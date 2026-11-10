@@ -20,6 +20,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 1015 — a declared source's data arrives as its principal ───
 //
@@ -81,7 +82,7 @@ type private World(?connectorStorage: IBlobStorage) =
     let ingestor =
         DataIngestor.create
             configs
-            (TestFakes.InMemorySecretStore())
+            (TestSecretStore())
             (DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore)
             events
             [ csv ]

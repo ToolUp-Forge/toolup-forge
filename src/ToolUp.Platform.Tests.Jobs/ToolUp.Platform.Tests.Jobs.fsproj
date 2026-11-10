@@ -18,6 +18,7 @@
         <Compile Include="..\ToolUp.Platform.Testing\Testing\Clock.fs" Link="Testing\Clock.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\Loggers.fs" Link="Testing\Loggers.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\CoreFakes.fs" Link="Testing\CoreFakes.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\Fakes.fs" Link="Testing\Fakes.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IJobStoreContract.fs" Link="Contracts\IJobStoreContract.fs" />

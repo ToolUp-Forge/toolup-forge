@@ -51,31 +51,6 @@ open ToolUp.Platform.Testing
 
 // ─── Test doubles ─────────────────────────────────────────────────────
 
-/// Trivial in-memory `ISecretStore` — mirrors the `ShareTokenStoreTests`
-/// double; the signing key is generated on first use and persisted here.
-type private InMemorySecretStore() =
-    let store =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(container, name) = async {
-            match store.TryGetValue((container, name)) with
-            | true, v -> return Some v
-            | _ -> return None
-        }
-
-        member _.SetSecret(container, name, value) = async {
-            store[(container, name)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(container, name) = async {
-            store.TryRemove((container, name)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(_) = async { return [] }
-
 let private makeStore () : IBlobStorage =
     InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
@@ -90,7 +65,7 @@ let private makeLibraryOver
     (options: MediaLibraryOptions)
     (blob: IBlobStorage)
     : IMediaLibrary =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = TestSecretStore() :> ISecretStore
     let signer = SignedUrl.MediaUrlSigner(secrets)
 
     DefaultMediaLibrary(blob, signer, NoopMediaDerivation.create (), transcoder, None, options, Logger.silent)
@@ -210,7 +185,7 @@ let private signedUrlTests =
 
         testCaseAsync "MediaUrlSigner sign/verify round-trips via the secret store"
         <| async {
-            let signer = SignedUrl.MediaUrlSigner(InMemorySecretStore() :> ISecretStore)
+            let signer = SignedUrl.MediaUrlSigner(TestSecretStore() :> ISecretStore)
             let! signed = signer.SignAsync(MediaId "xyz", signScope, TimeSpan.FromHours 1.0, now)
             let token = Expect.wantOk signed "sign"
             let! verified = signer.VerifyAsync(token, now)
@@ -436,7 +411,7 @@ let private makeSessionsOver
     (now: unit -> DateTimeOffset)
     (blob: IBlobStorage)
     : IUploadSessionStore * IMediaLibrary =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = TestSecretStore() :> ISecretStore
     let signer = SignedUrl.MediaUrlSigner(secrets)
 
     let lib =
@@ -750,7 +725,7 @@ let private makeFixtureWith
     (delegated: SignedUrl.IDelegatedUrlSigner option)
     =
     let blob = makeStore ()
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = TestSecretStore() :> ISecretStore
     let signer = SignedUrl.MediaUrlSigner(secrets)
     let keys = HlsKeyDelivery.MediaHlsKeyStore(secrets, Logger.silent, options)
 
@@ -1846,22 +1821,6 @@ let private declaredCacheHeaderTests =
 
 let private telemetryContainer = "team-telemetry"
 
-/// A metrics sink that keeps what it was handed.
-type private RecordingMetricsSink() =
-    let observations =
-        System.Collections.Concurrent.ConcurrentBag<string * float * Map<string, string>>()
-
-    let increments =
-        System.Collections.Concurrent.ConcurrentBag<string * Map<string, string>>()
-
-    member _.Observations = observations |> Seq.toList
-    member _.Increments = increments |> Seq.toList
-
-    interface IMetricsSink with
-        member _.Record(name, value, tags) = observations.Add((name, value, tags))
-        member _.Increment(name, tags) = increments.Add((name, tags))
-        member _.SetGauge(_, _, _) = ()
-
 /// A usage log that keeps its rows.
 ///
 /// Emission is fire-and-forget (`Async.Start`), so both directions need
@@ -1894,7 +1853,7 @@ type private RecordingUsageLog() =
 
 type private TelemetryHost = {
     Fixture: EncryptedFixture
-    Metrics: RecordingMetricsSink option
+    Metrics: Fakes.TestMetricsSink option
     Usage: RecordingUsageLog option
 }
 
@@ -1904,7 +1863,7 @@ let private meteredHost () =
 
     {
         Fixture = f
-        Metrics = Some(RecordingMetricsSink())
+        Metrics = Some(Fakes.TestMetricsSink())
         Usage = Some(RecordingUsageLog())
     }
 
@@ -2473,7 +2432,7 @@ let private egressAccountingTests =
 
             let h = {
                 Fixture = f
-                Metrics = Some(RecordingMetricsSink())
+                Metrics = Some(Fakes.TestMetricsSink())
                 Usage = Some(RecordingUsageLog())
             }
 
@@ -2508,7 +2467,7 @@ let private egressAccountingTests =
 
             let h = {
                 Fixture = f
-                Metrics = Some(RecordingMetricsSink())
+                Metrics = Some(Fakes.TestMetricsSink())
                 Usage = Some(RecordingUsageLog())
             }
 
@@ -2597,7 +2556,7 @@ let private egressAccountingTests =
 
             let metricsOnly = {
                 unmeteredHost () with
-                    Metrics = Some(RecordingMetricsSink())
+                    Metrics = Some(Fakes.TestMetricsSink())
             }
 
             let record2 = uploadTelemetryItem metricsOnly

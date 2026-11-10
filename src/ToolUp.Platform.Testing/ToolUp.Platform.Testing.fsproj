@@ -17,6 +17,7 @@
         <Compile Include="Testing\Clock.fs" />
         <Compile Include="Testing\TempDir.fs" />
         <Compile Include="Testing\Loggers.fs" />
+        <Compile Include="Testing\CoreFakes.fs" />
         <Compile Include="Testing\Fakes.fs" />
         <!-- Phase 180 — axe-style accessibility assertions over a rendered
              node tree (BCL-only, renderer-agnostic). Compiled BEFORE

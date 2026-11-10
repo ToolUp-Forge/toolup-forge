@@ -38,11 +38,7 @@ let private localDouble =
 /// The local doubles a pack still declares, each with why it cannot take
 /// the shipped one yet. A file leaves this map when it is swept; an entry
 /// whose file no longer declares the double fails the census.
-let private localDoubleExceptions: Map<string, string> =
-    Map.ofList [
-        "InProcess/TransientFaultPolicyTests.fs",
-        "compiled only by the Infra part pack, which may not reference the Testing package and cannot link Fakes.fs (it reaches the Scope part)"
-    ]
+let private localDoubleExceptions: Map<string, string> = Map.empty
 
 let private tempPathCall = Regex(@"\bGetTempPath\s*\(")
 

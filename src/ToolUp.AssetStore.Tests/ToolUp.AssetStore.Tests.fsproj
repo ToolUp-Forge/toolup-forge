@@ -7,7 +7,10 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="..\ToolUp.Platform.Testing\Testing\Recording.fs" Link="Testing\Recording.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\Loggers.fs" Link="Testing\Loggers.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\CoreFakes.fs" Link="Testing\CoreFakes.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Fakes.fs" Link="Testing\Fakes.fs" />
         <!-- The shared in-memory IBlobStorage double is link-compiled
              from Platform.Tests rather than referenced as a project —
              this pack needs only the double, not the whole Platform

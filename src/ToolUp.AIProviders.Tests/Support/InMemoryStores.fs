@@ -6,39 +6,6 @@ module ToolUp.AIProviders.Tests.Support.InMemoryStores
 open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.Providers
-open ToolUp.Platform.Secrets
-
-/// Trivial in-memory `ISecretStore` for the integration tests. Mirrors
-/// the local `InMemorySecretStore` used by `ShareTokenStoreTests` /
-/// `BlobPlatformAIKeyStoreTests` — kept inline rather than extracted
-/// because each test pack wants its own isolated state.
-type InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 /// Trivial in-memory `IProviderProfile` for the integration tests. The
 /// blob-backed `BlobProviderProfile` is already exercised by the

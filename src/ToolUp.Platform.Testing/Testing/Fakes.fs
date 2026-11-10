@@ -22,8 +22,9 @@ open ToolUp.Platform.Infra.Metrics
 // in `ToolUp.Platform.Tests.Contracts.*Contract` to verify portability.
 //
 // These are the doubles the SDK's own test packs use: a pack does not
-// re-declare a secret store, an audit log (`Recording.fs`), a metrics
-// sink or a logger (`Loggers.fs`) that this package ships. A recording double records
+// re-declare a secret store (`CoreFakes.fs`), an audit log
+// (`Recording.fs`), a metrics sink or a logger (`Loggers.fs`) that this
+// package ships. A recording double records
 // into a `Recording<'T>`, so the code under test may write it from any
 // thread while the test reads a snapshot. A test that needs a different
 // assertion shape adapts the snapshot at the call site rather than
@@ -126,41 +127,11 @@ type TestEventStore() =
         member _.Erase(scopeId, subjectUserId, policy, dryRun) =
             (inner :> IEventStore).Erase(scopeId, subjectUserId, policy, dryRun)
 
-/// In-memory `ISecretStore`. Per-(scope,key) string entries in a
-/// concurrent dictionary; writes always succeed, deletes are
-/// idempotent.
-type TestSecretStore() =
-    let secrets = ConcurrentDictionary<string * string, string>()
-
-    /// Pre-seed a secret without going through `SetSecret`. Useful for
-    /// arrange-act-assert flows that don't want to assert on the write
-    /// path.
-    member _.Seed(scopeId: string, key: string, value: string) = secrets[(scopeId, key)] <- value
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match secrets.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            secrets[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            secrets.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                secrets.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
+/// In-memory `ISecretStore`: the Core-only double, defined in
+/// `CoreFakes.fs` so a pack that may not reference this package can
+/// compile it by source link. The name here is the one the fakes have
+/// always been reached by.
+type TestSecretStore = ToolUp.Platform.Testing.TestSecretStore
 
 /// Recording `IMetricsSink`: every observation, increment and gauge set,
 /// in order, as `(name, value, tags)` / `(name, tags)` tuples.

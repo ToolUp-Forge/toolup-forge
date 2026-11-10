@@ -135,9 +135,6 @@ ToolUp.Platform.Testing.Fakes+TestMetricsSink..ctor()
 ToolUp.Platform.Testing.Fakes+TestMetricsSink.Gauges : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Double, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]] { get }
 ToolUp.Platform.Testing.Fakes+TestMetricsSink.Increments : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]] { get }
 ToolUp.Platform.Testing.Fakes+TestMetricsSink.Observations : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Double, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]] { get }
-ToolUp.Platform.Testing.Fakes+TestSecretStore (class)
-ToolUp.Platform.Testing.Fakes+TestSecretStore..ctor()
-ToolUp.Platform.Testing.Fakes+TestSecretStore.Seed(System.String, System.String, System.String) : System.Void
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver (class)
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(System.String)
 ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(ToolUp.Platform.StorageScope)
@@ -330,6 +327,7 @@ ToolUp.Platform.Testing.TempDirModule (class)
 ToolUp.Platform.Testing.TempDirModule.Prefix : System.String (literal)
 ToolUp.Platform.Testing.TempDirModule.create(System.String) : ToolUp.Platform.Testing.TempDir
 ToolUp.Platform.Testing.TempDirModule.familyOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.Testing.TempDirModule.forRun(System.String) : ToolUp.Platform.Testing.TempDir
 ToolUp.Platform.Testing.TempDirModule.withDir`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
 ToolUp.Platform.Testing.TestAuditLog (class)
 ToolUp.Platform.Testing.TestAuditLog..ctor()
@@ -342,3 +340,6 @@ ToolUp.Platform.Testing.TestLogger.Contains(System.String) : System.Boolean
 ToolUp.Platform.Testing.TestLogger.Lines : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Testing.LogLine] { get }
 ToolUp.Platform.Testing.TestLogger.MessagesAt(ToolUp.Platform.Testing.LogSeverity) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Testing.TestLogger.Recording : ToolUp.Platform.Testing.Recording`1[ToolUp.Platform.Testing.LogLine] { get }
+ToolUp.Platform.Testing.TestSecretStore (class)
+ToolUp.Platform.Testing.TestSecretStore..ctor()
+ToolUp.Platform.Testing.TestSecretStore.Seed(System.String, System.String, System.String) : System.Void

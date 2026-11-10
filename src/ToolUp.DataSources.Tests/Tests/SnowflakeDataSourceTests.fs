@@ -10,6 +10,7 @@ open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── ToolUp.DataSources.Snowflake ─────────────────────────────────
 
@@ -233,7 +234,7 @@ let private kindTests =
 
         testCaseAsync "password auth with no credential is CredentialMissing"
         <| async {
-            let source = SnowflakeDataSource.create (InMemorySecretStore())
+            let source = SnowflakeDataSource.create (TestSecretStore())
             let ctx = config "sf-1" "Snowflake" baseScope |> context "test-scope" None
 
             match! source.Connect ctx with

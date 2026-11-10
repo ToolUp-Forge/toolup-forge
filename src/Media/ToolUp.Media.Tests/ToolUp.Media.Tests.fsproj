@@ -16,6 +16,8 @@
         <Compile Include="..\..\ToolUp.Platform.Testing\Testing\Recording.fs" Link="Testing\Recording.fs" />
         <Compile Include="..\..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
         <Compile Include="..\..\ToolUp.Platform.Testing\Testing\Loggers.fs" Link="Testing\Loggers.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Testing\Testing\CoreFakes.fs" Link="Testing\CoreFakes.fs" />
+        <Compile Include="..\..\ToolUp.Platform.Testing\Testing\Fakes.fs" Link="Testing\Fakes.fs" />
         <Compile Include="..\..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\IDataObjectStoreContract.fs" Link="Contracts\IDataObjectStoreContract.fs" />
         <Compile Include="..\..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />

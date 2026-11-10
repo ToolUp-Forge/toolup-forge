@@ -24,6 +24,7 @@ open ToolUp.AI
 open ToolUp.AI.DefaultAIProviderFactory
 open ToolUp.AIProviders.Tests.Support.InMemoryStores
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 let private descriptor: AIProviderDescriptor = {
     Id = ClaudeAIProvider.ProviderId
@@ -106,7 +107,7 @@ let tests =
 
         testCaseAsync "a verified-failed rotation whose revert lands says the key was not saved"
         <| async {
-            let api = apiOver (InMemorySecretStore() :> ISecretStore)
+            let api = apiOver (TestSecretStore() :> ISecretStore)
 
             match! api.SaveInstance(save "sk-bad") with
             | Error e -> Expect.stringContains e "was not saved" "the undo landed, so the answer is true"
@@ -116,7 +117,7 @@ let tests =
         testCaseAsync "a refused revert is reported, never as 'not saved'"
         <| async {
             let refuse = ref false
-            let inner = InMemorySecretStore() :> ISecretStore
+            let inner = TestSecretStore() :> ISecretStore
             let secrets = refusingAfter inner refuse
 
             // No prior key, so the revert must DELETE the candidate. Arm the
