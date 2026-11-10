@@ -17,7 +17,7 @@ open ToolUp.Scheduling.IBookingScheduler
 // JSON pipeline and the SDK's error classifier.
 //
 // `ScopeResolutionMiddleware` populates `HttpContext.Items` with
-// `ToolUp.UserId` / `ToolUp.StorageScope` ahead of the handler, so
+// the principal's caller id (`AccessContext.callerId`) / the principal's `StorageScope` ahead of the handler, so
 // resolution is synchronous; we just read the items and delegate.
 //
 // **Authorisation in v1**: every authenticated user can call every
@@ -29,13 +29,13 @@ open ToolUp.Scheduling.IBookingScheduler
 
 let private resolveScope (ctx: HttpContext) : string * string =
     let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
     let scopeId =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as scope) -> scope.ScopeId
+        match AccessContext.scopeOf ctx.Items with
+        | Some scope -> scope.ScopeId
         | _ -> userId
 
     scopeId, userId

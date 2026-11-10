@@ -1255,9 +1255,8 @@ module PageDocumentRoute =
     /// context when the platform resolved none, which the store refuses
     /// since an anonymous scope holds no page layers.
     let private accessOf (ctx: HttpContext) : AccessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as access -> access
-        | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "PageDocumentStore")
 
     /// The mounted handler: `GET {Prefix}/{module}/{page}`. A 200 carries
     /// the envelope `encode` writes; a refusal carries `refusalJson` under

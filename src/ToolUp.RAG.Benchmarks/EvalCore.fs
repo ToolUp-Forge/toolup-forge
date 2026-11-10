@@ -106,8 +106,7 @@ let mrrAt (k: int) (results: QueryResult list) : float =
 /// Anonymous-mode access context — passes Platform / Deployment scopes,
 /// filters Team scopes. BEIR has no team semantics so everything goes
 /// under Deployment and this context retrieves cleanly.
-let evalContext: AccessContext =
-    AccessContext.unrestricted (Subject.AnonymousSession "bench-harness")
+let evalContext: AccessContext = AccessContext.system "bench-harness"
 
 /// Index every corpus entry under its declared scope and chunk id. Done
 /// once per benchmark cell, before the query loop. Errors propagate —

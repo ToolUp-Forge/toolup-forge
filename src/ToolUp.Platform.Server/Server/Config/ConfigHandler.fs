@@ -36,22 +36,8 @@ let configApi (entries: ModuleConfigEntry list) (ctx: HttpContext) : IConfigApi 
             }
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests that bypass ScopeResolutionMiddleware
-            // — same pattern as AISettingsHandler.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            let teamId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
-                | _ -> None
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "ConfigHandler")
 
     let scopeOpt = AccessContext.configScope accessContext
 

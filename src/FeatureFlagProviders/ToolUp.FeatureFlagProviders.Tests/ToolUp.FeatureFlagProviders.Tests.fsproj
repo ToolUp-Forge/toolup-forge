@@ -13,6 +13,7 @@
          there is one copy of each law and nothing to drift; the linked
          support files are the closure the moved cases compile against. -->
     <ItemGroup>
+        <Compile Include="..\..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="FlagSourceTests.fs" />
         <Compile Include="..\..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
         <Compile Include="Program.fs" />

@@ -52,9 +52,8 @@ let notificationPreferenceApi (config: ServerConfig) (ctx: HttpContext) : INotif
         | _ -> None
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "NotificationPreferenceApiHandler")
 
     /// The one gate every method runs through: store composed, caller
     /// signed in as a person, scope persistent.

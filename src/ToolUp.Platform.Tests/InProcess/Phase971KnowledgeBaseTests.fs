@@ -62,7 +62,7 @@ let private kbDeps (storage: IBlobStorage) (container: string) : KnowledgeApiDep
     EventStore = None
     EmbeddingProvider = None
     NarrativeStore = None
-    AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
+    AccessContext = AccessContexts.forSubject (AnonymousSession "user-1")
     OriginalResolver = KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
     AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore

@@ -293,7 +293,7 @@ let tests =
             services.AddSingleton<IModuleVisibilityStore>(store) |> ignore
             services.AddSingleton<ILogger>(recordingLogger lines) |> ignore
 
-            services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userId))
+            services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser userId))
             |> ignore
 
             let ctx = DefaultHttpContext()

@@ -599,7 +599,7 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
     EventStore = None
     EmbeddingProvider = None
     NarrativeStore = None
-    AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
+    AccessContext = AccessContexts.forSubject (AnonymousSession "user-1")
     OriginalResolver = createDefault ()
     AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore

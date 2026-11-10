@@ -39,7 +39,7 @@ let private ctxFor (userId: string) (teamStore: ITeamStore) (adminStore: IPlatfo
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx
 
 let private freshStorage () = InMemoryBlobStorage() :> IBlobStorage

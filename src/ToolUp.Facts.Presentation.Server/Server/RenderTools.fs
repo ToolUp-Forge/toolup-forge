@@ -418,8 +418,8 @@ module RenderTools =
         }
 
     let private userIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
     /// The registered executor: the fact browse's dependencies for this

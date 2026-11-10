@@ -110,7 +110,7 @@ let private mkDeps
         EventStore = None
         EmbeddingProvider = None
         NarrativeStore = None
-        AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
+        AccessContext = AccessContexts.forSubject (AnonymousSession "user-1")
         OriginalResolver = resolver
         AuditLog = auditLog
         RecordEnqueue = ignore
@@ -1018,11 +1018,12 @@ let private financialSpan = Redactor.ClassifiedSpan.create Financial "£4,120,00
 /// A caller with no reader capability at all — the empty permission map
 /// is UNRESTRICTED for `canAccessModule` but fails closed in the
 /// classification gate, which is exactly the asymmetry Phase 41 chose.
-let private nonReader = AccessContext.unrestricted (AuthenticatedUser "user-1")
+let private nonReader = AccessContexts.forSubject (AuthenticatedUser "user-1")
 
 let private readerOf (level: ClassificationLevel) = {
     nonReader with
-        ModulePermissions = Map [ ClassificationGate.readerModule level, [ ModulePermission.Read ] ]
+        ModulePermissions =
+            ModulePermissions.Restricted(Map [ ClassificationGate.readerModule level, [ ModulePermission.Read ] ])
 }
 
 let private platformAdmin = {

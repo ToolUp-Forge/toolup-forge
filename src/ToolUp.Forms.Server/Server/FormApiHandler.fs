@@ -47,24 +47,13 @@ open ToolUp.Platform.Compose
 // `AccessContext` — never trust client-supplied identity.
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.Items.TryGetValue "ToolUp.AccessContext" with
-    | true, (:? AccessContext as ac) -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        let teamId =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
-            | _ -> None
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    match AccessContext.ofItems ctx.Items with
+    | Some ac -> ac
+    | _ -> AccessContext.unresolved "FormApiHandler"
 
 let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as scope) -> scope.ScopeId
+    match AccessContext.scopeOf ctx.Items with
+    | Some scope -> scope.ScopeId
     | _ -> accessContext.UserId
 
 let private isWriteAllowed (ctx: HttpContext) (accessContext: AccessContext) : Async<bool> = async {
@@ -128,7 +117,7 @@ let formApi
     let scopeId = resolveScopeId ctx accessContext
     let userId = accessContext.UserId
     // Phase 814 — the caller, as the schema seam records it.
-    let principal = EntityPrincipal.ofPrincipal userId
+    let principal = AccessContext.entityPrincipal accessContext
 
     let withWriteGate (op: unit -> Async<Result<'T, FormError>>) : Async<Result<'T, FormError>> = async {
         let! ok = isWriteAllowed ctx accessContext

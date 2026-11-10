@@ -1084,7 +1084,7 @@ let private toConversationMessage
 ///
 /// Copies the pre-resolved scope / user / permission items from the
 /// original request into the background context's `Items` dictionary so
-/// any tool that reads them (`ToolUp.StorageScope` in particular) hits
+/// any tool that reads them (the principal's `StorageScope` in particular) hits
 /// the same store the Data Manager API used on the originating request.
 /// Without this copy the agent loop falls back to `getStoreForUser`
 /// which resolves a different container in every mode EXCEPT the one
@@ -1100,19 +1100,11 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     // Preserve user identity headers so scope resolvers work
     bgCtx.Request.Headers.Append("X-User-Id", userId)
 
-    // Carry forward the resolved scope / user / permission state from the
-    // middleware-decorated original context. Keys are the exact strings
-    // populated by `ScopeResolutionMiddleware` in `SDK.Server.fs`; keeping
-    // the list in lockstep with that middleware is a stringly-typed
-    // coupling a typed `RequestContext` would remove.
-    //
-    // The list carries all six items `reconstructAccessContext` reads.
-    // Dropping any of them would make the agent loop rebuild `Subject` from
-    // the scope-container prefix rather than carry the one the request
-    // resolved, or leave `ModuleExposure` / `PlatformRole` empty — every
-    // authorization row the loop emits would then attribute a subject it
-    // inferred, and the whole point of resolving a subject once is that
-    // nothing downstream has to guess.
+    // Carry forward the request's principal: ONE item
+    // (`AccessContext.ItemsKey`) holding subject, user, scope, permissions,
+    // exposure and role together, so the loop never reassembles a principal
+    // from separate stamps, and a background context without it is served
+    // under a context that grants nothing.
     //
     // The two grant stamps are load-bearing for the tool gate. Both are
     // resolved PER REQUEST by the middleware — the consent verdicts
@@ -1124,12 +1116,7 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     // direction: every governed module would vanish from the model's tool
     // list even for a subject who legitimately holds it.
     let itemsToCopy = [
-        "ToolUp.StorageScope"
-        "ToolUp.UserId"
-        "ToolUp.ModulePermissions"
-        "ToolUp.Subject"
-        "ToolUp.ModuleExposure"
-        "ToolUp.PlatformRole"
+        AccessContext.ItemsKey
         // The grant + consent stamps. Named through the constants that
         // DEFINE them, not re-spelled, so a rename moves both ends together.
         GrantPolicyGuard.ModuleGrantsItemsKey
@@ -1488,12 +1475,12 @@ let aiAssistantApi
     // resolution failed (Error case), fall back to an anonymous user-scoped
     // container.
     let scope =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> s
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> s
         | _ ->
             let fallback =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
+                match AccessContext.callerIdOf ctx.Items with
+                | Some id -> id
                 | _ -> "anonymous"
 
             {
@@ -1503,17 +1490,13 @@ let aiAssistantApi
             }
 
     let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback: construct from Items. Only used when the AccessContext
-            // DI factory didn't run (tests bypassing compose).
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "AIAssistantHandler")
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 
@@ -1526,7 +1509,7 @@ let aiAssistantApi
         TeamConversationPolicyStore.ConversationVisibility.resolveState ctx storage scope.Container
 
     let viewerIn (state: TeamConversationPolicyStore.TeamVisibilityState) =
-        TeamConversationPolicyStore.ConversationVisibility.resolveViewer ctx userId state.TeamId.Value
+        TeamConversationPolicyStore.ConversationVisibility.resolveViewer ctx state.TeamId.Value
 
     let createdAtOf (messages: ConversationMessage list) =
         match messages with
@@ -1721,7 +1704,6 @@ let aiAssistantApi
                         ToolUp.Platform.Scope.TeamPolicyStore.TeamPolicyViewer.resolve
                             turn.Background.RequestServices
                             turn.GateAccess
-                            userId
                             state.TeamId.Value)
                     messages
                     userId
@@ -2294,15 +2276,12 @@ let aiAssistantApi
         // caller's per-module `Read` permission, the same predicate the
         // agent loop's per-turn list and its dispatch re-check use — a
         // user must not be able to enumerate the tool surface of a module
-        // they cannot read. Unrestricted deployments (empty
-        // `ModulePermissions`) see the full registry as before (GP 11).
+        // they cannot read. Unrestricted deployments (`ModulePermissions
+        // .Unrestricted`) see the full registry as before (GP 11).
         //
-        // Resolved through the items-backed reconstruction rather than the
-        // `accessContext` above, whose fall-through is
-        // `AccessContext.unrestricted` — a silent unrestricted fallback is
-        // the one thing a permission filter must not have. Both read the
-        // same middleware-populated request; the reconstruction keeps
-        // `ModulePermissions` when the DI factory did not run.
+        // Read from the stamped principal when the DI factory did not run:
+        // a silent unrestricted fallback is the one thing a permission
+        // filter must not have, and neither path has one.
         GetAvailableTools =
             fun () -> async {
                 let toolAccess =

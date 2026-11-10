@@ -268,7 +268,7 @@ let private lexicalApp () =
 
 let private teamScope = Team "t1"
 
-let private teamAccess = AccessContext.unrestricted (TeamMember("u1", "t1"))
+let private teamAccess = AccessContexts.forSubject (TeamMember("u1", "t1"))
 
 let private indexAll (pipeline: IRetrievalPipeline) (chunks: (string * string * (string * string) list) list) = async {
     for chunkId, content, meta in chunks do
@@ -845,7 +845,7 @@ let tests =
                 let! retrieved =
                     pipeline.Retrieve
                         (RetrievalRequest.create "note" [ scope ] 10 Interleaved)
-                        (AccessContext.unrestricted (TeamMember("u1", "t1")))
+                        (AccessContexts.forSubject (TeamMember("u1", "t1")))
 
                 Expect.equal
                     (retrieved |> List.map _.ChunkId)

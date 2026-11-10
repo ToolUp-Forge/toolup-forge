@@ -34,10 +34,12 @@ let private teamCtx: AccessContext = {
     UserId = "u1"
     TeamId = Some "team-1"
     Subject = TeamMember("u1", "team-1")
-    ModulePermissions = Map.empty
+    ModulePermissions = ModulePermissions.Unrestricted
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     PublicationGrants = []
+    User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+    StorageScope = None
     ModuleExposure = Map.empty
     PlatformRole = None
 }

@@ -1228,12 +1228,12 @@ let private tryResolve<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
 /// the same scope the beacon rows and the latency rows use — a rollup
 /// that read a different scope would silently report nothing.
 let private resolveScope (ctx: HttpContext) : StorageScope =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> s
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> s
     | _ ->
         let fallback =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
+            match AccessContext.callerIdOf ctx.Items with
+            | Some id -> id
             | _ -> "anonymous"
 
         {

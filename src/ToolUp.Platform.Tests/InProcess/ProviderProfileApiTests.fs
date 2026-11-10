@@ -75,7 +75,7 @@ let private build () =
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
     let store = BlobProviderProfile.create storage
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "user-1"))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "user-1"))
     |> ignore
 
     services.AddSingleton<ISecretStore>(secrets) |> ignore
@@ -87,7 +87,7 @@ let private build () =
     ProviderProfileApiHandler.providerProfileApi store ctx, store, secrets
 
 let private scopeOf () =
-    AccessContext.configScope (AccessContext.unrestricted (AuthenticatedUser "user-1"))
+    AccessContext.configScope (AccessContexts.forSubject (AuthenticatedUser "user-1"))
     |> Option.get
 
 let private input (label: string) (providerId: string) (key: string option) : ProviderEntryInput = {

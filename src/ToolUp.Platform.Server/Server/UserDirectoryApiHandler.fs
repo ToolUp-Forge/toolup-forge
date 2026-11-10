@@ -46,15 +46,8 @@ let private resolveDirectory (ctx: HttpContext) : IUserDirectory option =
 /// context for test paths that bypass the middleware — mirrors the
 /// `PlatformAdminApiHandler.resolveAccessContext` shape.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "UserDirectoryApiHandler")
 
 /// Resolve the optional forge `ILogger` from DI. Used to surface a
 /// directory failure rather than swallow it — a silently-`Error`

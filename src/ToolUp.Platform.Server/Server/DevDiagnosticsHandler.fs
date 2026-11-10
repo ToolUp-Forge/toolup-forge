@@ -461,24 +461,17 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
         match ctx.RequestServices.GetService(typeof<AccessContext>) with
         | :? AccessContext as ac -> ac
         | _ ->
-            // Defensive fallback when the Scoped AccessContext is absent
-            // (no ScopeResolutionMiddleware in the pipeline). Reconstruct
-            // the caller's subject from the resolved identity + the
-            // deployment surfaces — team-scoped + a resolved team →
-            // `TeamMember`; any authenticated surface → `AuthenticatedUser`;
-            // anonymous-only → `AnonymousSession`. Mirrors the dominant-
-            // surface mapping a real request would have produced.
-            let fallbackSubject =
-                match teamId with
-                | Some tid when DeploymentConfig.hasTeamScope config -> TeamMember(user.UserId.Value, tid.Value)
-                | _ when DeploymentConfig.requiresAnyAuth config -> AuthenticatedUser user.UserId.Value
-                | _ -> AnonymousSession user.UserId.Value
+            // No principal was resolved for this request (no
+            // ScopeResolutionMiddleware in the pipeline): the report shows the
+            // context such a request is served under, which grants nothing.
+            AccessContext.unresolved "DevDiagnosticsHandler"
 
-            AccessContext.unrestricted fallbackSubject
-
+    // The report's map keeps its wire meaning: empty is
+    // `Unrestricted` (no module RBAC applies to this principal).
     let permissions =
-        accessContext.ModulePermissions
-        |> Map.map (fun _ perms -> perms |> List.map permissionName)
+        match accessContext.ModulePermissions with
+        | ModulePermissions.Restricted map -> map |> Map.map (fun _ perms -> perms |> List.map permissionName)
+        | ModulePermissions.Unrestricted -> Map.empty
 
     return {
         UserId = user.UserId

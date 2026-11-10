@@ -42,11 +42,11 @@ let tests (name: string) (factory: (string * ModuleQueryHandler) list -> IModule
     }
 
     let unrestrictedAccess userId =
-        AccessContext.unrestricted (Subject.AnonymousSession userId)
+        AccessContexts.forSubject (Subject.AnonymousSession userId)
 
     let restrictedAccess userId moduleName perms = {
-        AccessContext.unrestricted (Subject.AnonymousSession userId) with
-            ModulePermissions = Map.ofList [ moduleName, perms ]
+        AccessContexts.forSubject (Subject.AnonymousSession userId) with
+            ModulePermissions = ModulePermissions.Restricted(Map.ofList [ moduleName, perms ])
     }
 
     testList $"{name} — IModuleQueryBus contract" [

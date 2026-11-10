@@ -240,11 +240,11 @@ let registerTeamPermissionStores
     let resolveProposer (sp: System.IServiceProvider) () =
         match sp.GetService(typeof<Microsoft.AspNetCore.Http.IHttpContextAccessor>) with
         | :? Microsoft.AspNetCore.Http.IHttpContextAccessor as accessor when not (isNull (box accessor.HttpContext)) ->
-            match accessor.HttpContext.Items.TryGetValue "ToolUp.AccessContext" with
-            | true, (:? AccessContext as ac) when not (System.String.IsNullOrWhiteSpace ac.UserId) -> Some ac.UserId
+            match AccessContext.ofItems accessor.HttpContext.Items with
+            | Some ac when not (System.String.IsNullOrWhiteSpace ac.UserId) -> Some ac.UserId
             | _ ->
-                match accessor.HttpContext.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) when not (System.String.IsNullOrWhiteSpace id) -> Some id
+                match AccessContext.callerIdOf accessor.HttpContext.Items with
+                | Some id when not (System.String.IsNullOrWhiteSpace id) -> Some id
                 | _ -> None
         | _ -> None
 

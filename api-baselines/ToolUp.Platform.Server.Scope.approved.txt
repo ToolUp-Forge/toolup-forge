@@ -460,8 +460,10 @@ ToolUp.Platform.Scope.PeerRouteRegistry.PeerNameItemsKey : System.String (litera
 ToolUp.Platform.Scope.PeerRouteRegistry.isPeerRoute(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.AspNetCore.Http.PathString) : System.Boolean
 ToolUp.Platform.Scope.PermissionStore (class)
 ToolUp.Platform.Scope.PermissionStore.effectivePermissions(ToolUp.Platform.TeamPermissions, ToolUp.Platform.UserId) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]
+ToolUp.Platform.Scope.PermissionStore.isConfigured(ToolUp.Platform.TeamPermissions) : System.Boolean
+ToolUp.Platform.Scope.PermissionStore.modulePermissionsFor(ToolUp.Platform.TeamPermissions, ToolUp.Platform.UserId) : ToolUp.Platform.ModulePermissions
 ToolUp.Platform.Scope.PermissionStore+IPermissionStore (interface)
-ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetEffectivePermissions(ToolUp.Platform.UserId, ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], ToolUp.Platform.Scope.PermissionStore+PermissionStoreError]]
+ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetEffectivePermissions(ToolUp.Platform.UserId, ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ModulePermissions, ToolUp.Platform.Scope.PermissionStore+PermissionStoreError]]
 ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetModuleExposure(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], ToolUp.Platform.Scope.PermissionStore+PermissionStoreError]]
 ToolUp.Platform.Scope.PermissionStore+IPermissionStore.GetTeamPermissions(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, ToolUp.Platform.Scope.PermissionStore+PermissionStoreError]]
 ToolUp.Platform.Scope.PermissionStore+IPermissionStore.SetMemberPermissions(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
@@ -518,6 +520,7 @@ ToolUp.Platform.Scope.RequestViewerContext (class)
 ToolUp.Platform.Scope.RequestViewerContext.current() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.RequestViewer]
 ToolUp.Platform.Scope.RequestViewerContext.establish(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.RequestViewer]]) : System.IDisposable
 ToolUp.Platform.Scope.RequestViewerModule (class)
+ToolUp.Platform.Scope.RequestViewerModule.ofAccess(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.RequestViewer]
 ToolUp.Platform.Scope.RequestViewerModule.ofItems(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.RequestViewer]
 ToolUp.Platform.Scope.SecurityHardening (class)
 ToolUp.Platform.Scope.SecurityHardening.aggregate(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : ToolUp.Platform.Scope.SecurityHardening+ResolvedCspPolicy
@@ -568,7 +571,6 @@ ToolUp.Platform.Scope.ServiceAccountStore+BlobServiceAccountStore..ctor(ToolUp.P
 ToolUp.Platform.Scope.ServiceAccountTokenHandler (class)
 ToolUp.Platform.Scope.ServiceAccountTokenHandler.AuthorizationHeader : System.String (literal)
 ToolUp.Platform.Scope.ServiceAccountTokenHandler.BearerScheme : System.String (literal)
-ToolUp.Platform.Scope.ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey : System.String (literal)
 ToolUp.Platform.Scope.ServiceAccountTokenHandler.ServiceAccountPrincipalItemsKey : System.String (literal)
 ToolUp.Platform.Scope.ServiceAccountTokenHandler+ServiceAccountTokenMiddleware (class)
 ToolUp.Platform.Scope.ServiceAccountTokenHandler+ServiceAccountTokenMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate)
@@ -662,7 +664,6 @@ ToolUp.Platform.Scope.StoreIdSanitising+SanitisingShareTokenStore..ctor(ToolUp.P
 ToolUp.Platform.Scope.StoreIdSanitising+SanitisingTeamStore (class)
 ToolUp.Platform.Scope.StoreIdSanitising+SanitisingTeamStore..ctor(ToolUp.Platform.Config.TeamManagement+ITeamStore)
 ToolUp.Platform.Scope.SurfaceEnforcement (class)
-ToolUp.Platform.Scope.SurfaceEnforcement.SubjectItemsKey : System.String (literal)
 ToolUp.Platform.Scope.SurfaceEnforcement+ReaderRouteClass (class)
 ToolUp.Platform.Scope.SurfaceEnforcement+ReaderRouteClass.AnonymousOpen : System.String (literal)
 ToolUp.Platform.Scope.SurfaceEnforcement+ReaderRouteClass.Api : System.String (literal)
@@ -732,7 +733,7 @@ ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer.IsPlatformAdmin : System.
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer.TeamRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer.UserId : ToolUp.Platform.UserId { get }
 ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewerModule (class)
-ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewerModule.resolve(System.IServiceProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer]
+ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewerModule.resolve(System.IServiceProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext], System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer]
 ToolUp.Platform.Scope.TeamPolicyStore+TeamVisibilityDefaultsValidator (class)
 ToolUp.Platform.Scope.TeamPolicyStore+TeamVisibilityDefaultsValidator..ctor(ToolUp.Platform.TeamOutputVisibilitySettings, Microsoft.Extensions.DependencyInjection.IServiceCollection)
 ToolUp.Platform.Scope.TeamPolicyStore+TeamVisibilityDefaultsValidator.ValidatorName : System.String { get }

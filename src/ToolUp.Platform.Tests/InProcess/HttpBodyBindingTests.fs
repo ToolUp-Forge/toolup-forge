@@ -290,7 +290,7 @@ let private consentTests =
 // ── Section 3 — the ad-unit admin endpoint ──────────────────────────
 
 let private adminContext () = {
-    AccessContext.unrestricted (AuthenticatedUser "admin-763") with
+    AccessContexts.forSubject (AuthenticatedUser "admin-763") with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 

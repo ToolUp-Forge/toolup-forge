@@ -494,7 +494,7 @@ let private teamScope (teamId: string) =
     StorageScopeResolver.ScopeResolution.ofStorageScope (StorageScope.ofKey true (ScopeKey.Team(TeamId teamId)))
 
 let private member' (userId: string) (teamId: string) =
-    AccessContext.unrestricted (TeamMember(userId, teamId))
+    AccessContexts.forSubject (TeamMember(userId, teamId))
 
 let private admin (teamId: string) = {
     member' "operator" teamId with
@@ -975,7 +975,7 @@ let private storeTests =
 
         test "the anonymous scope holds no layers, and an unsafe page name is refused" {
             let rig = seeded PageStoreOptions.defaults
-            let anon = AccessContext.unrestricted (AnonymousSession "s1")
+            let anon = AccessContexts.forSubject (AnonymousSession "s1")
 
             match rig.Store.ReadFolded(ResolvedScope.anonymous, anon, page) |> run with
             | Error(PageStoreError.ScopeRefused _) -> ()
@@ -1217,7 +1217,7 @@ let private routeTests =
                 get
                     rig.Store
                     ResolvedScope.anonymous
-                    (AccessContext.unrestricted (AnonymousSession "visitor"))
+                    (AccessContexts.forSubject (AnonymousSession "visitor"))
                     (PageDocumentRoute.path page)
 
             Expect.equal status 403 "outside the gate"

@@ -145,7 +145,7 @@ let tests =
         testCaseAsync "Phase 132: HasRole PlatformAdmin reads server-resolved ToolUp.PlatformRole"
         <| async {
             let ctx = DefaultHttpContext() :> HttpContext
-            ctx.Items["ToolUp.PlatformRole"] <- box ToolUp.Platform.PlatformRole.PlatformAdmin
+            ToolUp.Platform.AccessContexts.stampPlatformRole ctx.Items (ToolUp.Platform.PlatformRole.PlatformAdmin)
             let! authCtx = ToolUp.Platform.Config.ApiSeams.defaultForgeAuthContextResolver ctx
             Expect.isTrue (authCtx.HasRole "PlatformAdmin") "a real admin (PlatformRole stamped) is allowed"
         }
@@ -273,7 +273,9 @@ let tests =
                 ctx.Request.Path <- PathString path
 
                 if stampAdmin then
-                    ctx.Items["ToolUp.PlatformRole"] <- box ToolUp.Platform.PlatformRole.PlatformAdmin
+                    ToolUp.Platform.AccessContexts.stampPlatformRole
+                        ctx.Items
+                        (ToolUp.Platform.PlatformRole.PlatformAdmin)
 
                 let mutable reached = false
 

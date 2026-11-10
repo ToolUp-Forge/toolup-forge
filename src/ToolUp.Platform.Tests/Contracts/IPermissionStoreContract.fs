@@ -88,7 +88,8 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
             | Error e -> failtestf "an absent document must not be an error: %A" e
 
             match! store.GetEffectivePermissions(UserId "alice", team) with
-            | Ok perms -> Expect.isEmpty perms "no document grants nothing explicitly"
+            | Ok perms ->
+                Expect.equal perms ModulePermissions.Unrestricted "no document: the team never configured RBAC"
             | Error e -> failtestf "an absent document must not be an error: %A" e
         }
 
@@ -145,8 +146,7 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
         <| async {
             let store = factory ()
             let! perms = ok (store.GetEffectivePermissions(UserId "alice", TeamId(uniqueTeam ())))
-            // Empty map = unrestricted via AccessContext.canAccessModule.
-            Expect.isEmpty perms "no perms configured"
+            Expect.equal perms ModulePermissions.Unrestricted "no perms configured: stated unrestricted"
         }
 
         testCaseAsync "SetMemberPermissions round-trips"
@@ -163,7 +163,7 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
             // would treat Read / Write as variable bindings (they're
             // module-level `let`s, not DU cases under RequireQualifiedAccess)
             // and match any two-element list.
-            Expect.equal (perms.TryFind "SkuAnalysis") (Some [ Read; Write ]) "alice has Read + Write"
+            Expect.equal (ModulePermissions.tryFind "SkuAnalysis" perms) (Some [ Read; Write ]) "alice has Read + Write"
         }
 
         testCaseAsync "Defaults apply to users without explicit entries"
@@ -178,7 +178,7 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
             | Ok() -> ()
 
             let! perms = ok (store.GetEffectivePermissions(UserId "bob", TeamId team))
-            Expect.equal (perms.TryFind "SkuAnalysis") (Some [ Read ]) "bob inherits default"
+            Expect.equal (ModulePermissions.tryFind "SkuAnalysis" perms) (Some [ Read ]) "bob inherits default"
         }
 
         testCaseAsync "Explicit member entries override defaults"
@@ -191,10 +191,14 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
             let! _ = store.SetMemberPermissions(TeamId team, UserId "alice", "SkuAnalysis", [ Admin ])
 
             let! alicePerms = ok (store.GetEffectivePermissions(UserId "alice", TeamId team))
-            Expect.equal (alicePerms.TryFind "SkuAnalysis") (Some [ Admin ]) "alice's explicit entry wins"
+
+            Expect.equal
+                (ModulePermissions.tryFind "SkuAnalysis" alicePerms)
+                (Some [ Admin ])
+                "alice's explicit entry wins"
 
             let! bobPerms = ok (store.GetEffectivePermissions(UserId "bob", TeamId team))
-            Expect.equal (bobPerms.TryFind "SkuAnalysis") (Some [ Read ]) "bob still gets default"
+            Expect.equal (ModulePermissions.tryFind "SkuAnalysis" bobPerms) (Some [ Read ]) "bob still gets default"
         }
 
         testCaseAsync "Empty permission list on SetMemberPermissions removes the entry"
@@ -210,7 +214,7 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
             let! _ = store.SetMemberPermissions(TeamId team, UserId "alice", "SkuAnalysis", [])
 
             let! perms = ok (store.GetEffectivePermissions(UserId "alice", TeamId team))
-            Expect.equal (perms.TryFind "SkuAnalysis") (Some [ Read ]) "alice falls back to default"
+            Expect.equal (ModulePermissions.tryFind "SkuAnalysis" perms) (Some [ Read ]) "alice falls back to default"
         }
 
         testCaseAsync "SetTeamPermissions replaces the entire document"
@@ -240,6 +244,17 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
             Expect.equal perms replacement "document replaced exactly"
         }
 
+        testCaseAsync "A member with no entry in a team that configured RBAC holds nothing, not everything"
+        <| async {
+            let store = factory ()
+            let team = uniqueTeam ()
+
+            let! _ = store.SetMemberPermissions(TeamId team, UserId "alice", "SkuAnalysis", [ Admin ])
+
+            let! carolPerms = ok (store.GetEffectivePermissions(UserId "carol", TeamId team))
+            Expect.equal carolPerms ModulePermissions.none "the team is configured: carol is restricted to nothing"
+        }
+
         testCaseAsync "Team isolation — writes to team A don't affect team B"
         <| async {
             let store = factory ()
@@ -249,7 +264,7 @@ let tests (name: string) (over: IBlobStorage -> IPermissionStore) =
             let! _ = store.SetMemberPermissions(TeamId teamA, UserId "alice", "SkuAnalysis", [ Admin ])
 
             let! fromB = ok (store.GetEffectivePermissions(UserId "alice", TeamId teamB))
-            Expect.isEmpty fromB "alice has no perms in team B"
+            Expect.equal fromB ModulePermissions.Unrestricted "team B never configured RBAC"
         }
 
         testCaseAsync "Persistence round-trip: perms survive serialisation"

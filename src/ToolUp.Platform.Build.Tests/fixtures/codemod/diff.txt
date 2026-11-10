@@ -315,6 +315,15 @@
 @@ L64 [1084-rag-snapshot-exception-home]
 -let refusedVector (ex: exn) = match ex with :? InMemoryVectorStore.RagScopeSnapshotUnreadableException -> true | _ -> false
 +let refusedVector (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+@@ L66 [882-unrestricted-constructor]
+-let fallback = AccessContext.unrestricted (AnonymousSession "anonymous")
++let fallback = AccessContext.ofSubject ModulePermissions.Unrestricted (AnonymousSession "anonymous")
+@@ L67 [882-unrestricted-constructor]
+-let jobContext subject = AccessContext.unrestricted subject
++let jobContext subject = AccessContext.ofSubject ModulePermissions.Unrestricted subject
+@@ L73 [882-entity-principal]
+-let actor (access: AccessContext) = EntityPrincipal.ofPrincipal access.UserId
++let actor (access: AccessContext) = AccessContext.entityPrincipal access
 --- a/src/Server/Ingestion.fs
 +++ b/src/Server/Ingestion.fs
 @@ L3 [1085-is-terminal-status]
@@ -435,4 +444,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 111 rewrite(s) across 20 file(s) pending.
+Codemod: 114 rewrite(s) across 20 file(s) pending.

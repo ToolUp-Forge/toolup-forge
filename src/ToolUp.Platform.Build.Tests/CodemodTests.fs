@@ -266,7 +266,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 25 file(s) visited, 111 rewrite(s) in 20 file(s), 118 site(s) for review."
+                        "Codemod: 25 file(s) visited, 114 rewrite(s) in 20 file(s), 123 site(s) for review."
                         "summary")
         ]
 

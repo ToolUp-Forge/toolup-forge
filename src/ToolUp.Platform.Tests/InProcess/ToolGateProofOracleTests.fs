@@ -264,7 +264,7 @@ let private generatedCallers: Caller list =
 
     let unrestricted = {
         Name = "unrestricted caller, every grant live"
-        Access = AccessContext.unrestricted (AuthenticatedUser "alice")
+        Access = AccessContexts.forSubject (AuthenticatedUser "alice")
         GrantLive = fun _ -> true
     }
 
@@ -280,8 +280,8 @@ let private generatedCallers: Caller list =
             {
                 Name = sprintf "caller #%d" n
                 Access = {
-                    AccessContext.unrestricted (AuthenticatedUser(sprintf "user-%d" n)) with
-                        ModulePermissions = Map.ofList perms
+                    AccessContexts.forSubject (AuthenticatedUser(sprintf "user-%d" n)) with
+                        ModulePermissions = AccessContexts.permissionsOf perms
                 }
                 GrantLive = fun m -> not (Set.contains m inert)
             })

@@ -39,7 +39,7 @@ type ContractEnv = {
 type EnvFactory = unit -> ContractEnv
 
 let private accessContext (userId: string) : AccessContext =
-    AccessContext.unrestricted (Subject.AuthenticatedUser userId)
+    AccessContexts.forSubject (Subject.AuthenticatedUser userId)
 
 let private makeSubmission (id: SubmissionId) (workflowId: WorkflowId) : Submission = {
     Id = id

@@ -148,10 +148,10 @@ let tests =
                     10
                     Interleaved
 
-            let! bobResults = pipeline.Retrieve request (AccessContext.unrestricted (AuthenticatedUser "bob"))
+            let! bobResults = pipeline.Retrieve request (AccessContexts.forSubject (AuthenticatedUser "bob"))
             Expect.isEmpty bobResults "bob must retrieve none of alice's chunks"
 
-            let! aliceResults = pipeline.Retrieve request (AccessContext.unrestricted (AuthenticatedUser "alice"))
+            let! aliceResults = pipeline.Retrieve request (AccessContexts.forSubject (AuthenticatedUser "alice"))
             Expect.isNonEmpty aliceResults "alice retrieves her own chunks (positive control)"
         }
 

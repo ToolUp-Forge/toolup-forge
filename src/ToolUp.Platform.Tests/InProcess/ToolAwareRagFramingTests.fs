@@ -49,7 +49,7 @@ let private emptyPipeline =
     }
 
 let private mkContext () : PromptContext = {
-    Access = AccessContext.unrestricted (AnonymousSession "anon")
+    Access = AccessContexts.forSubject (AnonymousSession "anon")
     ActiveModule = None
     ActivePage = None
     ActivePageNarrative = None

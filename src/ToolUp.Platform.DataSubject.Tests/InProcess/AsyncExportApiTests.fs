@@ -78,7 +78,7 @@ type private InlineScheduler() =
 /// (`AccessContext.canModifyPlatformConfig`). These tests drive the admin
 /// happy path, so the actor's context carries `PlatformRole.PlatformAdmin`.
 let private adminContext: AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser "admin") with
+    AccessContexts.forSubject (AuthenticatedUser "admin") with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 

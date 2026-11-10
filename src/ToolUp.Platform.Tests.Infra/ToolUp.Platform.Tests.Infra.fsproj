@@ -14,6 +14,7 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IBlobStorageContract.fs" Link="Contracts\IBlobStorageContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IProviderProfileContract.fs" Link="Contracts\IProviderProfileContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEventStoreContract.fs" Link="Contracts\IEventStoreContract.fs" />

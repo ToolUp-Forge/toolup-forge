@@ -10,6 +10,7 @@
          files with <ProjectReference> entries to the matching DLLs. The
          tests now exercise the production companion DLLs directly. -->
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="InProcess\InMemoryEntityStore.fs" />
         <Compile Include="InProcess\InMemoryAuditLog.fs" />
         <!-- Phase 814 — the principal-recording IEntityStore decorator the seam

@@ -410,8 +410,8 @@ let private composeAssetStore (companion: AssetStoreCompanionOptions) (app: Serv
             let store = ctx.RequestServices.GetService(typeof<IAssetStore>) :?> IAssetStore
 
             let scopeContainer () =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) -> s.Container
+                match AccessContext.scopeOf ctx.Items with
+                | Some s -> s.Container
                 | _ -> failwith "No active scope — IAssetApi requires authentication"
 
             {

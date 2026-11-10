@@ -152,8 +152,8 @@ let private authenticatedContext () = async {
         Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
-    ctx.Items["ToolUp.User"] <- box user
-    ctx.Items["ToolUp.Subject"] <- box (Subject.AuthenticatedUser "u-627")
+    AccessContexts.stampUser ctx.Items (user)
+    AccessContexts.stampSubject ctx.Items ((Subject.AuthenticatedUser "u-627"))
     let! forge = ApiSeams.defaultForgeAuthContextResolver ctx
     return bridge forge
 }
@@ -175,9 +175,9 @@ let private platformAdminContext () = async {
         Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
-    ctx.Items["ToolUp.User"] <- box user
-    ctx.Items["ToolUp.Subject"] <- box (Subject.AuthenticatedUser "admin-627")
-    ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin
+    AccessContexts.stampUser ctx.Items (user)
+    AccessContexts.stampSubject ctx.Items ((Subject.AuthenticatedUser "admin-627"))
+    AccessContexts.stampPlatformRole ctx.Items (PlatformRole.PlatformAdmin)
     let! forge = ApiSeams.defaultForgeAuthContextResolver ctx
     return bridge forge
 }

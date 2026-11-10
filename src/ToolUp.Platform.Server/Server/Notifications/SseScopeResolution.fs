@@ -65,13 +65,13 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
     | :? IAuditLog as auditLog ->
         // Subject kind/id vocabulary matches SurfaceEnforcementMiddleware
         // so operator dashboards aggregate both through one query shape.
-        // `"ToolUp.Subject"` is set by the scope-resolution middleware
+        // the principal's `Subject` is set by the scope-resolution middleware
         // (same key RateLimiting reads); when absent — defensive, a
         // resolved principal implies a resolved subject — fall back to
         // the principal id with kind "user".
         let subjectKind, subjectId =
-            match ctx.Items.TryGetValue "ToolUp.Subject" with
-            | true, (:? Subject as subject) ->
+            match AccessContext.subjectOf ctx.Items with
+            | Some subject ->
                 let kind =
                     match Subject.kind subject with
                     | AnonymousKind -> "anonymous"
@@ -110,7 +110,7 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
 
 /// Resolve the subscriber scope for an SSE connect.
 ///
-/// The middleware-resolved identity (`ctx.Items["ToolUp.UserId"]`,
+/// The middleware-resolved identity (`AccessContext.callerIdOf ctx.Items`,
 /// populated by `ScopeResolutionMiddleware`) always wins. The guard
 /// excludes `"anonymous"` so EventSource connections (which cannot set
 /// custom headers) fall through to the `?userId=` query param in
@@ -135,8 +135,8 @@ let resolve (sseAuthMode: SseAuthMode) (ctx: HttpContext) : SseScopeResult =
         | true, values when values.Count > 0 -> Some(string values[0])
         | _ -> None
 
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) when not (String.IsNullOrEmpty id) && id <> "anonymous" ->
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id when not (String.IsNullOrEmpty id) && id <> "anonymous" ->
         match queryUserId with
         | Some asserted when asserted <> id -> emitMismatchAudit ctx id asserted
         | _ -> ()

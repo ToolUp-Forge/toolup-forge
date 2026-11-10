@@ -284,7 +284,7 @@ let tests (f: UiInspectionContractFixture) : Test =
             test "the read-only ceiling admits it for an unrestricted caller" {
                 let verdict =
                     AIToolRegistry.ToolGate.decide
-                        (AccessContext.unrestricted (AuthenticatedUser "contract-user"))
+                        (AccessContexts.forSubject (AuthenticatedUser "contract-user"))
                         (fun _ -> true)
                         AIToolRegistry.ToolPolicy.readOnly
                         def

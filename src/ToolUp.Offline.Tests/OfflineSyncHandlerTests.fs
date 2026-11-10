@@ -214,14 +214,13 @@ type CapturingEventStore() =
 
 let private contextFor (scopeId: string) (userId: string) : HttpContext =
     let ctx = DefaultHttpContext()
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = scopeId
-            Container = sprintf "team-%s" scopeId
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = scopeId
+        Container = sprintf "team-%s" scopeId
+        Persist = true
+    }
 
     ctx :> HttpContext
 

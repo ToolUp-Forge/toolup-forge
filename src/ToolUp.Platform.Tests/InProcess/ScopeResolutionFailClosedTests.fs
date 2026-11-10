@@ -60,7 +60,10 @@ let private permissionStore (fault: Fault option) =
         member _.GetTeamPermissions _ = read TeamPermissions.empty
         member _.SetTeamPermissions(_, _) = async { return Ok() }
         member _.UpdateTeamPermissions(_, _) = async { return Ok() }
-        member _.GetEffectivePermissions(_, _) = read restricted
+
+        member _.GetEffectivePermissions(_, _) =
+            read (ModulePermissions.Restricted restricted)
+
         member _.SetMemberPermissions(_, _, _, _) = async { return Ok() }
         member _.SetTeamDefaults(_, _) = async { return Ok() }
         member _.GetModuleExposure _ = read Map.empty
@@ -69,11 +72,24 @@ let private permissionStore (fault: Fault option) =
 
 /// Run the real middleware for a valid team member against `store`. Returns
 /// the response status, whether M's handler was reached, and the audit rows.
-let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) = async {
+let private runWithAdmin (store: IPermissionStore) (adminFault: exn option) (onReached: HttpContext -> unit) = async {
     let rows = ConcurrentQueue<string * AuditEvent>()
     let services = ServiceCollection()
     services.AddMemoryCache() |> ignore
     services.AddSingleton<IPermissionStore>(store) |> ignore
+
+    match adminFault with
+    | Some ex ->
+        services.AddSingleton<IPlatformAdminStore>(
+            { new IPlatformAdminStore with
+                member _.IsPlatformAdmin _ = async { return raise ex }
+                member _.AssignPlatformAdmin(_, _) = async { return Ok() }
+                member _.RevokePlatformAdmin(_, _) = async { return Ok() }
+                member _.ListPlatformAdmins() = async { return [] }
+            }
+        )
+        |> ignore
+    | None -> ()
 
     services.AddSingleton<IAuditLog>(
         { new IAuditLog with
@@ -114,7 +130,10 @@ let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) =
         RequestDelegate(fun c ->
             reached.Value <- true
             onReached c
-            let access = ComposeScopeResolver.accessContextOf c
+
+            let access =
+                ComposeScopeResolver.accessContextOf c
+                |> Option.defaultWith (fun () -> AccessContext.unresolved "ScopeResolutionFailClosedTests")
 
             c.Response.StatusCode <-
                 if AccessContext.canAccessModule moduleName access then
@@ -130,6 +149,8 @@ let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) =
     do! middleware.InvokeAsync ctx |> Async.AwaitTask
     return ctx.Response.StatusCode, reached.Value, rows
 }
+
+let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) = runWithAdmin store None onReached
 
 let private run (store: IPermissionStore) = runWith store ignore
 
@@ -188,21 +209,46 @@ let tests =
             Expect.equal status 503 "refused"
         }
 
-        testCaseAsync
-            "Phase 878 — the ToolUp.UserId item stays the bare string (the cross-assembly item contract); the typed id rides ToolUp.User"
+        testCaseAsync "Phase 882 — the middleware leaves ONE item: the principal, carrying the user, subject and scope"
         <| async {
             let seen = ref None
 
             let! _, reached, _ =
                 runWith (permissionStore None) (fun c ->
-                    seen.Value <- Some(c.Items["ToolUp.UserId"], c.Items["ToolUp.User"]))
+                    seen.Value <- Some(AccessContext.ofItems c.Items, List.ofSeq c.Items.Keys))
 
             Expect.isTrue reached "the handler runs for a healthy store"
 
             match seen.Value with
-            | Some((:? string as id), (:? AuthenticatedUser as user)) ->
-                Expect.equal id memberUser.UserId.Value "readers match the item with `:? string`"
-                Expect.equal user.UserId memberUser.UserId "the typed id is on the user record"
-            | other -> failtestf "expected a string item and an AuthenticatedUser item, got %A" other
+            | Some(Some access, keys) ->
+                Expect.equal access.User.UserId memberUser.UserId "the provider's user rides the principal"
+                Expect.equal access.Subject (TeamMember(memberUser.UserId.Value, teamId)) "so does the subject"
+                Expect.equal (AccessContext.callerId access) memberUser.UserId.Value "and the caller id"
+                Expect.isSome access.StorageScope "and the scope"
+
+                for retired in
+                    [
+                        "ToolUp.User"
+                        "ToolUp.UserId"
+                        "ToolUp.Subject"
+                        "ToolUp.StorageScope"
+                        "ToolUp.ScopeResult"
+                        "ToolUp.ModulePermissions"
+                        "ToolUp.ModuleExposure"
+                        "ToolUp.PlatformRole"
+                        "ToolUp.PublicationGrants"
+                        "ToolUp.ServiceAccountPermissions"
+                    ] do
+                    Expect.isFalse (List.contains (box retired) keys) (sprintf "%s is not stamped" retired)
+            | other -> failtestf "expected a stamped principal, got %A" other
+        }
+
+        testCaseAsync "Phase 882 — a fault after the subject is stamped refuses the request, whichever read faulted"
+        <| async {
+            let! status, reached, _ =
+                runWithAdmin (permissionStore None) (Some(InvalidOperationException "admin store down")) ignore
+
+            Expect.isFalse reached "a request whose principal was interrupted must not reach a handler"
+            Expect.equal status 503 "refused"
         }
     ]

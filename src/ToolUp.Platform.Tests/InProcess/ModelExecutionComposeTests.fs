@@ -70,7 +70,7 @@ let private composedSubstrate () : IServiceCollection =
 /// An `HttpContext` over a built graph, carrying the caller's resolved
 /// scope exactly as `ScopeResolutionMiddleware` would.
 let private ctxOver (services: IServiceCollection) (userId: string) : HttpContext =
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userId))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser userId))
     |> ignore
 
     let ctx = DefaultHttpContext() :> HttpContext

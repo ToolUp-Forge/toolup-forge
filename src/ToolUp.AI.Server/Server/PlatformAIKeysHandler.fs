@@ -42,15 +42,8 @@ let private toTeamView (t: TeamInfo) : PlatformAIKeysTeamView = {
 /// Resolve `AccessContext` from DI per request — same pattern as
 /// `AISettingsHandler.aiSettingsApi` / `PlatformAdminApiHandler.platformAdminApi`.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "PlatformAIKeysHandler")
 
 /// Build the `PlatformAIKeysApi` ToolUp.Remoting handler. Resolves
 /// `IPlatformAIKeyStore` and `ITeamStore` from DI; the factory's

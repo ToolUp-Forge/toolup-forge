@@ -88,17 +88,8 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
         | _ -> None
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests bypassing the middleware. Mirrors
-            // ConfigHandler.configApi's fallback.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "DataIngestionApiHandler")
 
     let scopeOpt = AccessContext.configScope accessContext
 

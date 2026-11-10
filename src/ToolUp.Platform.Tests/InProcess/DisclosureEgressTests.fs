@@ -369,7 +369,7 @@ let retrievalTests =
                     :> IRetrievalPipeline
 
                 ignore resolver
-                let! results = pipeline.Retrieve clausedRequest (AccessContext.unrestricted (AuthenticatedUser "u"))
+                let! results = pipeline.Retrieve clausedRequest (AccessContexts.forSubject (AuthenticatedUser "u"))
 
                 Expect.equal (factIdsIn results) [ "fact-open" ] "only the disclosable fact surfaces"
 
@@ -407,7 +407,7 @@ let retrievalTests =
                     )
                     :> IRetrievalPipeline
 
-                let! results = pipeline.Retrieve clausedRequest (AccessContext.unrestricted (AuthenticatedUser "u"))
+                let! results = pipeline.Retrieve clausedRequest (AccessContexts.forSubject (AuthenticatedUser "u"))
                 Expect.equal (factIdsIn results) [ "fact-open" ] "pass-through without a gate"
             finally
                 dispose.Dispose()
@@ -442,7 +442,7 @@ let retrievalTests =
                         )
                         :> IRetrievalPipeline
 
-                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+                let ctx = AccessContexts.forSubject (AuthenticatedUser "u")
 
                 let gate =
                     PresetGate(Map.ofList [ "fact-open", FactDisclosable ]) :> IFactDisclosureGate
@@ -550,7 +550,7 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     EventStore = None
     EmbeddingProvider = None
     NarrativeStore = None
-    AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
+    AccessContext = AccessContexts.forSubject (AnonymousSession "user-1")
     OriginalResolver = KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
     AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
@@ -942,7 +942,7 @@ let derivedRetrievalTests =
 
                 let tracer = CapturingTracer()
                 let pipeline = derivedPipeline store gate tracer
-                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+                let ctx = AccessContexts.forSubject (AuthenticatedUser "u")
 
                 let! before = pipeline.Retrieve (derivedRequest factScope) ctx
 
@@ -974,7 +974,7 @@ let derivedRetrievalTests =
                 do! upsertChunk store "a" None
                 do! upsertChunk store "b" None
                 let gate = PresetGate Map.empty
-                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+                let ctx = AccessContexts.forSubject (AuthenticatedUser "u")
                 let _, factScope = derivedScope ()
 
                 let gatedTracer = CapturingTracer()
@@ -1026,7 +1026,7 @@ let derivedRetrievalTests =
                 let! results =
                     (derivedPipeline store gate tracer).Retrieve
                         (derivedRequest factScope)
-                        (AccessContext.unrestricted (AuthenticatedUser "u"))
+                        (AccessContexts.forSubject (AuthenticatedUser "u"))
 
                 Expect.equal (chunkIds results) [ "d1"; "d2"; "plain" ] "a chunk with ANY denied ref is dropped"
 
@@ -1053,7 +1053,7 @@ let derivedRetrievalTests =
                 let! all =
                     (derivedPipeline store allOpen quietTracer).Retrieve
                         (derivedRequest factScope)
-                        (AccessContext.unrestricted (AuthenticatedUser "u"))
+                        (AccessContexts.forSubject (AuthenticatedUser "u"))
 
                 Expect.equal all.Length 4 "every chunk survives when every ref is disclosable"
 
@@ -1082,7 +1082,7 @@ let derivedRetrievalTests =
                 do! upsertChunk store "plain" None
 
                 let pipeline = derivedPipeline store gate (CapturingTracer())
-                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+                let ctx = AccessContexts.forSubject (AuthenticatedUser "u")
 
                 do!
                     withClaim
@@ -1144,9 +1144,7 @@ let derivedRetrievalTests =
                         :> IRetrievalPipeline
 
                     let! results =
-                        pipeline.Retrieve
-                            (derivedRequest factScope)
-                            (AccessContext.unrestricted (AuthenticatedUser "u"))
+                        pipeline.Retrieve (derivedRequest factScope) (AccessContexts.forSubject (AuthenticatedUser "u"))
 
                     Expect.equal (chunkIds results) [ "plain" ] "fail-closed: no derived chunk without a verdict"
                     let stages = tracer.Last |> Option.map _.Stages |> Option.defaultValue []

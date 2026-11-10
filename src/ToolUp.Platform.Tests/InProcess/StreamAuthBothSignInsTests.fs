@@ -114,8 +114,8 @@ let private streamProbe: HttpHandler =
 /// A REST call: the identity the middleware resolved, or 401.
 let private restProbe: HttpHandler =
     fun _ ctx -> task {
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) when not (String.IsNullOrEmpty id) && id <> "anonymous" ->
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id when not (String.IsNullOrEmpty id) && id <> "anonymous" ->
             ctx.Response.StatusCode <- 200
             do! ctx.Response.WriteAsync id
         | _ -> ctx.Response.StatusCode <- 401

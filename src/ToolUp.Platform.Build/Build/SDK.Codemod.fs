@@ -102,6 +102,10 @@ type CodemodMigration =
     /// HNSW store's own unreadable-snapshot exception is the one
     /// `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`.
     | SnapshotIndex
+    /// An access context's module permissions are a closed type with a
+    /// stated `Unrestricted`, and a request with no resolved principal is
+    /// served a context that grants nothing.
+    | AccessContextRefuses
     /// Ingestion is an attempt advanced through one `IIngestionAttemptStore`:
     /// the Data Manager observer and the knowledge base's status helpers and
     /// `MarkIngestionFailed` closure are gone.
@@ -144,6 +148,7 @@ module CodemodMigration =
         | CodemodMigration.AdminPageKit -> "docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md"
         | CodemodMigration.SnapshotIndex ->
             "docs/migrations/1084-redesign-g-scopedsnapshotindex-under-the-three-stores.md"
+        | CodemodMigration.AccessContextRefuses -> "docs/migrations/882-access-context-refuses.md"
         | CodemodMigration.IngestionAttempt -> "docs/migrations/1085-redesign-g-ingestion-attempt-and-its-lattice.md"
 
     /// The phase label the renderings print.
@@ -175,6 +180,7 @@ module CodemodMigration =
         | CodemodMigration.OpenAuditRegistry -> "Phase 874"
         | CodemodMigration.AdminPageKit -> "Phase 1073"
         | CodemodMigration.SnapshotIndex -> "Phase 1084"
+        | CodemodMigration.AccessContextRefuses -> "Phase 882"
         | CodemodMigration.IngestionAttempt -> "Phase 1085"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
@@ -1116,6 +1122,22 @@ module Codemod =
             @"\b(?:ToolUp\.RAG\.)?InMemoryVectorStore\.RagScopeSnapshotUnreadableException\b"
             "ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException"
             "`InMemoryVectorStore.RagScopeSnapshotUnreadableException` → `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`"
+        // The fallback constructor states what it grants.
+        rewrite
+            "882-unrestricted-constructor"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bAccessContext\.unrestricted\b"
+            "AccessContext.ofSubject ModulePermissions.Unrestricted"
+            "`AccessContext.unrestricted subject` → `AccessContext.ofSubject ModulePermissions.Unrestricted subject` (same behaviour, stated; review where it was a fallback)"
+        // A write's actor is a projection of the principal.
+        rewrite
+            "882-entity-principal"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bEntityPrincipal\.ofPrincipal\s+(\w+)\.UserId\b"
+            "AccessContext.entityPrincipal $1"
+            "`EntityPrincipal.ofPrincipal ctx.UserId` → `AccessContext.entityPrincipal ctx` (the actor is a projection of the principal)"
         // The knowledge base's terminal set is the lattice's.
         rewrite
             "1085-is-terminal-status"
@@ -1759,6 +1781,41 @@ module Codemod =
             CodemodFileClass.Source
             @"\bData\.table\s*(?:\[\s*""|\(?\s*\w*[hH]eaders?\b)"
             "`Data.table` takes `Column<'row>` values and the rows themselves: write each header as `{ Header = \"…\"; Align = Data.Left; Cell = fun row -> … }` (the first column `Left`, figures `Right`) and pass the row values, not pre-rendered element lists"
+        // A fallback for a request with no principal grants nothing.
+        review
+            "882-unresolved-fallback"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bAccessContext\.ofSubject\s+ModulePermissions\.Unrestricted\s+\(\s*(?:Subject\.)?AnonymousSession\b"
+            "if this is a handler's fallback for a request with no resolved principal, write `AccessContext.tryResolve ctx.RequestServices |> Option.defaultWith (fun () -> AccessContext.unresolved \"<site>\")` (it grants nothing); work outside a request names `AccessContext.system \"<reason>\"` or `AccessContext.carrying \"<reason>\" subject`"
+        // The permission value is a closed type: an empty map no longer means every module.
+        review
+            "882-permissions-map-read"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\.ModulePermissions\s*(?:\.(?:IsEmpty|TryFind|ContainsKey|Count)\b|\|>\s*Map\.)|Map\.\w+\s+\S+\s+\w+\.ModulePermissions\b"
+            "`ModulePermissions` is `Unrestricted | Restricted of Map<…>`: match on the case or use `ModulePermissions.tryFind` / `grantsAccess` / `grants`; `Restricted Map.empty` grants nothing, so an `IsEmpty` test for \"unrestricted\" is `= ModulePermissions.Unrestricted`"
+        // The request's identity, scope, user and grants are one stamp.
+        review
+            "882-retired-request-item"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"""ToolUp\.(?:User|UserId|Subject|StorageScope|ScopeResult|ModulePermissions|ModuleExposure|PlatformRole|PublicationGrants|ServiceAccountPermissions)"""
+            "this request item is no longer stamped: the request's principal is ONE `AccessContext` under `AccessContext.ItemsKey`. Read it with `AccessContext.ofItems ctx.Items` or an accessor (`callerIdOf` for `ToolUp.UserId`, `subjectOf`, `scopeOf`, `userOf`, `platformRoleOf`), write it with `AccessContext.stamp`, and copy only `AccessContext.ItemsKey` to a background context"
+        // The team-policy viewer is a projection of the principal.
+        review
+            "882-team-policy-viewer"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bTeamPolicyViewer\.resolve\b|\bConversationVisibility\.resolveViewer\b"
+            "`TeamPolicyViewer.resolve` takes `services access teamId` and `ConversationVisibility.resolveViewer` takes `ctx teamId`: drop the user-id argument, the viewer's id is the principal's (`AccessContext.callerId`)"
+        // The constants that spelled two retired keys are gone.
+        review
+            "882-retired-item-constant"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\b(?:SurfaceEnforcement\.SubjectItemsKey|ServiceAccountPermissionsItemsKey)\b"
+            "`SurfaceEnforcement.SubjectItemsKey` and `ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey` are gone: read the subject with `AccessContext.subjectOf ctx.Items`; a service account's permissions are its principal's (`ServiceAccountPrincipalItemsKey`), adopted by scope resolution as the request's `ModulePermissions`"
         // The Data Manager observer is the one observer over the Data
         // Manager's attempt store.
         review
@@ -2795,6 +2852,7 @@ module Codemod =
             CodemodMigration.OpenAuditRegistry
             CodemodMigration.AdminPageKit
             CodemodMigration.SnapshotIndex
+            CodemodMigration.AccessContextRefuses
             CodemodMigration.IngestionAttempt
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())

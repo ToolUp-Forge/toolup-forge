@@ -68,7 +68,7 @@ let tests =
             let store = makeStore ()
             let decl = [ boolFlag "m.f" true ]
             let eval = FlagEvaluator.create store decl None
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isTrue v "declared default true flows through"
         }
@@ -78,7 +78,7 @@ let tests =
             let store = makeStore ()
             let decl = [ variantFlag "m.theme" [ "legacy"; "new" ] "legacy" ]
             let eval = FlagEvaluator.create store decl None
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
             let! v = eval.ResolveVariant "m.theme" ctx
             Expect.equal v "legacy" "declared default variant flows through"
         }
@@ -89,7 +89,7 @@ let tests =
             let store = makeStore ()
             let logger = RecordingLogger()
             let eval = FlagEvaluator.create store [] (Some(logger :> ILogger))
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
             let! v = eval.IsEnabled "typo.key" ctx
             Expect.isFalse v "undeclared key defaults to false"
 
@@ -108,7 +108,7 @@ let tests =
             do! setFlag store FlagScope.Platform "m.f" (FlagValue.Bool false)
             do! setFlag store (FlagScope.Team "teamA") "m.f" (FlagValue.Bool true)
 
-            let ctx = AccessContext.unrestricted (Subject.TeamMember("alice", "teamA"))
+            let ctx = AccessContexts.forSubject (Subject.TeamMember("alice", "teamA"))
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isTrue v "team override beats platform"
         }
@@ -122,7 +122,7 @@ let tests =
             do! setFlag store (FlagScope.Team "teamA") "m.f" (FlagValue.Bool false)
             do! setFlag store (FlagScope.User "alice") "m.f" (FlagValue.Bool true)
 
-            let ctx = AccessContext.unrestricted (Subject.TeamMember("alice", "teamA"))
+            let ctx = AccessContexts.forSubject (Subject.TeamMember("alice", "teamA"))
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isTrue v "user override beats team"
         }
@@ -135,7 +135,7 @@ let tests =
 
             do! setFlag store FlagScope.Platform "m.f" (FlagValue.Bool true)
 
-            let ctx = AccessContext.unrestricted (Subject.TeamMember("bob", "teamB"))
+            let ctx = AccessContexts.forSubject (Subject.TeamMember("bob", "teamB"))
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isTrue v "platform value applied when neither user nor team overrode"
         }
@@ -153,7 +153,7 @@ let tests =
             do! setFlag store (FlagScope.User "anonymous") "m.f" (FlagValue.Bool true)
             do! setFlag store FlagScope.Platform "m.f" (FlagValue.Bool false)
 
-            let ctx = AccessContext.unrestricted (Subject.AnonymousSession "anonymous")
+            let ctx = AccessContexts.forSubject (Subject.AnonymousSession "anonymous")
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isFalse v "Anonymous mode uses only platform; user/team writes ignored"
         }
@@ -168,7 +168,7 @@ let tests =
 
             // Individual mode: no team concept, even if some stale
             // Team document exists in storage.
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isFalse v "Individual mode does not consult Team scope"
         }
@@ -185,7 +185,7 @@ let tests =
             // in but hasn't picked a team yet — Phase 66 collapses the
             // pre-team-resolution shape to `AuthenticatedUser`). User
             // override must still apply; Team scope is quietly skipped.
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isTrue v "User scope still consulted when Team mode has no active team"
         }
@@ -195,7 +195,7 @@ let tests =
         <| async {
             let store = makeStore ()
             let eval = FlagEvaluator.create store [ boolFlag "m.f" true ] None
-            let ctx = AccessContext.unrestricted (Subject.TeamMember("alice", "teamA"))
+            let ctx = AccessContexts.forSubject (Subject.TeamMember("alice", "teamA"))
             let! v = eval.TryEvaluate "m.f" ctx
             Expect.isNone v "no override set → None (caller applies declared default)"
         }
@@ -207,7 +207,7 @@ let tests =
             let value = FlagValue.Variant([ "a"; "b" ], "b")
             do! setFlag store (FlagScope.Team "teamA") "m.v" value
 
-            let ctx = AccessContext.unrestricted (Subject.TeamMember("alice", "teamA"))
+            let ctx = AccessContexts.forSubject (Subject.TeamMember("alice", "teamA"))
             let! v = eval.TryEvaluate "m.v" ctx
             Expect.equal v (Some value) "full FlagValue returned, not coerced"
         }
@@ -224,7 +224,7 @@ let tests =
             // override (admin UI bug or manual blob edit).
             do! setFlag store FlagScope.Platform "m.f" (FlagValue.Variant([ "x" ], "x"))
 
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isTrue v "falls back to declared default"
 

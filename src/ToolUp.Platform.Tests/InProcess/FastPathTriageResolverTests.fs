@@ -417,7 +417,7 @@ let private buildContext
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box HarnessUserId
+    AccessContexts.stampUserId ctx.Items (HarnessUserId)
     ctx :> HttpContext
 
 /// Run the agent loop with a given triage configuration and report
@@ -1560,7 +1560,7 @@ let private routeTests =
                 )
                 :> IAIProviderFactory
 
-            let! resolved = chain.Resolve(AccessContext.unrestricted (TeamMember(HarnessUserId, "team-1")))
+            let! resolved = chain.Resolve(AccessContexts.forSubject (TeamMember(HarnessUserId, "team-1")))
 
             let gated =
                 match resolved with

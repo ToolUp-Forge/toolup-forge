@@ -80,7 +80,7 @@ let private refusedBlock (profile: RegisteredLanguageProfile) (json: string) : C
     | Error refusals -> refusals
 
 let private context: PromptContext = {
-    Access = AccessContext.unrestricted (AuthenticatedUser "u")
+    Access = AccessContexts.forSubject (AuthenticatedUser "u")
     ActiveModule = None
     ActivePage = None
     ActivePageNarrative = None

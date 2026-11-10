@@ -36,7 +36,7 @@ open ToolUp.Platform.Compose
 let private run a = a |> Async.RunSynchronously
 
 let private anonCtx: AccessContext =
-    AccessContext.unrestricted (AnonymousSession "route-session")
+    AccessContexts.forSubject (AnonymousSession "route-session")
 
 let private reportsRoute: HostRoute = {
     PathPattern = "reports/{quarter}"

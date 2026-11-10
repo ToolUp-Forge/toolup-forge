@@ -201,7 +201,7 @@ let private dropEmission =
 
 let private unitVec = Array.init 8 (fun i -> if i = 0 then 1.0f else 0.0f)
 
-let private ctxU = AccessContext.unrestricted (AuthenticatedUser "u")
+let private ctxU = AccessContexts.forSubject (AuthenticatedUser "u")
 
 /// An embedder that sleeps `delay` on every call and counts the calls.
 type private DelayedEmbedder(delay: TimeSpan) =

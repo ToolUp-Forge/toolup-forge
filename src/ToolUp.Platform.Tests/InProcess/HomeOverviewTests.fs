@@ -237,7 +237,7 @@ let overviewScopeAiTests =
             let! _ = store.Save("scope-a", "a2", bytesOf "y", "Sales", "u", Map.empty, Unversioned)
             let! _ = store.Save("scope-b", "b1", bytesOf "z", "Sales", "u", Map.empty, Unversioned)
 
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "scope-a")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "scope-a")
             let ctx = buildHttpContext accessContext (Some catalog)
 
             let api = HomeOverviewApiHandler.homeOverviewApi ctx
@@ -344,7 +344,7 @@ let overviewActiveAiPresentTests =
             // `Wiring.aiProviderFactory` fills.
             let probe = ToolUp.AI.ActiveAiProbe.create (platformOnlyFactory claudeDescriptor)
 
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "scope-a")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "scope-a")
             let ctx = buildHttpContextWithProbe accessContext catalog probe
 
             let api = HomeOverviewApiHandler.homeOverviewApi ctx
@@ -398,7 +398,7 @@ let widgetDataTests =
             let p2 =
                 StubWidgetDataProvider(fun _ -> Map [ "w2.k", "b" ]) :> IHomeWidgetDataProvider
 
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "scope-a")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "scope-a")
             let ctx = ctxWithProviders accessContext [ p1; p2 ]
 
             let api = HomeOverviewApiHandler.homeOverviewApi ctx
@@ -416,7 +416,7 @@ let widgetDataTests =
 
         testCaseAsync "no provider ⇒ WidgetData is empty (GP 13)"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "scope-a")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "scope-a")
             let ctx = ctxWithProviders accessContext []
 
             let api = HomeOverviewApiHandler.homeOverviewApi ctx
@@ -451,7 +451,7 @@ let pinningTests =
             let store = ToolUp.Platform.Config.ConfigStore.create blob
 
             let ctx =
-                ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-a")) store
+                ctxWithConfigStore (AccessContexts.forSubject (AuthenticatedUser "user-a")) store
 
             let api = HomeOverviewApiHandler.homeOverviewApi ctx
 
@@ -485,7 +485,7 @@ let pinningTests =
             // Durable: a fresh handler over the same store reads it back.
             let api2 =
                 HomeOverviewApiHandler.homeOverviewApi (
-                    ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-a")) store
+                    ctxWithConfigStore (AccessContexts.forSubject (AuthenticatedUser "user-a")) store
                 )
 
             let! reloaded = api2.GetPinning()
@@ -502,7 +502,7 @@ let pinningTests =
             // User A records a visit on the shared store.
             let apiA =
                 HomeOverviewApiHandler.homeOverviewApi (
-                    ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-a")) store
+                    ctxWithConfigStore (AccessContexts.forSubject (AuthenticatedUser "user-a")) store
                 )
 
             let! _ = apiA.RecordVisit "Sales"
@@ -510,7 +510,7 @@ let pinningTests =
             // User B, same store, sees nothing of A's.
             let apiB =
                 HomeOverviewApiHandler.homeOverviewApi (
-                    ctxWithConfigStore (AccessContext.unrestricted (AuthenticatedUser "user-b")) store
+                    ctxWithConfigStore (AccessContexts.forSubject (AuthenticatedUser "user-b")) store
                 )
 
             let! bState = apiB.GetPinning()
@@ -527,14 +527,14 @@ let pinningTests =
             // Two members of the SAME team must not share recents.
             let apiU1 =
                 HomeOverviewApiHandler.homeOverviewApi (
-                    ctxWithConfigStore (AccessContext.unrestricted (TeamMember("u1", "team-x"))) store
+                    ctxWithConfigStore (AccessContexts.forSubject (TeamMember("u1", "team-x"))) store
                 )
 
             let! _ = apiU1.RecordVisit "Sales"
 
             let apiU2 =
                 HomeOverviewApiHandler.homeOverviewApi (
-                    ctxWithConfigStore (AccessContext.unrestricted (TeamMember("u2", "team-x"))) store
+                    ctxWithConfigStore (AccessContexts.forSubject (TeamMember("u2", "team-x"))) store
                 )
 
             let! u2State = apiU2.GetPinning()

@@ -172,10 +172,10 @@ let private mintTests =
 
         testCase "AccessContext.configScope and its inverse"
         <| fun _ ->
-            let team = AccessContext.unrestricted (TeamMember("alice", "acme"))
-            let user = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+            let team = AccessContexts.forSubject (TeamMember("alice", "acme"))
+            let user = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
 
-            let claim = AccessContext.unrestricted (Subject.ClaimBearer(claimFor "survey-2026"))
+            let claim = AccessContexts.forSubject (Subject.ClaimBearer(claimFor "survey-2026"))
 
             Expect.equal
                 (AccessContext.configScope team)

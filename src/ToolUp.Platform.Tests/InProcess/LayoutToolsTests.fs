@@ -123,7 +123,7 @@ let private rigWith (options: PageStoreOptions) : Rig =
     }
 
 let private memberOf (userId: string) =
-    AccessContext.unrestricted (TeamMember(userId, teamId))
+    AccessContexts.forSubject (TeamMember(userId, teamId))
 
 let private admin = {
     memberOf "operator" with

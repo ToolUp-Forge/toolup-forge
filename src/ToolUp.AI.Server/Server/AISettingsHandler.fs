@@ -115,15 +115,8 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
     // DI first, fall back to HttpContext.Items for tests that bypass
     // composeWithAI's middleware.
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "AISettingsHandler")
 
     let scopeOpt = AccessContext.configScope accessContext
 

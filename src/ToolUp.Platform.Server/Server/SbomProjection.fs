@@ -869,9 +869,8 @@ module SbomAdminEndpoint =
     }
 
     let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as accessContext -> accessContext
-        | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "SbomProjection")
 
     let private writeError (ctx: HttpContext) (status: int) (message: string) =
         ctx.Response.StatusCode <- status

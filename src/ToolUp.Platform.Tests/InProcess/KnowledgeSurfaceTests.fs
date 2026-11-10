@@ -22,7 +22,7 @@ open ToolUp.Platform.Compose
 // `StrictlyGrounded` renders a no-answer page on a retrieval miss rather
 // than any speculative prose.
 
-let private ctx = AccessContext.unrestricted (AnonymousSession "s")
+let private ctx = AccessContexts.forSubject (AnonymousSession "s")
 
 /// A retrieval pipeline stub returning a fixed match list. Index /
 /// DeleteByScope are no-ops (the answer source never writes).

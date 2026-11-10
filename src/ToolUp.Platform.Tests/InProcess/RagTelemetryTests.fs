@@ -67,7 +67,7 @@ let private lexicalEmbedder =
     }
 
 let private team = Team "acme"
-let private teamAccess = AccessContext.unrestricted (TeamMember("u1", "acme"))
+let private teamAccess = AccessContexts.forSubject (TeamMember("u1", "acme"))
 
 /// The default composition's pipeline: dense store plus keyword index.
 let private fusedPipeline (corpus: string list) = async {

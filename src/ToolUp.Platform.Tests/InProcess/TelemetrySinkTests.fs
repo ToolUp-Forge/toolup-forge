@@ -153,7 +153,7 @@ let tests =
 
         test "The fan-out endpoint tags the event with the caller's resolved scope" {
             let recording = RecordingTelemetrySink()
-            let accessContext = AccessContext.unrestricted (TeamMember("u-1", "team-7"))
+            let accessContext = AccessContexts.forSubject (TeamMember("u-1", "team-7"))
 
             let status =
                 postTelemetry

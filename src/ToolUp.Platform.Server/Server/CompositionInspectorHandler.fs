@@ -291,15 +291,8 @@ let canonicalJson (view: 'view) : string =
 /// context — which the gate then refuses. `AuditViewApiHandler`'s
 /// fallback, and it fails CLOSED here for the same reason.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "CompositionInspectorHandler")
 
 /// True when a service of type `'svc` is registered.
 let private isComposed<'svc> (services: IServiceProvider) : bool =

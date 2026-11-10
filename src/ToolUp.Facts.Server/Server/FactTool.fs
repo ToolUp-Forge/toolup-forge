@@ -179,8 +179,8 @@ module FactTool =
     // only what was asserted anonymously.
 
     let private userIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
     /// The registered `HttpContext` executor for the fact tool `name`.

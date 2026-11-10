@@ -195,7 +195,7 @@ type private InMemoryProviderProfile() =
 
 // ─── Harness ─────────────────────────────────────────────────────
 
-let private ctx = AccessContext.unrestricted (AuthenticatedUser "user-1")
+let private ctx = AccessContexts.forSubject (AuthenticatedUser "user-1")
 
 let private scope =
     match AccessContext.configScope ctx with
@@ -525,7 +525,7 @@ let tests =
                     (fun _ -> async { return () })
                     inner
 
-            let anonCtx = AccessContext.unrestricted (AnonymousSession "anon-1")
+            let anonCtx = AccessContexts.forSubject (AnonymousSession "anon-1")
             let! provider = resolveOrFail factory anonCtx
 
             Expect.isTrue

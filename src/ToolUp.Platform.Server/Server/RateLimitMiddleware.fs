@@ -47,7 +47,7 @@ module RateLimitMiddleware =
     /// the `HttpContext`. `ByIp` reads `Connection.RemoteIpAddress`
     /// (falling back to `"unknown"` when the connection has no
     /// remote address — local dev edge case). `ByUserId` reads
-    /// `HttpContext.Items["ToolUp.UserId"]` populated by
+    /// `AccessContext.callerIdOf ctx.Items` populated by
     /// `ScopeResolutionMiddleware`; `"anonymous"` if absent.
     /// `ByComposite` returns the operator-supplied custom key
     /// verbatim — operators wanting per-(ip, route) or per-team
@@ -64,8 +64,8 @@ module RateLimitMiddleware =
             IpAddressKey ip
         | ByUserId ->
             let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
+                match AccessContext.callerIdOf ctx.Items with
+                | Some id -> id
                 | _ -> "anonymous"
 
             UserIdKey userId

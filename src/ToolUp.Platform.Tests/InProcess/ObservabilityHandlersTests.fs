@@ -90,14 +90,14 @@ let private parse<'T> (body: string) : 'T =
 // ─── Fixtures ─────────────────────────────────────────────────────────
 
 let private platformAdmin: AccessContext = {
-    AccessContext.unrestricted (TeamMember("admin", "team-1")) with
+    AccessContexts.forSubject (TeamMember("admin", "team-1")) with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 
 /// A team member with every module unrestricted but no platform role —
 /// the caller the gate exists to refuse.
 let private teamOwner: AccessContext =
-    AccessContext.unrestricted (TeamMember("owner", "team-1"))
+    AccessContexts.forSubject (TeamMember("owner", "team-1"))
 
 let private withAccess (access: AccessContext) (services: IServiceCollection) =
     services.AddSingleton<AccessContext>(access) |> ignore

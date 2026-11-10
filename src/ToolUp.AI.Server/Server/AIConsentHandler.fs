@@ -169,8 +169,8 @@ let consentDecisionHandler: HttpHandler =
                     return! next ctx
                 else
                     let scopeId =
-                        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                        | true, (:? StorageScope as s) -> s.ScopeId
+                        match AccessContext.scopeOf ctx.Items with
+                        | Some s -> s.ScopeId
                         | _ -> access.UserId
 
                     // Persist BEFORE completing, so the decision is durable

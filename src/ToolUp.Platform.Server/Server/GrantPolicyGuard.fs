@@ -110,7 +110,7 @@ module ModuleGrantPolicyRegistry =
 
 /// `HttpContext.Items` key carrying the acting subject's grant records
 /// for the active team, module-keyed. Stamped by
-/// `ScopeResolutionMiddleware` alongside `ToolUp.ModulePermissions`, and
+/// `ScopeResolutionMiddleware` alongside the principal's `ModulePermissions`, and
 /// ONLY when a non-empty `ModuleGrantPolicyRegistry` is composed — a
 /// deployment declaring no policy performs no extra store read (GP 13).
 [<Literal>]

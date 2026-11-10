@@ -21,7 +21,7 @@ open System
 ///
 /// The `scopeId` is always resolved from the caller's authenticated
 /// request — typically via `ScopeResolutionMiddleware` populating
-/// `ctx.Items["ToolUp.StorageScope"]`. Callers must not accept a
+/// `AccessContext.scopeOf ctx.Items`. Callers must not accept a
 /// `scopeId` parameter from an untrusted source (query string, client
 /// body) without validating it against the authenticated context
 /// first.

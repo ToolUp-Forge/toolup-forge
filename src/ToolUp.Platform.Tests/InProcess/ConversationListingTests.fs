@@ -182,14 +182,13 @@ let private buildContext
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = container
-            Container = container
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = container
+        Container = container
+        Persist = true
+    }
 
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx :> HttpContext
 
 let private apiFor (ctx: HttpContext) : AIAssistantApi =

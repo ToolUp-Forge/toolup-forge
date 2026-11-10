@@ -284,7 +284,7 @@ let private serviceOf<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
 let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
     let access =
         serviceOf<AccessContext> ctx
-        |> Option.defaultWith (fun () -> AccessContext.unrestricted (AnonymousSession "anonymous"))
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "NarrativePromptHandler")
 
     let store =
         NarrativeWording.storeOver (serviceOf<IBlobStorage> ctx) (serviceOf<ILogger> ctx)

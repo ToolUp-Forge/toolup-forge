@@ -69,8 +69,8 @@ let SuspendedDispatchTimeoutMs = SuspendedPrompt.SuspendedDispatchTimeoutMs
 /// server-resident tool needs either. Widening that signature
 /// would retype every tool in the SDK and every tool a consumer has
 /// written, to serve one gate; stamping the items is the same stringly-keyed
-/// per-request carry the loop already uses for `ToolUp.StorageScope` /
-/// `ToolUp.ModulePermissions` (and which `reconstructAccessContext`
+/// per-request carry the loop already uses for the principal's `StorageScope` /
+/// the stamped principal (and which `reconstructAccessContext`
 /// documents as the RBAC-correct path on the background flow).
 ///
 /// Named through constants so the stamping end and the reading end move
@@ -263,13 +263,13 @@ let private emitterOf (ctx: HttpContext) : StreamEmitter option =
     | _ -> None
 
 let private containerOf (ctx: HttpContext) : string option =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as scope) -> Some scope.Container
+    match AccessContext.scopeOf ctx.Items with
+    | Some scope -> Some scope.Container
     | _ -> None
 
 let private userIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) -> id
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id -> id
     | _ -> "anonymous"
 
 /// The standing refusal text, written for the model: the remedy is the

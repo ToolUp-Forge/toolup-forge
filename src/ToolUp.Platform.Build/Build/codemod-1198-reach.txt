@@ -1813,6 +1813,7 @@ ToolUp.Platform AP1
 ToolUp.Platform Abandoned
 ToolUp.Platform Absent
 ToolUp.Platform AccessContext
+ToolUp.Platform AccessContexts
 ToolUp.Platform AccessDenied
 ToolUp.Platform AccessTokenBearer
 ToolUp.Platform AccessTokenRejected
@@ -3225,6 +3226,7 @@ ToolUp.Platform ModuleLawOutcome
 ToolUp.Platform ModuleParityValidator
 ToolUp.Platform ModulePermission
 ToolUp.Platform ModulePermissionDenialRequirement
+ToolUp.Platform ModulePermissions
 ToolUp.Platform ModuleQueryBusApi
 ToolUp.Platform ModuleQueryClient
 ToolUp.Platform ModuleQueryCodec
@@ -3767,6 +3769,7 @@ ToolUp.Platform RestoreDrillFailed
 ToolUp.Platform RestoreDrillFailedPayload
 ToolUp.Platform RestoreDrillPassed
 ToolUp.Platform RestoreDrillPassedPayload
+ToolUp.Platform Restricted
 ToolUp.Platform ResultBudgetChars
 ToolUp.Platform ResultBuilder
 ToolUp.Platform ResultDiff
@@ -5704,6 +5707,7 @@ ToolUp.Platform.Compose.Middleware ScopeResolutionMiddleware
 ToolUp.Platform.Compose.Middleware StorageScopeDerivation
 ToolUp.Platform.Compose.Middleware SubjectRequestExtractor
 ToolUp.Platform.Compose.Middleware SubjectResolutionErrorBridge
+ToolUp.Platform.Compose.Middleware principalOf
 ToolUp.Platform.Compose.Middleware recordPublicationReaderSignIn
 ToolUp.Platform.Compose.Middleware resolverDowngradeSignal
 ToolUp.Platform.Compose.MigrationProbes noneProvisioned
@@ -8128,6 +8132,8 @@ ToolUp.Platform.Scope.PermissionStore TeamPermissionsEdit
 ToolUp.Platform.Scope.PermissionStore Unavailable
 ToolUp.Platform.Scope.PermissionStore Unreadable
 ToolUp.Platform.Scope.PermissionStore effectivePermissions
+ToolUp.Platform.Scope.PermissionStore isConfigured
+ToolUp.Platform.Scope.PermissionStore modulePermissionsFor
 ToolUp.Platform.Scope.PermissionStoreActionAuthorizer create
 ToolUp.Platform.Scope.PlatformAdminAuthorization PlatformAdminAuthorizationMiddleware
 ToolUp.Platform.Scope.PlatformAdminAuthorization isPlatformAdmin
@@ -8138,6 +8144,7 @@ ToolUp.Platform.Scope.PremiumUserApi routes
 ToolUp.Platform.Scope.PublicationReaderApiHandler publicationReaderApi
 ToolUp.Platform.Scope.PublicationReaderGrants validateToken
 ToolUp.Platform.Scope.RequestContextBuilder ofHttpContext
+ToolUp.Platform.Scope.RequestViewer ofAccess
 ToolUp.Platform.Scope.RequestViewer ofItems
 ToolUp.Platform.Scope.RequestViewerContext current
 ToolUp.Platform.Scope.RequestViewerContext establish
@@ -8164,7 +8171,6 @@ ToolUp.Platform.Scope.ServiceAccountStore create
 ToolUp.Platform.Scope.ServiceAccountStore platformContainer
 ToolUp.Platform.Scope.ServiceAccountTokenHandler AuthorizationHeader
 ToolUp.Platform.Scope.ServiceAccountTokenHandler BearerScheme
-ToolUp.Platform.Scope.ServiceAccountTokenHandler ServiceAccountPermissionsItemsKey
 ToolUp.Platform.Scope.ServiceAccountTokenHandler ServiceAccountPrincipalItemsKey
 ToolUp.Platform.Scope.ServiceAccountTokenHandler ServiceAccountTokenMiddleware
 ToolUp.Platform.Scope.ServiceAccountTokenHandler claimFor
@@ -8210,7 +8216,6 @@ ToolUp.Platform.Scope.StoreIdSanitising SanitisingTeamStore
 ToolUp.Platform.Scope.SurfaceEnforcement Pass
 ToolUp.Platform.Scope.SurfaceEnforcement ReaderRouteClass
 ToolUp.Platform.Scope.SurfaceEnforcement Reject
-ToolUp.Platform.Scope.SurfaceEnforcement SubjectItemsKey
 ToolUp.Platform.Scope.SurfaceEnforcement SurfaceEnforcement
 ToolUp.Platform.Scope.SurfaceEnforcement SurfaceEnforcementMiddleware
 ToolUp.Platform.Scope.SurfaceEnforcement SurfaceEnforcementOutcome

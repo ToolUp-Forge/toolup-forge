@@ -88,8 +88,8 @@ module LiveSessionHandler =
         match ctx.RequestServices.GetService(typeof<AccessContext>) with
         | :? AccessContext as ac -> ac.TeamId |> Option.defaultValue ac.UserId
         | _ ->
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) when not (String.IsNullOrEmpty id) && id <> "anonymous" -> id
+            match AccessContext.callerIdOf ctx.Items with
+            | Some id when not (String.IsNullOrEmpty id) && id <> "anonymous" -> id
             | _ ->
                 match ctx.Request.Query.TryGetValue "userId" with
                 | true, values when values.Count > 0 -> string values[0]

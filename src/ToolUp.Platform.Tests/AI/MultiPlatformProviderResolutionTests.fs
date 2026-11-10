@@ -278,7 +278,7 @@ let tests =
             let factory, _, _, _ =
                 buildFactory recorder [ anthropic ] bootstraps PlatformOnly false
 
-            let ctx = AccessContext.unrestricted anonymous
+            let ctx = AccessContexts.forSubject anonymous
             let! result = factory.Resolve ctx
 
             match result with
@@ -297,7 +297,7 @@ let tests =
             let factory, _, _, _ =
                 buildFactory recorder [ anthropic ] bootstraps PlatformOnly true
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -313,7 +313,7 @@ let tests =
             let factory, _, _, _ =
                 buildFactory recorder [ anthropic ] bootstraps PlatformOnly true
 
-            let ctx = AccessContext.unrestricted teamMember
+            let ctx = AccessContexts.forSubject teamMember
             let! result = factory.Resolve ctx
 
             match result with
@@ -330,7 +330,7 @@ let tests =
             let factory, _, _, _ =
                 buildFactory recorder [ anthropic ] bootstraps PlatformOnly true
 
-            let ctx = AccessContext.unrestricted claimBearer
+            let ctx = AccessContexts.forSubject claimBearer
             let! result = factory.Resolve ctx
 
             match result with
@@ -355,7 +355,7 @@ let tests =
             let keyStore = keyStoreOpt.Value
             let! _ = keyStore.SetPlatformKey(anthropic.Id, "platform-key")
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -377,7 +377,7 @@ let tests =
             let keyStore = keyStoreOpt.Value
             let! _ = keyStore.SetPlatformKey(anthropic.Id, "platform-key")
 
-            let ctx = AccessContext.unrestricted teamMember
+            let ctx = AccessContexts.forSubject teamMember
             let! result = factory.Resolve ctx
 
             match result with
@@ -399,7 +399,7 @@ let tests =
             let! _ = keyStore.SetPlatformKey(anthropic.Id, "platform-key")
             let! _ = keyStore.SetTeamKey(TeamId "team-alpha", anthropic.Id, "team-key")
 
-            let ctx = AccessContext.unrestricted teamMember
+            let ctx = AccessContexts.forSubject teamMember
             let! result = factory.Resolve ctx
 
             match result with
@@ -418,7 +418,7 @@ let tests =
             let keyStore = keyStoreOpt.Value
             let! _ = keyStore.SetTeamKey(TeamId "team-alpha", anthropic.Id, "team-key")
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -439,7 +439,7 @@ let tests =
             let factory, _, _, _ =
                 buildFactory recorder [ anthropic ] Map.empty PlatformOnly true
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -492,7 +492,7 @@ let tests =
             let keyStore = keyStoreOpt.Value
             let! _ = keyStore.SetPlatformKey(anthropic.Id, "platform-key")
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -528,7 +528,7 @@ let tests =
 
             providerProfile.Seed(userScope, profile)
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -566,7 +566,7 @@ let tests =
 
             providerProfile.Seed(userScope, profile)
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -600,7 +600,7 @@ let tests =
 
             providerProfile.Seed(userScope, profile)
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -630,7 +630,7 @@ let tests =
 
             providerProfile.Seed(userScope, profile)
 
-            let ctx = AccessContext.unrestricted authenticatedUser
+            let ctx = AccessContexts.forSubject authenticatedUser
             let! result = factory.Resolve ctx
 
             match result with
@@ -658,7 +658,7 @@ let tests =
                 buildFactory recorder [ anthropic ] bootstraps PlatformOnly false
 
             for subject in [ anonymous; authenticatedUser; teamMember ] do
-                let ctx = AccessContext.unrestricted subject
+                let ctx = AccessContexts.forSubject subject
                 let! result = factory.Resolve ctx
 
                 match result with

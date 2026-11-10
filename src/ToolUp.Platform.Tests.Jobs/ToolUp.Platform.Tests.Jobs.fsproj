@@ -14,6 +14,7 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IJobStoreContract.fs" Link="Contracts\IJobStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthStateStoreContract.fs" Link="Contracts\IOAuthStateStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthCredentialFlowContract.fs" Link="Contracts\IOAuthCredentialFlowContract.fs" />

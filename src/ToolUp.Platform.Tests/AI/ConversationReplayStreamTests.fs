@@ -46,7 +46,7 @@ let private scopeId = "team-replay"
 let private operator = "op-1"
 
 let private accessContext =
-    AccessContext.unrestricted (TeamMember(operator, scopeId))
+    AccessContexts.forSubject (TeamMember(operator, scopeId))
 
 let private response (text: string) : AIProviderResponse = {
     Content = text
@@ -219,14 +219,13 @@ let private getConversation (storage: IBlobStorage) (conversationId: Guid) : Con
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = operator
-            Container = blobContainer
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = operator
+        Container = blobContainer
+        Persist = true
+    }
 
-    ctx.Items["ToolUp.UserId"] <- box operator
+    AccessContexts.stampUserId ctx.Items (operator)
     let manager = new SSEConnectionManager()
 
     let api, _ =

@@ -1,4 +1,4 @@
-Codemod: 118 site(s) in 22 file(s) need human review (not rewritten):
+Codemod: 123 site(s) in 22 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -161,6 +161,16 @@ Codemod: 118 site(s) in 22 file(s) need human review (not rewritten):
       -> Phase 874: if this is an `AuditEvent` case, the companion that emits it declares it now: open its `*AuditEvents` module, construct with its family's `event` (`FormsAuditEvent.event (FormSubmitted p)`), and match with its active pattern (`FormsAudit(FormSubmitted p)`) or `tryRead`; Core carries it as `AuditEvent.Opaque`
     L60 [874-archive-read] JsonSerializer.Deserialize<ArchiveLine>(line, PlatformJson.options)
       -> Phase 874: if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode
+    L66 [882-unresolved-fallback] let fallback = AccessContext.ofSubject ModulePermissions.Unrestricted (AnonymousSession "anonymous")
+      -> Phase 882: if this is a handler's fallback for a request with no resolved principal, write `AccessContext.tryResolve ctx.RequestServices |> Option.defaultWith (fun () -> AccessContext.unresolved "<site>")` (it grants nothing); work outside a request names `AccessContext.system "<reason>"` or `AccessContext.carrying "<reason>" subject`
+    L69 [882-permissions-map-read] let isOpen (ctx: AccessContext) = ctx.ModulePermissions.IsEmpty
+      -> Phase 882: `ModulePermissions` is `Unrestricted | Restricted of Map<…>`: match on the case or use `ModulePermissions.tryFind` / `grantsAccess` / `grants`; `Restricted Map.empty` grants nothing, so an `IsEmpty` test for "unrestricted" is `= ModulePermissions.Unrestricted`
+    L71 [882-retired-request-item] let stamp (ctx: HttpContext) perms = ctx.Items["ToolUp.ModulePermissions"] <- box perms
+      -> Phase 882: this request item is no longer stamped: the request's principal is ONE `AccessContext` under `AccessContext.ItemsKey`. Read it with `AccessContext.ofItems ctx.Items` or an accessor (`callerIdOf` for `ToolUp.UserId`, `subjectOf`, `scopeOf`, `userOf`, `platformRoleOf`), write it with `AccessContext.stamp`, and copy only `AccessContext.ItemsKey` to a background context
+    L75 [882-team-policy-viewer] let viewer services access = TeamPolicyViewer.resolve services access "u" "t"
+      -> Phase 882: `TeamPolicyViewer.resolve` takes `services access teamId` and `ConversationVisibility.resolveViewer` takes `ctx teamId`: drop the user-id argument, the viewer's id is the principal's (`AccessContext.callerId`)
+    L77 [882-retired-item-constant] let subjectKey = SurfaceEnforcement.SubjectItemsKey
+      -> Phase 882: `SurfaceEnforcement.SubjectItemsKey` and `ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey` are gone: read the subject with `AccessContext.subjectOf ctx.Items`; a service account's permissions are its principal's (`ServiceAccountPrincipalItemsKey`), adopted by scope resolution as the request's `ModulePermissions`
   src/Server/Ingestion.fs
     L11 [1085-data-manager-observer] let observer = ToolUp.RAG.DataManagerIngestionObserver.create store None logger
       -> Phase 1085: `DataManagerIngestionObserver.create store channel logger` → `IngestionObserver.create (IngestionAttemptStore.dataManager store blobStorage logger) channel logger`; the post-save hook begins each file's attempt before it enqueues
@@ -283,3 +293,4 @@ Codemod: 118 site(s) in 22 file(s) need human review (not rewritten):
     Phase 877 — docs/migrations/877-nested-server-config.md
     Phase 878 — docs/migrations/878-typed-identity.md
     Phase 879 — docs/migrations/879-shell-slots.md
+    Phase 882 — docs/migrations/882-access-context-refuses.md

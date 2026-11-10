@@ -120,7 +120,7 @@ let private bareRequest (store: IFactStore) (gate: IFactDisclosureGate) : HttpCo
     services.AddSingleton<IFactDisclosureGate>(gate) |> ignore
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box "user-1"
+    AccessContexts.stampUserId ctx.Items ("user-1")
     ctx :> HttpContext
 
 // ── A. Unconstructible ────────────────────────────────────────────
@@ -248,8 +248,7 @@ let private requestPathTests =
             // (or a test harness, or a module) that plants it no longer
             // steers the fact doors: the door sees the anonymous scope.
             let ctx = DefaultHttpContext() :> HttpContext
-            ctx.Items["ToolUp.StorageScope"] <- box (storage "team-planted")
-
+            AccessContexts.stampScope ctx.Items ((storage "team-planted"))
             let seen = ScopeResolution.forRequest ctx
 
             Expect.isTrue seen.IsAnonymous "the planted record is not honoured"
@@ -258,8 +257,7 @@ let private requestPathTests =
 
         test "a user id on the request is not a scope either — the old middle rung is gone" {
             let ctx = DefaultHttpContext() :> HttpContext
-            ctx.Items["ToolUp.UserId"] <- box "user-42"
-
+            AccessContexts.stampUserId ctx.Items ("user-42")
             Expect.isTrue (ScopeResolution.forRequest ctx).IsAnonymous "no fallback to the principal's id"
         }
 
@@ -272,8 +270,7 @@ let private requestPathTests =
 
             // The same request the old code would have read as `scopeId`.
             let planted = bareRequest store gate
-            planted.Items["ToolUp.StorageScope"] <- box (storage scopeId)
-
+            AccessContexts.stampScope planted.Items ((storage scopeId))
             let! raw = FactQueryTool.execute planted queryArgs
 
             Expect.isEmpty (factsOf raw) "the door queried the anonymous shard, not the planted one"
@@ -646,7 +643,7 @@ type private CarryingScheduler(handler: unit -> IJobHandler, remints: bool) =
                 let ctx: JobContext = {
                     JobId = jobId
                     ScopeId = registration.ScopeId
-                    AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId.Value)
+                    AccessContext = AccessContexts.forSubject (AuthenticatedUser byUserId.Value)
                     Attempt = 1
                     Trigger = registration.Trigger
                     Scope =
@@ -793,7 +790,7 @@ let private reactivePathTests =
             Expect.equal (source ()) (Some remembered) "the middleware's value, read through forRequest"
 
             let planted = DefaultHttpContext() :> HttpContext
-            planted.Items["ToolUp.StorageScope"] <- box (storage "team-planted")
+            AccessContexts.stampScope planted.Items ((storage "team-planted"))
             accessor.HttpContext <- planted
 
             Expect.equal
@@ -894,7 +891,7 @@ let private reactivePathTests =
             let ctx: JobContext = {
                 JobId = Guid.NewGuid()
                 ScopeId = jobShard.ScopeId
-                AccessContext = AccessContext.unrestricted (AuthenticatedUser "tester")
+                AccessContext = AccessContexts.forSubject (AuthenticatedUser "tester")
                 Attempt = 1
                 Trigger = Trigger.Manual
                 Scope = otherShard
@@ -921,7 +918,7 @@ let private reactivePathTests =
                 let services = ServiceCollection()
                 services.AddSingleton<IJobScheduler>(scheduler) |> ignore
 
-                services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "user-930"))
+                services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "user-930"))
                 |> ignore
 
                 let ctx = DefaultHttpContext()

@@ -113,17 +113,8 @@ let providerProfileApi (providerProfile: IProviderProfile) (ctx: HttpContext) : 
             }
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests that bypass ScopeResolutionMiddleware —
-            // the same shape AISettingsHandler and ConfigHandler use.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "ProviderProfileApiHandler")
 
     let scopeOpt = AccessContext.configScope accessContext
 

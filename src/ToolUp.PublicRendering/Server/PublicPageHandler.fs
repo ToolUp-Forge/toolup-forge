@@ -382,9 +382,8 @@ module PublicPageHandler =
         // the same token, and the identity provider's live session would complete
         // that trip silently, so a redirect here is a loop.
         let signedIn =
-            match ctx.Items.TryGetValue "ToolUp.User" with
-            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                not (ToolUp.Platform.Auth.AuthenticatedUser.isAnonymous user)
+            match AccessContext.userOf ctx.Items with
+            | Some user -> not (ToolUp.Platform.Auth.AuthenticatedUser.isAnonymous user)
             | _ -> false
 
         match signIn with
@@ -745,9 +744,8 @@ module PublicPageHandler =
             // resolved this request's principal (page routes included) and
             // the registered factory builds the context from it.
             let accessContext =
-                match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                | :? AccessContext as ac -> ac
-                | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+                AccessContext.tryResolve ctx.RequestServices
+                |> Option.defaultWith (fun () -> AccessContext.unresolved "PublicPageHandler")
 
             // Phase 93 — render observability. Resolve the sink once
             // (NoOp when none composed → every emit is free, GP 13) and

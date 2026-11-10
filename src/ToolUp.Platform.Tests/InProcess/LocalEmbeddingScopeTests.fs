@@ -793,7 +793,7 @@ let private harness (embedder: IEmbeddingProvider) (rows: (VectorScope * string 
 
 /// A caller in team `acme` who may also read the Platform KB.
 let private teamCaller =
-    AccessContext.unrestricted (Subject.TeamMember("user-1", "acme"))
+    AccessContexts.forSubject (Subject.TeamMember("user-1", "acme"))
 
 /// The shared topic. Both on-topic documents are about it; the two noise
 /// documents (one per scope) are not — so "surfaced" cannot pass

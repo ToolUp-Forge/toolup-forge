@@ -292,8 +292,8 @@ module NarrativePublisher =
     open ToolUp.Platform
 
     let private resolveScopeId (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as scope) -> scope.ScopeId
+        match AccessContext.scopeOf ctx.Items with
+        | Some scope -> scope.ScopeId
         | _ -> FileManagement.getUserId ctx
 
     let private resolveStore (ctx: HttpContext) : INarrativeStore option =

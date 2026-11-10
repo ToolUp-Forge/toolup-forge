@@ -196,7 +196,7 @@ type private Bound = {
 }
 
 let private access =
-    AccessContext.unrestricted (Subject.AnonymousSession "query-rewrite")
+    AccessContexts.forSubject (Subject.AnonymousSession "query-rewrite")
 
 /// Build a default pipeline over the shared corpus with the given rewriter
 /// (and optional timeout override), seeded through `IRetrievalPipeline.Index`
