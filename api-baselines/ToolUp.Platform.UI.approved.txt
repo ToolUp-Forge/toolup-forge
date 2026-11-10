@@ -191,8 +191,8 @@ Toolup.UIToolkit.Forms+Field (class)
 Toolup.UIToolkit.Forms+Field.actions(Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Field.field(System.String, Fable.React.ReactElement) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Input (class)
-Toolup.UIToolkit.Forms+Input.currency(System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[System.Decimal, Microsoft.FSharp.Core.Unit], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Fable.React.ReactElement
-Toolup.UIToolkit.Forms+Input.integerInput(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.Unit], System.String, System.Boolean) : Fable.React.ReactElement
+Toolup.UIToolkit.Forms+Input.currency(System.String, System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[System.Decimal, Microsoft.FSharp.Core.Unit], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Fable.React.ReactElement
+Toolup.UIToolkit.Forms+Input.integerInput(System.String, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.Unit], System.String, System.Boolean) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Input.text(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], System.String) : Fable.React.ReactElement
 Toolup.UIToolkit.Kpi (class)
 Toolup.UIToolkit.Kpi.row(Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Kpi+Tile]) : Fable.React.ReactElement
@@ -225,13 +225,15 @@ Toolup.UIToolkit.Modal (class)
 Toolup.UIToolkit.Modal.confirm(Toolup.UIToolkit.ConfirmMessages, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], System.Boolean) : Fable.React.ReactElement
 Toolup.UIToolkit.Modal.overlay(System.String, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement], Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
 Toolup.UIToolkit.OutputFormatting (class)
-Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)
-Toolup.UIToolkit.OutputFormatting.formatCurrency`1(System.Int32) : a
+Toolup.UIToolkit.OutputFormatting.formatCurrency(System.String, System.String, System.Decimal) : System.String
 Toolup.UIToolkit.OutputFormatting.formatDate(System.DateTime) : System.String
-Toolup.UIToolkit.OutputFormatting.formatDecimal`1(System.Decimal) : a
-Toolup.UIToolkit.OutputFormatting.formatInt`1(System.Int32) : a
+Toolup.UIToolkit.OutputFormatting.formatDecimal(System.String, System.Decimal) : System.String
+Toolup.UIToolkit.OutputFormatting.formatInt(System.String, System.Int32) : System.String
+Toolup.UIToolkit.OutputFormatting.formatNumber(System.String, System.Int32, System.Int32, System.Decimal) : System.String
 Toolup.UIToolkit.OutputFormatting.formatPercentage(System.Decimal) : System.String
+Toolup.UIToolkit.OutputFormatting.parseDecimal(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
 Toolup.UIToolkit.OutputFormatting.phiChar : System.String { get }
+Toolup.UIToolkit.OutputFormatting.separators(System.String) : System.Tuple`2[System.String, System.String]
 Toolup.UIToolkit.StateViews (class)
 Toolup.UIToolkit.StateViews.emptyState(Fable.React.ReactElement, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Toolup.UIToolkit.StateViews+EmptyStateAction]) : Fable.React.ReactElement
 Toolup.UIToolkit.StateViews.inlineLoading(System.String) : Fable.React.ReactElement
