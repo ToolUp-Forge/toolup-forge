@@ -82,11 +82,11 @@ let appendKnowledgeBaseModule (mode: KnowledgeBaseMode) (modules: ErasedModule l
 /// that adds provenance), and implicit wiring never overrides an
 /// explicit one.
 let withNarrativeCommitHandler (mode: KnowledgeBaseMode) (config: ClientConfig) : ClientConfig =
-    match mode, config.Handlers.NarrativeCommitHandler with
+    match mode, config.Composition.Handlers.NarrativeCommitHandler with
     | (DefaultKnowledgeBase | ConfiguredKnowledgeBase _), None -> {
         config with
-            Handlers = {
-                config.Handlers with
+            Composition.Handlers = {
+                config.Composition.Handlers with
                     NarrativeCommitHandler = Some KnowledgeBaseView.narrativeCommitHandler
             }
       }

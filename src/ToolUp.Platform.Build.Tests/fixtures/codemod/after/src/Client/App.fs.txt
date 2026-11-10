@@ -11,7 +11,7 @@ open ToolUp.Platform
 let config = {
     ClientConfig.defaults with
         Surfaces = Surfaces.individual
-        DevDefaultUserId = "dev-admin"
+        Auth.DevDefaultUserId = "dev-admin"
 }
 
 let mode = UserSession.getSubjectKind ()

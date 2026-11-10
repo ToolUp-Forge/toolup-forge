@@ -63,6 +63,13 @@ module AISlotFills =
         PlatformAIKeys = SlotFill.Default
     }
 
+    /// The built-in family with the assistant rebranded (its name, its
+    /// icon, and whether the side panel shows).
+    let configured (branding: AIAssistantClientBranding) : AISlotFills = {
+        defaults with
+            AIAssistant = SlotFill.Configured branding
+    }
+
     /// No AI page at all, and no side panel.
     let empty: AISlotFills = {
         AIAssistant = SlotFill.Empty

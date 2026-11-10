@@ -732,18 +732,20 @@ let moduleId = "_sdk.DataManager"
 /// The DataTypeDisplay list determines how summaries are rendered. It
 /// fills the data-manager shell slot when that slot is `SlotFill.Default`
 /// or `Configured (DataManagerChoice.FileUpload _)`.
-/// Optional DataManagerConfig overrides the default name, icon, and
+/// The DataManagerConfig overrides the default name, icon, and
 /// group. The defaults — "File Upload" in group "Data Management" —
 /// keep file ingestion separate from any RAG / knowledge-base
 /// companion that might also be wired in (those declare their own
 /// "Knowledge" group).
-let create (displays: DataTypeDisplay list) (config: DataManagerConfig option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "File Upload"
+let create (displays: DataTypeDisplay list) (config: DataManagerConfig) : ErasedModule =
+    let name = config.Label |> Option.map _.Name |> Option.defaultValue "File Upload"
 
     let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.upload
+        config.Label
+        |> Option.map _.Icon
+        |> Option.defaultValue ToolUp.Platform.Icons.upload
 
-    let group = config |> Option.bind _.Group |> Option.defaultValue "Data Management"
+    let group = config.Group |> Option.defaultValue "Data Management"
 
     let route = "/" + name.ToLower().Replace(" ", "-")
 

@@ -861,10 +861,10 @@ let orderingTests =
 
 // ─── Admin group-set pins ─────────────────────────────────────────────
 //
-// The group labels stage 2 and stage 4 key off. `ClientConfig` re-exports
-// both predicates, but `ClientConfig`'s module initialiser is Fable-only
-// (it reaches `AgGridModuleConfig.community`), so the .NET-side pins call
-// `SidebarVisibility` directly — the canonical home since Phase 570.
+// The group labels stage 2 and stage 4 key off. They live in
+// `SidebarVisibility` alone — the canonical home since Phase 570; Phase
+// 1074 retired `ClientConfig`'s two re-exports — and the .NET-side pins
+// call it directly.
 
 [<Tests>]
 let groupSetTests =
@@ -1355,5 +1355,74 @@ let keyboardNavigationTests =
                          report its state as `aria-expanded`. Without it a screen-reader user gets \
                          the binding but no feedback that it did anything."
                         what)
+        }
+    ]
+// ─── Phase 1074 — the chrome rows are one shape ──────────────────────
+//
+// The six chrome rows the shell composes beside its slots are filled
+// through `ClientConfig.Chrome` (`ChromeFill.Off | On cfg`), so a row set
+// `Off` composes nothing on any surface. The behavioural half — every
+// row `Off` is absent from `prepareModules` for every surface — runs
+// Fable-side in `ToolUp.AI.Client.Tests/ShellSlotTests.fs`, because a
+// `ClientConfig` cannot be built under .NET (see the note at the head of
+// this file). These pins hold the shape: each row reads its own `Chrome`
+// field and nothing else, and the no-active-team gate's admin exception
+// is `SidebarVisibility.noActiveTeamAdmits` alone, with no re-export of
+// the group predicates on `ClientConfig`.
+
+let private clientSource (file: string) =
+    let assemblyDir =
+        System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+
+    let repoRoot =
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+    let path =
+        System.IO.Path.Combine(repoRoot, "src", "ToolUp.Platform.Client", "Client", file)
+
+    Expect.isTrue (System.IO.File.Exists path) (sprintf "expected %s at %s" file path)
+
+    (System.IO.File.ReadAllText path).Replace("\r\n", "\n").Split('\n')
+    |> Array.filter (fun line -> not (line.TrimStart().StartsWith "//"))
+    |> String.concat "\n"
+
+[<Tests>]
+let chromeRowTests =
+    testList "Phase 1074 — chrome rows as ChromeFill (shape)" [
+
+        test "each chrome row is filled through its own Chrome field" {
+            let code = clientSource "ShellSlots.fs"
+
+            for field in
+                [
+                    "AdminArea"
+                    "DatadogReadback"
+                    "Observability"
+                    "TenantLifecycle"
+                    "PlatformUsers"
+                ] do
+                Expect.stringContains
+                    code
+                    (sprintf "chrome _.%s " field)
+                    (sprintf "the %s row reads Chrome.%s" field field)
+
+            Expect.stringContains
+                code
+                "ctx.Config.Chrome.NoActiveTeamLanding"
+                "the no-active-team landing row reads Chrome.NoActiveTeamLanding"
+
+            Expect.stringContains code "| ChromeFill.Off -> []" "a row set Off composes nothing"
+        }
+
+        test "ClientConfig re-exports neither admin group predicate" {
+            let code = clientSource "SDK.ClientTypes.fs"
+
+            Expect.isFalse
+                (code.Contains "let isAdminSidebarGroup")
+                "isAdminSidebarGroup lives in SidebarVisibility only"
+
+            Expect.isFalse
+                (code.Contains "let isPlatformAdminSidebarGroup")
+                "isPlatformAdminSidebarGroup lives in SidebarVisibility only"
         }
     ]

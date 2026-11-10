@@ -753,38 +753,42 @@ module SlotExtension =
             }
     }
 
-/// Name, icon and sidebar group for the SDK data manager. The data slot's
-/// label: unlike `ModuleLabel` it can also move the entry to another
-/// sidebar group.
+/// The SDK data manager's label and sidebar group — the data slot's
+/// configuration, the same for both managers (Phase 1074 made the two
+/// symmetric). Unlike a plain `ModuleLabel` it can also move the entry to
+/// another sidebar group.
 type DataManagerConfig = {
-    /// Display name shown in the sidebar (default: "File Upload" for the
-    /// file-upload manager, "Import & Map" for the column-mapping one)
-    Name: string
-    /// Icon shown in the sidebar — typically `Icons.upload` or any
-    /// other typed `ReactElement`. Default: `ToolUp.Platform.Icons.upload`.
-    Icon: ReactElement
+    /// Display name and icon. `None` keeps the manager's own ("File
+    /// Upload" / "Import & Map", `ToolUp.Platform.Icons.upload`).
+    Label: ModuleLabel option
     /// Sidebar group the module appears under. `None` keeps the SDK
-    /// default ("Data Management"); `Some g` overrides it (e.g. to
-    /// merge file upload into a deployment-specific group).
+    /// default ("Data Management"); `Some g` overrides it (e.g. to merge
+    /// file upload into a deployment-specific group).
     Group: string option
 }
 
+/// Phase 1074 — the data manager's configuration values.
+module DataManagerConfig =
+    /// The manager's own label, in its own group.
+    let unlabelled: DataManagerConfig = { Label = None; Group = None }
+
 /// Phase 879 — which SDK data manager fills the data slot when it is
 /// `SlotFill.Configured`. (`SlotFill.Default` is the file-upload manager
-/// under its own label.)
+/// under its own label.) Both cases carry the same `DataManagerConfig`
+/// (Phase 1074); `DataManagerConfig.unlabelled` keeps the manager's own
+/// label.
 [<RequireQualifiedAccess>]
 type DataManagerChoice =
-    /// The file-upload manager, relabelled.
+    /// The file-upload manager.
     | FileUpload of DataManagerConfig
     /// The mapping-aware data manager: upload an arbitrary CSV, pick a
     /// registered (schema-bearing) target type, and map the schema's
     /// fields to the CSV's columns with smart auto-suggestion and
     /// per-field override. The confirmed map is persisted per scope,
     /// keyed by the CSV's column structure, and reused on later uploads.
-    /// `None` keeps its own label. Requires
-    /// `ServerConfig.ColumnMapping = FeatureMode.Enabled` to back the
-    /// mapping store.
-    | ColumnMapping of DataManagerConfig option
+    /// Requires `ServerConfig.ColumnMapping = FeatureMode.Enabled` to back
+    /// the mapping store.
+    | ColumnMapping of DataManagerConfig
 
 /// Controls the built-in real-time toast notification renderer that
 /// subscribes to `/api/notifications` and pops transient messages for
@@ -1696,8 +1700,8 @@ type ShellSlotFills = {
     /// "where you add data" entry, and the source of the boot-time file
     /// snapshot that lets data modules see uploaded data before the page
     /// is first opened. **Default `Default`** (the file-upload manager).
-    /// `Configured (DataManagerChoice.ColumnMapping None)` selects the
-    /// mapping-aware manager.
+    /// `Configured (DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)`
+    /// selects the mapping-aware manager.
     DataManager: SlotFill<DataManagerChoice>
     /// The team manager (create / join / settings / members). Admitted
     /// on any `Team` surface — single-team and multi-team alike (a fresh

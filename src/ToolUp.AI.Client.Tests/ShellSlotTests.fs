@@ -60,6 +60,7 @@ let private everyExternal = {
             MigrationAdmin = SlotFill.External(replacement "MigrationAdmin")
             DataSubjectRequestAdmin = SlotFill.External(replacement "DataSubjectRequestAdmin")
             JobsAdmin = SlotFill.External(replacement "JobsAdmin")
+            Extensions = []
         }
 }
 
@@ -72,8 +73,7 @@ let private everyConfigured = {
             DataManager =
                 SlotFill.Configured(
                     DataManagerChoice.FileUpload {
-                        Name = "uploads"
-                        Icon = Html.none
+                        Label = Some(label "uploads")
                         Group = None
                     }
                 )
@@ -96,12 +96,13 @@ let private everyConfigured = {
             MigrationAdmin = SlotFill.Configured(label "migrations")
             DataSubjectRequestAdmin = SlotFill.Configured(label "dsr")
             JobsAdmin = SlotFill.Configured(label "jobs")
+            Extensions = []
         }
 }
 
 let private columnMapping = {
     team with
-        Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping None)
+        Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)
 }
 
 let private ctxOf (config: ClientConfig) : ShellSlotContext = { Config = config; DataTypes = [] }
@@ -273,4 +274,110 @@ let tests =
                  |> tileFor UsageDashboard.moduleId
                  |> Option.isNone)
                 "no tile"
+
+        // ── Phase 1074 — the AI family on the slot table, the chrome rows ──
+
+        testCase "an AI deployment with the assistant slot Empty composes no assistant module"
+        <| fun () ->
+            let fills = {
+                ToolUp.AI.AISlotFills.defaults with
+                    AIAssistant = SlotFill.Empty
+            }
+
+            let ids =
+                Client.prepareModules (ToolUp.AI.Client.AIClientConfig.withAISlots fills team) []
+                |> List.map _.Definition.Id
+
+            let defaultIds =
+                Client.prepareModules (ToolUp.AI.Client.AIClientConfig.withAISlots ToolUp.AI.AISlotFills.defaults team) []
+                |> List.map _.Definition.Id
+
+            let assistantId =
+                defaultIds
+                |> List.except (Client.prepareModules team [] |> List.map _.Definition.Id)
+                |> List.head
+
+            Expect.isFalse (List.contains assistantId ids) "the assistant slot composes nothing"
+            Expect.equal (List.length defaultIds - List.length ids) 1 "and only the assistant is gone"
+
+        testCase "an AI deployment with the assistant slot External composes the replacement in its place"
+        <| fun () ->
+            let mine = module' "my.assistant" "My assistant"
+            let apps = [ module' "app.alpha" "Alpha" ]
+
+            let fills = {
+                ToolUp.AI.AISlotFills.defaults with
+                    AIAssistant = SlotFill.External mine
+            }
+
+            let builtIn =
+                Client.prepareModules
+                    (ToolUp.AI.Client.AIClientConfig.withAISlots ToolUp.AI.AISlotFills.defaults team)
+                    apps
+                |> List.map _.Definition.Id
+
+            let replaced =
+                Client.prepareModules (ToolUp.AI.Client.AIClientConfig.withAISlots fills team) apps
+                |> List.map _.Definition.Id
+
+            let alpha = List.findIndex ((=) "app.alpha") replaced
+            Expect.equal replaced[alpha + 1] "my.assistant" "the replacement sits right after the app's modules"
+            Expect.equal (List.length replaced) (List.length builtIn) "one module for one"
+
+        testCase "every AI slot can be emptied, and an empty family composes the plain shell"
+        <| fun () ->
+            Expect.equal
+                (Client.prepareModules (ToolUp.AI.Client.AIClientConfig.withAISlots ToolUp.AI.AISlotFills.empty team) []
+                 |> List.map _.Definition.Id)
+                (Client.prepareModules team [] |> List.map _.Definition.Id)
+                "no AI page at all"
+
+        testCase "a chrome row set Off is absent from prepareModules on every surface"
+        <| fun () ->
+            let allOn (config: ClientConfig) = {
+                config with
+                    Chrome = {
+                        AdminArea = ChromeFill.On()
+                        NoActiveTeamLanding =
+                            ChromeFill.On(
+                                NoActiveTeamLandingFill.BuiltIn {
+                                    Label = "Welcome"
+                                    Title = "t"
+                                    Body = "b"
+                                    Icon = None
+                                }
+                            )
+                        DatadogReadback = ChromeFill.On DatadogReadbackConfig.defaults
+                        Observability = ChromeFill.On()
+                        PlatformUsers = ChromeFill.On()
+                        TenantLifecycle = ChromeFill.On()
+                    }
+            }
+
+            let allOff (config: ClientConfig) = {
+                config with
+                    Chrome = {
+                        AdminArea = ChromeFill.Off
+                        NoActiveTeamLanding = ChromeFill.Off
+                        DatadogReadback = ChromeFill.Off
+                        Observability = ChromeFill.Off
+                        PlatformUsers = ChromeFill.Off
+                        TenantLifecycle = ChromeFill.Off
+                    }
+            }
+
+            for surfaces in [ Surfaces.anonymous; Surfaces.individual; Surfaces.team; Surfaces.multiTeam ] do
+                let base' = {
+                    ClientConfig.defaults with
+                        Surfaces = surfaces
+                }
+
+                let on = Client.prepareModules (allOn base') [] |> List.map _.Definition.Id
+                let off = Client.prepareModules (allOff base') [] |> List.map _.Definition.Id
+                let chromeIds = on |> List.except off
+                Expect.isFalse (List.isEmpty chromeIds) "the chrome rows compose modules when on"
+
+                Expect.isEmpty
+                    (off |> List.filter (fun id -> List.contains id chromeIds))
+                    "every chrome row set Off composes nothing"
     ]

@@ -49,11 +49,11 @@ let tests =
         testCase "default ClientConfig ships no contributors (GP 13, default-off)"
         <| fun () ->
             Expect.isTrue
-                (List.isEmpty ClientConfig.defaults.Handlers.HomeWidgetContributors)
+                (List.isEmpty ClientConfig.defaults.Composition.Handlers.HomeWidgetContributors)
                 "ClientConfig.defaults.Handlers.HomeWidgetContributors is empty"
 
         testCase "recents/pinning is off by default (GP 13)"
-        <| fun () -> Expect.isFalse ClientConfig.defaults.HomeRecents "ClientConfig.defaults.HomeRecents is false"
+        <| fun () -> Expect.isFalse ClientConfig.defaults.Shell.HomeRecents "ClientConfig.defaults.HomeRecents is false"
 
         testCase "one contributor ⇒ its widget is present"
         <| fun () ->

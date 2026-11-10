@@ -102,6 +102,11 @@ type CodemodMigration =
     /// HNSW store's own unreadable-snapshot exception is the one
     /// `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`.
     | SnapshotIndex
+    /// `ClientConfig` is a record of concern records (`Chrome`, `Auth`,
+    /// `PublicUtility`, `Locale`, `Shell`, `Composition` beside `Slots`), its
+    /// on/off unions are `FeatureMode` or `ChromeFill`, the AI assistant
+    /// family is three slot fills, and the `ClerkAuthUI` case is gone.
+    | ClientConfigByConcern
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -140,6 +145,8 @@ module CodemodMigration =
         | CodemodMigration.AdminPageKit -> "docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md"
         | CodemodMigration.SnapshotIndex ->
             "docs/migrations/1084-redesign-g-scopedsnapshotindex-under-the-three-stores.md"
+        | CodemodMigration.ClientConfigByConcern ->
+            "docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -170,6 +177,7 @@ module CodemodMigration =
         | CodemodMigration.OpenAuditRegistry -> "Phase 874"
         | CodemodMigration.AdminPageKit -> "Phase 1073"
         | CodemodMigration.SnapshotIndex -> "Phase 1084"
+        | CodemodMigration.ClientConfigByConcern -> "Phase 1074"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1110,6 +1118,100 @@ module Codemod =
             @"\b(?:ToolUp\.RAG\.)?InMemoryVectorStore\.RagScopeSnapshotUnreadableException\b"
             "ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException"
             "`InMemoryVectorStore.RagScopeSnapshotUnreadableException` → `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`"
+        // Phase 1074 — the client's payload-free on/off unions are 877's
+        // `FeatureMode`; the chrome rows' are `ChromeFill`. The labels move
+        // in the `ClientConfig` nesting pass, after these.
+        rewrite
+            "1074-feature-mode-off"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\b(?:(?:CommandPaletteMode|BrowserHistoryMode|AuthTokenStorage)\.)?(?:NoCommandPalette|NoBrowserHistory|ClientCookieAndLocalStorage)\b"
+            "FeatureMode.Disabled"
+            "`NoCommandPalette` / `NoBrowserHistory` / `ClientCookieAndLocalStorage` → `FeatureMode.Disabled`"
+        rewrite
+            "1074-feature-mode-on"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\b(?:(?:CommandPaletteMode|BrowserHistoryMode|AuthTokenStorage)\.)?(?:DefaultCommandPalette|HashHistory|ServerSetHttpOnlyCookie)\b"
+            "FeatureMode.Enabled"
+            "`DefaultCommandPalette` / `HashHistory` / `ServerSetHttpOnlyCookie` → `FeatureMode.Enabled`"
+        rewrite
+            "1074-feature-mode-type"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"(?<=:\s*)\b(?:CommandPaletteMode|BrowserHistoryMode|AuthTokenStorage)\b"
+            "FeatureMode"
+            "`: CommandPaletteMode` / `: BrowserHistoryMode` / `: AuthTokenStorage` (a type annotation) → `: FeatureMode`"
+        rewrite
+            "1074-chrome-off"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\b(?:(?:AdminSurfaceMode|ObservabilityModuleMode|PlatformUsersMode)\.)?(?:InlineGroups|NoObservabilityModule|NoPlatformUsers)\b"
+            "ChromeFill.Off"
+            "`InlineGroups` / `NoObservabilityModule` / `NoPlatformUsers` → `ChromeFill.Off`"
+        rewrite
+            "1074-chrome-on"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\b(?:(?:AdminSurfaceMode|ObservabilityModuleMode|PlatformUsersMode)\.)?(?:SeparateArea|DefaultObservabilityModule|DefaultPlatformUsers)\b"
+            "ChromeFill.On()"
+            "`SeparateArea` / `DefaultObservabilityModule` / `DefaultPlatformUsers` → `ChromeFill.On()`"
+        rewrite
+            "1074-chrome-type"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"(?<=:\s*)\b(?:AdminSurfaceMode|ObservabilityModuleMode|PlatformUsersMode)\b"
+            "ChromeFill<unit>"
+            "`: AdminSurfaceMode` / `: ObservabilityModuleMode` / `: PlatformUsersMode` → `: ChromeFill<unit>`"
+        // The AI assistant family is three slot fills.
+        rewrite
+            "1074-ai-assistant-none"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\b(?:AIAssistantMode\.)?NoAIAssistant\b"
+            "AISlotFills.empty"
+            "`NoAIAssistant` → `AISlotFills.empty` (every AI slot `Empty`)"
+        rewrite
+            "1074-ai-assistant-default"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\b(?:AIAssistantMode\.)?DefaultAIAssistant\b"
+            "AISlotFills.defaults"
+            "`DefaultAIAssistant` → `AISlotFills.defaults` (every AI slot `Default`)"
+        rewrite
+            "1074-ai-assistant-configured"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\b(?:AIAssistantMode\.)?ConfiguredAIAssistant\b"
+            "AISlotFills.configured"
+            "`ConfiguredAIAssistant branding` → `AISlotFills.configured branding` (the assistant slot `Configured`, the other two `Default`)"
+        rewrite
+            "1074-ai-assistant-type"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\bAIAssistantMode\b"
+            "AISlotFills"
+            "`AIAssistantMode` → `AISlotFills`"
+        // The vendor-named sign-in case is the ClerkUI companion's. A
+        // pattern (`| ClerkAuthUI cfg ->`) is reported instead.
+        {
+            rewrite
+                "1074-clerk-auth-ui"
+                CodemodMigration.ClientConfigByConcern
+                CodemodFileClass.Source
+                @"\b(?:AuthUIMode\.)?ClerkAuthUI\b"
+                "ToolUp.AuthProviders.ClerkRegister.authUI"
+                "`ClerkAuthUI cfg` → `ToolUp.AuthProviders.ClerkRegister.authUI cfg` (the vendor-neutral `ProviderAuthUI (\"clerk\", box cfg)`; add the companion's `ClerkRegister.handler` to `Composition.Handlers.AuthUIHandlers`)" with
+                Unless = Some(rx @"\|\s*(?:AuthUIMode\.)?ClerkAuthUI\b")
+        }
+        // The two data managers take the same configuration.
+        rewrite
+            "1074-column-mapping-unlabelled"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\bDataManagerChoice\.ColumnMapping\s*(?:\(\s*None\s*\)|None\b)"
+            "DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled"
+            "`DataManagerChoice.ColumnMapping None` → `DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1737,6 +1839,43 @@ module Codemod =
             CodemodFileClass.Source
             @"\bData\.table\s*(?:\[\s*""|\(?\s*\w*[hH]eaders?\b)"
             "`Data.table` takes `Column<'row>` values and the rows themselves: write each header as `{ Header = \"…\"; Align = Data.Left; Cell = fun row -> … }` (the first column `Left`, figures `Right`) and pass the row values, not pre-rendered element lists"
+        // Phase 1074 — what the codemod cannot prove or reshape.
+        review
+            "1074-no-active-team-landing"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\bNoActiveTeamLanding(?:ModuleId)?\s*=\s*Some\b"
+            "the two no-active-team inputs are one chrome row: `NoActiveTeamLandingModuleId = Some id` is `Chrome.NoActiveTeamLanding = ChromeFill.On(NoActiveTeamLandingFill.Module id)` and `NoActiveTeamLanding = Some cfg` is `Chrome.NoActiveTeamLanding = ChromeFill.On(NoActiveTeamLandingFill.BuiltIn cfg)` (when both were set the module won — keep `Module`)"
+        review
+            "1074-datadog-readback"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"(?<![\w.])(?:Chrome\.)?DatadogReadback\s*=\s*(?:EnabledDatadogReadback|NoDatadogReadback)\b"
+            "if this is a `ClientConfig` field, it is `Chrome.DatadogReadback = ChromeFill.On cfg` (or `ChromeFill.Off`) — the same `DatadogReadbackConfig` the server's `EnabledDatadogReadback` carries; `ServerConfig.Observability.DatadogReadback` keeps its mode"
+        review
+            "1074-shared-field-read"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"(?<![\w.])(?:clientConfig|config|cfg|ctx\.Config)\.(?:Observability|DatadogReadback|PlatformUsers|Presence|ModuleFilter|ExpectedModules|Locale|Handlers|Offline)\b(?!\.(?:Mode|MessageCatalogOverride)\b)"
+            "if this reads a `ClientConfig`, the field moved into a concern record: `.Chrome.Observability` / `.Chrome.DatadogReadback` / `.Chrome.PlatformUsers`, `.Shell.Presence` / `.Shell.Offline`, `.Composition.ModuleFilter` / `.Composition.ExpectedModules` / `.Composition.Handlers`, `.Locale.Mode` — a `ServerConfig` read of the same name is unchanged"
+        review
+            "1074-ai-family-append"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\bappendAssistantModule\b"
+            "`appendAssistantModule` is gone: the assistant family is three slots — pass `AISlotFills` to `AIClientConfig.run` / `program`, or fill them on a config with `AIClientConfig.withAISlots`"
+        review
+            "1074-clerk-auth-ui-pattern"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\|\s*(?:AuthUIMode\.)?ClerkAuthUI\b"
+            "the `ClerkAuthUI` case is removed: a Clerk deployment is `ProviderAuthUI (\"clerk\", cfg)` — match that case instead"
+        review
+            "1074-data-manager-label"
+            CodemodMigration.ClientConfigByConcern
+            CodemodFileClass.Source
+            @"\bDataManagerChoice\.(?:FileUpload|ColumnMapping)\s*\(?\s*(?:Some\s*)?\(?\s*\{"
+            "a data manager's configuration is `{ Label = Some { Name = …; Icon = … }; Group = … }` now (`Label = None` keeps the manager's own), the same for both managers; `ColumnMapping (Some cfg)` drops the `Some`"
     ]
 
 
@@ -2425,6 +2564,211 @@ module Codemod =
 
         out, List.ofSeq rewrites, List.ofSeq findings
 
+    // ── Phase 1074 — `ClientConfig` labels into their concern records ──
+    //
+    // F# nests a copy-and-update label (`{ c with Shell.ActiveModule = … }`),
+    // so a moved `ClientConfig` field is the same item under a qualified
+    // label. What no line regex can tell is whether a label belongs to a
+    // `ClientConfig` update: `ClientConfigOverrides` and the message
+    // catalog carry the same names. So the pass reads the update's BASE —
+    // the `{ base with` opener above the label — and moves the labels of an
+    // update whose base names a client configuration (`ClientConfig.defaults`,
+    // `ClientConfig.create …`, `config`, `cfg`, `clientConfig`), at the
+    // update's own label column only (a nested record's labels are not the
+    // config's).
+
+    /// The `ClientConfig` fields that moved, as (concern, fields), with the
+    /// three renamed on the way listed by their new names in
+    /// `clientRenames`. The table is the migration doc's field map.
+    let clientConcernFields: (string * string list) list = [
+        "Chrome", [ "DatadogReadback"; "Observability"; "PlatformUsers"; "AdminSurface" ]
+        "Auth", [ "AuthUI"; "AuthTokenStorage"; "AuthBridge"; "DevDefaultUserId" ]
+        "PublicUtility",
+        [
+            "PrerenderRoutes"
+            "ConsentProvider"
+            "AdPanel"
+            "PremiumModel"
+            "PlatformAdminProfile"
+        ]
+        "Locale", [ "Locale"; "MessageCatalogOverride" ]
+        "Shell",
+        [
+            "LoadingIndicator"
+            "ActiveModule"
+            "BrowserHistory"
+            "NotAuthorisedView"
+            "CommandPalette"
+            "HomeRecents"
+            "ToastCentre"
+            "GlobalOverlays"
+            "InputsPaneWidth"
+            "GridModules"
+            "Presence"
+            "Offline"
+        ]
+        "Composition",
+        [
+            "Handlers"
+            "RequestSeam"
+            "ModuleFilter"
+            "ShowDebugOnlyModules"
+            "ExpectedModules"
+            "PublicEntryDispatchers"
+            "OnError"
+            "EnableElmishConsoleTrace"
+            "OnElmishError"
+        ]
+    ]
+
+    /// The moved fields whose name changed with the move.
+    let private clientRenames =
+        Map [
+            "AdminSurface", "AdminArea"
+            "AuthTokenStorage", "HttpOnlySession"
+            "Locale", "Mode"
+        ]
+
+    /// Field → its qualified path under the concern record.
+    let private clientPathOf: Map<string, string> =
+        clientConcernFields
+        |> List.collect (fun (concern, fields) ->
+            fields
+            |> List.map (fun f -> f, concern + "." + (clientRenames.TryFind f |> Option.defaultValue f)))
+        |> Map.ofList
+
+    /// The fields a server or catalog record also carries: a READ of one is
+    /// not provably a `ClientConfig` read, so it is reported, not moved.
+    let private clientSharedReads =
+        set [
+            "Observability"
+            "DatadogReadback"
+            "PlatformUsers"
+            "Presence"
+            "ModuleFilter"
+            "ExpectedModules"
+            "Locale"
+            "Handlers"
+            "Offline"
+        ]
+
+    let private clientUpdateOpener =
+        Regex(@"\{\s*(?<base>[^{}]+?)\s+with\b(?<rest>.*)$", RegexOptions.CultureInvariant)
+
+    let private clientUpdateWithLine =
+        Regex(@"^\s*(?<base>[^{}]+?)\s+with\s*$", RegexOptions.CultureInvariant)
+
+    let private clientBase =
+        Regex(
+            @"^(?:ClientConfig\.(?:defaults|create\b.*)|config|cfg|clientConfig|baseConfig|clientCfg|ctx\.Config)$",
+            RegexOptions.CultureInvariant
+        )
+
+    let private clientLabel =
+        Regex(
+            sprintf @"(?<![\w.])(?<label>%s)(?=\s*=(?!=))" (String.Join("|", clientPathOf |> Map.keys)),
+            RegexOptions.CultureInvariant
+        )
+
+    /// A moved field read off a receiver named as the client config.
+    let private clientRead =
+        Regex(
+            sprintf
+                @"(?<receiver>(?<![\w.])(?:clientConfig|config|cfg|ClientConfig\.defaults|ctx\.Config))\.(?<field>%s)\b"
+                (String.Join(
+                    "|",
+                    clientPathOf
+                    |> Map.keys
+                    |> Seq.filter (fun f -> not (clientSharedReads.Contains f))
+                )),
+            RegexOptions.CultureInvariant
+        )
+
+    let private indentOfLine (line: string) = line.Length - line.TrimStart().Length
+
+    /// Moves the labels of every `ClientConfig` copy-and-update in
+    /// `segments` (alternating content / terminator) and the reads off a
+    /// receiver named as the config. Answers the rewritten segments and one
+    /// rewrite per changed line.
+    let private nestClientConfigLabels (segments: string[]) : string[] * CodemodRewrite list =
+        let out = Array.copy segments
+        let rewrites = ResizeArray<CodemodRewrite>()
+        // (opener indent, is a client update, the label column once seen)
+        let blocks = System.Collections.Generic.Stack<int * bool * int option ref>()
+
+        for i in 0..2 .. segments.Length - 1 do
+            let line = segments[i]
+            let trimmed = line.TrimStart()
+            let isComment = trimmed.StartsWith "//"
+            let indent = indentOfLine line
+
+            if not isComment && trimmed <> "" then
+                let closes () =
+                    let openIndent, _, _ = blocks.Peek()
+                    indent <= openIndent
+
+                while blocks.Count > 0 && closes () do
+                    blocks.Pop() |> ignore
+
+            let mutable after = line
+
+            if not isComment then
+                let one = clientUpdateOpener.Match line
+
+                let two =
+                    if one.Success then
+                        Match.Empty
+                    else
+                        clientUpdateWithLine.Match line
+
+                if one.Success then
+                    let isClient = clientBase.IsMatch(one.Groups["base"].Value.Trim())
+
+                    let rest = one.Groups["rest"]
+
+                    if isClient then
+                        let moved = clientLabel.Replace(rest.Value, (fun m -> clientPathOf[m.Value]))
+                        after <- line.Substring(0, rest.Index) + moved
+
+                    if not (rest.Value.Contains "}") then
+                        blocks.Push(indent, isClient, ref None)
+                elif two.Success then
+                    blocks.Push(indent, clientBase.IsMatch(two.Groups["base"].Value.Trim()), ref None)
+                elif blocks.Count > 0 then
+                    let (_, isClient, column) = blocks.Peek()
+
+                    if isClient then
+                        match column.Value with
+                        | None -> column.Value <- Some indent
+                        | Some _ -> ()
+
+                        if column.Value = Some indent then
+                            let m = clientLabel.Match line
+
+                            if m.Success && m.Index = indent then
+                                after <-
+                                    line.Substring(0, m.Index)
+                                    + clientPathOf[m.Value]
+                                    + line.Substring(m.Index + m.Length)
+
+                after <-
+                    clientRead.Replace(
+                        after,
+                        (fun m -> m.Groups["receiver"].Value + "." + clientPathOf[m.Groups["field"].Value])
+                    )
+
+            if after <> line then
+                out[i] <- after
+
+                rewrites.Add {
+                    RuleId = "1074-client-config-field"
+                    Line = i / 2 + 1
+                    Before = line
+                    After = after
+                }
+
+        out, List.ofSeq rewrites
+
     // ── Per-file decision ─────────────────────────────────────────────
 
     /// The file class a path belongs to, or `None` when the walk skips it.
@@ -2509,11 +2853,17 @@ module Codemod =
                 else
                     lineSplitter.Split rewritten, []
 
-            let withMembers, added =
-                if selected CodemodMigration.ModelCapabilities then
-                    addCapabilitiesMembers nested
+            let clientNested, clientRewrites =
+                if selected CodemodMigration.ClientConfigByConcern then
+                    nestClientConfigLabels nested
                 else
                     nested, []
+
+            let withMembers, added =
+                if selected CodemodMigration.ModelCapabilities then
+                    addCapabilitiesMembers clientNested
+                else
+                    clientNested, []
 
             let withNamespaces, derived =
                 if selected CodemodMigration.SubsystemNamespaces then
@@ -2532,7 +2882,8 @@ module Codemod =
                     withMembers, []
 
             String.concat "" withNamespaces,
-            List.ofSeq rewrites @ nestedRewrites @ added @ derived |> List.sortBy _.Line
+            List.ofSeq rewrites @ nestedRewrites @ clientRewrites @ added @ derived
+            |> List.sortBy _.Line
         | CodemodFileClass.Project -> rewritten, List.ofSeq rewrites
 
     /// `rewriteTextIn` for a file whose project reaches the server tier.
@@ -2744,6 +3095,7 @@ module Codemod =
             CodemodMigration.OpenAuditRegistry
             CodemodMigration.AdminPageKit
             CodemodMigration.SnapshotIndex
+            CodemodMigration.ClientConfigByConcern
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

@@ -122,6 +122,7 @@ let tests =
                         [
                             "Directory.Packages.props"
                             "src/Client/App.fs"
+                            "src/Client/Concerns.fs"
                             "src/Client/Grid.fs"
                             "src/Client/Hosting.fs"
                             "src/Client/Shell.fs"
@@ -169,6 +170,7 @@ let tests =
                         [
                             "Directory.Packages.props"
                             "src/Client/App.fs"
+                            "src/Client/Concerns.fs"
                             "src/Client/Grid.fs"
                             "src/Client/Hosting.fs"
                             "src/Client/Reports.fs"
@@ -264,7 +266,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 24 file(s) visited, 109 rewrite(s) in 19 file(s), 114 site(s) for review."
+                        "Codemod: 25 file(s) visited, 141 rewrite(s) in 20 file(s), 123 site(s) for review."
                         "summary")
         ]
 
@@ -525,8 +527,8 @@ let tests =
 
                 Expect.equal
                     (findings |> List.map _.RuleId |> List.distinct)
-                    [ "877-shared-label-receiver" ]
-                    "the shared labels on other receivers are reported"
+                    [ "877-shared-label-receiver"; "1074-shared-field-read" ]
+                    "the shared labels on other receivers are reported (a client config's DatadogReadback by 1074)"
 
             testCase "the retired modes read as FeatureMode in every spelling, and --phase selects one migration"
             <| fun () ->

@@ -188,13 +188,13 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
 
     let config = {
         ClientConfig.defaults with
-            ToastCentre = NoToastCentre
-            GlobalOverlays = [
+            Shell.ToastCentre = NoToastCentre
+            Shell.GlobalOverlays = [
                 fun () ->
                     chrome <- chrome + 1
                     Html.none
             ]
-            MessageCatalogOverride =
+            Locale.MessageCatalogOverride =
                 Some(fun catalog -> {
                     catalog with
                         Sidebar = {

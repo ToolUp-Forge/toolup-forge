@@ -256,7 +256,7 @@ let tests =
 
             let config = {
                 ClientConfig.defaults with
-                    OnError = Some(fun error -> reported.Add error.ModuleId)
+                    Composition.OnError = Some(fun error -> reported.Add error.ModuleId)
             }
 
             let throwing =

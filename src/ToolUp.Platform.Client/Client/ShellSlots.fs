@@ -194,9 +194,9 @@ module ShellSlots =
             | None -> FileManagerUI.moduleId)
             (fun ctx choice ->
                 match choice with
-                | None -> FileManagerUI.create ctx.DataTypes None
-                | Some(DataManagerChoice.FileUpload label) -> FileManagerUI.create ctx.DataTypes (Some label)
-                | Some(DataManagerChoice.ColumnMapping label) -> MappingDataManagerUI.create ctx.DataTypes label)
+                | None -> FileManagerUI.create ctx.DataTypes DataManagerConfig.unlabelled
+                | Some(DataManagerChoice.FileUpload cfg) -> FileManagerUI.create ctx.DataTypes cfg
+                | Some(DataManagerChoice.ColumnMapping cfg) -> MappingDataManagerUI.create ctx.DataTypes cfg)
             None
 
     let private teamManager =

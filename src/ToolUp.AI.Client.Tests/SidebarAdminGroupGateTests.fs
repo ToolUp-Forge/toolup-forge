@@ -5,7 +5,7 @@ module ToolUp.AI.Client.Tests.SidebarAdminGroupGateTests
 
 // ─── Sidebar admin-group role gate (Phase 4b / commit 4f.2) ──────────
 //
-// Pins `ClientConfig.isPlatformAdminSidebarGroup` — the predicate behind
+// Pins `SidebarVisibility.isPlatformAdminSidebarGroup` — the predicate behind
 // stage 2 of `SidebarVisibility.visible` (Phase 570; the shell's former
 // inline `adminGroupFiltered` in `SDK.Client.fs`) — and its relationship
 // to the pre-existing `isAdminSidebarGroup` union used by stage 4's
@@ -35,54 +35,56 @@ let tests =
         testList "isPlatformAdminSidebarGroup — platform-scoped set" [
             testCase "\"Platform Admin\" is platform-scoped (consumer `withGroup` convention preserved)" (fun () ->
                 Expect.isTrue
-                    (ClientConfig.isPlatformAdminSidebarGroup (Some "Platform Admin"))
+                    (SidebarVisibility.isPlatformAdminSidebarGroup (Some "Platform Admin"))
                     "a consumer module declaring withGroup \"Platform Admin\" keeps its role gate")
 
             testCase "\"Platform Management\" is platform-scoped — non-admins lose the SDK admin built-ins" (fun () ->
                 Expect.isTrue
-                    (ClientConfig.isPlatformAdminSidebarGroup (Some "Platform Management"))
+                    (SidebarVisibility.isPlatformAdminSidebarGroup (Some "Platform Management"))
                     "the SDK admin built-ins' declared group must be role-gated")
 
             testCase "the observability group is platform-scoped and in the no-team union (Phase 9x)" (fun () ->
                 Expect.isTrue
-                    (ClientConfig.isPlatformAdminSidebarGroup (Some SidebarVisibility.ObservabilitySidebarGroup))
+                    (SidebarVisibility.isPlatformAdminSidebarGroup (Some SidebarVisibility.ObservabilitySidebarGroup))
                     "the health monitor, Datadog readback and self-hosted observability modules' group is role-gated"
 
                 Expect.isTrue
-                    (ClientConfig.isAdminSidebarGroup (Some SidebarVisibility.ObservabilitySidebarGroup))
+                    (SidebarVisibility.isAdminSidebarGroup (Some SidebarVisibility.ObservabilitySidebarGroup))
                     "a team-less platform admin still reaches the health monitor after its regroup")
 
             testCase "\"Team Management\" is NOT platform-scoped — team Owners/Admins keep their tools" (fun () ->
                 Expect.isFalse
-                    (ClientConfig.isPlatformAdminSidebarGroup (Some "Team Management"))
+                    (SidebarVisibility.isPlatformAdminSidebarGroup (Some "Team Management"))
                     "team-scoped management must not be gated on PlatformRole")
 
             testCase "an app-domain group is not gated" (fun () ->
-                Expect.isFalse (ClientConfig.isPlatformAdminSidebarGroup (Some "Reports")) "app groups pass freely")
+                Expect.isFalse
+                    (SidebarVisibility.isPlatformAdminSidebarGroup (Some "Reports"))
+                    "app groups pass freely")
 
             testCase "ungrouped modules are not gated" (fun () ->
-                Expect.isFalse (ClientConfig.isPlatformAdminSidebarGroup None) "no group ⇒ never admin-gated")
+                Expect.isFalse (SidebarVisibility.isPlatformAdminSidebarGroup None) "no group ⇒ never admin-gated")
         ]
 
         testList "isAdminSidebarGroup — no-team landing-gate union unchanged" [
             testCase "all three admin/management groups remain in the union" (fun () ->
                 for g in [ "Platform Admin"; "Platform Management"; "Team Management" ] do
                     Expect.isTrue
-                        (ClientConfig.isAdminSidebarGroup (Some g))
+                        (SidebarVisibility.isAdminSidebarGroup (Some g))
                         $"\"{g}\" must stay visible to a team-less platform admin under the landing gate")
 
             testCase "non-admin groups stay outside the union" (fun () ->
-                Expect.isFalse (ClientConfig.isAdminSidebarGroup (Some "Reports")) "app group is not in the union"
-                Expect.isFalse (ClientConfig.isAdminSidebarGroup None) "no group is not in the union")
+                Expect.isFalse (SidebarVisibility.isAdminSidebarGroup (Some "Reports")) "app group is not in the union"
+                Expect.isFalse (SidebarVisibility.isAdminSidebarGroup None) "no group is not in the union")
         ]
 
         testList "shell filter semantics (adminGroupFiltered predicate)" [
             // The shell's filter is
-            //   isAdmin || not (ClientConfig.isPlatformAdminSidebarGroup m.Group)
+            //   isAdmin || not (SidebarVisibility.isPlatformAdminSidebarGroup m.Group)
             // — replicated here over a group-shaped fixture list.
             let visibleTo isAdmin groups =
                 groups
-                |> List.filter (fun g -> isAdmin || not (ClientConfig.isPlatformAdminSidebarGroup g))
+                |> List.filter (fun g -> isAdmin || not (SidebarVisibility.isPlatformAdminSidebarGroup g))
 
             let rail = [
                 None
