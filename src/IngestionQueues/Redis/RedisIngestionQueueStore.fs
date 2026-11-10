@@ -19,7 +19,7 @@ open ToolUp.RAG.IngestionTypes
 //   * A restart mid-ingestion loses every queued document. The KB index
 //     entry survives in a non-terminal status, but the JOB does not, so
 //     the document is never indexed and nothing retries it.
-//   * `RagIngestionInstanceValidator` REFUSES `ReplicaCount > 1`,
+//   * `ragIngestionInstanceValidator` REFUSES `ReplicaCount > 1`,
 //     because only the replica that handled an upload can drain it.
 //     Its own text calls the distributed path "a roadmap item".
 //

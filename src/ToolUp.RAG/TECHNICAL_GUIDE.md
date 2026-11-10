@@ -566,15 +566,13 @@ type RagOptions = {
 
 `withRAG options` sets the companion on a `ServerApp`, and claims the AI companion's slot too, so the AI tier is composed exactly once — by `composeRAG`, from `options.AI`. Per-module `VectorisationHandler`s flow in via `ServerModule.withVectorisation` and are read from the deployment's module registry. Apps without RAG compose `AICompose.withAI` and never touch this companion.
 
-## Null-blob-storage fallback
+## No `IBlobStorage` supplied
 
-If the deployment supplies no `IBlobStorage`, `composeRAG`:
-
-1. Logs `"[RAGCompose] No IBlobStorage supplied — vector index persistence is disabled. Ingested chunks will be lost across process restart."` at `Warn`.
-2. Substitutes `makeNullBlobStorage ()` — a no-op implementation whose `Upload` returns `Ok ""` and whose `Download` returns `Error`.
-3. Proceeds as normal. The in-memory store works; the debounced flush loop runs and posts every tick to the null storage (which no-ops); every restart re-starts with an empty index.
-
-This is a development-mode convenience: it lets an engineer run the full RAG pipeline end-to-end without configuring blob storage. It is *not* a supported production mode. The warning is deliberate and loud so that a misconfigured production deployment surfaces the loss-on-restart risk before it's needed.
+If the deployment supplies no `IBlobStorage` to RAG, `composeRAG` persists the in-process index through the
+deployment's resolved storage — the one every platform store uses, which defaults to the local file store under
+`./data`. That store does not survive a container restart or a replacement instance, so `ragPersistenceValidator`
+still refuses the shape on a persistent deployment (and warns on an ephemeral one) unless
+`AcceptEphemeralRagIndex` is set.
 
 ## Document-understanding extension points (Phase 14i)
 
