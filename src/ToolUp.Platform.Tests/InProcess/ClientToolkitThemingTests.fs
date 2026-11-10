@@ -253,13 +253,19 @@ let private adminPageKitTest = test "the admin page kit reads only theming token
         for definition in definitions do
             Expect.isTrue (code.Contains definition) $"{rel} defines `{definition.Trim()}`"
 
-    for rel in
+    // Data.fs also holds the older `pill` and `Misc.divider`, which are not
+    // the kit; its typed table is read from `type Align` to `columnTable`.
+    let typedTable (code: string) =
+        let start = code.IndexOf "type Align"
+        code.Substring(start, code.IndexOf("let columnTable", start) - start)
+
+    for rel, region in
         [
-            "ToolUp.Platform.UI/Toolkit/Tabs.fs"
-            "ToolUp.Platform.UI/Toolkit/Modal.fs"
-            "ToolUp.Platform.UI/Toolkit/Data.fs"
+            "ToolUp.Platform.UI/Toolkit/Tabs.fs", id
+            "ToolUp.Platform.UI/Toolkit/Modal.fs", id
+            "ToolUp.Platform.UI/Toolkit/Data.fs", typedTable
         ] do
-        let code = readCode rel
+        let code = readCode rel |> region
 
         let palette =
             Regex.Matches(

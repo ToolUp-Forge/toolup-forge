@@ -271,6 +271,7 @@ ToolUp.Platform.CodemodFinding.Migration : ToolUp.Platform.CodemodMigration { ge
 ToolUp.Platform.CodemodFinding.RuleId : System.String { get }
 ToolUp.Platform.CodemodFinding.Text : System.String { get }
 ToolUp.Platform.CodemodMigration (class)
+ToolUp.Platform.CodemodMigration.AdminPageKit : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ApiStability : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.AuditFailureAsData : ToolUp.Platform.CodemodMigration { get }
@@ -280,6 +281,7 @@ ToolUp.Platform.CodemodMigration.CompanionOptions : ToolUp.Platform.CodemodMigra
 ToolUp.Platform.CodemodMigration.ConnectorKernel : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Deprecations : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.FailureAsData : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.IsAdminPageKit : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsApiStability : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsAuditFailureAsData : System.Boolean { get }
@@ -319,6 +321,7 @@ ToolUp.Platform.CodemodMigration.Surfaces : ToolUp.Platform.CodemodMigration { g
 ToolUp.Platform.CodemodMigration.Tag : System.Int32 { get }
 ToolUp.Platform.CodemodMigration.TypedIdentity : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration+Tags (class)
+ToolUp.Platform.CodemodMigration+Tags.AdminPageKit : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ApiStability : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.AuditFailureAsData : System.Int32 (literal)

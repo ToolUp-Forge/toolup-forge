@@ -117,10 +117,33 @@ ToolUp.Platform.SvgProp+svgProp.strokeLinejoin(System.String) : Feliz.IReactProp
 ToolUp.Platform.SvgProp+svgProp.strokeOpacity(System.Double) : Feliz.IReactProperty
 ToolUp.Platform.SvgProp+svgProp.strokeWidth(System.Double) : Feliz.IReactProperty
 ToolUp.Platform.SvgProp+svgProp.textAnchor(System.String) : Feliz.IReactProperty
+Toolup.UIToolkit.ConfirmMessages (class)
+Toolup.UIToolkit.ConfirmMessages..ctor(System.String, System.String, System.String, System.String)
+Toolup.UIToolkit.ConfirmMessages.Busy : System.String { get }
+Toolup.UIToolkit.ConfirmMessages.Cancel : System.String { get }
+Toolup.UIToolkit.ConfirmMessages.Confirm : System.String { get }
+Toolup.UIToolkit.ConfirmMessages.Title : System.String { get }
 Toolup.UIToolkit.Data (class)
 Toolup.UIToolkit.Data.columnTable(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]]) : Fable.React.ReactElement
 Toolup.UIToolkit.Data.pill(System.String, System.Boolean, Toolup.UIToolkit.Data+PillClickable, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
-Toolup.UIToolkit.Data.table(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Collections.Generic.IEnumerable`1[Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]]) : Fable.React.ReactElement
+Toolup.UIToolkit.Data.table`1(Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Data+Column`1[row]], Microsoft.FSharp.Collections.FSharpList`1[row]) : Fable.React.ReactElement
+Toolup.UIToolkit.Data+Align (class)
+Toolup.UIToolkit.Data+Align.Center : Toolup.UIToolkit.Data+Align { get }
+Toolup.UIToolkit.Data+Align.IsCenter : System.Boolean { get }
+Toolup.UIToolkit.Data+Align.IsLeft : System.Boolean { get }
+Toolup.UIToolkit.Data+Align.IsRight : System.Boolean { get }
+Toolup.UIToolkit.Data+Align.Left : Toolup.UIToolkit.Data+Align { get }
+Toolup.UIToolkit.Data+Align.Right : Toolup.UIToolkit.Data+Align { get }
+Toolup.UIToolkit.Data+Align.Tag : System.Int32 { get }
+Toolup.UIToolkit.Data+Align+Tags (class)
+Toolup.UIToolkit.Data+Align+Tags.Center : System.Int32 (literal)
+Toolup.UIToolkit.Data+Align+Tags.Left : System.Int32 (literal)
+Toolup.UIToolkit.Data+Align+Tags.Right : System.Int32 (literal)
+Toolup.UIToolkit.Data+Column`1 (class)
+Toolup.UIToolkit.Data+Column`1..ctor(System.String, Toolup.UIToolkit.Data+Align, Microsoft.FSharp.Core.FSharpFunc`2[row, Fable.React.ReactElement])
+Toolup.UIToolkit.Data+Column`1.Align : Toolup.UIToolkit.Data+Align { get }
+Toolup.UIToolkit.Data+Column`1.Cell : Microsoft.FSharp.Core.FSharpFunc`2[row, Fable.React.ReactElement] { get }
+Toolup.UIToolkit.Data+Column`1.Header : System.String { get }
 Toolup.UIToolkit.Data+PillClickable (class)
 Toolup.UIToolkit.Data+PillClickable.AlwaysReact : Toolup.UIToolkit.Data+PillClickable { get }
 Toolup.UIToolkit.Data+PillClickable.IsAlwaysReact : System.Boolean { get }
@@ -145,8 +168,25 @@ Toolup.UIToolkit.Forms.dataSourcePicker(System.String, Microsoft.FSharp.Core.FSh
 Toolup.UIToolkit.Forms.dropdown(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms.fileUpload(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[Browser.Types.File, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Button (class)
+Toolup.UIToolkit.Forms+Button.dangerWith(Toolup.UIToolkit.Forms+Button+ButtonState, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Button.primary(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+Toolup.UIToolkit.Forms+Button.primaryWith(Toolup.UIToolkit.Forms+Button+ButtonState, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Button.secondary(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+Toolup.UIToolkit.Forms+Button.secondaryWith(Toolup.UIToolkit.Forms+Button+ButtonState, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+Toolup.UIToolkit.Forms+Button.stateOf(System.Boolean, System.String, System.Boolean) : Toolup.UIToolkit.Forms+Button+ButtonState
+Toolup.UIToolkit.Forms+Button+ButtonState (class)
+Toolup.UIToolkit.Forms+Button+ButtonState.Disabled : Toolup.UIToolkit.Forms+Button+ButtonState { get }
+Toolup.UIToolkit.Forms+Button+ButtonState.Enabled : Toolup.UIToolkit.Forms+Button+ButtonState { get }
+Toolup.UIToolkit.Forms+Button+ButtonState.IsBusy : System.Boolean { get }
+Toolup.UIToolkit.Forms+Button+ButtonState.IsDisabled : System.Boolean { get }
+Toolup.UIToolkit.Forms+Button+ButtonState.IsEnabled : System.Boolean { get }
+Toolup.UIToolkit.Forms+Button+ButtonState.Tag : System.Int32 { get }
+Toolup.UIToolkit.Forms+Button+ButtonState+Busy (class)
+Toolup.UIToolkit.Forms+Button+ButtonState+Busy.label : System.String { get }
+Toolup.UIToolkit.Forms+Button+ButtonState+Tags (class)
+Toolup.UIToolkit.Forms+Button+ButtonState+Tags.Busy : System.Int32 (literal)
+Toolup.UIToolkit.Forms+Button+ButtonState+Tags.Disabled : System.Int32 (literal)
+Toolup.UIToolkit.Forms+Button+ButtonState+Tags.Enabled : System.Int32 (literal)
 Toolup.UIToolkit.Forms+Field (class)
 Toolup.UIToolkit.Forms+Field.actions(Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
 Toolup.UIToolkit.Forms+Field.field(System.String, Fable.React.ReactElement) : Fable.React.ReactElement
@@ -181,6 +221,9 @@ Toolup.UIToolkit.Kpi+Tile.Label : System.String { get }
 Toolup.UIToolkit.Kpi+Tile.Value : System.String { get }
 Toolup.UIToolkit.Misc (class)
 Toolup.UIToolkit.Misc.divider : Fable.React.ReactElement { get }
+Toolup.UIToolkit.Modal (class)
+Toolup.UIToolkit.Modal.confirm(Toolup.UIToolkit.ConfirmMessages, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit], System.Boolean) : Fable.React.ReactElement
+Toolup.UIToolkit.Modal.overlay(System.String, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement], Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
 Toolup.UIToolkit.OutputFormatting (class)
 Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)
 Toolup.UIToolkit.OutputFormatting.formatCurrency`1(System.Int32) : a
@@ -200,10 +243,15 @@ Toolup.UIToolkit.StateViews+EmptyStateAction (class)
 Toolup.UIToolkit.StateViews+EmptyStateAction..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
 Toolup.UIToolkit.StateViews+EmptyStateAction.Label : System.String { get }
 Toolup.UIToolkit.StateViews+EmptyStateAction.OnClick : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+Toolup.UIToolkit.Tabs (class)
+Toolup.UIToolkit.Tabs.bar`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[T, System.String]], T, Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Tokens (class)
 Toolup.UIToolkit.Tokens+Bg (class)
 Toolup.UIToolkit.Tokens+Bg.card : System.String { get }
+Toolup.UIToolkit.Tokens+Bg.danger : System.String { get }
 Toolup.UIToolkit.Tokens+Bg.panel : System.String { get }
+Toolup.UIToolkit.Tokens+Bg.subtle : System.String { get }
+Toolup.UIToolkit.Tokens+Bg.success : System.String { get }
 Toolup.UIToolkit.Tokens+Border (class)
 Toolup.UIToolkit.Tokens+Border.defaultValue : System.String { get }
 Toolup.UIToolkit.Tokens+Border.panel : System.String { get }
@@ -223,8 +271,11 @@ Toolup.UIToolkit.Tokens+Spacing.buttonPaddingY : System.String { get }
 Toolup.UIToolkit.Tokens+Spacing.secondaryButtonPaddingX : System.String { get }
 Toolup.UIToolkit.Tokens+Spacing.secondaryButtonPaddingY : System.String { get }
 Toolup.UIToolkit.Tokens+Text (class)
+Toolup.UIToolkit.Tokens+Text.danger : System.String { get }
+Toolup.UIToolkit.Tokens+Text.muted : System.String { get }
 Toolup.UIToolkit.Tokens+Text.primary : System.String { get }
 Toolup.UIToolkit.Tokens+Text.secondary : System.String { get }
+Toolup.UIToolkit.Tokens+Text.success : System.String { get }
 Toolup.UIToolkit.Tokens+Typography (class)
 Toolup.UIToolkit.Tokens+Typography.buttonText : System.String { get }
 Toolup.UIToolkit.Typography (class)
