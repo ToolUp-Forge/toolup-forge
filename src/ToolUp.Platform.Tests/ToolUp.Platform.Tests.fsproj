@@ -296,6 +296,7 @@
         <Compile Include="InProcess\InMemoryBM25IndexTests.fs" />
         <Compile Include="InProcess\IndexLifecycleTests.fs" />
         <Compile Include="InProcess\CrossIndexErasureConformanceTests.fs" />
+        <Compile Include="InProcess\ScopedSnapshotIndexTests.fs" />
         <Compile Include="InProcess\AIAgentEngineClientResidentAuthorizationTests.fs" />
         <Compile Include="InProcess\AIAllowlistDiagnosticsTests.fs" />
         <Compile Include="InProcess\DevVersionEndpointTests.fs" />

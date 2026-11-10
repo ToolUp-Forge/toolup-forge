@@ -441,14 +441,14 @@ let private consentSummary (msgs: ExternalContactMessages) (contact: ExternalCon
         |> List.map (fst >> NotificationKind.SinkKind.toWireString)
 
     if List.isEmpty channels then
-        pill msgs.NoConsent "bg-gray-100 text-gray-600"
+        pill msgs.NoConsent ("bg-gray-100 " + Tokens.Text.secondary)
     else
         Html.div [
             prop.className "flex gap-1 flex-wrap"
             prop.children [ for channel in channels -> pill channel "bg-green-100 text-green-700" ]
         ]
 
-let private contactFormPanel (msgs: ExternalContactMessages) (form: ContactForm) (dispatch: Msg -> unit) =
+let private contactFormPanel (msgs: ExternalContactMessages) (busy: bool) (form: ContactForm) (dispatch: Msg -> unit) =
     let heading =
         match form.EditingId with
         | None -> msgs.NewContactHeading
@@ -503,7 +503,10 @@ let private contactFormPanel (msgs: ExternalContactMessages) (form: ContactForm)
                         msgs.PlaceholderNotes)
 
                 Forms.Field.actions [
-                    Forms.Button.primary msgs.SaveContact (fun () -> dispatch SubmitForm)
+                    Forms.Button.primaryWith
+                        (Forms.Button.stateOf busy msgs.SaveContact false)
+                        msgs.SaveContact
+                        (fun () -> dispatch SubmitForm)
                     Forms.Button.secondary msgs.Cancel (fun () -> dispatch CancelForm)
                 ]
             ]
@@ -581,17 +584,16 @@ let private consentPanel
                                 msgs.PlaceholderConsentSource)
 
                         Forms.Field.actions [
-                            if String.IsNullOrWhiteSpace model.OptIn.Source then
-                                // Disabled rather than hidden: the
-                                // operator should see that the control
-                                // exists and what it is waiting for.
-                                Html.button [
-                                    prop.disabled true
-                                    prop.className "px-3 py-1.5 rounded text-sm bg-gray-200 text-gray-500"
-                                    prop.text msgs.RecordConsent
-                                ]
-                            else
-                                Forms.Button.primary msgs.RecordConsent (fun () -> dispatch (RecordOptIn contact.Id))
+                            // Disabled rather than hidden while the source
+                            // is blank: the operator should see that the
+                            // control exists and what it is waiting for.
+                            Forms.Button.primaryWith
+                                (Forms.Button.stateOf
+                                    model.Busy
+                                    msgs.RecordConsent
+                                    (String.IsNullOrWhiteSpace model.OptIn.Source))
+                                msgs.RecordConsent
+                                (fun () -> dispatch (RecordOptIn contact.Id))
                         ]
                     ]
                 ]
@@ -651,7 +653,7 @@ let private contactListView (msgs: ExternalContactMessages) (model: Model) (disp
             ]
 
             match model.Form with
-            | Some form when form.EditingId.IsNone -> contactFormPanel msgs form dispatch
+            | Some form when form.EditingId.IsNone -> contactFormPanel msgs model.Busy form dispatch
             | _ ->
                 Html.div [
                     prop.children [ Forms.Button.primary msgs.AddContact (fun () -> dispatch StartAdd) ]
@@ -687,7 +689,7 @@ let private contactDetailView
                 ]
 
                 match model.Form with
-                | Some form when form.EditingId = Some contact.Id -> contactFormPanel msgs form dispatch
+                | Some form when form.EditingId = Some contact.Id -> contactFormPanel msgs model.Busy form dispatch
                 | _ ->
                     Layout.Panel.panel msgs.DetailsPanel [
                         Html.div [
@@ -731,7 +733,10 @@ let private ExternalContactManagerBody (model: Model) (dispatch: Msg -> unit) =
         prop.className "p-6 max-w-5xl"
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
+                prop.text msgs.Subheading
+            ]
             StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             body
         ]

@@ -175,7 +175,7 @@ let private summaryTable (msgs: TenantLifecycleAdminMessages) (summary: Lifecycl
                         prop.text (msgs.LastRunHeading(TenantLifecyclePhase.name summary.Phase))
                     ]
                     Html.span [
-                        prop.className "text-xs text-gray-500 font-mono break-all"
+                        prop.className [ "text-xs font-mono break-all"; Tokens.Text.muted ]
                         prop.text summary.ScopeId
                     ]
                 ]
@@ -193,74 +193,55 @@ let private summaryTable (msgs: TenantLifecycleAdminMessages) (summary: Lifecycl
                         (LifecycleSummary.skippedCount summary)
                         "bg-yellow-50 text-yellow-800"
                     countPill msgs.PillFailedLabel (LifecycleSummary.failedCount summary) "bg-red-50 text-red-700"
-                    countPill msgs.PillMsTotalLabel (int summary.TotalElapsedMs) "bg-gray-100 text-gray-600"
+                    countPill
+                        msgs.PillMsTotalLabel
+                        (int summary.TotalElapsedMs)
+                        ("bg-gray-100 " + Tokens.Text.secondary)
                 ]
             ]
 
             if List.isEmpty summary.Outcomes then
-                Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoHooksRecorded ]
-            else
-                Html.div [
-                    prop.className "border border-border rounded-lg overflow-hidden"
-                    prop.children [
-                        Html.table [
-                            prop.className "w-full text-xs"
-                            prop.children [
-                                Html.thead [
-                                    prop.className "bg-gray-50"
-                                    prop.children [
-                                        Html.tr [
-                                            prop.children [
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnHook
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnResult
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnDetail
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnElapsed
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                                Html.tbody [
-                                    prop.children [
-                                        for outcome in summary.Outcomes ->
-                                            Html.tr [
-                                                prop.className "border-t border-border"
-                                                prop.children [
-                                                    Html.td [
-                                                        prop.className "px-3 py-2 font-mono"
-                                                        prop.text outcome.HookName
-                                                    ]
-                                                    Html.td [
-                                                        prop.className "px-3 py-2"
-                                                        prop.children [ resultBadge msgs outcome.Result ]
-                                                    ]
-                                                    Html.td [
-                                                        prop.className "px-3 py-2 text-gray-600 break-all"
-                                                        prop.text (resultDetail outcome.Result)
-                                                    ]
-                                                    Html.td [
-                                                        prop.className "px-3 py-2 font-mono text-gray-500"
-                                                        prop.text (msgs.ElapsedMsLabel outcome.ElapsedMs)
-                                                    ]
-                                                ]
-                                            ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
+                Html.p [
+                    prop.className [ "text-xs"; Tokens.Text.muted ]
+                    prop.text msgs.NoHooksRecorded
                 ]
+            else
+                Data.table
+                    [
+                        {
+                            Header = msgs.ColumnHook
+                            Align = Data.Left
+                            Cell =
+                                fun (outcome: LifecycleHookOutcome) ->
+                                    Html.span [ prop.className "font-mono"; prop.text outcome.HookName ]
+                        }
+                        {
+                            Header = msgs.ColumnResult
+                            Align = Data.Left
+                            Cell = fun (outcome: LifecycleHookOutcome) -> resultBadge msgs outcome.Result
+                        }
+                        {
+                            Header = msgs.ColumnDetail
+                            Align = Data.Left
+                            Cell =
+                                fun (outcome: LifecycleHookOutcome) ->
+                                    Html.span [
+                                        prop.className [ "break-all"; Tokens.Text.secondary ]
+                                        prop.text (resultDetail outcome.Result)
+                                    ]
+                        }
+                        {
+                            Header = msgs.ColumnElapsed
+                            Align = Data.Left
+                            Cell =
+                                fun (outcome: LifecycleHookOutcome) ->
+                                    Html.span [
+                                        prop.className [ "font-mono"; Tokens.Text.muted ]
+                                        prop.text (msgs.ElapsedMsLabel outcome.ElapsedMs)
+                                    ]
+                        }
+                    ]
+                    summary.Outcomes
         ]
     ]
 
@@ -281,7 +262,7 @@ let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
         prop.className "bg-white rounded-lg border border-border p-4 mb-4"
         prop.children [
             Html.label [
-                prop.className "block text-xs font-medium text-gray-700 mb-1"
+                prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                 prop.text msgs.ScopeIdLabel
             ]
             Html.div [
@@ -298,28 +279,20 @@ let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
                         prop.className
                             "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand flex-1 font-mono text-xs"
                     ]
-                    Html.button [
-                        prop.className [
-                            "px-4 py-2 text-sm rounded-lg text-white transition-colors"
-                            if canSubmit then
-                                "bg-brand hover:bg-brand-dark cursor-pointer"
-                            else
-                                "bg-gray-300 cursor-not-allowed"
-                        ]
-                        prop.disabled (not canSubmit)
-                        prop.text (if loading then msgs.LoadingButton else msgs.LoadLastRun)
-                        prop.onClick (fun _ -> submit ())
-                    ]
+                    Forms.Button.primaryWith
+                        (Forms.Button.stateOf loading msgs.LoadingButton (scope.Trim() = ""))
+                        msgs.LoadLastRun
+                        submit
                 ]
             ]
             Html.p [
-                prop.className "text-xs text-gray-500 mt-2"
+                prop.className [ "text-xs mt-2"; Tokens.Text.muted ]
                 prop.text msgs.ScopeFormFootnote
             ]
         ]
     ]
 
-/// Phase 751 — the view body as a React COMPONENT, for the same reason
+/// The view body as a React COMPONENT, for the same reason
 /// `HealthMonitorUI.HealthMonitorBody` / `AdminHomeHeader` are: `view` is
 /// invoked inline by the shell's own render, so a hook called there would
 /// join the shell's hook order and break the moment the active module
@@ -331,32 +304,41 @@ let private TenantLifecycleAdminBody (model: Model) (dispatch: Msg -> unit) : Re
     let resultPane =
         match model.Summary with
         | Some summary -> summaryTable msgs summary
-        | None when model.Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+        | None when model.Loading -> Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
         | None when model.Loaded ->
             // Queried, but no run recorded for this scope.
             Html.div [
                 prop.className "bg-white rounded-lg border border-border p-6 text-center"
                 prop.children [
                     Html.p [
-                        prop.className "text-sm text-gray-600"
+                        prop.className [ "text-sm"; Tokens.Text.secondary ]
                         prop.text (
                             match model.QueriedScope with
                             | Some scope -> msgs.NoRunForScope scope
                             | None -> msgs.NoRunForScopeFallback
                         )
                     ]
-                    Html.p [ prop.className "text-xs text-gray-400 mt-1"; prop.text msgs.NoRunHelp ]
+                    Html.p [
+                        prop.className [ "text-xs mt-1"; Tokens.Text.muted ]
+                        prop.text msgs.NoRunHelp
+                    ]
                 ]
             ]
         | None ->
             // Nothing queried yet.
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.EnterScopePrompt ]
+            Html.p [
+                prop.className [ "text-sm"; Tokens.Text.muted ]
+                prop.text msgs.EnterScopePrompt
+            ]
 
     Html.div [
         prop.className "p-6 max-w-3xl"
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
+                prop.text msgs.Subheading
+            ]
             StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             ScopeForm model.Loading (fun scope -> dispatch (SubmitScope scope))
             resultPane

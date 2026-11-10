@@ -405,14 +405,14 @@ let private ProviderForm
             Html.div [
                 prop.children [
                     Html.label [
-                        prop.className "block text-sm font-medium text-gray-700 mb-1"
+                        prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                         prop.text "Label"
                     ]
                     Html.input [
                         prop.className [
                             "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
                             if isEditMode then
-                                "border-gray-200 bg-gray-50 text-gray-600"
+                                ("border-gray-200 bg-gray-50 " + Tokens.Text.secondary)
                             else
                                 "border-gray-300"
                         ]
@@ -428,7 +428,7 @@ let private ProviderForm
                         ]
                     elif isEditMode then
                         Html.p [
-                            prop.className "mt-1 text-xs text-gray-500"
+                            prop.className ("mt-1 text-xs " + Tokens.Text.muted)
                             prop.text "Label is fixed during edit. Delete and re-add to rename."
                         ]
                 ]
@@ -438,7 +438,7 @@ let private ProviderForm
             Html.div [
                 prop.children [
                     Html.label [
-                        prop.className "block text-sm font-medium text-gray-700 mb-1"
+                        prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                         prop.text "Provider"
                     ]
                     Html.select [
@@ -459,7 +459,7 @@ let private ProviderForm
             Html.div [
                 prop.children [
                     Html.label [
-                        prop.className "block text-sm font-medium text-gray-700 mb-1"
+                        prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                         prop.text "Model (optional)"
                     ]
                     Html.input [
@@ -492,7 +492,7 @@ let private ProviderForm
             Html.div [
                 prop.children [
                     Html.label [
-                        prop.className "block text-sm font-medium text-gray-700 mb-1"
+                        prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                         prop.text (if isEditMode then "API Key (optional)" else "API Key")
                     ]
                     Html.input [
@@ -510,7 +510,7 @@ let private ProviderForm
                         prop.disabled loading
                     ]
                     Html.p [
-                        prop.className "mt-1 text-xs text-gray-500"
+                        prop.className ("mt-1 text-xs " + Tokens.Text.muted)
                         prop.text (
                             if isEditMode then
                                 "Only provided when rotating. The existing key stays in place otherwise."
@@ -531,7 +531,7 @@ let private ProviderForm
                             if canSubmit then
                                 "bg-violet-500 hover:bg-violet-600 text-white"
                             else
-                                "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                ("bg-gray-200 cursor-not-allowed " + Tokens.Text.muted)
                         ]
                         prop.disabled (not canSubmit)
                         prop.onClick (fun _ -> handleSubmit ())
@@ -545,7 +545,10 @@ let private ProviderForm
 
                     if isEditMode then
                         Html.button [
-                            prop.className "px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100"
+                            prop.className (
+                                "px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 "
+                                + Tokens.Text.secondary
+                            )
                             prop.disabled loading
                             prop.onClick (fun _ -> onCancel ())
                             prop.text "Cancel"
@@ -696,7 +699,7 @@ let private PlatformProviderModelPicker
         prop.className "space-y-3"
         prop.children [
             Html.p [
-                prop.className "text-sm text-gray-600"
+                prop.className ("text-sm " + Tokens.Text.secondary)
                 prop.text (
                     if multiProvider then
                         "AI is managed by this deployment. Pick a provider and model from the options below; the deployment's Platform Admin manages the API keys."
@@ -727,7 +730,7 @@ let private PlatformProviderModelPicker
                 Html.div [
                     prop.children [
                         Html.label [
-                            prop.className "block text-sm font-medium text-gray-700 mb-1"
+                            prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                             prop.text "Provider"
                         ]
                         Html.select [
@@ -753,7 +756,7 @@ let private PlatformProviderModelPicker
                 Html.div [
                     prop.children [
                         Html.label [
-                            prop.className "block text-sm font-medium text-gray-700 mb-1"
+                            prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                             prop.text "Model"
                         ]
                         Html.select [
@@ -770,7 +773,7 @@ let private PlatformProviderModelPicker
                             ]
                         ]
                         Html.p [
-                            prop.className "mt-1 text-xs text-gray-500"
+                            prop.className ("mt-1 text-xs " + Tokens.Text.muted)
                             prop.text $"Effective model: {effectiveModel}"
                         ]
                     ]
@@ -786,7 +789,7 @@ let private PlatformProviderModelPicker
                             if not loading && pending then
                                 "bg-violet-500 hover:bg-violet-600 text-white"
                             else
-                                "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                ("bg-gray-200 cursor-not-allowed " + Tokens.Text.muted)
                         ]
                         prop.disabled (loading || not pending)
                         prop.onClick (fun _ -> handleSave ())
@@ -859,7 +862,7 @@ let private instanceRow
                         prop.children [
                             Html.span [ prop.className "font-medium text-sm"; prop.text instance.Label ]
                             Html.span [
-                                prop.className "text-xs text-gray-500 font-mono truncate"
+                                prop.className ("text-xs font-mono truncate " + Tokens.Text.muted)
                                 prop.text $"{providerName} · {modelText}"
                             ]
                         ]
@@ -891,8 +894,10 @@ let private instanceRow
 
             // Edit
             Html.button [
-                prop.className
-                    "text-gray-500 hover:text-violet-600 text-sm px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                prop.className (
+                    "hover:text-violet-600 text-sm px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed "
+                    + Tokens.Text.muted
+                )
                 prop.disabled (loading || isEditing)
                 prop.onClick (fun _ -> dispatch (StartEdit instance.Label))
                 prop.text "Edit"
@@ -900,8 +905,10 @@ let private instanceRow
 
             // Test — only enabled when an API key is stored.
             Html.button [
-                prop.className
-                    "text-gray-500 hover:text-violet-600 text-sm px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                prop.className (
+                    "hover:text-violet-600 text-sm px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed "
+                    + Tokens.Text.muted
+                )
                 prop.disabled (loading || not instance.HasApiKey)
                 prop.onClick (fun _ -> dispatch (TestInstance instance.Label))
                 prop.text "Test"
@@ -909,8 +916,10 @@ let private instanceRow
 
             // Delete
             Html.button [
-                prop.className
-                    "text-gray-400 hover:text-red-600 text-sm p-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                prop.className (
+                    "hover:text-red-600 text-sm p-1 disabled:opacity-50 disabled:cursor-not-allowed "
+                    + Tokens.Text.muted
+                )
                 prop.disabled loading
                 prop.onClick (fun _ -> dispatch (DeleteInstance instance.Label))
                 prop.text "Remove"
@@ -973,11 +982,11 @@ let private TeamConversationVisibilitySection () =
             prop.className "mt-4 pt-4 border-t border-gray-200"
             prop.children [
                 Html.h4 [
-                    prop.className "text-sm font-semibold text-gray-700 mb-1"
+                    prop.className ("text-sm font-semibold mb-1 " + Tokens.Text.secondary)
                     prop.text "Who can see team AI conversations"
                 ]
                 Html.p [
-                    prop.className "text-sm text-gray-600 mb-2"
+                    prop.className ("text-sm mb-2 " + Tokens.Text.secondary)
                     prop.text (TeamConversationVisibility.describe v.Level)
                 ]
 
@@ -988,7 +997,7 @@ let private TeamConversationVisibilitySection () =
 
                 if v.Selectable.IsEmpty then
                     Html.p [
-                        prop.className "text-xs text-gray-500"
+                        prop.className ("text-xs " + Tokens.Text.muted)
                         prop.text "Only the team owner can change this."
                     ]
                 else
@@ -998,7 +1007,7 @@ let private TeamConversationVisibilitySection () =
 
                         Html.label [
                             prop.key (TeamConversationVisibility.name level)
-                            prop.className "flex items-center gap-2 text-sm text-gray-700 py-0.5"
+                            prop.className ("flex items-center gap-2 text-sm py-0.5 " + Tokens.Text.secondary)
                             prop.children [
                                 Html.input [
                                     prop.type'.radio
@@ -1028,7 +1037,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 
             if model.Config.ConfiguredProviders.IsEmpty then
                 Html.p [
-                    prop.className "text-sm text-gray-500 py-4"
+                    prop.className ("text-sm py-4 " + Tokens.Text.muted)
                     prop.text
                         "No providers configured yet. Add one using the form on the right — the factory will fall back to the platform default (if any) until you activate one."
                 ]
@@ -1044,7 +1053,9 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
                             prop.className "mt-3 pt-3 border-t border-gray-200"
                             prop.children [
                                 Html.label [
-                                    prop.className "flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
+                                    prop.className (
+                                        "flex items-center gap-2 text-sm cursor-pointer " + Tokens.Text.secondary
+                                    )
                                     prop.children [
                                         Html.input [
                                             prop.type'.radio

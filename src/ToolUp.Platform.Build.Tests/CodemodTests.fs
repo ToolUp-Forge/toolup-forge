@@ -171,6 +171,7 @@ let tests =
                             "src/Client/App.fs"
                             "src/Client/Grid.fs"
                             "src/Client/Hosting.fs"
+                            "src/Client/Reports.fs"
                             "src/Client/Shell.fs"
                             "src/Server/AiRag.fs"
                             "src/Server/Already.fs"
@@ -263,7 +264,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 23 file(s) visited, 110 rewrite(s) in 19 file(s), 118 site(s) for review."
+                        "Codemod: 24 file(s) visited, 112 rewrite(s) in 19 file(s), 119 site(s) for review."
                         "summary")
         ]
 
@@ -875,5 +876,60 @@ let tests =
                     Codemod.plan root |> Codemod.apply |> ignore
                     let bytes = File.ReadAllBytes(Path.Combine(root, "src", "Server", "Program.fs"))
                     Expect.notEqual bytes[0] 0xEFuy "no BOM introduced")
+        ]
+
+        testList "Phase 1084 — one snapshot exception" [
+            testCase "both store-owned spellings become the Infra exception"
+            <| fun () ->
+                let source =
+                    String.concat "\n" [
+                        "| :? HnswVectorStore.HnswScopeSnapshotUnreadableException as ex -> ()"
+                        "| :? ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.HnswScopeSnapshotUnreadableException -> ()"
+                        "| :? HnswScopeSnapshotUnreadableException -> ()"
+                        "| :? ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException -> ()"
+                        "| :? InMemoryVectorStore.RagScopeSnapshotUnreadableException -> ()"
+                        "| :? RagScopeSnapshotUnreadableException -> ()"
+                    ]
+
+                let rewritten, rewrites = rewriteSource source
+
+                Expect.equal
+                    rewritten
+                    (String.concat "\n" [
+                        "| :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException as ex -> ()"
+                        "| :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> ()"
+                        "| :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> ()"
+                        "| :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> ()"
+                        "| :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> ()"
+                        "| :? RagScopeSnapshotUnreadableException -> ()"
+                    ])
+                    "every store-owned spelling is rewritten; the bare Infra name is left alone"
+
+                Expect.equal rewrites.Length 5 "one rewrite per store-owned spelling"
+
+                Expect.equal
+                    (Codemod.migrationOfPhase "1084")
+                    (Some CodemodMigration.SnapshotIndex)
+                    "the migration is reachable by its phase"
+
+            testCase "every migration resolves by its phase number, 874 included"
+            <| fun () ->
+                Expect.equal
+                    (Codemod.migrationOfPhase "874")
+                    (Some CodemodMigration.OpenAuditRegistry)
+                    "Codemod --phase 874 resolves the open audit registry"
+
+                let unresolved = [
+                    for case in Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<CodemodMigration> do
+                        let migration =
+                            Microsoft.FSharp.Reflection.FSharpValue.MakeUnion(case, [||]) :?> CodemodMigration
+
+                        let phase = (CodemodMigration.label migration).Substring("Phase ".Length)
+
+                        if Codemod.migrationOfPhase phase <> Some migration then
+                            yield CodemodMigration.label migration
+                ]
+
+                Expect.isEmpty unresolved "every migration is reachable by --phase"
         ]
     ]

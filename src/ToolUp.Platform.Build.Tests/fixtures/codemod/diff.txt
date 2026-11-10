@@ -309,13 +309,19 @@
 @@ L52 [1062-audit-log-option]
 -let sink (audit: IAuditLog option) = audit
 +let sink (audit: IAuditLog) = audit
-@@ L62 [882-unrestricted-constructor]
+@@ L62 [1084-hnsw-snapshot-exception]
+-let refusedHnsw (ex: exn) = match ex with :? HnswVectorStore.HnswScopeSnapshotUnreadableException -> true | _ -> false
++let refusedHnsw (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+@@ L64 [1084-rag-snapshot-exception-home]
+-let refusedVector (ex: exn) = match ex with :? InMemoryVectorStore.RagScopeSnapshotUnreadableException -> true | _ -> false
++let refusedVector (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+@@ L66 [882-unrestricted-constructor]
 -let fallback = AccessContext.unrestricted (AnonymousSession "anonymous")
 +let fallback = AccessContext.ofSubject ModulePermissions.Unrestricted (AnonymousSession "anonymous")
-@@ L63 [882-unrestricted-constructor]
+@@ L67 [882-unrestricted-constructor]
 -let jobContext subject = AccessContext.unrestricted subject
 +let jobContext subject = AccessContext.ofSubject ModulePermissions.Unrestricted subject
-@@ L69 [882-entity-principal]
+@@ L73 [882-entity-principal]
 -let actor (access: AccessContext) = EntityPrincipal.ofPrincipal access.UserId
 +let actor (access: AccessContext) = AccessContext.entityPrincipal access
 --- a/src/Server/Jobs.fs
@@ -430,4 +436,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 110 rewrite(s) across 19 file(s) pending.
+Codemod: 112 rewrite(s) across 19 file(s) pending.

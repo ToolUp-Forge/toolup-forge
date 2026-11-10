@@ -272,6 +272,7 @@ ToolUp.Platform.CodemodFinding.RuleId : System.String { get }
 ToolUp.Platform.CodemodFinding.Text : System.String { get }
 ToolUp.Platform.CodemodMigration (class)
 ToolUp.Platform.CodemodMigration.AccessContextRefuses : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.AdminPageKit : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ApiStability : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.AuditFailureAsData : ToolUp.Platform.CodemodMigration { get }
@@ -282,6 +283,7 @@ ToolUp.Platform.CodemodMigration.ConnectorKernel : ToolUp.Platform.CodemodMigrat
 ToolUp.Platform.CodemodMigration.Deprecations : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.FailureAsData : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.IsAccessContextRefuses : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsAdminPageKit : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsApiStability : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsAuditFailureAsData : System.Boolean { get }
@@ -303,6 +305,7 @@ ToolUp.Platform.CodemodMigration.IsRemoting : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemotingLeftovers : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRequestPipeline : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsShellSlots : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsSnapshotIndex : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSubsystemNamespaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsTypedIdentity : System.Boolean { get }
@@ -318,12 +321,14 @@ ToolUp.Platform.CodemodMigration.Remoting : ToolUp.Platform.CodemodMigration { g
 ToolUp.Platform.CodemodMigration.RemotingLeftovers : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.RequestPipeline : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ShellSlots : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.SnapshotIndex : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.SubsystemNamespaces : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Surfaces : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Tag : System.Int32 { get }
 ToolUp.Platform.CodemodMigration.TypedIdentity : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration+Tags (class)
 ToolUp.Platform.CodemodMigration+Tags.AccessContextRefuses : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.AdminPageKit : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ApiStability : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.AuditFailureAsData : System.Int32 (literal)
@@ -345,6 +350,7 @@ ToolUp.Platform.CodemodMigration+Tags.Remoting : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RemotingLeftovers : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RequestPipeline : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ShellSlots : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.SnapshotIndex : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.SubsystemNamespaces : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Surfaces : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.TypedIdentity : System.Int32 (literal)

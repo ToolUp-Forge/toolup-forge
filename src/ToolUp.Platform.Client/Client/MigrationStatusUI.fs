@@ -160,7 +160,7 @@ let update (msg: Msg) (model: Model) =
 let private statePill (msgs: MigrationStatusMessages) (state: MigrationRunState) =
     let label, cls =
         match state with
-        | MigrationIdle -> msgs.NotYetRun, "bg-gray-100 text-gray-700 border-gray-200"
+        | MigrationIdle -> msgs.NotYetRun, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
         | MigrationInProgress -> msgs.InProgressLabel, "bg-blue-100 text-blue-700 border-blue-200"
         | MigrationComplete -> msgs.UpToDate, "bg-green-100 text-green-700 border-green-200"
         | MigrationCompleteWithFailures -> msgs.CompletedWithFailures, "bg-yellow-100 text-yellow-700 border-yellow-200"
@@ -193,13 +193,16 @@ let private progressText
 
 let private failureRows (msgs: MigrationStatusMessages) (status: MigrationStatus) =
     if status.Failures.IsEmpty then
-        Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoFailuresRecorded ]
+        Html.p [
+            prop.className [ "text-xs"; Tokens.Text.muted ]
+            prop.text msgs.NoFailuresRecorded
+        ]
     else
         Html.div [
             prop.className "space-y-1"
             prop.children [
                 Html.p [
-                    prop.className "text-xs text-gray-500"
+                    prop.className [ "text-xs"; Tokens.Text.muted ]
                     prop.text (msgs.FailuresSummary(List.length status.Failures))
                 ]
                 Html.ul [
@@ -216,87 +219,75 @@ let private failureRows (msgs: MigrationStatusMessages) (status: MigrationStatus
             ]
         ]
 
-let private dataTypeRow
+let private dataTypeCell (info: MigrationDataTypeInfo) =
+    Html.div [
+        Html.div [ prop.className "text-sm font-medium"; prop.text info.DisplayName ]
+        Html.div [
+            prop.className [ "text-xs font-mono"; Tokens.Text.muted ]
+            prop.text info.DataTypeId
+        ]
+    ]
+
+/// The progress sentence, and the recorded failures beneath it while they
+/// are expanded.
+let private progressCell (msgs: MigrationStatusMessages) (model: Model) (info: MigrationDataTypeInfo) =
+    let status = model.Statuses.TryFind info.DataTypeId
+
+    Html.div [
+        Html.p [
+            prop.className [ "text-sm"; Tokens.Text.secondary ]
+            prop.text (progressText msgs info status)
+        ]
+        match status with
+        | Some s when model.ExpandedFailures = Some info.DataTypeId ->
+            Html.div [
+                prop.className [ "mt-2 p-3 rounded"; Tokens.Bg.subtle ]
+                prop.children [ failureRows msgs s ]
+            ]
+        | _ -> Html.none
+    ]
+
+let private actionsCell
     (msgs: MigrationStatusMessages)
     (model: Model)
     (dispatch: Msg -> unit)
     (info: MigrationDataTypeInfo)
     =
-    let status = model.Statuses.TryFind info.DataTypeId
     let triggering = model.Triggering.Contains info.DataTypeId
     let expanded = model.ExpandedFailures = Some info.DataTypeId
 
-    let failureCount = status |> Option.map _.FailedObjects |> Option.defaultValue 0
+    let failureCount =
+        model.Statuses.TryFind info.DataTypeId
+        |> Option.map _.FailedObjects
+        |> Option.defaultValue 0
 
-    Html.tbody [
-        Html.tr [
-            prop.className "border-b border-gray-100"
-            prop.children [
-                Html.td [
-                    prop.className "py-2 pr-4"
-                    prop.children [
-                        Html.div [ prop.className "text-sm font-medium"; prop.text info.DisplayName ]
-                        Html.div [ prop.className "text-xs text-gray-500 font-mono"; prop.text info.DataTypeId ]
-                    ]
+    Html.div [
+        prop.className "flex items-center justify-end gap-3"
+        prop.children [
+            match info.ChainProblem with
+            | Some problem ->
+                Html.span [
+                    prop.className "text-xs text-red-700"
+                    prop.title problem
+                    prop.text msgs.ChainIncomplete
                 ]
-                Html.td [
-                    prop.className "py-2 pr-4 text-sm"
-                    prop.text (msgs.DeclaredVersion info.CurrentVersion)
+            | None ->
+                Forms.Button.secondaryWith
+                    (Forms.Button.stateOf triggering msgs.Migrating false)
+                    msgs.MigrateNow
+                    (fun () -> dispatch (TriggerClicked info.DataTypeId))
+            if failureCount > 0 then
+                Html.button [
+                    prop.className "text-xs underline text-red-700"
+                    prop.text (
+                        if expanded then
+                            msgs.HideFailures
+                        else
+                            msgs.FailuresButton failureCount
+                    )
+                    prop.onClick (fun _ -> dispatch (ToggleFailures info.DataTypeId))
                 ]
-                Html.td [
-                    prop.className "py-2 pr-4 text-sm text-gray-700"
-                    prop.text (progressText msgs info status)
-                ]
-                Html.td [
-                    prop.className "py-2 pr-4"
-                    prop.children [
-                        match status with
-                        | Some s -> statePill msgs s.State
-                        | None -> statePill msgs MigrationIdle
-                    ]
-                ]
-                Html.td [
-                    prop.className "py-2 text-right space-x-3"
-                    prop.children [
-                        match info.ChainProblem with
-                        | Some problem ->
-                            Html.span [
-                                prop.className "text-xs text-red-700"
-                                prop.title problem
-                                prop.text msgs.ChainIncomplete
-                            ]
-                        | None ->
-                            Html.button [
-                                prop.className "text-xs underline disabled:opacity-40 disabled:no-underline"
-                                prop.disabled triggering
-                                prop.text (if triggering then msgs.Migrating else msgs.MigrateNow)
-                                prop.onClick (fun _ -> dispatch (TriggerClicked info.DataTypeId))
-                            ]
-                        if failureCount > 0 then
-                            Html.button [
-                                prop.className "text-xs underline text-red-700"
-                                prop.text (
-                                    if expanded then
-                                        msgs.HideFailures
-                                    else
-                                        msgs.FailuresButton failureCount
-                                )
-                                prop.onClick (fun _ -> dispatch (ToggleFailures info.DataTypeId))
-                            ]
-                    ]
-                ]
-            ]
         ]
-        if expanded then
-            match status with
-            | Some s ->
-                Html.tr [
-                    prop.className "border-b border-gray-100 bg-gray-50"
-                    prop.children [
-                        Html.td [ prop.colSpan 5; prop.className "p-3"; prop.children [ failureRows msgs s ] ]
-                    ]
-                ]
-            | None -> Html.none
     ]
 
 let private dataTypesTable
@@ -306,36 +297,43 @@ let private dataTypesTable
     (dataTypes: MigrationDataTypeInfo list)
     =
     if dataTypes.IsEmpty then
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoDataTypes ]
+        Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoDataTypes ]
     else
-        Html.table [
-            prop.className "w-full text-left"
-            prop.children [
-                Html.thead [
-                    Html.tr [
-                        prop.className "border-b border-gray-200 text-xs uppercase text-gray-500"
-                        prop.children [
-                            Html.th [ prop.className "py-2 pr-4 font-medium"; prop.text msgs.ColumnDataType ]
-                            Html.th [ prop.className "py-2 pr-4 font-medium"; prop.text msgs.ColumnDeclared ]
-                            Html.th [ prop.className "py-2 pr-4 font-medium"; prop.text msgs.ColumnProgress ]
-                            Html.th [ prop.className "py-2 pr-4 font-medium"; prop.text msgs.ColumnState ]
-                            Html.th [ prop.className "py-2 font-medium text-right"; prop.text msgs.ColumnActions ]
-                        ]
-                    ]
-                ]
-                yield! (dataTypes |> List.map (dataTypeRow msgs model dispatch))
+        Data.table
+            [
+                {
+                    Header = msgs.ColumnDataType
+                    Align = Data.Left
+                    Cell = dataTypeCell
+                }
+                {
+                    Header = msgs.ColumnDeclared
+                    Align = Data.Left
+                    Cell = fun info -> Html.text (msgs.DeclaredVersion info.CurrentVersion)
+                }
+                {
+                    Header = msgs.ColumnProgress
+                    Align = Data.Left
+                    Cell = progressCell msgs model
+                }
+                {
+                    Header = msgs.ColumnState
+                    Align = Data.Left
+                    Cell =
+                        fun info ->
+                            match model.Statuses.TryFind info.DataTypeId with
+                            | Some s -> statePill msgs s.State
+                            | None -> statePill msgs MigrationIdle
+                }
+                {
+                    Header = msgs.ColumnActions
+                    Align = Data.Right
+                    Cell = actionsCell msgs model dispatch
+                }
             ]
-        ]
+            dataTypes
 
-let private refreshButton (msgs: MigrationStatusMessages) (loading: bool) (dispatch: Msg -> unit) =
-    Html.button [
-        prop.className "px-3 py-1.5 text-sm border rounded border-gray-300 disabled:opacity-40"
-        prop.disabled loading
-        prop.text (if loading then msgs.Refreshing else msgs.Refresh)
-        prop.onClick (fun _ -> dispatch Refresh)
-    ]
-
-/// Phase 751 — the module body as a React COMPONENT, for the same reason
+/// The module body as a React COMPONENT, for the same reason
 /// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
 /// inline by the shell's own render, so a hook there would join the shell's
 /// hook order and break the moment the active module changed.
@@ -355,10 +353,13 @@ let private MigrationStatusBody (model: Model) (dispatch: Msg -> unit) =
                     Html.div [
                         prop.children [
                             Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.Subheading ]
+                            Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
                         ]
                     ]
-                    refreshButton msgs loading dispatch
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf loading msgs.Refreshing false)
+                        msgs.Refresh
+                        (fun () -> dispatch Refresh)
                 ]
             ]
             match model.LastError with
@@ -373,7 +374,11 @@ let private MigrationStatusBody (model: Model) (dispatch: Msg -> unit) =
             match model.DataTypes with
             | Remote.NotAsked
             | Remote.Loading
-            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingDataTypes ]
+            | Remote.Reloading _ ->
+                Html.p [
+                    prop.className [ "text-sm"; Tokens.Text.muted ]
+                    prop.text msgs.LoadingDataTypes
+                ]
             | Remote.Failed message ->
                 StateViews.notice noticeMsgs (Some(Notice.Problem message)) (fun () -> dispatch DismissError)
             | Remote.Loaded dataTypes -> dataTypesTable msgs model dispatch dataTypes

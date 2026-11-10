@@ -282,6 +282,7 @@ case ToolUp.Platform LedgerHeadRejected ToolUp.Platform.Compose
 case ToolUp.Platform LedgerHeadUnverifiable ToolUp.Platform.Compose
 case ToolUp.Platform LeftOuter ToolUp.Platform.Infra
 case ToolUp.Platform LifecycleOrderUnsatisfiable ToolUp.Platform.Compose
+case ToolUp.Platform Loaded ToolUp.Platform.Infra
 case ToolUp.Platform Local ToolUp.Platform.Infra
 case ToolUp.Platform LocalUser ToolUp.Platform.Infra
 case ToolUp.Platform LogAndServe ToolUp.Platform.Compose
@@ -413,6 +414,7 @@ case ToolUp.Platform Redact ToolUp.Platform.Audit
 case ToolUp.Platform ReducedWhenUnprovisioned ToolUp.Platform.Compose
 case ToolUp.Platform ReferrerPolicy ToolUp.Platform.Compose
 case ToolUp.Platform Reflection ToolUp.Platform.Compose
+case ToolUp.Platform Refuse ToolUp.Platform.Infra
 case ToolUp.Platform RefuseOnDrift ToolUp.Platform.Compose
 case ToolUp.Platform Refused ToolUp.Platform.Compose
 case ToolUp.Platform RefusedOnStoreFailure ToolUp.Platform.Infra
@@ -502,6 +504,7 @@ case ToolUp.Platform StaleBaseline ToolUp.Platform.Compose
 case ToolUp.Platform StaleTimestamp ToolUp.Platform.Infra
 case ToolUp.Platform StaleWrite ToolUp.Platform.Compose
 case ToolUp.Platform Standard ToolUp.Platform.Compose
+case ToolUp.Platform StartEmpty ToolUp.Platform.Infra
 case ToolUp.Platform StateMismatch ToolUp.Platform.Infra
 case ToolUp.Platform Storage ToolUp.Platform.Compose
 case ToolUp.Platform StorageFailure ToolUp.Platform.Infra
@@ -732,6 +735,7 @@ type ToolUp.Platform BlobPageDocumentStore ToolUp.Platform.Compose
 type ToolUp.Platform BlobPrivacyBudgetLedger ToolUp.Platform.Compose
 type ToolUp.Platform BlobProviderProfile ToolUp.Platform.Infra
 type ToolUp.Platform BlobPublicationReaderGrantStore ToolUp.Platform.Scope
+type ToolUp.Platform BlobSnapshot ToolUp.Platform.Infra
 type ToolUp.Platform BlobStorageEnv ToolUp.Platform.Config
 type ToolUp.Platform BlobStorageErasureHandler ToolUp.Platform.Audit
 type ToolUp.Platform BlobStorageSelectionValidator ToolUp.Platform.Config
@@ -917,6 +921,8 @@ type ToolUp.Platform ConversationEraseHandler ToolUp.Platform.Audit
 type ToolUp.Platform ConversationExporter ToolUp.Platform.Audit
 type ToolUp.Platform ConversationStore ToolUp.Platform.Config
 type ToolUp.Platform ConversationStoreLifecycle ToolUp.Platform.Compose
+type ToolUp.Platform CorruptPolicy ToolUp.Platform.Infra
+type ToolUp.Platform CorruptionHandling ToolUp.Platform.Infra
 type ToolUp.Platform CorsConfigValidator ToolUp.Platform.Config
 type ToolUp.Platform Countersignature ToolUp.Platform.Compose
 type ToolUp.Platform CountersignatureAction ToolUp.Platform.Compose
@@ -1744,6 +1750,7 @@ type ToolUp.Platform PublicBaseUrlFormatValidator ToolUp.Platform.Config
 type ToolUp.Platform PublicationReaderApiHandler ToolUp.Platform.Scope
 type ToolUp.Platform PublicationReaderGrants ToolUp.Platform.Scope
 type ToolUp.Platform QuietHoursClock ToolUp.Platform.Jobs
+type ToolUp.Platform RagScopeSnapshotUnreadableException ToolUp.Platform.Infra
 type ToolUp.Platform RateLimitConfigValidator ToolUp.Platform.Config
 type ToolUp.Platform RateLimitEventApi ToolUp.Platform.Infra
 type ToolUp.Platform RateLimitMiddleware ToolUp.Platform.Infra
@@ -1834,6 +1841,8 @@ type ToolUp.Platform ScopeEnumeration ToolUp.Platform.Compose
 type ToolUp.Platform ScopeId ToolUp.Platform.Compose
 type ToolUp.Platform ScopeKind ToolUp.Platform.Compose
 type ToolUp.Platform ScopeReissueError ToolUp.Platform.Jobs
+type ToolUp.Platform ScopeSlot ToolUp.Platform.Infra
+type ToolUp.Platform ScopedSnapshotIndex ToolUp.Platform.Infra
 type ToolUp.Platform ScoreContext ToolUp.Platform.Infra
 type ToolUp.Platform ScoreError ToolUp.Platform.Infra
 type ToolUp.Platform ScoreJobRequest ToolUp.Platform.Jobs
@@ -1898,6 +1907,11 @@ type ToolUp.Platform SlotCardinality ToolUp.Platform.Compose
 type ToolUp.Platform SlotRequirementSet ToolUp.Platform.Compose
 type ToolUp.Platform SlugCollisionPolicy ToolUp.Platform.Compose
 type ToolUp.Platform SmokeTestHandler ToolUp.Platform.Config
+type ToolUp.Platform SnapshotFault ToolUp.Platform.Infra
+type ToolUp.Platform SnapshotFaultText ToolUp.Platform.Infra
+type ToolUp.Platform SnapshotLayout ToolUp.Platform.Infra
+type ToolUp.Platform SnapshotLoad ToolUp.Platform.Infra
+type ToolUp.Platform SnapshotPolicy ToolUp.Platform.Infra
 type ToolUp.Platform SoftwareBillOfMaterials ToolUp.Platform.Infra
 type ToolUp.Platform SpaFallbackExcludedPath ToolUp.Platform.Infra
 type ToolUp.Platform SpaFallbackMiddleware ToolUp.Platform.Infra

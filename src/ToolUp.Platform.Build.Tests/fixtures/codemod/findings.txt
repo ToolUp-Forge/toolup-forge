@@ -1,4 +1,4 @@
-Codemod: 118 site(s) in 20 file(s) need human review (not rewritten):
+Codemod: 119 site(s) in 21 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -24,6 +24,9 @@ Codemod: 118 site(s) in 20 file(s) need human review (not rewritten):
       -> Phase 1071: `FlagsPrefetch` and `ResetCounters` are gone: delete the line from a full `Client.Model` literal. The first-init gates are `AwaitingFirstInit` (a set of boot-source keys), and a module's reset count is its host's `Generation`
     L15 [1071-module-msg-id] let increment dispatch = dispatch (Client.ModuleMsg(box Increment))
       -> Phase 1071: `ModuleMsg` carries the module id: construct `ModuleMsg(moduleId, box message)` and match `ModuleMsg(moduleId, message)`; a message for a module with no host is dropped
+  src/Client/Reports.fs
+    L7 [1073-data-table-columns] Data.table [ "Region"; "Spend" ] [ for r in rows -> [ Html.text r.Region; Html.text (string r.Spend) ] ]
+      -> Phase 1073: `Data.table` takes `Column<'row>` values and the rows themselves: write each header as `{ Header = "…"; Align = Data.Left; Cell = fun row -> … }` (the first column `Left`, figures `Right`) and pass the row values, not pre-rendered element lists
   src/Client/Shell.fs
     L24 [879-slot-field-split] DataManager =
       -> Phase 879: if this is a `ClientConfig` field, it is `Slots.<field> =` now (a nested copy-and-update) — the codemod moves the field only when its mode case is on the same line; a message-catalog field of the same name stays as it is
@@ -158,15 +161,15 @@ Codemod: 118 site(s) in 20 file(s) need human review (not rewritten):
       -> Phase 874: if this is an `AuditEvent` case, the companion that emits it declares it now: open its `*AuditEvents` module, construct with its family's `event` (`FormsAuditEvent.event (FormSubmitted p)`), and match with its active pattern (`FormsAudit(FormSubmitted p)`) or `tryRead`; Core carries it as `AuditEvent.Opaque`
     L60 [874-archive-read] JsonSerializer.Deserialize<ArchiveLine>(line, PlatformJson.options)
       -> Phase 874: if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode
-    L62 [882-unresolved-fallback] let fallback = AccessContext.ofSubject ModulePermissions.Unrestricted (AnonymousSession "anonymous")
+    L66 [882-unresolved-fallback] let fallback = AccessContext.ofSubject ModulePermissions.Unrestricted (AnonymousSession "anonymous")
       -> Phase 882: if this is a handler's fallback for a request with no resolved principal, write `AccessContext.tryResolve ctx.RequestServices |> Option.defaultWith (fun () -> AccessContext.unresolved "<site>")` (it grants nothing); work outside a request names `AccessContext.system "<reason>"` or `AccessContext.carrying "<reason>" subject`
-    L65 [882-permissions-map-read] let isOpen (ctx: AccessContext) = ctx.ModulePermissions.IsEmpty
+    L69 [882-permissions-map-read] let isOpen (ctx: AccessContext) = ctx.ModulePermissions.IsEmpty
       -> Phase 882: `ModulePermissions` is `Unrestricted | Restricted of Map<…>`: match on the case or use `ModulePermissions.tryFind` / `grantsAccess` / `grants`; `Restricted Map.empty` grants nothing, so an `IsEmpty` test for "unrestricted" is `= ModulePermissions.Unrestricted`
-    L67 [882-retired-request-item] let stamp (ctx: HttpContext) perms = ctx.Items["ToolUp.ModulePermissions"] <- box perms
+    L71 [882-retired-request-item] let stamp (ctx: HttpContext) perms = ctx.Items["ToolUp.ModulePermissions"] <- box perms
       -> Phase 882: this request item is no longer stamped: the request's principal is ONE `AccessContext` under `AccessContext.ItemsKey`. Read it with `AccessContext.ofItems ctx.Items` or an accessor (`callerIdOf` for `ToolUp.UserId`, `subjectOf`, `scopeOf`, `userOf`, `platformRoleOf`), write it with `AccessContext.stamp`, and copy only `AccessContext.ItemsKey` to a background context
-    L71 [882-team-policy-viewer] let viewer services access = TeamPolicyViewer.resolve services access "u" "t"
+    L75 [882-team-policy-viewer] let viewer services access = TeamPolicyViewer.resolve services access "u" "t"
       -> Phase 882: `TeamPolicyViewer.resolve` takes `services access teamId` and `ConversationVisibility.resolveViewer` takes `ctx teamId`: drop the user-id argument, the viewer's id is the principal's (`AccessContext.callerId`)
-    L73 [882-retired-item-constant] let subjectKey = SurfaceEnforcement.SubjectItemsKey
+    L77 [882-retired-item-constant] let subjectKey = SurfaceEnforcement.SubjectItemsKey
       -> Phase 882: `SurfaceEnforcement.SubjectItemsKey` and `ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey` are gone: read the subject with `AccessContext.subjectOf ctx.Items`; a service account's permissions are its principal's (`ServiceAccountPrincipalItemsKey`), adopted by scope resolution as the request's `ModulePermissions`
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
@@ -264,6 +267,7 @@ Codemod: 118 site(s) in 20 file(s) need human review (not rewritten):
     Phase 1068 — docs/migrations/1068-redesign-d-rate-limit-unification.md
     Phase 1070 — docs/migrations/1070-redesign-e-remote-and-memo-primitives.md
     Phase 1071 — docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md
+    Phase 1073 — docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1079 — docs/migrations/1079-redesign-f-the-connector-kernel.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md

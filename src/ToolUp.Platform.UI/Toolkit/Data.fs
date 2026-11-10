@@ -11,48 +11,72 @@ open ToolUp.Platform
 
 module Data =
 
-    /// Table component
-    let table (headers: string list) rows =
-        Html.table [
-            // keep sizing as desired (w-auto/table-auto or w-full)
-            prop.className "w-auto table-auto"
+    /// How a column's header and cells align.
+    type Align =
+        | Left
+        | Right
+        | Center
+
+    /// One column of a `table`: its header text (the caller's string), its
+    /// alignment, and how a row renders into its cell.
+    type Column<'row> = {
+        Header: string
+        Align: Align
+        Cell: 'row -> ReactElement
+    }
+
+    let private alignClass =
+        function
+        | Left -> "text-left"
+        | Right -> "text-right"
+        | Center -> "text-center"
+
+    /// The typed table: one header row from the columns, one body row per
+    /// value. Since 0.42.0 (Phase 1073) it takes `Column<'row>` values in
+    /// place of header strings and pre-rendered element rows.
+    let table (columns: Column<'row> list) (rows: 'row list) =
+        Html.div [
+            prop.className "overflow-x-auto"
             prop.children [
-                Html.thead [
-                    Html.tr [
-                        prop.className "border-b border-separator"
-                        prop.children [
-                            for i, header in List.indexed headers do
-                                Html.th [
-                                    prop.className [
-                                        // add horizontal padding (px-6) to increase space between columns
-                                        if i = 0 then "text-left px-6" else "text-right px-6"
-                                        "py-3 text-base font-bold text-[var(--text)]"
-                                    ]
-                                    prop.text header
-                                ]
-                        ]
-                    ]
-                ]
-                //Html.div [ prop.className "py-1" ]
-                Html.tbody [
+                Html.table [
+                    prop.className "w-full text-sm"
                     prop.children [
-                        for row in rows do
+                        Html.thead [
                             Html.tr [
+                                prop.className "border-b border-separator"
                                 prop.children [
-                                    for i, cell in List.indexed row do
-                                        Html.td [
+                                    for column in columns do
+                                        Html.th [
                                             prop.className [
-                                                // match header padding for body cells
-                                                if i = 0 then
-                                                    "text-left font-bold px-6"
-                                                else
-                                                    "text-right px-6"
-                                                "py-1.5 text-base text-[var(--text-strong)]"
+                                                alignClass column.Align
+                                                "px-3 py-2 text-xs font-semibold uppercase tracking-wide"
+                                                Tokens.Text.muted
                                             ]
-                                            prop.children [ cell ]
+                                            prop.text column.Header
                                         ]
                                 ]
                             ]
+                        ]
+                        Html.tbody [
+                            prop.children [
+                                for i, row in List.indexed rows do
+                                    Html.tr [
+                                        prop.key i
+                                        prop.className "border-b border-border last:border-b-0"
+                                        prop.children [
+                                            for column in columns do
+                                                Html.td [
+                                                    prop.className [
+                                                        alignClass column.Align
+                                                        "px-3 py-2 align-top"
+                                                        Tokens.Text.primary
+                                                    ]
+                                                    prop.children [ column.Cell row ]
+                                                ]
+                                        ]
+                                    ]
+                            ]
+                        ]
                     ]
                 ]
             ]

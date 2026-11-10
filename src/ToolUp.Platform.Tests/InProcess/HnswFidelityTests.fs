@@ -16,12 +16,11 @@ open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
-// ─── Phase 14k WS5 — HNSW recall-fidelity + latency smoke ───────
+// ─── HNSW recall-fidelity + latency smoke ────────────────────────
 //
 // The strict acceptance bounds ("HNSW recall@10 within 2% of flat
-// scan; p95 < 50 ms on a 500k representative corpus") were deferred by
-// Phase 14k and measured by Phase 970 with the `--hnsw-scale` benchmark
-// mode; the measured trade-off is in the RAG technical guide's scale
+// scan; p95 < 50 ms on a 500k representative corpus") are measured
+// with the `--hnsw-scale` benchmark mode; the measured trade-off is in the RAG technical guide's scale
 // story. The recall bound is pinned below by an OPT-IN case that runs
 // only when `TOOLUP_HNSW_SCALE_CORPUS` names a corpus. What runs by
 // default is the CI-safe, dependency-free smoke:
@@ -33,7 +32,7 @@ open ToolUp.Platform.Compose
 //     catastrophic graph regression without flaking on the inherent
 //     approximate-NN looseness of random high-dim vectors;
 //   • a loose latency ceiling that catches a pathological slowdown
-//     (NOT the 500k/50ms perf bound — Phase 970 measures that, opt-in).
+//     (NOT the 500k/50ms perf bound — the benchmark measures that, opt-in).
 //
 // Ground truth is computed in-test by brute-force cosine, so this
 // needs no `InMemoryVectorStore` reference (keeps the test project's
@@ -120,9 +119,84 @@ let private exactTopK (corpus: (string * float32[])[]) (query: float32[]) (k: in
 // byte-identical graph on every run — the recall numbers in the
 // budget checks are reproducible, not stochastic.
 
+/// The seeded build's identity: a fixed corpus, one cold build, then an
+/// incremental pass (an overwrite, a tombstone, a restore and new chunks)
+/// and a rebuild past the retirement threshold. Each graph is serialised by
+/// HNSW.Net and hashed; the hashes were captured on the store as it stood
+/// before it moved onto the shared snapshot index, so a change to how the
+/// store feeds the graph shows as a different hash.
+let private seededBuildHashes () = async {
+    let parameters = {
+        HnswVectorStore.HnswParameters.defaults with
+            TombstoneRebuildFraction = 0.05
+    }
+
+    let store, dispose = newStoreWith parameters
+
+    try
+        let hnsw = store :?> HnswVectorStore.HnswVectorStore
+        let rng = Random 20261110
+        let dim = 24
+        let scope = Team "byte-identity"
+        let corpus = Array.init 300 (fun i -> sprintf "c%03d" i, mkVec rng dim)
+
+        for (id, v) in corpus do
+            do! store.Upsert scope id v (chunk id)
+
+        let hashOf () =
+            match hnsw.GraphBytes scope with
+            | Some bytes -> Convert.ToHexString(Security.Cryptography.SHA256.HashData bytes).ToLowerInvariant()
+            | None -> "no graph"
+
+        let! _ = store.Search [ scope ] (snd corpus[0]) 10
+        let cold = hashOf ()
+
+        do! store.Upsert scope "c007" (mkVec rng dim) (chunk "c007")
+        do! store.DeleteChunk scope "c011"
+        do! store.DeleteChunk scope "c012"
+        do! store.RestoreChunk scope "c012"
+
+        for i in 300..309 do
+            do! store.Upsert scope (sprintf "c%03d" i) (mkVec rng dim) (chunk i)
+
+        let! _ = store.Search [ scope ] (snd corpus[1]) 10
+        let incremental = hashOf ()
+
+        for i in 20..39 do
+            do! store.DeleteChunk scope (sprintf "c%03d" i)
+
+        let! hits = store.Search [ scope ] (snd corpus[2]) 10
+        let rebuilt = hashOf ()
+        let ids = hits |> List.map _.ChunkId |> String.concat ","
+        return cold, incremental, rebuilt, ids
+    finally
+        dispose.Dispose()
+}
+
 let tests =
     testSequenced
     <| testList "HnswFidelity" [
+        testAsync "seeded build: the serialised graph is byte-identical to the captured fixture" {
+            let! cold, incremental, rebuilt, ids = seededBuildHashes ()
+
+            let observed =
+                sprintf "cold=%s\nincremental=%s\nrebuilt=%s\nids=%s" cold incremental rebuilt ids
+
+            let captured =
+                String.concat "\n" [
+                    "cold=b3cbc96e1a63640b9230e4bd5beaf63ca9cdbcfb72f3653240b061a6538fa848"
+                    "incremental=ccc1101a3a35e8ca6502357bd39f7a48473a2e255b2164d9404447dd8400a560"
+                    "rebuilt=6251d5e0353e2439337ba21735814b266a346884aa744ab217ff9852872dd6d4"
+                    "ids=c002,c069,c005,c068,c282,c309,c262,c268,c046,c237"
+                ]
+
+            Expect.equal
+                observed
+                captured
+                "the seeded build is byte-identical to the fixture captured before the store moved"
+        }
+
+
         testAsync "self-retrieval: an indexed vector queried back ranks itself #1" {
             let store, dispose = newStore ()
 
@@ -182,7 +256,7 @@ let tests =
                 // ≥0.5 catches a broken graph without flaking on the
                 // inherent approximate-NN looseness; the strict 2%
                 // acceptance bound needs a representative corpus — the
-                // opt-in Phase 970 case at the end of this list.
+                // opt-in case at the end of this list.
                 Expect.isGreaterThan
                     meanOverlap
                     0.5
@@ -192,7 +266,7 @@ let tests =
         }
 
         testAsync "dimension-mismatch defence: mixed-dim chunks in one scope do not corrupt retrieval" {
-            // Phase 14k WS5 audit slice. The TECHNICAL_GUIDE documents
+            // The TECHNICAL_GUIDE documents
             // a one-graph-per-scope contract that implies one embedding
             // dimensionality per scope. A future `IImageEmbedder`
             // companion that lands image vectors at a different
@@ -257,7 +331,7 @@ let tests =
         }
 
         testAsync "mixed-dim fixture: HNSW recall-fidelity matches flat scan, cross-dim purity holds" {
-            // Phase 14k WS5 Item 2 — fixture-driven multi-dim recall-fidelity.
+            // Fixture-driven multi-dim recall-fidelity.
             // Loads `eval-mixed-dim.json` (250 text@96 + 250 image@192
             // chunks under a single scope; 10 anchor-perturbed queries
             // per kind), seeds HNSW with the entire mixed-dim corpus,
@@ -269,9 +343,9 @@ let tests =
             //      against the matching-dim subset of the corpus only —
             //      mismatched-dim chunks are filtered by cosineDistance
             //      returning 1.0 and never reach the flat top-10).
-            //   2. HNSW's anchor recall@10 is within the Phase 14k
+            //   2. HNSW's anchor recall@10 is within the
             //      acceptance budget of the flat-scan anchor recall@10.
-            //      Phase 14k pins the absolute bound at 2% on a 500k
+            //      The absolute bound is 2% on a 500k
             //      corpus with tuned efSearch; this 500-chunk smoke
             //      uses a 10% absolute-gap budget to absorb the noise
             //      a default-M / untuned-efSearch HNSW exhibits on
@@ -339,7 +413,7 @@ let tests =
                 Expect.isLessThanOrEqual
                     recallGap
                     0.10
-                    $"HNSW anchor recall@10 {hnswAnchorRecall:F3} lagged flat-scan anchor recall@10 {flatAnchorRecall:F3} by {recallGap:F3} — outside the Phase 14k recall-fidelity budget"
+                    $"HNSW anchor recall@10 {hnswAnchorRecall:F3} lagged flat-scan anchor recall@10 {flatAnchorRecall:F3} by {recallGap:F3} — outside the recall-fidelity budget"
 
                 Expect.isFalse
                     crossDimLeakSeen
@@ -350,7 +424,7 @@ let tests =
 
         testAsync
             "latency smoke: HNSW stays far below a brute-force flat scan (no pathological O(n)-per-query regression)" {
-            // Phase 1007 — re-sized from 10k vectors at the default profile to
+            // Re-sized from 10k vectors at the default profile to
             // 5k at `HnswParameters.fastBuild`. The old build cost ~9 minutes
             // of every full gate (539 s measured 2026-09-12, 56 % of the
             // gate) while asserting nothing about the build: the case pins
@@ -407,7 +481,7 @@ let tests =
 
                 let! hnswMeanMs = meanSearchMs ()
 
-                // NOT the 500k/<50ms perf bound (Phase 970 measures that,
+                // NOT the 500k/<50ms perf bound (the benchmark measures that,
                 // opt-in, with the benchmark). This only trips on a pathological
                 // O(n)-per-query regression: a graph that has degenerated to
                 // a full scan does far more node work than a healthy
@@ -428,7 +502,7 @@ let tests =
                     ceilingMs
                     $"HNSW mean query latency {hnswMeanMs:F1} ms over a {n}-vector graph was >100x the {flatMeanMs:F2} ms flat-scan baseline — pathological O(n)-per-query slowdown"
 
-                // Phase 1007 — the same bound with a fifth of the graph
+                // The same bound with a fifth of the graph
                 // RETIRED (deleted, under the default rebuild threshold, so
                 // no rebuild): the search skips retired nodes inside the
                 // traversal, and a filter that degenerated into a scan of the
@@ -446,7 +520,7 @@ let tests =
                 dispose.Dispose()
         }
 
-        // Phase 970 — the recall bound at representative scale, OPT-IN.
+        // The recall bound at representative scale, OPT-IN.
         // `TOOLUP_HNSW_SCALE_CORPUS` names an extracted BEIR-format dataset
         // directory (`corpus.jsonl` + `queries.jsonl`, e.g. the `scifact`
         // directory the benchmark's BEIR cache holds). Unset, the case is
@@ -457,7 +531,7 @@ let tests =
         //
         // What it pins: at the SHIPPED `HnswParameters.defaults`, HNSW's
         // recall@10 against an exact flat scan over the same local-embedder
-        // vectors is at least 0.98 — Phase 14k's "within 2 %". Recall is the
+        // vectors is at least 0.98 — "within 2 %". Recall is the
         // ann-benchmarks definition (a result counts when its cosine reaches
         // the K-th exact cosine, less 1e-6), so duplicate documents tying at
         // the boundary are not misses. Latency is reported, not asserted:

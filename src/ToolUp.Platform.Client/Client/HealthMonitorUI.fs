@@ -211,7 +211,7 @@ let private statusPill (status: string) =
         | "Warning" -> "bg-yellow-100 text-yellow-700 border-yellow-200"
         | "Unhealthy"
         | "Error" -> "bg-red-100 text-red-700 border-red-200"
-        | _ -> "bg-gray-100 text-gray-700 border-gray-200"
+        | _ -> ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
 
     Html.span [
         prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
@@ -219,18 +219,7 @@ let private statusPill (status: string) =
     ]
 
 let private refreshButton (msgs: HealthMonitorMessages) (label: string) (onClick: unit -> unit) (loading: bool) =
-    Html.button [
-        prop.className [
-            "px-3 py-1.5 text-sm font-medium rounded border transition-colors"
-            if loading then
-                "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-            else
-                "bg-white text-gray-700 border-border hover:bg-gray-50"
-        ]
-        prop.disabled loading
-        prop.text (if loading then msgs.Refreshing else label)
-        prop.onClick (fun _ -> onClick ())
-    ]
+    Forms.Button.secondaryWith (Forms.Button.stateOf loading msgs.Refreshing false) label onClick
 
 // ─── Live health tab ─────────────────────────────────────────────────
 
@@ -257,17 +246,17 @@ let private schedulerTelemetryCard (msgs: HealthMonitorMessages) (view: JobSched
             if hasMiss then
                 "text-yellow-700 font-semibold"
             else
-                "text-gray-700"
+                Tokens.Text.secondary
 
         let driftCell =
             match view.LastDriftMs with
             | Some ms -> Html.text $"{ms} ms"
-            | None -> Html.span [ prop.className "text-gray-400"; prop.text "—" ]
+            | None -> Html.span [ prop.className Tokens.Text.muted; prop.text "—" ]
 
         let missedAtCell =
             match view.LastTickMissedAt with
             | Some ts -> Html.text (ts.ToString "u")
-            | None -> Html.span [ prop.className "text-gray-400"; prop.text "—" ]
+            | None -> Html.span [ prop.className Tokens.Text.muted; prop.text "—" ]
 
         Html.div [
             prop.className $"border rounded-lg p-3 mb-4 text-sm {borderCls}"
@@ -279,18 +268,30 @@ let private schedulerTelemetryCard (msgs: HealthMonitorMessages) (view: JobSched
                         let generatedAtLabel = view.GeneratedAt.ToString "u"
 
                         Html.span [
-                            prop.className "text-xs text-gray-500"
+                            prop.className ("text-xs " + Tokens.Text.muted)
                             prop.text (msgs.AsOf generatedAtLabel)
                         ]
                     ]
                 ]
-                Html.p [ prop.className "text-xs text-gray-600 mb-2"; prop.text msgs.SchedulerLagHelp ]
+                Html.p [
+                    prop.className ("text-xs mb-2 " + Tokens.Text.secondary)
+                    prop.text msgs.SchedulerLagHelp
+                ]
                 Html.div [
                     prop.className "grid grid-cols-3 gap-x-4 gap-y-1"
                     prop.children [
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerMissed60m ]
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerLastDrift ]
-                        Html.div [ prop.className "text-xs text-gray-500"; prop.text msgs.SchedulerLastMissAt ]
+                        Html.div [
+                            prop.className ("text-xs " + Tokens.Text.muted)
+                            prop.text msgs.SchedulerMissed60m
+                        ]
+                        Html.div [
+                            prop.className ("text-xs " + Tokens.Text.muted)
+                            prop.text msgs.SchedulerLastDrift
+                        ]
+                        Html.div [
+                            prop.className ("text-xs " + Tokens.Text.muted)
+                            prop.text msgs.SchedulerLastMissAt
+                        ]
                         Html.div [
                             prop.className $"text-sm font-mono {countCls}"
                             prop.text (string view.TickMissedCount60Min)
@@ -347,7 +348,7 @@ let private degradedCapabilitiesCard (msgs: HealthMonitorMessages) (entries: Deg
                                                 prop.text d.Capability
                                             ]
                                             Html.span [
-                                                prop.className "text-xs text-gray-500"
+                                                prop.className ("text-xs " + Tokens.Text.muted)
                                                 prop.text (msgs.DegradedSince(string d.DegradedSince))
                                             ]
                                         ]
@@ -356,20 +357,20 @@ let private degradedCapabilitiesCard (msgs: HealthMonitorMessages) (entries: Deg
                                         prop.className "grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs"
                                         prop.children [
                                             Html.dt [
-                                                prop.className "text-gray-500 font-medium"
+                                                prop.className ("font-medium " + Tokens.Text.muted)
                                                 prop.text msgs.DegradedReason
                                             ]
-                                            Html.dd [ prop.className "text-gray-700"; prop.text d.Reason ]
+                                            Html.dd [ prop.className Tokens.Text.secondary; prop.text d.Reason ]
                                             Html.dt [
-                                                prop.className "text-gray-500 font-medium"
+                                                prop.className ("font-medium " + Tokens.Text.muted)
                                                 prop.text msgs.DegradedImpact
                                             ]
-                                            Html.dd [ prop.className "text-gray-700"; prop.text d.Impact ]
+                                            Html.dd [ prop.className Tokens.Text.secondary; prop.text d.Impact ]
                                             Html.dt [
-                                                prop.className "text-gray-500 font-medium"
+                                                prop.className ("font-medium " + Tokens.Text.muted)
                                                 prop.text msgs.Remediation
                                             ]
-                                            Html.dd [ prop.className "text-gray-700"; prop.text d.Remediation ]
+                                            Html.dd [ prop.className Tokens.Text.secondary; prop.text d.Remediation ]
                                         ]
                                     ]
                                 ]
@@ -413,7 +414,7 @@ let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) 
             if active then
                 "text-sm font-semibold text-amber-800"
             else
-                "text-sm font-semibold text-gray-700"
+                ("text-sm font-semibold " + Tokens.Text.secondary)
 
         let groupList (heading: string) (rows: AIDenialGroupCount list) =
             if List.isEmpty rows then
@@ -421,7 +422,10 @@ let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) 
             else
                 Html.div [
                     prop.children [
-                        Html.div [ prop.className "text-xs text-gray-500 font-medium mb-1"; prop.text heading ]
+                        Html.div [
+                            prop.className ("text-xs font-medium mb-1 " + Tokens.Text.muted)
+                            prop.text heading
+                        ]
                         Html.div [
                             prop.className "flex flex-col gap-0.5"
                             prop.children (
@@ -431,9 +435,12 @@ let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) 
                                     Html.div [
                                         prop.className "flex items-baseline justify-between gap-3 text-xs"
                                         prop.children [
-                                            Html.span [ prop.className "font-mono text-gray-700"; prop.text row.Key ]
                                             Html.span [
-                                                prop.className "font-mono text-gray-500"
+                                                prop.className ("font-mono " + Tokens.Text.secondary)
+                                                prop.text row.Key
+                                            ]
+                                            Html.span [
+                                                prop.className ("font-mono " + Tokens.Text.muted)
                                                 prop.text (string row.Count)
                                             ]
                                         ]
@@ -451,13 +458,13 @@ let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) 
                         prop.className "flex items-baseline justify-between gap-3"
                         prop.children [
                             Html.span [
-                                prop.className "font-mono text-gray-700"
+                                prop.className ("font-mono " + Tokens.Text.secondary)
                                 prop.text $"{d.ToolName} · {d.ActiveModule}"
                             ]
-                            Html.span [ prop.className "text-gray-500"; prop.text (string d.OccurredAt) ]
+                            Html.span [ prop.className Tokens.Text.muted; prop.text (string d.OccurredAt) ]
                         ]
                     ]
-                    Html.div [ prop.className "text-gray-600 mt-0.5"; prop.text d.Reason ]
+                    Html.div [ prop.className ("mt-0.5 " + Tokens.Text.secondary); prop.text d.Reason ]
                 ]
             ]
 
@@ -472,15 +479,21 @@ let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) 
                             prop.text (msgs.AIDenials rollup.TotalDenialsInWindow)
                         ]
                         Html.span [
-                            prop.className "text-xs text-gray-500 font-mono"
+                            prop.className ("text-xs font-mono " + Tokens.Text.muted)
                             prop.text (msgs.AIDenialsRate rollup.WindowMinutes (sprintf "%.2f" rollup.DenialsPerMinute))
                         ]
                     ]
                 ]
-                Html.p [ prop.className "text-xs text-gray-600 mb-3"; prop.text msgs.AIDenialsHelp ]
+                Html.p [
+                    prop.className ("text-xs mb-3 " + Tokens.Text.secondary)
+                    prop.text msgs.AIDenialsHelp
+                ]
 
                 if not active then
-                    Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.AIDenialsQuiet ]
+                    Html.p [
+                        prop.className ("text-xs " + Tokens.Text.muted)
+                        prop.text msgs.AIDenialsQuiet
+                    ]
                 else
                     Html.div [
                         prop.className "flex flex-col gap-3"
@@ -496,7 +509,7 @@ let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) 
                                 Html.div [
                                     prop.children [
                                         Html.div [
-                                            prop.className "text-xs text-gray-500 font-medium mb-1"
+                                            prop.className ("text-xs font-medium mb-1 " + Tokens.Text.muted)
                                             prop.text msgs.AIDenialsRecent
                                         ]
                                         Html.div [
@@ -514,83 +527,44 @@ let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) 
 
 let private liveHealthHeader (msgs: HealthMonitorMessages) (snapshot: HealthSnapshot) =
     Html.div [
-        prop.className "text-xs text-gray-500"
+        prop.className ("text-xs " + Tokens.Text.muted)
         prop.text (msgs.GeneratedAt (string snapshot.GeneratedAt) snapshot.Probes.Length)
     ]
 
-let private probeRow (recentlyFlipped: Set<string>) (row: HealthProbeView) =
-    let isFlipped = recentlyFlipped |> Set.contains row.Name
+let private column header (cell: 'row -> ReactElement) : Data.Column<'row> = {
+    Header = header
+    Align = Data.Left
+    Cell = cell
+}
 
-    Html.tr [
-        prop.className [
-            "border-t border-border"
-            if isFlipped then
-                "animate-pulse bg-yellow-50"
-        ]
-        prop.children [
-            Html.td [ prop.className "px-3 py-2"; prop.children [ statusPill row.Status ] ]
-            Html.td [ prop.className "px-3 py-2 font-medium"; prop.text row.Name ]
-            Html.td [ prop.className "px-3 py-2 text-xs text-gray-500"; prop.text row.Kind ]
-            Html.td [
-                prop.className "px-3 py-2 text-xs text-gray-500 font-mono"
-                prop.text $"{row.TimeoutMs} ms"
-            ]
-            Html.td [
-                prop.className "px-3 py-2 text-xs text-gray-500 font-mono"
-                prop.text $"{row.ElapsedMs} ms"
-            ]
-            Html.td [ prop.className "px-3 py-2 text-xs text-gray-700"; prop.text row.Message ]
-        ]
+let private quiet (classes: string) (value: string) =
+    Html.span [ prop.className [ "text-xs"; classes ]; prop.text value ]
+
+/// A probe whose status flipped since the previous snapshot pulses its
+/// status pill, so the change is the first thing the eye lands on.
+let private probeColumns
+    (msgs: HealthMonitorMessages)
+    (recentlyFlipped: Set<string>)
+    : Data.Column<HealthProbeView> list =
+    [
+        column msgs.ColumnStatus (fun row ->
+            Html.span [
+                if recentlyFlipped |> Set.contains row.Name then
+                    prop.className "inline-block animate-pulse"
+                prop.children [ statusPill row.Status ]
+            ])
+        column msgs.ColumnProbe (fun row -> Html.span [ prop.className "font-medium"; prop.text row.Name ])
+        column msgs.ColumnKind (fun row -> quiet Tokens.Text.muted row.Kind)
+        column msgs.ColumnTimeout (fun row -> quiet ("font-mono " + Tokens.Text.muted) $"{row.TimeoutMs} ms")
+        column msgs.ColumnElapsed (fun row -> quiet ("font-mono " + Tokens.Text.muted) $"{row.ElapsedMs} ms")
+        column msgs.ColumnMessage (fun row -> quiet Tokens.Text.secondary row.Message)
     ]
 
 let private probesTable (msgs: HealthMonitorMessages) (recentlyFlipped: Set<string>) (probes: HealthProbeView list) =
     if List.isEmpty probes then
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoProbes ]
+        Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoProbes ]
     else
-        Html.div [
-            prop.className "border border-border rounded-lg overflow-hidden"
-            prop.children [
-                Html.table [
-                    prop.className "w-full text-sm"
-                    prop.children [
-                        Html.thead [
-                            prop.className "bg-gray-50"
-                            prop.children [
-                                Html.tr [
-                                    prop.children [
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnStatus
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnProbe
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnKind
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnTimeout
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnElapsed
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnMessage
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                        Html.tbody [ prop.children (probes |> List.map (probeRow recentlyFlipped)) ]
-                    ]
-                ]
-            ]
-        ]
+        Data.table (probeColumns msgs recentlyFlipped) probes
 
 let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
     let isLoading = Remote.isLoading model.Live
@@ -604,7 +578,10 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
                     Html.div [
                         prop.children [
                             Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.LiveHealthHeading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.ProbesFootnote ]
+                            Html.p [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text msgs.ProbesFootnote
+                            ]
                         ]
                     ]
                     refreshButton msgs msgs.Refresh (fun () -> dispatch RefreshLive) isLoading
@@ -636,7 +613,7 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
             match model.Live with
             | Remote.NotAsked
             | Remote.Loading
-            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Reloading _ -> Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
             | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
             | Remote.Loaded snapshot ->
                 Html.div [
@@ -653,60 +630,18 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
 
 // ─── Preflight tab ───────────────────────────────────────────────────
 
-let private preflightRow (row: PreflightOutcomeView) =
-    Html.tr [
-        prop.className "border-t border-border"
-        prop.children [
-            Html.td [ prop.className "px-3 py-2"; prop.children [ statusPill row.Status ] ]
-            Html.td [ prop.className "px-3 py-2 font-medium"; prop.text row.Name ]
-            Html.td [
-                prop.className "px-3 py-2 text-xs text-gray-500 font-mono"
-                prop.text $"{row.ElapsedMs} ms"
-            ]
-            Html.td [ prop.className "px-3 py-2 text-xs text-gray-700"; prop.text row.Message ]
-        ]
-    ]
+let private outcomeColumns (msgs: HealthMonitorMessages) : Data.Column<PreflightOutcomeView> list = [
+    column msgs.ColumnStatus (fun row -> statusPill row.Status)
+    column msgs.ColumnValidator (fun row -> Html.span [ prop.className "font-medium"; prop.text row.Name ])
+    column msgs.ColumnElapsed (fun row -> quiet ("font-mono " + Tokens.Text.muted) $"{row.ElapsedMs} ms")
+    column msgs.ColumnMessage (fun row -> quiet Tokens.Text.secondary row.Message)
+]
 
 let private outcomesTable (msgs: HealthMonitorMessages) (outcomes: PreflightOutcomeView list) =
     if List.isEmpty outcomes then
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoValidators ]
+        Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoValidators ]
     else
-        Html.div [
-            prop.className "border border-border rounded-lg overflow-hidden"
-            prop.children [
-                Html.table [
-                    prop.className "w-full text-sm"
-                    prop.children [
-                        Html.thead [
-                            prop.className "bg-gray-50"
-                            prop.children [
-                                Html.tr [
-                                    prop.children [
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnStatus
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnValidator
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnElapsed
-                                        ]
-                                        Html.th [
-                                            prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                            prop.text msgs.ColumnMessage
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                        Html.tbody [ prop.children (outcomes |> List.map preflightRow) ]
-                    ]
-                ]
-            ]
-        ]
+        Data.table (outcomeColumns msgs) outcomes
 
 let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
     let isLoading = Remote.isLoading model.Preflight
@@ -720,7 +655,10 @@ let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispa
                     Html.div [
                         prop.children [
                             Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.PreflightHeading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.PreflightFootnote ]
+                            Html.p [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text msgs.PreflightFootnote
+                            ]
                         ]
                     ]
                     refreshButton msgs msgs.Refetch (fun () -> dispatch RefreshPreflight) isLoading
@@ -729,11 +667,14 @@ let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispa
             match model.Preflight with
             | Remote.NotAsked
             | Remote.Loading
-            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Reloading _ -> Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
             | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
             | Remote.Loaded snapshot ->
                 if not snapshot.HasSnapshot then
-                    Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.PreflightUnavailable ]
+                    Html.p [
+                        prop.className ("text-sm " + Tokens.Text.muted)
+                        prop.text msgs.PreflightUnavailable
+                    ]
                 else
                     outcomesTable msgs snapshot.Outcomes
         ]
@@ -741,26 +682,14 @@ let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispa
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
-    Html.button [
-        prop.className [
-            "px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-            if active then
-                "border-brand text-brand"
-            else
-                "border-transparent text-gray-500 hover:text-gray-700"
-        ]
-        prop.text label
-        prop.onClick (fun _ -> onClick ())
-    ]
-
 let private tabBar (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
-        prop.className "flex gap-1 border-b border-border bg-white px-4"
+        prop.className [ "px-4"; Tokens.Bg.card ]
         prop.children [
-            tabButton msgs.LiveHealthTab (model.ActiveTab = LiveHealthTab) (fun () ->
-                dispatch (SwitchTab LiveHealthTab))
-            tabButton msgs.PreflightTab (model.ActiveTab = PreflightTab) (fun () -> dispatch (SwitchTab PreflightTab))
+            Tabs.bar
+                [ LiveHealthTab, msgs.LiveHealthTab; PreflightTab, msgs.PreflightTab ]
+                model.ActiveTab
+                (SwitchTab >> dispatch)
         ]
     ]
 

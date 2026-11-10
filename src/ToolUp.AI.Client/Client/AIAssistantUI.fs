@@ -575,7 +575,7 @@ let private conversationList (model: Model) dispatch =
 
             if conversations.IsEmpty && model.ConversationSearch <> "" then
                 Html.div [
-                    prop.className "px-3 py-2 text-xs text-gray-500"
+                    prop.className ("px-3 py-2 text-xs " + Tokens.Text.muted)
                     prop.text (sprintf "No conversations match \u201C%s\u201D." model.ConversationSearch)
                 ]
 
@@ -588,7 +588,7 @@ let private conversationList (model: Model) dispatch =
                         if isActive then
                             "bg-violet-50 text-violet-700"
                         else
-                            "text-gray-600 hover:bg-gray-50"
+                            ("hover:bg-gray-50 " + Tokens.Text.secondary)
                     ]
                     prop.onClick (fun _ -> dispatch (SelectConversation conv.Id))
                     prop.children [
@@ -596,7 +596,10 @@ let private conversationList (model: Model) dispatch =
                             prop.className "truncate"
                             prop.text (conv.Title |> Option.defaultValue (conv.Id.ToString()[..7]))
                         ]
-                        Html.div [ prop.className "text-xs text-gray-400"; prop.text (conversationMeta conv) ]
+                        Html.div [
+                            prop.className ("text-xs " + Tokens.Text.muted)
+                            prop.text (conversationMeta conv)
+                        ]
                     ]
                 ]
 
@@ -619,7 +622,7 @@ let private messageView (msg: ConversationMessage) =
             if isUser then
                 "ml-auto bg-violet-500 text-white"
             else
-                "mr-auto bg-gray-100 text-gray-800"
+                ("mr-auto bg-gray-100 " + Tokens.Text.primary)
         ]
         prop.children [
             Toolup.Markdown.render msg.Content
@@ -641,7 +644,7 @@ let private messageView (msg: ConversationMessage) =
 let private taskStatusBadge (task: AITask) =
     let (text, color) =
         match task.Status with
-        | Queued -> "Queued", "bg-gray-100 text-gray-600"
+        | Queued -> "Queued", ("bg-gray-100 " + Tokens.Text.secondary)
         | InProgress -> "Running...", "bg-blue-100 text-blue-700"
         | AITaskCompleted -> "Complete", "bg-green-100 text-green-700"
         | AITaskFailed err -> $"Failed: {err}", "bg-red-100 text-red-700"
@@ -840,9 +843,9 @@ let private view model dispatch =
                 Layout.Panel.panelSection "Available Tools" [
                     for tool in model.AvailableTools do
                         Html.div [
-                            prop.className "text-xs text-gray-500 py-1"
+                            prop.className ("text-xs py-1 " + Tokens.Text.muted)
                             prop.children [
-                                Html.span [ prop.className "font-mono text-gray-700"; prop.text tool.Name ]
+                                Html.span [ prop.className ("font-mono " + Tokens.Text.secondary); prop.text tool.Name ]
                                 Html.span [ prop.text $" \u2014 {tool.Description}" ]
                             ]
                         ]
@@ -867,7 +870,10 @@ let private view model dispatch =
             Html.div [
                 prop.className "mb-3 flex items-center gap-2 text-sm"
                 prop.children [
-                    Html.label [ prop.className "text-gray-600 font-medium"; prop.text "Provider:" ]
+                    Html.label [
+                        prop.className ("font-medium " + Tokens.Text.secondary)
+                        prop.text "Provider:"
+                    ]
                     Html.select [
                         prop.className
                             "border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400"
@@ -924,7 +930,7 @@ let private view model dispatch =
                 prop.children [
                     if model.Messages.IsEmpty && model.StreamingContent = "" then
                         Html.p [
-                            prop.className "text-gray-400 text-sm text-center py-8"
+                            prop.className ("text-sm text-center py-8 " + Tokens.Text.muted)
                             prop.text "Start a conversation or select one from the left."
                         ]
                     else
@@ -935,7 +941,7 @@ let private view model dispatch =
                         | Some status ->
                             Html.div [
                                 prop.role "status"
-                                prop.className "mr-auto text-sm text-gray-500 italic"
+                                prop.className ("mr-auto text-sm italic " + Tokens.Text.muted)
                                 prop.text status
                             ]
                         | None -> ()
@@ -943,8 +949,10 @@ let private view model dispatch =
                         // Streaming content
                         if model.StreamingContent <> "" then
                             Html.div [
-                                prop.className
-                                    "mr-auto max-w-[80%] rounded-lg px-4 py-3 text-sm bg-gray-100 text-gray-800"
+                                prop.className (
+                                    "mr-auto max-w-[80%] rounded-lg px-4 py-3 text-sm bg-gray-100 "
+                                    + Tokens.Text.primary
+                                )
                                 prop.children [
                                     Toolup.Markdown.render model.StreamingContent
                                     Html.span [ prop.className "inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1" ]
@@ -967,7 +975,7 @@ let private view model dispatch =
                                 prop.className [
                                     "px-2 py-1 rounded text-xs"
                                     "border border-gray-300 bg-white hover:bg-gray-50"
-                                    "text-gray-700"
+                                    Tokens.Text.secondary
                                 ]
                                 prop.title
                                     "Cancel the in-flight AI response. Whatever has streamed so far will be kept."

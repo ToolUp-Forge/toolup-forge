@@ -322,6 +322,9 @@ let tests =
                 use index =
                     new InMemoryBM25Index(storage, logger = logger, flushIntervalMs = 60000, analyzer = withoutStop)
 
+                // Construction reads nothing; `Start` loads the seeded scope.
+                index.Start() |> Async.RunSynchronously
+
                 Expect.isNonEmpty
                     (logger.Infos |> List.filter (fun i -> i.Contains "re-analysed"))
                     "changing an option must invalidate the persisted terms"

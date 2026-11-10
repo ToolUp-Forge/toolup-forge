@@ -59,6 +59,10 @@ let recordSubmission (log: IAuditLog) teamId actor payload =
 let readArchiveLine (line: string) =
     JsonSerializer.Deserialize<ArchiveLine>(line, PlatformJson.options)
 
+let refusedHnsw (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+
+let refusedVector (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+
 let fallback = AccessContext.ofSubject ModulePermissions.Unrestricted (AnonymousSession "anonymous")
 let jobContext subject = AccessContext.ofSubject ModulePermissions.Unrestricted subject
 

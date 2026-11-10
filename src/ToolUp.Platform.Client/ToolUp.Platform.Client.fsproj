@@ -405,6 +405,7 @@
              page never names a module (GP 9). -->
         <Compile Include="Client\AdminTile.fs" />
         <Compile Include="Client\UserDirectoryTypeahead.fs" />
+        <Compile Include="Client\UserDirectory.fs" />
         <!-- Phase 1107 — the publication-readers panel the team manager renders. -->
         <Compile Include="Client\PublicationReadersAdminUI.fs" />
         <Compile Include="Client\TeamManagerUI.fs" />

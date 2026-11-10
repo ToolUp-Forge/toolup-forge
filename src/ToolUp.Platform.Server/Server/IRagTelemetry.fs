@@ -40,7 +40,7 @@ type RagTelemetrySnapshot = {
     QueueRejections: int
 
     // ─── Vector-store flush ─────────────────────────────────────────
-    /// Number of flush passes (`InMemoryVectorStore.flushAll` or any
+    /// Number of flush passes (`ScopedSnapshotIndex.Flush` under the in-process stores, or any
     /// alternate store's equivalent) observed in the window.
     FlushCount: int
     /// Total dirty chunks persisted across all flushes in the window.

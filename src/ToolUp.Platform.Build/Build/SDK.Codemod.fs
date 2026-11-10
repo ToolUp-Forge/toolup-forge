@@ -95,6 +95,13 @@ type CodemodMigration =
     /// `AuditEvent` for the companion's own family, and an archive is read
     /// with the audit options.
     | OpenAuditRegistry
+    /// `Data.table` takes typed `Column<'row>` values in place of header
+    /// strings and pre-rendered element rows.
+    | AdminPageKit
+    /// The three in-process retrieval stores share one snapshot index: the
+    /// HNSW store's own unreadable-snapshot exception is the one
+    /// `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`.
+    | SnapshotIndex
     /// An access context's module permissions are a closed type with a
     /// stated `Unrestricted`, and a request with no resolved principal is
     /// served a context that grants nothing.
@@ -134,6 +141,9 @@ module CodemodMigration =
             "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
         | CodemodMigration.ModuleHost -> "docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md"
         | CodemodMigration.OpenAuditRegistry -> "docs/migrations/874-open-audit-event-registry.md"
+        | CodemodMigration.AdminPageKit -> "docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md"
+        | CodemodMigration.SnapshotIndex ->
+            "docs/migrations/1084-redesign-g-scopedsnapshotindex-under-the-three-stores.md"
         | CodemodMigration.AccessContextRefuses -> "docs/migrations/882-access-context-refuses.md"
 
     /// The phase label the renderings print.
@@ -163,6 +173,8 @@ module CodemodMigration =
         | CodemodMigration.AuditFailureAsData -> "Phase 1062"
         | CodemodMigration.ModuleHost -> "Phase 1071"
         | CodemodMigration.OpenAuditRegistry -> "Phase 874"
+        | CodemodMigration.AdminPageKit -> "Phase 1073"
+        | CodemodMigration.SnapshotIndex -> "Phase 1084"
         | CodemodMigration.AccessContextRefuses -> "Phase 882"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
@@ -1087,6 +1099,23 @@ module Codemod =
             @"^(\s*)ConfigsPrefetch\s*=.*$"
             "$1AwaitingFirstInit = Client.firstInitGates"
             "`ConfigsPrefetch = …` in a full `Client.Model` literal → `AwaitingFirstInit = Client.firstInitGates` (delete the `FlagsPrefetch` line beside it)"
+        // The HNSW store's unreadable-snapshot exception is the one the
+        // shared snapshot index raises.
+        rewrite
+            "1084-hnsw-snapshot-exception"
+            CodemodMigration.SnapshotIndex
+            CodemodFileClass.Source
+            @"\b(?:(?:ToolUp\.RAG\.VectorStores\.Hnsw\.)?HnswVectorStore\.)?HnswScopeSnapshotUnreadableException\b"
+            "ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException"
+            "`HnswScopeSnapshotUnreadableException` → `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException` (its `Fault` says unreadable or corrupt)"
+        // The vector store's exception moved with the index into Infra.
+        rewrite
+            "1084-rag-snapshot-exception-home"
+            CodemodMigration.SnapshotIndex
+            CodemodFileClass.Source
+            @"\b(?:ToolUp\.RAG\.)?InMemoryVectorStore\.RagScopeSnapshotUnreadableException\b"
+            "ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException"
+            "`InMemoryVectorStore.RagScopeSnapshotUnreadableException` → `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`"
         // The fallback constructor states what it grants.
         rewrite
             "882-unrestricted-constructor"
@@ -1723,6 +1752,13 @@ module Codemod =
             CodemodFileClass.Source
             @"\bDeserialize<[^>]*(?:AuditEvent|AuditEnvelope|Archive\w*|Ledger\w*)>\s*\(.*\bPlatformJson\.options\b"
             "if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode"
+        // Since 0.42.0 the toolkit's table is typed over its rows.
+        review
+            "1073-data-table-columns"
+            CodemodMigration.AdminPageKit
+            CodemodFileClass.Source
+            @"\bData\.table\s*(?:\[\s*""|\(?\s*\w*[hH]eaders?\b)"
+            "`Data.table` takes `Column<'row>` values and the rows themselves: write each header as `{ Header = \"…\"; Align = Data.Left; Cell = fun row -> … }` (the first column `Left`, figures `Right`) and pass the row values, not pre-rendered element lists"
         // A fallback for a request with no principal grants nothing.
         review
             "882-unresolved-fallback"
@@ -2762,6 +2798,10 @@ module Codemod =
             CodemodMigration.FailureAsData
             CodemodMigration.AuditFailureAsData
             CodemodMigration.ModuleHost
+            CodemodMigration.OpenAuditRegistry
+            CodemodMigration.AdminPageKit
+            CodemodMigration.SnapshotIndex
+            CodemodMigration.AccessContextRefuses
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

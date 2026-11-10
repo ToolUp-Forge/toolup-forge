@@ -300,6 +300,7 @@ let private registeredTests =
         InMemoryBM25IndexTests.tests
         IndexLifecycleTests.tests
         CrossIndexErasureConformanceTests.tests
+        ScopedSnapshotIndexTests.tests
         AIAgentEngineClientResidentAuthorizationTests.tests
         AIAllowlistDiagnosticsTests.tests
         DevVersionEndpointTests.tests

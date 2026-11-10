@@ -260,7 +260,7 @@ let update (msg: Msg) (model: Model) =
 let private severityPill (msgs: ServiceStatusBoardMessages) (summary: SectionSummary) =
     let label, cls =
         if summary.Disabled then
-            msgs.SeverityDisabled, "bg-gray-100 text-gray-600 border-gray-200"
+            msgs.SeverityDisabled, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
         else
             match summary.Severity with
             | StatusSeverity.Ok -> msgs.SeverityOk, "bg-green-100 text-green-700 border-green-200"
@@ -286,20 +286,6 @@ let private overallPill (msgs: ServiceStatusBoardMessages) (overall: OverallStat
     Html.span [
         prop.className $"inline-block text-sm px-3 py-1 rounded border font-semibold {cls}"
         prop.text label
-    ]
-
-let private refreshButton (msgs: ServiceStatusBoardMessages) (label: string) (loading: bool) (onClick: unit -> unit) =
-    Html.button [
-        prop.className [
-            "px-3 py-1.5 text-sm font-medium rounded border transition-colors"
-            if loading then
-                "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-            else
-                "bg-white text-gray-700 border-border hover:bg-gray-50"
-        ]
-        prop.disabled loading
-        prop.text (if loading then msgs.Refreshing else label)
-        prop.onClick (fun _ -> onClick ())
     ]
 
 let private sectionPanel
@@ -328,14 +314,20 @@ let private sectionPanel
                         prop.onClick (fun _ -> dispatch (ToggleCollapsed section))
                         prop.children [
                             Html.span [
-                                prop.className "text-xs text-gray-400 font-mono w-4"
+                                prop.className [ "text-xs font-mono w-4"; Tokens.Text.muted ]
                                 prop.text (if isCollapsed then "▸" else "▾")
                             ]
-                            Html.span [ prop.className "text-sm font-semibold text-gray-800"; prop.text section ]
+                            Html.span [
+                                prop.className [ "text-sm font-semibold"; Tokens.Text.primary ]
+                                prop.text section
+                            ]
                             severityPill msgs summary
                         ]
                     ]
-                    refreshButton msgs msgs.Refresh isRefreshing (fun () -> dispatch (RefreshSection section))
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf isRefreshing msgs.Refreshing false)
+                        msgs.Refresh
+                        (fun () -> dispatch (RefreshSection section))
                 ]
             ]
             if not isCollapsed then
@@ -343,7 +335,7 @@ let private sectionPanel
                     prop.className "px-4 py-3"
                     prop.children [
                         Html.p [
-                            prop.className "text-sm text-gray-700"
+                            prop.className [ "text-sm"; Tokens.Text.secondary ]
                             prop.text (
                                 if summary.Disabled then
                                     summary.DisabledReason
@@ -353,7 +345,7 @@ let private sectionPanel
                         ]
                         if not summary.Details.IsEmpty then
                             Html.ul [
-                                prop.className "mt-2 text-xs text-gray-600 list-disc pl-5 space-y-1"
+                                prop.className [ "mt-2 text-xs list-disc pl-5 space-y-1"; Tokens.Text.secondary ]
                                 prop.children (summary.Details |> List.map (fun d -> Html.li [ prop.text d ]))
                             ]
                     ]
@@ -375,16 +367,19 @@ let private boardView (msgs: ServiceStatusBoardMessages) (model: Model) (dispatc
                     Html.div [
                         prop.children [
                             Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.Subheading ]
+                            Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
                         ]
                     ]
-                    refreshButton msgs msgs.RefreshAll isLoading (fun () -> dispatch RefreshAll)
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf isLoading msgs.Refreshing false)
+                        msgs.RefreshAll
+                        (fun () -> dispatch RefreshAll)
                 ]
             ]
             match model.Snapshot with
             | Remote.NotAsked
             | Remote.Loading
-            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Reloading _ -> Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
             | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
             | Remote.Loaded snap ->
                 Html.div [
@@ -395,7 +390,7 @@ let private boardView (msgs: ServiceStatusBoardMessages) (model: Model) (dispatc
                             prop.children [
                                 overallPill msgs snap.Overall
                                 Html.span [
-                                    prop.className "text-xs text-gray-500"
+                                    prop.className [ "text-xs"; Tokens.Text.muted ]
                                     prop.text (msgs.GeneratedAt(snap.GeneratedAt.ToString "u"))
                                 ]
                             ]
