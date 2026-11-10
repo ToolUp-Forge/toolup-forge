@@ -693,17 +693,8 @@ let private tabBar (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -
         ]
     ]
 
-/// Phase 444 — the module body as a React COMPONENT rather than a plain
-/// render function, so it has a hook site from which to read the resolved
-/// catalog. A module's `view` is invoked inline by the shell's own render,
-/// where a hook would join the shell's hook order and break the moment the
-/// active module changed; a component of its own has a stable identity and
-/// its own. Same distinction `FileManagerUI.LoadingSlot` documents, applied
-/// to the whole body because every tab under it renders catalog strings.
-[<ReactComponent>]
-let private HealthMonitorBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).HealthMonitor
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.ActiveTab with
         | LiveHealthTab -> liveHealthTabView msgs model dispatch
@@ -714,16 +705,17 @@ let private HealthMonitorBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [ tabBar msgs model dispatch; content ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = HealthMonitorBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.HealthMonitor model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.HealthMonitor"
 
-/// Create the built-in health monitor admin as an `ErasedModule`. The
+/// The built-in health monitor admin (`ShellSlots.builtIn` builds its module). The
 /// module fills the `HealthMonitor` shell slot (Default / Configured),
 /// which the shell admits on every surface; its `PlatformAdminOnly` nav
 /// role hides it from non-admins.
@@ -743,26 +735,21 @@ let moduleId = "_sdk.HealthMonitor"
 /// group joined the platform-admin allow-list in the same change, so
 /// the entry keeps its administration area and a team-less platform
 /// admin still reaches it; the gate itself is the typed `NavRole`.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Health Monitor"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.health
-
-    // SDK-built-in — reserved under the `_sdk.` Id namespace so it can
-    // never collide with an app's RBAC-managed `ServerConfig.ModuleNames`.
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Health Monitor"
+        Icon = ToolUp.Platform.Icons.health
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup ToolUp.Platform.SidebarVisibility.ObservabilitySidebarGroup
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some ToolUp.Platform.SidebarVisibility.ObservabilitySidebarGroup
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}
 
 /// Phase 573.B — the administration-landing tile of the health-monitor
 /// slot, declared here rather than in the landing page so the page never

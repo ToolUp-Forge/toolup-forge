@@ -294,7 +294,7 @@ let visibilityTests =
         }
 
         test "HealthMonitorUI declares visibleToAuthenticated" {
-            let m = HealthMonitorUI.create None
+            let m = ShellSlots.builtIn HealthMonitorUI.builtIn None
             assertVisibleToAuthenticated "HealthMonitorUI" m
         }
 
@@ -356,7 +356,7 @@ let visibilityTests =
             let builtIns: (string * ErasedModule) list = [
                 "PlatformAdminUI", PlatformAdminUI.create None PublicUtilityConfig.defaults
                 "TeamManagerUI", ShellSlots.builtIn TeamManagerUI.builtIn None
-                "HealthMonitorUI", HealthMonitorUI.create None
+                "HealthMonitorUI", ShellSlots.builtIn HealthMonitorUI.builtIn None
                 "UsageDashboard", UsageDashboard.create None
                 "ServiceStatusBoardUI", ServiceStatusBoardUI.create None
                 "PermissionsAdminUI", PermissionsAdminUI.create None

@@ -343,7 +343,7 @@ module ShellSlots =
         everywhereAdmin
             _.HealthMonitor
             HealthMonitorUI.moduleId
-            (fun _ label -> HealthMonitorUI.create label)
+            (fun _ label -> builtIn HealthMonitorUI.builtIn label)
             (Some HealthMonitorUI.adminTile)
             "HealthMonitor"
 
