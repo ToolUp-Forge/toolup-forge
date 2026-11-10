@@ -268,6 +268,7 @@ let private registeredTests =
         ConversationRecordTests.tests
         AgentLoopRailsTests.tests
         TurnOutcomeStatusTests.tests
+        GatesAdmitOrderTests.tests
         ProviderProfileApiTests.tests
         TeamProviderTests.tests
         ProviderOAuthFlowTests.claudeOAuthContractTests
