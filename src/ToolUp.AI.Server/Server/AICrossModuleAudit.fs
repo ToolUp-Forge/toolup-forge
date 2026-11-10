@@ -46,16 +46,12 @@ open ToolUp.Platform.Compose
 
 // ─── Per-request items ───────────────────────────────────────────────
 
-/// `HttpContext.Items` keys this module READS. Named through constants
-/// so the stamping end and the reading end move together, exactly as
-/// `AIConsentDispatch.ItemsKeys` does for the consent gate.
+/// The consumer compatibility carry's key for the module the conversation
+/// was active in (`ToolContext.ItemsKeys.ActiveModule`).
 module ItemsKeys =
-    /// `string` — the module the conversation was active in for this
-    /// turn (`AIMessageRequest.ActiveModule`), stamped onto the agent
-    /// loop's background context by `AIAssistantHandler`. Absent when the
-    /// user was on no module's page, which is an ordinary state.
+    /// `string` — the module the conversation was active in for this turn.
     [<Literal>]
-    let ActiveModule = "ToolUp.AI.ActiveModule"
+    let ActiveModule = ToolContext.ItemsKeys.ActiveModule
 
 // ─── What a tool was reaching for ────────────────────────────────────
 
@@ -138,33 +134,7 @@ let outcomeOf (outcome: ToolOutcome) : string =
     match outcome with
     | ToolOutcome.Produced content -> producedOutcome content
     | ToolOutcome.Faulted fault -> ToolFault.kind fault
-    | ToolOutcome.Refused(ToolRefusal.Denied _) -> "Denied"
-
-// ─── Context reads ───────────────────────────────────────────────────
-
-let private userIdOf (ctx: HttpContext) : string =
-    match AccessContext.callerIdOf ctx.Items with
-    | Some id -> id
-    | _ -> "anonymous"
-
-/// The scope the row is written under — the same structural tenant
-/// boundary every other read in this family uses (GP 4), so a team's
-/// cross-module trail is readable by that team and structurally
-/// unreachable from another.
-let private scopeIdOf (ctx: HttpContext) : string =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s.ScopeId
-    | _ -> userIdOf ctx
-
-let private conversationIdOf (ctx: HttpContext) : Guid option =
-    match ctx.Items.TryGetValue AIConsentDispatch.ItemsKeys.ConversationId with
-    | true, (:? Guid as id) -> Some id
-    | _ -> None
-
-let private activeModuleOf (ctx: HttpContext) : string option =
-    match ctx.Items.TryGetValue ItemsKeys.ActiveModule with
-    | true, (:? string as m) when not (String.IsNullOrWhiteSpace m) -> Some m
-    | _ -> None
+    | ToolOutcome.Refused _ -> "Denied"
 
 // ─── Emission ────────────────────────────────────────────────────────
 
@@ -209,88 +179,118 @@ let payloadOf
         Outcome = outcome
     }
 
-let private record (ctx: HttpContext) (payload: CrossModuleReadPayload) : Async<unit> = async {
-    match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+let private record (context: ToolContext) (payload: CrossModuleReadPayload) : Async<unit> = async {
+    match context.Request.RequestServices.GetService(typeof<IAuditLog>) with
     | :? IAuditLog as auditLog ->
         do!
             auditLog.Record(
-                AuditScope.shard (scopeIdOf ctx),
-                ToolUp.Platform.Config.Background.requestActor "AICrossModule" ctx,
+                AuditScope.shard context.Scope.ScopeId,
+                ToolUp.Platform.Config.Background.requestActor "AICrossModule" context.Request,
                 AIAuditEvent.event (CrossModuleRead payload)
             )
             |> AuditRow.bestEffort
     | _ -> return ()
 }
 
-/// Wrap one `_platform.ai.*` executor so every invocation of it lands one
-/// `CrossModuleRead` row.
-///
-/// `describe` runs BEFORE the executor, so a refused read still records
-/// what it was reaching for. It is passed the same `argsJson` the tool
-/// gets and may consult DI (`query_entity` resolves its producers through
-/// the data catalogue); it must never throw — a `describe` that failed
-/// would otherwise take out the tool call it is only observing — so its
-/// result is guarded here rather than trusted.
-let audited
+/// Run one invocation of `toolName` reaching for `target`, and record one
+/// `CrossModuleRead` row whatever its outcome: the outcome's own token, a
+/// fault raised as `ToolHelpers.ToolFaulted` as that fault, any other raise
+/// as `ExceptionOutcome`. The audit is an observation; a raise is re-raised
+/// exactly as it was.
+let private observe
+    (context: ToolContext)
     (toolName: string)
-    (describe: HttpContext -> string -> Async<ReadTarget>)
-    (execute: HttpContext -> string -> Async<string>)
-    : HttpContext -> string -> Async<string> =
-    fun ctx argsJson -> async {
-        let! target = async {
-            try
-                return! describe ctx argsJson
-            with _ ->
-                return ReadTarget.enumeration
-        }
-
-        let conversationId = conversationIdOf ctx
-        let userId = userIdOf ctx
-        let activeModule = activeModuleOf ctx
+    (target: ReadTarget)
+    (run: Async<ToolOutcome>)
+    : Async<ToolOutcome> =
+    async {
         let stopwatch = Stopwatch.StartNew()
-
-        let! outcome = Async.Catch(execute ctx argsJson)
+        let! outcome = Async.Catch run
         stopwatch.Stop()
 
-        // A fault the executor raised as a value (`ToolHelpers.ToolFaulted`)
-        // is recorded as that fault, with the bytes the model is shown.
-        let toolOutcome =
+        let observed =
             match outcome with
-            | Choice1Of2 result -> Some(ToolOutcome.Produced result)
+            | Choice1Of2 value -> Some value
             | Choice2Of2(ToolHelpers.ToolFaulted fault) -> Some(ToolOutcome.Faulted fault)
             | Choice2Of2 _ -> None
 
         let rendered, outcomeToken =
-            match toolOutcome with
+            match observed with
             | Some value -> ToolOutcome.toModel value, outcomeOf value
             | None -> "", ExceptionOutcome
 
         do!
             record
-                ctx
+                context
                 (payloadOf
-                    conversationId
-                    userId
-                    activeModule
+                    (context.Channel |> Option.map _.ConversationId)
+                    context.Access.UserId
+                    context.ActiveModule
                     toolName
                     target
                     stopwatch.Elapsed.TotalMilliseconds
                     (Encoding.UTF8.GetByteCount rendered)
                     outcomeToken)
 
-        // The audit is an observation; it never changes what the caller
-        // sees. A throwing executor throws exactly as it did before.
         match outcome with
-        | Choice1Of2 result -> return result
+        | Choice1Of2 value -> return value
         | Choice2Of2 ex -> return raise ex
     }
 
-/// `createTool`, with the audit decorator applied. The registration
-/// shape the six built-ins use, so a seventh cannot be added without
+/// `describe`, guarded: it runs BEFORE the executor so a refused read still
+/// records what it was reaching for, and it must never take out the call it
+/// only observes.
+let private targetOf (describe: unit -> Async<ReadTarget>) : Async<ReadTarget> = async {
+    try
+        return! describe ()
+    with _ ->
+        return ReadTarget.enumeration
+}
+
+/// Wrap one `_platform.ai.*` typed executor so every invocation of it lands
+/// one `CrossModuleRead` row. A decorator over the whole executor rather than
+/// a call inside it: there is one return and one raise, both covered here,
+/// so no early return can lose a row.
+let auditedTyped
+    (toolName: string)
+    (describe: ToolContext -> ToolArgs -> Async<ReadTarget>)
+    (execute: ToolContext -> ToolArgs -> Async<ToolOutcome>)
+    : ToolContext -> ToolArgs -> Async<ToolOutcome> =
+    fun context args -> async {
+        let! target = targetOf (fun () -> describe context args)
+        return! observe context toolName target (execute context args)
+    }
+
+/// `auditedTyped` over the string contract, for an executor written against
+/// `HttpContext -> string -> Async<string>`.
+let audited
+    (toolName: string)
+    (describe: HttpContext -> string -> Async<ReadTarget>)
+    (execute: HttpContext -> string -> Async<string>)
+    : HttpContext -> string -> Async<string> =
+    fun ctx argsJson -> async {
+        let context = ToolContext.ofRequest ctx
+        let! target = targetOf (fun () -> describe ctx argsJson)
+
+        let! outcome =
+            observe
+                context
+                toolName
+                target
+                (async {
+                    let! text = execute ctx argsJson
+                    return ToolOutcome.Produced text
+                })
+
+        return ToolOutcome.toModel outcome
+    }
+
+/// `createTypedTool`, with the audit decorator applied: the registration
+/// shape the built-in reach family uses, so a tool cannot join it without
 /// declaring what it reads.
 let createAuditedTool
     (def: AIToolDefinition)
-    (describe: HttpContext -> string -> Async<ReadTarget>)
-    (execute: HttpContext -> string -> Async<string>)
+    (describe: ToolContext -> ToolArgs -> Async<ReadTarget>)
+    (execute: ToolContext -> ToolArgs -> Async<ToolOutcome>)
     : RegisteredTool =
-    createTool def (audited def.Name describe execute)
+    createTypedTool def (auditedTyped def.Name describe execute)

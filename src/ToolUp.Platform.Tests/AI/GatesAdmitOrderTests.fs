@@ -71,6 +71,8 @@ type private GateState = {
     Queryable: bool
     /// g7 — the user has not refused the read.
     Consented: bool
+    /// The request carries a resolved principal at all.
+    Resolved: bool
 }
 
 let private allOpen = {
@@ -81,6 +83,7 @@ let private allOpen = {
     ApprovalFree = true
     Queryable = true
     Consented = true
+    Resolved = true
 }
 
 let private allShut = {
@@ -91,6 +94,7 @@ let private allShut = {
     ApprovalFree = false
     Queryable = false
     Consented = false
+    Resolved = true
 }
 
 let private grantStamps
@@ -223,15 +227,17 @@ let private loopDoor (state: GateState) : string =
     |> ignore
 
     let ctx = DefaultHttpContext()
-    AccessContexts.stampUserId ctx.Items "alice"
-    AccessContexts.stampScope ctx.Items scope
 
-    AccessContexts.stampPermissions
-        ctx.Items
-        (if state.Readable then
-             [ "Payroll", [ Read ] ]
-         else
-             [ "Other", [ Read ] ])
+    if state.Resolved then
+        AccessContexts.stampUserId ctx.Items "alice"
+        AccessContexts.stampScope ctx.Items scope
+
+        AccessContexts.stampPermissions
+            ctx.Items
+            (if state.Readable then
+                 [ "Payroll", [ Read ] ]
+             else
+                 [ "Other", [ Read ] ])
 
     grantStamps state services ctx.Items
     ctx.RequestServices <- services.BuildServiceProvider()
@@ -550,16 +556,12 @@ let private reachRows = [
     "every gate open", allOpen, "admitted"
 ]
 
-/// The rows a reach tool answers differently from the table, with why.
-/// Each is a gate the tool does not run today.
-let private reachExceptions: Map<string * string, string * string> =
-    Map.ofList [
-        // query_module asks the bus, which checks Read; it never asks g2.
-        ("_platform.ai.query_module", "Read held, grant pending, the rest shut"), ("g6", "query_module runs no g2")
-        // query_entity runs no per-module RBAC at all.
-        ("_platform.ai.query_entity", "every gate shut"), ("g6", "query_entity runs no g1")
-        ("_platform.ai.query_entity", "Read held, grant pending, the rest shut"), ("g6", "query_entity runs no g2")
-    ]
+// Every reach tool answers every row the same way. Two rows changed when the
+// reach tools began passing through the one gate sequence, deliberately:
+// `query_entity` ran no per-module RBAC (its "every gate shut" and "grant
+// pending" rows answered g6, naming the deployment's opt-in to a caller who may
+// not read the module) and `query_module` asked no grant liveness (its "grant
+// pending" row reached the module's handler). Both now refuse at g1/g2.
 
 let private reachTools = [
     "_platform.ai.query_module", """{"moduleName":"Payroll","queryKey":"latest"}"""
@@ -568,8 +570,82 @@ let private reachTools = [
     "_platform.ai.get_latest_result", """{"moduleName":"Payroll","resultType":"summary"}"""
 ]
 
+// ─── The typed carry ─────────────────────────────────────────────────
+
+/// The AI server's sources, with their names, read from the tree.
+let private aiServerSources () =
+    let rec up (dir: DirectoryInfo) =
+        if isNull dir then
+            failtest "the repository root (ToolUp.Forge.sln) is not above the test binary"
+        elif File.Exists(Path.Combine(dir.FullName, "ToolUp.Forge.sln")) then
+            dir.FullName
+        else
+            up dir.Parent
+
+    let root = up (DirectoryInfo AppContext.BaseDirectory)
+
+    Directory.GetFiles(Path.Combine(root, "src", "ToolUp.AI.Server", "Server"), "*.fs", SearchOption.AllDirectories)
+    |> Array.map (fun f -> Path.GetFileName f, File.ReadAllLines f)
+    |> List.ofArray
+
+/// A source line that is code, not comment.
+let private isCode (line: string) =
+    let t = line.TrimStart()
+    not (t.StartsWith "//" || t.StartsWith "(*" || t.StartsWith "*")
+
+let private carryTests =
+    testList "the typed carry" [
+        testCase "the AI server reads and writes HttpContext.Items only in the consumer compatibility carry"
+        <| fun () ->
+            let sites = [
+                for name, lines in aiServerSources () do
+                    if name <> "ToolContext.fs" then
+                        for i, line in List.indexed (List.ofArray lines) do
+                            if isCode line && (line.Contains ".Items.TryGetValue" || line.Contains ".Items[") then
+                                yield $"{name}:{i + 1}: {line.Trim()}"
+            ]
+
+            Expect.isEmpty sites "the request is read through AIRequest / ToolContext, never by an Items key"
+
+        testCase "no AI server code invents an \"anonymous\" principal"
+        <| fun () ->
+            let quoted = "\"anonymous\""
+
+            let sites = [
+                for name, lines in aiServerSources () do
+                    for i, line in List.indexed (List.ofArray lines) do
+                        if isCode line && line.Contains quoted then
+                            yield $"{name}:{i + 1}"
+            ]
+
+            Expect.isEmpty sites "an unresolved request refuses; it is never served as a principal named anonymous"
+
+        testCase "the census reads the tree it guards"
+        <| fun () -> Expect.isGreaterThan (aiServerSources ()).Length 50 "the AI server's sources"
+
+        testCase "a turn with no resolved principal refuses a module tool rather than widening"
+        <| fun () ->
+            Expect.equal (loopRefusal (loopDoor { allOpen with Resolved = false })) "g1" "unresolved grants nothing"
+
+        testCase "a dev report reached with no resolved principal refuses"
+        <| fun () ->
+            let ctx = DefaultHttpContext()
+            ctx.RequestServices <- ServiceCollection().BuildServiceProvider()
+            ctx.Request.Path <- PathString "/dev/ai-latency"
+            ctx.Response.Body <- new MemoryStream()
+
+            Giraffe.Core.choose AILatencyHandler.routes (fun c -> Threading.Tasks.Task.FromResult(Some c)) ctx
+            |> Async.AwaitTask
+            |> Async.RunSynchronously
+            |> ignore
+
+            Expect.equal ctx.Response.StatusCode 401 "no principal, no scope, no report"
+    ]
+
 let tests =
     testList "the gate order, at every door" [
+        carryTests
+
         testList "the loop's dispatch arm" [
             for name, state, expected in loopRows ->
                 testCase name
@@ -579,13 +655,8 @@ let tests =
         testList "the four reach tools" [
             for toolName, args in reachTools do
                 for name, state, expected in reachRows do
-                    let expected, why =
-                        match reachExceptions.TryFind(toolName, name) with
-                        | Some(today, why) -> today, " (" + why + ")"
-                        | None -> expected, ""
-
                     yield
-                        testCase $"{toolName}: {name}{why}"
+                        testCase $"{toolName}: {name}"
                         <| fun () ->
                             Expect.equal (reachDoor toolName args state) expected "the refusal the tool returns"
         ]
@@ -600,6 +671,14 @@ let tests =
                 yield
                     testCase $"{door}: no Read on the recorded module refuses and leaves the call parked"
                     <| fun () -> Expect.equal (run "Payroll" [ "Other" ]) (403, true) "refused before completing"
+
+                yield
+                    testCase $"{door}: an SDK-reserved source the deployment did not name completes"
+                    <| fun () ->
+                        // g1 is the tool gate's own predicate, whose reserved
+                        // namespaces are not modules: a held `_platform.*`
+                        // call can be decided by a caller with no entry for it.
+                        Expect.equal (run "_platform.ai" [ "Other" ]) (200, false) "completed"
 
                 yield
                     testCase $"{door}: Read on the recorded module completes"

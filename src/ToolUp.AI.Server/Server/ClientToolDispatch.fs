@@ -11,7 +11,7 @@ open Giraffe
 open ToolUp.AI
 open ToolUp.Platform
 
-/// Phase 6g.A: in-memory registry of pending client-resident tool
+/// In-memory registry of pending client-resident tool
 /// calls. The agent loop registers a `TaskCompletionSource<string>`
 /// when it dispatches a `ClientResident` tool to the browser via
 /// the `ClientToolInvoke` SSE event; the `/api/ai/tool-result` POST
@@ -21,10 +21,10 @@ open ToolUp.Platform
 /// silos behind a load balancer need a Redis / SignalR-backed
 /// equivalent so the result POST can find the suspended TCS even
 /// when the SSE stream and the POST hit different instances. Out of
-/// scope for Phase 6g.A; flagged for the eventual distributed
-/// companion (mirror of Phase 9c half 2's planned scope).
+/// scope for the client-tool round trip; flagged for the eventual distributed
+/// companion (mirror of the distributed scheduler's planned scope).
 type ClientToolDispatchRegistry() =
-    // Phase 36.A: the pending entry carries the dispatched tool's
+    // The pending entry carries the dispatched tool's
     // `SourceModule` alongside its TCS, so `/api/ai/tool-result` can
     // re-check the POSTing caller's module permission before completing
     // it. Without the source module recorded at dispatch time the
@@ -40,7 +40,7 @@ type ClientToolDispatchRegistry() =
     /// thread pool, not on the SSE stream's thread.
     member this.RegisterPending(toolCallId: Guid) : Task<string> = this.RegisterPending(toolCallId, None)
 
-    /// Phase 36.A — register a pending tool call, recording the
+    /// Register a pending tool call, recording the
     /// dispatched tool's `SourceModule` so the `/api/ai/tool-result`
     /// POST handler can re-check the caller's per-module permission
     /// before completing it (the symmetric half of the agent loop's own
@@ -53,7 +53,7 @@ type ClientToolDispatchRegistry() =
         pending[toolCallId] <- (tcs, sourceModule)
         tcs.Task
 
-    /// Phase 36.A — the `SourceModule` recorded for a pending tool call,
+    /// The `SourceModule` recorded for a pending tool call,
     /// or `None` when the id is unknown / stale / was registered without
     /// one. Read-only: it does NOT remove the entry, so the handler can
     /// authorize first and complete second.
@@ -83,14 +83,14 @@ type ClientToolDispatchRegistry() =
 
 // ─── /api/ai/tool-result POST handler ────────────────────────────
 
-/// Phase 6g.A: serialiser for the result payload. STJ with
+/// Serialiser for the result payload. STJ with
 /// `FableConverters` matches the wire format the rest of the AI
 /// surface uses (ToolUp.Remoting client serialises with the same
 /// converter set on the way in, AIStreamEvent rendering uses it on the
 /// way out — see `SSEHandler.jsonOptions`).
 let private resultJsonOptions = PlatformJson.options
 
-/// Phase 6g.A: Giraffe handler for `/api/ai/tool-result`. Browsers
+/// Giraffe handler for `/api/ai/tool-result`. Browsers
 /// POST a `ClientToolResultRequest` after running a `ClientResident`
 /// tool; this handler resolves the registry singleton from DI and
 /// completes the matching pending TCS so the suspended agent loop
@@ -135,67 +135,20 @@ let clientToolResultHandler: HttpHandler =
             let registry =
                 ctx.RequestServices.GetService(typeof<ClientToolDispatchRegistry>) :?> ClientToolDispatchRegistry
 
-            // ─── Phase 36.A — symmetric RBAC gate ────────────────────
-            //
-            // The agent loop gates its own dispatch on the caller's
-            // `Read` permission for the tool's `SourceModule`. This
-            // endpoint is the OTHER way a client-resident tool call
-            // reaches completion, and it took only a Guid: any
-            // authenticated caller who obtained a pending toolCallId
-            // could feed the agent loop a result for a module they
-            // cannot read. Re-check the same permission here so both
-            // halves of the client-resident round trip enforce it.
-            //
-            // Read the recorded source module BEFORE completing —
-            // `TryComplete` removes the entry, so authorizing after it
-            // would authorize nothing and the result would already be
-            // in the model's context.
-            //
-            // A pending call registered without a source module (the
-            // legacy overload) is ungated, exactly as before (GP 11).
-            let sourceModuleOpt = registry.SourceModuleOf req.ToolCallId
-
-            let access = AIToolRegistry.reconstructAccessContext ctx
-
-            let denied =
-                match sourceModuleOpt with
-                | Some sourceModule -> not (AIToolRegistry.isToolSourcePermittedFor access sourceModule)
-                | None -> false
-
-            if denied then
-                let sourceModule = Option.defaultValue "" sourceModuleOpt
-
-                AIToolRegistry.recordUnauthorizedToolDenial
+            // The other way a client-resident call completes: the caller is
+            // re-checked against the source module the server recorded when
+            // it parked the call, before the result reaches the model. A call
+            // parked without a source module is ungated.
+            let! status =
+                AIToolRegistry.Gates.completePending
                     ctx
-                    access
-                    (sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path))
-                    (sprintf "toolCall:%O" req.ToolCallId)
-                    sourceModule
+                    logger
+                    $"toolCall:{req.ToolCallId}"
+                    (registry.SourceModuleOf req.ToolCallId)
+                    (fun _ -> async { return registry.TryComplete(req.ToolCallId, req.ResultJson) })
 
-                logger.Warn(
-                    sprintf
-                        "[ClientToolDispatch] tool-result POST rejected (403): caller lacks Read on source module '%s' for toolCallId %O"
-                        sourceModule
-                        req.ToolCallId
-                )
-
-                // The pending call is left registered rather than
-                // aborted: the agent loop's own 90-second timeout is
-                // the right owner of that lifetime, and aborting here
-                // would let an unauthorized POST cancel a legitimate
-                // in-flight dispatch.
-                ctx.Response.StatusCode <- 403
-                return! next ctx
-            else
-
-                let completed = registry.TryComplete(req.ToolCallId, req.ResultJson)
-
-                if completed then
-                    ctx.Response.StatusCode <- 200
-                    return! next ctx
-                else
-                    ctx.Response.StatusCode <- 404
-                    return! next ctx
+            ctx.Response.StatusCode <- status
+            return! next ctx
         with ex ->
             // Malformed/undeserializable tool-result POST. Was a silent
             // blanket 400 — log the exception type/message (not the body)

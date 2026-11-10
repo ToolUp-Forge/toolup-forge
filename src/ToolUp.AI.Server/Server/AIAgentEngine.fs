@@ -398,8 +398,8 @@ module TurnServices =
 
 /// One turn of the agent loop: everything it runs with, resolved once.
 type TurnContext = {
-    /// The request carry. The tool executors and the gates read the
-    /// caller's scope, identity and grants from its items.
+    /// The request the turn runs in, for its services and the grant stamps
+    /// the grant gate reads.
     Request: HttpContext
     /// The task the client is watching.
     TaskId: Guid
@@ -444,10 +444,6 @@ type TurnContext = {
 module TurnContext =
     /// Build a turn over `request`, resolving its access, grant gate,
     /// offered tools and services once.
-    ///
-    /// The turn's identity and stream are stamped onto the request's items
-    /// as well: a server-resident tool's signature carries only the
-    /// context, and the consent gate reads them there.
     let create
         (provider: IAIProvider)
         (registry: AIToolRegistry)
@@ -464,12 +460,6 @@ module TurnContext =
         (emit: AIStreamEvent -> unit)
         (cancel: CancellationToken)
         : TurnContext =
-        request.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId
-        request.Items[AIConsentDispatch.ItemsKeys.TaskId] <- box taskId
-
-        request.Items[AIConsentDispatch.ItemsKeys.StreamEmitter] <-
-            box ({ Emit = emit }: AIConsentDispatch.StreamEmitter)
-
         let access = reconstructAccessContext request
         let grantGate = moduleGrantGate request
 
@@ -496,6 +486,24 @@ module TurnContext =
             Emit = emit
             Cancel = cancel
         }
+
+    /// The turn's stream, as a gate or a tool asks its user on it.
+    let channel (turn: TurnContext) : PromptChannel = {
+        ConversationId = turn.ConversationId
+        TaskId = turn.TaskId
+        Emit = turn.Emit
+    }
+
+    /// What a tool called in this turn runs with.
+    let toolContext (turn: TurnContext) : ToolContext = {
+        Request = turn.Request
+        Access = turn.Access
+        Scope = AIRequest.scopeOf turn.Access
+        Channel = Some(channel turn)
+        ActiveModule = turn.ActiveModule
+        ActivePage = turn.ActivePage
+        Cancel = turn.Cancel
+    }
 
 /// What a turn does before any provider call: reply with text it already
 /// has, or run the loop.
@@ -526,7 +534,7 @@ type LoopState = {
     Timings: ToolCallTiming list
     /// The soft stop that ended the loop, when one did.
     Stopped: LoopStop option
-    /// Phase 1131 — the parts server-resident tools attached across the
+    /// The parts server-resident tools attached across the
     /// turn's tool rounds, in round order and, within a round, in
     /// tool-call order. The final assistant message carries them after
     /// its text (`LoopState.messageParts`).
@@ -545,7 +553,7 @@ module LoopState =
         Attached = []
     }
 
-    /// Phase 1131 — the parts of the final assistant message whose text is
+    /// The parts of the final assistant message whose text is
     /// `text`: none when no tool attached a part, so a plain turn stays a
     /// plain-text message; otherwise the text part first, then the attached
     /// parts in order.
@@ -605,34 +613,17 @@ module private Bounded =
 module private Telemetry =
     let private jsonOptions = PlatformJson.options
 
-    /// The storage scope latency rows and audits land in: the request's,
-    /// or the caller's user container.
-    let private scopeOf (ctx: HttpContext) : StorageScope =
-        match AccessContext.scopeOf ctx.Items with
-        | Some s -> s
-        | _ ->
-            let fallback =
-                match AccessContext.callerIdOf ctx.Items with
-                | Some id -> id
-                | _ -> "anonymous"
-
-            {
-                ScopeId = fallback
-                Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-                Persist = true
-            }
-
     /// The caller's user id for `AILatencyRecord.UserId`; `""` (unattributed)
-    /// when the request carried none.
-    let private userIdOf (ctx: HttpContext) : string =
-        match AccessContext.callerIdOf ctx.Items with
-        | Some id when not (String.IsNullOrWhiteSpace id) -> id
-        | _ -> ""
+    /// when the request resolved no principal.
+    let private userIdOf (turn: TurnContext) : string =
+        match AIRequest.access turn.Request with
+        | Some access -> access.UserId
+        | None -> ""
 
-    let private event (ctx: HttpContext) (sourceModule: string) (eventType: string) (payload: string) : ModuleEvent = {
+    let private event (turn: TurnContext) (sourceModule: string) (eventType: string) (payload: string) : ModuleEvent = {
         Id = Guid.NewGuid()
         OccurredAt = DateTime.UtcNow
-        ScopeId = (scopeOf ctx).ScopeId
+        ScopeId = (AIRequest.scopeOf turn.Access).ScopeId
         SourceModule = sourceModule
         EventType = eventType
         Payload = payload
@@ -656,7 +647,7 @@ module private Telemetry =
             let record: AILatencyRecord = {
                 TaskId = turn.TaskId
                 ConversationId = turn.ConversationId
-                UserId = UserId(userIdOf turn.Request)
+                UserId = UserId(userIdOf turn)
                 TurnNumber = turnNumber
                 ProviderName = turn.Provider.Capabilities.ProviderName
                 ProviderModel = turn.Provider.Capabilities.Model
@@ -679,7 +670,7 @@ module private Telemetry =
                         $"AI latency event-store write (taskId={turn.TaskId}, turn={turnNumber})"
                         store
                         (event
-                            turn.Request
+                            turn
                             AILatencyRecord.SourceModule
                             AILatencyRecord.EventType
                             (JsonSerializer.Serialize(record, jsonOptions)))
@@ -705,16 +696,23 @@ module private Telemetry =
                         $"AI latency IMetricsSink.Record failed (taskId={turn.TaskId}, turn={turnNumber}): {ex.Message}. Metric dropped; conversation unaffected."
         }
 
-    let private denialAudit
-        (turn: TurnContext)
-        (source: string)
-        (eventType: string)
-        (toolName: string)
-        (reason: string)
-        =
-        match turn.Services.EventStore with
-        | None -> async.Return()
-        | Some store ->
+    /// Record `refusal` on the stream its value names
+    /// (`ToolOutcome.auditStream`), and log it.
+    let denied (turn: TurnContext) (refusal: ToolRefusal) : Async<unit> = async {
+        let toolName = ToolRefusal.toolName refusal
+        let reason = ToolRefusal.reason refusal
+        let stream = ToolOutcome.auditStream refusal
+
+        turn.Services.Logger.Warn
+            $"AI tool '{toolName}' refused at dispatch ({stream}, activeModule={turn.ActiveModule}): {reason}"
+
+        match refusal with
+        | ToolRefusal.Unreadable(_, moduleName) ->
+            recordUnauthorizedToolDenial turn.Request turn.Access "agent-loop:tool-dispatch" toolName moduleName
+        | _ -> ()
+
+        match ToolAuditStream.source stream, ToolAuditStream.eventType stream, turn.Services.EventStore with
+        | Some source, Some eventType, Some store ->
             let payload = {|
                 ToolName = toolName
                 Reason = reason
@@ -724,29 +722,22 @@ module private Telemetry =
                 ConversationId = turn.ConversationId
             |}
 
-            Bounded.write
-                turn.Services.Logger
-                $"AI tool denial audit write ({source}, taskId={turn.TaskId})"
-                store
-                (event turn.Request source eventType (JsonSerializer.Serialize(payload, jsonOptions)))
+            do!
+                Bounded.write
+                    turn.Services.Logger
+                    $"AI tool denial audit write ({source}, taskId={turn.TaskId})"
+                    store
+                    (event turn source eventType (JsonSerializer.Serialize(payload, jsonOptions)))
+        | _ -> ()
 
-    /// A refusal on the allowlist denial stream — a policy the deployment
-    /// authored — which also feeds the sustained-denial rate monitor.
-    let denial (turn: TurnContext) (toolName: string) (reason: string) : Async<unit> = async {
-        do! denialAudit turn "_platform.ai.tool_allowlist_denial" "ToolAllowlistDenied" toolName reason
-
-        do!
-            AIDenialRateMonitor.observeAndAlert
-                turn.Services.DenialRateMonitor
-                turn.Services.DenialAlertChannel
-                (scopeOf turn.Request).ScopeId
-                toolName
+        if stream = ToolAuditStream.PolicyDenial then
+            do!
+                AIDenialRateMonitor.observeAndAlert
+                    turn.Services.DenialRateMonitor
+                    turn.Services.DenialAlertChannel
+                    (AIRequest.scopeOf turn.Access).ScopeId
+                    toolName
     }
-
-    /// A refusal on the RBAC stream: the model named a tool the USER holds
-    /// no `Read` on.
-    let unauthorized (turn: TurnContext) (toolName: string) (reason: string) : Async<unit> =
-        denialAudit turn "_platform.ai.unauthorized_tool" "UnauthorizedTool" toolName reason
 
     /// Count one tool-result elision, and warn once per tool per registry.
     let elided (turn: TurnContext) (tool: RegisteredTool) (elidedChars: int) =
@@ -772,131 +763,35 @@ module private Telemetry =
                 $"AI tool '{name}' returned {elidedChars} characters, over its {ceiling}-character result budget; the result was replaced by the elision marker and the model was steered to narrow the request (conversation={turn.ConversationId}). This tool needs an aggregate or paginated shape, or a deliberate ResultBudget declaration. Logged once per tool; every occurrence is counted on {AILatencyMetrics.ToolResultElided}."
 
 module private Dispatch =
-    let private denied (tc: AIProviderToolCall) (reason: string) =
-        ToolInvocationError.toOutcome (Denied(tc.Name, reason))
-
-    // ─── The dispatch-site re-check ───
-    //
-    // `ToolGate.decide` is the decision the offered list was filtered by
-    // (`proofs/ToolGate.fst`, `dispatch_never_wider_than_list`), so a tool
-    // it refuses here was never offered: the name is forged, hallucinated or
-    // replayed from a history in which the caller still held the authority.
-    // The list filter is ergonomic; this is the security boundary, the last
-    // point before `tool.Execute` runs with the caller's scope (GP 4). Each
-    // refusal is a refusal, not a fault — the model is told the action is
-    // not permitted, so it does not retry — and keeps its own audit stream.
-
-    /// The caller holds no `Read` on the tool's source module.
-    let private refuseSource (turn: TurnContext) (tc: AIProviderToolCall) (def: AIToolDefinition) = async {
-        let reason =
-            $"requires Read on module '{def.SourceModule}', which you do not have access to"
-
-        turn.Services.Logger.Warn(
-            sprintf
-                "AI tool '%s' (source module '%s') refused at dispatch: caller holds no Read on that module. The tool was not offered to the model this turn, so this is a forged or replayed tool name."
-                def.Name
-                def.SourceModule
-        )
-
-        recordUnauthorizedToolDenial turn.Request turn.Access "agent-loop:tool-dispatch" def.Name def.SourceModule
-        do! Telemetry.unauthorized turn def.Name reason
-        return denied tc reason
-    }
-
-    /// The caller's grant on the source module is not live: pending the
-    /// subject's acceptance, or its counterparty consent revoked.
-    let private refuseGrant (turn: TurnContext) (tc: AIProviderToolCall) (def: AIToolDefinition) =
-        // The audit half of the grant guard: it re-derives the same verdict
-        // and emits the `UnconsentedGrantRefused` row the Remoting seam emits.
-        guardToolGrant turn.Request turn.Access def.SourceModule |> ignore
-
-        turn.Services.Logger.Warn(
-            sprintf
-                "AI tool '%s' (source module '%s') refused at dispatch: the caller's grant on that module is not live under its declared GrantPolicy. The tool was not offered to the model this turn, so this is a forged or replayed tool name."
-                def.Name
-                def.SourceModule
-        )
-
-        denied
-            tc
-            $"module '{def.SourceModule}' requires a live grant under its declared policy; yours is not currently live"
-
-    /// The tool's effects are outside the deployment's `ToolPolicy`. The
-    /// refusal rides the allowlist denial stream: a ceiling is a policy the
-    /// deployment authored.
-    let private refuseEffects
-        (turn: TurnContext)
-        (tc: AIProviderToolCall)
-        (def: AIToolDefinition)
-        (verdict: ToolGateVerdict)
-        =
-        async {
-            let reason = ToolGate.describe def.Name verdict
-
-            turn.Services.Logger.Warn(
-                sprintf
-                    "AI tool '%s' (source module '%s') refused at dispatch by the tool effect policy: %s. The tool was not offered to the model this turn, so this is a forged or replayed tool name."
-                    def.Name
-                    def.SourceModule
-                    reason
-            )
-
-            do! Telemetry.denial turn def.Name reason
-            return denied tc reason
-        }
-
-    /// The last two gates for an admitted tool, in contract order: the
-    /// client-resident allowlist (which answers `Allow` for a server-resident
-    /// tool), then the human-in-the-loop approval for both locations. After
-    /// the allowlist, never before: a dialog for an action an outer gate
-    /// forbids would leak what the deployment exposes.
-    let private admit (turn: TurnContext) (tc: AIProviderToolCall) (def: AIToolDefinition) = async {
-        let logger = turn.Services.Logger
-
-        let allowlist =
-            match def.Location, turn.Services.ClientToolAuthorizer with
-            | ClientResident, Some auth -> auth.Authorize(def.Name, tc.Arguments, turn.ActiveModule, turn.ActivePage)
-            | _ -> ClientToolAuthDecision.Allow
-
-        match allowlist with
-        | ClientToolAuthDecision.Deny reason ->
-            logger.Warn(
-                sprintf
-                    "ClientResident tool '%s' denied by server-side allowlist (activeModule=%A): %s"
-                    def.Name
-                    turn.ActiveModule
-                    reason
-            )
-
-            do! Telemetry.denial turn def.Name reason
-            return Error(Denied(tc.Name, reason))
-        | ClientToolAuthDecision.Allow ->
-            // Held on effect CLASS first, then the deployment's
-            // `IToolApprovalPolicy`; with neither composed this grants.
-            let! approval =
-                ToolApprovalDispatch.requireApprovalKeyed
-                    (ToolApprovalDispatch.requirementByClass turn.Registry.Policy def)
-                    turn.Request
-                    logger
-                    def.Name
-                    def.SourceModule
-                    tc.Arguments
-                    turn.ActiveModule
-                    turn.ActivePage
-
-            match approval with
-            | ToolApprovalDispatch.ApprovalGranted -> return Ok()
-            | ToolApprovalDispatch.ApprovalRefused reason ->
-                logger.Warn(
-                    sprintf
-                        "Tool '%s' refused by the human-in-the-loop approval gate (activeModule=%A): %s"
-                        def.Name
-                        turn.ActiveModule
-                        reason
-                )
-
-                do! Telemetry.denial turn def.Name reason
-                return Error(Denied(tc.Name, reason))
+    /// The gates the loop's dispatch runs, g1-g5, over the tool's own source
+    /// module: the decision the offered list was filtered by
+    /// (`proofs/ToolGate.fst`, `dispatch_never_wider_than_list`), so a tool
+    /// it refuses was never offered and the name is forged, hallucinated or
+    /// replayed; then the client-resident allowlist (which admits a
+    /// server-resident tool); then the human approval for both locations.
+    /// Queryability and consent gate a reach tool's TARGET module, inside it.
+    let private gates (turn: TurnContext) : GateSet = {
+        ToolGate = Gates.toolGate turn.GrantGate turn.Registry.Policy
+        Allowlist =
+            fun call -> async {
+                match call.Tool.Location, turn.Services.ClientToolAuthorizer with
+                | ClientResident, Some authorizer ->
+                    match authorizer.Authorize(call.Tool.Name, call.Arguments, turn.ActiveModule, turn.ActivePage) with
+                    | ClientToolAuthDecision.Allow -> return Ok()
+                    | ClientToolAuthDecision.Deny reason ->
+                        return Error(ToolRefusal.AllowlistDenied(call.Tool.Name, reason))
+                | _ -> return Ok()
+            }
+        Approval =
+            ToolApprovalDispatch.approve
+                SuspendedPrompt.SuspendedDispatchTimeoutMs
+                turn.Registry.Policy
+                turn.Services.Logger
+                (Some(TurnContext.channel turn))
+                turn.ActiveModule
+                turn.ActivePage
+        Queryability = Gates.pass
+        Consent = Gates.pass
     }
 
     /// Wait for the browser to post a client-resident tool's result, within
@@ -939,7 +834,7 @@ module private Dispatch =
             return ToolInvocationError.toOutcome (ToolThrew(tc.Name, detail))
     }
 
-    /// Phase 1131 — a client-resident tool carrying the record form of the
+    /// A client-resident tool carrying the record form of the
     /// executor is refused by name before any gate runs: its result is the
     /// browser's, and a part is the server's judgement of a read it made.
     let private refuseAttach (turn: TurnContext) (tc: AIProviderToolCall) (def: AIToolDefinition) =
@@ -950,85 +845,93 @@ module private Dispatch =
             ToolRefusal.Denied(tc.Name, "a client-resident tool cannot attach parts to the assistant message")
         )
 
-    /// Run an admitted tool where it lives, with the parts it attached. A
-    /// server-resident body runs inside its declared effect envelope (an
-    /// undeclared tool has none) and under the turn's cancellation; a
-    /// client-resident one goes to the browser and attaches nothing.
-    let private route (turn: TurnContext) (tc: AIProviderToolCall) (tcId: Guid) (tool: RegisteredTool) = async {
+    /// Run an admitted server-resident tool inside its declared effect
+    /// envelope (an undeclared tool has none) and under the turn's
+    /// cancellation: the typed executor when the tool has one, else the
+    /// string contract over a request stamped with the turn's carry.
+    let private runServer (turn: TurnContext) (tc: AIProviderToolCall) (tool: RegisteredTool) = async {
         let def = tool.Definition
+        let context = TurnContext.toolContext turn
 
-        match def.Location, tool.Answer with
-        | ClientResident, Some _ -> return refuseAttach turn tc def, []
-        | _ ->
-            match! admit turn tc def with
-            | Error err -> return ToolInvocationError.toOutcome err, []
-            | Ok() ->
-                match def.Location with
-                | ServerResident ->
-                    let body =
-                        match tool.Answer with
-                        | Some answer -> answer turn.Request tc.Arguments
-                        | None -> async {
-                            let! content = tool.Execute turn.Request tc.Arguments
-
-                            return ({ Text = content; Parts = [] }: ToolHelpers.ToolAnswer)
-                          }
-
-                    let! executed =
-                        ToolEffectEnvelope.runWithin
-                            {
-                                ToolName = def.Name
-                                Effects = AIToolEffects.declaredOf def
-                                OnDenied = fun denial -> Telemetry.denial turn def.Name denial.Reason
-                            }
-                            body
-                        |> underCancel turn.Cancel
-
-                    match executed with
-                    | Some answered -> return ToolOutcome.Produced answered.Text, answered.Parts
-                    | None -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, "The turn was cancelled.")), []
-                | ClientResident ->
-                    let! outcome = awaitClient turn tc tcId def
+        let body: Async<ToolOutcome * AIContentPart list> =
+            match tool.ExecuteTyped, tool.Answer with
+            | Some execute, _ -> async {
+                match ToolArgs.parse tc.Arguments with
+                | Error detail -> return ToolOutcome.Faulted(ToolFault.InvalidArguments(tc.Name, detail)), []
+                | Ok args ->
+                    let! outcome = execute context args
                     return outcome, []
+              }
+            | None, Some answer -> async {
+                ToolContext.stamp context
+                let! answered = answer turn.Request tc.Arguments
+                return ToolOutcome.Produced answered.Text, answered.Parts
+              }
+            | None, None -> async {
+                ToolContext.stamp context
+                let! content = tool.Execute turn.Request tc.Arguments
+                return ToolOutcome.Produced content, []
+              }
+
+        let! executed =
+            ToolEffectEnvelope.runWithin
+                {
+                    ToolName = def.Name
+                    Effects = AIToolEffects.declaredOf def
+                    OnDenied = fun denial -> Telemetry.denied turn (ToolRefusal.OutsideCeiling(def.Name, denial.Reason))
+                }
+                body
+            |> underCancel turn.Cancel
+
+        match executed with
+        | Some result -> return result
+        | None -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, "The turn was cancelled.")), []
     }
 
-    /// Decide and run one tool call, with the parts it attached. Every
-    /// failure becomes a `ToolOutcome` the model is shown and attaches
+    /// Decide and run one tool call, with the parts it attached: the gates
+    /// in their one order (`Gates.admit`), then the tool where it lives.
+    /// Every failure becomes a `ToolOutcome` the model is shown and attaches
     /// nothing; nothing here ends the turn.
-    let private decide
-        (turn: TurnContext)
-        (tc: AIProviderToolCall)
-        (tcId: Guid)
-        (toolOpt: RegisteredTool option)
-        (verdict: ToolGateVerdict)
-        =
-        async {
-            let attachingNothing (outcome: Async<ToolOutcome>) = async {
-                let! outcome = outcome
-                return outcome, []
-            }
+    let private decide (turn: TurnContext) (tc: AIProviderToolCall) (tcId: Guid) (toolOpt: RegisteredTool option) = async {
+        try
+            match toolOpt with
+            | None -> return ToolInvocationError.toOutcome (UnknownTool tc.Name), []
+            | Some tool when tool.Definition.Location = ClientResident && tool.Answer.IsSome ->
+                return refuseAttach turn tc tool.Definition, []
+            | Some tool ->
+                let def = tool.Definition
 
-            try
-                match toolOpt, verdict with
-                | None, _ -> return ToolInvocationError.toOutcome (UnknownTool tc.Name), []
-                | Some tool, ToolAdmitted -> return! route turn tc tcId tool
-                | Some tool, ToolRefusedSource _ -> return! attachingNothing (refuseSource turn tc tool.Definition)
-                | Some tool, ToolRefusedGrant _ -> return refuseGrant turn tc tool.Definition, []
-                | Some tool, (ToolRefusedUndeclared | ToolRefusedEffects _) ->
-                    return! attachingNothing (refuseEffects turn tc tool.Definition verdict)
-            with
-            | :? JsonException as ex -> return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, ex.Message)), []
-            // The exception's own text, not `Message`, which F# renders as
-            // the exception's structured form.
-            | ToolHelpers.ToolArgumentError message ->
-                return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, message)), []
-            | ToolHelpers.ToolFaulted fault -> return ToolOutcome.Faulted fault, []
-            | ex -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, ex.Message)), []
-        }
+                let call: GateCall = {
+                    Request = turn.Request
+                    Access = turn.Access
+                    Tool = def
+                    Arguments = tc.Arguments
+                    Module = def.SourceModule
+                }
+
+                match! Gates.admit (gates turn) call with
+                | Error refusal ->
+                    do! Telemetry.denied turn refusal
+                    return ToolOutcome.Refused refusal, []
+                | Ok _ ->
+                    match def.Location with
+                    | ServerResident -> return! runServer turn tc tool
+                    | ClientResident ->
+                        let! outcome = awaitClient turn tc tcId def
+                        return outcome, []
+        with
+        | :? JsonException as ex -> return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, ex.Message)), []
+        // The exception's own text, not `Message`, which F# renders as
+        // the exception's structured form.
+        | ToolHelpers.ToolArgumentError message ->
+            return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, message)), []
+        | ToolHelpers.ToolFaulted fault -> return ToolOutcome.Faulted fault, []
+        | ex -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, ex.Message)), []
+    }
 
     /// Execute one tool call: the result the model is shown, the call's
     /// latency timing, its outcome for the rails, and the parts it attached
-    /// (Phase 1131), which ride only a produced outcome.
+    ///, which ride only a produced outcome.
     ///
     /// Produced content passes the tool's result budget, the single choke
     /// point between a tool and model context — a client-resident result
@@ -1047,12 +950,7 @@ module private Dispatch =
 
         let toolOpt = turn.Registry.FindByName tc.Name
 
-        let verdict =
-            match toolOpt with
-            | Some tool -> ToolGate.decide turn.Access turn.GrantGate turn.Registry.Policy tool.Definition
-            | None -> ToolAdmitted
-
-        let! outcome, attached = decide turn tc tcId toolOpt verdict
+        let! outcome, attached = decide turn tc tcId toolOpt
         let rendered = ToolOutcome.toModel outcome
 
         let content =
@@ -1071,8 +969,11 @@ module private Dispatch =
         let timing: ToolCallTiming = {
             Name = tc.Name
             Location =
-                match toolOpt, verdict with
-                | Some tool, ToolAdmitted when tool.Definition.Location = ClientResident -> ClientSide
+                match toolOpt, outcome with
+                | Some tool, (ToolOutcome.Produced _ | ToolOutcome.Faulted _) when
+                    tool.Definition.Location = ClientResident
+                    ->
+                    ClientSide
                 | _ -> ServerSide
             DurationMs = sw.Elapsed.TotalMilliseconds
             Errored = ToolOutcome.isError outcome
