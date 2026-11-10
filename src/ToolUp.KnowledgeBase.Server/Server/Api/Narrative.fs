@@ -256,81 +256,32 @@ let ingestNarrative
                             )
                     | _ -> ()
 
-                    // Atomic index RMW (see `upsertIndexEntry`).
-                    // Released before the enqueue block below (which can route
-                    // through `MarkIngestionFailed` → `updateIndexStatus`). The
+                    // Atomic index RMW (see `upsertIndexEntry`), released
+                    // before the enqueue, which takes the same lock. The
                     // provenance duplicate-check above still reads outside the
                     // lock; concurrent same-provenance commits remain a
                     // last-writer race (residual, addressed by the deferred
                     // ETag CAS), but neither write is lost from the index.
                     do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
-                    let mutable returnedDoc = doc
+                    let chunkPairs =
+                        chunks
+                        |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
 
-                    if box deps.Queue <> null && not chunks.IsEmpty then
-                        // Seed before enqueue so an early observer firing isn't
-                        // overwritten. Same pattern as the upload path above.
-                        let initialStatus = Embedding(0, chunks.Length)
+                    let! enqueued = KnowledgeIngest.enqueue deps doc chunkPairs
 
-                        updateStatus docId initialStatus (fun existing ->
-                            match existing with
-                            | Queued -> initialStatus
-                            | other -> other)
+                    let returnedDoc =
+                        match enqueued with
+                        | Ok _ -> doc
+                        | Error refused -> {
+                            doc with
+                                Status = IngestionStatus.Failed(EnqueueRefused.describe refused)
+                          }
 
-                        let chunkPairs =
-                            chunks
-                            |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
-
-                        // Record the attempt before the enqueue.
-                        let! attempt =
-                            beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
-
-                        let job: DocumentIngestionJob = {
-                            DocumentId = docId
-                            DocumentName = fileName
-                            Chunks = chunkPairs
-                            Scope = deps.VectorScope
-                            ScopeId = deps.Scope.ScopeId
-                            Container = deps.Scope.Container
-                            OriginatingUserId = Some deps.UserId
-                            Attempt = Some attempt
-                        }
-
-                        // Async enqueue: the sync form is a
-                        // blocking store round-trip on the request thread
-                        // once a deployment composes a durable queue.
-                        let! accepted = deps.Queue.EnqueueAsync(job)
-                        deps.RecordEnqueue accepted
-
-                        if not accepted then
-                            let reason =
-                                sprintf
-                                    "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                    deps.Queue.Count
-                                    deps.Queue.Capacity
-
-                            do! deps.MarkIngestionFailed docId fileName reason
-
-                            returnedDoc <- {
-                                doc with
-                                    Status = IngestionStatus.Failed reason
-                            }
-                    elif chunks.IsEmpty then
-                        // Nothing to index, so no chunk callback will settle
-                        // the document: settle the cache, the persisted
-                        // index and the announcement here.
-                        let terminal = Complete 0
-                        setStatus docId terminal
-                        do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
-
-                        do!
-                            publishTerminalStatus
-                                deps.Notifications
-                                deps.Logger
-                                docId
-                                fileName
-                                deps.UserId.Value
-                                terminal
+                    // Nothing to index, so no chunk callback will settle the
+                    // document: settle and announce it here.
+                    if chunks.IsEmpty then
+                        do! KnowledgeIngest.settle deps docId (Complete 0)
 
                     // Nudge the KB client to reload its document list.
                     // The notification scope is the user id (matches the

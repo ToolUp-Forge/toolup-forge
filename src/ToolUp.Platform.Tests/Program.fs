@@ -39,6 +39,7 @@ let private registeredTests =
         ModelExecutionApiTests.tests
         ModelExecutionComposeTests.tests
         IngestionStatusTests.tests
+        IngestionAttemptStoreTests.tests
         IngestionRetryTests.tests
         IngestionEmbedderRetryTests.tests
         IngestionBackpressureTests.tests

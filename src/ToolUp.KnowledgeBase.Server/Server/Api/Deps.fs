@@ -92,11 +92,6 @@ type KnowledgeApiDeps = {
     /// Publishes a fresh `InventorySummary` to the user's notification
     /// scope. Called after every inventory mutation.
     PublishInventory: unit -> Async<unit>
-    /// Marks a document `Failed` after `IngestionQueue.EnqueueAsync`
-    /// returned false (queue at capacity). Updates `statusCache`, persists the
-    /// failed status into the document index, and publishes an
-    /// `IngestionStatusUpdate` notification.
-    MarkIngestionFailed: string -> string -> string -> Async<unit>
     /// Owner / Admin gate for AI-context writes. Returns `Ok ()` for
     /// non-team modes and for users who can write team config; returns
     /// `Error <reason>` otherwise. Reused by the destructive document /
@@ -479,18 +474,6 @@ module KnowledgeApiDeps =
         let publishInventory () =
             publishInventoryUpdate storage notifications logger userId scope.Container
 
-        let markIngestionFailed (docId: string) (fileName: string) (reason: string) = async {
-            let status = IngestionStatus.Failed reason
-            setStatus docId status
-
-            // The guarded index writer, not a load-map-save: a
-            // concurrent upsert on this or another replica is not overwritten,
-            // and a refused write raises `KnowledgeIndexWriteFailed`.
-            do! updateIndexStatus storage scope.Container docId status
-
-            do! publishTerminalStatus notifications logger docId fileName userId status
-        }
-
         let ensureContextWriteAllowed () : Async<Result<unit, string>> = async {
             match accessContext.Subject with
             | TeamMember(userId, teamId) ->
@@ -529,7 +512,6 @@ module KnowledgeApiDeps =
             AuditLog = auditLog
             RecordEnqueue = recordEnqueue
             PublishInventory = publishInventory
-            MarkIngestionFailed = markIngestionFailed
             EnsureContextWriteAllowed = ensureContextWriteAllowed
             ScopeResolvedFromRequest = scopeResolvedFromRequest
             UploadPolicy = uploadPolicy
@@ -578,3 +560,83 @@ module KnowledgeApiDeps =
                 "Storage scope is unresolved for this request (ScopeResolutionMiddleware not wired); refusing the destructive operation to avoid mutating the shared anonymous container."
         else
             Ok()
+
+/// Why the ingestion queue refused an attempt.
+type EnqueueRefused =
+    /// The queue was at capacity.
+    | QueueFull of count: int * capacity: int
+
+/// Companion functions for `EnqueueRefused`.
+module EnqueueRefused =
+
+    /// The sentence a caller and the document's `Failed` status read.
+    let describe (refused: EnqueueRefused) : string =
+        match refused with
+        | QueueFull(count, capacity) ->
+            sprintf "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds." count capacity
+
+/// The knowledge base's one way into ingestion, and its one way to settle a
+/// document no chunk callback will settle.
+module KnowledgeIngest =
+
+    /// The attempt store over the request's storage, announcing through its
+    /// notification channel.
+    let attempts (deps: KnowledgeApiDeps) : KnowledgeAttemptStore =
+        KnowledgeAttemptStore(deps.Storage, Some deps.Notifications, deps.Logger)
+
+    /// Settle `docId` in the request's scope at `status` and announce it to
+    /// the requesting user.
+    let settle (deps: KnowledgeApiDeps) (docId: string) (status: IngestionStatus) : Async<unit> =
+        (attempts deps).Settle(deps.Scope.Container, docId, deps.UserId.Value, status)
+
+    /// Enqueue `chunkPairs` of `doc` as a new ingestion attempt: begin the
+    /// attempt (seeding `Embedding(0, n)` and the document's chunk count from
+    /// `doc.ChunkCount`), enqueue the job carrying it, record the enqueue, and
+    /// on a refusal settle the document `Failed` with the refusal's sentence.
+    /// `Ok None` when there is nothing to enqueue: no chunk, or no queue
+    /// composed.
+    let enqueue
+        (deps: KnowledgeApiDeps)
+        (doc: KnowledgeDocument)
+        (chunkPairs: (string * TextChunk) list)
+        : Async<Result<IngestionAttempt option, EnqueueRefused>> =
+        async {
+            if isNull (box deps.Queue) || List.isEmpty chunkPairs then
+                return Ok None
+            else
+                let attempt: IngestionAttempt = {
+                    AttemptId = Guid.NewGuid().ToString("N")
+                    EnqueuedChunks = chunkPairs.Length
+                }
+
+                do!
+                    (attempts deps)
+                        .Begin(
+                            deps.Scope.Container,
+                            doc.Id,
+                            attempt.AttemptId,
+                            attempt.EnqueuedChunks,
+                            Some doc.ChunkCount
+                        )
+
+                let job: DocumentIngestionJob = {
+                    DocumentId = doc.Id
+                    DocumentName = doc.FileName
+                    Chunks = chunkPairs
+                    Scope = deps.VectorScope
+                    ScopeId = deps.Scope.ScopeId
+                    Container = deps.Scope.Container
+                    OriginatingUserId = Some deps.UserId
+                    Attempt = Some attempt
+                }
+
+                let! accepted = deps.Queue.EnqueueAsync(job)
+                deps.RecordEnqueue accepted
+
+                if accepted then
+                    return Ok(Some attempt)
+                else
+                    let refused = QueueFull(deps.Queue.Count, deps.Queue.Capacity)
+                    do! settle deps doc.Id (Failed(EnqueueRefused.describe refused))
+                    return Error refused
+        }

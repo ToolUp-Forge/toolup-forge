@@ -1,0 +1,9 @@
+=== chunk 1
+source: doc-golden | short.txt | txt | Section "text"
+meta _locationHint = text
+meta _origin = Document
+meta _source = {"DocumentId":"doc-golden","DocumentName":"short.txt","FileType":"txt","Location":{"Section":"text"},"IndexedAt":"<clock>"}
+meta dataTypeId = KnowledgeDocument
+content:
+[short.txt — text]
+A short note.

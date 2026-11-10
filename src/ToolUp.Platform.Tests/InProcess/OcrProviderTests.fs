@@ -604,7 +604,6 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
     AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
-    MarkIngestionFailed = fun _ _ _ -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
     UploadPolicy = KnowledgeUploadPolicy.permissive

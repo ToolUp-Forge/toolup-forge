@@ -160,6 +160,13 @@ let chunksOf (origin: ChunkOrigin) (source: PartSource) (parts: Part list) : (Te
 
         makeChunk origin source.FileName header content src, src
 
+    // Prose shorter than the splitter's minimum is kept whole, so a short
+    // text is one chunk in every format rather than none.
+    let prosePieces (text: string) =
+        match splitByTokens ChunkingConfig.defaults text with
+        | [] -> [ text ]
+        | pieces -> pieces
+
     let numbered (pieces: string list) (whole: string) (part: int -> int -> string) =
         let total = pieces.Length
 
@@ -170,16 +177,10 @@ let chunksOf (origin: ChunkOrigin) (source: PartSource) (parts: Part list) : (Te
         for part in parts do
             match part with
             | Prose(ProseHeading.Titled(title, location), text) ->
-                let pieces =
-                    match splitByTokens ChunkingConfig.defaults text with
-                    | [] -> [ text ]
-                    | pieces -> pieces
-
-                for header, piece in numbered pieces title (sprintf "%s (part %d of %d)" title) do
+                for header, piece in numbered (prosePieces text) title (sprintf "%s (part %d of %d)" title) do
                     emit header piece location
             | Prose(ProseHeading.Running, text) ->
-                for header, piece in
-                    numbered (splitByTokens ChunkingConfig.defaults text) "text" (sprintf "part %d of %d") do
+                for header, piece in numbered (prosePieces text) "text" (sprintf "part %d of %d") do
                     emit header piece (SharedTypes.Section header)
             | Verbatim(header, location, text) -> emit header text location
             | Table(title, location, data) ->

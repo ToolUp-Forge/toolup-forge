@@ -129,7 +129,6 @@ let private kbDeps (storage: IBlobStorage) : KnowledgeApiDeps = {
     AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
-    MarkIngestionFailed = fun _ _ _ -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
     UploadPolicy = KnowledgeUploadPolicy.permissive

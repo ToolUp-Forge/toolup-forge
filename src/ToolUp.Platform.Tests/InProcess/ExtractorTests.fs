@@ -505,4 +505,20 @@ let private goldenTests =
             test name { expectGolden name (render (extract ())) }
     ]
 
-let tests = testList "KnowledgeBase extraction" [ csvTests; goldenTests ]
+/// Short prose is one whole chunk in every format, plain text included: a
+/// note below the splitter's minimum yields that note, never no chunk (which
+/// settled the upload `Complete 0`, a successful index of nothing).
+let private shortTextTests =
+    testList "KnowledgeBase short text" [
+        test "a .txt shorter than the splitter's minimum is one whole chunk" {
+            let chunks =
+                extractChunks noOpOcr noOpTables "doc-1" "short.txt" (Text.Encoding.UTF8.GetBytes "  A short note.  ")
+                |> Async.RunSynchronously
+
+            Expect.hasLength chunks 1 "one chunk, not none"
+            Expect.stringContains (fst chunks[0]).Content "A short note." "the whole text"
+        }
+    ]
+
+let tests =
+    testList "KnowledgeBase extraction" [ csvTests; shortTextTests; goldenTests ]

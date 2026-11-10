@@ -41,9 +41,6 @@ open ToolUp.Platform.Compose
 //                                team-inventory notification rather
 //                                than introducing a new platform-
 //                                inventory channel)
-//   MarkIngestionFailed = rebuilt to target `_platform/knowledge/
-//                          index.json` instead of the caller's team
-//                          index
 //
 // `UserId` stays the actual caller's user-id so the
 // `IngestionStatusNotificationKey` flow publishes terminal-status
@@ -71,30 +68,12 @@ let private platformScope: StorageScope = {
 /// rebuild rewires scope-dependent closures so reads / writes target
 /// `_platform` even though the request's resolved scope is the caller's
 /// team / user scope.
-let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
-    let storage = baseDeps.Storage
-    let logger = baseDeps.Logger
-    let notifications = baseDeps.Notifications
-    let userId = baseDeps.UserId
-
-    let markIngestionFailed (docId: string) (fileName: string) (reason: string) = async {
-        let status = IngestionStatus.Failed reason
-
-        setStatus docId status
-
-        // Phase 959 — the guarded index writer (see `Api/Deps.fs`).
-        do! updateIndexStatus storage platformContainer docId status
-
-        do! publishTerminalStatus notifications logger docId fileName userId.Value status
-    }
-
-    {
-        baseDeps with
-            Scope = platformScope
-            VectorScope = VectorScope.Platform
-            PublishInventory = fun () -> async { return () }
-            MarkIngestionFailed = markIngestionFailed
-    }
+let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps = {
+    baseDeps with
+        Scope = platformScope
+        VectorScope = VectorScope.Platform
+        PublishInventory = fun () -> async { return () }
+}
 
 /// Resolve `IAuditLog` from DI for audit emission on Platform KB
 /// mutations. Returns `None` when the audit-log substrate isn't

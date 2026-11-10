@@ -1,52 +1,86 @@
 module ToolUp.Platform.Tests.AI.IngestionStatusStreamTests
 
+// ─── KB ingestion status as a typed stream ────────────────────────
+//
+// `ingestionStatusStream` is the push form of the `GetStatus` poll. These
+// cases pin the properties that make it a replacement for that poll rather
+// than a second way to be wrong:
+//
+//   * the first element is the document's PERSISTED status — its in-flight
+//     attempt's progress, else its index entry — so a consumer that arrives
+//     mid-ingest, on any replica, is told where it is;
+//   * every transition the attempt store publishes reaches the subscriber,
+//     ending on the terminal;
+//   * a document removed mid-ingest terminates the stream, instead of
+//     leaving the subscriber waiting for a transition that can never come;
+//   * disposing the stream unsubscribes, so an aborted connection leaks
+//     nothing.
+
 open System
 open System.Collections.Generic
 open System.Threading
 open Expecto
+open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.Infra
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerIngestionStatusStream
-open ToolUp.Platform.Jobs
-
-// ─── Phase 69c.tail D — KB ingestion status as a typed stream ─────
-//
-// The seam under test is the one Phase 69c recorded as missing: the KB
-// status cache had no change notification, so intermediate ingestion
-// progress was reachable only by polling `GetStatus` every 2 s. These
-// cases pin the four properties that make the stream a replacement for
-// that poll rather than a second way to be wrong:
-//
-//   * every transition written through the cache's write helpers reaches
-//     a subscriber, seeded with the status the cache already held — a
-//     consumer that arrives mid-ingest is told where it is;
-//   * `updateStatus` publishes the value the cache SETTLED on. The
-//     enqueue paths deliberately decline to overwrite a fresher status,
-//     and publishing the declined one would tell a subscriber the
-//     ingestion had gone BACKWARDS;
-//   * a document removed mid-ingest terminates the stream. The cache
-//     entry simply disappears, so without this the subscriber waits for
-//     a transition that can never come;
-//   * disposing the stream unsubscribes. This is why the bridge is
-//     `AsyncStream.fromSubscription` and not `fromCallback` — the latter
-//     holds no handle, so every aborted connection would leak a
-//     subscriber.
+open KnowledgeBase.ServerIngestionObserver
 
 // ─── Harness ─────────────────────────────────────────────────────
 
-/// Each case uses its own document id: the status cache is process-wide
-/// and the pack runs beside others that touch it.
+let private container = "team-stream-tests"
+
+let private silent =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+/// Each case uses its own document id and its own storage: the feed is
+/// process-wide and the pack runs beside others that publish to it.
 let private freshDocId () =
-    "69c-tail-d-" + Guid.NewGuid().ToString("N")
+    "stream-" + Guid.NewGuid().ToString("N")
 
-/// Open a subscription synchronously. `GetAsyncEnumerator` is what
-/// subscribes and seeds, so every write after this call is observed.
-let private openStream (docId: string) : IAsyncEnumerator<IngestionStatus> =
-    (ingestionStatusStream docId).GetAsyncEnumerator CancellationToken.None
+let private freshStorage () =
+    ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
-/// Read every element the stream has to give, refusing to hang: the
+/// Put `docId` in the index at `status`.
+let private seedIndex (storage: IBlobStorage) (docId: string) (status: IngestionStatus) =
+    upsertIndexEntry storage container {
+        Id = docId
+        FileName = "notes.txt"
+        FileType = "txt"
+        UploadedAt = DateTimeOffset.UtcNow
+        UploadedBy = "alice"
+        Status = status
+        SizeBytes = 10L
+        ChunkCount = 4
+        Source = UploadedFile
+        ContentHash = None
+        Version = 1
+        Tags = []
+    }
+    |> Async.RunSynchronously
+
+let private openStream (storage: IBlobStorage) (docId: string) : IAsyncEnumerator<IngestionStatus> =
+    (ingestionStatusStream storage container docId).GetAsyncEnumerator CancellationToken.None
+
+/// The next element, refusing to hang.
+let private next (enumerator: IAsyncEnumerator<IngestionStatus>) : IngestionStatus =
+    let moved = enumerator.MoveNextAsync().AsTask()
+
+    if not (moved.Wait(TimeSpan.FromSeconds 30.0)) || not moved.Result then
+        failwith "the ingestion-status stream yielded nothing within 30s"
+
+    enumerator.Current
+
+/// Read every element the stream has left to give, refusing to hang: the
 /// writes under test all end in a terminal status, so the enumerator
-/// must run out. One that does not is the defect, not a slow test.
+/// completes on its own.
 let private drain (enumerator: IAsyncEnumerator<IngestionStatus>) : IngestionStatus list =
     let work = task {
         let acc = ResizeArray<IngestionStatus>()
@@ -70,132 +104,123 @@ let private drain (enumerator: IAsyncEnumerator<IngestionStatus>) : IngestionSta
 let private dispose (enumerator: IAsyncEnumerator<IngestionStatus>) =
     enumerator.DisposeAsync().AsTask().GetAwaiter().GetResult()
 
-// ─── Cases ───────────────────────────────────────────────────────
-
 [<Tests>]
 let tests =
     testList "Phase 69c.tail D — KB ingestion status streaming" [
 
-        test "every transition reaches the subscriber, in order, ending on the terminal" {
+        test "the persisted status first, then every transition, ending on the terminal" {
+            let storage = freshStorage ()
             let docId = freshDocId ()
-            setStatus docId Queued
+            seedIndex storage docId Queued
 
-            let stream = openStream docId
-            setStatus docId ExtractingText
-            setStatus docId (Embedding(1, 3))
-            setStatus docId (Embedding(2, 3))
-            setStatus docId (Complete 3)
+            let stream = openStream storage docId
+            Expect.equal (next stream) Queued "the seed is the persisted status"
+
+            IngestionStatusFeed.publish docId ExtractingText
+            IngestionStatusFeed.publish docId (Embedding(1, 3))
+            IngestionStatusFeed.publish docId (Embedding(2, 3))
+            IngestionStatusFeed.publish docId (Complete 3)
 
             let seen = drain stream
             dispose stream
 
             Expect.equal
                 seen
-                [ Queued; ExtractingText; Embedding(1, 3); Embedding(2, 3); Complete 3 ]
-                "the seed first, then each transition, ending on the terminal"
-
-            clearStatus docId
+                [ ExtractingText; Embedding(1, 3); Embedding(2, 3); Complete 3 ]
+                "each transition, ending on the terminal"
         }
 
-        test "a document with no cached status yields no seed, only later transitions" {
+        test "a document not in the index yields no seed, only later transitions" {
+            let storage = freshStorage ()
             let docId = freshDocId ()
 
-            let stream = openStream docId
-            setStatus docId (Failed "nope")
+            let stream = openStream storage docId
+            IngestionStatusFeed.publish docId (Failed "nope")
 
             let seen = drain stream
             dispose stream
 
-            Expect.equal seen [ Failed "nope" ] "nothing is invented for a status the cache has never held"
-
-            clearStatus docId
+            Expect.equal seen [ Failed "nope" ] "nothing is invented for a document the store does not hold"
         }
 
         test "an already-terminal document yields exactly one element and completes" {
+            let storage = freshStorage ()
             let docId = freshDocId ()
-            setStatus docId (Complete 7)
+            seedIndex storage docId (Complete 7)
 
-            let stream = openStream docId
+            let stream = openStream storage docId
             let seen = drain stream
             dispose stream
 
             Expect.equal seen [ Complete 7 ] "the seed is terminal, so the stream ends on it"
-
-            clearStatus docId
         }
 
-        test "updateStatus publishes the value the cache settled on, never the declined one" {
+        test "an attempt in flight seeds from its persisted progress, which the index does not carry" {
+            let storage = freshStorage ()
             let docId = freshDocId ()
-            // The upload path's shape: a racing chunk callback has already
-            // advanced this document, so the enqueue's seed is declined.
-            setStatus docId (Embedding(2, 5))
+            seedIndex storage docId Queued
 
-            let stream = openStream docId
+            let attempts = KnowledgeAttemptStore(storage, None, silent)
+            attempts.Begin(container, docId, "attempt-1", 5, None) |> Async.RunSynchronously
 
-            updateStatus docId (Embedding(0, 5)) (function
-                | Queued -> Embedding(0, 5)
-                | other -> other)
+            for chunk in 0..1 do
+                (attempts :> IIngestionAttemptStore)
+                    .Advance(
+                        {
+                            Scope = container
+                            DocumentId = docId
+                            AttemptId = Some "attempt-1"
+                            OriginatingUser = None
+                            Report = ChunkReport.Indexed(sprintf "%s:chunk:%d" docId chunk)
+                        }
+                    )
+                |> Async.RunSynchronously
+                |> ignore
 
-            setStatus docId (Complete 5)
-
-            let seen = drain stream
+            let stream = openStream storage docId
+            Expect.equal (next stream) (Embedding(2, 5)) "the seed is the attempt's progress, read from storage"
             dispose stream
-
-            Expect.equal
-                seen
-                [ Embedding(2, 5); Embedding(2, 5); Complete 5 ]
-                "the declined write republishes the value that is true, not the one that was offered"
-
-            clearStatus docId
         }
 
         test "a document removed mid-ingest terminates the stream instead of stranding it" {
+            let storage = freshStorage ()
             let docId = freshDocId ()
-            setStatus docId (Embedding(1, 4))
+            seedIndex storage docId (Embedding(1, 4))
 
-            let stream = openStream docId
+            let stream = openStream storage docId
+            Expect.equal (next stream) (Embedding(1, 4)) "the seed"
             clearStatus docId
 
             let seen = drain stream
             dispose stream
 
             match seen with
-            | [ Embedding(1, 4); Failed reason ] ->
+            | [ Failed reason ] ->
                 Expect.isTrue (reason.Contains "removed") "the terminal says why nothing further is coming"
-            | other -> failwithf "expected the seed then a terminal failure, got %A" other
+            | other -> failwithf "expected a terminal failure, got %A" other
         }
 
         test "disposing the stream unsubscribes — an aborted consumer leaks nothing" {
+            let storage = freshStorage ()
             let docId = freshDocId ()
-            setStatus docId Queued
 
             let before = IngestionStatusFeed.count ()
-            let stream = openStream docId
+            let stream = openStream storage docId
             let during = IngestionStatusFeed.count ()
             dispose stream
             let after = IngestionStatusFeed.count ()
 
             Expect.equal during (before + 1) "enumerating subscribes exactly once"
             Expect.equal after before "disposal removes that subscription"
-
-            clearStatus docId
         }
 
-        test "a subscriber that throws does not fail the ingestion write that triggered it" {
+        test "a subscriber that throws does not fail the publisher" {
             let docId = freshDocId ()
 
             use _bad =
                 IngestionStatusFeed.subscribe docId (fun _ -> failwith "a badly-written observer")
 
-            // The write must complete and the cache must hold the value:
-            // a subscriber observes the ingestion path, it never
-            // participates in it.
-            setStatus docId (Complete 1)
-
-            match statusCache.TryGetValue docId with
-            | true, status -> Expect.equal status (Complete 1) "the write landed despite the throwing subscriber"
-            | _ -> failwith "the write was lost"
-
-            clearStatus docId
+            // A subscriber observes the ingestion path; it never participates.
+            IngestionStatusFeed.publish docId (Complete 1)
         }
     ]
