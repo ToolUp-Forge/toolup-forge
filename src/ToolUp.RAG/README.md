@@ -278,7 +278,7 @@ let rowChunks : string list = chunkSpreadsheet ChunkingConfig.tabular sheetData
 
 **Optional contextual-retrieval preamble (`ITextSummariser`):**
 
-`withContextualHeader : ITextSummariser option -> string -> string -> Async<string>` prepends an Anthropic-style "this chunk is from document X about Y" summary before the chunk text, when a summariser companion is registered. With `None` (the default), it's a no-op and ingestion behaviour is unchanged. Concrete `IAIProvider`-backed summariser companions are deferred — cost-conscious by design (one `IAIProvider` call per chunk).
+`ITextSummariser` is the seam for an Anthropic-style "this chunk is from document X about Y" summary before the chunk text. No forge path calls it, so ingestion is unchanged unless a consumer calls a summariser from its own ingestion. Concrete `IAIProvider`-backed summariser companions are deferred — cost-conscious by design (one `IAIProvider` call per chunk).
 
 ## Document-understanding interfaces (OCR, table extraction, image embedding)
 

@@ -549,28 +549,3 @@ let chunkSpreadsheetWithSpans (config: ChunkingConfig) (ctx: SpanContext option)
 /// preserved verbatim for every existing caller.
 let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
     chunkSpreadsheetWithSpans config None data |> List.map ChunkPiece.text
-
-// ─── Optional contextual header ───────────────────────────────────
-
-/// Optional: prepend a short contextual summary to each chunk via a
-/// summariser companion. Off by default — summarisation is a per-chunk
-/// AI call, expensive at ingestion time. When `summariser = None` the
-/// caller should not wrap chunks with this and pay nothing.
-///
-/// Pattern is "anthropic-contextual-retrieval": each chunk gets a 50-100
-/// token preamble describing its place in the document, which lifts
-/// retrieval recall on documents where chunks are otherwise indistinguishable
-/// (boilerplate-heavy contracts, repetitive financial tables). See
-/// `ITextSummariser` in core for the extension point.
-let withContextualHeader
-    (summariser: ToolUp.Platform.Infra.ITextSummariser.ITextSummariser option)
-    (documentContext: string)
-    (chunk: string)
-    : Async<string> =
-    async {
-        match summariser with
-        | None -> return chunk
-        | Some s ->
-            let! header = s.Summarise documentContext chunk
-            return String.concat "\n" [ header; chunk ]
-    }

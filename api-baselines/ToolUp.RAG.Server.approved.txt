@@ -18,7 +18,6 @@ ToolUp.RAG.Chunking.splitBySentence(System.String) : Microsoft.FSharp.Collection
 ToolUp.RAG.Chunking.splitBySentenceWithOffsets(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Int32, System.Int32]]
 ToolUp.RAG.Chunking.splitByTokens(ToolUp.RAG.Chunking+ChunkingConfig, System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.RAG.Chunking.splitByTokensWithSpans(ToolUp.RAG.Chunking+ChunkingConfig, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.RAG.Chunking+ChunkPiece]
-ToolUp.RAG.Chunking.withContextualHeader(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.ITextSummariser+ITextSummariser], System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.RAG.Chunking+ChunkPiece (class)
 ToolUp.RAG.Chunking+ChunkPiece..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan])
 ToolUp.RAG.Chunking+ChunkPiece.Span : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+SourceSpan] { get }
