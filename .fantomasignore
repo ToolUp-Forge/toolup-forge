@@ -1,53 +1,48 @@
-# Phase 620 — `VerifyDocSnippets` extracts every in-scope ```fsharp block
-# from the docs into `docs-snippets/generated/`. Those files are build
-# output reproducing a doc's text verbatim, so formatting them is both
-# meaningless and actively wrong: `dotnet fantomas --check .` would fail
-# on any repo where the target had been run, over source nobody wrote.
-docs-snippets/generated/
-**/docs-snippets/generated/
+# GENERATED from projections.json — do not edit. Add or change a row there, then
+# `dotnet run --project Build.fsproj -- Projections --render`.
+#
+# Fantomas reads this file rather than .gitignore. Every entry is source nobody
+# wrote: a projection held byte for byte to its renderer, or a generator's working
+# directory. Formatting one would break the comparison that holds it.
 
-# Phase 787 — the committed extractions under `proofs/oracle/custard/` are the F*
-# extractor's output, reproduced byte for byte by `proofs/check.ps1` and compared
-# against the committed copies (since Phase 957 one whole-program run of Custard's
-# F# backend writes every module, the support library and the project). Formatting
-# them would break that diff on every run, over source nobody wrote. Same class as
-# the generated doc snippets above. `proofs/oracle/fable/FStarCustard.fs` is DERIVED
-# from the generated support library by the same leg and byte-held the same way.
-proofs/oracle/custard/
-proofs/oracle/fable/FStarCustard.fs
-# Phase 801 — the platform's own decoders are the remoting generator's emission over every
-# API record ToolUp.Platform.Core declares, held byte-for-byte to it by
-# Remoting/PlatformDecodersGenerationTests. Same class as the AOT sample's generated files below.
+# the remoting generator's decoders over every API record Core declares (held by src/ToolUp.Platform.Tests/Remoting/PlatformDecodersGenerationTests.fs)
 src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs
-# Phase 841 — the argument side's twin: the generator's JSON emission over every API
-# record's ARGUMENT types, held byte-for-byte to it by Remoting/GeneratorFidelityTests (841.C).
-src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs
-# The response side: the generator's json-encoders emission over every platform API record's
-# RETURN types, held byte-for-byte to it by Remoting/PlatformJsonEncodersGenerationTests.
+
+# the remoting generator's json-encoders emission over every API record's return types (held by src/ToolUp.Platform.Tests/Remoting/PlatformJsonEncodersGenerationTests.fs)
 src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonEncoders.fs
-# Phase 853 - the client side: the generator's client-proxies emission over every platform API
-# record, and over the ReadCatalogApi test fixture, each held byte-for-byte to it by
-# Remoting/ClientProxyGenerationTests (853.C).
+
+# the remoting generator's JSON emission over every API record's argument types (held by src/ToolUp.Platform.Tests/Remoting/GeneratorFidelityTests.fs)
+src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs
+
+# the remoting generator's client-proxies emission over every platform API record (held by src/ToolUp.Platform.Tests/Remoting/ClientProxyGenerationTests.fs)
 src/ToolUp.Platform.Client/Client/Remoting/PlatformClientProxies.fs
+
+# the remoting generator's client-proxies emission over the ReadCatalogApi test fixture (held by src/ToolUp.Platform.Tests/Remoting/ClientProxyGenerationTests.fs)
 src/ToolUp.Platform.Tests/Remoting/ReadCatalogClientProxies.fs
-# The proof leg's working directories: the downloaded toolchain, F*'s
-# .checked cache, and the fresh extraction the byte-diff compares. All
-# gitignored, but Fantomas reads THIS file rather than .gitignore, so a
-# developer who has run the leg would otherwise fail dotnet fantomas
-# --check . on output nobody wrote.
-proofs/.fstar/
-proofs/.cache/
-proofs/.extract/
-# Phase 804 — the remoting generator's emitted source in the AOT sample. The
-# generator rewrites these after every build of HelloWorld.AOT.Contract and
-# holds them byte-identical to what it emits; formatting them would make the
-# next build re-dirty them, over source nobody wrote. Same class as the
-# oracle above.
+
+# MessageCatalog.english: the translation skeleton a consumer copies to author a second language (held by src/ToolUp.Platform.Tests/InProcess/LocalizationTests.fs)
+docs/platform/message-catalog-skeleton.fs
+
+# the F* extractor's F# output for every proved module, the support library and the project (held by proofs/check.ps1)
+proofs/oracle/custard/
+
+# derived from the extracted support library by the proof leg (held by proofs/check.ps1)
+proofs/oracle/fable/FStarCustard.fs
+
+# the remoting generator's emission, rewritten after every build of HelloWorld.AOT.Contract (held by samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj)
 samples/HelloWorld-AOT/HelloWorld.AOT/Generated/
 
-# Phase 767 — `docs/platform/message-catalog-skeleton.fs` is the translation
-# skeleton `LocalizationTests` renders from `MessageCatalog.english` and
-# byte-compares on every run (regenerate with
-# dev-scripts/generate-localization-skeleton.ps1). Formatting it would break
-# that comparison over source nobody wrote — same class as the two above.
-docs/platform/message-catalog-skeleton.fs
+# VerifyDocSnippets extracts every in-scope fsharp block here; it reproduces a doc's text verbatim
+docs-snippets/generated/
+
+# the same, under a worktree or a nested checkout
+**/docs-snippets/generated/
+
+# the proof leg's downloaded toolchain
+proofs/.fstar/
+
+# F*'s .checked cache
+proofs/.cache/
+
+# the fresh extraction the proof leg byte-diffs against proofs/oracle/custard/
+proofs/.extract/

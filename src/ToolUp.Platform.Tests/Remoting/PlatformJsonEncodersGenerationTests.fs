@@ -21,6 +21,7 @@
 module ToolUp.Platform.Tests.Remoting.PlatformJsonEncodersGenerationTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open Expecto
@@ -97,7 +98,7 @@ let tests =
             let expected = emission ()
             let path = committedPath ()
 
-            if Environment.GetEnvironmentVariable "TOOLUP_REGEN_PLATFORM_DECODERS" = "1" then
+            if Approve.admit "platform-decoders" then
                 File.WriteAllText(path, expected.Replace("\r\n", "\n"))
 
             let committed = File.ReadAllText path

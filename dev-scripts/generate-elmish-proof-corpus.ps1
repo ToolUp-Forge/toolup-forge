@@ -1,36 +1,7 @@
 #Requires -Version 7.0
-# Phase 788 — regenerate the Elmish proof corpus:
-#
-#   tests/elmish-proof-corpus/ring-cases.txt    generated push/pop sequences and
-#                                               the outputs the PROVED ring model
-#                                               produced for them
-#   tests/elmish-proof-corpus/diff-cases.txt    generated subscription inputs and
-#                                               the four lists (+ the keys `change`
-#                                               leaves active) the PROVED diff
-#                                               model produced for them
-#
-# Both are projections of the extracted models under proofs/oracle/ over the
-# seeded campaign in src/ToolUp.Platform.Tests/Client/ElmishProofDifferential.fs.
-# The .NET pack (ToolUp.Platform.Tests.Remoting, "Phase 788 - the proved Elmish runtime as
-# oracle") runs the models LIVE beside production and holds these files to the
-# model on every run; the Fable pack (ToolUp.AI.Client.Tests) replays them
-# against the transpiled runtime and, since Phase 850, also runs the ring
-# extraction live beside them (the corpus is then also the check that the two
-# hosts' Prims shims agree). This script drives the two golden-file tests in
-# regeneration mode: with TOOLUP_REGEN_ELMISH_PROOF_CORPUS=1 set they write their
-# artefact instead of comparing. Run it after changing a model, the generator
-# or the seed, then commit the updated corpus alongside that change.
-
-$ErrorActionPreference = "Stop"
-Set-Location $PSScriptRoot/..
-
-$env:TOOLUP_REGEN_ELMISH_PROOF_CORPUS = "1"
-try {
-    dotnet run --project src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj `
-        -- --filter-test-list "Phase 788"
-}
-finally {
-    Remove-Item Env:TOOLUP_REGEN_ELMISH_PROOF_CORPUS -ErrorAction SilentlyContinue
-}
-
-Write-Host "Regenerated tests/elmish-proof-corpus/ring-cases.txt and diff-cases.txt" -ForegroundColor Green
+# Retired: regenerating tests/elmish-proof-corpus/ is `dev-scripts/regen.ps1 elmish-proof-corpus`, which reads the
+# row from projections.json. This name forwards there until 0.43.0, the same window
+# the retired TOOLUP_REGEN_* switches are read for.
+Write-Host "generate-*.ps1 is retired: running dev-scripts/regen.ps1 elmish-proof-corpus" -ForegroundColor Yellow
+& "$PSScriptRoot/regen.ps1" elmish-proof-corpus
+exit $LASTEXITCODE

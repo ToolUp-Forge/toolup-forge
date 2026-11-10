@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.AuditEventRegistryTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open System.Text.RegularExpressions
@@ -143,13 +144,8 @@ let private auditEventReferencePath () =
 let private eventsDocPath () =
     Path.Combine(repoRoot (), "docs", "platform", "events.md")
 
-/// Write the reference instead of comparing it — the `TOOLUP_APPROVE_API`
-/// / `TOOLUP_REGEN_CONFIG_REFERENCE` idiom.
-let private regenAuditReference () =
-    match Environment.GetEnvironmentVariable "TOOLUP_REGEN_AUDIT_EVENT_REFERENCE" with
-    | null
-    | "" -> false
-    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+/// Write the reference instead of comparing it: `TOOLUP_APPROVE=audit-event-reference`.
+let private regenAuditReference () = Approve.admit "audit-event-reference"
 
 let private normaliseEol (s: string) = s.Replace("\r\n", "\n")
 

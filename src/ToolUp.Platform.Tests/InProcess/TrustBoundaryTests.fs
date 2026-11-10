@@ -38,8 +38,8 @@ let private repoPath (relative: string) =
 /// The page `renderMarkdown` generates.
 let private DocPath = "docs/platform/trust-boundaries.md"
 
-/// Set to `1` to rewrite the page from the list instead of comparing.
-let private RegenVariable = "TOOLUP_REGEN_TRUST_BOUNDARIES"
+/// The stem that rewrites the page from the list instead of comparing.
+let private RegenStem = "trust-boundaries"
 
 let private referencesOf (boundary: TrustBoundary) =
     boundary.BoundedBy
@@ -264,7 +264,7 @@ let private publicPage =
             let expected = TrustBoundaries.renderMarkdown ()
             let path = repoPath DocPath
 
-            if Environment.GetEnvironmentVariable RegenVariable = "1" then
+            if Approve.admit RegenStem then
                 File.WriteAllText(path, expected)
 
             Expect.isTrue (File.Exists path) $"'{DocPath}' exists"
@@ -272,7 +272,7 @@ let private publicPage =
             Expect.equal
                 (File.ReadAllText path)
                 expected
-                $"'{DocPath}' is stale: regenerate it with {RegenVariable}=1 and this list, never by hand"
+                $"'{DocPath}' is stale: regenerate it with TOOLUP_APPROVE={RegenStem} and this list, never by hand"
         }
 
         test "the page names every boundary and every not-claimed line" {

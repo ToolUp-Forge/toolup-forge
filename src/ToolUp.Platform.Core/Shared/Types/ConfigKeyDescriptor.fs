@@ -3264,7 +3264,7 @@ let keys: ConfigKey list = [
     {
         EnvVar = Names.approveApi
         Description =
-            "Test-time: rewrites every public-API approval baseline instead of comparing against them. Never set on a running deployment."
+            "Test-time, retired: the old spelling of TOOLUP_APPROVE=api, read until 0.43.0. Rewrites the public-API approval baselines it names instead of comparing against them. Never set on a running deployment."
         Kind = ConfigKeyKind.BoolKey(Direction.Protective, Some false)
         IsSecret = false
         Category = ToolingCategory
@@ -3273,8 +3273,17 @@ let keys: ConfigKey list = [
     {
         EnvVar = Names.regenConfigReference
         Description =
-            "Test-time: rewrites the generated configuration reference instead of comparing against the committed copy. Never set on a running deployment."
+            "Test-time, retired: the old spelling of TOOLUP_APPROVE=config-reference, read until 0.43.0. Rewrites the generated configuration reference instead of comparing against the committed copy. Never set on a running deployment."
         Kind = ConfigKeyKind.BoolKey(Direction.Permissive, Some false)
+        IsSecret = false
+        Category = ToolingCategory
+        Seal = SealPosture.Unsealed "read by build, test and analyzer tooling, never by a running server"
+    }
+    {
+        EnvVar = "TOOLUP_APPROVE"
+        Description =
+            "Test-time: the projections a test run regenerates instead of comparing, by stem (projections.json): `api`, `api:ToolUp.Platform.Core`, `composition,config-reference`, or `1` for every stem. Never set on a running deployment."
+        Kind = ConfigKeyKind.StringKey None
         IsSecret = false
         Category = ToolingCategory
         Seal = SealPosture.Unsealed "read by build, test and analyzer tooling, never by a running server"

@@ -4,6 +4,7 @@
 module ToolUp.Platform.Tests.InProcess.LocalizationTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open System.Text.RegularExpressions
@@ -596,11 +597,7 @@ module private CatalogSkeleton =
     let path () =
         Path.Combine(repoRoot (), "docs", "platform", "message-catalog-skeleton.fs")
 
-    let regen () =
-        match Environment.GetEnvironmentVariable "TOOLUP_REGEN_LOCALIZATION_SKELETON" with
-        | null
-        | "" -> false
-        | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+    let regen () = Approve.admit "localization-skeleton"
 
     /// An F# string literal for `text`, escaped so a message carrying a
     /// quote, a backslash or a line break round-trips through the compiler.

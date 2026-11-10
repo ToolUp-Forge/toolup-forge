@@ -93,6 +93,7 @@
 module ToolUp.Forge.ConformanceCoverage
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Text
 open System.Text.RegularExpressions
@@ -135,16 +136,11 @@ let apiBaselinesDir (root: string) = Path.Combine(root, "api-baselines")
 /// a `ConfigKeyDescriptor` row, and a config surface is a poor price for
 /// a synonym.
 let regenerateCommand =
-    "$env:TOOLUP_APPROVE_API = \"1\"; dotnet run --project Build.fsproj -- VerifyAll; $env:TOOLUP_APPROVE_API = $null"
-
-let private approveEnvVar = "TOOLUP_APPROVE_API"
+    "$env:TOOLUP_APPROVE = \"api\"; dotnet run --project src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj; $env:TOOLUP_APPROVE = $null"
 
 /// True when the caller has asked for baselines to be rewritten rather
-/// than checked.
-let approvalRequested () =
-    match Environment.GetEnvironmentVariable approveEnvVar with
-    | null -> false
-    | v -> v.Trim() <> "" && v.Trim() <> "0"
+/// than checked: the `api` stem of `TOOLUP_APPROVE`.
+let approvalRequested () = Approve.admit "api"
 
 // ─── Pure parsers ─────────────────────────────────────────────────────
 

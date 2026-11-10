@@ -158,6 +158,7 @@ let private apiKeys =
 let private platformEnv =
     env [
         "TOOLUP_FEDERATION_SPEC_DIR"
+        "TOOLUP_APPROVE"
         "TOOLUP_APPROVE_API"
         "TOOLUP_APPROVE_COMPOSITION"
         "TOOLUP_AUTH_MODE"
@@ -276,6 +277,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         ([ Input.Tree; Input.Git; Input.Docker ]
          @ env [
              "TOOLUP_MODEL_EXECUTION_CORPUS"
+             "TOOLUP_APPROVE"
              "TOOLUP_APPROVE_BRANDKIT"
              "TOOLUP_REGEN_ELMISH_PROOF_CORPUS"
              "TOOLUP_REGEN_LOCALIZATION_SKELETON"
@@ -312,7 +314,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     pack
         "Platform.PublicApi"
         "src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj"
-        ([ Input.Tree ] @ env [ "TOOLUP_APPROVE_API" ])
+        ([ Input.Tree ] @ env [ "TOOLUP_APPROVE"; "TOOLUP_APPROVE_API" ])
     |> seed (minutes 1.5)
     pack "Forms" "src/ToolUp.Forms.Tests/ToolUp.Forms.Tests.fsproj" [ Input.Tree ]
     pack "Scheduling" "src/ToolUp.Scheduling.Tests/ToolUp.Scheduling.Tests.fsproj" [ Input.Tree ]
@@ -326,7 +328,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     pack
         "Build"
         "src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj"
-        ([ Input.Tree; Input.Git ] @ env [ "TOOLUP_APPROVE_API" ])
+        ([ Input.Tree; Input.Git ] @ env [ "TOOLUP_APPROVE"; "TOOLUP_APPROVE_API" ])
     pack "RemotingAnalyzers" "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj" [ Input.Tree ]
     pack
         "Cli"
@@ -356,7 +358,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "DataSources"
         "src/ToolUp.DataSources.Tests/ToolUp.DataSources.Tests.fsproj"
         ([ Input.Tree; Input.Network ] @ dataSourcesEnv)
-    pack "OpenXml" "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj" [ Input.Tree ]
+    pack "OpenXml" "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj" ([ Input.Tree ] @ env [ "TOOLUP_APPROVE" ])
     pack "OpenXmlSpreadsheet" "src/ToolUp.OpenXml.Spreadsheet.Tests/ToolUp.OpenXml.Spreadsheet.Tests.fsproj" [
         Input.Tree
     ]
@@ -376,7 +378,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     pack
         "TriageCalibration"
         "tools/ToolUp.TriageCalibration.Tests/ToolUp.TriageCalibration.Tests.fsproj"
-        ([ Input.Tree ] @ env [ "TOOLUP_APPROVE_API" ])
+        ([ Input.Tree ] @ env [ "TOOLUP_APPROVE"; "TOOLUP_APPROVE_API" ])
     pack "Tabular" "src/ToolUp.Tabular.Tests/ToolUp.Tabular.Tests.fsproj" [ Input.Tree ]
     pack "Classification" "src/ToolUp.Platform.Classification.Tests/ToolUp.Platform.Classification.Tests.fsproj" [
         Input.Tree
@@ -804,6 +806,7 @@ let rowReads: (string * string list) list = [
         "composition-baselines/**"
         "dev-scripts/merge-baselines.ps1"
         "docs/**"
+        "projections.json"
         "samples/**"
         "spec/**"
     ]

@@ -417,7 +417,7 @@ records them.
 
 191 keys are sealed by value. 8 secrets are sealed by presence only (set or unset), so the credential is never written into the seal: `TOOLUP_ADMIN_TOKEN`, `TOOLUP_AZURE_STORAGE_CONNECTION_STRING`, `TOOLUP_GCS_CREDENTIALS_JSON`, `TOOLUP_MODULE_BINDING_ANCHORS`, `TOOLUP_REDIS_CONNECTION`, `TOOLUP_SECRETS_MASTER_KEY`, `TOOLUP_SMOKE_TOKEN`, `TOOLUP_SMTP_PASSWORD`.
 
-The 23 keys in the reference's Build & tooling section are not sealed: they are read by build, test and analyzer tooling, never by a running server. Nor are these, so changing one is not drift:
+The 24 keys in the reference's Build & tooling section are not sealed: they are read by build, test and analyzer tooling, never by a running server. Nor are these, so changing one is not drift:
 
 | Key | Why it is not sealed |
 |---|---|

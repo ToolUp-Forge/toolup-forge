@@ -16,6 +16,7 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\Approval.fs" Link="Contracts\Approval.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IHealthCheckContract.fs" Link="Contracts\IHealthCheckContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IConfigValidatorContract.fs" Link="Contracts\IConfigValidatorContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Graph\SubsetFloorCorpus.fs" Link="Graph\SubsetFloorCorpus.fs" />
