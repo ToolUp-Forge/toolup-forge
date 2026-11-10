@@ -70,7 +70,9 @@ let private project (model: Model) : UiStateReport =
     |> UiStateReport.withField "refreshCount" (string model.RefreshCount)
     |> UiStateReport.withAction "refresh" (not (System.String.IsNullOrWhiteSpace model.Filter))
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let dispatch = ctx.Dispatch
+
     let left =
         Html.div [
             Html.h2 [ prop.text "UI awareness sample" ]
@@ -96,7 +98,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
             )
         ]
 
-    left, right
+    PageContent.SplitPanel(left, right)
 
 /// Registers as a `DebugOnly` module — reference-only, like
 /// `ToolUp.AI.SampleClientTool`, never meant to ship in a production

@@ -8,12 +8,14 @@ open MODULE_NAMESPACE_ROOT.SharedTypes
 
 // ─── View ────────────────────────────────────────────────────────
 //
-// Single-page module: the view returns `(left, right)` and the shell
-// wraps it as a split panel. Multi-page modules chain `withPages`
+// Single-page module: the view takes the model and the shell's
+// `RenderContext` and returns a split panel. Multi-page modules chain `withPages`
 // instead — see the SDK's module documentation for the full spec
 // surface.
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let dispatch = ctx.Dispatch
+
     let left =
         Html.div [
             dataProp.testid "MODULE_ID_TOKEN-module"
@@ -37,7 +39,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
             ]
         ]
 
-    left, right
+    PageContent.SplitPanel(left, right)
 
 // ─── Module registration (client half) ───────────────────────────
 

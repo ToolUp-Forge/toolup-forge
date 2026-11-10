@@ -996,7 +996,7 @@ let create () : ErasedModule =
         Icon = ToolUp.Platform.Icons.usage
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.Observability"
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withGroup DatadogReadbackUI.ObservabilityGroup
     |> ToolUp.Platform.ClientModule.withArea ToolUp.Platform.ModuleArea.Administration
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly

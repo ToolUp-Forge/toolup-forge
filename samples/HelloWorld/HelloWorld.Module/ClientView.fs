@@ -8,12 +8,15 @@ open HelloWorld.Module.ClientModel
 
 // ─── View ────────────────────────────────────────────────────────
 //
-// Single-page module: the view returns a tuple `(left, right)` and
-// the shell wraps it as `SplitPanel(left, right)`. Multi-page
+// Single-page module: the view takes the model and the shell's
+// `RenderContext` (dispatch, the resolved message catalog, the locale)
+// and returns its page's `PageContent`. Multi-page
 // modules call `withPages` instead — see `docs/platform/modules.md`
 // for the multi-page pattern and the full module-spec surface.
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let dispatch = ctx.Dispatch
+
 #if DEBUG
     // Phase 12c verification — throwing here happens DURING render, which
     // is exactly the lifecycle React error boundaries catch. Throwing in
@@ -81,7 +84,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
             ]
         ]
 
-    left, right
+    PageContent.SplitPanel(left, right)
 
 // ─── Module registration ─────────────────────────────────────────
 //

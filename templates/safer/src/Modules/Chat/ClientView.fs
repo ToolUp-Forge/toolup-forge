@@ -76,7 +76,9 @@ let private formatTime (t: DateTimeOffset) =
     let local = t.ToLocalTime()
     local.ToString("HH:mm:ss")
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let dispatch = ctx.Dispatch
+
     // Boot-time effect: start the polling ticker once, on first render.
     // `React.useEffectOnce` is the canonical "mount-only" hook.
     React.useEffectOnce (fun () -> pollingTicker dispatch)
@@ -143,7 +145,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
             ]
         ]
 
-    left, right
+    PageContent.SplitPanel(left, right)
 
 let register () : ErasedModule =
     ClientModule.create {

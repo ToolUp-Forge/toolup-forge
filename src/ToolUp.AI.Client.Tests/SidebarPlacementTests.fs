@@ -249,6 +249,7 @@ let tests =
             let shape (placement: SidebarPlacement option) =
                 shapeOf (
                     buildSections
+                        ToolUp.Platform.MessageCatalog.english.Sidebar
                         [
                             railRow "Sales" (Some "Analytics") placement
                             railRow "Scratch" None placement
@@ -447,6 +448,7 @@ let tests =
 
             let consumerSections =
                 buildSections
+                    ToolUp.Platform.MessageCatalog.english.Sidebar
                     [
                         undeclared "Sales" (Some "Analytics")
                         railRow "Settings" None (Some TrailingSlot)

@@ -203,8 +203,8 @@ let private composition (counters: Counters) =
                 createElement (brandingProbe, null)
                 createElement (tilesProbe, null)
                 createElement (catalogProbe, null)
-            ],
-            Html.none)
+            ]
+            |> PageContent.FullWidth)
         |> ClientModule.withId ModuleId
         // Rendered as a row in the narrow rail (see `RenderScope`).
         |> ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
@@ -217,7 +217,7 @@ let private composition (counters: Counters) =
             Name = "Composer other"
             Icon = Html.none
         }
-        |> ClientModule.withView (fun (_: ProbeModel) _ -> Html.div [ prop.id "composer-other" ], Html.none)
+        |> ClientModule.withView (fun (_: ProbeModel) _ -> PageContent.FullWidth(Html.div [ prop.id "composer-other" ]))
         |> ClientModule.withId OtherModuleId
         |> ClientModule.register
 

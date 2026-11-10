@@ -75,9 +75,11 @@ module ClientBoundHostView =
         (view: 'Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> HostBindingSources -> ReactElement)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
-        ClientModule.withFullWidthView
-            (fun model dispatch ->
-                view model dispatch (ClientHostCapabilities.create dispatch) (projection.Project model))
+        ClientModule.withView
+            (fun model ctx ->
+                PageContent.FullWidth(
+                    view model ctx.Dispatch (ClientHostCapabilities.create ctx.Dispatch) (projection.Project model)
+                ))
             m
 
     // ─── Phase 267 — projection-bound multi-region hosting ─────────────
@@ -110,8 +112,10 @@ module ClientBoundHostView =
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         ClientModule.withView
-            (fun model dispatch ->
-                view model dispatch (ClientHostCapabilities.create dispatch) (projection.Project model))
+            (fun model ctx ->
+                PageContent.SplitPanel(
+                    view model ctx.Dispatch (ClientHostCapabilities.create ctx.Dispatch) (projection.Project model)
+                ))
             m
 
     /// Multi-page host (`ClientHostView.withElementPages`) whose every page
@@ -128,8 +132,8 @@ module ClientBoundHostView =
         pageViews
         |> List.map (fun (page, view) ->
             page,
-            (fun model dispatch ->
-                view model dispatch (ClientHostCapabilities.create dispatch) (projection.Project model)))
+            (fun model (ctx: RenderContext<'Msg>) ->
+                view model ctx.Dispatch (ClientHostCapabilities.create ctx.Dispatch) (projection.Project model)))
         |> fun mapped -> ClientModule.withPages mapped m
 
 // ─── Phase 299 — owning ComponentId on the hosting seam (identity bridge) ─
@@ -216,7 +220,14 @@ module ClientOwnedHostView =
                 -> ReactElement)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
-        ClientModule.withFullWidthView
-            (fun model dispatch ->
-                view model dispatch (ClientHostCapabilities.create dispatch) (projection.Project model) ownership)
+        ClientModule.withView
+            (fun model ctx ->
+                PageContent.FullWidth(
+                    view
+                        model
+                        ctx.Dispatch
+                        (ClientHostCapabilities.create ctx.Dispatch)
+                        (projection.Project model)
+                        ownership
+                ))
             m

@@ -1203,7 +1203,8 @@ let create (config: ModuleLabel option) (publicUtility: PublicUtilityConfig) : E
     }
     |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView (viewWith publicUtility)
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx ->
+        PageContent.FullWidth(viewWith publicUtility model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

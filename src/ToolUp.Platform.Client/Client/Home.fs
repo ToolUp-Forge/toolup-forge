@@ -459,5 +459,5 @@ let create (recents: bool) (config: ModuleLabel option) : ErasedModule =
     // here, at the construction site, instead of being a consequence of
     // the sidebar's bucketing plus a hardcoded id list.
     |> ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.register

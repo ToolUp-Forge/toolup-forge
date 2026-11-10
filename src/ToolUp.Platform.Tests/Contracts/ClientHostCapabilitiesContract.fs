@@ -397,8 +397,8 @@ let private boundaryTests =
 
             Expect.stringContains
                 text
-                "ClientHostCapabilities.create dispatch"
-                "withElementView constructs the bag from the view's own dispatch"
+                "ClientHostCapabilities.create ctx.Dispatch"
+                "withElementView constructs the bag from the render context's dispatch"
     ]
 
 // ─── Aggregate ────────────────────────────────────────────────────────

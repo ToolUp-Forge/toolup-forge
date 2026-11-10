@@ -241,7 +241,7 @@ let create () : ErasedModule =
     // `buildSections` used to carry: this landing shares the leading
     // always-visible section with the product one, and says so itself.
     |> ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withArea ModuleArea.Administration
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

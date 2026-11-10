@@ -695,7 +695,7 @@ let create (config: ModuleLabel option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     // Phase 1112 — ingesting data is not team administration. The module
     // sits with the SDK's data managers ("Data Management", the group
     // `FileManagerUI` and `MappingDataManagerUI` default to) rather than

@@ -26,7 +26,9 @@ let private resultView (result: UploadResult) =
             ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let dispatch = ctx.Dispatch
+
     let left =
         Html.div [
             prop.children [
@@ -67,7 +69,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
             ]
         ]
 
-    left, right
+    PageContent.SplitPanel(left, right)
 
 /// The erased module. The composition root (Client.fs) fills the shell's
 /// data-manager slot with it, so it is the deployment's data manager:

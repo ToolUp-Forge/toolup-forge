@@ -33,7 +33,7 @@ module private Landing =
     let init () : Model * Cmd<Msg> = (), Cmd.none
     let update (_: Msg) (m: Model) : Model * Cmd<Msg> = m, Cmd.none
 
-    let view (_: Model) (_: Msg -> unit) : ReactElement * ReactElement =
+    let view (_: Model) (_: RenderContext<Msg>) : PageContent =
         let left =
             Html.div [
                 prop.children [
@@ -45,7 +45,7 @@ module private Landing =
             ]
 
         let right = Html.div []
-        left, right
+        PageContent.SplitPanel(left, right)
 
     let register () : ErasedModule =
         ClientModule.create {
@@ -67,7 +67,7 @@ module private TeamDashboard =
     let init () : Model * Cmd<Msg> = (), Cmd.none
     let update (_: Msg) (m: Model) : Model * Cmd<Msg> = m, Cmd.none
 
-    let view (_: Model) (_: Msg -> unit) : ReactElement * ReactElement =
+    let view (_: Model) (_: RenderContext<Msg>) : PageContent =
         let left =
             Html.div [
                 prop.children [
@@ -79,7 +79,7 @@ module private TeamDashboard =
             ]
 
         let right = Html.div []
-        left, right
+        PageContent.SplitPanel(left, right)
 
     let register () : ErasedModule =
         ClientModule.create {
@@ -101,7 +101,7 @@ module private SharePortal =
     let init () : Model * Cmd<Msg> = (), Cmd.none
     let update (_: Msg) (m: Model) : Model * Cmd<Msg> = m, Cmd.none
 
-    let view (_: Model) (_: Msg -> unit) : ReactElement * ReactElement =
+    let view (_: Model) (_: RenderContext<Msg>) : PageContent =
         let left =
             Html.div [
                 prop.children [
@@ -114,7 +114,7 @@ module private SharePortal =
             ]
 
         let right = Html.div []
-        left, right
+        PageContent.SplitPanel(left, right)
 
     let register () : ErasedModule =
         ClientModule.create {
@@ -148,7 +148,9 @@ module private Notifier =
         // the ping through the shell, never through a direct reference.
         | Ping -> { m with Sent = m.Sent + 1 }, ModuleEvents.publish "mixedmode/ping" $"ping #{m.Sent + 1}"
 
-    let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+    let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+        let dispatch = ctx.Dispatch
+
         let left =
             Html.div [
                 prop.children [
@@ -159,7 +161,7 @@ module private Notifier =
                 ]
             ]
 
-        left, Html.div []
+        PageContent.SplitPanel(left, Html.div [])
 
     let register () : ErasedModule =
         ClientModule.create {
@@ -195,7 +197,7 @@ module private Listener =
             },
             Cmd.none
 
-    let view (model: Model) (_: Msg -> unit) : ReactElement * ReactElement =
+    let view (model: Model) (_: RenderContext<Msg>) : PageContent =
         let left =
             Html.div [
                 prop.children [
@@ -206,7 +208,7 @@ module private Listener =
                 ]
             ]
 
-        left, Html.div []
+        PageContent.SplitPanel(left, Html.div [])
 
     let register () : ErasedModule =
         ClientModule.create {

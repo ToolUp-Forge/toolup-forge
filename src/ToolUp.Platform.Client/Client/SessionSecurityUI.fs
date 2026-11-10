@@ -446,6 +446,6 @@ let create (config: ModuleLabel option) : ErasedModule =
     }
     |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

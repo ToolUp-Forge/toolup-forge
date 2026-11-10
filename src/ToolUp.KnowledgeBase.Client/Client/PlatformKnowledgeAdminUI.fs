@@ -324,7 +324,7 @@ let register () : ToolUp.Platform.ErasedModule =
         Icon = ToolUp.KnowledgeBase.Icons.knowledge
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformKnowledgeAdmin"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

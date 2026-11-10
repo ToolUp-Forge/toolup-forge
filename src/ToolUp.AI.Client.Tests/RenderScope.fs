@@ -162,7 +162,7 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
         }
         |> ClientModule.withView (fun (m: ScopeModel) _ ->
             moduleRenders <- moduleRenders + 1
-            Html.div [ prop.id "scope-module"; prop.text (sprintf "count %d" m.Count) ], Html.none)
+            PageContent.FullWidth(Html.div [ prop.id "scope-module"; prop.text (sprintf "count %d" m.Count) ]))
         |> ClientModule.withId ModuleId
         // Phase 883 — the counted row must render in the narrow (at-rest)
         // rail, where an undeclared module's `_other` section collapses to
@@ -180,7 +180,7 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
             Name = "Scope other"
             Icon = Html.none
         }
-        |> ClientModule.withView (fun (_: ScopeModel) _ -> Html.div [ prop.id "scope-other" ], Html.none)
+        |> ClientModule.withView (fun (_: ScopeModel) _ -> PageContent.FullWidth(Html.div [ prop.id "scope-other" ]))
         |> ClientModule.withId OtherModuleId
         |> ClientModule.register
 

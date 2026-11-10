@@ -34,7 +34,7 @@ let private appModule (id: string) (name: string) : ErasedModule =
         Name = name
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId id
     |> ClientModule.register
 

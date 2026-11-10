@@ -197,5 +197,5 @@ let create (cfg: NoActiveTeamLandingConfig) : ErasedModule =
     |> ClientModule.withContextInit init
     |> ClientModule.withGroup cfg.Label
     |> ClientModule.withVisibility (Visibility.visibleTo [ UserKind ])
-    |> ClientModule.withFullWidthView (landingView cfg)
+    |> ClientModule.withView (fun model ctx -> PageContent.FullWidth(landingView cfg model ctx.Dispatch))
     |> ClientModule.register

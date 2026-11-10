@@ -469,7 +469,8 @@ let private page (panel: InspectorPanel) (render: CompositionInspectorMessages -
     }
 
     config,
-    (fun (model: Model) (dispatch: Msg -> unit) -> PageContent.FullWidth(InspectorPage panel model dispatch render))
+    (fun (model: Model) (ctx: RenderContext<Msg>) ->
+        PageContent.FullWidth(InspectorPage panel model ctx.Dispatch render))
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot

@@ -464,7 +464,7 @@ let create (config: ModuleLabel option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withGroup "Settings"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

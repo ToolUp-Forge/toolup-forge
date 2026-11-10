@@ -1031,7 +1031,7 @@ let create (branding: AIAssistantClientBranding option) : ErasedModule =
         Icon = icon
     }
     |> ToolUp.Platform.ClientModule.withId "_ai.AIAssistant"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
     // Declared "AI" group so the assistant lands in a positionable
     // section between the app's work groups and the Admin block —
     // ungrouped (`_other`) would force it to the very bottom of the

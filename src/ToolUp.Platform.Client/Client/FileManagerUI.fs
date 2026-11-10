@@ -760,7 +760,7 @@ let create (displays: DataTypeDisplay list) (config: DataManagerConfig) : Erased
     }
     |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (view displays)
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view displays model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
     |> ToolUp.Platform.ClientModule.withGroup group
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

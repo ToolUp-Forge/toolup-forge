@@ -123,11 +123,11 @@ let private singlePage (id: string) (inits: ResizeArray<string>) =
         Name = id
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId id
     |> ClientModule.register
 
-let private page (route: string) : PageConfig * (int -> (unit -> unit) -> PageContent) =
+let private page (route: string) : PageConfig * (int -> RenderContext<unit> -> PageContent) =
     {
         Route = route
         Title = route
@@ -156,7 +156,7 @@ let private adminOnly (id: string) (inits: ResizeArray<string>) =
         Name = id
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId id
     |> ClientModule.withNavRole NavRole.PlatformAdminOnly
     |> ClientModule.register

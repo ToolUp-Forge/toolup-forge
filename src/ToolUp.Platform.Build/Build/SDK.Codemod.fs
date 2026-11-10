@@ -120,6 +120,11 @@ type CodemodMigration =
     /// permission write chain built over the principal, one `LifecycleRun`
     /// with three entry points, and the session file stores as a service.
     | OneResolverOneGate
+    /// A module's view is `'Model -> RenderContext<'Msg> -> PageContent`
+    /// (`withFullWidthView` and the tuple view are gone), the toolkit's
+    /// formatters take the caller's locale, and `Layout.AppShell` is the
+    /// one shell entry, over an `AppShellProps` record.
+    | OneViewContract
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -164,6 +169,8 @@ module CodemodMigration =
             "docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md"
         | CodemodMigration.OneResolverOneGate ->
             "docs/migrations/1063-redesign-c-one-resolver-teamauthority-lifecyclerun-sessionfilestores.md"
+        | CodemodMigration.OneViewContract ->
+            "docs/migrations/1075-redesign-e-one-view-contract-toolkit-locale-and-appshell.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -198,6 +205,7 @@ module CodemodMigration =
         | CodemodMigration.IngestionAttempt -> "Phase 1085"
         | CodemodMigration.ClientConfigByConcern -> "Phase 1074"
         | CodemodMigration.OneResolverOneGate -> "Phase 1063"
+        | CodemodMigration.OneViewContract -> "Phase 1075"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1287,6 +1295,36 @@ module Codemod =
             @"\bIStorageScopeResolver\b"
             "ISubjectResolver"
             "`IStorageScopeResolver` → `ISubjectResolver` (derive the storage scope from the resolved subject with `StorageScopeDerivation.tryFromSubject`, or `SubjectScope.resolve`)"
+        // A view takes the shell's `RenderContext` and returns `PageContent`.
+        rewrite
+            "1075-full-width-view"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bwithFullWidthView\s+([A-Za-z_][\w']*)\s*$"
+            "withView (fun model ctx -> PageContent.FullWidth($1 model ctx.Dispatch))"
+            "`withFullWidthView view` → `withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))`"
+        rewrite
+            "1075-split-panel-view"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bClientModule\.withView\s+([A-Za-z_][\w']*)\s*$"
+            "ClientModule.withView (fun model ctx -> PageContent.SplitPanel($1 model ctx.Dispatch))"
+            "`ClientModule.withView view` (a `(left, right)` view) → `ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))`"
+        // The localised twins take the plain names.
+        rewrite
+            "1075-build-sections-with"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bbuildSectionsWith\b"
+            "buildSections"
+            "`Sidebar.buildSectionsWith messages` → `Sidebar.buildSections messages` (the English `buildSections` is gone)"
+        rewrite
+            "1075-banner-with"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bBootDegradation\.bannerWith\b"
+            "BootDegradation.banner"
+            "`BootDegradation.bannerWith messages` → `BootDegradation.banner messages` (the English `banner` is gone)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -2054,6 +2092,31 @@ module Codemod =
             CodemodFileClass.Source
             @"\b(?:GrantPolicyPermissionStore|DualControlPermissionStore|GrantNotificationObserver)\s*\("
             "the decorators take the caller's `AccessContext` in place of an actor id or a `unit -> string option` closure; a handler wraps its writes once with `PermissionWrites.asPrincipal principal writes` (the registered `PermissionWrites`), which builds grant policy outside dual control"
+        // Phase 1075 — the view contract, where the view is written inline.
+        review
+            "1075-view-lambda"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\b(?:withView|withFullWidthView)\s*\(\s*fun\b|\bwithPages\b"
+            "if this view is not yet `'Model -> RenderContext<'Msg> -> PageContent`: it takes `model ctx`, dispatches with `ctx.Dispatch`, reads strings from `ctx.Messages`, and returns a `PageContent` — a `(left, right)` pair is `PageContent.SplitPanel(left, right)`, a single pane `PageContent.FullWidth body`"
+        review
+            "1075-use-messages"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bMessageCatalogProvider\.useMessages\s*\(\s*\)"
+            "in a module view, read the resolved catalog from `ctx.Messages` (and the locale from `ctx.Locale`): a view needs no `[<ReactComponent>]` hook site to reach it"
+        review
+            "1075-toolkit-locale"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bOutputFormatting\.(?:formatCurrency|formatDecimal|formatInt|fallbackLocale)\b|\bInput\.(?:currency|integerInput)\b"
+            "the toolkit takes the caller's locale: `OutputFormatting.formatDecimal locale value`, `formatInt locale value`, `formatCurrency locale currencyCode value`, `Input.currency locale …`, `Input.integerInput locale …` — a view passes `ctx.Locale`; `fallbackLocale` is gone"
+        review
+            "1075-app-shell"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bLayout\.(?:AppShellWith|AppShell|userButton)\b"
+            "`Layout.AppShell` takes one `AppShellProps` record — `{ Sidebar = sidebarProps; Content = content; SidePanel = …; HeaderAction = …; IdentityAction = Layout.headerIdentityAction (); InputsWidth = … }`; the positional form and `AppShellWith` are gone, and `Layout.userButton` is the `IdentityAction` slot"
     ]
 
 
@@ -3283,6 +3346,7 @@ module Codemod =
             CodemodMigration.IngestionAttempt
             CodemodMigration.ClientConfigByConcern
             CodemodMigration.OneResolverOneGate
+            CodemodMigration.OneViewContract
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

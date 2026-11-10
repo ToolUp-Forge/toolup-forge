@@ -2560,8 +2560,7 @@ module Client =
     /// the Phase 852 store-subscribed host below).
     let private moduleBoundary
         (config: ClientConfig)
-        (shellMsgs: ShellMessages)
-        (boundaryMsgs: ModuleBoundaryMessages)
+        (catalog: MessageCatalog)
         (moduleImpl: ErasedModule)
         (moduleId: string)
         (pageRoute: string option)
@@ -2570,26 +2569,28 @@ module Client =
         (currentState: obj)
         : ReactElement =
         let dispatch = dispatchers.Dispatch
-        let dispatchMsg = dispatchers.ForModule moduleId
+
+        // The view's context, built once per render from the memoised
+        // catalog: the view reads its strings and locale from here rather
+        // than from a hook site of its own.
+        let ctx = RenderContext.create catalog (dispatchers.ForModule moduleId)
 
         let renderInner () : PageContent =
             match moduleImpl.PageViews, pageRoute with
             | Some map, Some route when map.ContainsKey route ->
                 let pageView = map[route]
-                pageView currentState dispatchMsg
+                pageView currentState ctx
             | _ ->
                 match moduleImpl.View with
-                | Some v ->
-                    let left, right = v currentState dispatchMsg
-                    SplitPanel(left, right)
+                | Some v -> v currentState ctx
                 | None ->
                     // `register` rejects modules with neither View nor PageViews,
                     // so this branch only fires when a multi-page module's
                     // ActivePageRoute doesn't match any registered PageViews entry.
-                    SplitPanel(Html.div (shellMsgs.NoViewForRoute(defaultArg pageRoute "")), Html.div "")
+                    FullWidth(Html.div (catalog.Shell.NoViewForRoute(defaultArg pageRoute "")))
 
         Components.ModuleBoundary.wrapWith
-            boundaryMsgs
+            catalog.ModuleBoundary
             moduleId
             resetKey
             config.Composition.OnError
@@ -2670,13 +2671,10 @@ module Client =
     type internal ModuleHostProps = {
         Store: ShellStore
         Config: ClientConfig
-        // The two catalog sections the host reads, not the catalog: the
-        // resolved catalog is a fresh record per chrome render
-        // (`MessageCatalog.forLocale` stamps the locale), while its
-        // sections are shared with the built-in catalog, so passing the
-        // sections keeps the host's memo holding across chrome renders.
-        ShellMessages: ShellMessages
-        BoundaryMessages: ModuleBoundaryMessages
+        // The resolved catalog: the same object while the locale and its
+        // override are unchanged (`resolveCatalog`'s memo), so the host's
+        // memo holds across chrome renders.
+        Catalog: MessageCatalog
         Module: ErasedModule
         ModuleId: string
         PageRoute: string option
@@ -2708,8 +2706,7 @@ module Client =
 
             moduleBoundary
                 p.Config
-                p.ShellMessages
-                p.BoundaryMessages
+                p.Catalog
                 p.Module
                 p.ModuleId
                 p.PageRoute
@@ -2725,8 +2722,7 @@ module Client =
 
         obj.ReferenceEquals(p.Store.Source, n.Store.Source)
         && obj.ReferenceEquals(p.Config, n.Config)
-        && obj.ReferenceEquals(p.ShellMessages, n.ShellMessages)
-        && obj.ReferenceEquals(p.BoundaryMessages, n.BoundaryMessages)
+        && obj.ReferenceEquals(p.Catalog, n.Catalog)
         && obj.ReferenceEquals(p.Module, n.Module)
         && obj.ReferenceEquals(p.ModuleId, n.ModuleId)
         && obj.ReferenceEquals(p.PageRoute, n.PageRoute)
@@ -2769,13 +2765,11 @@ module Client =
 
         // Select the page content for the active module. Multi-page
         // modules (`PageViews = Some map`) dispatch on the active
-        // `PageConfig.Route`; their views return `PageContent` directly.
-        // Single-page modules fall through the legacy tuple path — the
-        // shell wraps their `(left, right)` return in `SplitPanel` so
-        // every existing module renders byte-identically.
+        // `PageConfig.Route`; single-page modules render their `View`.
+        // Both return `PageContent`.
         // Phase 12c — wrap the active module's view in a per-module React
-        // error boundary. The view-function call (`pageView state dispatch`
-        // / `v state dispatch`) lives inside the `renderInner` thunk and is
+        // error boundary. The view-function call (`pageView state ctx`
+        // / `v state ctx`) lives inside the `renderInner` thunk and is
         // invoked by the boundary's child host component. Sync F# exceptions
         // during the call AND React render-time exceptions in the produced
         // tree both bubble into the boundary's `componentDidCatch`. The
@@ -2858,8 +2852,7 @@ module Client =
                         let props: ModuleHostProps = {
                             Store = store
                             Config = config
-                            ShellMessages = resolvedCatalog.Shell
-                            BoundaryMessages = resolvedCatalog.ModuleBoundary
+                            Catalog = resolvedCatalog
                             Module = moduleImpl
                             ModuleId = model.ActiveModuleId
                             PageRoute = model.ActivePageRoute
@@ -2875,8 +2868,7 @@ module Client =
                             Custom(
                                 moduleBoundary
                                     config
-                                    resolvedCatalog.Shell
-                                    resolvedCatalog.ModuleBoundary
+                                    resolvedCatalog
                                     moduleImpl
                                     model.ActiveModuleId
                                     model.ActivePageRoute
@@ -2884,7 +2876,7 @@ module Client =
                                     dispatchers
                                     host.State
                             )
-                | None -> SplitPanel(Html.div shellMsgs.ModuleNotFound, Html.div "")
+                | None -> FullWidth(Html.div shellMsgs.ModuleNotFound)
 
         // Composite sidebar Id for the active-border highlight so that
         // the shell matches the sidebar entry emitted for the active

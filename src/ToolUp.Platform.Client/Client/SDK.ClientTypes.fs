@@ -123,21 +123,16 @@ type ModuleAvailability =
 
 // ─── Page content shapes ──────────────────────────────────────────
 
-/// Rendering shape for a page's content area. Returned by a module's
-/// per-page view function (`withPages`) so each page picks its own
-/// layout format. The shell's `Layout.AppShell` branches on the case
-/// and lays the content out accordingly.
+/// Rendering shape for a page's content area — what every module view
+/// returns, so each page picks its own layout format. The shell's
+/// `Layout.AppShell` branches on the case and lays the content out
+/// accordingly.
 ///
 /// The side panel slot (right-fixed — today used for the AI assistant)
 /// and the page header are orthogonal to every case and rendered by
 /// the shell around the returned content.
-///
-/// Legacy single-page modules still return `ReactElement * ReactElement`
-/// from their `View` function; the shell adapts that tuple to
-/// `SplitPanel(l, r)` automatically, so existing modules need no changes.
 type PageContent =
     /// Narrow left control pane + wide right output pane, side by side.
-    /// Default shape; matches the current single-tuple contract.
     | SplitPanel of left: ReactElement * right: ReactElement
     /// Vertical stack of sections rendered top-down with a consistent
     /// gutter. Suits pages that read as one logical flow (Dataset
@@ -154,6 +149,38 @@ type PageContent =
     /// the shell renders it verbatim inside the main content area.
     /// Use sparingly — bypasses shell-provided gutters and styling.
     | Custom of ReactElement
+
+/// What the shell hands a module's view on every render: the module's
+/// `Dispatch`, the catalog the shell resolved for the session, and its
+/// locale. The shell builds it once per render from the same memoised
+/// catalog the reducers read through `ClientModuleContext.Messages`, so a
+/// view reads its strings from `ctx.Messages` and formats numbers with
+/// `ctx.Locale` without a React hook site of its own.
+type RenderContext<'Msg> = {
+    /// Sends a message to the module's `update`.
+    Dispatch: 'Msg -> unit
+    /// The resolved message catalog.
+    Messages: MessageCatalog
+    /// The resolved locale (`Messages.Locale`), for the toolkit's formatters.
+    Locale: string
+}
+
+/// Building and narrowing a `RenderContext`.
+module RenderContext =
+    /// A context over `messages` dispatching through `dispatch`.
+    let create (messages: MessageCatalog) (dispatch: 'Msg -> unit) : RenderContext<'Msg> = {
+        Dispatch = dispatch
+        Messages = messages
+        Locale = messages.Locale
+    }
+
+    /// The same context for a sub-view whose messages `wrap` lifts into
+    /// this one's (the `Cmd.map` of a view).
+    let map (wrap: 'Inner -> 'Msg) (ctx: RenderContext<'Msg>) : RenderContext<'Inner> = {
+        Dispatch = wrap >> ctx.Dispatch
+        Messages = ctx.Messages
+        Locale = ctx.Locale
+    }
 
 // ─── Module definition ────────────────────────────────────────────
 
@@ -290,15 +317,13 @@ type ErasedModule = {
     /// `None` for multi-page modules (which use `PageViews` instead).
     /// At least one of `View` or `PageViews` must be set; `register`
     /// throws at construction if both are `None`.
-    View: (obj -> (obj -> unit) -> ReactElement * ReactElement) option
-    /// Per-page views, keyed by `PageConfig.Route`. `None` → legacy
-    /// single-page; the shell uses `View` for every page and wraps its
-    /// returned tuple into `SplitPanel(l, r)`. `Some map` → multi-page;
-    /// the shell looks up the active page's route and dispatches to the
-    /// mapped view, which returns a `PageContent` case directly.
-    /// `Init` / `Update` still fire once per module — all pages share
-    /// the same `Model`.
-    PageViews: Map<string, obj -> (obj -> unit) -> PageContent> option
+    View: (obj -> RenderContext<obj> -> PageContent) option
+    /// Per-page views, keyed by `PageConfig.Route`. `None` → single-page;
+    /// the shell uses `View`. `Some map` → multi-page; the shell looks up
+    /// the active page's route and renders the mapped view. `Init` /
+    /// `Update` still fire once per module — all pages share the same
+    /// `Model`.
+    PageViews: Map<string, obj -> RenderContext<obj> -> PageContent> option
     NeedsData: ((DataManagementTypes.DataTypeId -> bool) -> bool) option
     /// Phase 621 — the data-type ids this module's gate needs, declared as
     /// DATA beside the predicate above rather than instead of it.
@@ -575,12 +600,12 @@ type ClientModule<'Model, 'Msg> = {
     /// `None` for multi-page modules (which use `PageViews` instead).
     /// At least one of `View` or `PageViews` must be set; `register`
     /// throws at construction if both are `None`.
-    View: ('Model -> ('Msg -> unit) -> ReactElement * ReactElement) option
-    /// Per-page views keyed by `PageConfig.Route`. `None` → legacy
-    /// single-page; the shell uses `View`. `Some map` → multi-page;
-    /// `Init` / `Update` still fire once — all pages share the `Model`.
-    /// Construct via the `withPages` helper after `create`.
-    PageViews: Map<string, 'Model -> ('Msg -> unit) -> PageContent> option
+    View: ('Model -> RenderContext<'Msg> -> PageContent) option
+    /// Per-page views keyed by `PageConfig.Route`. `None` → single-page;
+    /// the shell uses `View`. `Some map` → multi-page; `Init` / `Update`
+    /// still fire once — all pages share the `Model`. Construct via the
+    /// `withPages` helper after `create`.
+    PageViews: Map<string, 'Model -> RenderContext<'Msg> -> PageContent> option
     NeedsData: ((DataManagementTypes.DataTypeId -> bool) -> bool) option
     /// Phase 621 — the enumerable half of the data gate. See
     /// `ErasedModule.NeedsDataKeys`; set via
@@ -2513,19 +2538,14 @@ module ClientModule =
             View =
                 m.View
                 |> Option.map (fun v ->
-                    fun (state: obj) (dispatch: obj -> unit) ->
-                        let typedModel = unbox<'Model> state
-                        let typedDispatch msg = dispatch (box msg)
-                        v typedModel typedDispatch)
+                    fun (state: obj) (ctx: RenderContext<obj>) -> v (unbox<'Model> state) (RenderContext.map box ctx))
             PageViews =
                 m.PageViews
                 |> Option.map (fun map ->
                     map
                     |> Map.map (fun _ view ->
-                        fun (state: obj) (dispatch: obj -> unit) ->
-                            let typedModel = unbox<'Model> state
-                            let typedDispatch msg = dispatch (box msg)
-                            view typedModel typedDispatch))
+                        fun (state: obj) (ctx: RenderContext<obj>) ->
+                            view (unbox<'Model> state) (RenderContext.map box ctx)))
             NeedsData = m.NeedsData
             // Phase 621 — the three declared key sets are already
             // tier-neutral data, so erasure passes them straight through;
@@ -2630,15 +2650,22 @@ module ClientModule =
         InspectState = None
     }
 
-    /// Set the single-page view function on a `ClientModule` built by
-    /// `create`. Mutually exclusive with `withPages` — modules that
-    /// have multiple pages call `withPages` instead. The SDK rejects
-    /// modules with neither at `register` time.
+    /// Set the single-page view on a `ClientModule` built by `create`. The
+    /// view takes the module's `Model` and the shell's `RenderContext` and
+    /// returns its page's `PageContent` — `SplitPanel` for a controls pane
+    /// beside an output pane, `FullWidth` for a settings-shaped page, and so
+    /// on. Mutually exclusive with `withPages` (the last applied wins). The
+    /// SDK rejects modules with neither at `register` time.
     let withView
-        (view: 'Model -> ('Msg -> unit) -> ReactElement * ReactElement)
+        (view: 'Model -> RenderContext<'Msg> -> PageContent)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
-        { m with View = Some view }
+        {
+            m with
+                Definition = { m.Definition with Pages = [] }
+                View = Some view
+                PageViews = None
+        }
 
     /// Attach per-page views to a strongly-typed `ClientModule` before
     /// erasure. Each entry pairs a `PageConfig` (which also supplies the
@@ -2650,13 +2677,13 @@ module ClientModule =
     /// across page navigation. `Definition.Pages` is set from the keys
     /// of `pageViews`; `Definition.Pages` on the input module is ignored.
     /// **Sets** the module's pages: a later call replaces them all, as
-    /// does `withView` / `withFullWidthView` (the module has ONE page shape).
+    /// does `withView` (the module has ONE page shape).
     ///
     /// Usage (call before `register`):
     /// ```
     /// {
     ///     Definition = { Id = "SalesAnalysis"; Name = "Sales Analysis"; Pages = [] }
-    ///     Init = ...; Update = ...; View = fun _ _ -> Html.none, Html.none
+    ///     Init = ...; Update = ...; View = None
     ///     PageViews = None
     ///     ...
     /// }
@@ -2667,7 +2694,7 @@ module ClientModule =
     /// |> ClientModule.register
     /// ```
     let withPages
-        (pageViews: (PageConfig * ('Model -> ('Msg -> unit) -> PageContent)) list)
+        (pageViews: (PageConfig * ('Model -> RenderContext<'Msg> -> PageContent)) list)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         let pages = pageViews |> List.map fst
@@ -2676,44 +2703,9 @@ module ClientModule =
         {
             m with
                 Definition = { m.Definition with Pages = pages }
+                View = None
                 PageViews = Some viewMap
         }
-
-    /// 0.5.6 — Single-page module variant whose page renders as
-    /// `PageContent.FullWidth` rather than the legacy `withView`
-    /// `SplitPanel(left, right)` tuple. Sugar over `withPages` with
-    /// a single anonymous-route page — saves the boilerplate of
-    /// declaring a `PageConfig` for modules that don't expose
-    /// multiple routes.
-    ///
-    /// Suits settings-shaped modules (Permissions, Team Manager,
-    /// Webhook Admin, Health Monitor, Data Ingestion config,
-    /// Platform Admin tabs) that don't have a separate "controls
-    /// left, output right" affordance and would otherwise render
-    /// squashed inside the shell's `SplitPanel` wrap (the typical
-    /// `body, Html.none` tuple from a single-pane view).
-    ///
-    /// Caller's view returns the page's content `ReactElement`
-    /// directly; the helper wraps it in `PageContent.FullWidth` and
-    /// installs it under a single `PageConfig` that inherits the
-    /// module's `Definition.Name` and `Definition.Icon`. Mutually
-    /// exclusive with `withView` and `withPages` (only the last
-    /// applied wins, per the `register` invariant — `register`
-    /// fails fast when neither `View` nor `PageViews` is set).
-    let withFullWidthView
-        (view: 'Model -> ('Msg -> unit) -> ReactElement)
-        (m: ClientModule<'Model, 'Msg>)
-        : ClientModule<'Model, 'Msg> =
-        let page: PageConfig = {
-            Route = ""
-            Title = m.Definition.Name
-            Icon = m.Definition.Icon
-        }
-
-        let pageView (model: 'Model) (dispatch: 'Msg -> unit) : PageContent =
-            PageContent.FullWidth(view model dispatch)
-
-        withPages [ page, pageView ] m
 
     /// Attach a narrative extractor to a strongly-typed `ClientModule`
     /// before erasure. The function receives the module's `Model` and the

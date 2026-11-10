@@ -532,7 +532,7 @@ let create (config: DatadogReadbackConfig) : ErasedModule =
         Icon = ToolUp.Platform.Icons.health
     }
     |> ToolUp.Platform.ClientModule.withId "_sdk.DatadogReadback"
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withGroup ObservabilityGroup
     |> ToolUp.Platform.ClientModule.withArea ToolUp.Platform.ModuleArea.Administration
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly

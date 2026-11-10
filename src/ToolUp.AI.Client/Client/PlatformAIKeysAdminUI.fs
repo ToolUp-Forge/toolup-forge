@@ -483,7 +483,7 @@ let create () : ErasedModule =
         Icon = ToolUp.AI.Icons.aiSettings
     }
     |> ToolUp.Platform.ClientModule.withId "_ai.PlatformAIKeys"
-    |> ToolUp.Platform.ClientModule.withView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

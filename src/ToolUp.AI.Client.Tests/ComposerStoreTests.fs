@@ -559,7 +559,8 @@ let private runAIShell (report: CallbackRun -> unit) : unit =
         |> ClientModule.withContextInit (fun ctx ->
             context <- Some ctx
             { Seen = 0 }, Cmd.none)
-        |> ClientModule.withView (fun (_: CallbackModel) _ -> Html.div [ prop.id "callback-probe" ], Html.none)
+        |> ClientModule.withView (fun (_: CallbackModel) _ ->
+            PageContent.FullWidth(Html.div [ prop.id "callback-probe" ]))
         |> ClientModule.withId "_scope931.probe"
         // The boot validators refuse a module list with no declared group.
         |> ClientModule.withGroup "Probe"

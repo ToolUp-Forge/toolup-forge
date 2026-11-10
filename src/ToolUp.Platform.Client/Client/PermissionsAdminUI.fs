@@ -1118,7 +1118,7 @@ let create (config: ModuleLabel option) : ErasedModule =
     }
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
+    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

@@ -55,7 +55,7 @@ let private asker
         Name = id
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId id
     |> ClientModule.withActionDecoder (fun (key, payload) ->
         match key with
@@ -266,7 +266,7 @@ let tests =
                     Name = askerId
                     Icon = Html.none
                 }
-                |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+                |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
                 |> ClientModule.withId askerId
                 |> ClientModule.register
 
