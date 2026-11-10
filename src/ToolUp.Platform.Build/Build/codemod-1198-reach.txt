@@ -4605,9 +4605,9 @@ ToolUp.Platform.Audit.Metrics.ComponentCorrelation auditSourceLabel
 ToolUp.Platform.Audit.Metrics.ComponentCorrelation componentIdTag
 ToolUp.Platform.Audit.Metrics.ComponentCorrelation permitComponentIdDimension
 ToolUp.Platform.Audit.Metrics.ComponentCorrelation withComponentId
-ToolUp.Platform.Audit.Metrics.RouteClassifier classify
-ToolUp.Platform.Audit.Metrics.RouteClassifier isExcluded
-ToolUp.Platform.Audit.Metrics.RouteClassifier statusClass
+ToolUp.Platform.Audit.Metrics.RouteBucket classify
+ToolUp.Platform.Audit.Metrics.RouteBucket isExcluded
+ToolUp.Platform.Audit.Metrics.RouteBucket statusClass
 ToolUp.Platform.Audit.Metrics.StandardMetrics ErrorsTotal
 ToolUp.Platform.Audit.Metrics.StandardMetrics JobsQueued
 ToolUp.Platform.Audit.Metrics.StandardMetrics JobsRunsTotal
@@ -4849,6 +4849,7 @@ ToolUp.Platform.Compose.BootVerificationPreflight BindingFramingVersion
 ToolUp.Platform.Compose.BootVerificationPreflight BindingSchemaVersion
 ToolUp.Platform.Compose.BootVerificationPreflight CanonicalMethodFramingVersion
 ToolUp.Platform.Compose.BootVerificationPreflight ConfigKeyFramingVersion
+ToolUp.Platform.Compose.BootVerificationPreflight PipelineFramingVersion
 ToolUp.Platform.Compose.BootVerificationPreflight PlanFramingVersion
 ToolUp.Platform.Compose.BootVerificationPreflight PlatformScopeId
 ToolUp.Platform.Compose.BootVerificationPreflight bindingCanonicalBytes
@@ -5106,6 +5107,7 @@ ToolUp.Platform.Compose.CompositionInspectorHandler resolveSnapshot
 ToolUp.Platform.Compose.CompositionManifest CanonicalMethodSchemaVersion
 ToolUp.Platform.Compose.CompositionManifest ConfigKeySchemaVersion
 ToolUp.Platform.Compose.CompositionManifest LiveInterfaceSchemaVersion
+ToolUp.Platform.Compose.CompositionManifest PipelineSchemaVersion
 ToolUp.Platform.Compose.CompositionManifest PlanSchemaVersion
 ToolUp.Platform.Compose.CompositionManifest PreCanonicalMethodSchemaVersion
 ToolUp.Platform.Compose.CompositionManifest SchemaVersion
@@ -5130,6 +5132,7 @@ ToolUp.Platform.Compose.CompositionManifest liveInterfaceTools
 ToolUp.Platform.Compose.CompositionManifest liveInterfaceToolsOf
 ToolUp.Platform.Compose.CompositionManifest metricEntry
 ToolUp.Platform.Compose.CompositionManifest moduleEntry
+ToolUp.Platform.Compose.CompositionManifest pipeline
 ToolUp.Platform.Compose.CompositionManifest plan
 ToolUp.Platform.Compose.CompositionManifest planEntryOf
 ToolUp.Platform.Compose.CompositionManifest planOf
@@ -5137,6 +5140,7 @@ ToolUp.Platform.Compose.CompositionManifest purposeEntry
 ToolUp.Platform.Compose.CompositionManifest recordsCanonicalMethods
 ToolUp.Platform.Compose.CompositionManifest recordsConfigKeys
 ToolUp.Platform.Compose.CompositionManifest recordsLiveInterfaceTools
+ToolUp.Platform.Compose.CompositionManifest recordsPipeline
 ToolUp.Platform.Compose.CompositionManifest recordsPlan
 ToolUp.Platform.Compose.CompositionManifest sealedConfigKeys
 ToolUp.Platform.Compose.CompositionManifest subjectEntry
@@ -5146,6 +5150,7 @@ ToolUp.Platform.Compose.CompositionManifest withCanonicalMethods
 ToolUp.Platform.Compose.CompositionManifest withConfigKeys
 ToolUp.Platform.Compose.CompositionManifest withGrounding
 ToolUp.Platform.Compose.CompositionManifest withLiveInterfaceTools
+ToolUp.Platform.Compose.CompositionManifest withPipeline
 ToolUp.Platform.Compose.CompositionManifest withPlan
 ToolUp.Platform.Compose.CompositionManifest withPurposes
 ToolUp.Platform.Compose.CompositionProfile effectivePolicy
@@ -5239,8 +5244,12 @@ ToolUp.Platform.Compose.ConfigValidatorAggregator assertUniqueValidatorNames
 ToolUp.Platform.Compose.ConfigValidatorAggregator classify
 ToolUp.Platform.Compose.ConfigValidatorAggregator validate
 ToolUp.Platform.Compose.ConfigValidators fromEnv
+ToolUp.Platform.Compose.ConfigurePipeline Stage
+ToolUp.Platform.Compose.ConfigurePipeline StageInputs
 ToolUp.Platform.Compose.ConfigurePipeline buildForwardedHeadersOptions
 ToolUp.Platform.Compose.ConfigurePipeline configurePipeline
+ToolUp.Platform.Compose.ConfigurePipeline mounted
+ToolUp.Platform.Compose.ConfigurePipeline stages
 ToolUp.Platform.Compose.Contribution hosted
 ToolUp.Platform.Compose.Contribution middleware
 ToolUp.Platform.Compose.Contribution provides
@@ -5369,6 +5378,7 @@ ToolUp.Platform.Compose.DevDiagnosticsHandler IIndexConsistencyInspector
 ToolUp.Platform.Compose.DevDiagnosticsHandler LightweightFeatureEntry
 ToolUp.Platform.Compose.DevDiagnosticsHandler ModuleSnapshot
 ToolUp.Platform.Compose.DevDiagnosticsHandler ModuleSummary
+ToolUp.Platform.Compose.DevDiagnosticsHandler PipelineStageEntry
 ToolUp.Platform.Compose.DevDiagnosticsHandler ProcessProfileSummary
 ToolUp.Platform.Compose.DevDiagnosticsHandler ProcessProfileUnitEntry
 ToolUp.Platform.Compose.DevDiagnosticsHandler ScopeSummary
@@ -7295,6 +7305,15 @@ ToolUp.Platform.Infra.ResilientSecretStore applySecretResilience
 ToolUp.Platform.Infra.RestoreClosures readAssetsFile
 ToolUp.Platform.Infra.ResultObjectId make
 ToolUp.Platform.Infra.ResultObjectId modulePrefix
+ToolUp.Platform.Infra.RouteClass isApiSurface
+ToolUp.Platform.Infra.RouteClass name
+ToolUp.Platform.Infra.RouteClassifier ItemsKey
+ToolUp.Platform.Infra.RouteClassifier classify
+ToolUp.Platform.Infra.RouteClassifier ofItems
+ToolUp.Platform.Infra.RouteClassifier ofRequest
+ToolUp.Platform.Infra.RouteClassifier prefixesOf
+ToolUp.Platform.Infra.RouteClassifier stamp
+ToolUp.Platform.Infra.RouteClassifier table
 ToolUp.Platform.Infra.SbomAdminEndpoint CycloneDxFormat
 ToolUp.Platform.Infra.SbomAdminEndpoint RenderFailure
 ToolUp.Platform.Infra.SbomAdminEndpoint Rendered
@@ -7831,6 +7850,7 @@ ToolUp.Platform.Jobs.SseScopeResolution SseUnauthenticated
 ToolUp.Platform.Jobs.SseScopeResolution mismatchDenialCode
 ToolUp.Platform.Jobs.SseScopeResolution refuseUnauthenticated
 ToolUp.Platform.Jobs.SseScopeResolution resolve
+ToolUp.Platform.Jobs.SseScopeResolution resolveWith
 ToolUp.Platform.Jobs.SseTraceContributor SseTraceContributor
 ToolUp.Platform.Jobs.TeamQuotaPolicy BlobBackedTeamQuotaPolicy
 ToolUp.Platform.Jobs.TeamQuotaPolicy QuotaGatedAIProvider
