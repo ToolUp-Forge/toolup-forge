@@ -12,7 +12,7 @@ open Giraffe
 open ToolUp.Platform
 open ToolUp.Platform.Compose
 
-// ─── Phase 6g.E — client UI decoder-error observability sink ────
+// ─── Client UI decoder-error observability sink ────
 //
 // `POST /api/ai/ui-decode-error`. A client-side companion's composed
 // `ActionDecoder` fires this (fire-and-forget) when a module-author
@@ -64,21 +64,6 @@ type private UIDecodeErrorEventPayload = {
 
 let private jsonOptions = PlatformJson.options
 
-let private resolveScope (ctx: HttpContext) : StorageScope =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s
-    | _ ->
-        let fallback =
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id -> id
-            | _ -> "anonymous"
-
-        {
-            ScopeId = fallback
-            Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-            Persist = true
-        }
-
 let uiDecodeErrorHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {
         try
@@ -86,11 +71,14 @@ let uiDecodeErrorHandler: HttpHandler =
             let! body = reader.ReadToEndAsync()
             let report = JsonSerializer.Deserialize<UIDecodeErrorReport>(body, jsonOptions)
 
-            if isNull (box report) then
+            match AIRequest.scope ctx with
+            | _ when isNull (box report) ->
                 ctx.Response.StatusCode <- 400
                 return! next ctx
-            else
-                let scope = resolveScope ctx
+            | None ->
+                ctx.Response.StatusCode <- 401
+                return! next ctx
+            | Some scope ->
 
                 match ctx.RequestServices.GetService(typeof<IEventStore>) with
                 | :? IEventStore as store ->

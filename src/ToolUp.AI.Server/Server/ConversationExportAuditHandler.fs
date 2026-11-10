@@ -13,7 +13,7 @@ open ToolUp.Platform
 open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.Compose
 
-// ─── Phase 6h.A — conversation-export audit beacon ──────────────
+// ─── Conversation-export audit beacon ──────────────
 //
 // `POST /api/ai/conversation/export-audit`. The chat side panel's
 // `Export ▾` flow fires this (fire-and-forget) after a successful
@@ -42,26 +42,6 @@ type ExportAuditRequest = {
 
 let private jsonOptions = PlatformJson.options
 
-let private resolveScope (ctx: HttpContext) : StorageScope =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s
-    | _ ->
-        let fallback =
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id -> id
-            | _ -> "anonymous"
-
-        {
-            ScopeId = fallback
-            Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-            Persist = true
-        }
-
-let private resolveUserId (ctx: HttpContext) : string =
-    match AccessContext.callerIdOf ctx.Items with
-    | Some id -> id
-    | _ -> "anonymous"
-
 let exportAuditHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {
         try
@@ -69,11 +49,15 @@ let exportAuditHandler: HttpHandler =
             let! body = reader.ReadToEndAsync()
             let req = JsonSerializer.Deserialize<ExportAuditRequest>(body, jsonOptions)
 
-            if isNull (box req) then
+            match AIRequest.access ctx with
+            | _ when isNull (box req) ->
                 ctx.Response.StatusCode <- 400
                 return! next ctx
-            else
-                let scope = resolveScope ctx
+            | None ->
+                ctx.Response.StatusCode <- 401
+                return! next ctx
+            | Some access ->
+                let scope = AIRequest.scopeOf access
 
                 match ctx.RequestServices.GetService(typeof<IAuditLog>) with
                 | :? IAuditLog as auditLog ->
@@ -85,7 +69,7 @@ let exportAuditHandler: HttpHandler =
                                 ConversationExported {
                                     ConversationId = string req.ConversationId
                                     IncludeToolDetails = req.IncludeToolDetails
-                                    ExportedBy = resolveUserId ctx
+                                    ExportedBy = access.UserId
                                 }
                             )
                         )
