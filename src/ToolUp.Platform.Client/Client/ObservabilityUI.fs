@@ -438,24 +438,13 @@ let private warningBanner (message: string) =
     ]
 
 let private loadingLine (msgs: ObservabilityMessages) =
-    Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+    Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
 
 let private footnote (text: string) =
-    Html.p [ prop.className "mt-3 text-xs text-gray-500"; prop.text text ]
+    Html.p [ prop.className ("mt-3 text-xs " + Tokens.Text.muted); prop.text text ]
 
 let private refreshButton (msgs: ObservabilityMessages) (loading: bool) (onClick: unit -> unit) =
-    Html.button [
-        prop.className [
-            "px-3 py-1.5 text-sm font-medium rounded border transition-colors"
-            if loading then
-                "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-            else
-                "bg-white text-gray-700 border-border hover:bg-gray-50"
-        ]
-        prop.disabled loading
-        prop.text (if loading then msgs.Refreshing else msgs.Refresh)
-        prop.onClick (fun _ -> onClick ())
-    ]
+    Forms.Button.secondaryWith (Forms.Button.stateOf loading msgs.Refreshing false) msgs.Refresh onClick
 
 /// Formatted by hand: `DateTime.ToString(format)` is only partly
 /// implemented under Fable (the Datadog readback module records the same
@@ -484,7 +473,7 @@ let private windowChoices = [ 15; 60; 240; 1440 ]
 
 let private windowPicker (msgs: ObservabilityMessages) (current: int) (onChange: int -> unit) =
     Html.label [
-        prop.className "flex items-center gap-2 text-sm text-gray-600"
+        prop.className ("flex items-center gap-2 text-sm " + Tokens.Text.secondary)
         prop.children [
             Html.span [ prop.text msgs.WindowPickerLabel ]
             Html.select [
@@ -501,15 +490,6 @@ let private windowPicker (msgs: ObservabilityMessages) (current: int) (onChange:
             ]
         ]
     ]
-
-let private headerCell (label: string) =
-    Html.th [
-        prop.className "px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide"
-        prop.text label
-    ]
-
-let private cell (value: string) =
-    Html.td [ prop.className "px-3 py-2 text-sm text-gray-800 align-top"; prop.text value ]
 
 // ─── Logs tab ────────────────────────────────────────────────────────
 
@@ -550,12 +530,7 @@ let private LogFilterBar (msgs: ObservabilityMessages) (filter: LogFilter) (disp
             input msgs.SearchPlaceholder text setText "flex-1 min-w-48"
             input msgs.ScopePlaceholder scope setScope "w-40"
             input msgs.CorrelationPlaceholder correlation setCorrelation "w-48"
-            Html.button [
-                prop.className
-                    "px-3 py-1.5 text-sm font-medium rounded border bg-white text-gray-700 border-border hover:bg-gray-50"
-                prop.text msgs.Search
-                prop.onClick (fun _ -> submit ())
-            ]
+            Forms.Button.secondaryWith Forms.Button.Enabled msgs.Search submit
         ]
     ]
 
@@ -563,7 +538,7 @@ let private levelToggles (msgs: ObservabilityMessages) (filter: LogFilter) (disp
     Html.div [
         prop.className "flex items-center gap-1 text-sm"
         prop.children [
-            Html.span [ prop.className "text-gray-600 mr-1"; prop.text msgs.LevelsLabel ]
+            Html.span [ prop.className ("mr-1 " + Tokens.Text.secondary); prop.text msgs.LevelsLabel ]
             for level in [ LogLevel.Trace; LogLevel.Debug; LogLevel.Info; LogLevel.Warn; LogLevel.Error ] do
                 let active = List.contains level filter.Levels
 
@@ -574,7 +549,7 @@ let private levelToggles (msgs: ObservabilityMessages) (filter: LogFilter) (disp
                         if active then
                             "bg-brand text-white border-brand"
                         else
-                            "bg-white text-gray-600 border-border hover:bg-gray-50"
+                            ("bg-white border-border hover:bg-gray-50 " + Tokens.Text.secondary)
                     ]
                     prop.text (levelLabel msgs level)
                     prop.onClick (fun _ -> dispatch (ToggleLevel level))
@@ -589,13 +564,16 @@ let private recordDetail (msgs: ObservabilityMessages) (record: LogRecord) (disp
         Html.div [
             prop.className "grid grid-cols-[10rem_1fr] gap-2 py-1 border-b border-border last:border-0"
             prop.children [
-                Html.span [ prop.className "text-xs font-semibold text-gray-600"; prop.text label ]
+                Html.span [
+                    prop.className ("text-xs font-semibold " + Tokens.Text.secondary)
+                    prop.text label
+                ]
                 value
             ]
         ]
 
     let plain (value: string) =
-        Html.span [ prop.className "text-sm text-gray-800 break-all"; prop.text value ]
+        Html.span [ prop.className ("text-sm break-all " + Tokens.Text.primary); prop.text value ]
 
     let optional (value: string option) = plain (value |> Option.defaultValue "")
 
@@ -603,7 +581,7 @@ let private recordDetail (msgs: ObservabilityMessages) (record: LogRecord) (disp
         prop.className "border border-border rounded bg-white p-3"
         prop.children [
             Html.h3 [
-                prop.className "text-sm font-semibold text-gray-700 mb-2"
+                prop.className ("text-sm font-semibold mb-2 " + Tokens.Text.secondary)
                 prop.text msgs.DetailHeading
             ]
             row msgs.ColumnTime (plain (instant record.TimestampUtc))
@@ -684,7 +662,7 @@ let private logsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch: 
         | Remote.Reloading _ -> loadingLine msgs
         | Remote.Failed error -> StateViews.noticeStatic (Notice.Problem(describeError msgs error))
         | Remote.Loaded response when List.isEmpty response.Records ->
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoLogs ]
+            Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.NoLogs ]
         | Remote.Loaded response ->
             Html.div [
                 prop.className "flex flex-col gap-3"
@@ -752,7 +730,7 @@ let private metricChart
                 Html.div [
                     prop.children [
                         partial
-                        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoPoints ]
+                        Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.NoPoints ]
                     ]
                 ]
             else
@@ -778,7 +756,7 @@ let private metricChart
                         ]
                         if List.length response.Series > 1 then
                             Html.p [
-                                prop.className "mt-1 text-xs text-gray-500"
+                                prop.className ("mt-1 text-xs " + Tokens.Text.muted)
                                 prop.text (msgs.SeriesCount(List.length response.Series))
                             ]
                     ]
@@ -794,7 +772,10 @@ let private metricChart
                 "border-border"
         ]
         prop.children [
-            Html.h3 [ prop.className "text-sm font-semibold text-gray-700 mb-2"; prop.text metric ]
+            Html.h3 [
+                prop.className ("text-sm font-semibold mb-2 " + Tokens.Text.secondary)
+                prop.text metric
+            ]
             body
         ]
     ]
@@ -863,12 +844,46 @@ let private statePill (msgs: ObservabilityMessages) (state: AlertRuleState) =
         | AlertRuleState.Firing -> "bg-red-100 text-red-700 border-red-200", msgs.StateFiring
         | AlertRuleState.Pending -> "bg-yellow-100 text-yellow-700 border-yellow-200", msgs.StatePending
         | AlertRuleState.Clear -> "bg-green-100 text-green-700 border-green-200", msgs.StateClear
-        | AlertRuleState.NoData -> "bg-gray-100 text-gray-700 border-gray-200", msgs.StateNoData
-        | AlertRuleState.NotEvaluated -> "bg-gray-100 text-gray-500 border-gray-200", msgs.StateNotEvaluated
+        | AlertRuleState.NoData -> ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary), msgs.StateNoData
+        | AlertRuleState.NotEvaluated -> ("bg-gray-100 border-gray-200 " + Tokens.Text.muted), msgs.StateNotEvaluated
 
     Html.span [
         prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
         prop.text label
+    ]
+
+let private alertColumns (msgs: ObservabilityMessages) (dispatch: Msg -> unit) : Data.Column<AlertRuleStatus> list =
+    let column header (cell: AlertRuleStatus -> ReactElement) : Data.Column<AlertRuleStatus> = {
+        Header = header
+        Align = Data.Left
+        Cell = cell
+    }
+
+    let plain header (value: AlertRuleStatus -> string) =
+        column header (fun rule -> Html.text (value rule))
+
+    [
+        column msgs.ColumnState (fun rule -> statePill msgs rule.Observation.State)
+        plain msgs.ColumnRule _.Name
+        column msgs.ColumnSignal (fun rule ->
+            Html.div [
+                prop.children [
+                    Html.div [ prop.text rule.Signal ]
+                    match rule.MetricName with
+                    | Some metric ->
+                        Html.button [
+                            prop.className "text-xs text-brand underline"
+                            prop.text msgs.ViewChart
+                            prop.onClick (fun _ -> dispatch (ShowMetric metric))
+                        ]
+                    | None -> Html.none
+                ]
+            ])
+        plain msgs.ColumnCondition (fun rule -> rule.Condition + " " + msgs.Minutes(int (Math.Round rule.ForMinutes)))
+        plain msgs.ColumnBreachingSince (fun rule -> optionalInstant msgs rule.Observation.BreachingSinceUtc)
+        plain msgs.ColumnLastFired (fun rule -> optionalInstant msgs rule.Observation.LastFiredUtc)
+        plain msgs.ColumnLastCleared (fun rule -> optionalInstant msgs rule.Observation.LastClearedUtc)
+        plain msgs.ColumnLastEvaluated (fun rule -> optionalInstant msgs rule.Observation.LastEvaluatedUtc)
     ]
 
 let private alertsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch: Msg -> unit) =
@@ -879,68 +894,10 @@ let private alertsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch
         | Remote.Reloading _ -> loadingLine msgs
         | Remote.Failed error -> StateViews.noticeStatic (Notice.Problem(describeError msgs error))
         | Remote.Loaded response ->
-            Html.table [
-                prop.className "min-w-full border border-border rounded bg-white"
-                prop.children [
-                    Html.thead [
-                        Html.tr [
-                            prop.className "bg-gray-50 border-b border-border"
-                            prop.children [
-                                headerCell msgs.ColumnState
-                                headerCell msgs.ColumnRule
-                                headerCell msgs.ColumnSignal
-                                headerCell msgs.ColumnCondition
-                                headerCell msgs.ColumnBreachingSince
-                                headerCell msgs.ColumnLastFired
-                                headerCell msgs.ColumnLastCleared
-                                headerCell msgs.ColumnLastEvaluated
-                            ]
-                        ]
-                    ]
-                    Html.tbody [
-                        if List.isEmpty response.Rules then
-                            Html.tr [
-                                Html.td [
-                                    prop.colSpan 8
-                                    prop.className "px-3 py-6 text-center text-sm text-gray-500"
-                                    prop.text msgs.NoRules
-                                ]
-                            ]
-                        else
-                            for rule in response.Rules do
-                                Html.tr [
-                                    prop.key rule.Name
-                                    prop.className "border-b border-border last:border-0"
-                                    prop.children [
-                                        Html.td [
-                                            prop.className "px-3 py-2 align-top"
-                                            prop.children [ statePill msgs rule.Observation.State ]
-                                        ]
-                                        cell rule.Name
-                                        Html.td [
-                                            prop.className "px-3 py-2 text-sm text-gray-800 align-top"
-                                            prop.children [
-                                                Html.div [ prop.text rule.Signal ]
-                                                match rule.MetricName with
-                                                | Some metric ->
-                                                    Html.button [
-                                                        prop.className "text-xs text-brand underline"
-                                                        prop.text msgs.ViewChart
-                                                        prop.onClick (fun _ -> dispatch (ShowMetric metric))
-                                                    ]
-                                                | None -> Html.none
-                                            ]
-                                        ]
-                                        cell (rule.Condition + " " + msgs.Minutes(int (Math.Round rule.ForMinutes)))
-                                        cell (optionalInstant msgs rule.Observation.BreachingSinceUtc)
-                                        cell (optionalInstant msgs rule.Observation.LastFiredUtc)
-                                        cell (optionalInstant msgs rule.Observation.LastClearedUtc)
-                                        cell (optionalInstant msgs rule.Observation.LastEvaluatedUtc)
-                                    ]
-                                ]
-                    ]
-                ]
-            ]
+            if List.isEmpty response.Rules then
+                Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoRules ]
+            else
+                Data.table (alertColumns msgs dispatch) response.Rules
 
     Html.div [
         prop.className "p-4 flex flex-col gap-3"
@@ -958,35 +915,24 @@ let private alertsTabView (msgs: ObservabilityMessages) (model: Model) (dispatch
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
-    Html.button [
-        prop.className [
-            "px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-            if active then
-                "border-brand text-brand"
-            else
-                "border-transparent text-gray-500 hover:text-gray-700"
-        ]
-        prop.text label
-        prop.onClick (fun _ -> onClick ())
-    ]
-
 let private tabBar
     (msgs: ObservabilityMessages)
     (sources: ObservabilitySources)
     (model: Model)
     (dispatch: Msg -> unit)
     =
+    let tabs = [
+        if sources.Logs then
+            LogsTab, msgs.LogsTab
+        if sources.Metrics then
+            MetricsTab, msgs.MetricsTab
+        if sources.Alerts then
+            AlertsTab, msgs.AlertsTab
+    ]
+
     Html.div [
-        prop.className "flex gap-1 border-b border-border bg-white px-4"
-        prop.children [
-            if sources.Logs then
-                tabButton msgs.LogsTab (model.ActiveTab = LogsTab) (fun () -> dispatch (SwitchTab LogsTab))
-            if sources.Metrics then
-                tabButton msgs.MetricsTab (model.ActiveTab = MetricsTab) (fun () -> dispatch (SwitchTab MetricsTab))
-            if sources.Alerts then
-                tabButton msgs.AlertsTab (model.ActiveTab = AlertsTab) (fun () -> dispatch (SwitchTab AlertsTab))
-        ]
+        prop.className [ "px-4"; Tokens.Bg.card ]
+        prop.children [ Tabs.bar tabs model.ActiveTab (SwitchTab >> dispatch) ]
     ]
 
 /// The module body as a React COMPONENT, so it has a hook site from which
@@ -1009,7 +955,9 @@ let private ObservabilityBody (model: Model) (dispatch: Msg -> unit) =
         | Remote.Loaded sources when not (sources.Logs || sources.Metrics || sources.Alerts) ->
             Html.div [
                 prop.className "p-4"
-                prop.children [ Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoSources ] ]
+                prop.children [
+                    Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.NoSources ]
+                ]
             ]
         | Remote.Loaded sources ->
             Html.div [
