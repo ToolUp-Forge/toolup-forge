@@ -20,7 +20,7 @@ type RegisteredTool = {
     ProviderDef: AIProviderToolDef
     /// Execute the tool: HttpContext -> JSON args -> Async<JSON result>
     Execute: HttpContext -> string -> Async<string>
-    /// Phase 1131 — the record form of `Execute`, for a server-resident
+    /// The record form of `Execute`, for a server-resident
     /// tool that attaches parts to the assistant turn. When `Some`, the
     /// agent loop runs this instead of `Execute` and attaches its parts;
     /// `Execute` is its text alone, kept for every reader of the string
@@ -28,6 +28,12 @@ type RegisteredTool = {
     /// `createAnsweringTool`, which derives both from one function; the
     /// loop refuses a client-resident tool that carries one.
     Answer: (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>) option
+    /// The typed form of `Execute`, for a built-in tool: the context the turn
+    /// read once and the arguments parsed once, answering a `ToolOutcome`.
+    /// When `Some`, the agent loop runs this instead of `Execute`; `Execute`
+    /// is derived from it for every reader of the string contract (the MCP
+    /// host, a consumer). `None` for a tool built with `createTool`.
+    ExecuteTyped: (ToolContext -> ToolArgs -> Async<ToolOutcome>) option
 }
 
 /// Sanitize a tool name to match AI provider naming constraints.
@@ -43,7 +49,7 @@ let private sanitizeToolName (name: string) = name.Replace(".", "_")
 /// time. Order matters: backslashes first so they don't double-escape
 /// the replacements that follow.
 ///
-/// Phase 508 moved the implementation to `ToolSchema.jsonEscape` in the
+/// The rich-schema change moved the implementation to `ToolSchema.jsonEscape` in the
 /// tier-shared Core, because the recursive schema renderer that lives
 /// there has to escape nested member names and enum values by exactly
 /// the same rules. Two copies of an escaper are two escapers that can
@@ -52,7 +58,7 @@ let private sanitizeToolName (name: string) = name.Replace(".", "_")
 /// already uses.
 let private jsonEscape (s: string) : string = ToolSchema.jsonEscape s
 
-/// Phase 6g.A: surface gate. Returns true when the tool's `Surface`
+/// Surface gate. Returns true when the tool's `Surface`
 /// declaration permits the current request's surface. The agent loop
 /// applies this filter when constructing the per-turn tool list passed
 /// to the provider, so the model only sees tools that make sense for
@@ -65,7 +71,7 @@ let isToolVisibleOnSurface (surface: AISurface) (def: AIToolDefinition) : bool =
     | SidePanelOnly, FullPage
     | FullPageOnly, SidePanel -> false
 
-// ─── Phase 36.A — per-module RBAC over AI tool dispatch ──────────────
+// ─── Per-module RBAC over AI tool dispatch ──────────────
 //
 // A module tool is an executable the model can reach on the caller's
 // behalf. Until this phase the agent loop's per-turn tool list was
@@ -91,14 +97,14 @@ let isToolVisibleOnSurface (surface: AISurface) (def: AIToolDefinition) : bool =
 //     configured module permissions is byte-for-byte unchanged.
 //
 //   * **SDK-reserved tool sources are exempt, because they are not
-//     modules.** `_platform.ai.*` (Phase 36.B) enforces RBAC INTERNALLY
+//     modules.** `_platform.ai.*` enforces RBAC INTERNALLY
 //     per requested TARGET module — gating it on its own `SourceModule`
 //     would ask whether the caller may read a module called
 //     `"_platform.ai"`, which no permission map names, so the whole
 //     cross-module family would vanish the moment any deployment
 //     configured RBAC. See `isSdkReservedToolSource`.
 
-/// Phase 36.A — is this tool's `SourceModule` an SDK-reserved namespace
+/// Is this tool's `SourceModule` an SDK-reserved namespace
 /// rather than a consumer module?
 ///
 /// Two reserved namespaces, both owned by the SDK and neither ever a key
@@ -129,7 +135,7 @@ let isSdkReservedToolSource (sourceModule: string) : bool =
     && (sourceModule.StartsWith("_", System.StringComparison.Ordinal)
         || sourceModule.StartsWith("ToolUp.", System.StringComparison.Ordinal))
 
-/// Phase 36.A — may this caller reach a tool sourced from this module?
+/// May this caller reach a tool sourced from this module?
 ///
 /// The single predicate behind the list filter, the agent-loop dispatch
 /// re-check, the `/api/ai/tool-result` completion gate and the
@@ -150,14 +156,14 @@ let isToolSourcePermittedFor (access: AccessContext) (sourceModule: string) : bo
     else
         AccessContext.hasPermission sourceModule ModulePermission.Read access
 
-/// Phase 36.A — `isToolSourcePermittedFor` over a tool declaration.
+/// `isToolSourcePermittedFor` over a tool declaration.
 let isToolPermittedFor (access: AccessContext) (def: AIToolDefinition) : bool =
     isToolSourcePermittedFor access def.SourceModule
 
-// ─── Phase 793 — the tool policy, and the ONE gate decision ──────────
+// ─── The tool policy, and the ONE gate decision ──────────
 //
 // Two gates governed the tool surface and each was pure, but they were
-// two functions: `isToolPermittedFor` at list time and the Phase 730
+// two functions: `isToolPermittedFor` at list time and the grant
 // grant guard at dispatch, composed by hand at each of four call sites.
 // The registry's own comment on `ListAccessible` said why that was
 // fragile — "two gates that must agree should share their whole
@@ -195,12 +201,12 @@ type ToolPolicy = {
     /// an undeclared tool under a ceiling is a tool the ceiling cannot
     /// measure.
     PermitUndeclared: bool
-    /// Phase 503's approval gate, keyed on CLASS: a tool declaring any of
+    /// The approval gate, keyed on CLASS: a tool declaring any of
     /// these classes is held for the user's decision before it runs,
     /// whatever the deployment's `IToolApprovalPolicy` says about it by
     /// name.
     RequireApproval: Set<ToolEffectClass>
-    /// Phase 489's external principals — an MCP agent acting on its own
+    /// The external principals — an MCP agent acting on its own
     /// service-account credential — are gated under THIS ceiling rather
     /// than `Ceiling`: default-deny by class, so a bounded policy admits
     /// an external principal to no class it did not name.
@@ -268,7 +274,7 @@ type ToolGateVerdict =
     /// The caller holds no `Read` on the tool's source module (Phase
     /// 36.A).
     | ToolRefusedSource of sourceModule: string
-    /// The caller's grant on the source module is not live (Phase 730).
+    /// The caller's grant on the source module is not live.
     | ToolRefusedGrant of sourceModule: string
     /// The tool declares no effects and the policy does not admit
     /// undeclared tools.
@@ -345,7 +351,7 @@ module ToolGate =
         | ToolRefusedUndeclared
         | ToolRefusedEffects _ -> false
 
-    /// Phase 503 keyed on class: whether `policy` holds this tool for the
+    /// Approval keyed on class: whether `policy` holds this tool for the
     /// user's approval because of what it declares. An undeclared tool is
     /// never held by class — there is no class to key on — which is one
     /// more reason a bounded policy refuses it.
@@ -378,7 +384,7 @@ module ToolGate =
 
             $"tool '{toolName}' declares effects outside this deployment's tool policy ceiling: {named}"
 
-/// Phase 36.A — the caller's `AccessContext`, read from the per-request
+/// The caller's `AccessContext`, read from the per-request
 /// items.
 ///
 /// **Why items rather than DI, and why this is load-bearing.** Tool
@@ -394,11 +400,10 @@ module ToolGate =
 /// principal is served under `AccessContext.unresolved`, which grants
 /// nothing. The built-in `_platform.ai.*` tools call it too.
 let reconstructAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.Items.TryGetValue AccessContext.ItemsKey with
-    | true, (:? AccessContext as access) -> access
-    | _ -> AccessContext.unresolved "AIToolRegistry"
+    AccessContext.ofItems ctx.Items
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "AIToolRegistry")
 
-// ─── Phase 730 — the grant / consent gate on the AI path ─────────────
+// ─── The grant / consent gate on the AI path ─────────────
 //
 // Phases 551 and 552 each closed their own dispatch seam and each
 // recorded, in its Outcome, that this one was still open:
@@ -410,7 +415,7 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
 // whole point of a pending grant — so a gate reading only the permission
 // map cannot see the difference.
 //
-// **The mechanism, decided rather than defaulted.** Phase 551 deviation 1
+// **The mechanism, decided rather than defaulted.** An earlier deviation
 // deferred a choice between two shapes and named THIS as the moment to
 // revisit it: put the grant records on `AccessContext`, or extend the
 // `HttpContext.Items` stamp. The stamp is taken, and the reasoning has
@@ -437,7 +442,7 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
 // permissions — with `createBackgroundContext` carrying both stamps
 // forward (730.E).
 
-/// Phase 730 — a per-module grant-liveness predicate for the acting
+/// A per-module grant-liveness predicate for the acting
 /// request. Built ONCE per turn, closed over the stamps the middleware
 /// left, and applied at both the list filter and the dispatch re-check.
 ///
@@ -455,7 +460,7 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
 /// SDK-reserved tool sources (`_platform.*`, `ToolUp.*`) need no special
 /// case: they are not modules, so the registry resolves them to
 /// `AdminDiscretion`, for which the verdict is unconditionally `Ok`. The
-/// reserved-namespace exemption stays exactly where Phase 36.A put it.
+/// reserved-namespace exemption stays exactly where the RBAC re-check put it.
 let moduleGrantGate (ctx: HttpContext) : string -> bool =
     match ctx.RequestServices.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
     | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
@@ -470,7 +475,7 @@ let moduleGrantGate (ctx: HttpContext) : string -> bool =
             | Error _ -> false
     | _ -> fun _ -> true
 
-/// Phase 36.C — a per-module AI-queryability predicate for the acting
+/// A per-module AI-queryability predicate for the acting
 /// request: "has this module's author opted its data into the
 /// cross-module AI surface at all".
 ///
@@ -501,7 +506,7 @@ let moduleGrantGate (ctx: HttpContext) : string -> bool =
 ///
 /// SDK-reserved tool sources (`_platform.*`) never reach this — it gates
 /// the TARGET module of a cross-module read, not the tool's own
-/// `SourceModule`, which is exactly the split the Phase 36.A exemption
+/// `SourceModule`, which is exactly the split the RBAC re-check exemption
 /// established.
 let moduleAIQueryGate (ctx: HttpContext) : string -> bool =
     match ctx.RequestServices.GetService(typeof<ModuleAIExposureRegistry>) with
@@ -519,13 +524,8 @@ let gateToolResult (ctx: HttpContext) (toolName: string) (entityNames: string li
         ctx.RequestServices.GetService(typeof<IEgressGate>), ctx.RequestServices.GetService(typeof<IFieldClassifier>)
     with
     | (:? IEgressGate as gate), (:? IFieldClassifier as classifier) ->
-        let userId =
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id -> id
-            | _ -> "anonymous"
-
         let crossing =
-            EgressContext.create EgressBoundary.aiToolResult userId
+            EgressContext.create EgressBoundary.aiToolResult (reconstructAccessContext ctx).UserId
             |> EgressContext.withDestination toolName
 
         let! gated = EgressGate.applyToJson classifier gate crossing entityNames text
@@ -587,9 +587,19 @@ let withClassifiedResults (tool: RegisteredTool) : RegisteredTool =
                         let! text = gateModuleToolResult ctx name owner answered.Text
                         return { answered with Text = text }
                     })
+            ExecuteTyped =
+                tool.ExecuteTyped
+                |> Option.map (fun execute ->
+                    fun context args -> async {
+                        match! execute context args with
+                        | ToolOutcome.Produced text ->
+                            let! gated = gateModuleToolResult context.Request name owner text
+                            return ToolOutcome.Produced gated
+                        | outcome -> return outcome
+                    })
     }
 
-/// Phase 730 — the audited dispatch-time twin of `moduleGrantGate`.
+/// The audited dispatch-time twin of `moduleGrantGate`.
 ///
 /// The list filter above is silent by design (nothing was attempted). A
 /// tool the model names ANYWAY — because it planned around a stale list,
@@ -609,10 +619,7 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
         ->
         let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
 
-        let scopeId =
-            match AccessContext.scopeOf ctx.Items with
-            | Some s -> s.ScopeId
-            | _ -> access.UserId
+        let scopeId = (AIRequest.scopeOf access).ScopeId
 
         let verdict =
             GrantConsentStore.guardDispatchWithConsent
@@ -627,16 +634,16 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
         Result.isOk verdict
     | _ -> true
 
-/// Phase 36.A — the machine-readable verdict every unauthorized-tool
+/// The machine-readable verdict every unauthorized-tool
 /// denial carries on its `AuthorizationDenied` audit row. Stable: the
 /// `/dev/auth-denials` rollup and any operator query cut on it.
 [<Literal>]
 let UnauthorizedToolVerdict = "unauthorized_tool"
 
-/// Phase 36.A — record an unauthorized AI-tool invocation attempt.
+/// Record an unauthorized AI-tool invocation attempt.
 ///
 /// The phase specification called for a new `_platform.ai.unauthorized_tool`
-/// audit stream. Phase 120 landed afterwards and generalised exactly this
+/// audit stream. The auth-audit hook landed afterwards and generalised exactly this
 /// write side: `IAuthAuditHook` is the one seam every authorization denial
 /// on the HTTP surface calls, and `ModulePermissionDenialRequirement` is
 /// precisely this denial's class — so the row joins the existing uniform
@@ -668,16 +675,169 @@ let recordUnauthorizedToolDenial
                 Verdict = UnauthorizedToolVerdict
                 Reason =
                     $"AI tool '{toolName}' requires Read on module '{sourceModule}', which this caller does not hold."
-                ScopeId =
-                    match AccessContext.scopeOf ctx.Items with
-                    | Some s -> Some s.ScopeId
-                    | _ -> None
+                ScopeId = access.StorageScope |> Option.map _.ScopeId
                 CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
             }
             |> Async.Start
         | _ -> ()
     with _ ->
         ()
+
+// ─── The gate sequence ───────────────────────────────────────────────
+
+/// One tool call at a door, as every gate reads it.
+type GateCall = {
+    /// The request the call is served in, for the gates' services and stamps.
+    Request: HttpContext
+    /// The caller.
+    Access: AccessContext
+    /// The tool called.
+    Tool: AIToolDefinition
+    /// The arguments as the model wrote them.
+    Arguments: string
+    /// The module the call reaches: the tool's own source module at the
+    /// loop's dispatch, the TARGET module at a reach tool.
+    Module: string
+}
+
+/// One gate's answer for a call.
+type GateCheck = GateCall -> Async<Result<unit, ToolRefusal>>
+
+/// The predicates a door supplies, one per slot of the one order. A door
+/// fills the slots that apply to it with its own predicates and the rest
+/// with `Gates.pass`; it never chooses the order.
+type GateSet = {
+    /// g1–g3: `ToolGate.decide` (`Gates.toolGate`).
+    ToolGate: GateCheck
+    /// g4: the client-resident allowlist.
+    Allowlist: GateCheck
+    /// g5: the human-in-the-loop approval.
+    Approval: GateCheck
+    /// g6: the module's AI-queryability opt-in (`Gates.queryability`).
+    Queryability: GateCheck
+    /// g7: the user's consent to the read.
+    Consent: GateCheck
+}
+
+/// The one place the order of a tool call's gates is written.
+[<RequireQualifiedAccess>]
+module Gates =
+    /// A slot the door does not run.
+    let pass: GateCheck = fun _ -> async.Return(Ok())
+
+    /// The gates in the order they run, by name: the caller's authority
+    /// first, then the deployment's policies over the call, then the
+    /// module's opt-in, and the user last — an outer refusal never shows a
+    /// dialog, and a caller who may not read a module learns nothing about
+    /// the deployment's AI configuration.
+    let sequence (set: GateSet) : (string * GateCheck) list = [
+        "tool-gate", set.ToolGate
+        "allowlist", set.Allowlist
+        "approval", set.Approval
+        "queryability", set.Queryability
+        "consent", set.Consent
+    ]
+
+    /// Run `set` over `calls` — one read reaching several modules — in the
+    /// one order: each gate asks every call before the next gate asks any, so
+    /// no module's dialog is shown while another module's outer gate would
+    /// still refuse. The first refusal answers, and nothing after it is asked.
+    let admitAll (set: GateSet) (calls: GateCall list) : Async<Result<GateCall list, ToolRefusal>> =
+        let rec across (check: GateCheck) (pending: GateCall list) = async {
+            match pending with
+            | [] -> return Ok()
+            | call :: rest ->
+                match! check call with
+                | Ok() -> return! across check rest
+                | Error refusal -> return Error refusal
+        }
+
+        let rec run (gates: (string * GateCheck) list) = async {
+            match gates with
+            | [] -> return Ok calls
+            | (_, check) :: rest ->
+                match! across check calls with
+                | Ok() -> return! run rest
+                | Error refusal -> return Error refusal
+        }
+
+        run (sequence set)
+
+    /// Run `set` over `call` in the one order: the first refusal answers, and
+    /// no gate after it is asked.
+    let admit (set: GateSet) (call: GateCall) : Async<Result<GateCall, ToolRefusal>> = async {
+        match! admitAll set [ call ] with
+        | Ok _ -> return Ok call
+        | Error refusal -> return Error refusal
+    }
+
+    /// The refusal a `ToolGate` verdict is, for `toolName`.
+    let refusalOf (toolName: string) (verdict: ToolGateVerdict) : ToolRefusal option =
+        match verdict with
+        | ToolAdmitted -> None
+        | ToolRefusedSource moduleName -> Some(ToolRefusal.Unreadable(toolName, moduleName))
+        | ToolRefusedGrant moduleName -> Some(ToolRefusal.GrantNotLive(toolName, moduleName))
+        | ToolRefusedUndeclared
+        | ToolRefusedEffects _ -> Some(ToolRefusal.OutsideCeiling(toolName, ToolGate.describe toolName verdict))
+
+    /// The first gate: `ToolGate.decide` over the module the call reaches,
+    /// under `policy` and the grant predicate `grantLive`. A grant that is
+    /// not live is audited on the grant guard's own row.
+    let toolGate (grantLive: string -> bool) (policy: ToolPolicy) : GateCheck =
+        fun call -> async {
+            let verdict =
+                ToolGate.decideDeclared
+                    (isToolSourcePermittedFor call.Access)
+                    grantLive
+                    policy
+                    call.Module
+                    (AIToolEffects.declaredOf call.Tool)
+
+            match refusalOf call.Tool.Name verdict with
+            | None -> return Ok()
+            | Some(ToolRefusal.GrantNotLive(_, moduleName) as refusal) ->
+                guardToolGrant call.Request call.Access moduleName |> ignore
+                return Error refusal
+            | Some refusal -> return Error refusal
+        }
+
+    /// g6: the module has opted into the cross-module AI surface.
+    let queryability: GateCheck =
+        fun call -> async {
+            if moduleAIQueryGate call.Request call.Module then
+                return Ok()
+            else
+                return Error(ToolRefusal.Unqueryable(call.Tool.Name, call.Module))
+        }
+
+    /// The POST doors' gate: g1 over the module the SERVER's pending record
+    /// names (`moduleName`; `None` for a call parked without one, which is
+    /// ungated), checked BEFORE `complete` runs — completing removes the
+    /// record, so a check after it would check nothing. Answers the status:
+    /// 403 with the call left parked (its own budget owns its lifetime), 200
+    /// when `complete` resumed it, 404 when it found nothing to resume.
+    let completePending
+        (ctx: HttpContext)
+        (logger: ILogger)
+        (correlation: string)
+        (moduleName: string option)
+        (complete: AccessContext -> Async<bool>)
+        : Async<int> =
+        async {
+            let access = reconstructAccessContext ctx
+
+            match moduleName with
+            | Some m when not (isToolSourcePermittedFor access m) ->
+                recordUnauthorizedToolDenial ctx access $"{ctx.Request.Method} {ctx.Request.Path}" correlation m
+
+                logger.Warn
+                    $"[{ctx.Request.Path}] decision POST rejected (403): caller lacks Read on module '{m}' for {correlation}"
+
+                return 403
+            | _ ->
+                let! completed = complete access
+                return if completed then 200 else 404
+        }
 
 /// Generate an AIProviderToolDef (JSON Schema format) from an AIToolDefinition.
 /// Eliminates the need to hand-write both Definition and ProviderDef.
@@ -688,7 +848,7 @@ let recordUnauthorizedToolDenial
 /// like `e.g. "country"`, which would otherwise terminate the JSON
 /// string mid-stream and trip the provider's `JsonDocument.Parse`.
 ///
-/// **Phase 508 — rich parameters.** A parameter whose `Type` is a
+/// **rich parameters.** A parameter whose `Type` is a
 /// rendered JSON-Schema object (`ToolSchema.isRendered`) contributes
 /// that object verbatim, so a nested object, an array of objects or an
 /// enum reaches the provider — and the MCP projection, which republishes
@@ -704,7 +864,7 @@ let toProviderDef (def: AIToolDefinition) : AIProviderToolDef =
     // schema, and the author gets a failure a long way from the cause.
     // The renderer never produces one, so reaching here means a
     // hand-written `Type`: a composition error, refused at compose time
-    // beside the Phase 709 budget refusal (this function is called from
+    // beside the result-budget refusal (this function is called from
     // `createTool`) rather than at the first turn that offers the tool.
     let requireWellFormed (p: ToolParameterSchema) =
         try
@@ -739,7 +899,7 @@ let toProviderDef (def: AIToolDefinition) : AIProviderToolDef =
         InputSchema = $"{{\"type\":\"object\",\"properties\":{{{properties}}},\"required\":[{required}]}}"
     }
 
-// ─── Phase 709 — per-tool result context budget ──────────────────────
+// ─── Per-tool result context budget ──────────────────────
 //
 // A tool result is serialised straight into model context. Any module
 // tool can therefore flood the conversation with an unbounded payload —
@@ -831,7 +991,7 @@ module ToolResultBudget =
 /// Create a RegisteredTool from an AIToolDefinition and an Execute function.
 /// The ProviderDef is auto-generated from the Definition.
 ///
-/// Phase 709: this is the single funnel every `RegisteredTool` passes
+/// This is the single funnel every `RegisteredTool` passes
 /// through, so it is where a nonsensical budget declaration is refused.
 /// A non-positive `ResultBudgetChars` is a composition error, not a
 /// silent "unbounded" — reading it as `NoResultBudget` would disable
@@ -854,9 +1014,10 @@ let createTool (def: AIToolDefinition) (execute: HttpContext -> string -> Async<
         ProviderDef = toProviderDef def
         Execute = execute
         Answer = None
+        ExecuteTyped = None
     }
 
-/// Phase 1131 — create a RegisteredTool whose executor answers the record
+/// Create a RegisteredTool whose executor answers the record
 /// form: the text the model reads and the parts the assistant message
 /// carries. `Execute` is derived from `answer` (its text), so the two
 /// cannot disagree. A client-resident definition is refused here, at
@@ -879,20 +1040,43 @@ let createAnsweringTool
             Answer = Some answer
     }
 
+/// Create a RegisteredTool from a typed executor. The loop runs `execute`
+/// directly; `Execute` is derived from it for the string contract: the
+/// context read from the request (`ToolContext.ofRequest`), the arguments
+/// parsed, a fault raised as `ToolHelpers.ToolFaulted` (the classification
+/// every string reader already applies) and a refusal rendered.
+let createTypedTool (def: AIToolDefinition) (execute: ToolContext -> ToolArgs -> Async<ToolOutcome>) : RegisteredTool =
+    let typed (context: ToolContext) (args: ToolArgs) = execute context args
+
+    let asString (ctx: HttpContext) (argsJson: string) = async {
+        match ToolArgs.parse argsJson with
+        | Error detail -> return raise (ToolHelpers.ToolFaulted(ToolFault.InvalidArguments(def.Name, detail)))
+        | Ok args ->
+            match! typed (ToolContext.ofRequest ctx) args with
+            | ToolOutcome.Produced text -> return text
+            | ToolOutcome.Faulted fault -> return raise (ToolHelpers.ToolFaulted fault)
+            | refused -> return ToolOutcome.toModel refused
+    }
+
+    {
+        createTool def asString with
+            ExecuteTyped = Some typed
+    }
+
 /// Mutable registry of AI-callable tools, populated at startup.
 /// Modules register their tools via compose; the registry is immutable after startup.
 ///
-/// Phase 793 — the registry carries the deployment's `ToolPolicy`, so
+/// The registry carries the deployment's `ToolPolicy`, so
 /// every list built from it and every dispatch re-check against it
 /// decides under the same policy without any call site threading it.
 /// The parameterless constructor is the pre-793 one, kept as an explicit
-/// secondary so its token stays in the public-API baseline (Phase 175's
+/// secondary so its token stays in the public-API baseline (the approval gate's
 /// optional-argument rule); it runs under `ToolPolicy.unrestricted`.
 type AIToolRegistry(policy: ToolPolicy) =
     let mutable tools: RegisteredTool list = []
 
 
-    /// Phase 709 — tools that have already logged a budget-elision Warn
+    /// Tools that have already logged a budget-elision Warn
     /// on this registry. Instance state rather than a module-level
     /// `mutable` so two composed servers in one process (tests do this)
     /// do not share a suppression set.
@@ -901,7 +1085,7 @@ type AIToolRegistry(policy: ToolPolicy) =
 
     new() = AIToolRegistry(ToolPolicy.unrestricted)
 
-    /// Phase 793 — the policy this registry lists and dispatches under.
+    /// The policy this registry lists and dispatches under.
     member _.Policy: ToolPolicy = policy
 
     /// Register a list of tools (called during server startup)
@@ -915,7 +1099,7 @@ type AIToolRegistry(policy: ToolPolicy) =
         tools
         |> List.tryFind (fun t -> t.Definition.Name = name || t.ProviderDef.Name = name)
 
-    /// Phase 36.A — the tools this caller may reach, filtered by
+    /// The tools this caller may reach, filtered by
     /// per-module `Read` permission on each tool's `SourceModule`.
     ///
     /// This is the list-time half of the gate: the agent loop builds its
@@ -927,21 +1111,21 @@ type AIToolRegistry(policy: ToolPolicy) =
     /// An unrestricted context (empty `ModulePermissions`) returns the
     /// same list `GetAll` does, in the same order (GP 11).
     ///
-    /// **Phase 730 — this arity is the ungated one and is preserved
+    /// **this arity is the ungated one and is preserved
     /// exactly.** It admits every tool the RBAC filter admits, taking no
     /// view on grant policy, which is precisely its pre-730 behaviour.
     /// Kept rather than widened with an optional parameter, because an
     /// optional argument folds into ONE method and would delete this
     /// token from the public-API baseline — a genuine break under the
-    /// documented Phase 175 rule (the same reasoning that gave Phase 552's
+    /// documented approval-gate rule (the same reasoning that gave the consent store's
     /// decorator two explicit constructors). Every SDK call site moves to
     /// the two-argument overload below; a consumer calling this one keeps
     /// what it had.
     member this.ListAccessible(access: AccessContext) : RegisteredTool list =
         this.ListAccessible(access, (fun _ -> true))
 
-    /// Phase 730 — the tools this caller may reach, filtered by BOTH the
-    /// Phase 36.A per-module `Read` permission and `isModuleGrantLive`,
+    /// The tools this caller may reach, filtered by BOTH the
+    /// the RBAC re-check per-module `Read` permission and `isModuleGrantLive`,
     /// the grant / consent gate.
     ///
     /// The second filter is what closes the gap Phases 551 and 552 each
@@ -964,7 +1148,7 @@ type AIToolRegistry(policy: ToolPolicy) =
     /// `guardToolGrant` structurally different. Two gates that must agree
     /// should share their whole decision, not most of it.
     ///
-    /// **Phase 793 — the filter IS `ToolGate.decide`.** The two predicates
+    /// **the filter IS `ToolGate.decide`.** The two predicates
     /// this overload used to compose by hand are the first two clauses of
     /// that decision; the effect ceiling is its third. The dispatch
     /// re-check in the agent loop and the MCP host's `visibleTools` call
@@ -975,7 +1159,7 @@ type AIToolRegistry(policy: ToolPolicy) =
         tools
         |> List.filter (fun t -> ToolGate.admits (ToolGate.decide access isModuleGrantLive policy t.Definition))
 
-    /// Phase 709 — claim the one budget-elision Warn allowed for this
+    /// Claim the one budget-elision Warn allowed for this
     /// tool. Returns `true` exactly once per tool name per registry;
     /// every later elision by the same tool emits the telemetry counter
     /// but stays out of the log.

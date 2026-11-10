@@ -14,7 +14,7 @@ open ToolUp.AI
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
-/// Phase 503 — `POST /api/ai/tool-approval`.
+/// `POST /api/ai/tool-approval`.
 ///
 /// The browser's half of the approval round trip: the user answered a
 /// `ToolApprovalRequired` dialog, and this completes the tool invocation
@@ -48,7 +48,7 @@ let private noOpLogger =
 ///     resumed (to run, or to be refused).
 ///   * **403** — the caller does not hold `Read` on the source module of
 ///     the tool the pending record names. The symmetric half of the gate,
-///     exactly as Phase 36.A added it to `/api/ai/tool-result`: an
+///     exactly as the RBAC re-check added it to `/api/ai/tool-result`: an
 ///     approval id is a Guid and guessing one is infeasible, but the
 ///     permission check is the load-bearing protection and it belongs on
 ///     both ends of the round trip. The pending record is left
@@ -90,26 +90,7 @@ let toolApprovalDecisionHandler: HttpHandler =
                 // the action rather than running it.
                 let decision = ToolApprovalDecision.ofToken req.Decision
 
-                let access = AIToolRegistry.reconstructAccessContext ctx
-
-                if not (AccessContext.hasPermission pending.SourceModule ModulePermission.Read access) then
-                    AIToolRegistry.recordUnauthorizedToolDenial
-                        ctx
-                        access
-                        (sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path))
-                        (sprintf "approval:%O" req.ApprovalId)
-                        pending.SourceModule
-
-                    logger.Warn(
-                        sprintf
-                            "[ToolApproval] decision POST rejected (403): caller lacks Read on source module '%s' for approvalId %O"
-                            pending.SourceModule
-                            req.ApprovalId
-                    )
-
-                    ctx.Response.StatusCode <- 403
-                    return! next ctx
-                else
+                let complete (_: AccessContext) = async {
                     let store =
                         match ctx.RequestServices.GetService typeof<IEventStore> with
                         | :? IEventStore as s -> Some s
@@ -120,25 +101,23 @@ let toolApprovalDecisionHandler: HttpHandler =
                         | Approved -> ToolApprovalDispatch.ApprovalGrantedEvent
                         | Rejected -> ToolApprovalDispatch.ApprovalRejectedEvent
 
-                    // Audit BEFORE completing. The invocation resumes the
-                    // instant the source is completed, so a write ordered
-                    // after it races the action it is meant to precede —
-                    // and for a consequential action the decision record
-                    // must not be the thing that arrives second.
+                    // Audit BEFORE completing: the invocation resumes the
+                    // instant it is completed, and the decision record must
+                    // not arrive second.
                     do! ToolApprovalDispatch.writeApprovalAudit store logger eventType pending
+                    return registry.TryComplete(req.ApprovalId, decision)
+                }
 
-                    if registry.TryComplete(req.ApprovalId, decision) then
-                        ctx.Response.StatusCode <- 200
-                    else
-                        // The gate's budget elapsed between our read of
-                        // the pending record and this completion. The
-                        // decision is audited — it simply arrived too late
-                        // to resume the invocation, which has already been
-                        // refused — so 404 (nothing was completed) is the
-                        // honest answer.
-                        ctx.Response.StatusCode <- 404
+                let! status =
+                    AIToolRegistry.Gates.completePending
+                        ctx
+                        logger
+                        $"approval:{req.ApprovalId}"
+                        (Some pending.SourceModule)
+                        complete
 
-                    return! next ctx
+                ctx.Response.StatusCode <- status
+                return! next ctx
         with ex ->
             logger.Warn $"[ToolApproval] decision POST rejected (400): {ex.Message}"
             ctx.Response.StatusCode <- 400

@@ -1227,21 +1227,6 @@ let private tryResolve<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
 /// private `scopeOf`) so triage rows land in
 /// the same scope the beacon rows and the latency rows use — a rollup
 /// that read a different scope would silently report nothing.
-let private resolveScope (ctx: HttpContext) : StorageScope =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s
-    | _ ->
-        let fallback =
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id -> id
-            | _ -> "anonymous"
-
-        {
-            ScopeId = fallback
-            Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-            Persist = true
-        }
-
 /// Write the attempt row + the three metric emissions. Best-effort in
 /// both directions: telemetry never crashes and never blocks the chat
 /// path, but a wedged backend logs at Warn rather than developing
@@ -1249,13 +1234,16 @@ let private resolveScope (ctx: HttpContext) : StorageScope =
 let private emitTelemetry (ctx: HttpContext) (payload: TriageEventPayload) : Async<unit> = async {
     let logger = resolveLogger ctx
 
-    match tryResolve<IEventStore> ctx with
-    | None -> ()
-    | Some store ->
+    // A request with no resolved principal has no scope to write a row
+    // into; the metrics below carry no scope and still land.
+    match tryResolve<IEventStore> ctx, AIRequest.scope ctx with
+    | None, _
+    | _, None -> ()
+    | Some store, Some scope ->
         let evt: ModuleEvent = {
             Id = Guid.NewGuid()
             OccurredAt = DateTime.UtcNow
-            ScopeId = (resolveScope ctx).ScopeId
+            ScopeId = scope.ScopeId
             SourceModule = FastPathSourceModule
             EventType = TriageEventType
             Payload = toJson payload

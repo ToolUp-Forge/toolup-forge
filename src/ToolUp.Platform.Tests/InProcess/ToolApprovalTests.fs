@@ -43,6 +43,7 @@ open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Test-only fakes ──────────────────────────────────────────────────
 
@@ -261,13 +262,27 @@ let private auditRows (store: IEventStore) (source: string) = async {
     return rows |> Seq.toList
 }
 
-let private noOpLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
+/// The approval gate run directly over one call of the test tool, on a
+/// budget of `budgetMs` and the stream `channel`.
+let private approveDirectly (budgetMs: int) (ctx: HttpContext) (channel: PromptChannel option) = async {
+    let call: AIToolRegistry.GateCall = {
+        Request = ctx
+        Access = AIToolRegistry.reconstructAccessContext ctx
+        Tool = (buildToolRegistry ServerResident (ref false)).GetAll().Head.Definition
+        Arguments = ArgsJson
+        Module = SourceModule
     }
+
+    return!
+        ToolApprovalDispatch.approve
+            budgetMs
+            AIToolRegistry.ToolPolicy.unrestricted
+            Logger.silent
+            channel
+            (Some "SalesAnalysis")
+            (Some "/dashboard")
+            call
+}
 
 // ─── Tests ───────────────────────────────────────────────────────────
 
@@ -393,27 +408,18 @@ let tests =
             let ctx =
                 buildHttpContext store (Some(PredicatePolicy(fun _ -> true))) None (Some approvals)
 
-            ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box (Guid.NewGuid())
-            ctx.Items[AIConsentDispatch.ItemsKeys.TaskId] <- box (Guid.NewGuid())
+            let channel: PromptChannel = {
+                ConversationId = Guid.NewGuid()
+                TaskId = Guid.NewGuid()
+                Emit = ignore
+            }
 
-            ctx.Items[AIConsentDispatch.ItemsKeys.StreamEmitter] <-
-                box ({ Emit = ignore }: AIConsentDispatch.StreamEmitter)
-
-            let! outcome =
-                ToolApprovalDispatch.requireApprovalWithin
-                    50
-                    ctx
-                    noOpLogger
-                    ToolName
-                    SourceModule
-                    ArgsJson
-                    (Some "SalesAnalysis")
-                    (Some "/dashboard")
+            let! outcome = approveDirectly 50 ctx (Some channel)
 
             match outcome with
-            | ToolApprovalDispatch.ApprovalGranted ->
-                failtest "an unanswered approval prompt must NOT grant — the whole gate turns on this"
-            | ToolApprovalDispatch.ApprovalRefused reason ->
+            | Ok() -> failtest "an unanswered approval prompt must NOT grant — the whole gate turns on this"
+            | Error refusal ->
+                let reason = ToolRefusal.reason refusal
                 Expect.stringContains reason "not answered" "the model is told nobody answered"
                 Expect.stringContains reason "did NOT run" "and that the action did not happen"
 
@@ -534,12 +540,12 @@ let tests =
             let store = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let ctx = buildHttpContext store (Some(PredicatePolicy(fun _ -> true))) None None
 
-            let! outcome = ToolApprovalDispatch.requireApproval ctx noOpLogger ToolName SourceModule ArgsJson None None
+            let! outcome = approveDirectly SuspendedPrompt.SuspendedDispatchTimeoutMs ctx None
 
             match outcome with
-            | ToolApprovalDispatch.ApprovalGranted ->
-                failtest "with no way to ask, an approval-requiring invocation must be refused, never run"
-            | ToolApprovalDispatch.ApprovalRefused reason ->
+            | Ok() -> failtest "with no way to ask, an approval-requiring invocation must be refused, never run"
+            | Error refusal ->
+                let reason = ToolRefusal.reason refusal
                 Expect.stringContains reason "did not run" "the model is told the action did not happen"
         }
 

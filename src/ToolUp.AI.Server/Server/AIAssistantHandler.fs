@@ -1078,63 +1078,18 @@ let private toConversationMessage
 
 // ─── Background context ──────────────────────────────────────────
 
-/// Create a synthetic HttpContext with a new DI scope for background work.
-/// The original request HttpContext is disposed after the response is sent,
-/// so background work (the agent loop) needs its own scope.
-///
-/// Copies the pre-resolved scope / user / permission items from the
-/// original request into the background context's `Items` dictionary so
-/// any tool that reads them (the principal's `StorageScope` in particular) hits
-/// the same store the Data Manager API used on the originating request.
-/// Without this copy the agent loop falls back to `getStoreForUser`
-/// which resolves a different container in every mode EXCEPT the one
-/// where it happens to match — in Anonymous mode the user's files live
-/// in `session-{sessionId}` and the fallback looks in `user-{userId}`,
-/// which is always empty, so tools see no uploaded files at all.
-let private createBackgroundContext (ctx: HttpContext) (userId: string) =
-    let scopeFactory = ctx.RequestServices.GetRequiredService<IServiceScopeFactory>()
+/// A context with its own DI scope for the agent loop, which outlives the
+/// request (the request's context is disposed once the response is sent). The
+/// request's principal, grant verdicts and resolved scope travel with it
+/// (`AIRequest.carry`), so the loop's gates and its tools judge and read
+/// exactly as the request would have.
+let private createBackgroundContext (ctx: HttpContext) =
+    let scope =
+        ctx.RequestServices.GetRequiredService<IServiceScopeFactory>().CreateScope()
 
-    let scope = scopeFactory.CreateScope()
     let bgCtx = DefaultHttpContext()
     bgCtx.RequestServices <- scope.ServiceProvider
-    // Preserve user identity headers so scope resolvers work
-    bgCtx.Request.Headers.Append("X-User-Id", userId)
-
-    // Carry forward the request's principal: ONE item
-    // (`AccessContext.ItemsKey`) holding subject, user, scope, permissions,
-    // exposure and role together, so the loop never reassembles a principal
-    // from separate stamps, and a background context without it is served
-    // under a context that grants nothing.
-    //
-    // The two grant stamps are load-bearing for the tool gate. Both are
-    // resolved PER REQUEST by the middleware — the consent verdicts
-    // especially, because a revocation must bite at the next call rather
-    // than the next sweep. A
-    // background context that did not carry them would leave the tool gate
-    // reading `Map.empty`, which reads as "no grant, no consent" and would
-    // therefore fail CLOSED rather than open. Safe, but wrong in the other
-    // direction: every governed module would vanish from the model's tool
-    // list even for a subject who legitimately holds it.
-    let itemsToCopy = [
-        AccessContext.ItemsKey
-        // The grant + consent stamps. Named through the constants that
-        // DEFINE them, not re-spelled, so a rename moves both ends together.
-        GrantPolicyGuard.ModuleGrantsItemsKey
-        GrantConsentStore.ModuleGrantConsentsItemsKey
-    ]
-
-    for key in itemsToCopy do
-        match ctx.Items.TryGetValue key with
-        | true, value -> bgCtx.Items[key] <- value
-        | _ -> ()
-
-    // The scope the platform resolved for the request. The fact tools read
-    // only that (`ScopeResolution.forRequest`), and the list above does not
-    // carry it, so without this every fact tool in a chat turn would read the
-    // anonymous shard. `carry` records the request's own resolution and mints
-    // nothing: a request the platform resolved no scope for stays anonymous.
-    ScopeResolution.carry bgCtx (ScopeResolution.forRequest ctx)
-
+    AIRequest.carry ctx bgCtx
     bgCtx, scope
 
 // ─── Typed streaming surface ─────────────────────────────────────
@@ -1470,33 +1425,16 @@ let aiAssistantApi
                     return []
         }
 
-    // Scope and user are pre-resolved asynchronously by
-    // `ScopeResolutionMiddleware`. If the middleware did not run or scope
-    // resolution failed (Error case), fall back to an anonymous user-scoped
-    // container.
+    // The caller, resolved once by `ScopeResolutionMiddleware`: a request
+    // without a principal is served unresolved — no module, no role — in the
+    // anonymous principal's own shard, never another scope's.
+    let accessContext = AIRequest.accessOrUnresolved "AIAssistantHandler" ctx
+
     let scope =
-        match AccessContext.scopeOf ctx.Items with
-        | Some s -> s
-        | _ ->
-            let fallback =
-                match AccessContext.callerIdOf ctx.Items with
-                | Some id -> id
-                | _ -> "anonymous"
+        AIRequest.scope ctx
+        |> Option.defaultWith (fun () -> AIRequest.scopeOf accessContext)
 
-            {
-                ScopeId = fallback
-                Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-                Persist = true
-            }
-
-    let userId =
-        match AccessContext.callerIdOf ctx.Items with
-        | Some id -> id
-        | _ -> "anonymous"
-
-    let accessContext =
-        AccessContext.tryResolve ctx.RequestServices
-        |> Option.defaultWith (fun () -> AccessContext.unresolved "AIAssistantHandler")
+    let userId = AIRequest.callerId ctx |> Option.defaultValue accessContext.UserId
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 
@@ -1944,7 +1882,7 @@ let aiAssistantApi
                 content
                 []
                 turn.Contribution.RetrievedSources
-                // Phase 1131: the parts the turn's tools attached, after
+                // The parts the turn's tools attached, after
                 // the settled text; none on a plain turn.
                 (LoopState.messageParts content state)
                 ""
@@ -2180,15 +2118,7 @@ let aiAssistantApi
 
                 // A background context with its own DI scope: the request's
                 // HttpContext is disposed after this response.
-                let background, backgroundScope = createBackgroundContext ctx userId
-
-                // The "from" half of "cross-module". The active module
-                // arrives on the request body, not among the items the
-                // background context copies forward. Absent when the user was
-                // on no module's page; the audit row then carries `None`.
-                request.ActiveModule
-                |> Option.iter (fun activeModule ->
-                    background.Items[AICrossModuleAudit.ItemsKeys.ActiveModule] <- box activeModule)
+                let background, backgroundScope = createBackgroundContext ctx
 
                 let turn: TurnRequest = {
                     TaskId = taskId
@@ -2272,22 +2202,12 @@ let aiAssistantApi
                 return rows |> List.map _.Conversation
             }
 
-        // The client-visible tool listing is filtered by the
-        // caller's per-module `Read` permission, the same predicate the
-        // agent loop's per-turn list and its dispatch re-check use — a
-        // user must not be able to enumerate the tool surface of a module
-        // they cannot read. Unrestricted deployments (`ModulePermissions
-        // .Unrestricted`) see the full registry as before (GP 11).
-        //
-        // Read from the stamped principal when the DI factory did not run:
-        // a silent unrestricted fallback is the one thing a permission
-        // filter must not have, and neither path has one.
+        // The client-visible tool listing is filtered by the same decision
+        // the agent loop's per-turn list and its dispatch re-check use: a
+        // user must not enumerate the tool surface of a module they cannot
+        // read, and an unresolved caller holds none.
         GetAvailableTools =
             fun () -> async {
-                let toolAccess =
-                    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                    | :? AccessContext as ac -> ac
-                    | _ -> AIToolRegistry.reconstructAccessContext ctx
 
                 // Grant-gated for the same reason the listing
                 // is permission-gated: enumerating the tool surface of a
@@ -2295,7 +2215,7 @@ let aiAssistantApi
                 // the caller what they would have had, which is the fact
                 // the grant policy is withholding.
                 return
-                    registry.ListAccessible(toolAccess, AIToolRegistry.moduleGrantGate ctx)
+                    registry.ListAccessible(accessContext, AIToolRegistry.moduleGrantGate ctx)
                     |> List.map _.Definition
             }
 

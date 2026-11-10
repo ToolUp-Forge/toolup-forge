@@ -263,6 +263,7 @@
         <Compile Include="AI\ConversationRecordTests.fs" />
         <Compile Include="AI\AgentLoopRailsTests.fs" />
         <Compile Include="AI\TurnOutcomeStatusTests.fs" />
+        <Compile Include="AI\GatesAdmitOrderTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\SsePerConnectionWriterTests.fs" />
         <Compile Include="InProcess\AuditEventRegistryTests.fs" />

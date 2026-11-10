@@ -11,14 +11,14 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.AI
 open ToolUp.Platform.Compose
 
-/// Phase 36.D — `POST /api/ai/consent`.
+/// `POST /api/ai/consent`.
 ///
 /// The browser's half of the consent round trip: the user answered an
 /// `AIConsentRequired` dialog, and this completes the `_platform.ai.*`
 /// tool suspended on the matching `TaskCompletionSource`.
 ///
-/// Deliberately shaped after `/api/ai/tool-result` (Phase 6g.A + the
-/// Phase 36.A permission re-check bolted onto it), because it is the same
+/// Deliberately shaped after `/api/ai/tool-result` (the client-tool round trip + the
+/// the RBAC re-check permission re-check bolted onto it), because it is the same
 /// endpoint class: a small correlated POST that resumes a parked server
 /// thread. The three things that class has to get right are the three
 /// things it gets right here — authorise from the SERVER's record of the
@@ -30,7 +30,7 @@ open ToolUp.Platform.Compose
 // ─── Audit ───────────────────────────────────────────────────────
 
 /// The audit source every consent decision is recorded under. One source,
-/// two event types, for the same reason Phase 36.A gave the RBAC denial
+/// two event types, for the same reason the RBAC re-check gave the RBAC denial
 /// its own stream: an operator asking "what did users allow the agent to
 /// read" should read one stream and get every answer, not union two.
 [<Literal>]
@@ -148,43 +148,12 @@ let consentDecisionHandler: HttpHandler =
                 // the read rather than authorising it.
                 let decision = AllowDecision.ofToken req.Decision
 
-                let access = AIToolRegistry.reconstructAccessContext ctx
-
-                if not (AccessContext.hasPermission pending.TargetModule ModulePermission.Read access) then
-                    AIToolRegistry.recordUnauthorizedToolDenial
-                        ctx
-                        access
-                        (sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path))
-                        (sprintf "consent:%O" req.ConsentId)
-                        pending.TargetModule
-
-                    logger.Warn(
-                        sprintf
-                            "[AIConsent] decision POST rejected (403): caller lacks Read on target module '%s' for consentId %O"
-                            pending.TargetModule
-                            req.ConsentId
-                    )
-
-                    ctx.Response.StatusCode <- 403
-                    return! next ctx
-                else
-                    let scopeId =
-                        match AccessContext.scopeOf ctx.Items with
-                        | Some s -> s.ScopeId
-                        | _ -> access.UserId
-
-                    // Persist BEFORE completing, so the decision is durable
-                    // by the time the resumed read (and every read after it
-                    // in this conversation) consults the record. Completing
-                    // first would leave a window in which a second tool call
-                    // in the same parallel batch re-prompts for a module the
-                    // user has just answered about.
-                    //
-                    // The write uses the CONTAINER the suspending tool
-                    // recorded, not one re-derived from this request: the
-                    // POST is a different request with its own scope
-                    // resolution, and the record has to land where the tool
-                    // will look for it.
+                // Persist BEFORE completing, so the decision is durable by the
+                // time the resumed read (and every later read in this
+                // conversation) consults it, into the CONTAINER the
+                // suspending tool recorded, not one re-derived from this
+                // request. Audit before completing too.
+                let complete (access: AccessContext) = async {
                     match ctx.RequestServices.GetService typeof<IBlobStorage> with
                     | :? IBlobStorage as storage ->
                         do!
@@ -195,27 +164,25 @@ let consentDecisionHandler: HttpHandler =
                                 pending.TargetModule
                                 decision
                     | _ ->
-                        // No blob substrate: the decision still applies to
-                        // the read in front of the user, it simply is not
-                        // remembered. Worth a line — a deployment in this
-                        // state re-prompts on every read and the cause is
-                        // not otherwise visible.
+                        // The decision still applies to the read in front of
+                        // the user; it is not remembered.
                         logger.Warn
                             "[AIConsent] no IBlobStorage registered; the decision applies to this read but will not be remembered for the conversation."
 
-                    do! writeConsentAudit ctx logger scopeId pending decision
+                    do! writeConsentAudit ctx logger (AIRequest.scopeOf access).ScopeId pending decision
+                    return registry.TryComplete(req.ConsentId, decision)
+                }
 
-                    if registry.TryComplete(req.ConsentId, decision) then
-                        ctx.Response.StatusCode <- 200
-                    else
-                        // The tool timed out between our read of the pending
-                        // entry and this completion. The decision is
-                        // recorded and audited — it simply arrived too late
-                        // to resume this read — so 404 (nothing was
-                        // completed) is the honest answer.
-                        ctx.Response.StatusCode <- 404
+                let! status =
+                    AIToolRegistry.Gates.completePending
+                        ctx
+                        logger
+                        $"consent:{req.ConsentId}"
+                        (Some pending.TargetModule)
+                        complete
 
-                    return! next ctx
+                ctx.Response.StatusCode <- status
+                return! next ctx
         with ex ->
             logger.Warn $"[AIConsent] decision POST rejected (400): {ex.Message}"
             ctx.Response.StatusCode <- 400

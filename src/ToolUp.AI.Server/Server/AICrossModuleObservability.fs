@@ -12,7 +12,7 @@ open ToolUp.Platform
 open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.Compose
 
-// ─── Phase 36.E — `/dev/ai-cross-module` rolling-window rollup ───────
+// ─── `/dev/ai-cross-module` rolling-window rollup ───────
 //
 // The read side of `AICrossModuleAudit`. Every `_platform.ai.*`
 // invocation writes one `CrossModuleRead` row; this answers the two
@@ -298,28 +298,23 @@ let reportFor (auditLogOpt: IAuditLog) (scopeId: string) : Async<CrossModuleRepo
 
 // ─── Route handler ──────────────────────────────────────────────────
 
-let private resolveScopeId (ctx: HttpContext) : string =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s.ScopeId
-    | _ ->
-        match AccessContext.callerIdOf ctx.Items with
-        | Some id -> id
-        | _ -> "anonymous"
-
-let private buildReport (ctx: HttpContext) : Async<CrossModuleReport> =
-    let auditLogOpt = ToolUp.Platform.Config.Background.auditLogOf ctx
-
-    reportFor auditLogOpt (resolveScopeId ctx)
+let private buildReport (ctx: HttpContext) (scope: StorageScope) : Async<CrossModuleReport> =
+    reportFor (ToolUp.Platform.Config.Background.auditLogOf ctx) scope.ScopeId
 
 /// JSON handler for `/dev/ai-cross-module`. `Cache-Control: no-store` so
 /// a refresh always re-reads the trail.
 let private crossModuleHandler: HttpHandler =
     fun next ctx -> task {
-        let! report = buildReport ctx
-        ctx.Response.ContentType <- "application/json; charset=utf-8"
-        ctx.Response.Headers["Cache-Control"] <- "no-store"
-        do! ctx.Response.WriteAsync(JsonSerializer.Serialize(report, indentedJsonOptions))
-        return! next ctx
+        match AIRequest.scope ctx with
+        | None ->
+            ctx.Response.StatusCode <- 401
+            return! next ctx
+        | Some scope ->
+            let! report = buildReport ctx scope
+            ctx.Response.ContentType <- "application/json; charset=utf-8"
+            ctx.Response.Headers["Cache-Control"] <- "no-store"
+            do! ctx.Response.WriteAsync(JsonSerializer.Serialize(report, indentedJsonOptions))
+            return! next ctx
     }
 
 /// Route for the cross-module read rollup. Mounted only when

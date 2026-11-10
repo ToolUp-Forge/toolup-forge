@@ -8,9 +8,9 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Compose
 
-// ─── Phase 6i.A — `/dev/ai-latency` rolling-window telemetry ────
+// ─── `/dev/ai-latency` rolling-window telemetry ────
 //
-// Mirrors the Phase 6j.A `/dev/ai-fastpath` shape: read from
+// Mirrors the fast-path report's `/dev/ai-fastpath` shape: read from
 // `IEventStore.ReadBySource(_, AILatencyRecord.SourceModule)`
 // filtered to the caller's scope (cross-team enumeration is
 // structurally impossible — GP 4) and roll up p50 / p95 / p99
@@ -21,7 +21,7 @@ open ToolUp.Platform.Compose
 //     finding without per-deployment instrumentation.
 //   - **Per tool name** — which tool is dragging tail latency?
 //     Includes error rate so "tools that fail are slow" stands out.
-//   - **Server vs client tool** — gross split across Phase 6g.A's
+//   - **Server vs client tool** — gross split across the client-tool round trip's
 //     server-resident vs client-resident tools. Validates the
 //     90s client timeout is sensibly tuned for the long tail.
 //
@@ -39,7 +39,7 @@ let private SourceModule = "_platform.ai.latency"
 /// Rolling window for percentile stats. Matches the 60-minute
 /// window `FastPathTelemetryHandler` uses so an operator can read
 /// `/dev/ai-fastpath` and `/dev/ai-latency` against a comparable
-/// time slice — Phase 36.E made that a shared declaration rather than
+/// time slice — the cross-module observability change made that a shared declaration rather than
 /// a per-handler constant, so the two cannot drift apart.
 let private rollingWindow = AIDiagnosticsWindow.rollingWindow
 
@@ -69,7 +69,7 @@ type private ProviderModelBreakdown = {
     P99TurnMs: float
     P50TtftMs: float option
     P95TtftMs: float option
-    /// Phase 6i.B: average per-record `CachedPromptTokens / PromptTokens`
+    /// Average per-record `CachedPromptTokens / PromptTokens`
     /// across records in the bucket where both values are populated and
     /// `PromptTokens > 0`. `None` when no record qualifies (e.g., every
     /// record is pre-6i.B and has `None` token fields, or the provider
@@ -110,7 +110,7 @@ type private LatencyReport = {
 // ─── Statistics ─────────────────────────────────────────────────
 
 /// Nearest-rank percentile, and its partially-populated twin (`None`
-/// when every turn was tool-only). Phase 36.E hoisted both into
+/// when every turn was tool-only). the cross-module observability change hoisted both into
 /// `AIDiagnosticsWindow` when this file's copy became one of three;
 /// the local names stay so the breakdown builders below read unchanged.
 let private percentile = AIDiagnosticsWindow.percentile
@@ -130,21 +130,6 @@ let private decodePayload (evt: ModuleEvent) : (AILatencyRecord * DateTime) opti
             Some(payload, evt.OccurredAt)
     with _ ->
         None
-
-let private resolveScope (ctx: HttpContext) : StorageScope =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s
-    | _ ->
-        let fallback =
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id -> id
-            | _ -> "anonymous"
-
-        {
-            ScopeId = fallback
-            Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-            Persist = true
-        }
 
 // ─── Breakdown builders ─────────────────────────────────────────
 
@@ -224,8 +209,7 @@ let private buildServerVsClient (records: AILatencyRecord list) : LocationBreakd
 
 // ─── Report builder ─────────────────────────────────────────────
 
-let private buildReport (ctx: HttpContext) : Async<LatencyReport> = async {
-    let scope = resolveScope ctx
+let private buildReport (ctx: HttpContext) (scope: StorageScope) : Async<LatencyReport> = async {
     let now = DateTime.UtcNow
     let windowStart = now - rollingWindow
 
@@ -267,11 +251,18 @@ let private renderJson (report: LatencyReport) =
 /// so dev-tools sees fresh stats on every refresh.
 let private latencyHandler: HttpHandler =
     fun next ctx -> task {
-        let! report = buildReport ctx
-        ctx.Response.ContentType <- "application/json; charset=utf-8"
-        ctx.Response.Headers["Cache-Control"] <- "no-store"
-        do! ctx.Response.WriteAsync(renderJson report)
-        return! next ctx
+        match AIRequest.scope ctx with
+        | None ->
+            // No resolved principal: there is no scope to read, and none is
+            // invented for it.
+            ctx.Response.StatusCode <- 401
+            return! next ctx
+        | Some scope ->
+            let! report = buildReport ctx scope
+            ctx.Response.ContentType <- "application/json; charset=utf-8"
+            ctx.Response.Headers["Cache-Control"] <- "no-store"
+            do! ctx.Response.WriteAsync(renderJson report)
+            return! next ctx
     }
 
 /// Route for the AI latency telemetry endpoint. Mounted only when
