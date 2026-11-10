@@ -376,7 +376,7 @@ type AuditEvent =
     ///
     /// Phase 625: renamed from `ArtifactSigned`. Wire `EventType`
     /// remains `"ArtifactSigned"` — do not "tidy" it to match the case
-    /// name; see the decision record at `AuditLog.auditEventCodecs`.
+    /// name; see the Phase 625 decision record at the head of `AuditLog.fs`.
     | ModuleArtefactSigned of ModuleArtefactSignedPayload
     /// Phase 30a — `IArtifactVerifier.Verify` returned
     /// `ArtifactValidation.Ok` (signature valid + publisher key trusted

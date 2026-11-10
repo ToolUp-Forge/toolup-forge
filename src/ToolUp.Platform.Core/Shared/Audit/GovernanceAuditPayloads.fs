@@ -33,7 +33,7 @@ open System
 // The WIRE IS UNCHANGED: `AuditEvent.eventTypeName` still returns the
 // historical `"ArtifactSigned"` / `"ArtifactVerified"` /
 // `"ArtifactRejected"` discriminators. See the decision record at
-// `auditEventCodecs` in `Server/AuditLog.fs`. Record FIELD names are
+// the head of `Server/AuditLog.fs` (Phase 625). Record FIELD names are
 // likewise untouched (they ARE serialised); only the F#-facing type and
 // case identifiers moved.
 
