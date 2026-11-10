@@ -263,13 +263,13 @@ let private emitterOf (ctx: HttpContext) : StreamEmitter option =
     | _ -> None
 
 let private containerOf (ctx: HttpContext) : string option =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as scope) -> Some scope.Container
+    match AccessContext.scopeOf ctx.Items with
+    | Some scope -> Some scope.Container
     | _ -> None
 
 let private userIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) -> id
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id -> id
     | _ -> "anonymous"
 
 /// The standing refusal text, written for the model: the remedy is the

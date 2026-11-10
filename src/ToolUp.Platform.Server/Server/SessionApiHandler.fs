@@ -75,8 +75,8 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
         | _ -> AccessContext.unresolved "SessionApiHandler"
 
     let scopeIdOpt =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> Some s.ScopeId
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> Some s.ScopeId
         | _ -> None
 
     /// Every method needs the same two things: a composed registry and a

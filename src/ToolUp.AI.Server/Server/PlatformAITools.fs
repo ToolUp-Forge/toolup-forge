@@ -191,11 +191,11 @@ let private notOptedInMessage (moduleName: string) =
 /// isolation boundary for entity / result / catalog reads (GP 4). Falls
 /// back to the user id (then `"anonymous"`) when no scope was resolved.
 let private scopeIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> s.ScopeId
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> s.ScopeId
     | _ ->
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
 let private dataObjectErrorText (err: DataObjectError) : string =

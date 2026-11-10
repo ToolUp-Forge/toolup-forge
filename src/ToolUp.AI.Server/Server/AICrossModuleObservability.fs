@@ -299,11 +299,11 @@ let reportFor (auditLogOpt: IAuditLog) (scopeId: string) : Async<CrossModuleRepo
 // ─── Route handler ──────────────────────────────────────────────────
 
 let private resolveScopeId (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> s.ScopeId
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> s.ScopeId
     | _ ->
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
 let private buildReport (ctx: HttpContext) : Async<CrossModuleReport> =

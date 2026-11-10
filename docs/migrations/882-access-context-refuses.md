@@ -19,6 +19,13 @@ bypassed the middleware. Now the first meaning is a stated case, and the second 
 | `IPermissionStore.GetEffectivePermissions` | `Result<Map<…>, _>` | `Result<ModulePermissions, _>`: `Unrestricted` for a team whose document holds no member grant and no default (`PermissionStore.isConfigured`), else `Restricted` to the user's effective map |
 | Service-account overlay | three never-empty guards | adopted as `Restricted`; the token middleware's and factory's empty guards removed; the store still refuses an empty declared set and an empty meet |
 
+| The request items | eleven string keys (`ToolUp.User`, `UserId`, `Subject`, `StorageScope`, `ScopeResult`, `ModulePermissions`, `ModuleExposure`, `PlatformRole`, `PublicationGrants`, `ServiceAccountPermissions`, and the factory's reassembly) | ONE item, the principal under `AccessContext.ItemsKey`; `AccessContext` gains `User` (the provider's user) and `StorageScope`. Read it with `AccessContext.ofItems` / `stamp`, or the accessors `callerIdOf` / `subjectOf` / `scopeOf` / `userOf` / `platformRoleOf`. Two inputs to resolution stay: the share-token claim and `ServiceAccountPrincipalItemsKey` |
+| The caller id | `ToolUp.UserId`, the provider's user (`"anonymous"` for a machine bearer) | `AccessContext.callerId`: `"anonymous"` for an anonymous session, the principal id otherwise — a machine or share-link bearer is named by its account, never `"anonymous"` |
+| `RequestViewer` | read three items | `RequestViewer.ofAccess` (a projection); `ofItems` reads the principal |
+| `TeamPolicyViewer.resolve` | `services access userId teamId` | `services access teamId` — the user id is the principal's |
+| `EntityPrincipal` from a handler | `EntityPrincipal.ofPrincipal ac.UserId` | `AccessContext.entityPrincipal ac` |
+| Service-account overlay | its own item, read by the factory | derived from the stamped `ServiceAccountPrincipal` by `Middleware.principalOf`, the one projection |
+
 **Behaviour change for configured teams:** a member with no entry and no team default now holds nothing; before,
 their empty effective map read as every module. A team that never configured permissions is unchanged (GP 11).
 `PermissionStoreActionAuthorizer` stays default-deny: `Unrestricted` cites no grant for an action requirement.
@@ -40,12 +47,17 @@ match ctx.ModulePermissions with                                                
 | ModulePermissions.Unrestricted -> …
 | ModulePermissions.Restricted map -> Map.tryFind m map
 
-ctx.Items["ToolUp.ModulePermissions"] <- box perms                       // before (a test)
-ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items perms)   // after (the fixture)
+match ctx.Items.TryGetValue "ToolUp.StorageScope" with                   // before
+| true, (:? StorageScope as s) -> …
+match AccessContext.scopeOf ctx.Items with                                // after
+| Some s -> …
+
+ctx.Items["ToolUp.UserId"] <- box "alice"                                 // before (a test)
+AccessContexts.stampUserId ctx.Items "alice"                              // after (the fixture)
 ```
 
 Tests build contexts through `src/ToolUp.Platform.Tests/TestSupport/AccessContexts.fs` (`forSubject`, `anonymous`,
-`user`, `teamMember`, `system`, `restrictedTo`, `ofItems`), linked into each test pack that uses it.
+`user`, `teamMember`, `system`, `restrictedTo`, `permissionsOf`, and the `stamp*` builders over a request's items), linked into each test pack that uses it.
 
 ## Codemod
 
@@ -53,14 +65,14 @@ Tests build contexts through `src/ToolUp.Platform.Tests/TestSupport/AccessContex
 `AccessContext.ofSubject ModulePermissions.Unrestricted` (behaviour-preserving; review each site: a handler
 fallback becomes `unresolved`, background work `carrying` / `system`) and flags `.ModulePermissions.IsEmpty`,
 `.ModulePermissions.TryFind` / `ContainsKey` / `Map.tryFind … ModulePermissions` and the retired
-`ToolUp.ModulePermissions` item for review.
+retired request items for review, and rewrites `EntityPrincipal.ofPrincipal x.UserId` to `AccessContext.entityPrincipal x`.
 
 ## Verification
 
 `dotnet run --project Build.fsproj -- VerifyAccessFallbacks` (also in the `ScopeLiterals` leg of `VerifyAll`) is
 red on the retired fallback anywhere under `src/`, `samples/` or `templates/` outside test packs, and on
 `ModulePermissions.Unrestricted` constructed outside its three homes (`AccessContext.fs`, `PermissionStore.fs`,
-`Middleware.fs`).
+`Middleware.fs`), and on any retired request item key spelled outside `AccessContext.fs`.
 
 ## Rollback
 

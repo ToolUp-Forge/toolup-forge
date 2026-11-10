@@ -11,6 +11,7 @@
          matching DLLs. The tests now exercise the production companion
          DLLs directly. -->
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="InProcess\RecurrenceExpanderTests.fs" />
         <Compile Include="InProcess\iCalendarTests.fs" />
         <Compile Include="InProcess\BookingConflictDetectorTests.fs" />
@@ -29,7 +30,6 @@
         <Compile Include="Contracts\ICalendarBridgeContract.fs" />
         <Compile Include="InProcess\InMemoryCalendarBridgeTests.fs" />
         <Compile Include="InProcess\CalDAVCalendarBridgeTests.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="InProcess\CalendarSyncTests.fs" />
         <!-- Phase 971 — a refused calendar-link delete is reported. -->
         <Compile Include="InProcess\Phase971SchedulingTests.fs" />

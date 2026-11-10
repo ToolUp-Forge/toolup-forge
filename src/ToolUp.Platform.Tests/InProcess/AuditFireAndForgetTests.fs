@@ -186,8 +186,8 @@ let private run (site: Site) (auditLog: IAuditLog) (invites: IPendingInviteStore
     do! middleware.InvokeAsync ctx |> Async.AwaitTask
 
     let subject =
-        match ctx.Items.TryGetValue "ToolUp.Subject" with
-        | true, (:? Subject as s) ->
+        match AccessContext.subjectOf ctx.Items with
+        | Some s ->
             match s with
             // A fresh anonymous session id per request; its shape is the claim.
             | AnonymousSession _ -> "AnonymousSession"

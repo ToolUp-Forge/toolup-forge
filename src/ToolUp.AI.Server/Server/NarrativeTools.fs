@@ -55,8 +55,8 @@ let private disclosureGateOf (ctx: HttpContext) : IFactDisclosureGate option =
     | _ -> None
 
 let private userIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) -> id
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id -> id
     | _ -> "anonymous"
 
 /// Check every fact ref in `document` at `surface`; returns the denied

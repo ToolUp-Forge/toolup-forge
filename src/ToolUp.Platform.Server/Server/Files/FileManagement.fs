@@ -258,8 +258,8 @@ let mutable private headerTrustWarned = 0
 /// path. Falls back to the X-User-Id header if the middleware did not run —
 /// a header-trust degradation that warns once (see below).
 let getUserId (ctx: HttpContext) =
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) -> id
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id -> id
     | _ ->
         match ctx.Request.Headers.TryGetValue "X-User-Id" with
         | true, values when values.Count > 0 ->
@@ -1344,8 +1344,8 @@ let getFileContents (ctx: HttpContext) (fileName: string) : string =
     let runtime = resolveRuntime ctx
 
     let store =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as scope) -> getStore dataTypes dataObjectStore runtime scope
+        match AccessContext.scopeOf ctx.Items with
+        | Some scope -> getStore dataTypes dataObjectStore runtime scope
         | _ -> getStoreForUser dataTypes dataObjectStore runtime (getUserId ctx)
 
     match store.GetFile(fileName) with
@@ -1370,8 +1370,8 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
     // Items-cached userId) if the middleware did not run — this covers tests
     // and avoids re-introducing `Async.RunSynchronously`.
     let scope =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> Some s
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> Some s
         | _ -> None
 
     let store =

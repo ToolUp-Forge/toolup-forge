@@ -563,8 +563,8 @@ let composeForms (options: FormsOptions) (app: ServerApp) : ServerApp =
                                     match httpAccessor.HttpContext with
                                     | null -> "_system"
                                     | ctx ->
-                                        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                                        | true, (:? StorageScope as s) -> s.ScopeId
+                                        match AccessContext.scopeOf ctx.Items with
+                                        | Some s -> s.ScopeId
                                         | _ -> "_system"
 
                             ToolUp.Forms.AnalyserCache.createResultStoreBacked store scopeResolver

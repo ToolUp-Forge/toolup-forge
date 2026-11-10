@@ -151,7 +151,7 @@ let private fixtureWith
 let private contextOf (fixture: Fixture) (userId: string) : HttpContext =
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- fixture.Services
-    ctx.Items["ToolUp.UserId"] <- userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx
 
 let private run (f: HttpContext -> string -> Async<string>) (ctx: HttpContext) (args: string) =

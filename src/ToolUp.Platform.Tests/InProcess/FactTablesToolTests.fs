@@ -665,7 +665,7 @@ let private contextFor (sp: IServiceProvider) (scope: ResolvedScope) : HttpConte
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- sp
     ScopeResolution.carry ctx scope
-    ctx.Items["ToolUp.UserId"] <- box "user-1"
+    AccessContexts.stampUserId ctx.Items ("user-1")
     ctx :> HttpContext
 
 let private newScope () : ResolvedScope =

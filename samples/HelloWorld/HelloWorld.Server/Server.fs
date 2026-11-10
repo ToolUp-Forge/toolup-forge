@@ -52,7 +52,7 @@ open ToolUp.Platform.Compose
 //
 // Without the explicit `?telemetry` and `?authContext` overrides the
 // wrapper would compose its defaults: `IMetricsSink` bridge for
-// telemetry, `HttpContext.Items["ToolUp.Subject"]` lookup for context.
+// telemetry, the stamped principal (`AccessContext.ofItems`) for context.
 // Either path is correct; the worked example surfaces both seams
 // explicitly so the migration doc has something to point at.
 
@@ -127,7 +127,7 @@ module HelloWorldRoutes =
     /// Mount the worked-example handler via `Api.make`. Both seams
     /// passed explicitly so the trace lines render on stdout; remove
     /// the explicit args to fall back to the default bridges (forge's
-    /// `IMetricsSink` + the `HttpContext.Items["ToolUp.Subject"]`
+    /// `IMetricsSink` + the stamped principal (`AccessContext.ofItems`)
     /// reader) per the Phase 69b.tail wrapper composition.
     let routes =
         Api.make (

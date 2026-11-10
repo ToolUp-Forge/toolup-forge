@@ -201,9 +201,9 @@ let private buildHarness
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- provider
-    ctx.Items["ToolUp.UserId"] <- box "alice"
-    ctx.Items["ToolUp.StorageScope"] <- box scope
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items (perms))
+    AccessContexts.stampUserId ctx.Items ("alice")
+    AccessContexts.stampScope ctx.Items (scope)
+    AccessContexts.stampPermissions ctx.Items (perms)
     ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId
     ctx.Items[AIConsentDispatch.ItemsKeys.TaskId] <- box (Guid.NewGuid())
 

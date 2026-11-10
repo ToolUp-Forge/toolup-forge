@@ -341,7 +341,7 @@ let tests =
                                 HttpRequestLifetimeFeature(RequestAborted = cts.Token)
                             )
 
-                            ctx.Items["ToolUp.UserId"] <- "u-1064"
+                            AccessContexts.stampUserId ctx.Items ("u-1064")
                             let body = new SerialOnlyBody()
                             ctx.Response.Body <- body
                             let serving = handler (fun c -> Task.FromResult(Some c)) ctx

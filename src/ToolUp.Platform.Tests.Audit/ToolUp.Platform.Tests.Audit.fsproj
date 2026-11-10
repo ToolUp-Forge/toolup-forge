@@ -14,6 +14,7 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEventStoreDecoratorContract.fs" Link="Contracts\IEventStoreDecoratorContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IAuditSinkContract.fs" Link="Contracts\IAuditSinkContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IArtifactSignerContract.fs" Link="Contracts\IArtifactSignerContract.fs" />
@@ -25,7 +26,6 @@
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEgressGateContract.fs" Link="Contracts\IEgressGateContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IEvidencePackGeneratorContract.fs" Link="Contracts\IEvidencePackGeneratorContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Support\CacheReset.fs" Link="Support\CacheReset.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SignedExportTests.fs" Link="InProcess\SignedExportTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\MinimumViableShapeTests.fs" Link="InProcess\MinimumViableShapeTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryAuditSinkTests.fs" Link="InProcess\InMemoryAuditSinkTests.fs" />

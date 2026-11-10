@@ -99,7 +99,7 @@ let private ctxFor
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx
 
 let private configWith (proof: DirectAddIdentityProof) = {

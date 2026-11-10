@@ -622,9 +622,9 @@ let private assistantWith (storage: IBlobStorage) (provider: IAIProvider) (tools
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.StorageScope"] <- box scope
-    ctx.Items["ToolUp.UserId"] <- box "alice"
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items [])
+    AccessContexts.stampScope ctx.Items (scope)
+    AccessContexts.stampUserId ctx.Items ("alice")
+    AccessContexts.stampPermissions ctx.Items []
     AIAssistantHandler.aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx
 
 let private collectStream (stream: System.Collections.Generic.IAsyncEnumerable<AIStreamEvent>) = async {

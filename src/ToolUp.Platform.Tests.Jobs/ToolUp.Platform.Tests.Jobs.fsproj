@@ -14,6 +14,7 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IJobStoreContract.fs" Link="Contracts\IJobStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthStateStoreContract.fs" Link="Contracts\IOAuthStateStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthCredentialFlowContract.fs" Link="Contracts\IOAuthCredentialFlowContract.fs" />
@@ -27,7 +28,6 @@
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IOAuthTokenRefresherContract.fs" Link="Contracts\IOAuthTokenRefresherContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Contracts\InMemoryBlobStorage.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\ICrdtDocumentStoreContract.fs" Link="Contracts\ICrdtDocumentStoreContract.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IUserSchemaStoreContract.fs" Link="Contracts\IUserSchemaStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\INotificationPreferenceStoreContract.fs" Link="Contracts\INotificationPreferenceStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDistributedLockContract.fs" Link="Contracts\IDistributedLockContract.fs" />

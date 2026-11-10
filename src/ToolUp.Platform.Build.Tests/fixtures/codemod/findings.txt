@@ -1,4 +1,4 @@
-Codemod: 116 site(s) in 20 file(s) need human review (not rewritten):
+Codemod: 118 site(s) in 20 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -162,8 +162,12 @@ Codemod: 116 site(s) in 20 file(s) need human review (not rewritten):
       -> Phase 882: if this is a handler's fallback for a request with no resolved principal, write `AccessContext.tryResolve ctx.RequestServices |> Option.defaultWith (fun () -> AccessContext.unresolved "<site>")` (it grants nothing); work outside a request names `AccessContext.system "<reason>"` or `AccessContext.carrying "<reason>" subject`
     L65 [882-permissions-map-read] let isOpen (ctx: AccessContext) = ctx.ModulePermissions.IsEmpty
       -> Phase 882: `ModulePermissions` is `Unrestricted | Restricted of Map<…>`: match on the case or use `ModulePermissions.tryFind` / `grantsAccess` / `grants`; `Restricted Map.empty` grants nothing, so an `IsEmpty` test for "unrestricted" is `= ModulePermissions.Unrestricted`
-    L67 [882-permissions-item] let stamp (ctx: HttpContext) perms = ctx.Items["ToolUp.ModulePermissions"] <- box perms
-      -> Phase 882: the `ToolUp.ModulePermissions` item is no longer stamped: the request's principal is one `AccessContext` under `AccessContext.ItemsKey` (read it, or copy that key to a background context)
+    L67 [882-retired-request-item] let stamp (ctx: HttpContext) perms = ctx.Items["ToolUp.ModulePermissions"] <- box perms
+      -> Phase 882: this request item is no longer stamped: the request's principal is ONE `AccessContext` under `AccessContext.ItemsKey`. Read it with `AccessContext.ofItems ctx.Items` or an accessor (`callerIdOf` for `ToolUp.UserId`, `subjectOf`, `scopeOf`, `userOf`, `platformRoleOf`), write it with `AccessContext.stamp`, and copy only `AccessContext.ItemsKey` to a background context
+    L71 [882-team-policy-viewer] let viewer services access = TeamPolicyViewer.resolve services access "u" "t"
+      -> Phase 882: `TeamPolicyViewer.resolve` takes `services access teamId` and `ConversationVisibility.resolveViewer` takes `ctx teamId`: drop the user-id argument, the viewer's id is the principal's (`AccessContext.callerId`)
+    L73 [882-retired-item-constant] let subjectKey = SurfaceEnforcement.SubjectItemsKey
+      -> Phase 882: `SurfaceEnforcement.SubjectItemsKey` and `ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey` are gone: read the subject with `AccessContext.subjectOf ctx.Items`; a service account's permissions are its principal's (`ServiceAccountPrincipalItemsKey`), adopted by scope resolution as the request's `ModulePermissions`
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
       -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once

@@ -167,8 +167,8 @@ let resolveAuditLog (services: IServiceProvider) : IAuditLog =
 /// resolution stamped on the request, or `emitter` as a system actor when
 /// it resolved none.
 let requestActor (emitter: string) (ctx: HttpContext) : AuditSubject =
-    match ctx.Items.TryGetValue "ToolUp.Subject" with
-    | true, (:? Subject as subject) -> AuditSubject.fromSubject subject
+    match AccessContext.subjectOf ctx.Items with
+    | Some subject -> AuditSubject.fromSubject subject
     | _ -> AuditSubject.system emitter
 
 /// The request's composed `IAuditLog` (`resolveAuditLog` over its services).

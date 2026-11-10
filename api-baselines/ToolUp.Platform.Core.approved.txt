@@ -472,24 +472,29 @@ ToolUp.Platform.AIToolResultBudget+Tags.DefaultResultBudget : System.Int32 (lite
 ToolUp.Platform.AIToolResultBudget+Tags.NoResultBudget : System.Int32 (literal)
 ToolUp.Platform.AIToolResultBudget+Tags.ResultBudgetChars : System.Int32 (literal)
 ToolUp.Platform.AccessContext (class)
-ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, ToolUp.Platform.ModulePermissions, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant])
+ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, ToolUp.Platform.ModulePermissions, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant], ToolUp.Platform.Auth+AuthenticatedUser, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope])
 ToolUp.Platform.AccessContext.Admission : ToolUp.Platform.Auth+PrincipalAdmission { get }
 ToolUp.Platform.AccessContext.ModuleExposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
 ToolUp.Platform.AccessContext.ModulePermissions : ToolUp.Platform.ModulePermissions { get }
 ToolUp.Platform.AccessContext.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
 ToolUp.Platform.AccessContext.PublicationGrants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant] { get }
+ToolUp.Platform.AccessContext.StorageScope : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope] { get }
 ToolUp.Platform.AccessContext.Subject : ToolUp.Platform.Subject { get }
 ToolUp.Platform.AccessContext.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.AccessContext.TokenRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AccessContext.User : ToolUp.Platform.Auth+AuthenticatedUser { get }
 ToolUp.Platform.AccessContext.UserId : System.String { get }
 ToolUp.Platform.AccessContextModule (class)
 ToolUp.Platform.AccessContextModule.ItemsKey : System.String (literal)
 ToolUp.Platform.AccessContextModule.admissionFor(ToolUp.Platform.Subject, ToolUp.Platform.Auth+PrincipalAdmission) : ToolUp.Platform.Auth+PrincipalAdmission
+ToolUp.Platform.AccessContextModule.callerId(ToolUp.Platform.AccessContext) : System.String
+ToolUp.Platform.AccessContextModule.callerIdOf(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.AccessContextModule.canAccessModule(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.canModifyPlatformConfig(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.carrying(System.String, ToolUp.Platform.Subject) : ToolUp.Platform.AccessContext
 ToolUp.Platform.AccessContextModule.claim(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim]
 ToolUp.Platform.AccessContextModule.configScope(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]
+ToolUp.Platform.AccessContextModule.entityPrincipal(ToolUp.Platform.AccessContext) : ToolUp.Platform.EntityTypes+EntityPrincipal
 ToolUp.Platform.AccessContextModule.exposureOf(System.String, ToolUp.Platform.AccessContext) : ToolUp.Platform.ModuleExposure
 ToolUp.Platform.AccessContextModule.flagScope(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagScope]
 ToolUp.Platform.AccessContextModule.forConfigScope(System.String, ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext]
@@ -502,13 +507,19 @@ ToolUp.Platform.AccessContextModule.isModuleAvailable(System.String, ToolUp.Plat
 ToolUp.Platform.AccessContextModule.isModuleExposed(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isPublicationReader(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.kindLabel(ToolUp.Platform.AccessContext) : System.String
+ToolUp.Platform.AccessContextModule.ofItems(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext]
 ToolUp.Platform.AccessContextModule.ofSubject(ToolUp.Platform.ModulePermissions, ToolUp.Platform.Subject) : ToolUp.Platform.AccessContext
+ToolUp.Platform.AccessContextModule.platformRoleOf(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole]
 ToolUp.Platform.AccessContextModule.principalId(ToolUp.Platform.Subject) : System.String
 ToolUp.Platform.AccessContextModule.publicationGrantsFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]
+ToolUp.Platform.AccessContextModule.scopeOf(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]
+ToolUp.Platform.AccessContextModule.stamp(System.Collections.Generic.IDictionary`2[System.Object, System.Object], ToolUp.Platform.AccessContext) : System.Void
+ToolUp.Platform.AccessContextModule.subjectOf(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Subject]
 ToolUp.Platform.AccessContextModule.system(System.String) : ToolUp.Platform.AccessContext
 ToolUp.Platform.AccessContextModule.tokenRolesFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.AccessContextModule.tryResolve(System.IServiceProvider) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext]
 ToolUp.Platform.AccessContextModule.unresolved(System.String) : ToolUp.Platform.AccessContext
+ToolUp.Platform.AccessContextModule.userOf(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+AuthenticatedUser]
 ToolUp.Platform.AccessibilityApi (class)
 ToolUp.Platform.AccessibilityApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AccessibleModulesResponse]])
 ToolUp.Platform.AccessibilityApi.GetAccessibleModules : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AccessibleModulesResponse]] { get }

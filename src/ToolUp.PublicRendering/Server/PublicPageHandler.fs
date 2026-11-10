@@ -382,9 +382,8 @@ module PublicPageHandler =
         // the same token, and the identity provider's live session would complete
         // that trip silently, so a redirect here is a loop.
         let signedIn =
-            match ctx.Items.TryGetValue "ToolUp.User" with
-            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                not (ToolUp.Platform.Auth.AuthenticatedUser.isAnonymous user)
+            match AccessContext.userOf ctx.Items with
+            | Some user -> not (ToolUp.Platform.Auth.AuthenticatedUser.isAnonymous user)
             | _ -> false
 
         match signIn with

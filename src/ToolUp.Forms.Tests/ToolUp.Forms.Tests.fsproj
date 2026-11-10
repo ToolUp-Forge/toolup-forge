@@ -10,13 +10,13 @@
          files with <ProjectReference> entries to the matching DLLs. The
          tests now exercise the production companion DLLs directly. -->
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="InProcess\InMemoryEntityStore.fs" />
         <Compile Include="InProcess\InMemoryAuditLog.fs" />
         <!-- Phase 814 — the principal-recording IEntityStore decorator the seam
              contract packs observe through, source-linked from ToolUp.Platform.Tests. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\PrincipalRecordingEntityStore.fs" Link="Support\PrincipalRecordingEntityStore.fs" />
         <Compile Include="Contracts\IFormStoreContract.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="Contracts\IWorkflowEngineContract.fs" />
         <Compile Include="Contracts\IActionLedgerContract.fs" />
         <Compile Include="Contracts\IShareTokenRateLimiterContract.fs" />

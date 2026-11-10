@@ -88,19 +88,6 @@ open ToolUp.Platform.Config
 [<Literal>]
 let private LastSeenKeyPrefix = "anon-migrate:lastseen:"
 
-/// Stashed-`Subject` items key (mirrors `SurfaceEnforcement
-/// .SubjectItemsKey`; duplicated as a literal because this module
-/// compiles after `SurfaceEnforcementMiddleware.fs` and re-`open`ing it
-/// only to read one literal adds a needless module dependency).
-[<Literal>]
-let private SubjectItemsKey = "ToolUp.Subject"
-
-/// Stashed-`StorageScope` items key (set by `ScopeResolutionMiddleware`
-/// only on `Ok`). Used to attribute the migration audit row to the
-/// resolved scope; falls back to `user-{uid}` when absent.
-[<Literal>]
-let private StorageScopeItemsKey = "ToolUp.StorageScope"
-
 /// Per-user-id locks for the double-migration guard. Static so the lock
 /// set is shared across every request for the process lifetime.
 let private userLocks = ConcurrentDictionary<string, SemaphoreSlim>()
@@ -144,8 +131,8 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
             let inboundSessionId = AnonymousSessionBinding.boundSessionId ctx
 
             let subjectOpt =
-                match ctx.Items.TryGetValue SubjectItemsKey with
-                | true, (:? Subject as s) -> Some s
+                match AccessContext.subjectOf ctx.Items with
+                | Some s -> Some s
                 | _ -> None
 
             let targetIdOpt = subjectOpt |> Option.bind migrationTargetId
@@ -211,8 +198,8 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
                                     cache.Set(lastSeenKey, sid, opts) |> ignore
 
                                 let scopeId =
-                                    match ctx.Items.TryGetValue StorageScopeItemsKey with
-                                    | true, (:? StorageScope as scope) -> scope.ScopeId
+                                    match AccessContext.scopeOf ctx.Items with
+                                    | Some scope -> scope.ScopeId
                                     | _ -> ScopeKey.container (ScopeKey.User(UserId uid))
 
                                 let emitAudit

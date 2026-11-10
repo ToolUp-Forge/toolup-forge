@@ -110,16 +110,15 @@ let private providerOf (audit: RecordingAuditLog) (substrate: IServiceCollection
 let private requestOver (provider: IServiceProvider) : HttpContext =
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- provider
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampUserId ctx.Items ("alice")
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = "t1"
-            Container = "team-t1"
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = "t1"
+        Container = "team-t1"
+        Persist = true
+    }
 
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items [])
+    AccessContexts.stampPermissions ctx.Items []
     ctx :> HttpContext
 
 let private composed (modules: ServerModule list) =

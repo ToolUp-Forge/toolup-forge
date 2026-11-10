@@ -1193,6 +1193,13 @@ let main args =
             let stated =
                 System.Text.RegularExpressions.Regex @"\bModulePermissions\.Unrestricted\b(?!\s*->)"
 
+            // The request's principal is ONE item; these keys carried its
+            // pieces separately and are retired. The principal's own key is
+            // spelled only by its constant.
+            let retiredKey =
+                System.Text.RegularExpressions.Regex
+                    "\"ToolUp\\.(User|UserId|Subject|StorageScope|ScopeResult|ModulePermissions|ModuleExposure|PlatformRole|PublicationGrants|ServiceAccountPermissions|AccessContext)\""
+
             let isComment (line: string) =
                 let t = line.TrimStart()
                 t.StartsWith "//" || t.StartsWith "(*"
@@ -1211,6 +1218,8 @@ let main args =
                                     yield rel, i + 1, "the retired fallback", line.Trim()
                                 elif not home && stated.IsMatch line then
                                     yield rel, i + 1, "Unrestricted stated outside its homes", line.Trim()
+                                elif retiredKey.IsMatch line && not (rel.EndsWith "Shared/Types/AccessContext.fs") then
+                                    yield rel, i + 1, "a retired request item key", line.Trim()
             ]
 
             Trace.tracefn ""
@@ -1228,7 +1237,7 @@ let main args =
                     Trace.traceError (sprintf "  %s:%d: %s: %s" rel line what text)
 
                 Trace.traceError
-                    "VerifyAccessFallbacks: a request with no resolved principal is served under `AccessContext.unresolved` (which grants nothing); work outside a request names `AccessContext.system` or `AccessContext.carrying`; and `ModulePermissions.Unrestricted` is decided only where `unrestrictedHomes` says. See docs/migrations/882-access-context-refuses.md."
+                    "VerifyAccessFallbacks: a request with no resolved principal is served under `AccessContext.unresolved` (which grants nothing); work outside a request names `AccessContext.system` or `AccessContext.carrying`; `ModulePermissions.Unrestricted` is decided only where `unrestrictedHomes` says; and a request's identity, scope, user and grants are read from its ONE stamped principal (`AccessContext.ofItems` and its accessors), never from a key of their own. See docs/migrations/882-access-context-refuses.md."
 
                 1
 

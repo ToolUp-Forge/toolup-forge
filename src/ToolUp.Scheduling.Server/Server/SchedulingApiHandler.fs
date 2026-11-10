@@ -29,13 +29,13 @@ open ToolUp.Scheduling.IBookingScheduler
 
 let private resolveScope (ctx: HttpContext) : string * string =
     let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
     let scopeId =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as scope) -> scope.ScopeId
+        match AccessContext.scopeOf ctx.Items with
+        | Some scope -> scope.ScopeId
         | _ -> userId
 
     scopeId, userId

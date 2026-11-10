@@ -3410,8 +3410,8 @@ module DeploymentVerificationReport =
     /// is present. The read is Platform-Admin-gated, so by the time the
     /// gatherer runs there always is.
     let private resolveActor (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) when not (String.IsNullOrWhiteSpace id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id when not (String.IsNullOrWhiteSpace id) -> id
         | _ -> "unknown"
 
     /// Build the `IDeploymentVerificationApi` handler. Mirrors

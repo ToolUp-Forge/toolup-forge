@@ -143,8 +143,8 @@ let outcomeOf (outcome: ToolOutcome) : string =
 // ─── Context reads ───────────────────────────────────────────────────
 
 let private userIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) -> id
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id -> id
     | _ -> "anonymous"
 
 /// The scope the row is written under — the same structural tenant
@@ -152,8 +152,8 @@ let private userIdOf (ctx: HttpContext) : string =
 /// cross-module trail is readable by that team and structurally
 /// unreachable from another.
 let private scopeIdOf (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> s.ScopeId
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> s.ScopeId
     | _ -> userIdOf ctx
 
 let private conversationIdOf (ctx: HttpContext) : Guid option =

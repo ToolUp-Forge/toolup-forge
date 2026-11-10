@@ -552,13 +552,13 @@ module KnowledgeApiDeps =
     /// values `resolveFrom` needs and does nothing else.
     let resolve (ctx: HttpContext) : KnowledgeApiDeps =
         let resolvedScope =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> Some s
+            match AccessContext.scopeOf ctx.Items with
+            | Some s -> Some s
             | _ -> None
 
         let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
+            match AccessContext.callerIdOf ctx.Items with
+            | Some id -> id
             | _ -> "anonymous"
 
         resolveFrom ctx.RequestServices (StorageScopeResolver.ScopeResolution.forRequest ctx) resolvedScope userId

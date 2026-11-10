@@ -645,8 +645,12 @@ section eliminates structurally.
 > never configured permissions, decided in the permission store; a subject in
 > no team; a named system or scope-carrying context), and `Restricted Map.empty`
 > grants nothing, so an absent or empty permission value never reads as every
-> module. `VerifyAccessFallbacks` (a `VerifyAll` leg) refuses the retired
-> fallback and an `Unrestricted` stated anywhere else.
+> module. The principal is the ONE request item that carries identity, scope
+> and grants: every reader reads it through `AccessContext.ofItems` and its
+> accessors, and a machine principal is named by its account
+> (`AccessContext.callerId`), never "anonymous". `VerifyAccessFallbacks` (a
+> `VerifyAll` leg) refuses the retired fallback, an `Unrestricted` stated
+> anywhere else, and a retired request item key reintroduced.
 > **Evidence:** `src/ToolUp.Platform.Server/Server/Remoting/Auth.fs` ·
 > `src/ToolUp.Platform.Server/Server/RemotingHelpers.fs` ·
 > `src/ToolUp.Platform.Server/Server/Middleware.fs` (`ScopeResolutionMiddleware`,

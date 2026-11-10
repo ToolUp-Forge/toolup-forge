@@ -135,16 +135,15 @@ let private buildContext (eventStore: IEventStore) : HttpContext =
     services.AddSingleton<IEventStore>(eventStore) |> ignore
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampUserId ctx.Items ("alice")
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = "alice"
-            Container = "user-alice"
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = "alice"
+        Container = "user-alice"
+        Persist = true
+    }
 
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items [])
+    AccessContexts.stampPermissions ctx.Items []
     ctx :> HttpContext
 
 /// Run one forged-call turn against `registry` and return the tool-result

@@ -546,8 +546,7 @@ let divergenceTests =
                 let http = DefaultHttpContext()
                 http.RequestServices <- sp
                 ScopeResolution.remember http (storageScope resolvedId) |> ignore
-                http.Items["ToolUp.UserId"] <- box resolvedId
-
+                AccessContexts.stampUserId http.Items (resolvedId)
                 // The retrieval turn.
                 let request = {
                     RetrievalRequest.create "what was revenue?" [ User resolvedId ] 10 Interleaved with

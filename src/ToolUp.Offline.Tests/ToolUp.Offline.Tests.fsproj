@@ -13,6 +13,7 @@
          browser-only and are covered by the Fable compile gate, not
          here. -->
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="OfflineTypesTests.fs" />
         <Compile Include="OfflineSyncHandlerTests.fs" />
         <Compile Include="SyncCoordinatorListenerTests.fs" />

@@ -144,6 +144,16 @@ type AccessContext = {
     /// (`publicationGrantsFor`); empty for every other subject, and empty
     /// wherever no grant store is composed.
     PublicationGrants: PublicationReaderGrant list
+    /// The user the identity provider asserted for the request
+    /// (`AuthenticatedUser.anonymous` where it asserted none — an anonymous
+    /// session, a share-link or machine bearer it does not recognise, work
+    /// outside a request). Read for what only the provider knows (its roles,
+    /// e-mail, tenant); the caller's identity is `UserId` / `callerId`.
+    User: ToolUp.Platform.Auth.AuthenticatedUser
+    /// The storage scope scope resolution derived for the subject, or `None`
+    /// where it derived none (a publication reader, a refused scope, work
+    /// that holds no scope).
+    StorageScope: StorageScope option
 }
 
 module AccessContext =
@@ -181,6 +191,8 @@ module AccessContext =
         TokenRoles = []
         Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
         PublicationGrants = []
+        User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+        StorageScope = None
     }
 
     /// The context of work that runs outside any request and
@@ -228,6 +240,20 @@ module AccessContext =
         match services.GetService(typeof<AccessContext>) with
         | :? AccessContext as access -> Some access
         | _ -> None
+
+    /// The principal stamped on a request's items (`ItemsKey`), or `None`.
+    /// The one read of the request's identity, scope, user and grants from
+    /// `HttpContext.Items`: no other key carries them. A background context
+    /// that copies `ItemsKey` forward reads back the same principal.
+    let ofItems (items: System.Collections.Generic.IDictionary<obj, obj>) : AccessContext option =
+        match items.TryGetValue(box ItemsKey) with
+        | true, (:? AccessContext as access) -> Some access
+        | _ -> None
+
+    /// Stamp `access` as the request's principal (`ItemsKey`), replacing
+    /// any principal already there.
+    let stamp (items: System.Collections.Generic.IDictionary<obj, obj>) (access: AccessContext) : unit =
+        items[box ItemsKey] <- box access
 #endif
 
     /// Phase 987 — the `TokenRoles` a context for `subject` carries, given
@@ -462,3 +488,44 @@ module AccessContext =
     /// NEW handler that accepts a target-scope parameter MUST gate on this.
     let canModifyPlatformConfig (ctx: AccessContext) : bool =
         ctx.PlatformRole = Some PlatformRole.PlatformAdmin
+
+    /// The caller's id as every per-user read keys it: `"anonymous"` for an
+    /// anonymous session (whatever its session id), the principal id for
+    /// everyone else. A machine or share-link bearer — whom no identity
+    /// provider recognises, so the provider's user is anonymous — is named by
+    /// its claim's attributed handle, never `"anonymous"`.
+    let callerId (ctx: AccessContext) : string =
+        match ctx.Subject with
+        | AnonymousSession _ -> "anonymous"
+        | _ -> ctx.UserId
+
+    /// The actor an entity-store write by this principal records: the
+    /// principal itself, acting for itself, live. A projection of the
+    /// principal; a delegated or replayed write extends it
+    /// (`EntityPrincipal.onBehalfOf` / `replaying`).
+    let entityPrincipal (ctx: AccessContext) : EntityTypes.EntityPrincipal =
+        EntityTypes.EntityPrincipal.ofPrincipal ctx.UserId
+
+#if !FABLE_COMPILER
+    /// `callerId` of the principal stamped on `items`, or `None` without one.
+    let callerIdOf (items: System.Collections.Generic.IDictionary<obj, obj>) : string option =
+        ofItems items |> Option.map callerId
+
+    /// The subject of the principal stamped on `items`.
+    let subjectOf (items: System.Collections.Generic.IDictionary<obj, obj>) : Subject option =
+        ofItems items |> Option.map _.Subject
+
+    /// The storage scope of the principal stamped on `items`.
+    let scopeOf (items: System.Collections.Generic.IDictionary<obj, obj>) : StorageScope option =
+        ofItems items |> Option.bind _.StorageScope
+
+    /// The provider's user of the principal stamped on `items`.
+    let userOf
+        (items: System.Collections.Generic.IDictionary<obj, obj>)
+        : ToolUp.Platform.Auth.AuthenticatedUser option =
+        ofItems items |> Option.map _.User
+
+    /// The platform role of the principal stamped on `items`.
+    let platformRoleOf (items: System.Collections.Generic.IDictionary<obj, obj>) : PlatformRole option =
+        ofItems items |> Option.bind _.PlatformRole
+#endif

@@ -262,8 +262,8 @@ type SequenceBeacon = {
 // fallback — that silently funnelled middleware-bypassed callers
 // into one shared container. `None` ⇒ the request is rejected.
 let private tryResolveScope (ctx: HttpContext) : StorageScope option =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> Some s
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> Some s
     | _ -> None
 
 // Caller identity for the ownership gate. Populated by
@@ -272,8 +272,8 @@ let private tryResolveScope (ctx: HttpContext) : StorageScope option =
 // resolved no identity — the gate refuses unauthenticated callers
 // rather than admitting `"anonymous"` as a usable owner.
 let private tryResolveUserId (ctx: HttpContext) : string option =
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) when id <> "" -> Some id
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id when id <> "" -> Some id
     | _ -> None
 
 let private resolveLogger (ctx: HttpContext) : ILogger option =
@@ -741,7 +741,6 @@ let beaconHandler: HttpHandler =
                                     (fun state ->
                                         TeamConversationPolicyStore.ConversationVisibility.resolveViewer
                                             ctx
-                                            callerUserId
                                             state.TeamId.Value)
                                     existing
                                     callerUserId

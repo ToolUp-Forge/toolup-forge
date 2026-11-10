@@ -265,13 +265,13 @@ module internal ApiSeams =
     /// the default makes the wiring vanish.
     let defaultForgeAuthContextResolver (ctx: HttpContext) : Async<ForgeAuthContext> = async {
         let user =
-            match ctx.Items.TryGetValue "ToolUp.User" with
-            | true, (:? AuthenticatedUser as u) -> u
+            match AccessContext.userOf ctx.Items with
+            | Some u -> u
             | _ -> AuthenticatedUser.anonymous
 
         let subject =
-            match ctx.Items.TryGetValue "ToolUp.Subject" with
-            | true, (:? Subject as s) -> Some s
+            match AccessContext.subjectOf ctx.Items with
+            | Some s -> Some s
             | _ -> None
 
         // Phase 1002 — a publication reader is not an app user: at the
@@ -306,8 +306,8 @@ module internal ApiSeams =
                     if isReader then
                         false
                     elif role = "PlatformAdmin" then
-                        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-                        | true, (:? PlatformRole as r) -> r = PlatformRole.PlatformAdmin
+                        match AccessContext.platformRoleOf ctx.Items with
+                        | Some r -> r = PlatformRole.PlatformAdmin
                         | _ -> false
                     else
                         user.Roles |> List.contains role

@@ -74,8 +74,8 @@ let private urlSigner (ctx: HttpContext) : SignedUrl.MediaUrlSigner =
     ctx.RequestServices.GetService(typeof<SignedUrl.MediaUrlSigner>) :?> SignedUrl.MediaUrlSigner
 
 let private mediaScope (ctx: HttpContext) : StorageScope option =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> Some s
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> Some s
     | _ -> None
 
 let private headerValue (ctx: HttpContext) (name: string) : string =

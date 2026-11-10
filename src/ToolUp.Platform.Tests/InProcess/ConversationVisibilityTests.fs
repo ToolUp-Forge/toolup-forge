@@ -175,14 +175,13 @@ let private contextForWith
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = teamId
-            Container = containerOf teamId
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = teamId
+        Container = containerOf teamId
+        Persist = true
+    }
 
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx :> HttpContext
 
 /// A request by `userId` in `teamId`'s scope.
@@ -483,14 +482,13 @@ let private readPathTests =
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
 
-            ctx.Items["ToolUp.StorageScope"] <-
-                box {
-                    ScopeId = "alice"
-                    Container = "user-alice"
-                    Persist = true
-                }
+            AccessContexts.stampScope ctx.Items {
+                ScopeId = "alice"
+                Container = "user-alice"
+                Persist = true
+            }
 
-            ctx.Items["ToolUp.UserId"] <- box "alice"
+            AccessContexts.stampUserId ctx.Items ("alice")
             let id = Guid.NewGuid()
 
             let! _ =
@@ -582,14 +580,13 @@ let private perTeamTests =
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
 
-            ctx.Items["ToolUp.StorageScope"] <-
-                box {
-                    ScopeId = "alpha"
-                    Container = "team-alpha"
-                    Persist = true
-                }
+            AccessContexts.stampScope ctx.Items {
+                ScopeId = "alpha"
+                Container = "team-alpha"
+                Persist = true
+            }
 
-            ctx.Items["ToolUp.UserId"] <- box "bob"
+            AccessContexts.stampUserId ctx.Items ("bob")
             let id = Guid.NewGuid()
 
             let! _ =
@@ -898,14 +895,13 @@ let private contextWithStore (world: World) (teamId: string) (userId: string) (s
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = teamId
-            Container = containerOf teamId
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = teamId
+        Container = containerOf teamId
+        Persist = true
+    }
 
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx :> HttpContext
 
 /// The history the prompt builder is handed when `userId` submits a turn

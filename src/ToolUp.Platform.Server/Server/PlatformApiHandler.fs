@@ -64,12 +64,9 @@ let private defaultsSummary (defaults: Map<string, ModulePermission list>) =
 /// `ToolUp.UserId` stamp, then `"anonymous"`, remain only for a request
 /// the middleware did not resolve (e.g. tests that bypass `compose`).
 let internal resolveUserId (ctx: HttpContext) =
-    match ctx.Items.TryGetValue "ToolUp.Subject" with
-    | true, (:? Subject as subject) -> AccessContext.principalId subject
-    | _ ->
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
+    AccessContext.ofItems ctx.Items
+    |> Option.map _.UserId
+    |> Option.defaultValue "anonymous"
 
 let private resolveTeamStore (ctx: HttpContext) =
     match ctx.RequestServices.GetService(typeof<ITeamStore>) with

@@ -192,12 +192,12 @@ let private contextFor (sp: IServiceProvider) (scopeId: string) : HttpContext =
         Persist = true
     }
 
-    ctx.Items["ToolUp.StorageScope"] <- box scope
+    AccessContexts.stampScope ctx.Items (scope)
     // Phase 797 — the fact doors take their scope from the resolver's
     // typed record, not from the `StorageScope` item; seed both, as the
     // middleware does.
     ScopeResolution.remember ctx scope |> ignore
-    ctx.Items["ToolUp.UserId"] <- box "user-1"
+    AccessContexts.stampUserId ctx.Items ("user-1")
     ctx :> HttpContext
 
 let private executeRaw (sp: IServiceProvider) (scopeId: string) (argsJson: string) : string =

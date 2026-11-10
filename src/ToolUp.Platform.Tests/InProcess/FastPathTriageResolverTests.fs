@@ -417,7 +417,7 @@ let private buildContext
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box HarnessUserId
+    AccessContexts.stampUserId ctx.Items (HarnessUserId)
     ctx :> HttpContext
 
 /// Run the agent loop with a given triage configuration and report

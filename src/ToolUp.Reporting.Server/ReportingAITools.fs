@@ -239,13 +239,13 @@ type private Caller = {
 
 let private callerOf (ctx: HttpContext) : Caller =
     let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) when not (String.IsNullOrWhiteSpace id) -> Some id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id when not (String.IsNullOrWhiteSpace id) -> Some id
         | _ -> None
 
     let scopeId =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> Some s.ScopeId
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> Some s.ScopeId
         | _ -> None
 
     // The principal the middleware stamped once; a context

@@ -70,8 +70,8 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
         // resolved principal implies a resolved subject — fall back to
         // the principal id with kind "user".
         let subjectKind, subjectId =
-            match ctx.Items.TryGetValue "ToolUp.Subject" with
-            | true, (:? Subject as subject) ->
+            match AccessContext.subjectOf ctx.Items with
+            | Some subject ->
                 let kind =
                     match Subject.kind subject with
                     | AnonymousKind -> "anonymous"
@@ -135,8 +135,8 @@ let resolve (sseAuthMode: SseAuthMode) (ctx: HttpContext) : SseScopeResult =
         | true, values when values.Count > 0 -> Some(string values[0])
         | _ -> None
 
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) when not (String.IsNullOrEmpty id) && id <> "anonymous" ->
+    match AccessContext.callerIdOf ctx.Items with
+    | Some id when not (String.IsNullOrEmpty id) && id <> "anonymous" ->
         match queryUserId with
         | Some asserted when asserted <> id -> emitMismatchAudit ctx id asserted
         | _ -> ()

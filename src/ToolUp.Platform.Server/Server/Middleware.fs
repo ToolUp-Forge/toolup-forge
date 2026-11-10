@@ -21,39 +21,22 @@ open ToolUp.Platform.Scope
 type internal PermissionReadRefused(message: string) =
     inherit Exception(message)
 
-// ─── Phase 66 Stream A.6 — pipeline cut-over ─────────────────────────
+// ─── What the scope-resolution middleware leaves on a request ────────
 //
-// `ScopeResolutionMiddleware` now calls `ISubjectResolver` (the new
-// resolver from Stream A.3) instead of the retiring per-mode
-// `IStorageScopeResolver`. It stashes a richer set on
-// `HttpContext.Items`:
-//   * `"ToolUp.Subject"`      — the resolved `Subject` value (the
-//                               new load-bearing pivot).
-//   * `"ToolUp.StorageScope"` — derived from the Subject by the
-//                               transitional `StorageScopeDerivation`
-//                               helper (Phase 66 Stream A.2 collapses
-//                               this when `Surfaces` lands on
-//                               `ServerConfig`).
-//   * `"ToolUp.User"` / `"ToolUp.UserId"` — extracted from
-//                               `IAuthProvider.GetUser`. `"ToolUp.User"`
-//                               carries the `AuthenticatedUser` (its
-//                               `UserId` typed, Phase 878); `"ToolUp.UserId"`
-//                               carries the BARE STRING, by contract: the
-//                               item is read with `:? string` across every
-//                               server assembly, the AI/Media/Offline
-//                               packages and consumer modules, and a typed
-//                               box would read as anonymous in all of them.
-//   * `"ToolUp.ScopeResult"`  — legacy-shape `Result<StorageScope,
-//                               ScopeResolutionError>` for handlers
-//                               that have not yet migrated to the
-//                               Subject model. Stream A.7 finishes
-//                               the consumer migration; until then
-//                               the bridge translates resolver
-//                               errors back into the legacy shape.
+// ONE item: the request's principal, an `AccessContext` under
+// `AccessContext.ItemsKey`, stamped once after every per-request grant was
+// read. It carries the subject, the provider's user, the storage scope, the
+// module permissions and exposure, the platform role, the provider roles and
+// admission and the publication grants; every reader reads it through
+// `AccessContext.ofItems` (or the scoped `AccessContext` service), never a
+// key of its own. Two items stay, because they are written BEFORE the
+// principal exists and are inputs to resolving it: the share-token claim
+// (`ShareTokenClaimItemsKey`) and the validated service-account principal
+// (`ServiceAccountPrincipalItemsKey`). The resolved scope the fact doors read
+// (`ScopeResolution.remember`) keeps its own typed accessor.
 //
-// `AuthEnforcementMiddleware` retired in this commit. Its role is
-// now covered by `SurfaceEnforcementMiddleware` (Stream A.5) reading
-// `SurfaceRequirementRegistry` per route.
+// `AuthEnforcementMiddleware` is retired; `SurfaceEnforcementMiddleware`
+// reads `SurfaceRequirementRegistry` per route.
 
 /// Build a `SubjectResolutionRequest` from a live `HttpContext`.
 /// Lives in server code so the resolver interface itself stays
@@ -219,9 +202,7 @@ module StorageScopeDerivation =
 
 /// Map a `SubjectResolutionError` back into the legacy
 /// `ScopeResolutionError` shape used by handlers that still read
-/// `HttpContext.Items["ToolUp.ScopeResult"]`. Phase 66 Stream A.7
-/// migrates the remaining handlers; until then the bridge keeps the
-/// legacy wire-format working.
+/// scope-derivation result the middleware decides on.
 module SubjectResolutionErrorBridge =
     let toScopeError (err: SubjectResolutionError) : ScopeResolutionError =
         match err with
@@ -418,62 +399,48 @@ let private claimPendingInvite (ctx: HttpContext) (user: AuthenticatedUser) : Sy
         | _ -> ()
 }
 
-/// The request's principal, built ONCE from what this middleware
-/// stamped and stamped under `AccessContext.ItemsKey`. `permissions` is the
-/// value the middleware decided: the store's answer for a team scope, and
-/// `Unrestricted`, stated, for a subject in no team (module RBAC is per team).
+/// The request's principal, built ONCE from what this middleware resolved,
+/// for `AccessContext.ItemsKey`. `permissions` is the value the middleware
+/// decided: the store's answer for a team scope, and `Unrestricted`, stated,
+/// for a subject in no team (module RBAC is per team).
 ///
-/// A validated service-account token's declared permission map
-/// takes precedence over `permissions` (precedence rather than merge: the
-/// machine principal's declared set IS its authority, and merging it with
-/// what the owning team grants its human members would silently widen a
-/// credential deliberately scoped narrower). The overlay is adopted as
-/// `Restricted`, so an empty one grants nothing.
+/// A validated service-account token's declared permission map (the
+/// `ServiceAccountPrincipal` the token middleware stamped) takes precedence
+/// over `permissions` — precedence rather than merge: the machine
+/// principal's declared set IS its authority, and merging it with what the
+/// owning team grants its human members would silently widen a credential
+/// deliberately scoped narrower. It is adopted as `Restricted`, so an empty
+/// set grants nothing. The overlay is this projection and no other.
 ///
 /// `UserId` and `TeamId` come from the Subject (`AccessContext.principalId`),
-/// never from `ToolUp.UserId` — the auth provider's user, `"anonymous"` for a
-/// service-account bearer it does not recognise. Provider roles,
-/// the provider's admission and publication grants ride for a signed-in human
+/// never from the provider's user, which is `"anonymous"` for a
+/// service-account bearer it does not recognise. Provider roles, the
+/// provider's admission and publication grants ride for a signed-in human
 /// principal only.
-let internal principalOf (ctx: HttpContext) (subject: Subject) (permissions: ModulePermissions) : AccessContext =
+let internal principalOf
+    (ctx: HttpContext)
+    (user: AuthenticatedUser)
+    (subject: Subject)
+    (scope: StorageScope option)
+    (permissions: ModulePermissions)
+    (exposure: Map<string, ModuleExposure>)
+    (platformRole: PlatformRole option)
+    (publicationGrants: PublicationReaderGrant list)
+    : AccessContext =
     let permissions =
-        match ctx.Items.TryGetValue ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey with
-        | true, (:? Map<string, ModulePermission list> as declared) -> ModulePermissions.Restricted declared
+        match ctx.Items.TryGetValue ServiceAccountTokenHandler.ServiceAccountPrincipalItemsKey with
+        | true, (:? ServiceAccountPrincipal as account) -> ModulePermissions.Restricted account.Permissions
         | _ -> permissions
-
-    let moduleExposure =
-        match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
-        | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
-        | _ -> Map.empty
-
-    let platformRole =
-        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-        | true, (:? PlatformRole as role) -> Some role
-        | _ -> None
-
-    let user =
-        match ctx.Items.TryGetValue "ToolUp.User" with
-        | true, (:? AuthenticatedUser as user) -> Some user
-        | _ -> None
-
-    let publicationGrants =
-        match ctx.Items.TryGetValue "ToolUp.PublicationGrants" with
-        | true, (:? (PublicationReaderGrant list) as grants) -> grants
-        | _ -> []
 
     {
         AccessContext.ofSubject permissions subject with
-            ModuleExposure = moduleExposure
+            ModuleExposure = exposure
             PlatformRole = platformRole
-            TokenRoles =
-                AccessContext.tokenRolesFor
-                    subject
-                    (user |> Option.map AuthenticatedUser.pageRoles |> Option.defaultValue [])
-            Admission =
-                AccessContext.admissionFor
-                    subject
-                    (user |> Option.map _.Admission |> Option.defaultValue PrincipalAdmission.Member)
+            TokenRoles = AccessContext.tokenRolesFor subject (AuthenticatedUser.pageRoles user)
+            Admission = AccessContext.admissionFor subject user.Admission
             PublicationGrants = AccessContext.publicationGrantsFor subject publicationGrants
+            User = user
+            StorageScope = scope
     }
 
 /// ASP.NET Core middleware that resolves the per-request `Subject`,
@@ -634,6 +601,12 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
             // with: `Unrestricted`, stated, unless a team scope's store
             // answers otherwise below (module RBAC is per team).
             let permissions = ref ModulePermissions.Unrestricted
+            let exposure = ref Map.empty<string, ModuleExposure>
+            let platformRole: PlatformRole option ref = ref None
+            let resolvedScope: StorageScope option ref = ref None
+            // Set once the first per-request read that the principal is built
+            // from has run: a fault after it refuses (below).
+            let stampBegan = ref false
 
             try
                 try
@@ -647,8 +620,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                     let user = request.User |> Option.defaultValue AuthenticatedUser.anonymous
 
-                    ctx.Items["ToolUp.User"] <- box user
-                    ctx.Items["ToolUp.UserId"] <- box user.UserId.Value
+                    stampBegan.Value <- true
 
                     do! claimPendingInvite ctx user
 
@@ -709,8 +681,6 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                             fallback, Error bridged
 
-                    ctx.Items["ToolUp.Subject"] <- box subject
-                    ctx.Items["ToolUp.ScopeResult"] <- box scopeResult
 
                     // Phase 1107 — the principal's in-platform publication
                     // reader grants, read per request so a revocation bites
@@ -732,8 +702,6 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                             runAsync (store.GrantsFor(UserId userId))
                         | _ -> System.Threading.Tasks.Task.FromResult []
 
-                    if not (List.isEmpty publicationGrants) then
-                        ctx.Items["ToolUp.PublicationGrants"] <- box publicationGrants
 
                     // Phase 337 — seal whatever anonymous session the
                     // request actually resolved to into the binding
@@ -766,7 +734,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                     match scopeResult with
                     | Ok scope ->
-                        ctx.Items["ToolUp.StorageScope"] <- box scope
+                        resolvedScope.Value <- Some scope
 
                         // Phase 797 — the fact tier's typed scope is
                         // minted HERE and nowhere else: the resolver's
@@ -860,10 +828,9 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     // (tri-state) map, alongside the permission
                                     // map, so the AccessContext factory sees a
                                     // populated `ModuleExposure`.
-                                    let! exposure = runAsync (permStore.GetModuleExposure(TeamId scope.ScopeId))
-                                    let exposure = refusedOn exposure
+                                    let! exposureRead = runAsync (permStore.GetModuleExposure(TeamId scope.ScopeId))
 
-                                    ctx.Items["ToolUp.ModuleExposure"] <- box exposure
+                                    exposure.Value <- refusedOn exposureRead
 
                                     // Phase 551 — the subject's grant
                                     // records, so the module-access gate
@@ -1002,7 +969,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                 let! isAdmin = runAsync (adminStore.IsPlatformAdmin(user.UserId))
 
                                 if isAdmin then
-                                    ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin
+                                    platformRole.Value <- Some PlatformRole.PlatformAdmin
                             | _ -> ()
                     | Error _ -> ()
 
@@ -1011,7 +978,17 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // did not run for has no principal: the access-context
                     // factory yields no context and every reader refuses.
                     if refusal.Value.IsNone then
-                        ctx.Items[AccessContext.ItemsKey] <- box (principalOf ctx subject permissions.Value)
+                        AccessContext.stamp
+                            ctx.Items
+                            (principalOf
+                                ctx
+                                user
+                                subject
+                                resolvedScope.Value
+                                permissions.Value
+                                exposure.Value
+                                platformRole.Value
+                                publicationGrants)
                 with ex ->
                     // Auth-observability A1 — infrastructure error in
                     // the scope-resolution pipeline (DI hiccup, resolver
@@ -1035,7 +1012,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // per-request grant the fault left unread. So it is
                     // REFUSED with a 503 below, as a permission-store fault
                     // is, whichever read faulted.
-                    if ctx.Items.ContainsKey "ToolUp.User" then
+                    if stampBegan.Value then
                         refusal.Value <-
                             Some(sprintf "%s after the principal stamp began: %s" (ex.GetType().Name) ex.Message, ex)
                     else

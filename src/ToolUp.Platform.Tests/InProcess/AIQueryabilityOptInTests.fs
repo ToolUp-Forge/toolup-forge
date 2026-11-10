@@ -128,17 +128,15 @@ let private buildContext
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampUserId ctx.Items ("alice")
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = "t1"
-            Container = "team-t1"
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = "t1"
+        Container = "team-t1"
+        Persist = true
+    }
 
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items perms)
-
+    AccessContexts.stampPermissions ctx.Items perms
     ctx :> HttpContext
 
 let private queryableOf (names: string list) =

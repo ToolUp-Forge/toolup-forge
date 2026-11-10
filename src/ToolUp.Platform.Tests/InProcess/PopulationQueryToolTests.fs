@@ -142,12 +142,12 @@ let private contextFor (sp: IServiceProvider) (scopeId: string) (userId: string)
         Persist = true
     }
 
-    ctx.Items["ToolUp.StorageScope"] <- box scope
+    AccessContexts.stampScope ctx.Items (scope)
     // Phase 797 — the fact doors take their scope from the resolver's
     // typed record, not from the `StorageScope` item; seed both, as the
     // middleware does.
     ScopeResolution.remember ctx scope |> ignore
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx :> HttpContext
 
 /// Phase 797 — a `ResolvedScope` for a test-minted scope id, through the

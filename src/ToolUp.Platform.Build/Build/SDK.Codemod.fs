@@ -1095,6 +1095,14 @@ module Codemod =
             @"\bAccessContext\.unrestricted\b"
             "AccessContext.ofSubject ModulePermissions.Unrestricted"
             "`AccessContext.unrestricted subject` → `AccessContext.ofSubject ModulePermissions.Unrestricted subject` (same behaviour, stated; review where it was a fallback)"
+        // A write's actor is a projection of the principal.
+        rewrite
+            "882-entity-principal"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bEntityPrincipal\.ofPrincipal\s+(\w+)\.UserId\b"
+            "AccessContext.entityPrincipal $1"
+            "`EntityPrincipal.ofPrincipal ctx.UserId` → `AccessContext.entityPrincipal ctx` (the actor is a projection of the principal)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1729,13 +1737,27 @@ module Codemod =
             CodemodFileClass.Source
             @"\.ModulePermissions\s*(?:\.(?:IsEmpty|TryFind|ContainsKey|Count)\b|\|>\s*Map\.)|Map\.\w+\s+\S+\s+\w+\.ModulePermissions\b"
             "`ModulePermissions` is `Unrestricted | Restricted of Map<…>`: match on the case or use `ModulePermissions.tryFind` / `grantsAccess` / `grants`; `Restricted Map.empty` grants nothing, so an `IsEmpty` test for \"unrestricted\" is `= ModulePermissions.Unrestricted`"
-        // The permission item is gone: the principal is one stamp.
+        // The request's identity, scope, user and grants are one stamp.
         review
-            "882-permissions-item"
+            "882-retired-request-item"
             CodemodMigration.AccessContextRefuses
             CodemodFileClass.Source
-            @"""ToolUp\.ModulePermissions"""
-            "the `ToolUp.ModulePermissions` item is no longer stamped: the request's principal is one `AccessContext` under `AccessContext.ItemsKey` (read it, or copy that key to a background context)"
+            @"""ToolUp\.(?:User|UserId|Subject|StorageScope|ScopeResult|ModulePermissions|ModuleExposure|PlatformRole|PublicationGrants|ServiceAccountPermissions)"""
+            "this request item is no longer stamped: the request's principal is ONE `AccessContext` under `AccessContext.ItemsKey`. Read it with `AccessContext.ofItems ctx.Items` or an accessor (`callerIdOf` for `ToolUp.UserId`, `subjectOf`, `scopeOf`, `userOf`, `platformRoleOf`), write it with `AccessContext.stamp`, and copy only `AccessContext.ItemsKey` to a background context"
+        // The team-policy viewer is a projection of the principal.
+        review
+            "882-team-policy-viewer"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bTeamPolicyViewer\.resolve\b|\bConversationVisibility\.resolveViewer\b"
+            "`TeamPolicyViewer.resolve` takes `services access teamId` and `ConversationVisibility.resolveViewer` takes `ctx teamId`: drop the user-id argument, the viewer's id is the principal's (`AccessContext.callerId`)"
+        // The constants that spelled two retired keys are gone.
+        review
+            "882-retired-item-constant"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\b(?:SurfaceEnforcement\.SubjectItemsKey|ServiceAccountPermissionsItemsKey)\b"
+            "`SurfaceEnforcement.SubjectItemsKey` and `ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey` are gone: read the subject with `AccessContext.subjectOf ctx.Items`; a service account's permissions are its principal's (`ServiceAccountPrincipalItemsKey`), adopted by scope resolution as the request's `ModulePermissions`"
     ]
 
 

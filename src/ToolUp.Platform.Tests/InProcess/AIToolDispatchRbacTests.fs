@@ -145,17 +145,15 @@ let private buildContext (eventStore: IEventStore option) (perms: (string * Modu
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampUserId ctx.Items ("alice")
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = "alice"
-            Container = "user-alice"
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = "alice"
+        Container = "user-alice"
+        Persist = true
+    }
 
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items perms)
-
+    AccessContexts.stampPermissions ctx.Items perms
     ctx :> HttpContext
 
 // ─── Tests ───────────────────────────────────────────────────────────
@@ -425,11 +423,8 @@ let tests =
 
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
-            ctx.Items["ToolUp.UserId"] <- box "alice"
-
-            ctx.Items[AccessContext.ItemsKey] <-
-                box (AccessContexts.ofItems ctx.Items ([ "MoodJournal", [ ModulePermission.Read ] ]))
-
+            AccessContexts.stampUserId ctx.Items ("alice")
+            AccessContexts.stampPermissions ctx.Items ([ "MoodJournal", [ ModulePermission.Read ] ])
             let body = sprintf "{\"ToolCallId\":\"%O\",\"ResultJson\":\"{}\"}" toolCallId
 
             ctx.Request.Body <- new MemoryStream(Encoding.UTF8.GetBytes body)
@@ -466,10 +461,8 @@ let tests =
 
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
-            ctx.Items["ToolUp.UserId"] <- box "alice"
-
-            ctx.Items[AccessContext.ItemsKey] <-
-                box (AccessContexts.ofItems ctx.Items ([ "MoodJournal", [ ModulePermission.Read ] ]))
+            AccessContexts.stampUserId ctx.Items ("alice")
+            AccessContexts.stampPermissions ctx.Items ([ "MoodJournal", [ ModulePermission.Read ] ])
 
             let body =
                 sprintf "{\"ToolCallId\":\"%O\",\"ResultJson\":\"{\\\"ok\\\":true}\"}" toolCallId

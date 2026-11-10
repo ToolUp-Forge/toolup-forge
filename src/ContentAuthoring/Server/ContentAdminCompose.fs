@@ -74,12 +74,9 @@ let withContentAdmin (app: ServerApp) : ServerApp =
         // the anonymous session so a misconfigured pipeline yields a
         // visible 'anonymous' row rather than a placeholder.
         let actor =
-            match ctx.Items.TryGetValue "ToolUp.AccessContext" with
-            | true, (:? AccessContext as ac) -> EntityPrincipal.ofPrincipal ac.UserId
-            | _ ->
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> EntityPrincipal.ofPrincipal id
-                | _ -> EntityPrincipal.ofPrincipal "anonymous"
+            AccessContext.ofItems ctx.Items
+            |> Option.map AccessContext.entityPrincipal
+            |> Option.defaultValue (EntityPrincipal.ofPrincipal "anonymous")
 
         ContentAdminApiImpl.create store actor
 

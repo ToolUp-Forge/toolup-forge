@@ -27,13 +27,13 @@ open ToolUp.Platform.Infra
 //     — client-supplied identity is never trusted.
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.Items.TryGetValue "ToolUp.AccessContext" with
-    | true, (:? AccessContext as ac) -> ac
+    match AccessContext.ofItems ctx.Items with
+    | Some ac -> ac
     | _ -> AccessContext.unresolved "UserSchemaApiHandler"
 
 let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as scope) -> scope.ScopeId
+    match AccessContext.scopeOf ctx.Items with
+    | Some scope -> scope.ScopeId
     | _ -> accessContext.UserId
 
 let private isWriteAllowed (ctx: HttpContext) (accessContext: AccessContext) : Async<bool> = async {

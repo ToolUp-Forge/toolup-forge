@@ -1873,13 +1873,13 @@ let private scopeProbeRoute: HttpHandler =
     >=> route "/probe/scope"
     >=> fun next ctx ->
         let kind =
-            match ctx.Items.TryGetValue "ToolUp.Subject" with
-            | true, (:? Subject as subject) -> $"%A{Subject.kind subject}"
+            match AccessContext.subjectOf ctx.Items with
+            | Some subject -> $"%A{Subject.kind subject}"
             | _ -> "unresolved"
 
         let container =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as scope) -> scope.Container
+            match AccessContext.scopeOf ctx.Items with
+            | Some scope -> scope.Container
             | _ -> "none"
 
         text $"{kind}|{container}" next ctx

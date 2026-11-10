@@ -52,12 +52,6 @@ open ToolUp.Platform.Config
 // revocation reaches instance B within B's own window. See the
 // multi-instance caveat on `ISessionRegistry` for the two remedies.
 
-[<Literal>]
-let private SubjectItemsKey = "ToolUp.Subject"
-
-[<Literal>]
-let private StorageScopeItemsKey = "ToolUp.StorageScope"
-
 /// Stamped on `HttpContext.Items` when a session id was derived for the
 /// request, so a downstream handler (`SessionApiHandler`) can tell the
 /// caller which of their listed sessions is the one they are sitting at
@@ -90,13 +84,13 @@ let private bearerCredential (ctx: HttpContext) : string option =
     | _ -> None
 
 let private subjectOf (ctx: HttpContext) : Subject option =
-    match ctx.Items.TryGetValue SubjectItemsKey with
-    | true, (:? Subject as s) -> Some s
+    match AccessContext.subjectOf ctx.Items with
+    | Some s -> Some s
     | _ -> None
 
 let private scopeOf (ctx: HttpContext) : StorageScope option =
-    match ctx.Items.TryGetValue StorageScopeItemsKey with
-    | true, (:? StorageScope as s) -> Some s
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> Some s
     | _ -> None
 
 let private serviceOf<'T> (ctx: HttpContext) : 'T option =

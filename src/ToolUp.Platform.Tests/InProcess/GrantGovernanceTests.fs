@@ -197,16 +197,15 @@ let private buildContext
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampUserId ctx.Items ("alice")
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = "t1"
-            Container = "team-t1"
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = "t1"
+        Container = "team-t1"
+        Persist = true
+    }
 
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items perms)
+    AccessContexts.stampPermissions ctx.Items perms
 
     if not (List.isEmpty grants) then
         ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box (Map.ofList grants)
@@ -224,6 +223,8 @@ let private accessFor (perms: (string * ModulePermission list) list) = {
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     PublicationGrants = []
+    User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+    StorageScope = None
     ModuleExposure = Map.empty
     PlatformRole = None
 }
@@ -632,14 +633,13 @@ let tests =
 
                 let ctx = DefaultHttpContext()
                 ctx.RequestServices <- services.BuildServiceProvider()
-                ctx.Items["ToolUp.UserId"] <- box "alice"
+                AccessContexts.stampUserId ctx.Items ("alice")
 
-                ctx.Items["ToolUp.StorageScope"] <-
-                    box {
-                        ScopeId = "t1"
-                        Container = "team-t1"
-                        Persist = true
-                    }
+                AccessContexts.stampScope ctx.Items {
+                    ScopeId = "t1"
+                    Container = "team-t1"
+                    Persist = true
+                }
 
                 ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <-
                     box (Map.ofList [ "Payroll", pendingRecord GrantPolicy.RequiresSubjectConsent "onboarding" ])
@@ -679,7 +679,7 @@ let tests =
 
                 let ctx = DefaultHttpContext()
                 ctx.RequestServices <- services.BuildServiceProvider()
-                ctx.Items["ToolUp.UserId"] <- box "alice"
+                AccessContexts.stampUserId ctx.Items ("alice")
 
                 ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <-
                     box (Map.ofList [ "Payroll", activeRecord GrantPolicy.RequiresSubjectConsent "onboarding" ])

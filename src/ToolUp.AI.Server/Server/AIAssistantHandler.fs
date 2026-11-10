@@ -1100,18 +1100,11 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     // Preserve user identity headers so scope resolvers work
     bgCtx.Request.Headers.Append("X-User-Id", userId)
 
-    // Carry forward the resolved scope / user / permission state from the
-    // middleware-decorated original context. Keys are the exact strings
-    // populated by `ScopeResolutionMiddleware` in `SDK.Server.fs`; keeping
-    // the list in lockstep with that middleware is a stringly-typed
-    // coupling a typed `RequestContext` would remove.
-    //
-    // The request's principal is ONE item
-    // (`AccessContext.ItemsKey`), the record `reconstructAccessContext`
-    // reads: subject, permissions, exposure and role travel together, so the
-    // loop never reassembles a principal from separate stamps, and a
-    // background context without it is served under a context that grants
-    // nothing. The remaining items serve their own readers (scope, user id).
+    // Carry forward the request's principal: ONE item
+    // (`AccessContext.ItemsKey`) holding subject, user, scope, permissions,
+    // exposure and role together, so the loop never reassembles a principal
+    // from separate stamps, and a background context without it is served
+    // under a context that grants nothing.
     //
     // The two grant stamps are load-bearing for the tool gate. Both are
     // resolved PER REQUEST by the middleware — the consent verdicts
@@ -1123,12 +1116,7 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     // direction: every governed module would vanish from the model's tool
     // list even for a subject who legitimately holds it.
     let itemsToCopy = [
-        "ToolUp.StorageScope"
-        "ToolUp.UserId"
         AccessContext.ItemsKey
-        "ToolUp.Subject"
-        "ToolUp.ModuleExposure"
-        "ToolUp.PlatformRole"
         // The grant + consent stamps. Named through the constants that
         // DEFINE them, not re-spelled, so a rename moves both ends together.
         GrantPolicyGuard.ModuleGrantsItemsKey
@@ -1487,12 +1475,12 @@ let aiAssistantApi
     // resolution failed (Error case), fall back to an anonymous user-scoped
     // container.
     let scope =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> s
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> s
         | _ ->
             let fallback =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
+                match AccessContext.callerIdOf ctx.Items with
+                | Some id -> id
                 | _ -> "anonymous"
 
             {
@@ -1502,8 +1490,8 @@ let aiAssistantApi
             }
 
     let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
     let accessContext =
@@ -1521,7 +1509,7 @@ let aiAssistantApi
         TeamConversationPolicyStore.ConversationVisibility.resolveState ctx storage scope.Container
 
     let viewerIn (state: TeamConversationPolicyStore.TeamVisibilityState) =
-        TeamConversationPolicyStore.ConversationVisibility.resolveViewer ctx userId state.TeamId.Value
+        TeamConversationPolicyStore.ConversationVisibility.resolveViewer ctx state.TeamId.Value
 
     let createdAtOf (messages: ConversationMessage list) =
         match messages with
@@ -1716,7 +1704,6 @@ let aiAssistantApi
                         ToolUp.Platform.Scope.TeamPolicyStore.TeamPolicyViewer.resolve
                             turn.Background.RequestServices
                             turn.GateAccess
-                            userId
                             state.TeamId.Value)
                     messages
                     userId

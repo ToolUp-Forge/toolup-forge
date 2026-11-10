@@ -30,10 +30,7 @@ open ToolUp.Platform.Jobs
 /// substituted for a stamp the middleware did not write. The scoped factory
 /// below is this function over the request's context; it is separate so the
 /// reading is testable without composing a server.
-let internal accessContextOf (ctx: HttpContext) : AccessContext option =
-    match ctx.Items.TryGetValue AccessContext.ItemsKey with
-    | true, (:? AccessContext as access) -> Some access
-    | _ -> None
+let internal accessContextOf (ctx: HttpContext) : AccessContext option = AccessContext.ofItems ctx.Items
 
 /// Build + register the per-request scope-resolution substrate:
 ///

@@ -747,13 +747,13 @@ let beaconLimiter = BeaconRateLimiter beaconRateLimit
 // ─── The endpoint ─────────────────────────────────────────────────────
 
 let private storageScopeOf (ctx: HttpContext) : StorageScope option =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> Some s
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> Some s
     | _ -> None
 
 let private subjectOf (ctx: HttpContext) : Subject =
-    match ctx.Items.TryGetValue "ToolUp.Subject" with
-    | true, (:? Subject as s) -> s
+    match AccessContext.subjectOf ctx.Items with
+    | Some s -> s
     | _ -> AnonymousSession ""
 
 let private remoteIp (ctx: HttpContext) =

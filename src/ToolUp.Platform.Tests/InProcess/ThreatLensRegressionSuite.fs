@@ -711,7 +711,7 @@ let private runBackstop (httpMethod: string) (path: string) (stampAdmin: bool) :
     ctx.Request.Path <- PathString path
 
     if stampAdmin then
-        ctx.Items["ToolUp.PlatformRole"] <- box ToolUp.Platform.PlatformRole.PlatformAdmin
+        AccessContexts.stampPlatformRole ctx.Items (ToolUp.Platform.PlatformRole.PlatformAdmin)
 
     let mutable reached = false
 

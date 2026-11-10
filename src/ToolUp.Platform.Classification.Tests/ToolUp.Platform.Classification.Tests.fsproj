@@ -11,10 +11,10 @@
          references Core directly rather than the whole Server DLL. Keeps
          the pack buildable independently of the rest of the server tier. -->
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Classification\IFieldClassifier.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Classification\DefaultFieldClassifier.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Classification\ClassificationGate.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="Support\Doubles.fs" />
         <Compile Include="Contracts\IFieldClassifierContract.fs" />
         <Compile Include="InProcess\ClassificationGateTests.fs" />

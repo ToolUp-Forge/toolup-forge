@@ -315,6 +315,9 @@
 @@ L63 [882-unrestricted-constructor]
 -let jobContext subject = AccessContext.unrestricted subject
 +let jobContext subject = AccessContext.ofSubject ModulePermissions.Unrestricted subject
+@@ L69 [882-entity-principal]
+-let actor (access: AccessContext) = EntityPrincipal.ofPrincipal access.UserId
++let actor (access: AccessContext) = AccessContext.entityPrincipal access
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -427,4 +430,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 109 rewrite(s) across 19 file(s) pending.
+Codemod: 110 rewrite(s) across 19 file(s) pending.

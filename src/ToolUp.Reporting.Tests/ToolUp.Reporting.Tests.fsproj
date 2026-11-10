@@ -8,8 +8,8 @@
     <ItemGroup>
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
-        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
         <Compile Include="InProcess\Fakes.fs" />
         <Compile Include="InProcess\SubscriptionTests.fs" />
         <!-- Phase 534 / 575 spillover — the structural narrative egress

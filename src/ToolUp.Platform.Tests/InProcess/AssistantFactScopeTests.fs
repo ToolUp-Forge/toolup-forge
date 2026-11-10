@@ -198,9 +198,9 @@ let private requestFor (sp: IServiceProvider) (teamId: string) (userId: string) 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- sp
     let storage = storageFor teamId
-    ctx.Items["ToolUp.StorageScope"] <- box storage
+    AccessContexts.stampScope ctx.Items (storage)
     ScopeResolution.remember ctx storage |> ignore
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx :> HttpContext
 
 /// Poll `GetTaskStatus` until the task is terminal — bounded, so a hang
@@ -294,9 +294,8 @@ let tests =
             // the fact door must not promote the one into the other.
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- sp
-            ctx.Items["ToolUp.StorageScope"] <- box (storageFor team)
-            ctx.Items["ToolUp.UserId"] <- box "alice"
-
+            AccessContexts.stampScope ctx.Items ((storageFor team))
+            AccessContexts.stampUserId ctx.Items ("alice")
             chatTurn (ctx :> HttpContext)
 
             match model.ToolResults with

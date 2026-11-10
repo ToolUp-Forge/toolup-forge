@@ -902,8 +902,8 @@ let teamInvitationApi
         CheckMyInvites =
             fun () -> async {
                 let user =
-                    match ctx.Items.TryGetValue "ToolUp.User" with
-                    | true, (:? AuthenticatedUser as u) -> u
+                    match AccessContext.userOf ctx.Items with
+                    | Some u -> u
                     | _ -> {
                         AuthenticatedUser.anonymous with
                             UserId = UserId access.UserId

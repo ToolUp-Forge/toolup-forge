@@ -65,3 +65,9 @@ let jobContext subject = AccessContext.unrestricted subject
 let isOpen (ctx: AccessContext) = ctx.ModulePermissions.IsEmpty
 
 let stamp (ctx: HttpContext) perms = ctx.Items["ToolUp.ModulePermissions"] <- box perms
+
+let actor (access: AccessContext) = EntityPrincipal.ofPrincipal access.UserId
+
+let viewer services access = TeamPolicyViewer.resolve services access "u" "t"
+
+let subjectKey = SurfaceEnforcement.SubjectItemsKey

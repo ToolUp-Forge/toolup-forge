@@ -22,9 +22,9 @@ open ToolUp.Platform.Config
 //   * `ShareTokenAuth.ShareTokenClaimItemsKey` ← a synthesised
 //     `ShareTokenClaim`, so the shipped `ISubjectResolver` four-step
 //     algorithm resolves the request to `ClaimBearer claim`;
-//   * `ServiceAccountPermissionsItemsKey` ← the account's effective
-//     module-permission map, which the `AccessContext` DI factory
-//     prefers over the team-derived map when present.
+//   * `ServiceAccountPrincipalItemsKey` ← the validated principal, whose
+//     effective module-permission map scope resolution adopts as the
+//     request's module permissions (`Middleware.principalOf`).
 //
 // **Why a synthesised claim rather than a fifth `Subject` case.** The
 // phase's own dependency line settles it — a service-account principal
@@ -75,17 +75,6 @@ open ToolUp.Platform.Config
 // and moving it means deciding how a service account's declared
 // module-permission set maps onto SCIM's team-membership authority —
 // a design question, not a plumbing one.
-
-/// `HttpContext.Items` key carrying the effective module-permission map
-/// of a validated service-account token. Read by
-/// `ScopeResolutionMiddleware` when it stamps the request's principal
-/// (`Middleware.principalOf`), which prefers it over the team-derived
-/// permissions — the precedence is decided there, in one place.
-///
-/// This middleware runs BEFORE scope resolution (the claim has to exist
-/// for the subject to resolve), so it cannot stamp the principal itself.
-[<Literal>]
-let ServiceAccountPermissionsItemsKey = "ToolUp.ServiceAccountPermissions"
 
 /// `HttpContext.Items` key carrying the resolved
 /// `ServiceAccountPrincipal`. Handlers that want the account id or
@@ -323,7 +312,6 @@ type ServiceAccountTokenMiddleware(next: RequestDelegate) =
                         do! writeUnauthorized ctx code description
                     | Ok principal ->
                         ctx.Items[ShareTokenAuth.ShareTokenClaimItemsKey] <- box (claimFor principal)
-                        ctx.Items[ServiceAccountPermissionsItemsKey] <- box principal.Permissions
                         ctx.Items[ServiceAccountPrincipalItemsKey] <- box principal
                         meterRequest ctx principal
                         do! next.Invoke(ctx)

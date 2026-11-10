@@ -167,9 +167,9 @@ let private postDecision
     : int =
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services
-    ctx.Items["ToolUp.UserId"] <- box userId
-    ctx.Items["ToolUp.StorageScope"] <- box scope
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items (perms))
+    AccessContexts.stampUserId ctx.Items (userId)
+    AccessContexts.stampScope ctx.Items (scope)
+    AccessContexts.stampPermissions ctx.Items (perms)
 
     let request: AIConsentDecisionRequest = {
         ConsentId = consentId
@@ -241,9 +241,9 @@ let private buildHarness
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- provider
-    ctx.Items["ToolUp.UserId"] <- box "alice"
-    ctx.Items["ToolUp.StorageScope"] <- box scope
-    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items (perms))
+    AccessContexts.stampUserId ctx.Items ("alice")
+    AccessContexts.stampScope ctx.Items (scope)
+    AccessContexts.stampPermissions ctx.Items (perms)
     ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId
     ctx.Items[AIConsentDispatch.ItemsKeys.TaskId] <- box (Guid.NewGuid())
 
@@ -702,7 +702,7 @@ let tests =
 
                 let ctx = DefaultHttpContext()
                 ctx.RequestServices <- h.Services
-                ctx.Items["ToolUp.UserId"] <- box "alice"
+                AccessContexts.stampUserId ctx.Items ("alice")
                 ctx.Request.Body <- new MemoryStream(Encoding.UTF8.GetBytes "not json")
                 ctx.Response.Body <- new MemoryStream()
 

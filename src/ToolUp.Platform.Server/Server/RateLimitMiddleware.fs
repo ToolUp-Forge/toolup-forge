@@ -64,8 +64,8 @@ module RateLimitMiddleware =
             IpAddressKey ip
         | ByUserId ->
             let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
+                match AccessContext.callerIdOf ctx.Items with
+                | Some id -> id
                 | _ -> "anonymous"
 
             UserIdKey userId

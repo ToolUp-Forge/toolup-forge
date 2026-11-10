@@ -539,6 +539,8 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 PublicationGrants = []
+                User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+                StorageScope = None
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -559,6 +561,8 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 PublicationGrants = []
+                User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+                StorageScope = None
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -576,6 +580,8 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 PublicationGrants = []
+                User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+                StorageScope = None
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }

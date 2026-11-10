@@ -1415,9 +1415,18 @@ type GroundedNarrativeRunner
         let diScope = services.GetRequiredService<IServiceScopeFactory>().CreateScope()
         let ctx = DefaultHttpContext()
         ctx.RequestServices <- diScope.ServiceProvider
-        ctx.Items["ToolUp.StorageScope"] <- box storage
         StorageScopeResolver.ScopeResolution.carry ctx resolved
-        ctx.Items["ToolUp.UserId"] <- box principal
+
+        let subject =
+            match StorageScope.tryTeamId storage with
+            | Some teamId -> TeamMember(principal, teamId.Value)
+            | None -> AuthenticatedUser principal
+
+        AccessContext.stamp ctx.Items {
+            AccessContext.carrying "narrative run" subject with
+                StorageScope = Some storage
+        }
+
         ctx :> HttpContext, diScope
 
     /// Phase 1136 — run `project` under the run's projection context: the

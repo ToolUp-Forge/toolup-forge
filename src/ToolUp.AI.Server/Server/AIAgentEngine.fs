@@ -608,12 +608,12 @@ module private Telemetry =
     /// The storage scope latency rows and audits land in: the request's,
     /// or the caller's user container.
     let private scopeOf (ctx: HttpContext) : StorageScope =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> s
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> s
         | _ ->
             let fallback =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
+                match AccessContext.callerIdOf ctx.Items with
+                | Some id -> id
                 | _ -> "anonymous"
 
             {
@@ -625,8 +625,8 @@ module private Telemetry =
     /// The caller's user id for `AILatencyRecord.UserId`; `""` (unattributed)
     /// when the request carried none.
     let private userIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) when not (String.IsNullOrWhiteSpace id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id when not (String.IsNullOrWhiteSpace id) -> id
         | _ -> ""
 
     let private event (ctx: HttpContext) (sourceModule: string) (eventType: string) (payload: string) : ModuleEvent = {

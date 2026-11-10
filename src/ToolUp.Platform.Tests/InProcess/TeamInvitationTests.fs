@@ -80,7 +80,7 @@ let private ctxFor (userId: string) : HttpContext =
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx
 
 let private cfg = {
@@ -211,7 +211,7 @@ let tests =
                 |> ignore
 
                 ctx.RequestServices <- services.BuildServiceProvider()
-                ctx.Items["ToolUp.Subject"] <- box (Subject.AuthenticatedUser "dana@example.com")
+                AccessContexts.stampSubject ctx.Items ((Subject.AuthenticatedUser "dana@example.com"))
                 let recipient = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
                 let! accepted = recipient.AcceptInvite token
 
@@ -389,7 +389,7 @@ let tests =
             let sp = services.BuildServiceProvider() :> IServiceProvider
             let ctx = DefaultHttpContext() :> HttpContext
             ctx.RequestServices <- sp
-            ctx.Items["ToolUp.UserId"] <- box "alice@example.com"
+            AccessContexts.stampUserId ctx.Items ("alice@example.com")
             let owner = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
 
             // Owner issues a pending-by-email invitation for Carol.
@@ -519,7 +519,7 @@ let tests =
             let sp = services.BuildServiceProvider() :> IServiceProvider
             let ctx = DefaultHttpContext() :> HttpContext
             ctx.RequestServices <- sp
-            ctx.Items["ToolUp.UserId"] <- box "alice@example.com"
+            AccessContexts.stampUserId ctx.Items ("alice@example.com")
             let owner = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
 
             let! _ =
@@ -873,7 +873,7 @@ let private ctxWithPendingStore (storage: IBlobStorage) (store: IPendingInviteSt
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx
 
 [<Tests>]
@@ -1263,8 +1263,8 @@ let private ctxForAuthenticatedUser (store: IPendingInviteStore) (user: Authenti
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
-    ctx.Items["ToolUp.User"] <- box user
-    ctx.Items["ToolUp.UserId"] <- box user.UserId
+    AccessContexts.stampUser ctx.Items (user)
+    AccessContexts.stampUserId ctx.Items (user.UserId.Value)
     ctx
 
 let private signedInAs (email: string) : AuthenticatedUser = {

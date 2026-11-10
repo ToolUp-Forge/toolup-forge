@@ -219,14 +219,13 @@ let private getConversation (storage: IBlobStorage) (conversationId: Guid) : Con
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = operator
-            Container = blobContainer
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = operator
+        Container = blobContainer
+        Persist = true
+    }
 
-    ctx.Items["ToolUp.UserId"] <- box operator
+    AccessContexts.stampUserId ctx.Items (operator)
     let manager = new SSEConnectionManager()
 
     let api, _ =

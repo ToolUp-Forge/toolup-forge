@@ -1196,12 +1196,11 @@ let private drive
 
     match scope with
     | Some container ->
-        ctx.Items["ToolUp.StorageScope"] <-
-            box {
-                ScopeId = "u1"
-                Container = container
-                Persist = true
-            }
+        AccessContexts.stampScope ctx.Items {
+            ScopeId = "u1"
+            Container = container
+            Persist = true
+        }
     | None -> ()
 
     let body = new MemoryStream()
@@ -1981,12 +1980,11 @@ let private driveMedia
 
     match scope with
     | Some container ->
-        ctx.Items["ToolUp.StorageScope"] <-
-            box {
-                ScopeId = "u1"
-                Container = container
-                Persist = true
-            }
+        AccessContexts.stampScope ctx.Items {
+            ScopeId = "u1"
+            Container = container
+            Persist = true
+        }
     | None -> ()
 
     let body = new MemoryStream()
@@ -2015,12 +2013,11 @@ let private driveBeacon (h: TelemetryHost) (body: string) (query: string) (scope
 
     match scope with
     | Some container ->
-        ctx.Items["ToolUp.StorageScope"] <-
-            box {
-                ScopeId = "u1"
-                Container = container
-                Persist = true
-            }
+        AccessContexts.stampScope ctx.Items {
+            ScopeId = "u1"
+            Container = container
+            Persist = true
+        }
     | None -> ()
 
     ctx.Response.Body <- new MemoryStream()
@@ -2898,16 +2895,15 @@ let private driveAudited
 
     match scope with
     | Some container ->
-        ctx.Items["ToolUp.StorageScope"] <-
-            box {
-                ScopeId = "u1"
-                Container = container
-                Persist = true
-            }
+        AccessContexts.stampScope ctx.Items {
+            ScopeId = "u1"
+            Container = container
+            Persist = true
+        }
     | None -> ()
 
     match subject with
-    | Some s -> ctx.Items["ToolUp.Subject"] <- box s
+    | Some s -> AccessContexts.stampSubject ctx.Items (s)
     | None -> ()
 
     let body = new MemoryStream()

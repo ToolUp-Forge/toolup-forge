@@ -520,8 +520,8 @@ let gateToolResult (ctx: HttpContext) (toolName: string) (entityNames: string li
     with
     | (:? IEgressGate as gate), (:? IFieldClassifier as classifier) ->
         let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
+            match AccessContext.callerIdOf ctx.Items with
+            | Some id -> id
             | _ -> "anonymous"
 
         let crossing =
@@ -610,8 +610,8 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
         let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
 
         let scopeId =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> s.ScopeId
+            match AccessContext.scopeOf ctx.Items with
+            | Some s -> s.ScopeId
             | _ -> access.UserId
 
         let verdict =
@@ -669,8 +669,8 @@ let recordUnauthorizedToolDenial
                 Reason =
                     $"AI tool '{toolName}' requires Read on module '{sourceModule}', which this caller does not hold."
                 ScopeId =
-                    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                    | true, (:? StorageScope as s) -> Some s.ScopeId
+                    match AccessContext.scopeOf ctx.Items with
+                    | Some s -> Some s.ScopeId
                     | _ -> None
                 CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
             }

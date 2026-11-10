@@ -114,8 +114,8 @@ let internal requiresPlatformAdmin (httpMethod: string) (path: PathString) : boo
 /// `ScopeResolutionMiddleware`. Mirrors the `ToolUp.PlatformRole` item
 /// contract the `ForgeAuthContext.HasRole` bridge reads (Phase 132 core).
 let internal isPlatformAdmin (ctx: HttpContext) : bool =
-    match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-    | true, (:? PlatformRole as role) -> role = PlatformRole.PlatformAdmin
+    match AccessContext.platformRoleOf ctx.Items with
+    | Some role -> role = PlatformRole.PlatformAdmin
     | _ -> false
 
 /// Path-prefix authorisation backstop for the raw `_platform` admin

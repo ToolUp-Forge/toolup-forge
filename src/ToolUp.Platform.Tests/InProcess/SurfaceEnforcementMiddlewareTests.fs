@@ -82,7 +82,7 @@ let private run
     ctx.Response.Body <- body
 
     match subject with
-    | Some s -> ctx.Items[SubjectItemsKey] <- box s
+    | Some s -> AccessContexts.stampSubject ctx.Items (s)
     | None -> ()
 
     let mutable nextInvoked = false

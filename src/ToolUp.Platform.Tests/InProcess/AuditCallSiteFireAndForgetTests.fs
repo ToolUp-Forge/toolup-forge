@@ -282,7 +282,7 @@ let private files: Site = {
             use _ = provider
             // A user of its own per run, so no other test's session store
             // is reset and none is shared.
-            ctx.Items["ToolUp.UserId"] <- sprintf "user-1026-%s" (Guid.NewGuid().ToString "N")
+            AccessContexts.stampUserId ctx.Items (sprintf "user-1026-%s" (Guid.NewGuid().ToString "N"))
             let! reset = (FileManagement.fileManagementApi ctx).ResetDataStore()
             return sprintf "%A" reset
         }

@@ -241,7 +241,7 @@ let private migrationTests =
 
         let ctx = ctxWith sp
         ctx.Request.Path <- PathString "/api/data"
-        ctx.Items["ToolUp.Subject"] <- box (AuthenticatedUser uid)
+        AccessContexts.stampSubject ctx.Items ((AuthenticatedUser uid))
 
         match header with
         | Some h -> ctx.Request.Headers["X-User-Id"] <- StringValues h

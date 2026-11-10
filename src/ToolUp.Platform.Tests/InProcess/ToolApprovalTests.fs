@@ -654,8 +654,8 @@ let tests =
             let post (perms: (string * ModulePermission list) list) (approvalId: Guid) (token: string) =
                 let ctx = DefaultHttpContext()
                 ctx.RequestServices <- provider
-                ctx.Items["ToolUp.UserId"] <- box "alice"
-                ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items (perms))
+                AccessContexts.stampUserId ctx.Items ("alice")
+                AccessContexts.stampPermissions ctx.Items (perms)
 
                 let body =
                     JsonSerializer.Serialize(

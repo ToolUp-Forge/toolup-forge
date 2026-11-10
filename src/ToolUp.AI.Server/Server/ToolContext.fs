@@ -54,8 +54,8 @@ let emitAction (ctx: HttpContext) (moduleId: string) (actionKey: string) (payloa
 
     match channelBox with
     | :? INotificationChannel as channel ->
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as userId) when not (String.IsNullOrEmpty userId) && userId <> "anonymous" ->
+        match AccessContext.callerIdOf ctx.Items with
+        | Some userId when not (String.IsNullOrEmpty userId) && userId <> "anonymous" ->
             try
                 do! channel.Publish(userId, Notification.ModuleAction(moduleId, actionKey, payloadJson))
             with _ ->

@@ -39,8 +39,8 @@ open ToolUp.Platform.Config
 // also only stashes `Subject` for `/api/*` and `/dev/*`, so paths
 // outside that set arrive here with no Subject and fall through.
 //
-// **Subject source.** Reads `HttpContext.Items[SubjectItemsKey]`,
-// populated by `ScopeResolutionMiddleware` for every `/api/*`
+// **Subject source.** Reads the stamped principal's subject
+// (`AccessContext.subjectOf`), stamped by `ScopeResolutionMiddleware` for every `/api/*`
 // request (including the synthetic-`AnonymousSession` fallback that
 // `ScopeResolutionMiddleware` stashes when `ISubjectResolver`
 // returns `Error _` — keeps the matrix uniform across resolver
@@ -69,9 +69,6 @@ open ToolUp.Platform.Config
 // session id is a fresh GUID, never a caller-supplied value:
 // honouring an unverified claimed id on a path reached only because
 // something already went wrong is the Phase 337 hazard.
-
-[<Literal>]
-let SubjectItemsKey = "ToolUp.Subject"
 
 /// Per-process route → `SurfaceRequirement` registry, populated at
 /// composition time by `addModules` (Phase 66 Stream B.3 wiring).
@@ -586,8 +583,8 @@ let private emitAuthDenial
             // caller-scoped `/dev/auth-denials` rollup; `None` (→ `_platform`)
             // for anonymous / pre-scope denials.
             let scopeId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) -> Some s.ScopeId
+                match AccessContext.scopeOf ctx.Items with
+                | Some s -> Some s.ScopeId
                 | _ -> None
 
             hook.RecordDenial {
@@ -690,8 +687,8 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 // everything the strict default covers now 401s instead
                 // of reaching the handler unauthenticated.
                 let subject =
-                    match ctx.Items.TryGetValue SubjectItemsKey with
-                    | true, (:? Subject as s) -> s
+                    match AccessContext.subjectOf ctx.Items with
+                    | Some s -> s
                     | _ ->
                         warnUnresolvedSubject ctx
                         AnonymousSession(Guid.NewGuid().ToString())
@@ -703,8 +700,8 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 // `ScopeResolutionMiddleware` stashed; absent, the request
                 // is a member's (or anonymous), evaluated as before.
                 let user =
-                    match ctx.Items.TryGetValue "ToolUp.User" with
-                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> Some user
+                    match AccessContext.userOf ctx.Items with
+                    | Some user -> Some user
                     | _ -> None
 
                 let admission =

@@ -182,8 +182,8 @@ let private contextOver (storage: IBlobStorage) (provider: IAIProvider) : HttpCo
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.StorageScope"] <- box scope
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampScope ctx.Items (scope)
+    AccessContexts.stampUserId ctx.Items ("alice")
     ctx :> HttpContext
 
 let private assistantOver (storage: IBlobStorage) (provider: IAIProvider) : AIAssistantApi =
@@ -266,8 +266,8 @@ let private postBeacon (storage: IBlobStorage) (beacon: FastPathBeaconHandler.Fa
     services.AddSingleton<IBlobStorage>(storage) |> ignore
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box "alice"
-    ctx.Items["ToolUp.StorageScope"] <- box scope
+    AccessContexts.stampUserId ctx.Items ("alice")
+    AccessContexts.stampScope ctx.Items (scope)
     ctx.Request.Body <- new IO.MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(beacon, wire)))
     ctx.Response.Body <- new IO.MemoryStream()
 

@@ -148,8 +148,8 @@ let private mediaApi (options: MediaLibraryOptions) (ctx: HttpContext) : IMediaA
         ctx.RequestServices.GetService(typeof<IUploadSessionStore>) :?> IUploadSessionStore
 
     let scope () =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> s
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> s
         | _ -> failwith "No active scope — IMediaApi requires authentication"
 
     {

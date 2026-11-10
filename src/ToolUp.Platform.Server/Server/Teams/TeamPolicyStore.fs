@@ -283,30 +283,30 @@ type TeamPolicyViewer = {
 
 /// Resolve a `TeamPolicyViewer`.
 module TeamPolicyViewer =
-    /// The viewer, with their role in `teamId` read from `ITeamStore`
-    /// (`None` when no team store is composed — fail closed) and their
-    /// platform role from `access`.
-    let resolve
-        (services: IServiceProvider)
-        (access: AccessContext option)
-        (userId: string)
-        (teamId: string)
-        : Async<TeamPolicyViewer> =
-        async {
-            let! role =
-                match services.GetService(typeof<ITeamStore>) with
-                | :? ITeamStore as teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
-                | _ -> async.Return None
+    /// The viewer an access context stands for, in `teamId`: its user id is
+    /// the principal's (`AccessContext.callerId`; "anonymous" without one),
+    /// its role in the team is read from `ITeamStore` (`None` when no team
+    /// store is composed — fail closed) and its platform role is the
+    /// principal's. A projection of the principal, never of a user id the
+    /// caller passes beside it.
+    let resolve (services: IServiceProvider) (access: AccessContext option) (teamId: string) : Async<TeamPolicyViewer> = async {
+        let userId =
+            access |> Option.map AccessContext.callerId |> Option.defaultValue "anonymous"
 
-            return {
-                UserId = UserId userId
-                TeamRole = role
-                IsPlatformAdmin =
-                    access
-                    |> Option.map AccessContext.canModifyPlatformConfig
-                    |> Option.defaultValue false
-            }
+        let! role =
+            match services.GetService(typeof<ITeamStore>) with
+            | :? ITeamStore as teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
+            | _ -> async.Return None
+
+        return {
+            UserId = UserId userId
+            TeamRole = role
+            IsPlatformAdmin =
+                access
+                |> Option.map AccessContext.canModifyPlatformConfig
+                |> Option.defaultValue false
         }
+    }
 
 // ─── The disclosure gate's source ────────────────────────────────
 
@@ -469,7 +469,7 @@ let teamOutputVisibilityApi (ctx: HttpContext) : TeamOutputVisibilityApi =
             fun () -> async {
                 match team, storage, outputSettings with
                 | Some(userId, teamId, container), Some storage, Some settings ->
-                    let! viewer = TeamPolicyViewer.resolve services access userId teamId
+                    let! viewer = TeamPolicyViewer.resolve services access teamId
 
                     match! TeamPolicyStore(storage).ReadOutput container with
                     | Ok record -> return viewOf settings record viewer
@@ -499,7 +499,7 @@ let teamOutputVisibilityApi (ctx: HttpContext) : TeamOutputVisibilityApi =
             fun requested -> async {
                 match team, storage, outputSettings with
                 | Some(userId, teamId, container), Some storage, Some settings ->
-                    let! viewer = TeamPolicyViewer.resolve services access userId teamId
+                    let! viewer = TeamPolicyViewer.resolve services access teamId
 
                     let decide (record: TeamConversationPolicyRecord, output: TeamOutputPolicyRecord) =
                         let current = TeamOutputPolicyRecord.current settings.Default output

@@ -119,8 +119,8 @@ let uploadHandler (options: AssetStoreOptions) : HttpHandler =
             let! form = ctx.Request.ReadFormAsync()
 
             let scopeContainer =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) -> Some s.Container
+                match AccessContext.scopeOf ctx.Items with
+                | Some s -> Some s.Container
                 | _ -> None
 
             let assetStore =
@@ -129,8 +129,8 @@ let uploadHandler (options: AssetStoreOptions) : HttpHandler =
                 | _ -> None
 
             let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) when id <> "" -> id
+                match AccessContext.callerIdOf ctx.Items with
+                | Some id when id <> "" -> id
                 | _ -> "anonymous"
 
             match scopeContainer, assetStore, readFile form with
