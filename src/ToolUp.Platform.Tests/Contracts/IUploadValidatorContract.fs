@@ -37,13 +37,9 @@ let tests (name: string) (factory: unit -> UploadValidatorFixture) =
 
     testList $"{name} — IUploadValidator contract" [
 
-        test "declares a stable non-empty Name (GP 12 rule 1 — identity by value)" {
+        test "declares a non-empty Name (GP 12 rule 1 — identity by value)" {
             let fx = factory ()
             Expect.isNotEmpty fx.Validator.Name "Name is surfaced in ValidationUnavailable reasons"
-
-            // Rule 1 again: the name is a value, so reading it twice
-            // from the same instance cannot differ.
-            Expect.equal fx.Validator.Name fx.Validator.Name "Name is stable across reads"
         }
 
         testCaseAsync "CONTROL — a PNG declared image/png is admitted"

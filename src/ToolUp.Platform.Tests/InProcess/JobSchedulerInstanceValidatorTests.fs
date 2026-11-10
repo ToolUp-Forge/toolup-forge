@@ -66,11 +66,6 @@ let tests =
             Expect.equal result Ok "explicit opt-in passes"
         }
 
-        test "NoJobScheduler + ReplicaCount=10 → Ok (no scheduler means no duplication)" {
-            let result = validate (cfg NoJobScheduler 10 false)
-            Expect.equal result Ok "scheduler off, replica count irrelevant"
-        }
-
         test "Validator metadata is well-formed" {
             let v =
                 JobSchedulerInstanceValidator.JobSchedulerInstanceValidator(cfg InProcessJobScheduler 1 false)

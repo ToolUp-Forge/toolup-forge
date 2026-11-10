@@ -105,15 +105,13 @@ let tests (name: string) (factory: EventStoreDecoratorFactory) =
 
     testList $"{name} — IEventStoreDecorator contract" [
 
-        testCase "1. DecoratorName is non-empty and stable across reads"
+        testCase "1. DecoratorName is non-empty"
         <| fun _ ->
             let _, _, declaring = build ()
 
             Expect.isFalse
                 (String.IsNullOrWhiteSpace declaring.DecoratorName)
                 "the walk and every refusal message key off this string"
-
-            Expect.equal declaring.DecoratorName declaring.DecoratorName "identity by value — stable across reads"
 
         testCase "2. DecoratorPosition sits within the reserved bounds and is stable"
         <| fun _ ->

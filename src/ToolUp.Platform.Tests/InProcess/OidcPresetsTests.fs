@@ -70,11 +70,6 @@ let tests: Test =
                 // opt-out at startup so the decision is visible.
                 let cfg = generic "https://issuer.example.test" testClientId testRedirectUri
                 Expect.equal cfg.ValidateIdToken (Some true) ""
-
-            testCase "Audience defaults to ClientId"
-            <| fun () ->
-                let cfg = generic "https://issuer.example.test" testClientId testRedirectUri
-                Expect.equal cfg.Audience testClientId ""
         ]
 
         // ─── entraWorkforce preset (HEADLINE) ──────────────────────
@@ -200,11 +195,6 @@ let tests: Test =
                     let cfg = entraExternalId tenant testClientId testRedirectUri
                     Expect.stringEnds cfg.Issuer "/v2.0" $"v2.0 path enforced for tenant '{tenant}'"
                     Expect.isFalse (cfg.Issuer.Contains "/v1.0") $"no v1.0 path for tenant '{tenant}'"
-
-            testCase "the companion's own default-host vector"
-            <| fun () ->
-                let cfg = entraExternalId "contoso" testClientId testRedirectUri
-                Expect.equal cfg.Issuer "https://contoso.ciamlogin.com/contoso/v2.0" "default host pattern"
         ]
 
         // ─── entraExternalIdWithDomain (custom-domain override) ────

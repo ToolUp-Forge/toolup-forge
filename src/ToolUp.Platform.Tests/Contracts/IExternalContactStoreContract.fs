@@ -490,11 +490,8 @@ let tests (name: string) (binding: ExternalContactBinding) =
             let scope, _ = binding.Scopes()
             let! contact = created store scope (request "Valued" (Some "valued@example.com") None)
 
-            // `Id` is a string, `Owner` is a DU over strings, and the
-            // whole record survives a structural comparison — no live
-            // handle could.
-            Expect.equal contact contact "the returned record is structurally comparable"
-
+            // `Id` is a string and `Owner` is a DU over strings — no live
+            // handle could round-trip.
             Expect.equal
                 (ContactOwner.tryParse (ContactOwner.toWireString contact.Owner))
                 (Some contact.Owner)
