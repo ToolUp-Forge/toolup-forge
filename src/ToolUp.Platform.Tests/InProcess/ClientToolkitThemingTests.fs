@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.ClientToolkitThemingTests
 open System.IO
 open System.Text.RegularExpressions
 open Expecto
+open Toolup.UIToolkit
 
 // ─── Client-toolkit theming contract (Phase 221/222/224) ─────────
 //
@@ -162,48 +163,48 @@ let private filesExistTest = test "tokenised toolkit files exist at their declar
         Expect.isTrue (File.Exists(srcFile rel)) $"expected {rel} under src/"
 }
 
-/// Phase 1069 — every number the toolkit formats goes through the ONE
-/// named locale, `OutputFormatting.fallbackLocale`. A `toLocaleString`
-/// with no locale argument renders in the BROWSER's locale (a non-`en-GB`
-/// user sees a different form from everyone else), and a spelled `"en-GB"`
-/// literal is a second copy of the fallback that Phase 1075 would have to
-/// find. So: each call names `fallbackLocale`, and the literal appears
-/// exactly once — in its definition.
-let private fallbackLocaleTest = test "the toolkit formats under the one named fallback locale (Phase 1069)" {
-    let toolkitDir = Path.Combine(repoRoot (), "src", "ToolUp.Platform.UI")
-    let objSegment = $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"
+/// The toolkit formats every number under the locale its CALLER passes: it
+/// names no locale of its own, so a deployment whose `Locale` is not British
+/// English sees its own number and currency forms, and a person's typed
+/// number is read back in the same form.
+let private callerLocaleTests =
+    testList "the toolkit formats under the caller's locale" [
+        test "de-DE renders the German forms" {
+            Expect.equal (OutputFormatting.formatDecimal "de-DE" 1234.5m) "1.234,5" "decimal"
+            Expect.equal (OutputFormatting.formatInt "de-DE" 1234567) "1.234.567" "integer"
 
-    let files =
-        Directory.EnumerateFiles(toolkitDir, "*.fs", SearchOption.AllDirectories)
-        |> Seq.filter (fun f -> not (f.Contains objSegment))
-        |> Seq.map (fun f -> Path.GetFileName f, File.ReadAllText f |> codeOnly)
-        |> List.ofSeq
+            let euros = OutputFormatting.formatCurrency "de-DE" "EUR" 1234.5m
+            Expect.stringStarts euros "1.234,50" "currency amount"
+            Expect.stringContains euros "€" "currency symbol"
+        }
 
-    // The call and the line after it — the locale argument of a
-    // multi-line `toLocaleString (` sits on the next line.
-    let calls = [
-        for name, code in files do
-            for m in Regex.Matches(code, @"toLocaleString\b[^\n]*(?:\n[^\n]*)?") do
-                yield name, m.Value
+        test "en-GB renders the British forms, so the locale is what moved" {
+            Expect.equal (OutputFormatting.formatDecimal "en-GB" 1234.5m) "1,234.5" "decimal"
+            Expect.equal (OutputFormatting.formatCurrency "en-GB" "GBP" 1234.5m) "£1,234.50" "currency"
+        }
+
+        test "a typed number is read back in the locale's form" {
+            Expect.equal (OutputFormatting.parseDecimal "de-DE" "1.234,5") (Some 1234.5m) "German"
+            Expect.equal (OutputFormatting.parseDecimal "en-GB" "1,234.5") (Some 1234.5m) "British"
+            Expect.equal (OutputFormatting.parseDecimal "en-GB" "abc") None "not a number"
+        }
+
+        test "the toolkit spells no locale literal" {
+            let toolkitDir = Path.Combine(repoRoot (), "src", "ToolUp.Platform.UI")
+            let objSegment = $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"
+
+            let literals = [
+                for f in Directory.EnumerateFiles(toolkitDir, "*.fs", SearchOption.AllDirectories) do
+                    if not (f.Contains objSegment) then
+                        let code = File.ReadAllText f |> codeOnly
+
+                        if Regex.IsMatch(code, "\"[a-z]{2}-[A-Z]{2}\"") then
+                            yield Path.GetFileName f
+            ]
+
+            Expect.equal literals [] "a toolkit file spells a locale literal; take the caller's `locale` instead"
+        }
     ]
-
-    Expect.isGreaterThanOrEqual (List.length calls) 5 "the probe sees the toolkit's formatting calls"
-
-    let unnamed =
-        calls
-        |> List.filter (fun (_, call) ->
-            not (Regex.IsMatch(call, @"toLocaleString\s*\(?\s*(?:OutputFormatting\.)?fallbackLocale")))
-
-    Expect.isEmpty unnamed $"a toolkit formatting call does not name `OutputFormatting.fallbackLocale`: %A{unnamed}"
-
-    let literals = [
-        for name, code in files do
-            for _ in Regex.Matches(code, "\"en-GB\"") do
-                yield name
-    ]
-
-    Expect.equal literals [ "OutputFormatting.fs" ] "the \"en-GB\" literal is spelled once, as `fallbackLocale`"
-}
 
 /// The state views' notice and remote renderings take their colour from the
 /// theming tokens alone, so a light and a dark token set both re-skin them:
@@ -290,8 +291,8 @@ let private adminPageKitTest = test "the admin page kit reads only theming token
 
 /// Phase 1069 — the shell bundle references no vendor UI package. Clerk's
 /// `UserButton` is rendered by the ClerkUI companion, which registers it
-/// as the page header's identity action; `Layout.userButton` renders the
-/// registered action or nothing.
+/// as the page header's identity action; the shell renders it through
+/// `AppShellProps.IdentityAction`, or nothing.
 let private noVendorImportTest = test "the Platform.Client bundle imports no @clerk package (Phase 1069)" {
     let clientDir = Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client")
 
@@ -321,7 +322,7 @@ let tests =
         testList "no hardcoded styling leaked back into a tokenised file" noLeakTests
         tokenEmissionTest
         brandHexGuardTest
-        fallbackLocaleTest
+        callerLocaleTests
         stateViewNoticeTest
         noVendorImportTest
         adminPageKitTest
