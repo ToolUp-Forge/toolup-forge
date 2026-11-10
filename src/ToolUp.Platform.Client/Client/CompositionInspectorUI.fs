@@ -6,6 +6,7 @@ module CompositionInspectorUI
 open System
 open ToolUp.Elmish
 open Feliz
+open Toolup.UIToolkit
 open Browser
 open Browser.Types
 open Fable.Core
@@ -177,44 +178,25 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
 // ─── View helpers ────────────────────────────────────────────────────
 
-let private headerCell (label: string) =
-    Html.th [
-        prop.className "px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider"
-        prop.text label
-    ]
+/// A table column: identifiers and values in monospace, prose plain.
+let private column (header: string) (cell: 'row -> string) : Data.Column<'row> = {
+    Header = header
+    Align = Data.Left
+    Cell = fun row -> Html.span [ prop.className "font-mono break-all"; prop.text (cell row) ]
+}
 
-let private bodyCell (value: string) =
-    Html.td [
-        prop.className "px-3 py-2 text-sm text-gray-700 font-mono break-all"
-        prop.text value
-    ]
-
-let private proseCell (value: string) =
-    Html.td [ prop.className "px-3 py-2 text-sm text-gray-700"; prop.text value ]
-
-let private table (headers: string list) (rows: ReactElement list) =
-    Html.div [
-        prop.className "overflow-x-auto"
-        prop.children [
-            Html.table [
-                prop.className "min-w-full divide-y divide-gray-200 border border-gray-200 rounded"
-                prop.children [
-                    Html.thead [
-                        prop.className "bg-gray-50"
-                        prop.children [ Html.tr (headers |> List.map headerCell) ]
-                    ]
-                    Html.tbody [ prop.className "bg-white divide-y divide-gray-200"; prop.children rows ]
-                ]
-            ]
-        ]
-    ]
+let private proseColumn (header: string) (cell: 'row -> string) : Data.Column<'row> = {
+    Header = header
+    Align = Data.Left
+    Cell = fun row -> Html.span [ prop.text (cell row) ]
+}
 
 let private emptyNote (text: string) =
-    Html.p [ prop.className "text-sm text-gray-500 italic"; prop.text text ]
+    Html.p [ prop.className ("text-sm italic " + Tokens.Text.muted); prop.text text ]
 
 let private sectionHeading (text: string) =
     Html.h3 [
-        prop.className "text-sm font-semibold text-gray-800 mt-5 mb-2"
+        prop.className ("text-sm font-semibold mt-5 mb-2 " + Tokens.Text.primary)
         prop.text text
     ]
 
@@ -229,18 +211,14 @@ let private componentSection (msgs: CompositionInspectorMessages) (name: string)
             if List.isEmpty entries then
                 emptyNote (msgs.NoneDeclared name)
             else
-                table [ msgs.ColumnId; msgs.ColumnKind; msgs.ColumnLabel; msgs.ColumnImpl ] [
-                    for entry in entries ->
-                        Html.tr [
-                            prop.key entry.Id
-                            prop.children [
-                                bodyCell entry.Id
-                                bodyCell entry.Kind
-                                proseCell entry.Label
-                                bodyCell (entry.Impl |> Option.defaultValue "—")
-                            ]
-                        ]
-                ]
+                Data.table
+                    [
+                        column msgs.ColumnId (fun (e: InspectedComponent) -> e.Id)
+                        column msgs.ColumnKind _.Kind
+                        proseColumn msgs.ColumnLabel _.Label
+                        column msgs.ColumnImpl (fun e -> e.Impl |> Option.defaultValue "—")
+                    ]
+                    entries
         ]
     ]
 
@@ -253,19 +231,9 @@ let private exportBar (msgs: CompositionInspectorMessages) (panel: InspectorPane
     Html.div [
         prop.className "flex items-center gap-3 mb-3"
         prop.children [
-            Html.button [
-                prop.className
-                    "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded disabled:opacity-50"
-                prop.disabled inFlight
-                prop.onClick (fun _ -> dispatch (ExportRequested panel))
-                prop.text (if inFlight then msgs.Exporting else msgs.ExportJson)
-            ]
-            Html.button [
-                prop.className
-                    "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded disabled:opacity-50"
-                prop.onClick (fun _ -> dispatch Refresh)
-                prop.text msgs.Refresh
-            ]
+            Forms.Button.secondaryWith (Forms.Button.stateOf inFlight msgs.Exporting false) msgs.ExportJson (fun () ->
+                dispatch (ExportRequested panel))
+            Forms.Button.secondaryWith Forms.Button.Enabled msgs.Refresh (fun () -> dispatch Refresh)
             match model.ExportError with
             | Some(failed, err) when failed = panel ->
                 Html.span [ prop.className "text-sm text-red-700"; prop.text err ]
@@ -279,7 +247,7 @@ let private exportBar (msgs: CompositionInspectorMessages) (panel: InspectorPane
 /// and paraphrasing them client-side would collapse the distinction.
 let private panelBody (msgs: CompositionInspectorMessages) (data: PanelData<'T>) (render: 'T -> ReactElement) =
     match data with
-    | PanelLoading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+    | PanelLoading -> Html.div [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
     | PanelFailed err ->
         Html.div [
             prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
@@ -289,7 +257,7 @@ let private panelBody (msgs: CompositionInspectorMessages) (data: PanelData<'T>)
 
 /// Shared page chrome: the module heading, the panel title, the export
 /// bar, then the body.
-/// Phase 444 — the panel body as a React COMPONENT rather than a plain
+/// The panel body as a React COMPONENT rather than a plain
 /// render function, so it has a hook site of its own from which to read
 /// the resolved catalog. See `HealthMonitorUI.HealthMonitorBody`. All
 /// five pages share this one, taking their own body as a parameter: the
@@ -317,11 +285,17 @@ let private InspectorPage
         prop.className "p-4"
         prop.children [
             Html.h2 [
-                prop.className "text-lg font-semibold text-gray-800 mb-1"
+                prop.className ("text-lg font-semibold mb-1 " + Tokens.Text.primary)
                 prop.text msgs.Heading
             ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-3"; prop.text msgs.Subheading ]
-            Html.h3 [ prop.className "text-base font-semibold text-gray-800 mb-2"; prop.text title ]
+            Html.p [
+                prop.className ("text-sm mb-3 " + Tokens.Text.secondary)
+                prop.text msgs.Subheading
+            ]
+            Html.h3 [
+                prop.className ("text-base font-semibold mb-2 " + Tokens.Text.primary)
+                prop.text title
+            ]
             exportBar msgs panel model dispatch
             renderBody msgs model
         ]
@@ -346,23 +320,24 @@ let private compositionBody (msgs: CompositionInspectorMessages) (model: Model) 
                 if List.isEmpty view.ConfigKnobs then
                     emptyNote (msgs.NoneDeclared msgs.ConfigKnobs)
                 else
-                    table [ msgs.ColumnName; msgs.ColumnValue ] [
-                        for k in view.ConfigKnobs ->
-                            Html.tr [ prop.key k.Name; prop.children [ bodyCell k.Name; bodyCell k.Value ] ]
-                    ]
+                    Data.table
+                        [
+                            column msgs.ColumnName (fun (k: InspectedKnob) -> k.Name)
+                            column msgs.ColumnValue _.Value
+                        ]
+                        view.ConfigKnobs
 
                 sectionHeading (msgs.SectionCount msgs.CanonicalMethods (List.length view.CanonicalMethods))
 
                 if List.isEmpty view.CanonicalMethods then
                     emptyNote (msgs.NoneDeclared msgs.CanonicalMethods)
                 else
-                    table [ msgs.ColumnName; msgs.ColumnValue ] [
-                        for m in view.CanonicalMethods ->
-                            Html.tr [
-                                prop.key m.MetricId
-                                prop.children [ bodyCell m.MetricId; bodyCell m.Selector ]
-                            ]
-                    ]
+                    Data.table
+                        [
+                            column msgs.ColumnName (fun (m: InspectedCanonicalMethod) -> m.MetricId)
+                            column msgs.ColumnValue _.Selector
+                        ]
+                        view.CanonicalMethods
             ]
         ])
 
@@ -399,7 +374,7 @@ let private rulesBody (msgs: CompositionInspectorMessages) (model: Model) =
         Html.div [
             prop.children [
                 Html.p [
-                    prop.className "text-xs text-gray-500 mb-2"
+                    prop.className ("text-xs mb-2 " + Tokens.Text.muted)
                     prop.text (msgs.CapturedAt(view.CapturedAtUtc.ToString "u"))
                 ]
 
@@ -408,23 +383,14 @@ let private rulesBody (msgs: CompositionInspectorMessages) (model: Model) =
                 if List.isEmpty view.Rules then
                     emptyNote (msgs.NoneDeclared msgs.RuleManifest)
                 else
-                    table [
-                        msgs.ColumnCode
-                        msgs.ColumnSeverity
-                        msgs.ColumnClass
-                        msgs.ColumnDescription
-                    ] [
-                        for r in view.Rules ->
-                            Html.tr [
-                                prop.key r.Code
-                                prop.children [
-                                    bodyCell r.Code
-                                    bodyCell r.Severity
-                                    bodyCell r.RuleClass
-                                    proseCell r.Description
-                                ]
-                            ]
-                    ]
+                    Data.table
+                        [
+                            column msgs.ColumnCode (fun (r: InspectedRule) -> r.Code)
+                            column msgs.ColumnSeverity _.Severity
+                            column msgs.ColumnClass _.RuleClass
+                            proseColumn msgs.ColumnDescription _.Description
+                        ]
+                        view.Rules
 
                 sectionHeading (msgs.SectionCount msgs.PreflightFindings (List.length view.Defects))
 
@@ -435,13 +401,13 @@ let private rulesBody (msgs: CompositionInspectorMessages) (model: Model) =
                 if List.isEmpty view.Defects then
                     emptyNote msgs.AllRulesPassed
                 else
-                    table [ msgs.ColumnCode; msgs.ColumnSeverity; msgs.ColumnMessage ] [
-                        for (i, d) in List.indexed view.Defects ->
-                            Html.tr [
-                                prop.key (d.Code + ":" + string i)
-                                prop.children [ bodyCell d.Code; bodyCell d.Severity; proseCell d.Message ]
-                            ]
-                    ]
+                    Data.table
+                        [
+                            column msgs.ColumnCode (fun (d: InspectedDefect) -> d.Code)
+                            column msgs.ColumnSeverity _.Severity
+                            proseColumn msgs.ColumnMessage _.Message
+                        ]
+                        view.Defects
             ]
         ])
 
@@ -450,20 +416,20 @@ let private disclosureBody (msgs: CompositionInspectorMessages) (model: Model) =
         Html.div [
             prop.children [
                 Html.p [
-                    prop.className "text-xs text-gray-500 font-mono break-all mb-3"
+                    prop.className ("text-xs font-mono break-all mb-3 " + Tokens.Text.muted)
                     prop.text (msgs.EnvelopeDigest + ": " + view.Digest)
                 ]
 
                 if List.isEmpty view.Declarations then
                     emptyNote msgs.NoDeclarations
                 else
-                    table [ msgs.ColumnFacet; msgs.ColumnSubject; msgs.ColumnValue ] [
-                        for (i, d) in List.indexed view.Declarations ->
-                            Html.tr [
-                                prop.key (d.Facet + ":" + d.Subject + ":" + string i)
-                                prop.children [ bodyCell d.Facet; bodyCell d.Subject; proseCell d.Value ]
-                            ]
-                    ]
+                    Data.table
+                        [
+                            column msgs.ColumnFacet (fun (d: InspectedDeclaration) -> d.Facet)
+                            column msgs.ColumnSubject _.Subject
+                            proseColumn msgs.ColumnValue _.Value
+                        ]
+                        view.Declarations
             ]
         ])
 
@@ -474,28 +440,13 @@ let private provenanceBody (msgs: CompositionInspectorMessages) (model: Model) =
 
         Html.div [
             prop.children [
-                table [ msgs.ColumnName; msgs.ColumnValue ] [
-                    Html.tr [
-                        prop.key "graph"
-                        prop.children [ proseCell msgs.ProvenanceGraph; bodyCell (stateOf view.GraphComposed) ]
-                    ]
-                    Html.tr [
-                        prop.key "facts"
-                        prop.children [
-                            proseCell msgs.ProvenanceFactEvidence
-                            bodyCell (stateOf view.FactEvidenceComposed)
-                        ]
-                    ]
-                    Html.tr [
-                        prop.key "artifacts"
-                        prop.children [
-                            proseCell msgs.ProvenanceArtifacts
-                            bodyCell (stateOf view.ArtifactProvenanceComposed)
-                        ]
-                    ]
+                Data.table [ proseColumn msgs.ColumnName fst; column msgs.ColumnValue (snd >> stateOf) ] [
+                    msgs.ProvenanceGraph, view.GraphComposed
+                    msgs.ProvenanceFactEvidence, view.FactEvidenceComposed
+                    msgs.ProvenanceArtifacts, view.ArtifactProvenanceComposed
                 ]
                 Html.p [
-                    prop.className "text-sm text-gray-600 mt-3"
+                    prop.className ("text-sm mt-3 " + Tokens.Text.secondary)
                     prop.text msgs.ProvenanceWalkNote
                 ]
             ]
