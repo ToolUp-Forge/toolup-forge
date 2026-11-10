@@ -2086,50 +2086,13 @@ let getStatus (deps: KnowledgeApiDeps) (docId: string) : Async<IngestionStatus> 
 }
 
 let getSuggestedQuestions (deps: KnowledgeApiDeps) (activeModule: string option) : Async<string list> = async {
-    // Sample document names from the team's KB and produce
-    // canned questions that point at real content. Fall back
-    // to a generic onboarding set when the KB is empty so
-    // the zero-state isn't a blank input box. Server-side
-    // AI-generated suggestions (per the WS4.4 plan) are a
-    // follow-up — this v1 is heuristic-only and free.
+    // The inventory's heuristic over the scope's documents (`suggestedQuestions`).
     try
         let! docs = loadListing deps.Logger deps.Storage deps.Scope.Container
 
-        let documents, notes =
-            docs
-            |> List.partition (fun d ->
-                match d.Source with
-                | Note _ -> false
-                | UploadedFile
-                | FromNarrative _ -> true)
-
-        let topDocs = documents |> List.sortByDescending _.UploadedAt |> List.truncate 3
-
-        let questions =
-            [
-                for doc in topDocs do
-                    sprintf "What's in \"%s\"?" doc.FileName
-
-                if notes.Length >= 1 then
-                    "Summarise the team's notes."
-
-                if documents.Length >= 2 then
-                    "What themes do these documents share?"
-
-                match activeModule with
-                | Some name when documents.Length > 0 -> sprintf "How does our %s data look?" name
-                | _ -> ()
-            ]
-            |> List.distinct
-            |> List.truncate 5
-
-        if questions.IsEmpty && documents.IsEmpty && notes.IsEmpty then
-            // Empty KB — return nothing so the client can
-            // render its own empty-state hint instead of
-            // questions with no grounding.
-            return []
-        else
-            return questions
+        // An empty scope returns nothing, so the client renders its own
+        // empty-state hint instead of questions with no grounding.
+        return KnowledgeBase.ServerInventory.suggestedQuestions activeModule docs
     with ex ->
         deps.Logger.Warn(sprintf "[KnowledgeBase] GetSuggestedQuestions failed: %s" ex.Message)
 
