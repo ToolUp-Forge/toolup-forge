@@ -1,0 +1,15 @@
+{
+  "kind": "TenantOffboardConfirmationApproved",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"ApprovedBy\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"ApprovedBy\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantOffboardConfirmationApproved\":{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"ApprovedBy\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"ApprovedBy\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"ApprovedBy\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantOffboardConfirmationApproved\":{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"ApprovedBy\":\"s\"}}"
+    }
+  ]
+}

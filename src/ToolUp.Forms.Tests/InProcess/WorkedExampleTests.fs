@@ -3,6 +3,7 @@ module ToolUp.Forms.Tests.InProcess.WorkedExampleTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.Forms.FormsAuditEvents
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Infra.IEntityStore
@@ -236,8 +237,8 @@ let tests =
             let allTransitions =
                 auditLog.EventsForScope scope
                 |> List.choose (fun e ->
-                    match e with
-                    | WorkflowTransitioned p -> Some p
+                    match FormsAuditEvent.tryRead e with
+                    | Some(WorkflowTransitioned p) -> Some p
                     | _ -> None)
 
             let bug1Transitions =

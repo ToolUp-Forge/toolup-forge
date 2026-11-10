@@ -1,0 +1,15 @@
+{
+  "kind": "AnswerVerificationFlagged",
+  "samples": [
+    {
+      "row": "{\"TaskId\":\"00000000-0000-0000-0000-000000000000\",\"ConversationId\":\"00000000-0000-0000-0000-000000000000\",\"Mode\":\"\",\"Verified\":0,\"Unmatched\":0,\"Unverifiable\":0,\"FactsInScope\":0,\"Tokens\":[],\"CitedFactIds\":[],\"ProvenanceChainHead\":null,\"CertificateRef\":null,\"CompositionSealId\":null,\"ProviderName\":\"\",\"ProviderModel\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"TaskId\":\"00000000-0000-0000-0000-000000000000\",\"ConversationId\":\"00000000-0000-0000-0000-000000000000\",\"Mode\":\"\",\"Verified\":0,\"Unmatched\":0,\"Unverifiable\":0,\"FactsInScope\":0,\"Tokens\":[],\"CitedFactIds\":[],\"ProvenanceChainHead\":null,\"CertificateRef\":null,\"CompositionSealId\":null,\"ProviderName\":\"\",\"ProviderModel\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AnswerVerificationFlagged\":{\"TaskId\":\"00000000-0000-0000-0000-000000000000\",\"ConversationId\":\"00000000-0000-0000-0000-000000000000\",\"Mode\":\"\",\"Verified\":0,\"Unmatched\":0,\"Unverifiable\":0,\"FactsInScope\":0,\"Tokens\":[],\"CitedFactIds\":[],\"ProvenanceChainHead\":null,\"CertificateRef\":null,\"CompositionSealId\":null,\"ProviderName\":\"\",\"ProviderModel\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"TaskId\":\"00000000-0000-0000-0000-000000000874\",\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"Mode\":\"s\",\"Verified\":7,\"Unmatched\":7,\"Unverifiable\":7,\"FactsInScope\":7,\"Tokens\":[{\"Token\":\"s\",\"Canonical\":\"s\",\"Verdict\":\"s\",\"MatchedFactId\":\"s\"}],\"CitedFactIds\":[\"s\"],\"ProvenanceChainHead\":\"s\",\"CertificateRef\":\"s\",\"CompositionSealId\":\"s\",\"ProviderName\":\"s\",\"ProviderModel\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"TaskId\":\"00000000-0000-0000-0000-000000000874\",\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"Mode\":\"s\",\"Verified\":7,\"Unmatched\":7,\"Unverifiable\":7,\"FactsInScope\":7,\"Tokens\":[{\"Token\":\"s\",\"Canonical\":\"s\",\"Verdict\":\"s\",\"MatchedFactId\":\"s\"}],\"CitedFactIds\":[\"s\"],\"ProvenanceChainHead\":\"s\",\"CertificateRef\":\"s\",\"CompositionSealId\":\"s\",\"ProviderName\":\"s\",\"ProviderModel\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AnswerVerificationFlagged\":{\"TaskId\":\"00000000-0000-0000-0000-000000000874\",\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"Mode\":\"s\",\"Verified\":7,\"Unmatched\":7,\"Unverifiable\":7,\"FactsInScope\":7,\"Tokens\":[{\"Token\":\"s\",\"Canonical\":\"s\",\"Verdict\":\"s\",\"MatchedFactId\":\"s\"}],\"CitedFactIds\":[\"s\"],\"ProvenanceChainHead\":\"s\",\"CertificateRef\":\"s\",\"CompositionSealId\":\"s\",\"ProviderName\":\"s\",\"ProviderModel\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "DatasetSpillDeleted",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"ScopeId\":\"\",\"SpillDatasetId\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"ScopeId\":\"\",\"SpillDatasetId\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetSpillDeleted\":{\"Actor\":\"\",\"ScopeId\":\"\",\"SpillDatasetId\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"ScopeId\":\"s\",\"SpillDatasetId\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"ScopeId\":\"s\",\"SpillDatasetId\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetSpillDeleted\":{\"Actor\":\"s\",\"ScopeId\":\"s\",\"SpillDatasetId\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

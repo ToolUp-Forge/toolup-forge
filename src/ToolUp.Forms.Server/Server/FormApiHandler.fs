@@ -3,6 +3,7 @@ module ToolUp.Forms.FormApiHandler
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Forms.FormsAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.EntityTypes
@@ -235,7 +236,7 @@ let formApi
                                 auditLog.Record(
                                     AuditScope.shard scopeId,
                                     AuditSubject.UserAudit(UserId userId),
-                                    AuditEvent.FormSubmitted payload
+                                    FormsAuditEvent.event (FormSubmitted payload)
                                 )
                                 |> AuditRow.orRefuse
 
@@ -284,7 +285,7 @@ let formApi
                                         auditLog.Record(
                                             AuditScope.shard scopeId,
                                             AuditSubject.UserAudit(UserId userId),
-                                            AuditEvent.FormSubmissionUpdated payload
+                                            FormsAuditEvent.event (FormSubmissionUpdated payload)
                                         )
                                         |> AuditRow.orRefuse
 

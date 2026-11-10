@@ -11,6 +11,7 @@ open System.Text.Json
 open System.Text.RegularExpressions
 open System.Threading.Tasks
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Remoting.Json.SystemTextJson
@@ -913,9 +914,9 @@ let runVerificationStageWithScope
 
             let event =
                 if verification.Unmatched > 0 then
-                    AuditEvent.AnswerVerificationFlagged payload
+                    AIAuditEvent.event (AnswerVerificationFlagged payload)
                 else
-                    AuditEvent.AnswerVerificationPassed payload
+                    AIAuditEvent.event (AnswerVerificationPassed payload)
 
             // Best-effort, exactly as the event-store write above: a
             // wedged audit backend must never crash or block the
@@ -1107,8 +1108,8 @@ let deploymentVerificationSource
             |> Array.toList
             |> List.collect id
             |> List.choose (function
-                | AnswerVerificationPassed p
-                | AnswerVerificationFlagged p -> Some p
+                | AIAudit(AnswerVerificationPassed p)
+                | AIAudit(AnswerVerificationFlagged p) -> Some p
                 | _ -> None)
 
         let results = payloads |> List.map rejoinAnswerVerification

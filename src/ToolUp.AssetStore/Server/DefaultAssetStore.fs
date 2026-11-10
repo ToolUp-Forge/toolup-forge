@@ -8,6 +8,7 @@ open System.Security.Cryptography
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.AssetStore.AssetAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Compose
 
@@ -181,15 +182,17 @@ type DefaultAssetStore
                         do!
                             emitAudit
                                 scopeContainer
-                                (AuditEvent.AssetUploaded {
-                                    UserId = UserId request.UploadedBy
-                                    AssetId = AssetId.value assetId
-                                    ContentHash = hash
-                                    OriginalFilename = request.OriginalFilename
-                                    MimeType = request.MimeType
-                                    SizeBytes = record.SizeBytes
-                                    Profile = DerivativeProfileId.value request.Profile
-                                })
+                                (AssetAuditEvent.event (
+                                    AssetUploaded {
+                                        UserId = UserId request.UploadedBy
+                                        AssetId = AssetId.value assetId
+                                        ContentHash = hash
+                                        OriginalFilename = request.OriginalFilename
+                                        MimeType = request.MimeType
+                                        SizeBytes = record.SizeBytes
+                                        Profile = DerivativeProfileId.value request.Profile
+                                    }
+                                ))
 
                         return Ok record
             with ex ->
@@ -401,11 +404,13 @@ type DefaultAssetStore
                         do!
                             emitAudit
                                 scopeContainer
-                                (AuditEvent.AssetDeleted {
-                                    UserId = UserId record.UploadedBy
-                                    AssetId = AssetId.value id
-                                    ContentHash = record.ContentHash
-                                })
+                                (AssetAuditEvent.event (
+                                    AssetDeleted {
+                                        UserId = UserId record.UploadedBy
+                                        AssetId = AssetId.value id
+                                        ContentHash = record.ContentHash
+                                    }
+                                ))
 
                         return Ok()
         }

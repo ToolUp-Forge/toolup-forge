@@ -1,0 +1,15 @@
+{
+  "kind": "MemberAdded",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"Role\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"Role\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MemberAdded\":{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"Role\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"Role\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"Role\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MemberAdded\":{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"Role\":\"s\"}}"
+    }
+  ]
+}

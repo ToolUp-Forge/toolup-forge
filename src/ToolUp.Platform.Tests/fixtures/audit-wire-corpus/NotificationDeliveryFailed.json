@@ -1,0 +1,15 @@
+{
+  "kind": "NotificationDeliveryFailed",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"NotificationKind\":\"\",\"Provider\":\"\",\"RecipientUserIds\":[],\"Error\":\"\",\"Attempts\":0,\"CorrelationId\":null}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"NotificationKind\":\"\",\"Provider\":\"\",\"RecipientUserIds\":[],\"Error\":\"\",\"Attempts\":0,\"CorrelationId\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationDeliveryFailed\":{\"UserId\":\"\",\"ScopeId\":\"\",\"NotificationKind\":\"\",\"Provider\":\"\",\"RecipientUserIds\":[],\"Error\":\"\",\"Attempts\":0,\"CorrelationId\":null}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"NotificationKind\":\"s\",\"Provider\":\"s\",\"RecipientUserIds\":[\"s\"],\"Error\":\"s\",\"Attempts\":7,\"CorrelationId\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"NotificationKind\":\"s\",\"Provider\":\"s\",\"RecipientUserIds\":[\"s\"],\"Error\":\"s\",\"Attempts\":7,\"CorrelationId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationDeliveryFailed\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"NotificationKind\":\"s\",\"Provider\":\"s\",\"RecipientUserIds\":[\"s\"],\"Error\":\"s\",\"Attempts\":7,\"CorrelationId\":\"s\"}}"
+    }
+  ]
+}

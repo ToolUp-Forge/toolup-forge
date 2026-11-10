@@ -1,0 +1,15 @@
+{
+  "kind": "TeamInviteIssued",
+  "samples": [
+    {
+      "row": "{\"TeamId\":\"\",\"TokenId\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"EmailHint\":null,\"ExpiresAt\":\"2020-01-01T00:00:00.0000000Z\",\"MaxUses\":0}",
+      "rowWithActor": "{\"TeamId\":\"\",\"TokenId\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"EmailHint\":null,\"ExpiresAt\":\"2020-01-01T00:00:00.0000000Z\",\"MaxUses\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteIssued\":{\"TeamId\":\"\",\"TokenId\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"EmailHint\":null,\"ExpiresAt\":\"2020-01-01T00:00:00.0000000Z\",\"MaxUses\":0}}"
+    },
+    {
+      "row": "{\"TeamId\":\"s\",\"TokenId\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"EmailHint\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\",\"MaxUses\":7}",
+      "rowWithActor": "{\"TeamId\":\"s\",\"TokenId\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"EmailHint\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\",\"MaxUses\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteIssued\":{\"TeamId\":\"s\",\"TokenId\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"EmailHint\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\",\"MaxUses\":7}}"
+    }
+  ]
+}

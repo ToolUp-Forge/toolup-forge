@@ -1,0 +1,15 @@
+{
+  "kind": "ModelArtifactSuperseded",
+  "samples": [
+    {
+      "row": "{\"SupersedingKeyHash\":\"\",\"SupersededKeyHash\":\"\",\"PolicyId\":\"\",\"MetricCount\":0,\"Retired\":false,\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"SupersedingKeyHash\":\"\",\"SupersededKeyHash\":\"\",\"PolicyId\":\"\",\"MetricCount\":0,\"Retired\":false,\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactSuperseded\":{\"SupersedingKeyHash\":\"\",\"SupersededKeyHash\":\"\",\"PolicyId\":\"\",\"MetricCount\":0,\"Retired\":false,\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"SupersedingKeyHash\":\"s\",\"SupersededKeyHash\":\"s\",\"PolicyId\":\"s\",\"MetricCount\":7,\"Retired\":true,\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"SupersedingKeyHash\":\"s\",\"SupersededKeyHash\":\"s\",\"PolicyId\":\"s\",\"MetricCount\":7,\"Retired\":true,\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactSuperseded\":{\"SupersedingKeyHash\":\"s\",\"SupersededKeyHash\":\"s\",\"PolicyId\":\"s\",\"MetricCount\":7,\"Retired\":true,\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

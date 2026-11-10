@@ -1,0 +1,15 @@
+{
+  "kind": "PeerCleanRoomDecision",
+  "samples": [
+    {
+      "row": "{\"ContractId\":\"\",\"MethodName\":\"\",\"TemplateId\":\"\",\"CallerPeerId\":\"\",\"RootRequestId\":\"\",\"Released\":false,\"SuppressedCells\":[],\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"ContractId\":\"\",\"MethodName\":\"\",\"TemplateId\":\"\",\"CallerPeerId\":\"\",\"RootRequestId\":\"\",\"Released\":false,\"SuppressedCells\":[],\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PeerCleanRoomDecision\":{\"ContractId\":\"\",\"MethodName\":\"\",\"TemplateId\":\"\",\"CallerPeerId\":\"\",\"RootRequestId\":\"\",\"Released\":false,\"SuppressedCells\":[],\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"ContractId\":\"s\",\"MethodName\":\"s\",\"TemplateId\":\"s\",\"CallerPeerId\":\"s\",\"RootRequestId\":\"s\",\"Released\":true,\"SuppressedCells\":[\"s\"],\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"ContractId\":\"s\",\"MethodName\":\"s\",\"TemplateId\":\"s\",\"CallerPeerId\":\"s\",\"RootRequestId\":\"s\",\"Released\":true,\"SuppressedCells\":[\"s\"],\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PeerCleanRoomDecision\":{\"ContractId\":\"s\",\"MethodName\":\"s\",\"TemplateId\":\"s\",\"CallerPeerId\":\"s\",\"RootRequestId\":\"s\",\"Released\":true,\"SuppressedCells\":[\"s\"],\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

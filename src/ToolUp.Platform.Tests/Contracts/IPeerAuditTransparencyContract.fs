@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.Contracts.IPeerAuditTransparencyContract
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.InterPlatform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
@@ -45,15 +46,17 @@ let private mkRow
     (outcome: string)
     (occurredAt: DateTimeOffset)
     : AuditEvent =
-    PeerCallCompleted {
-        ContractId = contractId
-        MethodName = methodName
-        CallerPeerId = caller
-        RootRequestId = Guid.NewGuid().ToString()
-        Succeeded = succeeded
-        Outcome = outcome
-        OccurredAt = occurredAt
-    }
+    PeerAuditEvent.event (
+        PeerCallCompleted {
+            ContractId = contractId
+            MethodName = methodName
+            CallerPeerId = caller
+            RootRequestId = Guid.NewGuid().ToString()
+            Succeeded = succeeded
+            Outcome = outcome
+            OccurredAt = occurredAt
+        }
+    )
 
 /// Phase 310 — a *terminal* row for a long-running call. Takes the
 /// correlation id explicitly, because the whole point of the pair is that
@@ -67,16 +70,18 @@ let private mkJobRow
     (outcome: string)
     (occurredAt: DateTimeOffset)
     : AuditEvent =
-    PeerJobCompleted {
-        ContractId = contractId
-        MethodName = methodName
-        CallerPeerId = caller
-        RootRequestId = rootRequestId
-        JobId = Guid.NewGuid()
-        Succeeded = succeeded
-        Outcome = outcome
-        OccurredAt = occurredAt
-    }
+    PeerAuditEvent.event (
+        PeerJobCompleted {
+            ContractId = contractId
+            MethodName = methodName
+            CallerPeerId = caller
+            RootRequestId = rootRequestId
+            JobId = Guid.NewGuid()
+            Succeeded = succeeded
+            Outcome = outcome
+            OccurredAt = occurredAt
+        }
+    )
 
 /// Seed: three buyer rows (one failure) + two rival rows, plus a
 /// non-peer audit event that must never appear in a peer audit answer.
@@ -117,13 +122,13 @@ type private StubAuditLog(events: AuditEvent list) =
                     events
                     |> List.filter (fun e ->
                         match e with
-                        | PeerCallCompleted _ -> true
+                        | PeerAudit(PeerCallCompleted _) -> true
                         | _ -> false)
                 | Some "PeerJobCompleted" ->
                     events
                     |> List.filter (fun e ->
                         match e with
-                        | PeerJobCompleted _ -> true
+                        | PeerAudit(PeerJobCompleted _) -> true
                         | _ -> false)
                 | Some _ -> []
                 | None -> events

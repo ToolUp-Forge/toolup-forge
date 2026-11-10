@@ -9,6 +9,7 @@ open System.Text
 open System.Text.Json.Nodes
 open Expecto
 open ToolUp.Platform
+open ToolUp.Facts.FactsAuditEvents
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.ArtefactSigning
@@ -456,7 +457,7 @@ let tests =
 
                 // One accepted row, recording both stances.
                 match audit.OfType "FactImportAccepted" with
-                | [ FactImportAccepted payload ] ->
+                | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal payload.PeerId "deployment-a" "the row names the peer the caller stated"
                     Expect.equal payload.PeerKeyId a.KeyId "and the key its anchor holds"
                     Expect.equal payload.CertificateRoot original.FactId "the root the certificate covers"
@@ -497,7 +498,7 @@ let tests =
                     "the importing deployment's ceiling narrows what a peer offered freely"
 
                 match audit.OfType "FactImportAccepted" with
-                | [ FactImportAccepted payload ] ->
+                | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal payload.DeclaredDisclosure "Surfaceable" "the trail records what the peer declared"
 
                     Expect.equal
@@ -896,7 +897,7 @@ let tests =
             do! expectStoreEmpty b
 
             match audit.OfType "FactImportRefused" with
-            | [ FactImportRefused payload ] ->
+            | [ FactsAudit(FactImportRefused payload) ] ->
                 Expect.equal payload.ImportedFactId "" "a refusal claims no local fact"
                 Expect.stringContains payload.Reason "no key material" "and states why"
             | other -> failtestf "expected exactly one refusal row; got %A" other
@@ -943,7 +944,7 @@ let tests =
                 | other -> failtestf "an imported fact must carry Imported provenance; got %A" other
 
                 match audit.OfType "FactImportAccepted" with
-                | [ FactImportAccepted payload ] ->
+                | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal
                         payload.AttestationLevel
                         "isolated-signer"
@@ -985,7 +986,7 @@ let tests =
                 failtestf "the direct path must be unchanged by a level policy: %s" (FactImportRefusal.describe refusal)
             | Ok _ ->
                 match audit.OfType "FactImportAccepted" with
-                | [ FactImportAccepted payload ] ->
+                | [ FactsAudit(FactImportAccepted payload) ] ->
                     Expect.equal payload.AttestationLevel "" "a document claiming no level records none"
                 | other -> failtestf "expected exactly one accepted row; got %A" other
         }
@@ -1067,7 +1068,7 @@ let tests =
                 do! expectStoreEmpty b
 
                 match audit.OfType "FactImportRefused" with
-                | [ FactImportRefused payload ] ->
+                | [ FactsAudit(FactImportRefused payload) ] ->
                     Expect.equal
                         payload.AttestationLevel
                         (AttestationLevel.name level)
@@ -1219,7 +1220,7 @@ let tests =
             do! expectStoreEmpty b
 
             match audit.OfType "FactImportRefused" with
-            | [ FactImportRefused payload ] ->
+            | [ FactsAudit(FactImportRefused payload) ] ->
                 Expect.equal
                     payload.AttestationLevel
                     ""

@@ -15,6 +15,7 @@
     <Compile Include="PasskeyCeremony.fs" />
     <Compile Include="PasskeyAuthProvider.fs" />
     <Compile Include="PasskeyConfigValidator.fs" />
+    <Compile Include="PasskeyAuditEvents.fs" />
     <Compile Include="PasskeyHost.fs" />
     <Compile Include="PasskeyCompose.fs" />
   </ItemGroup>

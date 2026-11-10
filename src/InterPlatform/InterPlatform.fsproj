@@ -11,6 +11,7 @@
        shared between two peer deployments (server-to-server), not
        between a server and a Fable client. -->
   <ItemGroup>
+    <Compile Include="Shared\PeerAuditEvents.fs" />
     <Compile Include="Shared\PeerTypes.fs" />
     <!-- Phase 642 — the federated data-visibility authority levels: the
          ordered level vocabulary, its fail-closed label reader, and the

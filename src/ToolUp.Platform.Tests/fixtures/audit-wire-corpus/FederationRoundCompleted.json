@@ -1,0 +1,15 @@
+{
+  "kind": "FederationRoundCompleted",
+  "samples": [
+    {
+      "row": "{\"RunId\":\"\",\"RoundNumber\":0,\"ParticipantCount\":0,\"RespondedCount\":0,\"DroppedCount\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"RunId\":\"\",\"RoundNumber\":0,\"ParticipantCount\":0,\"RespondedCount\":0,\"DroppedCount\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FederationRoundCompleted\":{\"RunId\":\"\",\"RoundNumber\":0,\"ParticipantCount\":0,\"RespondedCount\":0,\"DroppedCount\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"RunId\":\"s\",\"RoundNumber\":7,\"ParticipantCount\":7,\"RespondedCount\":7,\"DroppedCount\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"RunId\":\"s\",\"RoundNumber\":7,\"ParticipantCount\":7,\"RespondedCount\":7,\"DroppedCount\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FederationRoundCompleted\":{\"RunId\":\"s\",\"RoundNumber\":7,\"ParticipantCount\":7,\"RespondedCount\":7,\"DroppedCount\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

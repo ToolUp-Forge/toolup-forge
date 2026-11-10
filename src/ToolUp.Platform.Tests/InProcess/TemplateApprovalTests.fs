@@ -4,6 +4,7 @@ open System
 open System.Security.Cryptography
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform

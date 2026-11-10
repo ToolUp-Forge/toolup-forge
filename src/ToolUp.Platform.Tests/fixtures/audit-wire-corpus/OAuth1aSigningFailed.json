@@ -1,0 +1,15 @@
+{
+  "kind": "OAuth1aSigningFailed",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"FlowName\":\"\",\"ResourceId\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"FlowName\":\"\",\"ResourceId\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuth1aSigningFailed\":{\"ScopeId\":\"\",\"FlowName\":\"\",\"ResourceId\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"FlowName\":\"s\",\"ResourceId\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"FlowName\":\"s\",\"ResourceId\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuth1aSigningFailed\":{\"ScopeId\":\"s\",\"FlowName\":\"s\",\"ResourceId\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

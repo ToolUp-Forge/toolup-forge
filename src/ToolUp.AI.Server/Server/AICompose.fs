@@ -702,6 +702,7 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
                 sp.GetRequiredService<AIChatWorker.AIChatWorker>() :> Microsoft.Extensions.Hosting.IHostedService))
     )
     |> ServerApp.withCompanionMarker "ToolUp.AI"
+    |> ServerApp.withAuditEvents (AuditEventFamily.registration AIAuditEvents.AIAuditEvent.family)
 
 module AIOptions =
     /// The AI companion's options with the two required AI inputs: the

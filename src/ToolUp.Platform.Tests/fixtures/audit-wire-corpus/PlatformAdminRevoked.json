@@ -1,0 +1,15 @@
+{
+  "kind": "PlatformAdminRevoked",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"TargetUserId\":\"\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"TargetUserId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformAdminRevoked\":{\"Actor\":\"\",\"TargetUserId\":\"\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"TargetUserId\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"TargetUserId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformAdminRevoked\":{\"Actor\":\"s\",\"TargetUserId\":\"s\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "PlatformDocumentUploaded",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"DocumentId\":\"\",\"FileName\":\"\",\"SizeBytes\":\"+0\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"DocumentId\":\"\",\"FileName\":\"\",\"SizeBytes\":\"+0\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformDocumentUploaded\":{\"Actor\":\"\",\"DocumentId\":\"\",\"FileName\":\"\",\"SizeBytes\":\"+0\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"DocumentId\":\"s\",\"FileName\":\"s\",\"SizeBytes\":\"+7\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"DocumentId\":\"s\",\"FileName\":\"s\",\"SizeBytes\":\"+7\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformDocumentUploaded\":{\"Actor\":\"s\",\"DocumentId\":\"s\",\"FileName\":\"s\",\"SizeBytes\":\"+7\"}}"
+    }
+  ]
+}

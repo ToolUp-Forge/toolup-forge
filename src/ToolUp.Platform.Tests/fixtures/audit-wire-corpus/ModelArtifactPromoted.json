@@ -1,0 +1,15 @@
+{
+  "kind": "ModelArtifactPromoted",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"TargetStatus\":\"\",\"Channel\":\"\",\"AuthorKind\":\"\",\"AuthorId\":\"\",\"AttachmentHashes\":[],\"SigningKeyId\":\"\",\"Accepted\":false,\"Replayed\":false,\"Refusal\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"TargetStatus\":\"\",\"Channel\":\"\",\"AuthorKind\":\"\",\"AuthorId\":\"\",\"AttachmentHashes\":[],\"SigningKeyId\":\"\",\"Accepted\":false,\"Replayed\":false,\"Refusal\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactPromoted\":{\"CompositeKeyHash\":\"\",\"TargetStatus\":\"\",\"Channel\":\"\",\"AuthorKind\":\"\",\"AuthorId\":\"\",\"AttachmentHashes\":[],\"SigningKeyId\":\"\",\"Accepted\":false,\"Replayed\":false,\"Refusal\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"TargetStatus\":\"s\",\"Channel\":\"s\",\"AuthorKind\":\"s\",\"AuthorId\":\"s\",\"AttachmentHashes\":[\"s\"],\"SigningKeyId\":\"s\",\"Accepted\":true,\"Replayed\":true,\"Refusal\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"TargetStatus\":\"s\",\"Channel\":\"s\",\"AuthorKind\":\"s\",\"AuthorId\":\"s\",\"AttachmentHashes\":[\"s\"],\"SigningKeyId\":\"s\",\"Accepted\":true,\"Replayed\":true,\"Refusal\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactPromoted\":{\"CompositeKeyHash\":\"s\",\"TargetStatus\":\"s\",\"Channel\":\"s\",\"AuthorKind\":\"s\",\"AuthorId\":\"s\",\"AttachmentHashes\":[\"s\"],\"SigningKeyId\":\"s\",\"Accepted\":true,\"Replayed\":true,\"Refusal\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

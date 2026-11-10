@@ -232,7 +232,7 @@ module ScopedExportVerification =
 [<Literal>]
 let SchemaVersion = 1
 
-let private jsonOptions = PlatformJson.options
+let private jsonOptions = ToolUp.Platform.Audit.AuditLog.AuditEventJson.options
 
 let private coerceFacetList (facets: string list) =
     if obj.ReferenceEquals(facets, null) then [] else facets

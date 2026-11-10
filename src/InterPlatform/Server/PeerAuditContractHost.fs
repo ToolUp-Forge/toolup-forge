@@ -5,6 +5,7 @@ module ToolUp.InterPlatform.PeerAuditContractHost
 
 open System
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open PeerReflection
 
 // ─── Phase 18a — cross-deployment audit transparency (host) ──────────
@@ -69,7 +70,7 @@ let project (callerPeerId: string) (query: PeerAuditQuery) (events: AuditEvent l
     events
     |> List.choose (fun e ->
         match e with
-        | PeerCallCompleted p ->
+        | PeerAudit(PeerCallCompleted p) ->
             Some {
                 ContractId = p.ContractId
                 MethodName = p.MethodName
@@ -79,7 +80,7 @@ let project (callerPeerId: string) (query: PeerAuditQuery) (events: AuditEvent l
                 Outcome = p.Outcome
                 OccurredAt = p.OccurredAt
             }
-        | PeerJobCompleted p ->
+        | PeerAudit(PeerJobCompleted p) ->
             Some {
                 ContractId = p.ContractId
                 MethodName = p.MethodName

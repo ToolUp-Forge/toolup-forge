@@ -1,0 +1,15 @@
+{
+  "kind": "TenantDeprovisionCancelled",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"CancelledBy\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"CancelledBy\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantDeprovisionCancelled\":{\"ScopeId\":\"\",\"CancelledBy\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"CancelledBy\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"CancelledBy\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantDeprovisionCancelled\":{\"ScopeId\":\"s\",\"CancelledBy\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "ConversationStarted",
+  "samples": [
+    {
+      "row": "{\"ConversationId\":\"\",\"UserId\":\"\",\"ScopeId\":\"\",\"Provider\":\"\",\"ModelName\":\"\",\"SystemPromptDigest\":\"\",\"SdkVersion\":\"\"}",
+      "rowWithActor": "{\"ConversationId\":\"\",\"UserId\":\"\",\"ScopeId\":\"\",\"Provider\":\"\",\"ModelName\":\"\",\"SystemPromptDigest\":\"\",\"SdkVersion\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationStarted\":{\"ConversationId\":\"\",\"UserId\":\"\",\"ScopeId\":\"\",\"Provider\":\"\",\"ModelName\":\"\",\"SystemPromptDigest\":\"\",\"SdkVersion\":\"\"}}"
+    },
+    {
+      "row": "{\"ConversationId\":\"s\",\"UserId\":\"s\",\"ScopeId\":\"s\",\"Provider\":\"s\",\"ModelName\":\"s\",\"SystemPromptDigest\":\"s\",\"SdkVersion\":\"s\"}",
+      "rowWithActor": "{\"ConversationId\":\"s\",\"UserId\":\"s\",\"ScopeId\":\"s\",\"Provider\":\"s\",\"ModelName\":\"s\",\"SystemPromptDigest\":\"s\",\"SdkVersion\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationStarted\":{\"ConversationId\":\"s\",\"UserId\":\"s\",\"ScopeId\":\"s\",\"Provider\":\"s\",\"ModelName\":\"s\",\"SystemPromptDigest\":\"s\",\"SdkVersion\":\"s\"}}"
+    }
+  ]
+}

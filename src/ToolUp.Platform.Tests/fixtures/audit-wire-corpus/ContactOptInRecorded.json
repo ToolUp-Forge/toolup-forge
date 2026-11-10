@@ -1,0 +1,15 @@
+{
+  "kind": "ContactOptInRecorded",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Channel\":\"\",\"Source\":\"\",\"ExpiresAt\":null}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Channel\":\"\",\"Source\":\"\",\"ExpiresAt\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactOptInRecorded\":{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Channel\":\"\",\"Source\":\"\",\"ExpiresAt\":null}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Channel\":\"s\",\"Source\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Channel\":\"s\",\"Source\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactOptInRecorded\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Channel\":\"s\",\"Source\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

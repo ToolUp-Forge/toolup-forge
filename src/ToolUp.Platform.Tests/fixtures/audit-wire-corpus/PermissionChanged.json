@@ -1,0 +1,15 @@
+{
+  "kind": "PermissionChanged",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"ModuleName\":\"\",\"Permissions\":\"\",\"Chain\":null}",
+      "rowWithActor": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"ModuleName\":\"\",\"Permissions\":\"\",\"Chain\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PermissionChanged\":{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"ModuleName\":\"\",\"Permissions\":\"\",\"Chain\":null}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"ModuleName\":\"s\",\"Permissions\":\"s\",\"Chain\":{\"PrevHash\":\"s\",\"ContentHash\":\"s\"}}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"ModuleName\":\"s\",\"Permissions\":\"s\",\"Chain\":{\"PrevHash\":\"s\",\"ContentHash\":\"s\"},\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PermissionChanged\":{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"ModuleName\":\"s\",\"Permissions\":\"s\",\"Chain\":{\"PrevHash\":\"s\",\"ContentHash\":\"s\"}}}"
+    }
+  ]
+}

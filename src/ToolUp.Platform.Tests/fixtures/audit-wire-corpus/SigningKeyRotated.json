@@ -1,0 +1,15 @@
+{
+  "kind": "SigningKeyRotated",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"OldKeyId\":null,\"NewKeyId\":\"\",\"Algorithm\":\"\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"OldKeyId\":null,\"NewKeyId\":\"\",\"Algorithm\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SigningKeyRotated\":{\"Actor\":\"\",\"OldKeyId\":null,\"NewKeyId\":\"\",\"Algorithm\":\"\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"OldKeyId\":\"s\",\"NewKeyId\":\"s\",\"Algorithm\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"OldKeyId\":\"s\",\"NewKeyId\":\"s\",\"Algorithm\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SigningKeyRotated\":{\"Actor\":\"s\",\"OldKeyId\":\"s\",\"NewKeyId\":\"s\",\"Algorithm\":\"s\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "KnowledgeScopeErased",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"DocumentCount\":0,\"OrphanChunkCount\":0}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"DocumentCount\":0,\"OrphanChunkCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeScopeErased\":{\"UserId\":\"\",\"ScopeId\":\"\",\"DocumentCount\":0,\"OrphanChunkCount\":0}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"DocumentCount\":7,\"OrphanChunkCount\":7}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"DocumentCount\":7,\"OrphanChunkCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeScopeErased\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"DocumentCount\":7,\"OrphanChunkCount\":7}}"
+    }
+  ]
+}

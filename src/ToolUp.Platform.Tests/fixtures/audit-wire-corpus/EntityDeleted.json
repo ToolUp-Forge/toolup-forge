@@ -1,0 +1,15 @@
+{
+  "kind": "EntityDeleted",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"OnBehalfOf\":null,\"EntityType\":\"\",\"EntityId\":\"\",\"Version\":0,\"Replay\":null}",
+      "rowWithActor": "{\"UserId\":\"\",\"OnBehalfOf\":null,\"EntityType\":\"\",\"EntityId\":\"\",\"Version\":0,\"Replay\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EntityDeleted\":{\"UserId\":\"\",\"OnBehalfOf\":null,\"EntityType\":\"\",\"EntityId\":\"\",\"Version\":0,\"Replay\":null}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"OnBehalfOf\":\"s\",\"EntityType\":\"s\",\"EntityId\":\"s\",\"Version\":7,\"Replay\":{\"OriginatedAt\":\"2021-02-03T04:05:06.0000000Z\",\"ReplayedAt\":\"2021-02-03T04:05:06.0000000Z\",\"MutationId\":\"s\"}}",
+      "rowWithActor": "{\"UserId\":\"s\",\"OnBehalfOf\":\"s\",\"EntityType\":\"s\",\"EntityId\":\"s\",\"Version\":7,\"Replay\":{\"OriginatedAt\":\"2021-02-03T04:05:06.0000000Z\",\"ReplayedAt\":\"2021-02-03T04:05:06.0000000Z\",\"MutationId\":\"s\"},\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EntityDeleted\":{\"UserId\":\"s\",\"OnBehalfOf\":\"s\",\"EntityType\":\"s\",\"EntityId\":\"s\",\"Version\":7,\"Replay\":{\"OriginatedAt\":\"2021-02-03T04:05:06.0000000Z\",\"ReplayedAt\":\"2021-02-03T04:05:06.0000000Z\",\"MutationId\":\"s\"}}}"
+    }
+  ]
+}

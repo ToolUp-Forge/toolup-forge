@@ -9,14 +9,17 @@ open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
 
-// ─── Phase 6h.A — ConversationExported audit round-trip ─────────
+// ─── ConversationExported audit round-trip ──────────────────────
 //
-// Covers the .NET-verifiable half of 6h.A: the `ConversationExported`
-// AuditEvent serialises + decodes losslessly through the production
-// `EventStoreAuditLog` path (STJ + `FableConverters`), and the
-// event-type filter on `GetAuditTrail` targets it. The client-side
-// export sanitisation (stripping `ToolCalls`) lives in Fable code in
-// `ConversationPanel.fs` and is verified separately at the Fable layer.
+// The AI companion declares `ConversationExported` in its own family, so
+// this pack — which reaches the audit part and nothing above it — sees the
+// row as Core does: an `Opaque` event carrying its kind and payload. What
+// is held here is the log's half: the row round-trips byte-for-byte through
+// the production `EventStoreAuditLog` path, and the event-type filter on
+// `GetAuditTrail` targets it. The typed half (the AI family re-encodes the
+// same bytes) is the wire corpus's, in `AuditEventRegistryTests`. The
+// client-side export sanitisation (stripping `ToolCalls`) lives in Fable
+// code in `ConversationPanel.fs` and is verified at the Fable layer.
 
 let private silentLogger =
     { new ILogger with
@@ -31,53 +34,44 @@ let private workingChain () =
     let auditLog = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
     auditLog
 
+/// An export row as the AI family writes it.
+let private exported (conversationId: string) (includeToolDetails: bool) (exportedBy: string) : AuditEvent =
+    Opaque {
+        Kind = "ConversationExported"
+        Payload =
+            sprintf
+                "{\"ConversationId\":\"%s\",\"IncludeToolDetails\":%s,\"ExportedBy\":\"%s\"}"
+                conversationId
+                (if includeToolDetails then "true" else "false")
+                exportedBy
+    }
+
 let tests =
     testList "ConversationExportAudit" [
         testCaseAsync "sanitised export → ConversationExported round-trips losslessly"
         <| async {
             let auditLog = workingChain ()
-
-            let payload = {
-                ConversationId = "11111111-1111-1111-1111-111111111111"
-                IncludeToolDetails = false
-                ExportedBy = "alice"
-            }
+            let row = exported "11111111-1111-1111-1111-111111111111" false "alice"
 
             do!
-                auditLog.Record(AuditScope.shard "user-alice", AuditSubject.system "test", ConversationExported payload)
+                auditLog.Record(AuditScope.shard "user-alice", AuditSubject.system "test", row)
                 |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail(AuditScope.shard "user-alice", None, Some "ConversationExported")
-
-            match trail with
-            | [ ConversationExported p ] ->
-                Expect.equal p.ConversationId payload.ConversationId "ConversationId round-trips"
-                Expect.isFalse p.IncludeToolDetails "sanitised export records IncludeToolDetails=false"
-                Expect.equal p.ExportedBy "alice" "ExportedBy round-trips"
-            | other -> failtestf "expected exactly one ConversationExported; got %A" other
+            Expect.equal trail [ row ] "the export row reads back byte-for-byte, IncludeToolDetails=false"
         }
 
         testCaseAsync "full-detail export → IncludeToolDetails=true round-trips"
         <| async {
             let auditLog = workingChain ()
+            let row = exported "22222222-2222-2222-2222-222222222222" true "bob"
 
             do!
-                auditLog.Record(
-                    AuditScope.shard "user-bob",
-                    AuditSubject.system "test",
-                    ConversationExported {
-                        ConversationId = "22222222-2222-2222-2222-222222222222"
-                        IncludeToolDetails = true
-                        ExportedBy = "bob"
-                    }
-                )
+                auditLog.Record(AuditScope.shard "user-bob", AuditSubject.system "test", row)
                 |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail(AuditScope.shard "user-bob", None, None)
-
-            match trail with
-            | [ ConversationExported p ] -> Expect.isTrue p.IncludeToolDetails "opt-in records IncludeToolDetails=true"
-            | other -> failtestf "expected exactly one ConversationExported; got %A" other
+            Expect.equal trail [ row ] "the opt-in row reads back byte-for-byte, IncludeToolDetails=true"
         }
 
         testCaseAsync "event-type filter isolates ConversationExported"
@@ -88,11 +82,7 @@ let tests =
                 auditLog.Record(
                     AuditScope.shard "user-carol",
                     AuditSubject.system "test",
-                    ConversationExported {
-                        ConversationId = "33333333-3333-3333-3333-333333333333"
-                        IncludeToolDetails = false
-                        ExportedBy = "carol"
-                    }
+                    exported "33333333-3333-3333-3333-333333333333" false "carol"
                 )
                 |> AuditRow.orRefuse
 

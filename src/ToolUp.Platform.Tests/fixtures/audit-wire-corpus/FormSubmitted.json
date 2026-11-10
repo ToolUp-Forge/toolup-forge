@@ -1,0 +1,15 @@
+{
+  "kind": "FormSubmitted",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"SchemaVersion\":0,\"FieldCount\":0,\"WorkflowId\":null,\"InitialState\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"SchemaVersion\":0,\"FieldCount\":0,\"WorkflowId\":null,\"InitialState\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FormSubmitted\":{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"SchemaVersion\":0,\"FieldCount\":0,\"WorkflowId\":null,\"InitialState\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"SchemaVersion\":7,\"FieldCount\":7,\"WorkflowId\":\"s\",\"InitialState\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"SchemaVersion\":7,\"FieldCount\":7,\"WorkflowId\":\"s\",\"InitialState\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FormSubmitted\":{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"SchemaVersion\":7,\"FieldCount\":7,\"WorkflowId\":\"s\",\"InitialState\":\"s\"}}"
+    }
+  ]
+}

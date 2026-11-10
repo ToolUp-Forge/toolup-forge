@@ -1,0 +1,15 @@
+{
+  "kind": "DatasetDeclassified",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"ScopeId\":\"\",\"DatasetId\":\"\",\"FromVersion\":0,\"ToVersion\":0,\"LabelCount\":0,\"Reason\":\"\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"ScopeId\":\"\",\"DatasetId\":\"\",\"FromVersion\":0,\"ToVersion\":0,\"LabelCount\":0,\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetDeclassified\":{\"Actor\":\"\",\"ScopeId\":\"\",\"DatasetId\":\"\",\"FromVersion\":0,\"ToVersion\":0,\"LabelCount\":0,\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"ScopeId\":\"s\",\"DatasetId\":\"s\",\"FromVersion\":7,\"ToVersion\":7,\"LabelCount\":7,\"Reason\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"ScopeId\":\"s\",\"DatasetId\":\"s\",\"FromVersion\":7,\"ToVersion\":7,\"LabelCount\":7,\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetDeclassified\":{\"Actor\":\"s\",\"ScopeId\":\"s\",\"DatasetId\":\"s\",\"FromVersion\":7,\"ToVersion\":7,\"LabelCount\":7,\"Reason\":\"s\"}}"
+    }
+  ]
+}

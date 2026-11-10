@@ -1,0 +1,15 @@
+{
+  "kind": "AdImpressionRecorded",
+  "samples": [
+    {
+      "row": "{\"SlotId\":\"\",\"AdClientId\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"PathAtImpression\":\"\"}",
+      "rowWithActor": "{\"SlotId\":\"\",\"AdClientId\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"PathAtImpression\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdImpressionRecorded\":{\"SlotId\":\"\",\"AdClientId\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"PathAtImpression\":\"\"}}"
+    },
+    {
+      "row": "{\"SlotId\":\"s\",\"AdClientId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"PathAtImpression\":\"s\"}",
+      "rowWithActor": "{\"SlotId\":\"s\",\"AdClientId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"PathAtImpression\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdImpressionRecorded\":{\"SlotId\":\"s\",\"AdClientId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"PathAtImpression\":\"s\"}}"
+    }
+  ]
+}

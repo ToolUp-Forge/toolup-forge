@@ -1,0 +1,15 @@
+{
+  "kind": "TeamInviteExpired",
+  "samples": [
+    {
+      "row": "{\"TeamId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"IssuedAt\":\"2020-01-01T00:00:00.0000000Z\",\"ExpiredAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"TeamId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"IssuedAt\":\"2020-01-01T00:00:00.0000000Z\",\"ExpiredAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteExpired\":{\"TeamId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"IssuedAt\":\"2020-01-01T00:00:00.0000000Z\",\"ExpiredAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"TeamId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"IssuedAt\":\"2021-02-03T04:05:06.0000000Z\",\"ExpiredAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"TeamId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"IssuedAt\":\"2021-02-03T04:05:06.0000000Z\",\"ExpiredAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteExpired\":{\"TeamId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"IssuedAt\":\"2021-02-03T04:05:06.0000000Z\",\"ExpiredAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

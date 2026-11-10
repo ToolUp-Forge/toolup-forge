@@ -35,6 +35,7 @@
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="Server\FactsAuditEvents.fs" />
         <Compile Include="Server\IFactStore.fs" />
         <!-- Phase 702 — the metric surface: the derived, columnar
              current-heads read model the population query executes

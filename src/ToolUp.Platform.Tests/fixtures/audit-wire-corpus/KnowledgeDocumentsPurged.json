@@ -1,0 +1,15 @@
+{
+  "kind": "KnowledgeDocumentsPurged",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"DocumentIds\":[],\"PurgedCount\":0,\"ReclaimedBytes\":\"+0\",\"MaxAgeSeconds\":\"+0\",\"OrphanChunkCount\":0}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"DocumentIds\":[],\"PurgedCount\":0,\"ReclaimedBytes\":\"+0\",\"MaxAgeSeconds\":\"+0\",\"OrphanChunkCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeDocumentsPurged\":{\"ScopeId\":\"\",\"DocumentIds\":[],\"PurgedCount\":0,\"ReclaimedBytes\":\"+0\",\"MaxAgeSeconds\":\"+0\",\"OrphanChunkCount\":0}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"DocumentIds\":[\"s\"],\"PurgedCount\":7,\"ReclaimedBytes\":\"+7\",\"MaxAgeSeconds\":\"+7\",\"OrphanChunkCount\":7}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"DocumentIds\":[\"s\"],\"PurgedCount\":7,\"ReclaimedBytes\":\"+7\",\"MaxAgeSeconds\":\"+7\",\"OrphanChunkCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeDocumentsPurged\":{\"ScopeId\":\"s\",\"DocumentIds\":[\"s\"],\"PurgedCount\":7,\"ReclaimedBytes\":\"+7\",\"MaxAgeSeconds\":\"+7\",\"OrphanChunkCount\":7}}"
+    }
+  ]
+}

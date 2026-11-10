@@ -5,6 +5,7 @@ module KnowledgeBase.ServerRetentionSweep
 
 open System
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open SharedTypes
@@ -294,14 +295,16 @@ let sweepScope
                         auditLog.Record(
                             AuditScope.shard scopeId,
                             AuditSubject.system "KnowledgeRetentionSweep",
-                            KnowledgeDocumentsPurged {
-                                ScopeId = scopeId
-                                DocumentIds = purgedIds
-                                PurgedCount = purgedIds.Length
-                                ReclaimedBytes = reclaimed
-                                MaxAgeSeconds = maxAgeSeconds
-                                OrphanChunkCount = orphanChunks
-                            }
+                            KnowledgeAuditEvent.event (
+                                KnowledgeDocumentsPurged {
+                                    ScopeId = scopeId
+                                    DocumentIds = purgedIds
+                                    PurgedCount = purgedIds.Length
+                                    ReclaimedBytes = reclaimed
+                                    MaxAgeSeconds = maxAgeSeconds
+                                    OrphanChunkCount = orphanChunks
+                                }
+                            )
                         )
                         |> AuditRow.orRefuse
 

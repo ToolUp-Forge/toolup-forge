@@ -1,0 +1,15 @@
+{
+  "kind": "OAuthTokenRefreshFailed",
+  "samples": [
+    {
+      "row": "{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Attempt\":0,\"Reason\":\"\"}",
+      "rowWithActor": "{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Attempt\":0,\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthTokenRefreshFailed\":{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Attempt\":0,\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Attempt\":7,\"Reason\":\"s\"}",
+      "rowWithActor": "{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Attempt\":7,\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthTokenRefreshFailed\":{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Attempt\":7,\"Reason\":\"s\"}}"
+    }
+  ]
+}

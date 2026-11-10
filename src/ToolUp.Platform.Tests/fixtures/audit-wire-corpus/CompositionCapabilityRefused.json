@@ -1,0 +1,15 @@
+{
+  "kind": "CompositionCapabilityRefused",
+  "samples": [
+    {
+      "row": "{\"Component\":\"\",\"Required\":\"\",\"Declared\":\"\",\"Reason\":\"\",\"Profile\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Component\":\"\",\"Required\":\"\",\"Declared\":\"\",\"Reason\":\"\",\"Profile\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CompositionCapabilityRefused\":{\"Component\":\"\",\"Required\":\"\",\"Declared\":\"\",\"Reason\":\"\",\"Profile\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"Component\":\"s\",\"Required\":\"s\",\"Declared\":\"s\",\"Reason\":\"s\",\"Profile\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"Component\":\"s\",\"Required\":\"s\",\"Declared\":\"s\",\"Reason\":\"s\",\"Profile\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CompositionCapabilityRefused\":{\"Component\":\"s\",\"Required\":\"s\",\"Declared\":\"s\",\"Reason\":\"s\",\"Profile\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

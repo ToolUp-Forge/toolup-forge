@@ -11,6 +11,7 @@ open Microsoft.Extensions.DependencyInjection
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Scope.StorageScopeResolver
@@ -477,14 +478,16 @@ module ConversationRetention =
                             auditLog.Record(
                                 AuditScope.shard scopeId,
                                 AuditSubject.system "ConversationPurge",
-                                ConversationsPurged {
-                                    ScopeId = scopeId
-                                    ConversationIds = purged |> List.map string
-                                    PurgedCount = purged.Length
-                                    MaxAgeSeconds = policy.MaxAge |> Option.map (fun a -> int64 a.TotalSeconds)
-                                    MaxCount = policy.MaxCount
-                                    FailedCount = failures.Length
-                                }
+                                AIAuditEvent.event (
+                                    ConversationsPurged {
+                                        ScopeId = scopeId
+                                        ConversationIds = purged |> List.map string
+                                        PurgedCount = purged.Length
+                                        MaxAgeSeconds = policy.MaxAge |> Option.map (fun a -> int64 a.TotalSeconds)
+                                        MaxCount = policy.MaxCount
+                                        FailedCount = failures.Length
+                                    }
+                                )
                             )
                             |> AuditRow.orRefuse
 
@@ -1678,7 +1681,7 @@ let aiAssistantApi
                 auditLogOpt.Record(
                     StorageScope.auditScope scope,
                     AuditSubject.UserAudit(UserId userId),
-                    BeaconRejected payload
+                    AIAuditEvent.event (BeaconRejected payload)
                 )
                 |> AuditRow.orRefuse
         with ex ->

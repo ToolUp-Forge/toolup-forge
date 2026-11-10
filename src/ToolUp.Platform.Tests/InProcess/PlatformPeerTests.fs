@@ -20,6 +20,7 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts
@@ -208,7 +209,7 @@ let private peerCallRootRequestIds (audit: RecordingAuditLog) =
     audit.Events
     |> List.choose (fun e ->
         match e with
-        | PeerCallCompleted payload -> Some payload
+        | PeerAudit(PeerCallCompleted payload) -> Some payload
         | _ -> None)
 
 let workedExampleTests =

@@ -1,0 +1,15 @@
+{
+  "kind": "WorkflowTransitioned",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"WorkflowId\":\"\",\"FromState\":\"\",\"Event\":\"\",\"ToState\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"WorkflowId\":\"\",\"FromState\":\"\",\"Event\":\"\",\"ToState\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"WorkflowTransitioned\":{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"WorkflowId\":\"\",\"FromState\":\"\",\"Event\":\"\",\"ToState\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"WorkflowId\":\"s\",\"FromState\":\"s\",\"Event\":\"s\",\"ToState\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"WorkflowId\":\"s\",\"FromState\":\"s\",\"Event\":\"s\",\"ToState\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"WorkflowTransitioned\":{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"WorkflowId\":\"s\",\"FromState\":\"s\",\"Event\":\"s\",\"ToState\":\"s\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "ExternalCallbackRejected",
+  "samples": [
+    {
+      "row": "{\"HandleId\":null,\"Reason\":\"\",\"ClientIp\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"HandleId\":null,\"Reason\":\"\",\"ClientIp\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ExternalCallbackRejected\":{\"HandleId\":null,\"Reason\":\"\",\"ClientIp\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"HandleId\":\"s\",\"Reason\":\"s\",\"ClientIp\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"HandleId\":\"s\",\"Reason\":\"s\",\"ClientIp\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ExternalCallbackRejected\":{\"HandleId\":\"s\",\"Reason\":\"s\",\"ClientIp\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

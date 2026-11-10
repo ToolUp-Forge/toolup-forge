@@ -1,0 +1,15 @@
+{
+  "kind": "ConversationExported",
+  "samples": [
+    {
+      "row": "{\"ConversationId\":\"\",\"IncludeToolDetails\":false,\"ExportedBy\":\"\"}",
+      "rowWithActor": "{\"ConversationId\":\"\",\"IncludeToolDetails\":false,\"ExportedBy\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationExported\":{\"ConversationId\":\"\",\"IncludeToolDetails\":false,\"ExportedBy\":\"\"}}"
+    },
+    {
+      "row": "{\"ConversationId\":\"s\",\"IncludeToolDetails\":true,\"ExportedBy\":\"s\"}",
+      "rowWithActor": "{\"ConversationId\":\"s\",\"IncludeToolDetails\":true,\"ExportedBy\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationExported\":{\"ConversationId\":\"s\",\"IncludeToolDetails\":true,\"ExportedBy\":\"s\"}}"
+    }
+  ]
+}

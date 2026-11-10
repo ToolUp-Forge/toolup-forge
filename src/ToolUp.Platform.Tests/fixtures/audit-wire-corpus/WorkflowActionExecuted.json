@@ -1,0 +1,15 @@
+{
+  "kind": "WorkflowActionExecuted",
+  "samples": [
+    {
+      "row": "{\"SubmissionId\":\"\",\"TransitionId\":\"\",\"ActionName\":\"\",\"Status\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"SubmissionId\":\"\",\"TransitionId\":\"\",\"ActionName\":\"\",\"Status\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"WorkflowActionExecuted\":{\"SubmissionId\":\"\",\"TransitionId\":\"\",\"ActionName\":\"\",\"Status\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"SubmissionId\":\"s\",\"TransitionId\":\"s\",\"ActionName\":\"s\",\"Status\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"SubmissionId\":\"s\",\"TransitionId\":\"s\",\"ActionName\":\"s\",\"Status\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"WorkflowActionExecuted\":{\"SubmissionId\":\"s\",\"TransitionId\":\"s\",\"ActionName\":\"s\",\"Status\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

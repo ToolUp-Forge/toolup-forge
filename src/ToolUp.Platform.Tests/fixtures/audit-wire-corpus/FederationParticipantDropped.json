@@ -1,0 +1,15 @@
+{
+  "kind": "FederationParticipantDropped",
+  "samples": [
+    {
+      "row": "{\"RunId\":\"\",\"RoundNumber\":0,\"PeerId\":\"\",\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"RunId\":\"\",\"RoundNumber\":0,\"PeerId\":\"\",\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FederationParticipantDropped\":{\"RunId\":\"\",\"RoundNumber\":0,\"PeerId\":\"\",\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"RunId\":\"s\",\"RoundNumber\":7,\"PeerId\":\"s\",\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"RunId\":\"s\",\"RoundNumber\":7,\"PeerId\":\"s\",\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FederationParticipantDropped\":{\"RunId\":\"s\",\"RoundNumber\":7,\"PeerId\":\"s\",\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

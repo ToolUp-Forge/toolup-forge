@@ -1,0 +1,15 @@
+{
+  "kind": "ConversationErased",
+  "samples": [
+    {
+      "row": "{\"SubjectUserId\":\"\",\"Policy\":\"\",\"ConversationCount\":0}",
+      "rowWithActor": "{\"SubjectUserId\":\"\",\"Policy\":\"\",\"ConversationCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationErased\":{\"SubjectUserId\":\"\",\"Policy\":\"\",\"ConversationCount\":0}}"
+    },
+    {
+      "row": "{\"SubjectUserId\":\"s\",\"Policy\":\"s\",\"ConversationCount\":7}",
+      "rowWithActor": "{\"SubjectUserId\":\"s\",\"Policy\":\"s\",\"ConversationCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationErased\":{\"SubjectUserId\":\"s\",\"Policy\":\"s\",\"ConversationCount\":7}}"
+    }
+  ]
+}

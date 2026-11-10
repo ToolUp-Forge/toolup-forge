@@ -1,0 +1,15 @@
+{
+  "kind": "OAuthDisconnected",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"DataSourceId\":\"\",\"UpstreamRevoked\":false}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"DataSourceId\":\"\",\"UpstreamRevoked\":false,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthDisconnected\":{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"DataSourceId\":\"\",\"UpstreamRevoked\":false}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"DataSourceId\":\"s\",\"UpstreamRevoked\":true}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"DataSourceId\":\"s\",\"UpstreamRevoked\":true,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthDisconnected\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"DataSourceId\":\"s\",\"UpstreamRevoked\":true}}"
+    }
+  ]
+}

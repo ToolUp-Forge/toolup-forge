@@ -7,6 +7,7 @@ open System
 open System.Text
 open System.Threading
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Compose
 
@@ -366,35 +367,41 @@ type PlatformRoundObserver(auditLog: IAuditLog, channel: INotificationChannel op
                 do!
                     record
                         scopeId
-                        (FederationRoundCompleted {
-                            RunId = runId
-                            RoundNumber = round
-                            ParticipantCount = List.length responded + List.length dropped
-                            RespondedCount = List.length responded
-                            DroppedCount = List.length dropped
-                            OccurredAt = occurredAt
-                        })
+                        (PeerAuditEvent.event (
+                            FederationRoundCompleted {
+                                RunId = runId
+                                RoundNumber = round
+                                ParticipantCount = List.length responded + List.length dropped
+                                RespondedCount = List.length responded
+                                DroppedCount = List.length dropped
+                                OccurredAt = occurredAt
+                            }
+                        ))
             | ParticipantDropped(runId, round, peerId, reason) ->
                 do!
                     record
                         scopeId
-                        (FederationParticipantDropped {
-                            RunId = runId
-                            RoundNumber = round
-                            PeerId = peerId
-                            Reason = reason
-                            OccurredAt = occurredAt
-                        })
+                        (PeerAuditEvent.event (
+                            FederationParticipantDropped {
+                                RunId = runId
+                                RoundNumber = round
+                                PeerId = peerId
+                                Reason = reason
+                                OccurredAt = occurredAt
+                            }
+                        ))
             | RunAborted(runId, round, reason) ->
                 do!
                     record
                         scopeId
-                        (FederationRunAborted {
-                            RunId = runId
-                            RoundNumber = round
-                            Reason = reason
-                            OccurredAt = occurredAt
-                        })
+                        (PeerAuditEvent.event (
+                            FederationRunAborted {
+                                RunId = runId
+                                RoundNumber = round
+                                Reason = reason
+                                OccurredAt = occurredAt
+                            }
+                        ))
         }
 
 [<RequireQualifiedAccess>]

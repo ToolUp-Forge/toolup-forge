@@ -21,19 +21,19 @@ ToolUp.InterPlatform.ActivationCanonical.template(ToolUp.InterPlatform.Activatio
 ToolUp.InterPlatform.ActivationCanonical.templateIdPrefix : System.String (literal)
 ToolUp.InterPlatform.ActivationCanonical.version(ToolUp.InterPlatform.ActivationAuthorisation) : System.String
 ToolUp.InterPlatform.ActivationDeps (class)
-ToolUp.InterPlatform.ActivationDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], ToolUp.InterPlatform.ICohortResolver, ToolUp.InterPlatform.IActivationMatcher, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IActivationTokenMinter], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.InterPlatform.ActivationDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], ToolUp.InterPlatform.ICohortResolver, ToolUp.InterPlatform.IActivationMatcher, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IActivationTokenMinter], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
 ToolUp.InterPlatform.ActivationDeps.Approval : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]] { get }
 ToolUp.InterPlatform.ActivationDeps.Broker : ToolUp.InterPlatform.ICleanRoomBroker { get }
 ToolUp.InterPlatform.ActivationDeps.Budget : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter] { get }
 ToolUp.InterPlatform.ActivationDeps.Matcher : ToolUp.InterPlatform.IActivationMatcher { get }
 ToolUp.InterPlatform.ActivationDeps.Noise : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]] { get }
 ToolUp.InterPlatform.ActivationDeps.Resolver : ToolUp.InterPlatform.ICohortResolver { get }
-ToolUp.InterPlatform.ActivationDeps.Sink : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.InterPlatform.ActivationDeps.Sink : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.InterPlatform.ActivationDeps.Tokens : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.IActivationTokenMinter] { get }
 ToolUp.InterPlatform.ActivationDepsModule (class)
 ToolUp.InterPlatform.ActivationDepsModule.create(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.ICohortResolver, ToolUp.InterPlatform.IActivationMatcher) : ToolUp.InterPlatform.ActivationDeps
 ToolUp.InterPlatform.ActivationDepsModule.withApproval(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
-ToolUp.InterPlatform.ActivationDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
+ToolUp.InterPlatform.ActivationDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
 ToolUp.InterPlatform.ActivationDepsModule.withBudget(ToolUp.Platform.Compose.PrivacyBudgetMeter, ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
 ToolUp.InterPlatform.ActivationDepsModule.withNoise(ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
 ToolUp.InterPlatform.ActivationDepsModule.withTokenMinter(ToolUp.InterPlatform.IActivationTokenMinter, ToolUp.InterPlatform.ActivationDeps) : ToolUp.InterPlatform.ActivationDeps
@@ -210,11 +210,11 @@ ToolUp.InterPlatform.BlobTemplateApprovalRegistry..ctor(ToolUp.Platform.BlobStor
 ToolUp.InterPlatform.CleanRoomBroker (class)
 ToolUp.InterPlatform.CleanRoomBroker.create() : ToolUp.InterPlatform.ICleanRoomBroker
 ToolUp.InterPlatform.CleanRoomGate (class)
-ToolUp.InterPlatform.CleanRoomGate.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.InterPlatform.CleanRoomGate.wrap(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
-ToolUp.InterPlatform.CleanRoomGate.wrapApproved(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
-ToolUp.InterPlatform.CleanRoomGate.wrapMetered(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
-ToolUp.InterPlatform.CleanRoomGate.wrapNoised(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
+ToolUp.InterPlatform.CleanRoomGate.noAudit(ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.CleanRoomGate.wrap(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
+ToolUp.InterPlatform.CleanRoomGate.wrapApproved(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
+ToolUp.InterPlatform.CleanRoomGate.wrapMetered(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
+ToolUp.InterPlatform.CleanRoomGate.wrapNoised(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.PeerContractRegistration) : ToolUp.InterPlatform.GatedContractRegistration
 ToolUp.InterPlatform.CleanRoomTemplate (class)
 ToolUp.InterPlatform.CleanRoomTemplate..ctor(System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.InterPlatform.PrivacyGate)
 ToolUp.InterPlatform.CleanRoomTemplate.AllowedMethods : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -223,7 +223,7 @@ ToolUp.InterPlatform.CleanRoomTemplate.TemplateId : System.String { get }
 ToolUp.InterPlatform.CohortActivation (class)
 ToolUp.InterPlatform.CohortActivation.activate(ToolUp.InterPlatform.ActivationDeps, ToolUp.InterPlatform.ActivationRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.ActivationRelease, ToolUp.InterPlatform.ActivationRefusal]]
 ToolUp.InterPlatform.CohortActivation.contextFor(ToolUp.InterPlatform.ActivationRequest) : ToolUp.InterPlatform.PeerCallContext
-ToolUp.InterPlatform.CohortActivation.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.CohortActivation.noAudit(ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.CohortConstraints (class)
 ToolUp.InterPlatform.CohortConstraints..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.CohortPredicate])
 ToolUp.InterPlatform.CohortConstraints.MinCohortSize : System.Int32 { get }
@@ -566,17 +566,17 @@ ToolUp.InterPlatform.GateDecision+Tags.Withheld : System.Int32 (literal)
 ToolUp.InterPlatform.GateDecision+Withheld (class)
 ToolUp.InterPlatform.GateDecision+Withheld.reason : System.String { get }
 ToolUp.InterPlatform.GatedComputeDeps (class)
-ToolUp.InterPlatform.GatedComputeDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
+ToolUp.InterPlatform.GatedComputeDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
 ToolUp.InterPlatform.GatedComputeDeps.Approval : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]]] { get }
 ToolUp.InterPlatform.GatedComputeDeps.Broker : ToolUp.InterPlatform.ICleanRoomBroker { get }
 ToolUp.InterPlatform.GatedComputeDeps.Budget : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.PrivacyBudgetMeter] { get }
 ToolUp.InterPlatform.GatedComputeDeps.Noise : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy]] { get }
-ToolUp.InterPlatform.GatedComputeDeps.Sink : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.InterPlatform.GatedComputeDeps.Sink : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.InterPlatform.GatedComputeDeps.Template : ToolUp.InterPlatform.CleanRoomTemplate { get }
 ToolUp.InterPlatform.GatedComputeDepsModule (class)
 ToolUp.InterPlatform.GatedComputeDepsModule.create(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate) : ToolUp.InterPlatform.GatedComputeDeps
 ToolUp.InterPlatform.GatedComputeDepsModule.withApproval(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
-ToolUp.InterPlatform.GatedComputeDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
+ToolUp.InterPlatform.GatedComputeDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
 ToolUp.InterPlatform.GatedComputeDepsModule.withBudget(ToolUp.Platform.Compose.PrivacyBudgetMeter, ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
 ToolUp.InterPlatform.GatedComputeDepsModule.withNoise(ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.NoisedReleasePolicy, ToolUp.InterPlatform.GatedComputeDeps) : ToolUp.InterPlatform.GatedComputeDeps
 ToolUp.InterPlatform.GatedComputeOutput (class)
@@ -587,7 +587,7 @@ ToolUp.InterPlatform.GatedComputeOutput.ToString() : System.String
 ToolUp.InterPlatform.GatedComputeOutputModule (class)
 ToolUp.InterPlatform.GatedComputeOutputModule.contextFor(ToolUp.Platform.ExternalHandle) : ToolUp.InterPlatform.PeerCallContext
 ToolUp.InterPlatform.GatedComputeOutputModule.hold(ToolUp.Platform.IsolationPosture, ToolUp.Platform.ExternalWorkSpec, ToolUp.Platform.ExternalHandle, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.GatedComputeOutput, ToolUp.InterPlatform.ComputeReleaseRefusal]
-ToolUp.InterPlatform.GatedComputeOutputModule.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.GatedComputeOutputModule.noAudit(ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.GatedComputeOutputModule.release(ToolUp.InterPlatform.GatedComputeDeps, ToolUp.InterPlatform.GatedComputeOutput) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.CohortResult, ToolUp.InterPlatform.ComputeReleaseRefusal]]
 ToolUp.InterPlatform.GatedContractRegistration (class)
 ToolUp.InterPlatform.GatedContractRegistration.Registration : ToolUp.InterPlatform.PeerContractRegistration { get }
@@ -878,7 +878,7 @@ ToolUp.InterPlatform.ModelExecutionPeerContract.admit(ToolUp.InterPlatform.Model
 ToolUp.InterPlatform.ModelExecutionPeerContract.answerBody`1(ToolUp.InterPlatform.ModelExecutionPeerAnswer) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.InterPlatform.ModelExecutionPeerRefusal]
 ToolUp.InterPlatform.ModelExecutionPeerContract.arguments(ToolUp.InterPlatform.ModelExecutionPeerRequest) : System.String
 ToolUp.InterPlatform.ModelExecutionPeerContract.diagnosticRequest(System.String, ToolUp.InterPlatform.ModelExecutionPeerDiagnosticRequest) : ToolUp.InterPlatform.ModelExecutionPeerRequest
-ToolUp.InterPlatform.ModelExecutionPeerContract.governedDiagnostics(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps) : ToolUp.InterPlatform.GatedContractRegistration
+ToolUp.InterPlatform.ModelExecutionPeerContract.governedDiagnostics(ToolUp.InterPlatform.ICleanRoomBroker, ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.ModelExecutionDiagnosticsDeps) : ToolUp.InterPlatform.GatedContractRegistration
 ToolUp.InterPlatform.ModelExecutionPeerContract.host(ToolUp.InterPlatform.ModelExecutionPeerDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion]) : ToolUp.InterPlatform.PeerContractHost
 ToolUp.InterPlatform.ModelExecutionPeerContract.ofWireSubmission(ToolUp.InterPlatform.ModelExecutionPeerSubmission) : ToolUp.Platform.ModelExecutionFitSubmission
 ToolUp.InterPlatform.ModelExecutionPeerContract.promotionRequest(ToolUp.InterPlatform.PeerPromotionTransfer) : ToolUp.InterPlatform.ModelExecutionPeerRequest
@@ -1135,6 +1135,91 @@ ToolUp.InterPlatform.PeerAuditEntry.OccurredAt : System.DateTimeOffset { get }
 ToolUp.InterPlatform.PeerAuditEntry.Outcome : System.String { get }
 ToolUp.InterPlatform.PeerAuditEntry.RootRequestId : System.String { get }
 ToolUp.InterPlatform.PeerAuditEntry.Succeeded : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents (class)
+ToolUp.InterPlatform.PeerAuditEvents.|PeerAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent]
+ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload (class)
+ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload..ctor(System.String, System.Int32, System.String, System.String, System.DateTimeOffset)
+ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload.PeerId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload.Reason : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload.RoundNumber : System.Int32 { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload.RunId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload (class)
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload..ctor(System.String, System.Int32, System.Int32, System.Int32, System.Int32, System.DateTimeOffset)
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload.DroppedCount : System.Int32 { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload.ParticipantCount : System.Int32 { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload.RespondedCount : System.Int32 { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload.RoundNumber : System.Int32 { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload.RunId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRunAbortedPayload (class)
+ToolUp.InterPlatform.PeerAuditEvents+FederationRunAbortedPayload..ctor(System.String, System.Int32, System.String, System.DateTimeOffset)
+ToolUp.InterPlatform.PeerAuditEvents+FederationRunAbortedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRunAbortedPayload.Reason : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRunAbortedPayload.RoundNumber : System.Int32 { get }
+ToolUp.InterPlatform.PeerAuditEvents+FederationRunAbortedPayload.RunId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent.IsFederationParticipantDropped : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent.IsFederationRoundCompleted : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent.IsFederationRunAborted : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent.IsPeerCallCompleted : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent.IsPeerCleanRoomDecision : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent.IsPeerJobCompleted : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+FederationParticipantDropped (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+FederationParticipantDropped.Item : ToolUp.InterPlatform.PeerAuditEvents+FederationParticipantDroppedPayload { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+FederationRoundCompleted (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+FederationRoundCompleted.Item : ToolUp.InterPlatform.PeerAuditEvents+FederationRoundCompletedPayload { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+FederationRunAborted (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+FederationRunAborted.Item : ToolUp.InterPlatform.PeerAuditEvents+FederationRunAbortedPayload { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+PeerCallCompleted (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+PeerCallCompleted.Item : ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+PeerCleanRoomDecision (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+PeerCleanRoomDecision.Item : ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+PeerJobCompleted (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+PeerJobCompleted.Item : ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+Tags (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+Tags.FederationParticipantDropped : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+Tags.FederationRoundCompleted : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+Tags.FederationRunAborted : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+Tags.PeerCallCompleted : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+Tags.PeerCleanRoomDecision : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent+Tags.PeerJobCompleted : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEventModule (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEventModule.Registrant : System.String (literal)
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEventModule.event(ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent] { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAuditEvents+PeerAuditEvent]
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload..ctor(System.String, System.String, System.String, System.String, System.Boolean, System.String, System.DateTimeOffset)
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload.CallerPeerId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload.ContractId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload.MethodName : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload.Outcome : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload.RootRequestId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCallCompletedPayload.Succeeded : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTimeOffset)
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.CallerPeerId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.ContractId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.MethodName : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.Reason : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.Released : System.Boolean { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.RootRequestId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.SuppressedCells : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload.TemplateId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload (class)
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload..ctor(System.String, System.String, System.String, System.String, System.Guid, System.Boolean, System.String, System.DateTimeOffset)
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.CallerPeerId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.ContractId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.JobId : System.Guid { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.MethodName : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.Outcome : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.RootRequestId : System.String { get }
+ToolUp.InterPlatform.PeerAuditEvents+PeerJobCompletedPayload.Succeeded : System.Boolean { get }
 ToolUp.InterPlatform.PeerAuditQuery (class)
 ToolUp.InterPlatform.PeerAuditQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], System.Boolean, System.Int32)
 ToolUp.InterPlatform.PeerAuditQuery.ContractId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -2259,7 +2344,7 @@ ToolUp.InterPlatform.ServedContract.Versions : Microsoft.FSharp.Collections.FSha
 ToolUp.InterPlatform.SignalFeed (class)
 ToolUp.InterPlatform.SignalFeed.emit(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.FeedTick]
 ToolUp.InterPlatform.SignalFeed.inspect(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedInspection, System.String]]
-ToolUp.InterPlatform.SignalFeed.noAudit(ToolUp.Platform.PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.InterPlatform.SignalFeed.noAudit(ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.SignalFeed.pause(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
 ToolUp.InterPlatform.SignalFeed.resume(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
 ToolUp.InterPlatform.SignalFeed.start(ToolUp.InterPlatform.SignalFeedDeps, ToolUp.InterPlatform.SignalFeedSpec) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FeedState, System.String]]
@@ -2269,9 +2354,9 @@ ToolUp.InterPlatform.SignalFeedCanonical (class)
 ToolUp.InterPlatform.SignalFeedCanonical.domain : System.String { get }
 ToolUp.InterPlatform.SignalFeedCanonical.idempotencyKey(System.String, System.String, System.Int64) : System.String
 ToolUp.InterPlatform.SignalFeedDeps (class)
-ToolUp.InterPlatform.SignalFeedDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.Platform.Compose.PrivacyBudgetMeter, ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.ISignalSource, ToolUp.InterPlatform.ISignalFeedSink, ToolUp.InterPlatform.IFeedStateStore, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.InterPlatform.SignalFeedDeps..ctor(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.Platform.Compose.PrivacyBudgetMeter, ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.ISignalSource, ToolUp.InterPlatform.ISignalFeedSink, ToolUp.InterPlatform.IFeedStateStore, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
 ToolUp.InterPlatform.SignalFeedDeps.Approval : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]] { get }
-ToolUp.InterPlatform.SignalFeedDeps.Audit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.InterPlatform.SignalFeedDeps.Audit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.InterPlatform.SignalFeedDeps.Broker : ToolUp.InterPlatform.ICleanRoomBroker { get }
 ToolUp.InterPlatform.SignalFeedDeps.Budget : ToolUp.Platform.Compose.PrivacyBudgetMeter { get }
 ToolUp.InterPlatform.SignalFeedDeps.Mechanism : ToolUp.InterPlatform.INoiseMechanism { get }
@@ -2281,7 +2366,7 @@ ToolUp.InterPlatform.SignalFeedDeps.Sink : ToolUp.InterPlatform.ISignalFeedSink 
 ToolUp.InterPlatform.SignalFeedDeps.State : ToolUp.InterPlatform.IFeedStateStore { get }
 ToolUp.InterPlatform.SignalFeedDepsModule (class)
 ToolUp.InterPlatform.SignalFeedDepsModule.create(ToolUp.InterPlatform.ICleanRoomBroker, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerCallContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], ToolUp.Platform.Compose.PrivacyBudgetMeter, ToolUp.InterPlatform.INoiseMechanism, ToolUp.InterPlatform.ISignalSource, ToolUp.InterPlatform.ISignalFeedSink, ToolUp.InterPlatform.IFeedStateStore) : ToolUp.InterPlatform.SignalFeedDeps
-ToolUp.InterPlatform.SignalFeedDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.SignalFeedDeps) : ToolUp.InterPlatform.SignalFeedDeps
+ToolUp.InterPlatform.SignalFeedDepsModule.withAudit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.PeerAuditEvents+PeerCleanRoomDecisionPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], ToolUp.InterPlatform.SignalFeedDeps) : ToolUp.InterPlatform.SignalFeedDeps
 ToolUp.InterPlatform.SignalFeedDepsModule.withClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.InterPlatform.SignalFeedDeps) : ToolUp.InterPlatform.SignalFeedDeps
 ToolUp.InterPlatform.SignalFeedSpec (class)
 ToolUp.InterPlatform.SignalFeedSpec..ctor(System.String, ToolUp.InterPlatform.ActivationAuthorisation, ToolUp.InterPlatform.ActivationShape, System.TimeSpan, ToolUp.InterPlatform.NoisedReleasePolicy, System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset])

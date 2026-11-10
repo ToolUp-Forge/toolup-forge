@@ -12,6 +12,7 @@ open Microsoft.Extensions.Hosting
 open Giraffe
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.InterPlatform
@@ -223,7 +224,7 @@ type private RecordingAuditLog() =
         |> List.ofSeq
         |> List.choose (fun (_, e) ->
             match e with
-            | PeerJobCompleted p -> Some p
+            | PeerAudit(PeerJobCompleted p) -> Some p
             | _ -> None)
 
     interface IAuditLog with

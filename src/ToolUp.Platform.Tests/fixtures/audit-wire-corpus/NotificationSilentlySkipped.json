@@ -1,0 +1,15 @@
+{
+  "kind": "NotificationSilentlySkipped",
+  "samples": [
+    {
+      "row": "{\"NotificationKind\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"RecipientHashes\":[],\"CorrelationId\":null}",
+      "rowWithActor": "{\"NotificationKind\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"RecipientHashes\":[],\"CorrelationId\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationSilentlySkipped\":{\"NotificationKind\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"RecipientHashes\":[],\"CorrelationId\":null}}"
+    },
+    {
+      "row": "{\"NotificationKind\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"RecipientHashes\":[\"s\"],\"CorrelationId\":\"s\"}",
+      "rowWithActor": "{\"NotificationKind\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"RecipientHashes\":[\"s\"],\"CorrelationId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationSilentlySkipped\":{\"NotificationKind\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"RecipientHashes\":[\"s\"],\"CorrelationId\":\"s\"}}"
+    }
+  ]
+}

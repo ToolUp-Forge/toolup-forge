@@ -1,0 +1,15 @@
+{
+  "kind": "UserLoggedIn",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"AuthProvider\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"AuthProvider\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"UserLoggedIn\":{\"UserId\":\"\",\"AuthProvider\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"AuthProvider\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"AuthProvider\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"UserLoggedIn\":{\"UserId\":\"s\",\"AuthProvider\":\"s\"}}"
+    }
+  ]
+}

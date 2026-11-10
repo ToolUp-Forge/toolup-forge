@@ -1,0 +1,15 @@
+{
+  "kind": "SyntheticSampleGenerated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TypeId\":\"\",\"RequestedCount\":0,\"EmittedCount\":0,\"Seed\":0,\"AppliedMaxRows\":0}",
+      "rowWithActor": "{\"UserId\":\"\",\"TypeId\":\"\",\"RequestedCount\":0,\"EmittedCount\":0,\"Seed\":0,\"AppliedMaxRows\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SyntheticSampleGenerated\":{\"UserId\":\"\",\"TypeId\":\"\",\"RequestedCount\":0,\"EmittedCount\":0,\"Seed\":0,\"AppliedMaxRows\":0}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TypeId\":\"s\",\"RequestedCount\":7,\"EmittedCount\":7,\"Seed\":7,\"AppliedMaxRows\":7}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TypeId\":\"s\",\"RequestedCount\":7,\"EmittedCount\":7,\"Seed\":7,\"AppliedMaxRows\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SyntheticSampleGenerated\":{\"UserId\":\"s\",\"TypeId\":\"s\",\"RequestedCount\":7,\"EmittedCount\":7,\"Seed\":7,\"AppliedMaxRows\":7}}"
+    }
+  ]
+}

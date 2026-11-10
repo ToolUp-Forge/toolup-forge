@@ -947,6 +947,7 @@ module FactsCompose =
                     AITools = app.AITools @ NarrativeGrounding.factTools
             }
             |> contribute register
+            |> ServerApp.withAuditEvents (AuditEventFamily.registration FactsAuditEvents.FactsAuditEvent.family)
 
     /// **Adds** a composed withholding surface for the startup disclosure
     /// finding (`DisclosureReachFinding`): `name` is what the finding calls it

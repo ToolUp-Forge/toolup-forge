@@ -1,0 +1,15 @@
+{
+  "kind": "ContentScanned",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ScannerName\":\"\",\"FileName\":\"\",\"ContentHash\":\"\",\"SizeBytes\":\"+0\",\"Verdict\":\"\",\"Reason\":null,\"Refused\":false,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ScannerName\":\"\",\"FileName\":\"\",\"ContentHash\":\"\",\"SizeBytes\":\"+0\",\"Verdict\":\"\",\"Reason\":null,\"Refused\":false,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContentScanned\":{\"UserId\":\"\",\"ScopeId\":\"\",\"ScannerName\":\"\",\"FileName\":\"\",\"ContentHash\":\"\",\"SizeBytes\":\"+0\",\"Verdict\":\"\",\"Reason\":null,\"Refused\":false,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ScannerName\":\"s\",\"FileName\":\"s\",\"ContentHash\":\"s\",\"SizeBytes\":\"+7\",\"Verdict\":\"s\",\"Reason\":\"s\",\"Refused\":true,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ScannerName\":\"s\",\"FileName\":\"s\",\"ContentHash\":\"s\",\"SizeBytes\":\"+7\",\"Verdict\":\"s\",\"Reason\":\"s\",\"Refused\":true,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContentScanned\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ScannerName\":\"s\",\"FileName\":\"s\",\"ContentHash\":\"s\",\"SizeBytes\":\"+7\",\"Verdict\":\"s\",\"Reason\":\"s\",\"Refused\":true,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

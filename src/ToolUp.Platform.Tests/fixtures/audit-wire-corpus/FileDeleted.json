@@ -1,0 +1,15 @@
+{
+  "kind": "FileDeleted",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"FileName\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"FileName\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FileDeleted\":{\"UserId\":\"\",\"FileName\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"FileName\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"FileName\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FileDeleted\":{\"UserId\":\"s\",\"FileName\":\"s\"}}"
+    }
+  ]
+}

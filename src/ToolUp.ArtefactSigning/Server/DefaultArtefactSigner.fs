@@ -6,6 +6,7 @@ namespace ToolUp.ArtefactSigning
 open System
 open System.Security.Cryptography
 open ToolUp.Platform
+open ToolUp.ArtefactSigning.ArtefactAuditEvents
 open ToolUp.Platform.Secrets
 
 /// Phase 40 — in-process default `IArtefactSigner`. Holds no secret
@@ -52,12 +53,14 @@ type DefaultArtefactSigner
                 | Ok detachedJws ->
                     do!
                         recordAudit (
-                            AuditEvent.ArtefactSigned {
-                                Actor = actor
-                                KeyId = keyId
-                                Algorithm = SigningAlgorithm.name key.Algorithm
-                                ArtefactSha256 = sha256Hex artefact
-                            }
+                            ArtefactAuditEvent.event (
+                                ArtefactSigned {
+                                    Actor = actor
+                                    KeyId = keyId
+                                    Algorithm = SigningAlgorithm.name key.Algorithm
+                                    ArtefactSha256 = sha256Hex artefact
+                                }
+                            )
                         )
 
                     return

@@ -1,0 +1,15 @@
+{
+  "kind": "TeamInviteAcceptedFromPending",
+  "samples": [
+    {
+      "row": "{\"TeamId\":\"\",\"InviteeUserId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\"}",
+      "rowWithActor": "{\"TeamId\":\"\",\"InviteeUserId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteAcceptedFromPending\":{\"TeamId\":\"\",\"InviteeUserId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\"}}"
+    },
+    {
+      "row": "{\"TeamId\":\"s\",\"InviteeUserId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\"}",
+      "rowWithActor": "{\"TeamId\":\"s\",\"InviteeUserId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteAcceptedFromPending\":{\"TeamId\":\"s\",\"InviteeUserId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\"}}"
+    }
+  ]
+}

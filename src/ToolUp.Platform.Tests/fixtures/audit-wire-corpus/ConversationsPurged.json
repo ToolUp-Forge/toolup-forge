@@ -1,0 +1,15 @@
+{
+  "kind": "ConversationsPurged",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"ConversationIds\":[],\"PurgedCount\":0,\"MaxAgeSeconds\":null,\"MaxCount\":null,\"FailedCount\":0}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"ConversationIds\":[],\"PurgedCount\":0,\"MaxAgeSeconds\":null,\"MaxCount\":null,\"FailedCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationsPurged\":{\"ScopeId\":\"\",\"ConversationIds\":[],\"PurgedCount\":0,\"MaxAgeSeconds\":null,\"MaxCount\":null,\"FailedCount\":0}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"ConversationIds\":[\"s\"],\"PurgedCount\":7,\"MaxAgeSeconds\":\"+7\",\"MaxCount\":7,\"FailedCount\":7}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"ConversationIds\":[\"s\"],\"PurgedCount\":7,\"MaxAgeSeconds\":\"+7\",\"MaxCount\":7,\"FailedCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationsPurged\":{\"ScopeId\":\"s\",\"ConversationIds\":[\"s\"],\"PurgedCount\":7,\"MaxAgeSeconds\":\"+7\",\"MaxCount\":7,\"FailedCount\":7}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "ContactDeleted",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"WithdrawnChannels\":[]}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"WithdrawnChannels\":[],\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactDeleted\":{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"WithdrawnChannels\":[]}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"WithdrawnChannels\":[\"s\"]}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"WithdrawnChannels\":[\"s\"],\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactDeleted\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"WithdrawnChannels\":[\"s\"]}}"
+    }
+  ]
+}

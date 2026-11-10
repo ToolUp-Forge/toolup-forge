@@ -1,0 +1,15 @@
+{
+  "kind": "AssetDeleted",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"AssetId\":\"\",\"ContentHash\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"AssetId\":\"\",\"ContentHash\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AssetDeleted\":{\"UserId\":\"\",\"AssetId\":\"\",\"ContentHash\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"AssetId\":\"s\",\"ContentHash\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"AssetId\":\"s\",\"ContentHash\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AssetDeleted\":{\"UserId\":\"s\",\"AssetId\":\"s\",\"ContentHash\":\"s\"}}"
+    }
+  ]
+}

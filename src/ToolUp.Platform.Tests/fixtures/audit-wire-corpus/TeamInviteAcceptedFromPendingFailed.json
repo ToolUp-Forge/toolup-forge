@@ -1,0 +1,15 @@
+{
+  "kind": "TeamInviteAcceptedFromPendingFailed",
+  "samples": [
+    {
+      "row": "{\"TeamId\":\"\",\"InviteeUserId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"TeamId\":\"\",\"InviteeUserId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteAcceptedFromPendingFailed\":{\"TeamId\":\"\",\"InviteeUserId\":\"\",\"InviteeEmail\":\"\",\"InviterUserId\":\"\",\"Role\":\"Owner\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"TeamId\":\"s\",\"InviteeUserId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"TeamId\":\"s\",\"InviteeUserId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteAcceptedFromPendingFailed\":{\"TeamId\":\"s\",\"InviteeUserId\":\"s\",\"InviteeEmail\":\"s\",\"InviterUserId\":\"s\",\"Role\":\"Member\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

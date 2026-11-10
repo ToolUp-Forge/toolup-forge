@@ -1,0 +1,15 @@
+{
+  "kind": "SurfaceDenied",
+  "samples": [
+    {
+      "row": "{\"Method\":\"\",\"Path\":\"\",\"SubjectKind\":\"\",\"SubjectId\":null,\"DenialCode\":\"\",\"Hint\":null,\"CorrelationId\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Method\":\"\",\"Path\":\"\",\"SubjectKind\":\"\",\"SubjectId\":null,\"DenialCode\":\"\",\"Hint\":null,\"CorrelationId\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SurfaceDenied\":{\"Method\":\"\",\"Path\":\"\",\"SubjectKind\":\"\",\"SubjectId\":null,\"DenialCode\":\"\",\"Hint\":null,\"CorrelationId\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"RouteClass\":null,\"ReaderRoles\":null}}"
+    },
+    {
+      "row": "{\"Method\":\"s\",\"Path\":\"s\",\"SubjectKind\":\"s\",\"SubjectId\":\"s\",\"DenialCode\":\"s\",\"Hint\":\"s\",\"CorrelationId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"RouteClass\":\"s\",\"ReaderRoles\":[\"s\"]}",
+      "rowWithActor": "{\"Method\":\"s\",\"Path\":\"s\",\"SubjectKind\":\"s\",\"SubjectId\":\"s\",\"DenialCode\":\"s\",\"Hint\":\"s\",\"CorrelationId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"RouteClass\":\"s\",\"ReaderRoles\":[\"s\"],\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SurfaceDenied\":{\"Method\":\"s\",\"Path\":\"s\",\"SubjectKind\":\"s\",\"SubjectId\":\"s\",\"DenialCode\":\"s\",\"Hint\":\"s\",\"CorrelationId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"RouteClass\":\"s\",\"ReaderRoles\":[\"s\"]}}"
+    }
+  ]
+}

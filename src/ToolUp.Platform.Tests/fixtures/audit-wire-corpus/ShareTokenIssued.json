@@ -1,0 +1,15 @@
+{
+  "kind": "ShareTokenIssued",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\",\"AttributedHandle\":null,\"ExpiresAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\",\"AttributedHandle\":null,\"ExpiresAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ShareTokenIssued\":{\"UserId\":\"\",\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\",\"AttributedHandle\":null,\"ExpiresAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\",\"AttributedHandle\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\",\"AttributedHandle\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ShareTokenIssued\":{\"UserId\":\"s\",\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\",\"AttributedHandle\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

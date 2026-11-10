@@ -1,0 +1,15 @@
+{
+  "kind": "UnconsentedGrantRefused",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"InertReason\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"InertReason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"UnconsentedGrantRefused\":{\"UserId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"InertReason\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"InertReason\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"InertReason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"UnconsentedGrantRefused\":{\"UserId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"InertReason\":\"s\"}}"
+    }
+  ]
+}

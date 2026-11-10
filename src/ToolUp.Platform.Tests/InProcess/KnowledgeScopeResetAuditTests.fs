@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.KnowledgeScopeResetAuditTests
 open System
 open Expecto
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -168,7 +169,7 @@ let tests =
             Expect.isOk result "reset must succeed"
 
             match audit.Events with
-            | [ (scopeId, KnowledgeScopeErased p) ] ->
+            | [ (scopeId, KnowledgeAudit(KnowledgeScopeErased p)) ] ->
                 Expect.equal scopeId "team-a" "recorded under the caller's scope"
                 Expect.equal p.UserId (UserId "user-1") "actor"
                 Expect.equal p.ScopeId "team-a" "payload scope"

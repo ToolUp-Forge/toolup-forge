@@ -43,7 +43,7 @@ type IAssetApi = {
     /// Delete an asset by id. Idempotent — unknown ids
     /// resolve to `Ok ()`. No `[<Audit>]` attribute here:
     /// `DefaultAssetStore.Delete` already emits the richer
-    /// `AuditEvent.AssetDeleted` through `IAuditLog` (gated by
+    /// `AssetDeleted` audit event through `IAuditLog` (gated by
     /// `AssetStoreOptions.EmitAudit`); a dispatcher-level audit
     /// row would duplicate it.
     [<AllowAnonymous>]

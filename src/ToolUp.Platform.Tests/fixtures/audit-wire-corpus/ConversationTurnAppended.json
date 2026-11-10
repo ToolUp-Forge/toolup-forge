@@ -1,0 +1,15 @@
+{
+  "kind": "ConversationTurnAppended",
+  "samples": [
+    {
+      "row": "{\"ConversationId\":\"\",\"TurnId\":\"\",\"Role\":\"\",\"ContentDigest\":\"\",\"TokensIn\":null,\"TokensOut\":null}",
+      "rowWithActor": "{\"ConversationId\":\"\",\"TurnId\":\"\",\"Role\":\"\",\"ContentDigest\":\"\",\"TokensIn\":null,\"TokensOut\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationTurnAppended\":{\"ConversationId\":\"\",\"TurnId\":\"\",\"Role\":\"\",\"ContentDigest\":\"\",\"TokensIn\":null,\"TokensOut\":null}}"
+    },
+    {
+      "row": "{\"ConversationId\":\"s\",\"TurnId\":\"s\",\"Role\":\"s\",\"ContentDigest\":\"s\",\"TokensIn\":7,\"TokensOut\":7}",
+      "rowWithActor": "{\"ConversationId\":\"s\",\"TurnId\":\"s\",\"Role\":\"s\",\"ContentDigest\":\"s\",\"TokensIn\":7,\"TokensOut\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationTurnAppended\":{\"ConversationId\":\"s\",\"TurnId\":\"s\",\"Role\":\"s\",\"ContentDigest\":\"s\",\"TokensIn\":7,\"TokensOut\":7}}"
+    }
+  ]
+}

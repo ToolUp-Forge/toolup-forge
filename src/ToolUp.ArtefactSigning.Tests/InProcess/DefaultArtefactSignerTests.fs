@@ -6,6 +6,7 @@ module ToolUp.ArtefactSigning.Tests.InProcess.DefaultArtefactSignerTests
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.ArtefactSigning.ArtefactAuditEvents
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 open ToolUp.ArtefactSigning.Tests.Contracts
@@ -43,7 +44,7 @@ let private inProcessSpecificTests =
                 audit.AllEvents
                 |> List.choose (fun (_, e) ->
                     match e with
-                    | AuditEvent.ArtefactSigned p -> Some p
+                    | ArtefactAudit(ArtefactSigned p) -> Some p
                     | _ -> None)
 
             Expect.equal signedEvents.Length 1 "exactly one ArtefactSigned event"

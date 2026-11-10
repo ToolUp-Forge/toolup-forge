@@ -1,0 +1,15 @@
+{
+  "kind": "SchemaOnlyAccessAttempted",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ModuleName\":\"\",\"AttemptedPath\":\"\",\"AttemptedResource\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ModuleName\":\"\",\"AttemptedPath\":\"\",\"AttemptedResource\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SchemaOnlyAccessAttempted\":{\"UserId\":\"\",\"ModuleName\":\"\",\"AttemptedPath\":\"\",\"AttemptedResource\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ModuleName\":\"s\",\"AttemptedPath\":\"s\",\"AttemptedResource\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ModuleName\":\"s\",\"AttemptedPath\":\"s\",\"AttemptedResource\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SchemaOnlyAccessAttempted\":{\"UserId\":\"s\",\"ModuleName\":\"s\",\"AttemptedPath\":\"s\",\"AttemptedResource\":\"s\"}}"
+    }
+  ]
+}

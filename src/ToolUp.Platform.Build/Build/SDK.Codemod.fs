@@ -91,6 +91,10 @@ type CodemodMigration =
     /// and `ResetCounters` are `Hosts`, and the two first-init gate fields
     /// are `AwaitingFirstInit`.
     | ModuleHost
+    /// Audit events are an open registry: a companion's events left Core's
+    /// `AuditEvent` for the companion's own family, and an archive is read
+    /// with the audit options.
+    | OpenAuditRegistry
     /// `Data.table` takes typed `Column<'row>` values in place of header
     /// strings and pre-rendered element rows.
     | AdminPageKit
@@ -128,6 +132,7 @@ module CodemodMigration =
         | CodemodMigration.AuditFailureAsData ->
             "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
         | CodemodMigration.ModuleHost -> "docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md"
+        | CodemodMigration.OpenAuditRegistry -> "docs/migrations/874-open-audit-event-registry.md"
         | CodemodMigration.AdminPageKit -> "docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md"
 
     /// The phase label the renderings print.
@@ -156,6 +161,7 @@ module CodemodMigration =
         | CodemodMigration.FailureAsData -> "Phase 873"
         | CodemodMigration.AuditFailureAsData -> "Phase 1062"
         | CodemodMigration.ModuleHost -> "Phase 1071"
+        | CodemodMigration.OpenAuditRegistry -> "Phase 874"
         | CodemodMigration.AdminPageKit -> "Phase 1073"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
@@ -1686,6 +1692,20 @@ module Codemod =
             CodemodFileClass.Source
             @"\bModuleMsg\s*\(\s*box\b|\bModuleMsg\s+\w+\s*->"
             "`ModuleMsg` carries the module id: construct `ModuleMsg(moduleId, box message)` and match `ModuleMsg(moduleId, message)`; a message for a module with no host is dropped"
+        // A companion's audit events left Core's union for its own family.
+        review
+            "874-moved-audit-case"
+            CodemodMigration.OpenAuditRegistry
+            CodemodFileClass.Source
+            @"(?<!["".])\b(?:AuditEvent\.)?(?:FormSubmitted|FormSubmissionUpdated|WorkflowTransitioned|WorkflowActionExecuted|PlatformDocumentUploaded|PlatformDocumentDeleted|KnowledgeOriginalRetrieved|KnowledgeOriginalRetrievalDenied|KnowledgeScopeErased|KnowledgeDocumentDeduplicated|KnowledgeDocumentsPurged|ContentScanned|AssetUploaded|AssetDeleted|PasskeyCredentialRegistered|PasskeyCredentialRemoved|FactImportAccepted|FactImportRefused|CertificateIssued|KnowledgeIngestionDropped|ArtefactSigned|SigningKeyRotated|ConversationExported|BeaconRejected|ConversationReplayed|AnswerVerificationPassed|AnswerVerificationFlagged|CrossModuleRead|ConversationsPurged|PeerCallCompleted|PeerJobCompleted|PeerCleanRoomDecision|FederationRoundCompleted|FederationParticipantDropped|FederationRunAborted)\b(?!"")"
+            "if this is an `AuditEvent` case, the companion that emits it declares it now: open its `*AuditEvents` module, construct with its family's `event` (`FormsAuditEvent.event (FormSubmitted p)`), and match with its active pattern (`FormsAudit(FormSubmitted p)`) or `tryRead`; Core carries it as `AuditEvent.Opaque`"
+        // An archive or a ledger is read with the audit options.
+        review
+            "874-archive-read"
+            CodemodMigration.OpenAuditRegistry
+            CodemodFileClass.Source
+            @"\bDeserialize<[^>]*(?:AuditEvent|AuditEnvelope|Archive\w*|Ledger\w*)>\s*\(.*\bPlatformJson\.options\b"
+            "if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode"
         // Since 0.42.0 the toolkit's table is typed over its rows.
         review
             "1073-data-table-columns"

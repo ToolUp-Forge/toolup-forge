@@ -6,6 +6,7 @@ open System.Text.Json
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -256,7 +257,7 @@ let private handlerTests =
             | Error e -> failtest $"expected Ok, got {e}"
 
             match audit.Events with
-            | [ (scopeId, KnowledgeOriginalRetrieved p) ] ->
+            | [ (scopeId, KnowledgeAudit(KnowledgeOriginalRetrieved p)) ] ->
                 Expect.equal scopeId "team-a" "recorded under the caller's scope"
                 Expect.equal p.UserId (UserId "user-1") "actor"
                 Expect.equal p.DocumentId "doc-1" "doc id"
@@ -279,7 +280,7 @@ let private handlerTests =
             Expect.equal result (Error NotInScope) "typed refusal"
 
             match audit.Events with
-            | [ (_, KnowledgeOriginalRetrievalDenied p) ] ->
+            | [ (_, KnowledgeAudit(KnowledgeOriginalRetrievalDenied p)) ] ->
                 Expect.equal p.Reason "NotInScope" "denial reason"
                 Expect.equal p.DocumentId "doc-nope" "requested id recorded verbatim"
                 Expect.equal p.UserId (UserId "user-1") "actor"
@@ -316,7 +317,8 @@ let private handlerTests =
             Expect.equal result (Error NoOriginalAvailable) "typed absence, not an exception"
 
             match audit.Events with
-            | [ (_, KnowledgeOriginalRetrievalDenied p) ] -> Expect.equal p.Reason "NoOriginalAvailable" "reason"
+            | [ (_, KnowledgeAudit(KnowledgeOriginalRetrievalDenied p)) ] ->
+                Expect.equal p.Reason "NoOriginalAvailable" "reason"
             | other -> failtest $"expected exactly one denial audit, got %A{other}"
         }
 
@@ -1233,7 +1235,7 @@ let private redactedHandlerTests =
                 audit.Events
                 |> List.choose (fun (_, e) ->
                     match e with
-                    | KnowledgeOriginalRetrieved p -> Some p
+                    | KnowledgeAudit(KnowledgeOriginalRetrieved p) -> Some p
                     | _ -> None)
 
             let redactions =
@@ -1312,7 +1314,7 @@ let private redactedHandlerTests =
                 audit.Events
                 |> List.choose (fun (_, e) ->
                     match e with
-                    | KnowledgeOriginalRetrievalDenied p -> Some p.Reason
+                    | KnowledgeAudit(KnowledgeOriginalRetrievalDenied p) -> Some p.Reason
                     | _ -> None)
 
             Expect.contains reasons "RedactionWithheld" "the operator-side trail distinguishes the two"
@@ -1321,7 +1323,7 @@ let private redactedHandlerTests =
                 audit.Events
                 |> List.filter (fun (_, e) ->
                     match e with
-                    | KnowledgeOriginalRetrieved _ -> true
+                    | KnowledgeAudit(KnowledgeOriginalRetrieved _) -> true
                     | _ -> false)
 
             Expect.isEmpty retrievals "nothing was delivered, so nothing is recorded as retrieved"

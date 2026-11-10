@@ -60,6 +60,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Http
 open Microsoft.FSharp.Reflection
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
@@ -245,7 +246,7 @@ let private rows (h: Harness) : CrossModuleReadPayload list =
     h.AuditLog.GetAuditTrail(AuditScope.shard scope.ScopeId, None, Some AICrossModuleObservability.EventType)
     |> Async.RunSynchronously
     |> List.choose (function
-        | CrossModuleRead p -> Some p
+        | AIAudit(CrossModuleRead p) -> Some p
         | _ -> None)
 
 let private soleRow (h: Harness) : CrossModuleReadPayload =
@@ -314,7 +315,9 @@ let private sinkEnvelope: AuditEnvelope =
         AuditSubject.unattributed
         "team-sinks"
         (DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc))
-        (CrossModuleRead(syntheticRow (Some "Payroll") "_platform.ai.list_results" 12.0 AICrossModuleAudit.OkOutcome))
+        (AIAuditEvent.event (
+            CrossModuleRead(syntheticRow (Some "Payroll") "_platform.ai.list_results" 12.0 AICrossModuleAudit.OkOutcome)
+        ))
 
 // ─── Tests ───────────────────────────────────────────────────────────
 

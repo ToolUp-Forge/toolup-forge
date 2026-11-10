@@ -16,6 +16,7 @@ module ToolUp.Platform.Tests.InProcess.IngestionBackpressureTests
 
 open Expecto
 open ToolUp.Platform
+open ToolUp.RAG.RagAuditEvents
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
 open System
@@ -132,7 +133,7 @@ let private dropEmission =
             Expect.equal q.Dropped 1L "queue cumulative bumped"
 
             match audit.Events with
-            | [ (scopeId, KnowledgeIngestionDropped p) ] ->
+            | [ (scopeId, RagAudit(KnowledgeIngestionDropped p)) ] ->
                 Expect.equal scopeId KnowledgeSourceModule.value "recorded under _platform.knowledge"
                 Expect.equal p.ScopeKey "team:t1" "scope key"
                 Expect.equal p.DocId "doc.pdf" "doc id"

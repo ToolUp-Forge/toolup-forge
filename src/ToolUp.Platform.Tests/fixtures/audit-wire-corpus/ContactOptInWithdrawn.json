@@ -1,0 +1,15 @@
+{
+  "kind": "ContactOptInWithdrawn",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Channel\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Channel\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactOptInWithdrawn\":{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Channel\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Channel\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Channel\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactOptInWithdrawn\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Channel\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

@@ -22,6 +22,7 @@
         <!-- The connector kernel: one provider call, a connector as data, and
              the one IAIProvider over it. Depends on Core, AI.Wire and the
              server tier's HTTP transport only. -->
+        <Compile Include="Server\AIAuditEvents.fs" />
         <Compile Include="Server\Providers\ProviderCall.fs" />
     </ItemGroup>
     <ItemGroup>

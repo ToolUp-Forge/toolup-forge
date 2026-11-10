@@ -10,6 +10,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.Compose
 
 // ─── Phase 6h.A — conversation-export audit beacon ──────────────
@@ -80,11 +81,13 @@ let exportAuditHandler: HttpHandler =
                         auditLog.Record(
                             StorageScope.auditScope scope,
                             ToolUp.Platform.Config.Background.requestActor "ConversationExport" ctx,
-                            ConversationExported {
-                                ConversationId = string req.ConversationId
-                                IncludeToolDetails = req.IncludeToolDetails
-                                ExportedBy = resolveUserId ctx
-                            }
+                            AIAuditEvent.event (
+                                ConversationExported {
+                                    ConversationId = string req.ConversationId
+                                    IncludeToolDetails = req.IncludeToolDetails
+                                    ExportedBy = resolveUserId ctx
+                                }
+                            )
                         )
                         |> AuditRow.orRefuse
                 | _ -> ()

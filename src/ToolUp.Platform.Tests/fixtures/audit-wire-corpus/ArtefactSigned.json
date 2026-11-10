@@ -1,0 +1,15 @@
+{
+  "kind": "ArtefactSigned",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"KeyId\":\"\",\"Algorithm\":\"\",\"ArtefactSha256\":\"\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"KeyId\":\"\",\"Algorithm\":\"\",\"ArtefactSha256\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ArtefactSigned\":{\"Actor\":\"\",\"KeyId\":\"\",\"Algorithm\":\"\",\"ArtefactSha256\":\"\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"KeyId\":\"s\",\"Algorithm\":\"s\",\"ArtefactSha256\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"KeyId\":\"s\",\"Algorithm\":\"s\",\"ArtefactSha256\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ArtefactSigned\":{\"Actor\":\"s\",\"KeyId\":\"s\",\"Algorithm\":\"s\",\"ArtefactSha256\":\"s\"}}"
+    }
+  ]
+}

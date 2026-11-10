@@ -10,6 +10,7 @@ open Microsoft.Extensions.Primitives
 open Giraffe
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Infra
@@ -86,7 +87,7 @@ type private CapturingAuditLog() =
         lock events (fun () ->
             events
             |> Seq.choose (function
-                | PeerCallCompleted p -> Some p
+                | PeerAudit(PeerCallCompleted p) -> Some p
                 | _ -> None)
             |> List.ofSeq)
 

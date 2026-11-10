@@ -4,6 +4,7 @@ open System
 open System.Text
 open Expecto
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -109,7 +110,7 @@ type private CapturingAuditLog() =
         rows
         |> Seq.choose (fun (_, e) ->
             match e with
-            | ContentScanned p -> Some p
+            | KnowledgeAudit(ContentScanned p) -> Some p
             | _ -> None)
         |> List.ofSeq
 

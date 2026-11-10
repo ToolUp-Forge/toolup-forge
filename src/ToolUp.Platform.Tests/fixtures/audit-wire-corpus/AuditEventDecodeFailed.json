@@ -1,0 +1,15 @@
+{
+  "kind": "AuditEventDecodeFailed",
+  "samples": [
+    {
+      "row": "{\"SinkName\":\"\",\"BatchScopeId\":\"\",\"BatchSize\":0,\"FailedCount\":0,\"FailedEventIds\":[],\"FailedEventTypes\":[],\"FailedAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"SinkName\":\"\",\"BatchScopeId\":\"\",\"BatchSize\":0,\"FailedCount\":0,\"FailedEventIds\":[],\"FailedEventTypes\":[],\"FailedAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AuditEventDecodeFailed\":{\"SinkName\":\"\",\"BatchScopeId\":\"\",\"BatchSize\":0,\"FailedCount\":0,\"FailedEventIds\":[],\"FailedEventTypes\":[],\"FailedAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"SinkName\":\"s\",\"BatchScopeId\":\"s\",\"BatchSize\":7,\"FailedCount\":7,\"FailedEventIds\":[\"00000000-0000-0000-0000-000000000874\"],\"FailedEventTypes\":[\"s\"],\"FailedAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"SinkName\":\"s\",\"BatchScopeId\":\"s\",\"BatchSize\":7,\"FailedCount\":7,\"FailedEventIds\":[\"00000000-0000-0000-0000-000000000874\"],\"FailedEventTypes\":[\"s\"],\"FailedAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AuditEventDecodeFailed\":{\"SinkName\":\"s\",\"BatchScopeId\":\"s\",\"BatchSize\":7,\"FailedCount\":7,\"FailedEventIds\":[\"00000000-0000-0000-0000-000000000874\"],\"FailedEventTypes\":[\"s\"],\"FailedAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

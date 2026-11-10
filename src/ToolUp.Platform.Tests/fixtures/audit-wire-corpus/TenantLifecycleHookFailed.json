@@ -1,0 +1,15 @@
+{
+  "kind": "TenantLifecycleHookFailed",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"Actor\":\"\",\"Phase\":\"\",\"HookName\":\"\",\"Error\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"Actor\":\"\",\"Phase\":\"\",\"HookName\":\"\",\"Error\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantLifecycleHookFailed\":{\"ScopeId\":\"\",\"Actor\":\"\",\"Phase\":\"\",\"HookName\":\"\",\"Error\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"Phase\":\"s\",\"HookName\":\"s\",\"Error\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"Phase\":\"s\",\"HookName\":\"s\",\"Error\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantLifecycleHookFailed\":{\"ScopeId\":\"s\",\"Actor\":\"s\",\"Phase\":\"s\",\"HookName\":\"s\",\"Error\":\"s\"}}"
+    }
+  ]
+}

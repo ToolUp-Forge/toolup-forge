@@ -329,6 +329,23 @@ ToolUp.RAG.RAGVacuumJobHandler+RAGVacuumDeps.Retention : System.TimeSpan { get }
 ToolUp.RAG.RAGVacuumJobHandler+RAGVacuumDeps.VectorStore : ToolUp.Platform.Infra.IVectorStore+IVectorStore { get }
 ToolUp.RAG.RAGVacuumJobHandler+RAGVacuumJobHandler (class)
 ToolUp.RAG.RAGVacuumJobHandler+RAGVacuumJobHandler..ctor(ToolUp.RAG.RAGVacuumJobHandler+RAGVacuumDeps)
+ToolUp.RAG.RagAuditEvents (class)
+ToolUp.RAG.RagAuditEvents.|RagAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RagAuditEvents+RagAuditEvent]
+ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload (class)
+ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload..ctor(System.String, System.String, System.Int32, System.Int32, System.String)
+ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload.ChunkCount : System.Int32 { get }
+ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload.DocId : System.String { get }
+ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload.QueueCapacity : System.Int32 { get }
+ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload.Reason : System.String { get }
+ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload.ScopeKey : System.String { get }
+ToolUp.RAG.RagAuditEvents+RagAuditEvent (class)
+ToolUp.RAG.RagAuditEvents+RagAuditEvent.Item : ToolUp.RAG.RagAuditEvents+KnowledgeIngestionDroppedPayload { get }
+ToolUp.RAG.RagAuditEvents+RagAuditEvent.Tag : System.Int32 { get }
+ToolUp.RAG.RagAuditEvents+RagAuditEventModule (class)
+ToolUp.RAG.RagAuditEvents+RagAuditEventModule.Registrant : System.String (literal)
+ToolUp.RAG.RagAuditEvents+RagAuditEventModule.event(ToolUp.RAG.RagAuditEvents+RagAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.RAG.RagAuditEvents+RagAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.RAG.RagAuditEvents+RagAuditEvent] { get }
+ToolUp.RAG.RagAuditEvents+RagAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RagAuditEvents+RagAuditEvent]
 ToolUp.RAG.RagConfigValidator (class)
 ToolUp.RAG.RagConfigValidator+ChunkingConfigValidator (class)
 ToolUp.RAG.RagConfigValidator+ChunkingConfigValidator..ctor(System.String, ToolUp.RAG.Chunking+ChunkingConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

@@ -1,0 +1,15 @@
+{
+  "kind": "DataSubjectRequest",
+  "samples": [
+    {
+      "row": "{\"RequestId\":\"\",\"Kind\":\"\",\"SubjectUserId\":\"\",\"Actor\":\"\",\"Reason\":\"\",\"Properties\":{}}",
+      "rowWithActor": "{\"RequestId\":\"\",\"Kind\":\"\",\"SubjectUserId\":\"\",\"Actor\":\"\",\"Reason\":\"\",\"Properties\":{},\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DataSubjectRequest\":{\"RequestId\":\"\",\"Kind\":\"\",\"SubjectUserId\":\"\",\"Actor\":\"\",\"Reason\":\"\",\"Properties\":{}}}"
+    },
+    {
+      "row": "{\"RequestId\":\"s\",\"Kind\":\"s\",\"SubjectUserId\":\"s\",\"Actor\":\"s\",\"Reason\":\"s\",\"Properties\":{}}",
+      "rowWithActor": "{\"RequestId\":\"s\",\"Kind\":\"s\",\"SubjectUserId\":\"s\",\"Actor\":\"s\",\"Reason\":\"s\",\"Properties\":{},\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DataSubjectRequest\":{\"RequestId\":\"s\",\"Kind\":\"s\",\"SubjectUserId\":\"s\",\"Actor\":\"s\",\"Reason\":\"s\",\"Properties\":{}}}"
+    }
+  ]
+}

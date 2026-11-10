@@ -1,0 +1,15 @@
+{
+  "kind": "ModelRegistrationObserverFailed",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"Observer\":\"\",\"Reason\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"Observer\":\"\",\"Reason\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelRegistrationObserverFailed\":{\"CompositeKeyHash\":\"\",\"Observer\":\"\",\"Reason\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"Observer\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"Observer\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelRegistrationObserverFailed\":{\"CompositeKeyHash\":\"s\",\"Observer\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

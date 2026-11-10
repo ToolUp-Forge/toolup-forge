@@ -1,0 +1,15 @@
+{
+  "kind": "ShareTokenRevoked",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ShareTokenRevoked\":{\"UserId\":\"\",\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ShareTokenRevoked\":{\"UserId\":\"s\",\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\"}}"
+    }
+  ]
+}

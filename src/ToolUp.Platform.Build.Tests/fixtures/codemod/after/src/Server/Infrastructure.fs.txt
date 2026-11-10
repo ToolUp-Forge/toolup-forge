@@ -52,3 +52,9 @@ let envelope scopeId at event = AuditEnvelope.create AuditSubject.unattributed s
 let sink (audit: IAuditLog) = audit
 
 let quiet auditLog = match auditLog with Some log -> log | None -> NoOpAuditLog() :> IAuditLog
+
+let recordSubmission (log: IAuditLog) teamId actor payload =
+    AuditRow.emit log (AuditScope.team teamId) actor (AuditEvent.FormSubmitted payload)
+
+let readArchiveLine (line: string) =
+    JsonSerializer.Deserialize<ArchiveLine>(line, PlatformJson.options)

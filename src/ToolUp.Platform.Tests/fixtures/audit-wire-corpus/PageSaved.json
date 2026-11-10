@@ -1,0 +1,15 @@
+{
+  "kind": "PageSaved",
+  "samples": [
+    {
+      "row": "{\"Module\":\"\",\"Page\":\"\",\"Layer\":\"\",\"Principal\":\"\",\"ActorId\":\"\",\"Act\":\"\",\"OpCount\":0,\"OpsHash\":\"\",\"DocumentHash\":\"\",\"ChainHead\":\"\",\"Version\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Module\":\"\",\"Page\":\"\",\"Layer\":\"\",\"Principal\":\"\",\"ActorId\":\"\",\"Act\":\"\",\"OpCount\":0,\"OpsHash\":\"\",\"DocumentHash\":\"\",\"ChainHead\":\"\",\"Version\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PageSaved\":{\"Module\":\"\",\"Page\":\"\",\"Layer\":\"\",\"Principal\":\"\",\"ActorId\":\"\",\"Act\":\"\",\"OpCount\":0,\"OpsHash\":\"\",\"DocumentHash\":\"\",\"ChainHead\":\"\",\"Version\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"Module\":\"s\",\"Page\":\"s\",\"Layer\":\"s\",\"Principal\":\"s\",\"ActorId\":\"s\",\"Act\":\"s\",\"OpCount\":7,\"OpsHash\":\"s\",\"DocumentHash\":\"s\",\"ChainHead\":\"s\",\"Version\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"Module\":\"s\",\"Page\":\"s\",\"Layer\":\"s\",\"Principal\":\"s\",\"ActorId\":\"s\",\"Act\":\"s\",\"OpCount\":7,\"OpsHash\":\"s\",\"DocumentHash\":\"s\",\"ChainHead\":\"s\",\"Version\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PageSaved\":{\"Module\":\"s\",\"Page\":\"s\",\"Layer\":\"s\",\"Principal\":\"s\",\"ActorId\":\"s\",\"Act\":\"s\",\"OpCount\":7,\"OpsHash\":\"s\",\"DocumentHash\":\"s\",\"ChainHead\":\"s\",\"Version\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

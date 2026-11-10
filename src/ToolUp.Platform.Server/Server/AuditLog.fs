@@ -2,6 +2,8 @@ module ToolUp.Platform.Audit.AuditLog
 
 open System
 open System.Text.Json
+open System.Text.Json.Serialization
+open Microsoft.FSharp.Reflection
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.Infra
@@ -37,11 +39,21 @@ open ToolUp.Platform.BlobStorage
 
 let private auditJsonOptions = PlatformJson.options
 
-let private toAuditJson (value: 'T) =
-    JsonSerializer.Serialize(value, auditJsonOptions)
+/// The one payload serialisation every audit kind's codec uses — the
+/// platform's and every companion family's — so a kind's bytes do not
+/// depend on which assembly declares it.
+module AuditPayloadJson =
+    /// A payload record's JSON, as stored.
+    let write (value: 'T) : string =
+        JsonSerializer.Serialize(value, auditJsonOptions)
 
-let private fromAuditJson<'T> (json: string) =
-    JsonSerializer.Deserialize<'T>(json, auditJsonOptions)
+    /// A stored payload back to its record.
+    let read<'T> (json: string) : 'T =
+        JsonSerializer.Deserialize<'T>(json, auditJsonOptions)
+
+let private toAuditJson (value: 'T) = AuditPayloadJson.write value
+
+let private fromAuditJson<'T> (json: string) = AuditPayloadJson.read<'T> json
 
 // Phase 1006 — a publication reader's `SurfaceDenied` row carries two
 // optional fields (`RouteClass`, `ReaderRoles`) that are `None` for every
@@ -108,26 +120,17 @@ module AuditMetrics =
     [<Literal>]
     let ChainHeadUnreadableTotal = "toolup.audit.chain_head_unreadable_total"
 
-// ─── Phase 114 — audit-event codec registry ──────────────────────
+// ─── The platform's audit-event codec ───────────────────────────
 //
-// One declarative table mapping every `AuditEvent` union case to its
-// wire `EventType` discriminator + payload encode/decode. This is the
-// single source of truth the three formerly-hand-maintained mirrors all
-// consume:
-//
-//   * `serialiseAuditEvent` (the write path — was EventStoreAuditLog.serialise)
-//   * `decodeAuditEvent` (the `GetAuditTrail` read path)
-//   * `AuditReplicator`'s batch decode (was a 21-case inline match that
-//     dropped 59 of ~80 event types into a silent `| _ -> None`)
-//
-// Before this phase the three lists drifted: `serialise` was missing 7
-// cases (every emission threw + was logged-and-lost), `decodeAuditEvent`
-// silently dropped 11, and the replicator dropped 59 from external SIEM
-// sinks with no signal. The reflection-based exhaustiveness test in
-// `ToolUp.Platform.Tests` (`AuditEventRegistryTests`) enumerates the
-// union via `FSharpType.GetUnionCases` and fails the build if any case
-// lacks a registry entry — adding a new `AuditEvent` case without a row
-// here is a test failure, not a runtime loss (GP 6 + GP 9).
+// The platform is one registrant of the open audit-event registry
+// (`AuditEventRegistry` in Core): its kinds are the cases of the
+// `AuditEvent` union, its encoder is one compiler-checked `match` over
+// them, and its decoders are a table keyed by wire kind. Every other kind
+// is a companion's or a module's, and arrives here as `Opaque` (kind +
+// payload bytes): encoded verbatim, decoded to an `Opaque` value that
+// carries its id and its raw payload, never a failure. The write path,
+// the `GetAuditTrail` read path and the replicator all share the one
+// codec, and the wire corpus in the test pack holds every kind's bytes.
 //
 // ─── Phase 625 — the `Artifact` / `Artefact` decision record ──────
 //
@@ -198,1900 +201,464 @@ module AuditMetrics =
 // status quo (the Phase 40 case already carried a disambiguating doc
 // comment) and it did not prevent the confusion that raised this phase.
 
-/// One row of the audit-event codec registry: the wire `EventType`
-/// discriminator plus the encode/decode pair for that case's payload.
-/// `internal` so the replicator (same assembly) and the test pack
-/// (InternalsVisibleTo) share the one table.
-type internal AuditEventCodec = {
-    /// Wire-format `EventType` discriminator. Always equal to
-    /// `AuditEvent.eventTypeName` for this entry's case — that identity
-    /// is what the decode lookup and the exhaustiveness gate rest on.
-    /// It is NOT necessarily the F# case identifier: the three Phase 625
-    /// `ModuleArtefact*` rows deliberately emit their historical
-    /// `"Artifact*"` strings (see the decision record above).
-    EventType: string
-    /// Serialise THIS case's payload to JSON. Returns `Some json` when
-    /// `audit` is this entry's case, `None` otherwise — the table is
-    /// scanned with `List.tryPick` so the first matching entry wins.
-    TryEncode: AuditEvent -> string option
-    /// Decode a persisted payload JSON back into this entry's
-    /// `AuditEvent` case. May throw on malformed JSON; callers wrap in
-    /// `try/with` so a single corrupt blob never breaks a whole query or
-    /// replication batch.
-    Decode: string -> AuditEvent
+/// The platform's encoder: one compiler-checked `match` over the union,
+/// answering a case's payload JSON. The union's tag switch IS the lookup by
+/// kind, so nothing is scanned. An `Opaque` event's payload is written as
+/// it was received, byte-for-byte: a companion's kind, or a stored kind
+/// this deployment no longer registers, is re-exportable unchanged.
+let internal serialiseAuditEvent (audit: AuditEvent) : string =
+    match audit with
+    | UserLoggedIn p -> toAuditJson p
+    | TeamCreated p -> toAuditJson p
+    | MemberAdded p -> toAuditJson p
+    | MemberRemoved p -> toAuditJson p
+    | MemberRoleChanged p -> toAuditJson p
+    | FileUploaded p -> toAuditJson p
+    | FileDeleted p -> toAuditJson p
+    | FileReprocessed p -> toAuditJson p
+    | DataStoreReset p -> toAuditJson p
+    | SessionStoreReset p -> toAuditJson p
+    | AnalysisRun p -> toAuditJson p
+    | PermissionChanged p -> toAuditJson p
+    | NotificationSent p -> toAuditJson p
+    | NotificationDeliveryFailed p -> toAuditJson p
+    | HealthStateChanged p -> toAuditJson p
+    | EncryptionKeyCreated p -> toAuditJson p
+    | EncryptionKeyRotated p -> toAuditJson p
+    | EncryptionKeyDestroyed p -> toAuditJson p
+    | EncryptionKeyDestroyAcknowledged p -> toAuditJson p
+    | EncryptionKeyUnreadable p -> toAuditJson p
+    | EntityCreated p -> toAuditJson p
+    | EntityUpdated p -> toAuditJson p
+    | EntityDeleted p -> toAuditJson p
+    | AuditSinkDelivered p -> toAuditJson p
+    | AuditSinkFailed p -> toAuditJson p
+    | AuditSinkDeadLettered p -> toAuditJson p
+    | AuditEventDecodeFailed p -> toAuditJson p
+    | NotificationSilentlySkipped p -> toAuditJson p
+    | OAuthConnected p -> toAuditJson p
+    | OAuthDisconnected p -> toAuditJson p
+    | OAuthRefreshFailed p -> toAuditJson p
+    | OAuth1aConnected p -> toAuditJson p
+    | OAuth1aDisconnected p -> toAuditJson p
+    | OAuth1aSigningFailed p -> toAuditJson p
+    | OAuthTokenRefreshed p -> toAuditJson p
+    | OAuthTokenRefreshFailed p -> toAuditJson p
+    | OAuthRefreshTokenInvalidated p -> toAuditJson p
+    | OAuthRefreshDeadLettered p -> toAuditJson p
+    | PlatformAdminAssigned p -> toAuditJson p
+    | PlatformAdminRevoked p -> toAuditJson p
+    | ShareTokenIssued p -> toAuditJson p
+    | ShareTokenUsed p -> toAuditJson p
+    | ShareTokenRevoked p -> toAuditJson p
+    | ServiceAccountCreated p -> toAuditJson p
+    | ServiceAccountPermissionsChanged p -> toAuditJson p
+    | ServiceAccountTokenMinted p -> toAuditJson p
+    | ServiceAccountTokenRevoked p -> toAuditJson p
+    | ServiceAccountStatusChanged p -> toAuditJson p
+    | SessionRevoked p -> toAuditJson p
+    | AllSessionsRevoked p -> toAuditJson p
+    | ConfigDrift p -> toAuditJson p
+    | DiagnosticBundleAccessed p -> toAuditJson p
+    | RateLimitWaited p -> toAuditJson p
+    | RateLimitRefused p -> toAuditJson p
+    | ComputeBudgetDenied p -> toAuditJson p
+    | ComputeBudgetWarning p -> toAuditJson p
+    | DataSubjectRequest p -> toAuditJson p
+    | ConversationStarted p -> toAuditJson p
+    | ConversationTurnAppended p -> toAuditJson p
+    | ConversationCompleted p -> toAuditJson p
+    | ConversationErased p -> toAuditJson p
+    | TeamCreationDenied p -> toAuditJson p
+    | TeamArchived p -> toAuditJson p
+    | TeamRestored p -> toAuditJson p
+    | TeamDeleted p -> toAuditJson p
+    | TeamOwnershipTransferred p -> toAuditJson p
+    | TeamInviteIssued p -> toAuditJson p
+    | TeamInviteAccepted p -> toAuditJson p
+    | TeamInviteAcceptedFromPending p -> toAuditJson p
+    | TeamInviteAcceptedFromPendingFailed p -> toAuditJson p
+    | TeamInviteRevoked p -> toAuditJson p
+    | TeamInviteRedeemed p -> toAuditJson p
+    | TeamInviteExpired p -> toAuditJson p
+    | ConsentRecorded p -> toAuditJson p
+    | AdImpressionRecorded p -> toAuditJson p
+    | AdClickRecorded p -> toAuditJson p
+    | PremiumGranted(subjectUserId, grantor, reason, occurredAt) ->
+        toAuditJson {
+            SubjectUserId = subjectUserId
+            Grantor = grantor
+            Reason = reason
+            OccurredAt = occurredAt
+        }
+    | PremiumRevoked(subjectUserId, grantor, reason, occurredAt) ->
+        toAuditJson {
+            SubjectUserId = subjectUserId
+            Grantor = grantor
+            Reason = reason
+            OccurredAt = occurredAt
+        }
+    | AdSlotConfigCreated(slotId, actor, occurredAt) ->
+        toAuditJson {
+            SlotId = slotId
+            Actor = actor
+            OccurredAt = occurredAt
+        }
+    | AdSlotConfigUpdated(slotId, actor, occurredAt) ->
+        toAuditJson {
+            SlotId = slotId
+            Actor = actor
+            OccurredAt = occurredAt
+        }
+    | AdSlotConfigDeleted(slotId, actor, occurredAt) ->
+        toAuditJson {
+            SlotId = slotId
+            Actor = actor
+            OccurredAt = occurredAt
+        }
+    | AnonymousSessionMigrated p -> toAuditJson p
+    | AuthScopeResolutionFailed p -> toAuditJson p
+    | SurfaceDenied p -> encodeSurfaceDenied p
+    | ModuleArtefactSigned p -> toAuditJson p
+    | ModuleArtefactVerified p -> toAuditJson p
+    | ModuleArtefactRejected p -> toAuditJson p
+    | SyntheticSampleGenerated p -> toAuditJson p
+    | SchemaOnlyAccessAttempted p -> toAuditJson p
+    | GrantPolicyRefused p -> toAuditJson p
+    | UnconsentedGrantRefused p -> toAuditJson p
+    | GrantRecorded p -> toAuditJson p
+    | AdminMutationProposed p -> toAuditJson p
+    | AdminMutationApproved p -> toAuditJson p
+    | AdminMutationRejected p -> toAuditJson p
+    | AdminMutationApprovalRefused p -> toAuditJson p
+    | AdminMutationExpired p -> toAuditJson p
+    | GrantConsentProposed p -> toAuditJson p
+    | GrantConsentApproved p -> toAuditJson p
+    | GrantConsentRevoked p -> toAuditJson p
+    | GrantConsentVerificationDenied p -> toAuditJson p
+    | ClassifiedFieldRead p -> toAuditJson p
+    | ClassifiedFieldWritten p -> toAuditJson p
+    | TenantProvisioned p -> toAuditJson p
+    | TenantDeprovisioned p -> toAuditJson p
+    | TenantLifecycleHookFailed p -> toAuditJson p
+    | TenantDataExported p -> toAuditJson p
+    | TenantOffboardConfirmationRequested p -> toAuditJson p
+    | TenantOffboardConfirmationApproved p -> toAuditJson p
+    | TenantOffboardConfirmationRefused p -> toAuditJson p
+    | TenantDeprovisionScheduled p -> toAuditJson p
+    | TenantDeprovisionCancelled p -> toAuditJson p
+    | RemotingMethodAudited p -> toAuditJson p
+    | AuthorizationDenied p -> toAuditJson p
+    | HostActionDispatched p -> toAuditJson p
+    | EgressBlocked p -> toAuditJson p
+    | EgressDenied p -> toAuditJson p
+    | KnowledgeIndexLoadFailed p -> toAuditJson p
+    | OrphanedContentBlobReclaimed p -> toAuditJson p
+    | OrphanSweepCompleted p -> toAuditJson p
+    | ModelFitStarted p -> toAuditJson p
+    | ModelFitCompleted p -> toAuditJson p
+    | ModelFitGateFailed p -> toAuditJson p
+    | ModelFitBatchSubmitted p -> toAuditJson p
+    | ModelArtifactRegistered p -> toAuditJson p
+    | ModelArtifactTransitioned p -> toAuditJson p
+    | ModelArtifactTransitionDenied p -> toAuditJson p
+    | ModelArtifactTransitionAttributed p -> toAuditJson p
+    | ModelArtifactProvenanceAttached p -> toAuditJson p
+    | ModelArtifactPromoted p -> toAuditJson p
+    | ModelScored p -> toAuditJson p
+    | ModelScoreRefused p -> toAuditJson p
+    | ModelEvaluated p -> toAuditJson p
+    | ModelPromotionPolicyEvaluated p -> toAuditJson p
+    | ModelArtifactSuperseded p -> toAuditJson p
+    | ModelRegistrationObserverFailed p -> toAuditJson p
+    | DatasetSpillCreated p -> toAuditJson p
+    | DatasetSpillDeleted p -> toAuditJson p
+    | DatasetRevintaged p -> toAuditJson p
+    | DatasetDeclassified p -> toAuditJson p
+    | DatasetPolicyDenied p -> toAuditJson p
+    | SchemaProposed p -> toAuditJson p
+    | SchemaApproved p -> toAuditJson p
+    | SchemaChanged p -> toAuditJson p
+    | ExternalCallbackResolved p -> toAuditJson p
+    | ExternalCallbackRejected p -> toAuditJson p
+    | CompositionVerificationRecorded p -> toAuditJson p
+    | CompositionCapabilityRefused p -> toAuditJson p
+    | GroundingEnvelopeMutated p -> toAuditJson p
+    | GroundingMutationRefused p -> toAuditJson p
+    | DeploymentVerified p -> toAuditJson p
+    | EvidenceChainWalked p -> toAuditJson p
+    | MediaKeyDelivered p -> toAuditJson p
+    | BlobStorageAuthFailed p -> toAuditJson p
+    | BackupCompleted p -> toAuditJson p
+    | BackupFailed p -> toAuditJson p
+    | RestoreDrillPassed p -> toAuditJson p
+    | RestoreDrillFailed p -> toAuditJson p
+    | ContactCreated p -> toAuditJson p
+    | ContactUpdated p -> toAuditJson p
+    | ContactDeleted p -> toAuditJson p
+    | ContactOptInRecorded p -> toAuditJson p
+    | ContactOptInWithdrawn p -> toAuditJson p
+    | NotificationDeliveryRefused p -> toAuditJson p
+    | PublicationReaderSignedIn p -> toAuditJson p
+    | PublicationReaderGranted p -> toAuditJson p
+    | PublicationReaderRevoked p -> toAuditJson p
+    | PageSaved p -> toAuditJson p
+    | PageReseeded p -> toAuditJson p
+    | PageDetached p -> toAuditJson p
+    | PageWriteRefused p -> toAuditJson p
+    | Opaque o -> o.Payload
+
+/// The platform's decoders, keyed by wire kind. A kind's wire id is NOT
+/// always its F# case identifier: the three `ModuleArtefact*` cases keep
+/// their historical `Artifact*` strings (the decision record above).
+let internal auditDecoderByType: Map<string, string -> AuditEvent> =
+    Map.ofList [
+        "UserLoggedIn", (fun j -> UserLoggedIn(fromAuditJson<UserLoggedInPayload> j))
+        "TeamCreated", (fun j -> TeamCreated(fromAuditJson<TeamCreatedPayload> j))
+        "MemberAdded", (fun j -> MemberAdded(fromAuditJson<MemberAddedPayload> j))
+        "MemberRemoved", (fun j -> MemberRemoved(fromAuditJson<MemberRemovedPayload> j))
+        "MemberRoleChanged", (fun j -> MemberRoleChanged(fromAuditJson<MemberRoleChangedPayload> j))
+        "FileUploaded", (fun j -> FileUploaded(fromAuditJson<FileUploadedPayload> j))
+        "FileDeleted", (fun j -> FileDeleted(fromAuditJson<FileDeletedPayload> j))
+        "FileReprocessed", (fun j -> FileReprocessed(fromAuditJson<FileReprocessedPayload> j))
+        "DataStoreReset", (fun j -> DataStoreReset(fromAuditJson<DataStoreResetPayload> j))
+        "SessionStoreReset", (fun j -> SessionStoreReset(fromAuditJson<SessionStoreResetPayload> j))
+        "AnalysisRun", (fun j -> AnalysisRun(fromAuditJson<AnalysisRunPayload> j))
+        "PermissionChanged", (fun j -> PermissionChanged(fromAuditJson<PermissionChangedPayload> j))
+        "NotificationSent", (fun j -> NotificationSent(fromAuditJson<NotificationSentPayload> j))
+        "NotificationDeliveryFailed",
+        (fun j -> NotificationDeliveryFailed(fromAuditJson<NotificationDeliveryFailedPayload> j))
+        "HealthStateChanged", (fun j -> HealthStateChanged(fromAuditJson<HealthStateChangedPayload> j))
+        "EncryptionKeyCreated", (fun j -> EncryptionKeyCreated(fromAuditJson<EncryptionKeyEventPayload> j))
+        "EncryptionKeyRotated", (fun j -> EncryptionKeyRotated(fromAuditJson<EncryptionKeyEventPayload> j))
+        "EncryptionKeyDestroyed", (fun j -> EncryptionKeyDestroyed(fromAuditJson<EncryptionKeyEventPayload> j))
+        "EncryptionKeyDestroyAcknowledged",
+        (fun j -> EncryptionKeyDestroyAcknowledged(fromAuditJson<EncryptionKeyDestroyAckPayload> j))
+        "EncryptionKeyUnreadable", (fun j -> EncryptionKeyUnreadable(fromAuditJson<EncryptionKeyUnreadablePayload> j))
+        "EntityCreated", (fun j -> EntityCreated(fromAuditJson<EntityLifecycleEventPayload> j))
+        "EntityUpdated", (fun j -> EntityUpdated(fromAuditJson<EntityLifecycleEventPayload> j))
+        "EntityDeleted", (fun j -> EntityDeleted(fromAuditJson<EntityLifecycleEventPayload> j))
+        "AuditSinkDelivered", (fun j -> AuditSinkDelivered(fromAuditJson<AuditSinkDeliveredPayload> j))
+        "AuditSinkFailed", (fun j -> AuditSinkFailed(fromAuditJson<AuditSinkFailedPayload> j))
+        "AuditSinkDeadLettered", (fun j -> AuditSinkDeadLettered(fromAuditJson<AuditSinkDeadLetteredPayload> j))
+        "AuditEventDecodeFailed", (fun j -> AuditEventDecodeFailed(fromAuditJson<AuditEventDecodeFailedPayload> j))
+        "NotificationSilentlySkipped",
+        (fun j -> NotificationSilentlySkipped(fromAuditJson<NotificationSilentlySkippedPayload> j))
+        "OAuthConnected", (fun j -> OAuthConnected(fromAuditJson<OAuthConnectedPayload> j))
+        "OAuthDisconnected", (fun j -> OAuthDisconnected(fromAuditJson<OAuthDisconnectedPayload> j))
+        "OAuthRefreshFailed", (fun j -> OAuthRefreshFailed(fromAuditJson<OAuthRefreshFailedPayload> j))
+        "OAuth1aConnected", (fun j -> OAuth1aConnected(fromAuditJson<OAuth1aConnectedPayload> j))
+        "OAuth1aDisconnected", (fun j -> OAuth1aDisconnected(fromAuditJson<OAuth1aDisconnectedPayload> j))
+        "OAuth1aSigningFailed", (fun j -> OAuth1aSigningFailed(fromAuditJson<OAuth1aSigningFailedPayload> j))
+        "OAuthTokenRefreshed", (fun j -> OAuthTokenRefreshed(fromAuditJson<OAuthTokenRefreshedPayload> j))
+        "OAuthTokenRefreshFailed", (fun j -> OAuthTokenRefreshFailed(fromAuditJson<OAuthTokenRefreshFailedPayload> j))
+        "OAuthRefreshTokenInvalidated",
+        (fun j -> OAuthRefreshTokenInvalidated(fromAuditJson<OAuthRefreshTokenInvalidatedPayload> j))
+        "OAuthRefreshDeadLettered",
+        (fun j -> OAuthRefreshDeadLettered(fromAuditJson<OAuthRefreshDeadLetteredPayload> j))
+        "PlatformAdminAssigned", (fun j -> PlatformAdminAssigned(fromAuditJson<PlatformAdminAssignedPayload> j))
+        "PlatformAdminRevoked", (fun j -> PlatformAdminRevoked(fromAuditJson<PlatformAdminRevokedPayload> j))
+        "ShareTokenIssued", (fun j -> ShareTokenIssued(fromAuditJson<ShareTokenIssuedPayload> j))
+        "ShareTokenUsed", (fun j -> ShareTokenUsed(fromAuditJson<ShareTokenUsedPayload> j))
+        "ShareTokenRevoked", (fun j -> ShareTokenRevoked(fromAuditJson<ShareTokenRevokedPayload> j))
+        "ServiceAccountCreated", (fun j -> ServiceAccountCreated(fromAuditJson<ServiceAccountCreatedPayload> j))
+        "ServiceAccountPermissionsChanged",
+        (fun j -> ServiceAccountPermissionsChanged(fromAuditJson<ServiceAccountPermissionsChangedPayload> j))
+        "ServiceAccountTokenMinted",
+        (fun j -> ServiceAccountTokenMinted(fromAuditJson<ServiceAccountTokenMintedPayload> j))
+        "ServiceAccountTokenRevoked",
+        (fun j -> ServiceAccountTokenRevoked(fromAuditJson<ServiceAccountTokenRevokedPayload> j))
+        "ServiceAccountStatusChanged",
+        (fun j -> ServiceAccountStatusChanged(fromAuditJson<ServiceAccountStatusChangedPayload> j))
+        "SessionRevoked", (fun j -> SessionRevoked(fromAuditJson<SessionRevokedPayload> j))
+        "AllSessionsRevoked", (fun j -> AllSessionsRevoked(fromAuditJson<AllSessionsRevokedPayload> j))
+        "ConfigDrift", (fun j -> ConfigDrift(fromAuditJson<ConfigDriftPayload> j))
+        "DiagnosticBundleAccessed",
+        (fun j -> DiagnosticBundleAccessed(fromAuditJson<DiagnosticBundleAccessedPayload> j))
+        "RateLimitWaited", (fun j -> RateLimitWaited(fromAuditJson<RateLimitWaitedPayload> j))
+        "RateLimitRefused", (fun j -> RateLimitRefused(fromAuditJson<RateLimitRefusedPayload> j))
+        "ComputeBudgetDenied", (fun j -> ComputeBudgetDenied(fromAuditJson<ComputeBudgetDeniedPayload> j))
+        "ComputeBudgetWarning", (fun j -> ComputeBudgetWarning(fromAuditJson<ComputeBudgetWarningPayload> j))
+        "DataSubjectRequest", (fun j -> DataSubjectRequest(fromAuditJson<DataSubjectRequestAuditPayload> j))
+        "ConversationStarted", (fun j -> ConversationStarted(fromAuditJson<ConversationStartedPayload> j))
+        "ConversationTurnAppended",
+        (fun j -> ConversationTurnAppended(fromAuditJson<ConversationTurnAppendedPayload> j))
+        "ConversationCompleted", (fun j -> ConversationCompleted(fromAuditJson<ConversationCompletedPayload> j))
+        "ConversationErased", (fun j -> ConversationErased(fromAuditJson<ConversationErasedPayload> j))
+        "TeamCreationDenied", (fun j -> TeamCreationDenied(fromAuditJson<TeamCreationDeniedPayload> j))
+        "TeamArchived", (fun j -> TeamArchived(fromAuditJson<TeamArchivedPayload> j))
+        "TeamRestored", (fun j -> TeamRestored(fromAuditJson<TeamRestoredPayload> j))
+        "TeamDeleted", (fun j -> TeamDeleted(fromAuditJson<TeamDeletedPayload> j))
+        "TeamOwnershipTransferred",
+        (fun j -> TeamOwnershipTransferred(fromAuditJson<TeamOwnershipTransferredPayload> j))
+        "TeamInviteIssued", (fun j -> TeamInviteIssued(fromAuditJson<TeamInviteIssuedPayload> j))
+        "TeamInviteAccepted", (fun j -> TeamInviteAccepted(fromAuditJson<TeamInviteAcceptedPayload> j))
+        "TeamInviteAcceptedFromPending",
+        (fun j -> TeamInviteAcceptedFromPending(fromAuditJson<TeamInviteAcceptedFromPendingPayload> j))
+        "TeamInviteAcceptedFromPendingFailed",
+        (fun j -> TeamInviteAcceptedFromPendingFailed(fromAuditJson<TeamInviteAcceptedFromPendingFailedPayload> j))
+        "TeamInviteRevoked", (fun j -> TeamInviteRevoked(fromAuditJson<TeamInviteRevokedPayload> j))
+        "TeamInviteRedeemed", (fun j -> TeamInviteRedeemed(fromAuditJson<TeamInviteRedeemedPayload> j))
+        "TeamInviteExpired", (fun j -> TeamInviteExpired(fromAuditJson<TeamInviteExpiredPayload> j))
+        "ConsentRecorded", (fun j -> ConsentRecorded(fromAuditJson<ConsentEvent> j))
+        "AdImpressionRecorded", (fun j -> AdImpressionRecorded(fromAuditJson<AdImpression> j))
+        "AdClickRecorded", (fun j -> AdClickRecorded(fromAuditJson<AdClick> j))
+        "PremiumGranted",
+        (fun j ->
+            let p = fromAuditJson<PremiumAuditPayload> j
+            PremiumGranted(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt))
+        "PremiumRevoked",
+        (fun j ->
+            let p = fromAuditJson<PremiumAuditPayload> j
+            PremiumRevoked(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt))
+        "AdSlotConfigCreated",
+        (fun j ->
+            let p = fromAuditJson<AdSlotConfigAuditPayload> j
+            AdSlotConfigCreated(p.SlotId, p.Actor, p.OccurredAt))
+        "AdSlotConfigUpdated",
+        (fun j ->
+            let p = fromAuditJson<AdSlotConfigAuditPayload> j
+            AdSlotConfigUpdated(p.SlotId, p.Actor, p.OccurredAt))
+        "AdSlotConfigDeleted",
+        (fun j ->
+            let p = fromAuditJson<AdSlotConfigAuditPayload> j
+            AdSlotConfigDeleted(p.SlotId, p.Actor, p.OccurredAt))
+        "AnonymousSessionMigrated",
+        (fun j -> AnonymousSessionMigrated(fromAuditJson<AnonymousSessionMigratedPayload> j))
+        "AuthScopeResolutionFailed", (fun j -> AuthScopeResolutionFailed(fromAuditJson<ScopeResolutionFailedPayload> j))
+        "SurfaceDenied", (fun j -> SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> j))
+        "ArtifactSigned", (fun j -> ModuleArtefactSigned(fromAuditJson<ModuleArtefactSignedPayload> j))
+        "ArtifactVerified", (fun j -> ModuleArtefactVerified(fromAuditJson<ModuleArtefactVerifiedPayload> j))
+        "ArtifactRejected", (fun j -> ModuleArtefactRejected(fromAuditJson<ModuleArtefactRejectedPayload> j))
+        "SyntheticSampleGenerated",
+        (fun j -> SyntheticSampleGenerated(fromAuditJson<SyntheticSampleGeneratedPayload> j))
+        "SchemaOnlyAccessAttempted",
+        (fun j -> SchemaOnlyAccessAttempted(fromAuditJson<SchemaOnlyAccessAttemptedPayload> j))
+        "GrantPolicyRefused", (fun j -> GrantPolicyRefused(fromAuditJson<GrantPolicyRefusedPayload> j))
+        "UnconsentedGrantRefused", (fun j -> UnconsentedGrantRefused(fromAuditJson<UnconsentedGrantRefusedPayload> j))
+        "GrantRecorded", (fun j -> GrantRecorded(fromAuditJson<GrantRecordedPayload> j))
+        "AdminMutationProposed", (fun j -> AdminMutationProposed(fromAuditJson<AdminMutationProposedPayload> j))
+        "AdminMutationApproved", (fun j -> AdminMutationApproved(fromAuditJson<AdminMutationApprovedPayload> j))
+        "AdminMutationRejected", (fun j -> AdminMutationRejected(fromAuditJson<AdminMutationRejectedPayload> j))
+        "AdminMutationApprovalRefused",
+        (fun j -> AdminMutationApprovalRefused(fromAuditJson<AdminMutationApprovalRefusedPayload> j))
+        "AdminMutationExpired", (fun j -> AdminMutationExpired(fromAuditJson<AdminMutationExpiredPayload> j))
+        "GrantConsentProposed", (fun j -> GrantConsentProposed(fromAuditJson<GrantConsentProposedPayload> j))
+        "GrantConsentApproved", (fun j -> GrantConsentApproved(fromAuditJson<GrantConsentApprovedPayload> j))
+        "GrantConsentRevoked", (fun j -> GrantConsentRevoked(fromAuditJson<GrantConsentRevokedPayload> j))
+        "GrantConsentVerificationDenied",
+        (fun j -> GrantConsentVerificationDenied(fromAuditJson<GrantConsentVerificationDeniedPayload> j))
+        "ClassifiedFieldRead", (fun j -> ClassifiedFieldRead(fromAuditJson<ClassifiedFieldReadPayload> j))
+        "ClassifiedFieldWritten", (fun j -> ClassifiedFieldWritten(fromAuditJson<ClassifiedFieldWrittenPayload> j))
+        "TenantProvisioned", (fun j -> TenantProvisioned(fromAuditJson<TenantProvisionedPayload> j))
+        "TenantDeprovisioned", (fun j -> TenantDeprovisioned(fromAuditJson<TenantDeprovisionedPayload> j))
+        "TenantLifecycleHookFailed",
+        (fun j -> TenantLifecycleHookFailed(fromAuditJson<TenantLifecycleHookFailedPayload> j))
+        "TenantDataExported", (fun j -> TenantDataExported(fromAuditJson<TenantDataExportedPayload> j))
+        "TenantOffboardConfirmationRequested",
+        (fun j -> TenantOffboardConfirmationRequested(fromAuditJson<TenantOffboardConfirmationRequestedPayload> j))
+        "TenantOffboardConfirmationApproved",
+        (fun j -> TenantOffboardConfirmationApproved(fromAuditJson<TenantOffboardConfirmationApprovedPayload> j))
+        "TenantOffboardConfirmationRefused",
+        (fun j -> TenantOffboardConfirmationRefused(fromAuditJson<TenantOffboardConfirmationRefusedPayload> j))
+        "TenantDeprovisionScheduled",
+        (fun j -> TenantDeprovisionScheduled(fromAuditJson<TenantDeprovisionScheduledPayload> j))
+        "TenantDeprovisionCancelled",
+        (fun j -> TenantDeprovisionCancelled(fromAuditJson<TenantDeprovisionCancelledPayload> j))
+        "RemotingMethodAudited", (fun j -> RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> j))
+        "AuthorizationDenied", (fun j -> AuthorizationDenied(fromAuditJson<AuthorizationDeniedPayload> j))
+        "HostActionDispatched", (fun j -> HostActionDispatched(fromAuditJson<HostActionDispatchedPayload> j))
+        "EgressBlocked", (fun j -> EgressBlocked(fromAuditJson<EgressBlockedPayload> j))
+        "EgressDenied", (fun j -> EgressDenied(fromAuditJson<EgressDeniedPayload> j))
+        "KnowledgeIndexLoadFailed",
+        (fun j -> KnowledgeIndexLoadFailed(fromAuditJson<KnowledgeIndexLoadFailedPayload> j))
+        "OrphanedContentBlobReclaimed",
+        (fun j -> OrphanedContentBlobReclaimed(fromAuditJson<OrphanedContentBlobReclaimedPayload> j))
+        "OrphanSweepCompleted", (fun j -> OrphanSweepCompleted(fromAuditJson<OrphanSweepCompletedPayload> j))
+        "ModelFitStarted", (fun j -> ModelFitStarted(fromAuditJson<ModelFitStartedPayload> j))
+        "ModelFitCompleted", (fun j -> ModelFitCompleted(fromAuditJson<ModelFitCompletedPayload> j))
+        "ModelFitGateFailed", (fun j -> ModelFitGateFailed(fromAuditJson<ModelFitGateFailedPayload> j))
+        "ModelFitBatchSubmitted", (fun j -> ModelFitBatchSubmitted(fromAuditJson<ModelFitBatchSubmittedPayload> j))
+        "ModelArtifactRegistered", (fun j -> ModelArtifactRegistered(fromAuditJson<ModelArtifactRegisteredPayload> j))
+        "ModelArtifactTransitioned",
+        (fun j -> ModelArtifactTransitioned(fromAuditJson<ModelArtifactTransitionedPayload> j))
+        "ModelArtifactTransitionDenied",
+        (fun j -> ModelArtifactTransitionDenied(fromAuditJson<ModelArtifactTransitionDeniedPayload> j))
+        "ModelArtifactTransitionAttributed",
+        (fun j -> ModelArtifactTransitionAttributed(fromAuditJson<ModelArtifactTransitionAttributedPayload> j))
+        "ModelArtifactProvenanceAttached",
+        (fun j -> ModelArtifactProvenanceAttached(fromAuditJson<ModelArtifactProvenanceAttachedPayload> j))
+        "ModelArtifactPromoted", (fun j -> ModelArtifactPromoted(fromAuditJson<ModelArtifactPromotionPayload> j))
+        "ModelScored", (fun j -> ModelScored(fromAuditJson<ModelScoredPayload> j))
+        "ModelScoreRefused", (fun j -> ModelScoreRefused(fromAuditJson<ModelScoreRefusedPayload> j))
+        "ModelEvaluated", (fun j -> ModelEvaluated(fromAuditJson<ModelEvaluatedPayload> j))
+        "ModelPromotionPolicyEvaluated",
+        (fun j -> ModelPromotionPolicyEvaluated(fromAuditJson<ModelPromotionPolicyEvaluatedPayload> j))
+        "ModelArtifactSuperseded", (fun j -> ModelArtifactSuperseded(fromAuditJson<ModelArtifactSupersededPayload> j))
+        "ModelRegistrationObserverFailed",
+        (fun j -> ModelRegistrationObserverFailed(fromAuditJson<ModelRegistrationObserverFailedPayload> j))
+        "DatasetSpillCreated", (fun j -> DatasetSpillCreated(fromAuditJson<DatasetSpillCreatedPayload> j))
+        "DatasetSpillDeleted", (fun j -> DatasetSpillDeleted(fromAuditJson<DatasetSpillDeletedPayload> j))
+        "DatasetRevintaged", (fun j -> DatasetRevintaged(fromAuditJson<DatasetRevintagedPayload> j))
+        "DatasetDeclassified", (fun j -> DatasetDeclassified(fromAuditJson<DatasetDeclassifiedPayload> j))
+        "DatasetPolicyDenied", (fun j -> DatasetPolicyDenied(fromAuditJson<DatasetPolicyDeniedPayload> j))
+        "SchemaProposed", (fun j -> SchemaProposed(fromAuditJson<SchemaProposedPayload> j))
+        "SchemaApproved", (fun j -> SchemaApproved(fromAuditJson<SchemaApprovedPayload> j))
+        "SchemaChanged", (fun j -> SchemaChanged(fromAuditJson<SchemaChangedPayload> j))
+        "ExternalCallbackResolved",
+        (fun j -> ExternalCallbackResolved(fromAuditJson<ExternalCallbackResolvedPayload> j))
+        "ExternalCallbackRejected",
+        (fun j -> ExternalCallbackRejected(fromAuditJson<ExternalCallbackRejectedPayload> j))
+        "CompositionVerificationRecorded",
+        (fun j -> CompositionVerificationRecorded(fromAuditJson<CompositionVerificationRecordedPayload> j))
+        "CompositionCapabilityRefused",
+        (fun j -> CompositionCapabilityRefused(fromAuditJson<CompositionCapabilityRefusedPayload> j))
+        "GroundingEnvelopeMutated",
+        (fun j -> GroundingEnvelopeMutated(fromAuditJson<GroundingEnvelopeMutatedPayload> j))
+        "GroundingMutationRefused",
+        (fun j -> GroundingMutationRefused(fromAuditJson<GroundingMutationRefusedPayload> j))
+        "DeploymentVerified", (fun j -> DeploymentVerified(fromAuditJson<DeploymentVerifiedPayload> j))
+        "EvidenceChainWalked", (fun j -> EvidenceChainWalked(fromAuditJson<EvidenceChainWalkedPayload> j))
+        "MediaKeyDelivered", (fun j -> MediaKeyDelivered(fromAuditJson<MediaKeyDeliveredPayload> j))
+        "BlobStorageAuthFailed", (fun j -> BlobStorageAuthFailed(fromAuditJson<BlobStorageAuthFailedPayload> j))
+        "BackupCompleted", (fun j -> BackupCompleted(fromAuditJson<BackupCompletedPayload> j))
+        "BackupFailed", (fun j -> BackupFailed(fromAuditJson<BackupFailedPayload> j))
+        "RestoreDrillPassed", (fun j -> RestoreDrillPassed(fromAuditJson<RestoreDrillPassedPayload> j))
+        "RestoreDrillFailed", (fun j -> RestoreDrillFailed(fromAuditJson<RestoreDrillFailedPayload> j))
+        "ContactCreated", (fun j -> ContactCreated(fromAuditJson<ContactCreatedPayload> j))
+        "ContactUpdated", (fun j -> ContactUpdated(fromAuditJson<ContactUpdatedPayload> j))
+        "ContactDeleted", (fun j -> ContactDeleted(fromAuditJson<ContactDeletedPayload> j))
+        "ContactOptInRecorded", (fun j -> ContactOptInRecorded(fromAuditJson<ContactOptInRecordedPayload> j))
+        "ContactOptInWithdrawn", (fun j -> ContactOptInWithdrawn(fromAuditJson<ContactOptInWithdrawnPayload> j))
+        "NotificationDeliveryRefused",
+        (fun j -> NotificationDeliveryRefused(fromAuditJson<NotificationDeliveryRefusedPayload> j))
+        "PublicationReaderSignedIn",
+        (fun j -> PublicationReaderSignedIn(fromAuditJson<PublicationReaderSignedInPayload> j))
+        "PublicationReaderGranted",
+        (fun j -> PublicationReaderGranted(fromAuditJson<PublicationReaderGrantChangedPayload> j))
+        "PublicationReaderRevoked",
+        (fun j -> PublicationReaderRevoked(fromAuditJson<PublicationReaderGrantChangedPayload> j))
+        "PageSaved", (fun j -> PageSaved(fromAuditJson<PageSavedPayload> j))
+        "PageReseeded", (fun j -> PageReseeded(fromAuditJson<PageReseededPayload> j))
+        "PageDetached", (fun j -> PageDetached(fromAuditJson<PageDetachedPayload> j))
+        "PageWriteRefused", (fun j -> PageWriteRefused(fromAuditJson<PageWriteRefusedPayload> j))
+    ]
+
+/// The platform's own kinds, as the registry records them. The platform
+/// does not grade its kinds (`Severity = None`): a sink's own
+/// classification stays authoritative for them.
+let platformAuditRegistration: AuditEventRegistration = {
+    Registrant = AuditEventRegistry.PlatformRegistrant
+    Kinds =
+        auditDecoderByType
+        |> Map.toList
+        |> List.map (fun (kind, _) -> {
+            Kind = kind
+            Registrant = AuditEventRegistry.PlatformRegistrant
+            Severity = None
+        })
 }
 
-/// The registry. Order is irrelevant to correctness (encode scans by
-/// `tryPick`, decode is keyed by `EventType`); kept in `eventTypeName`
-/// order for diff-friendliness against the union definition.
-let internal auditEventCodecs: AuditEventCodec list = [
-    {
-        EventType = "UserLoggedIn"
-        TryEncode =
-            (function
-            | UserLoggedIn p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> UserLoggedIn(fromAuditJson<UserLoggedInPayload> j)
-    }
-    {
-        EventType = "TeamCreated"
-        TryEncode =
-            (function
-            | TeamCreated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamCreated(fromAuditJson<TeamCreatedPayload> j)
-    }
-    {
-        EventType = "MemberAdded"
-        TryEncode =
-            (function
-            | MemberAdded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> MemberAdded(fromAuditJson<MemberAddedPayload> j)
-    }
-    {
-        EventType = "MemberRemoved"
-        TryEncode =
-            (function
-            | MemberRemoved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> MemberRemoved(fromAuditJson<MemberRemovedPayload> j)
-    }
-    {
-        EventType = "MemberRoleChanged"
-        TryEncode =
-            (function
-            | MemberRoleChanged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> MemberRoleChanged(fromAuditJson<MemberRoleChangedPayload> j)
-    }
-    {
-        EventType = "FileUploaded"
-        TryEncode =
-            (function
-            | FileUploaded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FileUploaded(fromAuditJson<FileUploadedPayload> j)
-    }
-    {
-        EventType = "FileDeleted"
-        TryEncode =
-            (function
-            | FileDeleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FileDeleted(fromAuditJson<FileDeletedPayload> j)
-    }
-    {
-        EventType = "FileReprocessed"
-        TryEncode =
-            (function
-            | FileReprocessed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FileReprocessed(fromAuditJson<FileReprocessedPayload> j)
-    }
-    {
-        EventType = "DataStoreReset"
-        TryEncode =
-            (function
-            | DataStoreReset p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DataStoreReset(fromAuditJson<DataStoreResetPayload> j)
-    }
-    {
-        EventType = "SessionStoreReset"
-        TryEncode =
-            (function
-            | SessionStoreReset p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SessionStoreReset(fromAuditJson<SessionStoreResetPayload> j)
-    }
-    {
-        EventType = "AnalysisRun"
-        TryEncode =
-            (function
-            | AnalysisRun p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AnalysisRun(fromAuditJson<AnalysisRunPayload> j)
-    }
-    {
-        EventType = "PermissionChanged"
-        TryEncode =
-            (function
-            | PermissionChanged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PermissionChanged(fromAuditJson<PermissionChangedPayload> j)
-    }
-    {
-        EventType = "NotificationSent"
-        TryEncode =
-            (function
-            | NotificationSent p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> NotificationSent(fromAuditJson<NotificationSentPayload> j)
-    }
-    {
-        EventType = "NotificationDeliveryFailed"
-        TryEncode =
-            (function
-            | NotificationDeliveryFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> NotificationDeliveryFailed(fromAuditJson<NotificationDeliveryFailedPayload> j)
-    }
-    {
-        EventType = "HealthStateChanged"
-        TryEncode =
-            (function
-            | HealthStateChanged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> HealthStateChanged(fromAuditJson<HealthStateChangedPayload> j)
-    }
-    {
-        EventType = "EncryptionKeyCreated"
-        TryEncode =
-            (function
-            | EncryptionKeyCreated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EncryptionKeyCreated(fromAuditJson<EncryptionKeyEventPayload> j)
-    }
-    {
-        EventType = "EncryptionKeyRotated"
-        TryEncode =
-            (function
-            | EncryptionKeyRotated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EncryptionKeyRotated(fromAuditJson<EncryptionKeyEventPayload> j)
-    }
-    {
-        EventType = "EncryptionKeyDestroyed"
-        TryEncode =
-            (function
-            | EncryptionKeyDestroyed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EncryptionKeyDestroyed(fromAuditJson<EncryptionKeyEventPayload> j)
-    }
-    {
-        EventType = "EncryptionKeyDestroyAcknowledged"
-        TryEncode =
-            (function
-            | EncryptionKeyDestroyAcknowledged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EncryptionKeyDestroyAcknowledged(fromAuditJson<EncryptionKeyDestroyAckPayload> j)
-    }
-    {
-        EventType = "EncryptionKeyUnreadable"
-        TryEncode =
-            (function
-            | EncryptionKeyUnreadable p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EncryptionKeyUnreadable(fromAuditJson<EncryptionKeyUnreadablePayload> j)
-    }
-    {
-        EventType = "EntityCreated"
-        TryEncode =
-            (function
-            | EntityCreated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EntityCreated(fromAuditJson<EntityLifecycleEventPayload> j)
-    }
-    {
-        EventType = "EntityUpdated"
-        TryEncode =
-            (function
-            | EntityUpdated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EntityUpdated(fromAuditJson<EntityLifecycleEventPayload> j)
-    }
-    {
-        EventType = "EntityDeleted"
-        TryEncode =
-            (function
-            | EntityDeleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EntityDeleted(fromAuditJson<EntityLifecycleEventPayload> j)
-    }
-    {
-        EventType = "FormSubmitted"
-        TryEncode =
-            (function
-            | FormSubmitted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FormSubmitted(fromAuditJson<FormSubmittedPayload> j)
-    }
-    {
-        EventType = "FormSubmissionUpdated"
-        TryEncode =
-            (function
-            | FormSubmissionUpdated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FormSubmissionUpdated(fromAuditJson<FormSubmissionUpdatedPayload> j)
-    }
-    {
-        EventType = "WorkflowTransitioned"
-        TryEncode =
-            (function
-            | WorkflowTransitioned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> WorkflowTransitioned(fromAuditJson<WorkflowTransitionedPayload> j)
-    }
-    {
-        EventType = "AuditSinkDelivered"
-        TryEncode =
-            (function
-            | AuditSinkDelivered p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AuditSinkDelivered(fromAuditJson<AuditSinkDeliveredPayload> j)
-    }
-    {
-        EventType = "AuditSinkFailed"
-        TryEncode =
-            (function
-            | AuditSinkFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AuditSinkFailed(fromAuditJson<AuditSinkFailedPayload> j)
-    }
-    {
-        EventType = "AuditSinkDeadLettered"
-        TryEncode =
-            (function
-            | AuditSinkDeadLettered p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AuditSinkDeadLettered(fromAuditJson<AuditSinkDeadLetteredPayload> j)
-    }
-    {
-        EventType = "AuditEventDecodeFailed"
-        TryEncode =
-            (function
-            | AuditEventDecodeFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AuditEventDecodeFailed(fromAuditJson<AuditEventDecodeFailedPayload> j)
-    }
-    {
-        EventType = "NotificationSilentlySkipped"
-        TryEncode =
-            (function
-            | NotificationSilentlySkipped p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> NotificationSilentlySkipped(fromAuditJson<NotificationSilentlySkippedPayload> j)
-    }
-    {
-        EventType = "OAuthConnected"
-        TryEncode =
-            (function
-            | OAuthConnected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuthConnected(fromAuditJson<OAuthConnectedPayload> j)
-    }
-    {
-        EventType = "OAuthDisconnected"
-        TryEncode =
-            (function
-            | OAuthDisconnected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuthDisconnected(fromAuditJson<OAuthDisconnectedPayload> j)
-    }
-    {
-        EventType = "OAuthRefreshFailed"
-        TryEncode =
-            (function
-            | OAuthRefreshFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuthRefreshFailed(fromAuditJson<OAuthRefreshFailedPayload> j)
-    }
-    {
-        EventType = "OAuth1aConnected"
-        TryEncode =
-            (function
-            | OAuth1aConnected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuth1aConnected(fromAuditJson<OAuth1aConnectedPayload> j)
-    }
-    {
-        EventType = "OAuth1aDisconnected"
-        TryEncode =
-            (function
-            | OAuth1aDisconnected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuth1aDisconnected(fromAuditJson<OAuth1aDisconnectedPayload> j)
-    }
-    {
-        EventType = "OAuth1aSigningFailed"
-        TryEncode =
-            (function
-            | OAuth1aSigningFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuth1aSigningFailed(fromAuditJson<OAuth1aSigningFailedPayload> j)
-    }
-    {
-        EventType = "OAuthTokenRefreshed"
-        TryEncode =
-            (function
-            | OAuthTokenRefreshed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuthTokenRefreshed(fromAuditJson<OAuthTokenRefreshedPayload> j)
-    }
-    {
-        EventType = "OAuthTokenRefreshFailed"
-        TryEncode =
-            (function
-            | OAuthTokenRefreshFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuthTokenRefreshFailed(fromAuditJson<OAuthTokenRefreshFailedPayload> j)
-    }
-    {
-        EventType = "OAuthRefreshTokenInvalidated"
-        TryEncode =
-            (function
-            | OAuthRefreshTokenInvalidated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuthRefreshTokenInvalidated(fromAuditJson<OAuthRefreshTokenInvalidatedPayload> j)
-    }
-    {
-        EventType = "OAuthRefreshDeadLettered"
-        TryEncode =
-            (function
-            | OAuthRefreshDeadLettered p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OAuthRefreshDeadLettered(fromAuditJson<OAuthRefreshDeadLetteredPayload> j)
-    }
-    {
-        EventType = "PlatformAdminAssigned"
-        TryEncode =
-            (function
-            | PlatformAdminAssigned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PlatformAdminAssigned(fromAuditJson<PlatformAdminAssignedPayload> j)
-    }
-    {
-        EventType = "PlatformAdminRevoked"
-        TryEncode =
-            (function
-            | PlatformAdminRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PlatformAdminRevoked(fromAuditJson<PlatformAdminRevokedPayload> j)
-    }
-    {
-        EventType = "PlatformDocumentUploaded"
-        TryEncode =
-            (function
-            | PlatformDocumentUploaded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PlatformDocumentUploaded(fromAuditJson<PlatformDocumentUploadedPayload> j)
-    }
-    {
-        EventType = "PlatformDocumentDeleted"
-        TryEncode =
-            (function
-            | PlatformDocumentDeleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PlatformDocumentDeleted(fromAuditJson<PlatformDocumentDeletedPayload> j)
-    }
-    {
-        EventType = "ShareTokenIssued"
-        TryEncode =
-            (function
-            | ShareTokenIssued p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ShareTokenIssued(fromAuditJson<ShareTokenIssuedPayload> j)
-    }
-    {
-        EventType = "ShareTokenUsed"
-        TryEncode =
-            (function
-            | ShareTokenUsed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ShareTokenUsed(fromAuditJson<ShareTokenUsedPayload> j)
-    }
-    {
-        EventType = "ShareTokenRevoked"
-        TryEncode =
-            (function
-            | ShareTokenRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ShareTokenRevoked(fromAuditJson<ShareTokenRevokedPayload> j)
-    }
-    // ─── Service accounts (Phase 527) ────────────────────────────────
-    {
-        EventType = "ServiceAccountCreated"
-        TryEncode =
-            (function
-            | ServiceAccountCreated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ServiceAccountCreated(fromAuditJson<ServiceAccountCreatedPayload> j)
-    }
-    {
-        EventType = "ServiceAccountPermissionsChanged"
-        TryEncode =
-            (function
-            | ServiceAccountPermissionsChanged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ServiceAccountPermissionsChanged(fromAuditJson<ServiceAccountPermissionsChangedPayload> j)
-    }
-    {
-        EventType = "ServiceAccountTokenMinted"
-        TryEncode =
-            (function
-            | ServiceAccountTokenMinted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ServiceAccountTokenMinted(fromAuditJson<ServiceAccountTokenMintedPayload> j)
-    }
-    {
-        EventType = "ServiceAccountTokenRevoked"
-        TryEncode =
-            (function
-            | ServiceAccountTokenRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ServiceAccountTokenRevoked(fromAuditJson<ServiceAccountTokenRevokedPayload> j)
-    }
-    {
-        EventType = "ServiceAccountStatusChanged"
-        TryEncode =
-            (function
-            | ServiceAccountStatusChanged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ServiceAccountStatusChanged(fromAuditJson<ServiceAccountStatusChangedPayload> j)
-    }
-    {
-        EventType = "SessionRevoked"
-        TryEncode =
-            (function
-            | SessionRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SessionRevoked(fromAuditJson<SessionRevokedPayload> j)
-    }
-    {
-        EventType = "AllSessionsRevoked"
-        TryEncode =
-            (function
-            | AllSessionsRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AllSessionsRevoked(fromAuditJson<AllSessionsRevokedPayload> j)
-    }
-    {
-        EventType = "ConversationExported"
-        TryEncode =
-            (function
-            | ConversationExported p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConversationExported(fromAuditJson<ConversationExportPayload> j)
-    }
-    {
-        EventType = "BeaconRejected"
-        TryEncode =
-            (function
-            | BeaconRejected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> BeaconRejected(fromAuditJson<BeaconRejectedPayload> j)
-    }
-    {
-        EventType = "ConfigDrift"
-        TryEncode =
-            (function
-            | ConfigDrift p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConfigDrift(fromAuditJson<ConfigDriftPayload> j)
-    }
-    {
-        EventType = "DiagnosticBundleAccessed"
-        TryEncode =
-            (function
-            | DiagnosticBundleAccessed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DiagnosticBundleAccessed(fromAuditJson<DiagnosticBundleAccessedPayload> j)
-    }
-    {
-        EventType = "RateLimitWaited"
-        TryEncode =
-            (function
-            | RateLimitWaited p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> RateLimitWaited(fromAuditJson<RateLimitWaitedPayload> j)
-    }
-    {
-        EventType = "RateLimitRefused"
-        TryEncode =
-            (function
-            | RateLimitRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> RateLimitRefused(fromAuditJson<RateLimitRefusedPayload> j)
-    }
-    {
-        EventType = "ComputeBudgetDenied"
-        TryEncode =
-            (function
-            | ComputeBudgetDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ComputeBudgetDenied(fromAuditJson<ComputeBudgetDeniedPayload> j)
-    }
-    {
-        EventType = "ComputeBudgetWarning"
-        TryEncode =
-            (function
-            | ComputeBudgetWarning p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ComputeBudgetWarning(fromAuditJson<ComputeBudgetWarningPayload> j)
-    }
-    {
-        EventType = "DataSubjectRequest"
-        TryEncode =
-            (function
-            | DataSubjectRequest p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DataSubjectRequest(fromAuditJson<DataSubjectRequestAuditPayload> j)
-    }
-    {
-        EventType = "ConversationStarted"
-        TryEncode =
-            (function
-            | ConversationStarted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConversationStarted(fromAuditJson<ConversationStartedPayload> j)
-    }
-    {
-        EventType = "ConversationTurnAppended"
-        TryEncode =
-            (function
-            | ConversationTurnAppended p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConversationTurnAppended(fromAuditJson<ConversationTurnAppendedPayload> j)
-    }
-    {
-        EventType = "ConversationCompleted"
-        TryEncode =
-            (function
-            | ConversationCompleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConversationCompleted(fromAuditJson<ConversationCompletedPayload> j)
-    }
-    {
-        EventType = "ConversationErased"
-        TryEncode =
-            (function
-            | ConversationErased p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConversationErased(fromAuditJson<ConversationErasedPayload> j)
-    }
-    {
-        EventType = "ConversationReplayed"
-        TryEncode =
-            (function
-            | ConversationReplayed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConversationReplayed(fromAuditJson<ConversationReplayedPayload> j)
-    }
-    {
-        EventType = "AssetUploaded"
-        TryEncode =
-            (function
-            | AssetUploaded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AssetUploaded(fromAuditJson<AssetUploadedPayload> j)
-    }
-    {
-        EventType = "AssetDeleted"
-        TryEncode =
-            (function
-            | AssetDeleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AssetDeleted(fromAuditJson<AssetDeletedPayload> j)
-    }
-    {
-        EventType = "TeamCreationDenied"
-        TryEncode =
-            (function
-            | TeamCreationDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamCreationDenied(fromAuditJson<TeamCreationDeniedPayload> j)
-    }
-    {
-        EventType = "TeamArchived"
-        TryEncode =
-            (function
-            | TeamArchived p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamArchived(fromAuditJson<TeamArchivedPayload> j)
-    }
-    {
-        EventType = "TeamRestored"
-        TryEncode =
-            (function
-            | TeamRestored p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamRestored(fromAuditJson<TeamRestoredPayload> j)
-    }
-    {
-        EventType = "TeamDeleted"
-        TryEncode =
-            (function
-            | TeamDeleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamDeleted(fromAuditJson<TeamDeletedPayload> j)
-    }
-    {
-        EventType = "TeamOwnershipTransferred"
-        TryEncode =
-            (function
-            | TeamOwnershipTransferred p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamOwnershipTransferred(fromAuditJson<TeamOwnershipTransferredPayload> j)
-    }
-    {
-        EventType = "TeamInviteIssued"
-        TryEncode =
-            (function
-            | TeamInviteIssued p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamInviteIssued(fromAuditJson<TeamInviteIssuedPayload> j)
-    }
-    {
-        EventType = "TeamInviteAccepted"
-        TryEncode =
-            (function
-            | TeamInviteAccepted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamInviteAccepted(fromAuditJson<TeamInviteAcceptedPayload> j)
-    }
-    {
-        EventType = "TeamInviteAcceptedFromPending"
-        TryEncode =
-            (function
-            | TeamInviteAcceptedFromPending p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamInviteAcceptedFromPending(fromAuditJson<TeamInviteAcceptedFromPendingPayload> j)
-    }
-    {
-        EventType = "TeamInviteAcceptedFromPendingFailed"
-        TryEncode =
-            (function
-            | TeamInviteAcceptedFromPendingFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode =
-            fun j -> TeamInviteAcceptedFromPendingFailed(fromAuditJson<TeamInviteAcceptedFromPendingFailedPayload> j)
-    }
-    {
-        EventType = "TeamInviteRevoked"
-        TryEncode =
-            (function
-            | TeamInviteRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamInviteRevoked(fromAuditJson<TeamInviteRevokedPayload> j)
-    }
-    {
-        EventType = "TeamInviteRedeemed"
-        TryEncode =
-            (function
-            | TeamInviteRedeemed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamInviteRedeemed(fromAuditJson<TeamInviteRedeemedPayload> j)
-    }
-    {
-        EventType = "TeamInviteExpired"
-        TryEncode =
-            (function
-            | TeamInviteExpired p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TeamInviteExpired(fromAuditJson<TeamInviteExpiredPayload> j)
-    }
-    {
-        EventType = "WorkflowActionExecuted"
-        TryEncode =
-            (function
-            | WorkflowActionExecuted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> WorkflowActionExecuted(fromAuditJson<WorkflowActionExecutedPayload> j)
-    }
-    {
-        EventType = "ConsentRecorded"
-        TryEncode =
-            (function
-            | ConsentRecorded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConsentRecorded(fromAuditJson<ConsentEvent> j)
-    }
-    {
-        EventType = "AdImpressionRecorded"
-        TryEncode =
-            (function
-            | AdImpressionRecorded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AdImpressionRecorded(fromAuditJson<AdImpression> j)
-    }
-    {
-        EventType = "AdClickRecorded"
-        TryEncode =
-            (function
-            | AdClickRecorded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AdClickRecorded(fromAuditJson<AdClick> j)
-    }
-    {
-        EventType = "PremiumGranted"
-        TryEncode =
-            (function
-            | PremiumGranted(subjectUserId, grantor, reason, occurredAt) ->
-                Some(
-                    toAuditJson {
-                        SubjectUserId = subjectUserId
-                        Grantor = grantor
-                        Reason = reason
-                        OccurredAt = occurredAt
-                    }
-                )
-            | _ -> None)
-        Decode =
-            fun j ->
-                let p = fromAuditJson<PremiumAuditPayload> j
-                PremiumGranted(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
-    }
-    {
-        EventType = "PremiumRevoked"
-        TryEncode =
-            (function
-            | PremiumRevoked(subjectUserId, grantor, reason, occurredAt) ->
-                Some(
-                    toAuditJson {
-                        SubjectUserId = subjectUserId
-                        Grantor = grantor
-                        Reason = reason
-                        OccurredAt = occurredAt
-                    }
-                )
-            | _ -> None)
-        Decode =
-            fun j ->
-                let p = fromAuditJson<PremiumAuditPayload> j
-                PremiumRevoked(p.SubjectUserId, p.Grantor, p.Reason, p.OccurredAt)
-    }
-    {
-        EventType = "AdSlotConfigCreated"
-        TryEncode =
-            (function
-            | AdSlotConfigCreated(slotId, actor, occurredAt) ->
-                Some(
-                    toAuditJson {
-                        SlotId = slotId
-                        Actor = actor
-                        OccurredAt = occurredAt
-                    }
-                )
-            | _ -> None)
-        Decode =
-            fun j ->
-                let p = fromAuditJson<AdSlotConfigAuditPayload> j
-                AdSlotConfigCreated(p.SlotId, p.Actor, p.OccurredAt)
-    }
-    {
-        EventType = "AdSlotConfigUpdated"
-        TryEncode =
-            (function
-            | AdSlotConfigUpdated(slotId, actor, occurredAt) ->
-                Some(
-                    toAuditJson {
-                        SlotId = slotId
-                        Actor = actor
-                        OccurredAt = occurredAt
-                    }
-                )
-            | _ -> None)
-        Decode =
-            fun j ->
-                let p = fromAuditJson<AdSlotConfigAuditPayload> j
-                AdSlotConfigUpdated(p.SlotId, p.Actor, p.OccurredAt)
-    }
-    {
-        EventType = "AdSlotConfigDeleted"
-        TryEncode =
-            (function
-            | AdSlotConfigDeleted(slotId, actor, occurredAt) ->
-                Some(
-                    toAuditJson {
-                        SlotId = slotId
-                        Actor = actor
-                        OccurredAt = occurredAt
-                    }
-                )
-            | _ -> None)
-        Decode =
-            fun j ->
-                let p = fromAuditJson<AdSlotConfigAuditPayload> j
-                AdSlotConfigDeleted(p.SlotId, p.Actor, p.OccurredAt)
-    }
-    {
-        EventType = "AnonymousSessionMigrated"
-        TryEncode =
-            (function
-            | AnonymousSessionMigrated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AnonymousSessionMigrated(fromAuditJson<AnonymousSessionMigratedPayload> j)
-    }
-    {
-        EventType = "AuthScopeResolutionFailed"
-        TryEncode =
-            (function
-            | AuthScopeResolutionFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AuthScopeResolutionFailed(fromAuditJson<ScopeResolutionFailedPayload> j)
-    }
-    {
-        EventType = "SurfaceDenied"
-        TryEncode =
-            (function
-            | SurfaceDenied p -> Some(encodeSurfaceDenied p)
-            | _ -> None)
-        Decode = fun j -> SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> j)
-    }
-    // Phase 625 — the three rows below are the ONLY rows in this table
-    // whose `EventType` differs from its `AuditEvent` case identifier.
-    // That divergence is deliberate and pinned; see the decision record
-    // in this file's registry header.
-    {
-        EventType = "ArtifactSigned"
-        TryEncode =
-            (function
-            | ModuleArtefactSigned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModuleArtefactSigned(fromAuditJson<ModuleArtefactSignedPayload> j)
-    }
-    {
-        EventType = "ArtifactVerified"
-        TryEncode =
-            (function
-            | ModuleArtefactVerified p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModuleArtefactVerified(fromAuditJson<ModuleArtefactVerifiedPayload> j)
-    }
-    {
-        EventType = "ArtifactRejected"
-        TryEncode =
-            (function
-            | ModuleArtefactRejected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModuleArtefactRejected(fromAuditJson<ModuleArtefactRejectedPayload> j)
-    }
-    {
-        EventType = "SyntheticSampleGenerated"
-        TryEncode =
-            (function
-            | SyntheticSampleGenerated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SyntheticSampleGenerated(fromAuditJson<SyntheticSampleGeneratedPayload> j)
-    }
-    {
-        EventType = "SchemaOnlyAccessAttempted"
-        TryEncode =
-            (function
-            | SchemaOnlyAccessAttempted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SchemaOnlyAccessAttempted(fromAuditJson<SchemaOnlyAccessAttemptedPayload> j)
-    }
-    // Phase 551 — the grant-policy refusal pair. Write-time and
-    // dispatch-time are separate event types on purpose: an operator
-    // alerting on "someone is trying to create authority the module does
-    // not admit" and one alerting on "recorded authority is not being
-    // honoured" are different alerts with different responses.
-    {
-        EventType = "GrantPolicyRefused"
-        TryEncode =
-            (function
-            | GrantPolicyRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GrantPolicyRefused(fromAuditJson<GrantPolicyRefusedPayload> j)
-    }
-    {
-        EventType = "UnconsentedGrantRefused"
-        TryEncode =
-            (function
-            | UnconsentedGrantRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> UnconsentedGrantRefused(fromAuditJson<UnconsentedGrantRefusedPayload> j)
-    }
-    // Phase 730 — the success twin the pair above was missing. Phase 551
-    // made every REFUSED grant dashboardable and left every ADMITTED one
-    // invisible, so the trail answered "what was blocked" but not "who was
-    // given access to what".
-    {
-        EventType = "GrantRecorded"
-        TryEncode =
-            (function
-            | GrantRecorded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GrantRecorded(fromAuditJson<GrantRecordedPayload> j)
-    }
-    // Phase 555 — the dual-control ceremony. Five event types rather than
-    // one row with an outcome field: "what is queued", "who approved
-    // what", "what was turned down", "what was attempted and refused"
-    // and "what lapsed unreviewed" are five different alerts. The fourth
-    // is the security signal — a proposer attempting to approve their own
-    // proposal — and it must not be a filter over the others.
-    {
-        EventType = "AdminMutationProposed"
-        TryEncode =
-            (function
-            | AdminMutationProposed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AdminMutationProposed(fromAuditJson<AdminMutationProposedPayload> j)
-    }
-    {
-        EventType = "AdminMutationApproved"
-        TryEncode =
-            (function
-            | AdminMutationApproved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AdminMutationApproved(fromAuditJson<AdminMutationApprovedPayload> j)
-    }
-    {
-        EventType = "AdminMutationRejected"
-        TryEncode =
-            (function
-            | AdminMutationRejected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AdminMutationRejected(fromAuditJson<AdminMutationRejectedPayload> j)
-    }
-    {
-        EventType = "AdminMutationApprovalRefused"
-        TryEncode =
-            (function
-            | AdminMutationApprovalRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AdminMutationApprovalRefused(fromAuditJson<AdminMutationApprovalRefusedPayload> j)
-    }
-    {
-        EventType = "AdminMutationExpired"
-        TryEncode =
-            (function
-            | AdminMutationExpired p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AdminMutationExpired(fromAuditJson<AdminMutationExpiredPayload> j)
-    }
-    // Phase 552 — the consented-grant registry. Three lifecycle acts and
-    // one alert: `GrantConsentVerificationDenied` fires only where a
-    // presented record is not what it claims (`ConsentDenial.isTrustFailure`),
-    // never for an ordinary revocation or expiry — those are already
-    // described by the `UnconsentedGrantRefused` row the dispatch refusal
-    // emits, and burying a forgery alert in their volume is how a forgery
-    // alert stops being read.
-    {
-        EventType = "GrantConsentProposed"
-        TryEncode =
-            (function
-            | GrantConsentProposed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GrantConsentProposed(fromAuditJson<GrantConsentProposedPayload> j)
-    }
-    {
-        EventType = "GrantConsentApproved"
-        TryEncode =
-            (function
-            | GrantConsentApproved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GrantConsentApproved(fromAuditJson<GrantConsentApprovedPayload> j)
-    }
-    {
-        EventType = "GrantConsentRevoked"
-        TryEncode =
-            (function
-            | GrantConsentRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GrantConsentRevoked(fromAuditJson<GrantConsentRevokedPayload> j)
-    }
-    {
-        EventType = "GrantConsentVerificationDenied"
-        TryEncode =
-            (function
-            | GrantConsentVerificationDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GrantConsentVerificationDenied(fromAuditJson<GrantConsentVerificationDeniedPayload> j)
-    }
-    {
-        EventType = "PeerCallCompleted"
-        TryEncode =
-            (function
-            | PeerCallCompleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> j)
-    }
-    // Phase 310 — the terminal row for a long-running peer call. Its
-    // schedule-time twin above records only that the call was accepted.
-    {
-        EventType = "PeerJobCompleted"
-        TryEncode =
-            (function
-            | PeerJobCompleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PeerJobCompleted(fromAuditJson<PeerJobCompletedPayload> j)
-    }
-    // Phase 311 — the composed clean-room gate's decision over one gated
-    // contract answer. The only place the withhold reason is recorded; the
-    // wire refusal deliberately carries none.
-    {
-        EventType = "PeerCleanRoomDecision"
-        TryEncode =
-            (function
-            | PeerCleanRoomDecision p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PeerCleanRoomDecision(fromAuditJson<PeerCleanRoomDecisionPayload> j)
-    }
-    {
-        EventType = "FederationRoundCompleted"
-        TryEncode =
-            (function
-            | FederationRoundCompleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FederationRoundCompleted(fromAuditJson<FederationRoundCompletedPayload> j)
-    }
-    {
-        EventType = "FederationParticipantDropped"
-        TryEncode =
-            (function
-            | FederationParticipantDropped p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FederationParticipantDropped(fromAuditJson<FederationParticipantDroppedPayload> j)
-    }
-    {
-        EventType = "FederationRunAborted"
-        TryEncode =
-            (function
-            | FederationRunAborted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FederationRunAborted(fromAuditJson<FederationRunAbortedPayload> j)
-    }
-    {
-        EventType = "ArtefactSigned"
-        TryEncode =
-            (function
-            | ArtefactSigned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ArtefactSigned(fromAuditJson<ArtefactSignedPayload> j)
-    }
-    {
-        EventType = "SigningKeyRotated"
-        TryEncode =
-            (function
-            | SigningKeyRotated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SigningKeyRotated(fromAuditJson<SigningKeyRotatedPayload> j)
-    }
-    {
-        EventType = "ClassifiedFieldRead"
-        TryEncode =
-            (function
-            | ClassifiedFieldRead p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ClassifiedFieldRead(fromAuditJson<ClassifiedFieldReadPayload> j)
-    }
-    {
-        EventType = "ClassifiedFieldWritten"
-        TryEncode =
-            (function
-            | ClassifiedFieldWritten p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ClassifiedFieldWritten(fromAuditJson<ClassifiedFieldWrittenPayload> j)
-    }
-    {
-        EventType = "TenantProvisioned"
-        TryEncode =
-            (function
-            | TenantProvisioned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantProvisioned(fromAuditJson<TenantProvisionedPayload> j)
-    }
-    {
-        EventType = "TenantDeprovisioned"
-        TryEncode =
-            (function
-            | TenantDeprovisioned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantDeprovisioned(fromAuditJson<TenantDeprovisionedPayload> j)
-    }
-    {
-        EventType = "TenantLifecycleHookFailed"
-        TryEncode =
-            (function
-            | TenantLifecycleHookFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantLifecycleHookFailed(fromAuditJson<TenantLifecycleHookFailedPayload> j)
-    }
-    // Phase 54j — export-then-erase archive marker (codec registration was
-    // omitted when the case shipped; added here so the case round-trips
-    // through the registry and external sinks, per the Phase 114 gate).
-    {
-        EventType = "TenantDataExported"
-        TryEncode =
-            (function
-            | TenantDataExported p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantDataExported(fromAuditJson<TenantDataExportedPayload> j)
-    }
-    // Phase 54i — offboard confirmation-gate audit events (append-only).
-    {
-        EventType = "TenantOffboardConfirmationRequested"
-        TryEncode =
-            (function
-            | TenantOffboardConfirmationRequested p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode =
-            fun j -> TenantOffboardConfirmationRequested(fromAuditJson<TenantOffboardConfirmationRequestedPayload> j)
-    }
-    {
-        EventType = "TenantOffboardConfirmationApproved"
-        TryEncode =
-            (function
-            | TenantOffboardConfirmationApproved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantOffboardConfirmationApproved(fromAuditJson<TenantOffboardConfirmationApprovedPayload> j)
-    }
-    {
-        EventType = "TenantOffboardConfirmationRefused"
-        TryEncode =
-            (function
-            | TenantOffboardConfirmationRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantOffboardConfirmationRefused(fromAuditJson<TenantOffboardConfirmationRefusedPayload> j)
-    }
-    // Phase 54f — scheduled / grace-period offboard audit events (append-only).
-    {
-        EventType = "TenantDeprovisionScheduled"
-        TryEncode =
-            (function
-            | TenantDeprovisionScheduled p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantDeprovisionScheduled(fromAuditJson<TenantDeprovisionScheduledPayload> j)
-    }
-    {
-        EventType = "TenantDeprovisionCancelled"
-        TryEncode =
-            (function
-            | TenantDeprovisionCancelled p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> TenantDeprovisionCancelled(fromAuditJson<TenantDeprovisionCancelledPayload> j)
-    }
-    {
-        EventType = "KnowledgeOriginalRetrieved"
-        TryEncode =
-            (function
-            | KnowledgeOriginalRetrieved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> KnowledgeOriginalRetrieved(fromAuditJson<KnowledgeOriginalRetrievedPayload> j)
-    }
-    {
-        EventType = "KnowledgeOriginalRetrievalDenied"
-        TryEncode =
-            (function
-            | KnowledgeOriginalRetrievalDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> KnowledgeOriginalRetrievalDenied(fromAuditJson<KnowledgeOriginalRetrievalDeniedPayload> j)
-    }
-    {
-        EventType = "RemotingMethodAudited"
-        TryEncode =
-            (function
-            | RemotingMethodAudited p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> j)
-    }
-    // Phase 115 — KB scope wipe fan-out outcome (append-only registration).
-    {
-        EventType = "KnowledgeScopeErased"
-        TryEncode =
-            (function
-            | KnowledgeScopeErased p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> KnowledgeScopeErased(fromAuditJson<KnowledgeScopeErasedPayload> j)
-    }
-    // Phase 120 — uniform structured authz-denial row (append-only registration).
-    {
-        EventType = "AuthorizationDenied"
-        TryEncode =
-            (function
-            | AuthorizationDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AuthorizationDenied(fromAuditJson<AuthorizationDeniedPayload> j)
-    }
-    // Phase 272 — hosted-tree action audit row (append-only registration).
-    {
-        EventType = "HostActionDispatched"
-        TryEncode =
-            (function
-            | HostActionDispatched p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> HostActionDispatched(fromAuditJson<HostActionDispatchedPayload> j)
-    }
-    // Phase 188 — field-classification egress/DLP gate deny row (append-only registration).
-    {
-        EventType = "EgressBlocked"
-        TryEncode =
-            (function
-            | EgressBlocked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EgressBlocked(fromAuditJson<EgressBlockedPayload> j)
-    }
-    // Phase 772 — server-side egress policy deny row (append-only registration).
-    {
-        EventType = "EgressDenied"
-        TryEncode =
-            (function
-            | EgressDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EgressDenied(fromAuditJson<EgressDeniedPayload> j)
-    }
-    // Phase 14v — RAG vector-index corrupt-load audit row (append-only registration).
-    {
-        EventType = "KnowledgeIndexLoadFailed"
-        TryEncode =
-            (function
-            | KnowledgeIndexLoadFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> KnowledgeIndexLoadFailed(fromAuditJson<KnowledgeIndexLoadFailedPayload> j)
-    }
-    // Phase 303 — ingestion-queue drop audit row (append-only registration).
-    {
-        EventType = "KnowledgeIngestionDropped"
-        TryEncode =
-            (function
-            | KnowledgeIngestionDropped p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> KnowledgeIngestionDropped(fromAuditJson<KnowledgeIngestionDroppedPayload> j)
-    }
-    // Phase 14x — KB upload content-hash dedup audit row (append-only registration).
-    {
-        EventType = "KnowledgeDocumentDeduplicated"
-        TryEncode =
-            (function
-            | KnowledgeDocumentDeduplicated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> KnowledgeDocumentDeduplicated(fromAuditJson<KnowledgeDocumentDeduplicatedPayload> j)
-    }
-    // Phase 512 — KB retention-sweep purge audit row (append-only registration).
-    {
-        EventType = "KnowledgeDocumentsPurged"
-        TryEncode =
-            (function
-            | KnowledgeDocumentsPurged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> KnowledgeDocumentsPurged(fromAuditJson<KnowledgeDocumentsPurgedPayload> j)
-    }
-    // Phase 515 — upload content-scan verdict row (append-only registration).
-    {
-        EventType = "ContentScanned"
-        TryEncode =
-            (function
-            | ContentScanned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ContentScanned(fromAuditJson<ContentScannedPayload> j)
-    }
-    // Phase 7c — data-object orphan-blob sweep rows (append-only registration).
-    {
-        EventType = "OrphanedContentBlobReclaimed"
-        TryEncode =
-            (function
-            | OrphanedContentBlobReclaimed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OrphanedContentBlobReclaimed(fromAuditJson<OrphanedContentBlobReclaimedPayload> j)
-    }
-    {
-        EventType = "OrphanSweepCompleted"
-        TryEncode =
-            (function
-            | OrphanSweepCompleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> OrphanSweepCompleted(fromAuditJson<OrphanSweepCompletedPayload> j)
-    }
-    {
-        EventType = "PasskeyCredentialRegistered"
-        TryEncode =
-            (function
-            | PasskeyCredentialRegistered p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PasskeyCredentialRegistered(fromAuditJson<PasskeyCredentialRegisteredPayload> j)
-    }
-    {
-        EventType = "PasskeyCredentialRemoved"
-        TryEncode =
-            (function
-            | PasskeyCredentialRemoved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PasskeyCredentialRemoved(fromAuditJson<PasskeyCredentialRemovedPayload> j)
-    }
-    // Phase 449 — model-fit envelope lifecycle audit rows (append-only registration).
-    {
-        EventType = "ModelFitStarted"
-        TryEncode =
-            (function
-            | ModelFitStarted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelFitStarted(fromAuditJson<ModelFitStartedPayload> j)
-    }
-    {
-        EventType = "ModelFitCompleted"
-        TryEncode =
-            (function
-            | ModelFitCompleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelFitCompleted(fromAuditJson<ModelFitCompletedPayload> j)
-    }
-    {
-        EventType = "ModelFitGateFailed"
-        TryEncode =
-            (function
-            | ModelFitGateFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelFitGateFailed(fromAuditJson<ModelFitGateFailedPayload> j)
-    }
-    // Phase 599 — batch fit submission audit row (append-only registration).
-    {
-        EventType = "ModelFitBatchSubmitted"
-        TryEncode =
-            (function
-            | ModelFitBatchSubmitted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelFitBatchSubmitted(fromAuditJson<ModelFitBatchSubmittedPayload> j)
-    }
-    // Phase 453 — model-registry lifecycle audit rows (append-only registration).
-    {
-        EventType = "ModelArtifactRegistered"
-        TryEncode =
-            (function
-            | ModelArtifactRegistered p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelArtifactRegistered(fromAuditJson<ModelArtifactRegisteredPayload> j)
-    }
-    {
-        EventType = "ModelArtifactTransitioned"
-        TryEncode =
-            (function
-            | ModelArtifactTransitioned p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelArtifactTransitioned(fromAuditJson<ModelArtifactTransitionedPayload> j)
-    }
-    {
-        EventType = "ModelArtifactTransitionDenied"
-        TryEncode =
-            (function
-            | ModelArtifactTransitionDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelArtifactTransitionDenied(fromAuditJson<ModelArtifactTransitionDeniedPayload> j)
-    }
-    // Phase 644 — the attributed transition row the author-agnostic seam
-    // writes, carrying the channel and author the registry's own two rows
-    // structurally cannot know.
-    {
-        EventType = "ModelArtifactTransitionAttributed"
-        TryEncode =
-            (function
-            | ModelArtifactTransitionAttributed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelArtifactTransitionAttributed(fromAuditJson<ModelArtifactTransitionAttributedPayload> j)
-    }
-    // Phase 646 — the append-only provenance-attachment row and the
-    // promotion-transfer row. Hashes and media types only: the attachment
-    // content is opaque by construction, so a trail carrying it would be
-    // republishing bytes this deployment cannot characterise.
-    {
-        EventType = "ModelArtifactProvenanceAttached"
-        TryEncode =
-            (function
-            | ModelArtifactProvenanceAttached p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelArtifactProvenanceAttached(fromAuditJson<ModelArtifactProvenanceAttachedPayload> j)
-    }
-    {
-        EventType = "ModelArtifactPromoted"
-        TryEncode =
-            (function
-            | ModelArtifactPromoted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelArtifactPromoted(fromAuditJson<ModelArtifactPromotionPayload> j)
-    }
-    // Phase 454 — model-scoring lifecycle audit rows (append-only registration).
-    {
-        EventType = "ModelScored"
-        TryEncode =
-            (function
-            | ModelScored p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelScored(fromAuditJson<ModelScoredPayload> j)
-    }
-    {
-        EventType = "ModelScoreRefused"
-        TryEncode =
-            (function
-            | ModelScoreRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelScoreRefused(fromAuditJson<ModelScoreRefusedPayload> j)
-    }
-    // Phase 456 — model-evaluation audit row (append-only registration).
-    {
-        EventType = "ModelEvaluated"
-        TryEncode =
-            (function
-            | ModelEvaluated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelEvaluated(fromAuditJson<ModelEvaluatedPayload> j)
-    }
-    // Phase 645 — promotion-policy verdicts + explicit supersession. The
-    // two rows are the subscription surface for promotion events: a
-    // consumer attaches an IAuditSink rather than a bespoke pub/sub.
-    {
-        EventType = "ModelPromotionPolicyEvaluated"
-        TryEncode =
-            (function
-            | ModelPromotionPolicyEvaluated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelPromotionPolicyEvaluated(fromAuditJson<ModelPromotionPolicyEvaluatedPayload> j)
-    }
-    {
-        EventType = "ModelArtifactSuperseded"
-        TryEncode =
-            (function
-            | ModelArtifactSuperseded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelArtifactSuperseded(fromAuditJson<ModelArtifactSupersededPayload> j)
-    }
-    // Phase 651 — an isolated registration-observer failure. The
-    // registration stands; without this row the observer's absence would
-    // be indistinguishable from it having nothing to do.
-    {
-        EventType = "ModelRegistrationObserverFailed"
-        TryEncode =
-            (function
-            | ModelRegistrationObserverFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ModelRegistrationObserverFailed(fromAuditJson<ModelRegistrationObserverFailedPayload> j)
-    }
-    // Phase 482 / 487 — dataset provenance & virtual-spill audit rows (append-only registration).
-    {
-        EventType = "DatasetSpillCreated"
-        TryEncode =
-            (function
-            | DatasetSpillCreated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DatasetSpillCreated(fromAuditJson<DatasetSpillCreatedPayload> j)
-    }
-    {
-        EventType = "DatasetSpillDeleted"
-        TryEncode =
-            (function
-            | DatasetSpillDeleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DatasetSpillDeleted(fromAuditJson<DatasetSpillDeletedPayload> j)
-    }
-    // Phase 601 — assembly re-vintage audit row (append-only registration).
-    {
-        EventType = "DatasetRevintaged"
-        TryEncode =
-            (function
-            | DatasetRevintaged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DatasetRevintaged(fromAuditJson<DatasetRevintagedPayload> j)
-    }
-    {
-        EventType = "DatasetDeclassified"
-        TryEncode =
-            (function
-            | DatasetDeclassified p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DatasetDeclassified(fromAuditJson<DatasetDeclassifiedPayload> j)
-    }
-    {
-        EventType = "DatasetPolicyDenied"
-        TryEncode =
-            (function
-            | DatasetPolicyDenied p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DatasetPolicyDenied(fromAuditJson<DatasetPolicyDeniedPayload> j)
-    }
-    {
-        EventType = "SchemaProposed"
-        TryEncode =
-            (function
-            | SchemaProposed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SchemaProposed(fromAuditJson<SchemaProposedPayload> j)
-    }
-    {
-        EventType = "SchemaApproved"
-        TryEncode =
-            (function
-            | SchemaApproved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SchemaApproved(fromAuditJson<SchemaApprovedPayload> j)
-    }
-    {
-        EventType = "SchemaChanged"
-        TryEncode =
-            (function
-            | SchemaChanged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> SchemaChanged(fromAuditJson<SchemaChangedPayload> j)
-    }
-    // Phase 320 — external-compute completion-callback ingress.
-    {
-        EventType = "ExternalCallbackResolved"
-        TryEncode =
-            (function
-            | ExternalCallbackResolved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ExternalCallbackResolved(fromAuditJson<ExternalCallbackResolvedPayload> j)
-    }
-    {
-        EventType = "ExternalCallbackRejected"
-        TryEncode =
-            (function
-            | ExternalCallbackRejected p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ExternalCallbackRejected(fromAuditJson<ExternalCallbackRejectedPayload> j)
-    }
-    {
-        EventType = "CompositionVerificationRecorded"
-        TryEncode =
-            (function
-            | CompositionVerificationRecorded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> CompositionVerificationRecorded(fromAuditJson<CompositionVerificationRecordedPayload> j)
-    }
-    {
-        EventType = "CompositionCapabilityRefused"
-        TryEncode =
-            (function
-            | CompositionCapabilityRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> CompositionCapabilityRefused(fromAuditJson<CompositionCapabilityRefusedPayload> j)
-    }
-    // Phase 680 — grounded-answer verification, both verdicts. Two event
-    // types over one payload shape: the discriminator is what a SIEM rule
-    // and a chained-ledger query cut on, and collapsing the pair into one
-    // type with a `Flagged: bool` field would put that cut inside the
-    // payload where neither can reach it without decoding every row.
-    {
-        EventType = "AnswerVerificationPassed"
-        TryEncode =
-            (function
-            | AnswerVerificationPassed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AnswerVerificationPassed(fromAuditJson<AnswerVerificationPayload> j)
-    }
-    {
-        EventType = "AnswerVerificationFlagged"
-        TryEncode =
-            (function
-            | AnswerVerificationFlagged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> AnswerVerificationFlagged(fromAuditJson<AnswerVerificationPayload> j)
-    }
-    // Phase 683 — certificate-verified fact import, both verdicts. Two
-    // event types over one payload, for the reason the pair above gives:
-    // "an import was refused" is the row a SIEM rule alerts on, and it must
-    // be selectable without decoding every accepted import to read a flag.
-    {
-        EventType = "FactImportAccepted"
-        TryEncode =
-            (function
-            | FactImportAccepted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FactImportAccepted(fromAuditJson<FactImportPayload> j)
-    }
-    {
-        EventType = "FactImportRefused"
-        TryEncode =
-            (function
-            | FactImportRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> FactImportRefused(fromAuditJson<FactImportPayload> j)
-    }
-    // Phase 684 — grounding-envelope mutation, both verdicts. Two event
-    // types over two payload shapes: a refusal carries the chained-vs-
-    // observed digest pair and no sequence, because nothing was appended
-    // to the chain — folding it into the mutation row would need every
-    // field on it to be optional and the walk to skip rows by inspection.
-    {
-        EventType = "GroundingEnvelopeMutated"
-        TryEncode =
-            (function
-            | GroundingEnvelopeMutated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GroundingEnvelopeMutated(fromAuditJson<GroundingEnvelopeMutatedPayload> j)
-    }
-    {
-        EventType = "GroundingMutationRefused"
-        TryEncode =
-            (function
-            | GroundingMutationRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> GroundingMutationRefused(fromAuditJson<GroundingMutationRefusedPayload> j)
-    }
-    // Phase 685 — certificate issuance. ONE event type, and the asymmetry
-    // with the three pairs above is the point rather than an oversight:
-    // those record a verdict over an attempt, so the refusal is a row a
-    // SIEM rule cuts on. An issuance has no refused counterpart to
-    // discriminate against — a certificate that failed to seal was never
-    // issued, and recording that it nearly was would put documents on the
-    // log that no holder can ever present. What this log answers is "what
-    // exists", so the only rows on it are things that do.
-    {
-        EventType = "CertificateIssued"
-        TryEncode =
-            (function
-            | CertificateIssued p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> CertificateIssued(fromAuditJson<CertificateIssuedPayload> j)
-    }
-    // Phase 686 — one run of the deployment verification report. An
-    // audited READ, which is why there is one event type and no refusal
-    // counterpart: the report cannot be refused, only gated, and a gated
-    // caller never reaches the gatherer. The row is written on every
-    // outcome including the clean one — a trail carrying only adverse
-    // runs cannot distinguish a deployment nobody verified from one that
-    // was verified and was fine.
-    {
-        EventType = "DeploymentVerified"
-        TryEncode =
-            (function
-            | DeploymentVerified p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> DeploymentVerified(fromAuditJson<DeploymentVerifiedPayload> j)
-    }
-    // Phase 713 — one walk of the evidence chain. An audited READ, for
-    // the same reason the row above is: the walk mutates nothing and
-    // cannot be refused, only gated, so there is one event type and no
-    // refusal counterpart. Written on every outcome including the
-    // complete one — a trail carrying only broken walks cannot
-    // distinguish a deployment nobody traced from one that was traced
-    // and was whole.
-    {
-        EventType = "EvidenceChainWalked"
-        TryEncode =
-            (function
-            | EvidenceChainWalked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> EvidenceChainWalked(fromAuditJson<EvidenceChainWalkedPayload> j)
-    }
-    // Phase 739 — the grant twin of the `AuthorizationDenied` row the
-    // gated-HLS key endpoint already emits. Phase 471 made every REFUSED
-    // key fetch queryable and left every GRANTED one as a structured log
-    // line, so the store could answer "who was turned away" and not "who
-    // holds the key" — and the key is the whole protection on segments
-    // that are cached at an edge and exported to disk.
-    {
-        EventType = "MediaKeyDelivered"
-        TryEncode =
-            (function
-            | MediaKeyDelivered p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> MediaKeyDelivered(fromAuditJson<MediaKeyDeliveredPayload> j)
-    }
-    // Phase 2c — the trail beside the credential-rotation health probe.
-    // The probe says the deployment is unwell; this row says when the
-    // rejections started, against which store, and doing what. Emitted
-    // by the three cloud-storage companions on their own failure paths.
-    {
-        EventType = "BlobStorageAuthFailed"
-        TryEncode =
-            (function
-            | BlobStorageAuthFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> BlobStorageAuthFailed(fromAuditJson<BlobStorageAuthFailedPayload> j)
-    }
-    // Phase 36.E — the cross-module AI read trail. A registry row rather
-    // than an AI-tier `ModuleEvent` stream is what puts this family in
-    // front of the Phase 9g replicator at all: `shouldReplicate` admits
-    // `SourceModule = "_platform.audit"` only.
-    {
-        EventType = "CrossModuleRead"
-        TryEncode =
-            (function
-            | CrossModuleRead p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> CrossModuleRead(fromAuditJson<CrossModuleReadPayload> j)
-    }
-    // Phase 445 — the backup / restore-drill trail: what was captured,
-    // whether it was captured atomically, and whether the rehearsed
-    // restore of it passed.
-    {
-        EventType = "BackupCompleted"
-        TryEncode =
-            (function
-            | BackupCompleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> BackupCompleted(fromAuditJson<BackupCompletedPayload> j)
-    }
-    {
-        EventType = "BackupFailed"
-        TryEncode =
-            (function
-            | BackupFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> BackupFailed(fromAuditJson<BackupFailedPayload> j)
-    }
-    {
-        EventType = "RestoreDrillPassed"
-        TryEncode =
-            (function
-            | RestoreDrillPassed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> RestoreDrillPassed(fromAuditJson<RestoreDrillPassedPayload> j)
-    }
-    {
-        EventType = "RestoreDrillFailed"
-        TryEncode =
-            (function
-            | RestoreDrillFailed p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> RestoreDrillFailed(fromAuditJson<RestoreDrillFailedPayload> j)
-    }
-    // Phase 6f.A - the external-contact consent trail: who was filed,
-    // who asserted a per-channel consent and on what evidence, who
-    // withdrew it and why, and every send refused for want of one.
-    {
-        EventType = "ContactCreated"
-        TryEncode =
-            (function
-            | ContactCreated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ContactCreated(fromAuditJson<ContactCreatedPayload> j)
-    }
-    {
-        EventType = "ContactUpdated"
-        TryEncode =
-            (function
-            | ContactUpdated p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ContactUpdated(fromAuditJson<ContactUpdatedPayload> j)
-    }
-    {
-        EventType = "ContactDeleted"
-        TryEncode =
-            (function
-            | ContactDeleted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ContactDeleted(fromAuditJson<ContactDeletedPayload> j)
-    }
-    {
-        EventType = "ContactOptInRecorded"
-        TryEncode =
-            (function
-            | ContactOptInRecorded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ContactOptInRecorded(fromAuditJson<ContactOptInRecordedPayload> j)
-    }
-    {
-        EventType = "ContactOptInWithdrawn"
-        TryEncode =
-            (function
-            | ContactOptInWithdrawn p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ContactOptInWithdrawn(fromAuditJson<ContactOptInWithdrawnPayload> j)
-    }
-    {
-        EventType = "NotificationDeliveryRefused"
-        TryEncode =
-            (function
-            | NotificationDeliveryRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> NotificationDeliveryRefused(fromAuditJson<NotificationDeliveryRefusedPayload> j)
-    }
-    // Phase 504 — AI conversation retention-sweep purge audit row (append-only registration).
-    {
-        EventType = "ConversationsPurged"
-        TryEncode =
-            (function
-            | ConversationsPurged p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> ConversationsPurged(fromAuditJson<ConversationsPurgedPayload> j)
-    }
-    // Phase 1002 — a publication reader's sign-in audit row (append-only registration).
-    {
-        EventType = "PublicationReaderSignedIn"
-        TryEncode =
-            (function
-            | PublicationReaderSignedIn p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PublicationReaderSignedIn(fromAuditJson<PublicationReaderSignedInPayload> j)
-    }
-    // Phase 1107 — in-platform publication reader grants (append-only registration).
-    {
-        EventType = "PublicationReaderGranted"
-        TryEncode =
-            (function
-            | PublicationReaderGranted p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PublicationReaderGranted(fromAuditJson<PublicationReaderGrantChangedPayload> j)
-    }
-    {
-        EventType = "PublicationReaderRevoked"
-        TryEncode =
-            (function
-            | PublicationReaderRevoked p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PublicationReaderRevoked(fromAuditJson<PublicationReaderGrantChangedPayload> j)
-    }
-    // The page store's writes and refusals (append-only registration).
-    {
-        EventType = "PageSaved"
-        TryEncode =
-            (function
-            | PageSaved p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PageSaved(fromAuditJson<PageSavedPayload> j)
-    }
-    {
-        EventType = "PageReseeded"
-        TryEncode =
-            (function
-            | PageReseeded p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PageReseeded(fromAuditJson<PageReseededPayload> j)
-    }
-    {
-        EventType = "PageDetached"
-        TryEncode =
-            (function
-            | PageDetached p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PageDetached(fromAuditJson<PageDetachedPayload> j)
-    }
-    {
-        EventType = "PageWriteRefused"
-        TryEncode =
-            (function
-            | PageWriteRefused p -> Some(toAuditJson p)
-            | _ -> None)
-        Decode = fun j -> PageWriteRefused(fromAuditJson<PageWriteRefusedPayload> j)
-    }
-]
-
-/// Decode lookup keyed by wire `EventType`. Built once at module init.
-let internal auditDecoderByType: Map<string, string -> AuditEvent> =
-    auditEventCodecs |> List.map (fun c -> c.EventType, c.Decode) |> Map.ofList
-
-/// Serialise an `AuditEvent` payload to JSON via the registry. Total
-/// over the union when the `AuditEventRegistryTests` exhaustiveness gate
-/// passes; the `failwithf` is an invariant guard for the unreachable
-/// case where a union case has no registry row. Unlike the pre-114
-/// throw-and-Warn behaviour, this throw lands inside `Record`'s
-/// try/with, so even the impossible case is counted against
-/// `audit_write_failures_total` rather than silently advancing.
-let internal serialiseAuditEvent (audit: AuditEvent) : string =
-    match auditEventCodecs |> List.tryPick (fun c -> c.TryEncode audit) with
-    | Some json -> json
-    | None ->
-        failwithf
-            "AuditEvent case '%s' has no codec-registry entry (Phase 114 — add it to AuditLog.auditEventCodecs)"
-            (AuditEvent.eventTypeName audit)
-
-/// Decode a persisted audit `(eventType, payload)` pair via the
-/// registry, surfacing WHY a decode failed so the replicator can record
-/// it. `Error` covers both an unrecognised / future `eventType` and a
-/// malformed payload for a known type — Phase 114 routes both into the
-/// `AuditEventDecodeFailed` summary row instead of advancing the cursor
-/// silently (Gap C1). Shared by the replicator (same assembly) and the
-/// `GetAuditTrail` read path below.
-let internal tryDecodeAuditEvent (eventType: string) (payload: string) : Result<AuditEvent, string> =
-    match Map.tryFind eventType auditDecoderByType with
-    | None -> Error(sprintf "unknown event type '%s'" eventType)
-    | Some decode ->
-        try
-            Ok(decode payload)
-        with ex ->
-            Error(sprintf "payload decode error: %s" ex.Message)
 
 /// The property a persisted row carries its actor in, beside the event's
 /// own fields. Every reader of a payload ignores a property its record does
@@ -2129,18 +696,121 @@ let internal decodeActor (payload: string) : AuditSubject =
         with _ ->
             AuditSubject.unattributed
 
+/// A stored payload without the `_actor` property `withActor` appended:
+/// the event's own bytes. Only the property `withActor` splices in at the
+/// end is removed — one whose value is exactly the row's actor JSON
+/// followed by the closing brace — so a payload is never re-serialised.
+let internal withoutActor (payload: string) : string =
+    let marker = "\"" + ActorProperty + "\":"
+
+    if isNull payload then
+        payload
+    else
+        let body = payload.TrimEnd()
+        let at = body.LastIndexOf marker
+
+        if at < 0 then
+            payload
+        else
+            try
+                use doc = JsonDocument.Parse body
+
+                match doc.RootElement.TryGetProperty ActorProperty with
+                | true, actor when body.Substring(at + marker.Length) = actor.GetRawText() + "}" ->
+                    let head = body.Substring(0, at).TrimEnd()
+
+                    let head =
+                        if head.EndsWith "," then
+                            head.Substring(0, head.Length - 1)
+                        else
+                            head
+
+                    head + "}"
+                | _ -> payload
+            with _ ->
+                payload
+
+/// Decode a persisted audit `(eventType, payload)` pair. A platform kind
+/// decodes to its case; a malformed payload for one is an `Error` naming
+/// why (the replicator records it). Any other kind decodes to `Opaque`,
+/// carrying its id and its payload without the row's `_actor`: a
+/// companion reads it back through its family, and a kind no registrant
+/// on this deployment declares stays readable and re-exportable.
+let internal tryDecodeAuditEvent (eventType: string) (payload: string) : Result<AuditEvent, string> =
+    match Map.tryFind eventType auditDecoderByType with
+    | None ->
+        Ok(
+            Opaque {
+                Kind = eventType
+                Payload = withoutActor payload
+            }
+        )
+    | Some decode ->
+        try
+            Ok(decode payload)
+        with ex ->
+            Error(sprintf "payload decode error: %s" ex.Message)
+
 /// Decode a persisted `ModuleEvent` whose `SourceModule` is
 /// `AuditSourceModule.value` back into an `AuditEvent`. Returns
-/// `None` for unknown `EventType` strings or malformed payloads —
-/// callers filter `None`s out so a single corrupt blob doesn't
-/// break the whole query (audit trails are append-only and the
-/// payload format is owned by the SDK, but defensive decoding
-/// keeps the trail readable across SDK upgrades). `internal` (was
-/// `private`) per Phase 114 so the replicator shares the one decoder.
+/// `None` only for a malformed payload of a platform kind, so a single
+/// corrupt blob doesn't break the whole query; every other kind reads.
 let internal decodeAuditEvent (evt: ModuleEvent) : AuditEvent option =
     match tryDecodeAuditEvent evt.EventType evt.Payload with
     | Ok audit -> Some audit
     | Error _ -> None
+
+/// Whole-event audit JSON: what an archive, a sink or a ledger writes for an
+/// `AuditEvent`. A platform case keeps the shape `PlatformJson.options`
+/// gives a union case (`{"Case": payload}`); an `Opaque` event is written in
+/// that SAME shape under its kind (`{"<Kind>": payload}`), with its payload
+/// bytes verbatim. So a companion's event archives exactly as it did when
+/// it was a case of the union, and reading one back answers `Opaque`.
+module AuditEventJson =
+    let private platformCases: Set<string> =
+        FSharpType.GetUnionCases typeof<AuditEvent>
+        |> Array.map _.Name
+        |> Array.filter (fun name -> name <> "Opaque")
+        |> Set.ofArray
+
+    type private AuditEventConverter() =
+        inherit JsonConverter<AuditEvent>()
+
+        override _.Write(writer: Utf8JsonWriter, value: AuditEvent, _options: JsonSerializerOptions) =
+            match value with
+            | Opaque o ->
+                writer.WriteStartObject()
+                writer.WritePropertyName o.Kind
+                writer.WriteRawValue(o.Payload, skipInputValidation = false)
+                writer.WriteEndObject()
+            | platform -> JsonSerializer.Serialize(writer, platform, PlatformJson.options)
+
+        override _.Read(reader: byref<Utf8JsonReader>, _typeToConvert: Type, _options: JsonSerializerOptions) =
+            use doc = JsonDocument.ParseValue &reader
+            let root = doc.RootElement
+
+            let single =
+                if root.ValueKind = JsonValueKind.Object then
+                    match List.ofSeq (root.EnumerateObject()) with
+                    | [ only ] when not (platformCases.Contains only.Name) -> Some only
+                    | _ -> None
+                else
+                    None
+
+            match single with
+            | Some kind ->
+                Opaque {
+                    Kind = kind.Name
+                    Payload = kind.Value.GetRawText()
+                }
+            | None -> JsonSerializer.Deserialize<AuditEvent>(root.GetRawText(), PlatformJson.options)
+
+    /// `PlatformJson.options` with the whole-event audit shape in front.
+    /// Every audit sink serialises its envelopes with these.
+    let options: JsonSerializerOptions =
+        let o = JsonSerializerOptions(PlatformJson.options)
+        o.Converters.Insert(0, AuditEventConverter())
+        o
 
 /// SDK-default `IAuditLog`. Wraps the DI-registered `IEventStore`
 /// so audit events flow through the same retention policy, blob

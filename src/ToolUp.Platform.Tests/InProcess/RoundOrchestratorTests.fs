@@ -6,6 +6,7 @@ open System.Threading
 open Expecto
 open ToolUp.InterPlatform
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -561,7 +562,7 @@ let tests =
             let dropped =
                 auditLog.Events
                 |> List.choose (function
-                    | FederationParticipantDropped p -> Some p
+                    | PeerAudit(FederationParticipantDropped p) -> Some p
                     | _ -> None)
 
             Expect.hasLength dropped 1 "the dropout produced exactly one audit row"
@@ -572,7 +573,7 @@ let tests =
             let completed =
                 auditLog.Events
                 |> List.choose (function
-                    | FederationRoundCompleted p -> Some p
+                    | PeerAudit(FederationRoundCompleted p) -> Some p
                     | _ -> None)
 
             Expect.hasLength completed 2 "one row per completed round"
@@ -626,7 +627,7 @@ let tests =
             let aborted =
                 auditLog.Events
                 |> List.choose (function
-                    | FederationRunAborted p -> Some p
+                    | PeerAudit(FederationRunAborted p) -> Some p
                     | _ -> None)
 
             Expect.hasLength aborted 1 "the abort produced exactly one audit row"
@@ -636,7 +637,7 @@ let tests =
             Expect.isEmpty
                 (auditLog.Events
                  |> List.filter (function
-                     | FederationRoundCompleted _ -> true
+                     | PeerAudit(FederationRoundCompleted _) -> true
                      | _ -> false))
                 "no round completed, so no round-completed row was emitted"
         }

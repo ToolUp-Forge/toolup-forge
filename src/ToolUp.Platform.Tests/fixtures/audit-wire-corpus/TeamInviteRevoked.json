@@ -1,0 +1,15 @@
+{
+  "kind": "TeamInviteRevoked",
+  "samples": [
+    {
+      "row": "{\"TeamId\":\"\",\"TokenId\":\"\",\"ActorUserId\":\"\"}",
+      "rowWithActor": "{\"TeamId\":\"\",\"TokenId\":\"\",\"ActorUserId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteRevoked\":{\"TeamId\":\"\",\"TokenId\":\"\",\"ActorUserId\":\"\"}}"
+    },
+    {
+      "row": "{\"TeamId\":\"s\",\"TokenId\":\"s\",\"ActorUserId\":\"s\"}",
+      "rowWithActor": "{\"TeamId\":\"s\",\"TokenId\":\"s\",\"ActorUserId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteRevoked\":{\"TeamId\":\"s\",\"TokenId\":\"s\",\"ActorUserId\":\"s\"}}"
+    }
+  ]
+}

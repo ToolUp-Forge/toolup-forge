@@ -1,0 +1,15 @@
+{
+  "kind": "TeamOwnershipTransferred",
+  "samples": [
+    {
+      "row": "{\"TeamId\":\"\",\"FromUserId\":\"\",\"ToUserId\":\"\",\"ActorUserId\":\"\"}",
+      "rowWithActor": "{\"TeamId\":\"\",\"FromUserId\":\"\",\"ToUserId\":\"\",\"ActorUserId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamOwnershipTransferred\":{\"TeamId\":\"\",\"FromUserId\":\"\",\"ToUserId\":\"\",\"ActorUserId\":\"\"}}"
+    },
+    {
+      "row": "{\"TeamId\":\"s\",\"FromUserId\":\"s\",\"ToUserId\":\"s\",\"ActorUserId\":\"s\"}",
+      "rowWithActor": "{\"TeamId\":\"s\",\"FromUserId\":\"s\",\"ToUserId\":\"s\",\"ActorUserId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamOwnershipTransferred\":{\"TeamId\":\"s\",\"FromUserId\":\"s\",\"ToUserId\":\"s\",\"ActorUserId\":\"s\"}}"
+    }
+  ]
+}

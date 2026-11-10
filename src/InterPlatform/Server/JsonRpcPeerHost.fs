@@ -11,6 +11,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.FSharp.Reflection
 open Giraffe
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open PeerReflection
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
@@ -468,7 +469,11 @@ module JsonRpcPeerHost =
             }
 
             do!
-                auditLog.Record(AuditScope.platform, AuditSubject.system "PeerHost", PeerCallCompleted payload)
+                auditLog.Record(
+                    AuditScope.platform,
+                    AuditSubject.system "PeerHost",
+                    PeerAuditEvent.event (PeerCallCompleted payload)
+                )
                 |> AuditRow.orRefuse
                 |> Async.StartAsTask
         }
@@ -540,7 +545,7 @@ module JsonRpcPeerHost =
                             auditLog.Record(
                                 AuditScope.platform,
                                 AuditSubject.system "PeerHost",
-                                PeerJobCompleted payload
+                                PeerAuditEvent.event (PeerJobCompleted payload)
                             )
                             |> AuditRow.orRefuse
                             |> Async.StartAsTask

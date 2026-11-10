@@ -1,0 +1,15 @@
+{
+  "kind": "DiagnosticBundleAccessed",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":null,\"BundleSizeBytes\":\"+0\",\"Truncated\":false}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":null,\"BundleSizeBytes\":\"+0\",\"Truncated\":false,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DiagnosticBundleAccessed\":{\"UserId\":\"\",\"ScopeId\":null,\"BundleSizeBytes\":\"+0\",\"Truncated\":false}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"BundleSizeBytes\":\"+7\",\"Truncated\":true}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"BundleSizeBytes\":\"+7\",\"Truncated\":true,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DiagnosticBundleAccessed\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"BundleSizeBytes\":\"+7\",\"Truncated\":true}}"
+    }
+  ]
+}
