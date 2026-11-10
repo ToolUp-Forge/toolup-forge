@@ -1,4 +1,4 @@
-Codemod: 107 site(s) in 19 file(s) need human review (not rewritten):
+Codemod: 111 site(s) in 20 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -15,6 +15,15 @@ Codemod: 107 site(s) in 19 file(s) need human review (not rewritten):
       -> Phase 815: the legacy `ThemeClass.*` CSS-class strings are removed: drop the `prop.className` wrapper and the `theme = "legacy"` prop, and pass `AgGrid.theme Theme.themeAlpine` / `Theme.themeBalham` / `Theme.themeMaterial` (a `*Dark` class is `|> Theme.withPart Theme.colorSchemeDark`) — no stylesheet import is needed under the Theming API
     L25 [815-elmish-error-handler-inline] |> Program.withErrorHandler (fun (text, ex) -> printfn "%s: %A" text ex)
       -> Phase 815: `Program.withErrorHandler` is removed: wrap the upstream-shape callback as `Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))` — a named callback in pipeline position is rewritten; an inline lambda or a call with the program applied on the same line is left for you to reshape
+  src/Client/Hosting.fs
+    L9 [1071-module-states] ModuleStates = Map.empty
+      -> Phase 1071: `Model.ModuleStates` is `Model.Hosts : Map<string, ModuleHost>`: a module's state is `host.State` (`Client.moduleState id model`), and a full model literal writes `Hosts = Map.empty` or `Hosts = Map.ofList [ id, { State = box state; Generation = 0 } ]`; `Client.observeModuleStates` takes the prior `Hosts`
+    L11 [1071-removed-shell-fields] FlagsPrefetch = Remote.Loading
+      -> Phase 1071: `FlagsPrefetch` and `ResetCounters` are gone: delete the line from a full `Client.Model` literal. The first-init gates are `AwaitingFirstInit` (a set of boot-source keys), and a module's reset count is its host's `Generation`
+    L12 [1071-removed-shell-fields] ResetCounters = Map.empty
+      -> Phase 1071: `FlagsPrefetch` and `ResetCounters` are gone: delete the line from a full `Client.Model` literal. The first-init gates are `AwaitingFirstInit` (a set of boot-source keys), and a module's reset count is its host's `Generation`
+    L15 [1071-module-msg-id] let increment dispatch = dispatch (Client.ModuleMsg(box Increment))
+      -> Phase 1071: `ModuleMsg` carries the module id: construct `ModuleMsg(moduleId, box message)` and match `ModuleMsg(moduleId, message)`; a message for a module with no host is dropped
   src/Client/Shell.fs
     L24 [879-slot-field-split] DataManager =
       -> Phase 879: if this is a `ClientConfig` field, it is `Slots.<field> =` now (a nested copy-and-update) — the codemod moves the field only when its mode case is on the same line; a message-catalog field of the same name stays as it is
@@ -240,6 +249,7 @@ Codemod: 107 site(s) in 19 file(s) need human review (not rewritten):
     Phase 1067 — docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md
     Phase 1068 — docs/migrations/1068-redesign-d-rate-limit-unification.md
     Phase 1070 — docs/migrations/1070-redesign-e-remote-and-memo-primitives.md
+    Phase 1071 — docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1079 — docs/migrations/1079-redesign-f-the-connector-kernel.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md

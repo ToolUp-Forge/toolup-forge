@@ -29,6 +29,7 @@ module ToolUp.Platform.Tests.Remoting.ClientProxyGenerationTests
 //           emission, compiled by both packs).
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open Expecto
 open Microsoft.FSharp.Reflection
@@ -81,10 +82,10 @@ let private fixtureEmission () : string * ClientPlan =
 let private normalise (text: string) = text.Replace("\r\n", "\n").TrimEnd()
 
 /// Hold `relative` to `expected`, rewriting it first when `switch` is set.
-let private pinned (switch: string) (relative: string) (expected: string) =
+let private pinned (stem: string) (relative: string) (expected: string) =
     let path = Path.Combine(repoRoot (), relative)
 
-    if Environment.GetEnvironmentVariable switch = "1" then
+    if Approve.admit stem then
         File.WriteAllText(path, expected.Replace("\r\n", "\n"))
 
     let committed = File.ReadAllText path
@@ -99,13 +100,12 @@ let private pinned (switch: string) (relative: string) (expected: string) =
             |> Option.defaultValue (min e.Length c.Length)
 
         failtestf
-            "%s is not what the generator emits (first difference at line %d; %d committed lines vs %d expected). Regenerate and commit it with your change:\n  $env:%s = \"1\"\n  dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj -- --filter-test-case \"853.C\"\n  $env:%s = $null\nthen rebuild and re-run this pack WITHOUT the variable."
+            "%s is not what the generator emits (first difference at line %d; %d committed lines vs %d expected). Regenerate and commit it with your change:\n  $env:TOOLUP_APPROVE = \"%s\"\n  dotnet run --project src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj -- --filter-test-case \"853.C\"\n  $env:TOOLUP_APPROVE = $null\nthen rebuild and re-run this pack WITHOUT the variable."
             relative
             (first + 1)
             c.Length
             e.Length
-            switch
-            switch
+            stem
 
 /// The records the census DECLARES skipped, with the class of reason. A
 /// record entering or leaving this list is a deliberate edit here.
@@ -214,7 +214,7 @@ let tests =
                 let expected, _ = platformEmission ()
 
                 pinned
-                    "TOOLUP_REGEN_PLATFORM_CLIENT_PROXIES"
+                    "platform-client-proxies"
                     "src/ToolUp.Platform.Client/Client/Remoting/PlatformClientProxies.fs"
                     expected
 
@@ -223,7 +223,7 @@ let tests =
                 let expected, _ = fixtureEmission ()
 
                 pinned
-                    "TOOLUP_REGEN_PLATFORM_CLIENT_PROXIES"
+                    "platform-client-proxies"
                     "src/ToolUp.Platform.Tests/Remoting/ReadCatalogClientProxies.fs"
                     expected
 

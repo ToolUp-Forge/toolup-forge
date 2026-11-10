@@ -32,10 +32,8 @@ open Feliz
 /// function values live on the Model (records stay comparable and the
 /// type stays usable from any tier).
 type BootDegradation = {
-    /// Stable source key — `"teams"`, `"active-team"`,
-    /// `"team-auto-select"`, `"permissions"`, `"configs"`, `"flags"`,
-    /// `"platform-role"`, `"auth-bridge"`. Dedup key, and the handle
-    /// the shell's retry dispatcher resolves to a loader.
+    /// The source's `BootSources` key. Dedup key, and the handle the
+    /// shell's Retry resolves to the source's loader.
     Source: string
     /// Human-readable name for the banner row.
     Label: string
@@ -61,30 +59,13 @@ let add (entry: BootDegradation) (existing: BootDegradation list) : BootDegradat
 let remove (source: string) (existing: BootDegradation list) : BootDegradation list =
     existing |> List.filter (fun e -> e.Source <> source)
 
-/// Phase 444 — the display name for a boot source, in the caller's
-/// locale. The stable `Source` key is what the shell's retry dispatcher
-/// and the dedup both run on; only this projection is localised, so a
-/// translation can never break retry.
-///
-/// A source the SDK does not know (a consumer-registered loader) falls
-/// through to whatever `entry.Label` carries, which is the pre-444
-/// behaviour for every key and the only sensible answer for a string the
-/// catalog has no field for.
+/// The display name for a boot source, in the caller's locale: the source's
+/// row in `BootSources.all` names its catalog field. Only the label is
+/// localised; the `Source` key the dedup and Retry run on is not. A source
+/// the table does not hold falls through to `fallback` (the entry's own
+/// `Label`).
 let localisedLabel (msgs: BootSourceMessages) (source: string) (fallback: string) : string =
-    match source with
-    | "teams" -> msgs.Teams
-    | "active-team" -> msgs.ActiveTeam
-    | "team-auto-select" -> msgs.TeamAutoSelect
-    | "permissions" -> msgs.Permissions
-    | "configs" -> msgs.Configs
-    | "flags" -> msgs.Flags
-    | "platform-role" -> msgs.PlatformRole
-    | "team-role" -> msgs.TeamRole
-    | "auth-bridge" -> msgs.AuthBridge
-    | "platform-info" -> msgs.PlatformInfo
-    | "data-snapshot" -> msgs.DataSnapshot
-    | "sidebar-prefs" -> msgs.SidebarPrefs
-    | _ -> fallback
+    BootSources.label msgs source fallback (BootSources.all<obj, obj> ())
 
 /// Dismissible top-of-viewport banner listing every degraded source
 /// with a per-source Retry affordance. Returns `Html.none` when the

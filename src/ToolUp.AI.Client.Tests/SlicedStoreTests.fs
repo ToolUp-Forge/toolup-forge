@@ -268,11 +268,11 @@ let private shellScopeTests =
                     0
                     "NO module render: its state did not move"
 
-        testCase "the chrome's comparison masks ModuleStates and nothing else" (fun () ->
+        testCase "the chrome's comparison masks Hosts and nothing else" (fun () ->
             let m: Client.Model = {
                 ActiveModuleId = "m"
                 ActivePageRoute = None
-                ModuleStates = Map.ofList [ "m", box 1 ]
+                Hosts = Map.ofList [ "m", ({ State = box 1; Generation = 0 }: ModuleHost) ]
                 AccessibleModules = None
                 ShowAllModules = false
                 ModuleConfigs = Map.empty
@@ -287,9 +287,7 @@ let private shellScopeTests =
                 PlatformRole = None
                 ActiveTeamRole = None
                 CurrentArea = ModuleArea.Product
-                ConfigsPrefetch = Remote.Loading
-                FlagsPrefetch = Remote.Loading
-                ResetCounters = Map.empty
+                AwaitingFirstInit = Client.firstInitGates
                 InitPhase = Client.Ready
                 Degradations = []
                 AppAccessRefused = false
@@ -299,7 +297,7 @@ let private shellScopeTests =
 
             let moduleOnly = {
                 m with
-                    ModuleStates = m.ModuleStates |> Map.add "m" (box 2)
+                    Hosts = m.Hosts |> Map.add "m" { State = box 2; Generation = 0 }
             }
 
             let chromeToo = {
@@ -307,7 +305,7 @@ let private shellScopeTests =
                     ShowAllModules = true
             }
 
-            Expect.isTrue (Client.chromeSliceEqual m moduleOnly) "a ModuleStates-only change is not a chrome change"
+            Expect.isTrue (Client.chromeSliceEqual m moduleOnly) "a Hosts-only change is not a chrome change"
             Expect.isFalse (Client.chromeSliceEqual m chromeToo) "any other field is"
 
             Expect.isFalse

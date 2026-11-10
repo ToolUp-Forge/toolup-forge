@@ -513,6 +513,17 @@ module ErasedModule =
     /// `ClientModule.withGroup`, for a module the SDK constructed.
     let withGroup (group: string) (m: ErasedModule) : ErasedModule = { m with Group = Some group }
 
+/// One initialised module, as the shell hosts it (`Client.Model.Hosts`,
+/// keyed by module id). The state is the module's own `'Model`, erased at
+/// `ClientModule.register`.
+type ModuleHost = {
+    State: obj
+    /// How many times `ResetModule` has re-initialised the module since it
+    /// was first hosted. Part of the module boundary's React key, so a reset
+    /// remounts the boundary and clears its error state.
+    Generation: int
+}
+
 /// Phase 66 Stream B.3 — smart constructors for the per-module
 /// `Visibility: SubjectKind -> bool` predicate. The default
 /// `visibleToAll` matches pre-B.3 behaviour (every module visible);

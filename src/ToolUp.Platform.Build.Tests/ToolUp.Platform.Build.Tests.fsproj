@@ -6,6 +6,7 @@
         <IsPackable>false</IsPackable>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\Contracts\Approval.fs" Link="Contracts\Approval.fs" />
         <Compile Include="SbomTests.fs" />
         <Compile Include="PackagedModuleConformanceTests.fs" />
         <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
@@ -57,6 +58,8 @@
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\SurfaceDiff.fs" Link="Contracts\SurfaceDiff.fs" />
         <Compile Include="..\..\SemVerBump.fs" Link="SemVerBump.fs" />
         <Compile Include="SemVerBumpTests.fs" />
+        <Compile Include="..\..\DocGates.fs" Link="DocGates.fs" />
+        <Compile Include="DocGatesTests.fs" />
         <!-- Phase 259 — the conformance-pack coverage gate. Pure file
              scanning over the checkout (api-baselines, the Contracts
              directory, the `.fs` tree), so it belongs beside the other

@@ -390,9 +390,7 @@
         <Compile Include="Components\Modal.fs" />
         <Compile Include="Components\SvgTree.fs" />
         <Compile Include="Components\ToastCentre.fs" />
-        <!-- Phase 121 — typed boot-degradation accumulator + dismissible
-             banner. Pure data + one Feliz component; the shell (SDK.Client)
-             owns accumulation, retry dispatch, and the banner mount. -->
+        <Compile Include="Client\BootSources.fs" />
         <Compile Include="Client\BootDegradation.fs" />
         <Compile Include="Client\FileManagerUI.fs" />
         <Compile Include="Client\MappingDataManagerUI.fs" />

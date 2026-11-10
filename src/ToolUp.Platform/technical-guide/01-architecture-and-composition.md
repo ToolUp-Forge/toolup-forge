@@ -181,7 +181,7 @@ The SDK provides a complete Elmish program in `SDK.Client.fs` that manages modul
 ```fsharp
 type private Model = {
     ActiveModuleName: string
-    ModuleStates: Map<string, obj>   // Each module's state, keyed by name
+    Hosts: Map<string, obj>          // Each initialised module's host (its state), keyed by id
 }
 
 type private Msg =
@@ -189,7 +189,7 @@ type private Msg =
     | ModuleSelected of string       // User clicked a different module in the sidebar
 ```
 
-`ModuleStates` is a `Map<string, obj>` — each module's state is stored as a boxed value keyed by its name. When the user switches modules, the previous module's state is preserved in the map. When they switch back, the state is restored without re-initialising.
+`Hosts` is a `Map<string, ModuleHost>` — each module's state is stored boxed in its host, keyed by its id. When the user switches modules, the previous module's state is preserved in the map. When they switch back, the state is restored without re-initialising.
 
 After every update cycle, the shell calls `computeProcessedData` — a pure aggregation over every module that exposes `ProvidesProcessedData` — and stores the result in `Model.ProcessedData`. The shell `view` wraps the active module in `ProcessedDataContext.Context.Provider model.ProcessedData`, so any module view `[<ReactComponent>]` that calls `ProcessedData.forType` sees the up-to-date list via `React.useContext`. This is how the shell distributes shared state without modules mutating globals directly — no module writes to a shared registry; only the shell publishes, only views consume.
 

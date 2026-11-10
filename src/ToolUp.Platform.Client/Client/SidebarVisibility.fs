@@ -366,7 +366,7 @@ let private kindAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts)
 /// with an unpicked team still gets the affordance to select one.
 /// GP 12 — UI shape only; the server's `[<TenantScoped>]` gate is
 /// authoritative.
-let private noActiveTeamAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts) : bool =
+let noActiveTeamAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts) : bool =
     match inputs.NoActiveTeamLandingId with
     | Some landingId when inputs.HasTeamScope && inputs.ActiveTeamId.IsNone ->
         f.Id = landingId || (isPlatformAdmin inputs && isAdminSidebarGroup f.Group)

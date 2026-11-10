@@ -113,7 +113,7 @@ type PageContent =
     | Custom of ReactElement                                   // escape hatch — shell renders verbatim, no gutter
 ```
 
-The shell emits one sidebar entry per `PageConfig` for multi-page modules (composite Id `"{moduleId}{pageRoute}"` — the route's leading `/` is the separator) and routes page navigation without re-initialising the MVU. Same-module page clicks only update `ActivePageRoute`; cross-module clicks init the new module as usual. `ModuleStates` remains keyed by module Id — all pages share the same state record, so a selection made on one page is immediately visible to every other page of the same module.
+The shell emits one sidebar entry per `PageConfig` for multi-page modules (composite Id `"{moduleId}{pageRoute}"` — the route's leading `/` is the separator) and routes page navigation without re-initialising the MVU. Same-module page clicks only update `ActivePageRoute`; cross-module clicks init the new module as usual. `Model.Hosts` remains keyed by module Id — all pages share the same state record, so a selection made on one page is immediately visible to every other page of the same module.
 
 `Custom` is a last resort — prefer `Stacked` or `Dashboard` for anything that can live within the shell's gutter conventions.
 

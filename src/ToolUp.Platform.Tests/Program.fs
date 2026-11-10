@@ -203,6 +203,7 @@ let private registeredTests =
         CompositionUpgradePlanTests.tests
         TenantCompositionPresetTests.tests
         ConfigReferenceTests.tests
+        ProjectionsTests.tests
         ConfigStartupModeTests.tests
         ConfigResolverTests.tests
         ConfigProfileTests.tests

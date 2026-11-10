@@ -26,6 +26,7 @@
          compile stay here; this project compiles only its own and the helpers
          they use. -->
     <ItemGroup>
+        <Compile Include="Contracts\Approval.fs" />
         <Compile Include="Support\TestScope.fs" />
         <Compile Include="Contracts\IBlobStorageContract.fs" />
         <Compile Include="Contracts\ITeamProviderResolverContract.fs" />
@@ -205,6 +206,7 @@
         <Compile Include="InProcess\CompositionDryRunTests.fs" />
         <Compile Include="InProcess\CompositionUpgradePlanTests.fs" />
         <Compile Include="InProcess\ConfigReferenceTests.fs" />
+        <Compile Include="InProcess\ProjectionsTests.fs" />
         <Compile Include="InProcess\ConfigStartupModeTests.fs" />
         <Compile Include="InProcess\ConfigResolverTests.fs" />
         <Compile Include="InProcess\ConfigProfileTests.fs" />
