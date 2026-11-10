@@ -84,16 +84,17 @@ let private stepHeading (index: int) (title: string) (enabled: bool) =
                     if enabled then
                         "inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
                     else
-                        "inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500"
+                        ("inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold bg-gray-100 "
+                         + Toolup.UIToolkit.Tokens.Text.muted)
                 )
                 prop.text (string index)
             ]
             Html.span [
                 prop.className (
                     if enabled then
-                        "text-sm font-medium text-gray-900"
+                        ("text-sm font-medium " + Toolup.UIToolkit.Tokens.Text.primary)
                     else
-                        "text-sm font-medium text-gray-500"
+                        ("text-sm font-medium " + Toolup.UIToolkit.Tokens.Text.muted)
                 )
                 prop.text title
             ]
@@ -115,7 +116,10 @@ let private labelledInput (label: string) (inputType: string) (value: string) (o
     Html.label [
         prop.className "flex flex-col gap-1"
         prop.children [
-            Html.span [ prop.className "text-xs font-medium text-gray-700"; prop.text label ]
+            Html.span [
+                prop.className ("text-xs font-medium " + Toolup.UIToolkit.Tokens.Text.secondary)
+                prop.text label
+            ]
             Html.input [
                 prop.type' inputType
                 prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
@@ -288,7 +292,7 @@ let private GoogleAnalyticsCredentialPanel
                 prop.children [
                     stepHeading 1 "Google Cloud OAuth client" true
                     Html.p [
-                        prop.className "text-xs text-gray-600 mb-2"
+                        prop.className ("text-xs mb-2 " + Toolup.UIToolkit.Tokens.Text.secondary)
                         prop.text
                             "Create an OAuth 2.0 Client ID of type \"Web application\" in the Google Cloud project, register this deployment's callback as an authorised redirect URI, and paste the credentials here. They are written to the server's secret store and never returned to the browser."
                     ]
@@ -315,7 +319,7 @@ let private GoogleAnalyticsCredentialPanel
                 prop.children [
                     stepHeading 2 "Authorise Google Analytics access" hasClientCredentials
                     Html.p [
-                        prop.className "text-xs text-gray-600 mb-2"
+                        prop.className ("text-xs mb-2 " + Toolup.UIToolkit.Tokens.Text.secondary)
                         prop.text
                             "Sends you to Google to grant this deployment read-only access to your Analytics data. You will be returned here when consent completes."
                     ]
@@ -357,7 +361,7 @@ let private GoogleAnalyticsCredentialPanel
                                     // discovery pass first" state, not an
                                     // error.
                                     Html.span [
-                                        prop.className "text-xs text-gray-500"
+                                        prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                                         prop.text
                                             "No properties discovered yet. Trigger a refresh on this data source to enumerate the properties this account can see."
                                     ]
@@ -366,7 +370,9 @@ let private GoogleAnalyticsCredentialPanel
                                         prop.className "flex flex-col gap-1"
                                         prop.children [
                                             Html.span [
-                                                prop.className "text-xs font-medium text-gray-700"
+                                                prop.className (
+                                                    "text-xs font-medium " + Toolup.UIToolkit.Tokens.Text.secondary
+                                                )
                                                 prop.text "Property"
                                             ]
                                             Html.select [
@@ -400,7 +406,7 @@ let private GoogleAnalyticsCredentialPanel
                         ]
                     | _ ->
                         Html.span [
-                            prop.className "text-xs text-gray-500"
+                            prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                             prop.text "Available once Google Analytics is connected."
                         ]
                 ]

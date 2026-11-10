@@ -405,12 +405,6 @@ let private jsonFromDisplay (kind: ConfigFieldKind) (display: string) : string =
 
 // ─── Form component ──────────────────────────────────────────────────
 
-/// Per-module form. Holds its own React state for every field so text
-/// inputs don't round-trip through Elmish on every keystroke — matches
-/// the pattern documented in CLAUDE.md (`UIToolkit.Forms.Input`).
-/// `onSave` and `onClear` fire only on explicit button clicks.
-/// PascalCase name follows React component conventions so react-refresh
-/// can pick up edits during dev without a full reload.
 /// The status under a module form or a flag row: a working line while the
 /// save is in flight, then the outcome as a dismissible notice.
 let private formStatusView (msgs: TeamConfigMessages) (status: FormStatus) (onDismiss: unit -> unit) =
@@ -422,10 +416,29 @@ let private formStatusView (msgs: TeamConfigMessages) (status: FormStatus) (onDi
 
     match status with
     | Idle -> Html.none
-    | Saving -> Html.div [ prop.className "mt-3 text-sm text-gray-500"; prop.text msgs.Saving ]
+    | Saving -> Html.div [ prop.className ("mt-3 text-sm " + Tokens.Text.muted); prop.text msgs.Saving ]
     | Saved -> settled (Notice.Info msgs.Saved)
     | Failed err -> settled (Notice.Problem err)
 
+/// A form's save button: busy, with the catalog's working line, while its
+/// save is in flight.
+let private saveState (msgs: TeamConfigMessages) (status: FormStatus) =
+    Forms.Button.stateOf (status = Saving) msgs.Saving false
+
+/// A form's clear button: inert while a save is in flight or when there is
+/// nothing to clear.
+let private clearState (status: FormStatus) (hasValue: bool) =
+    if status = Saving || not hasValue then
+        Forms.Button.Disabled
+    else
+        Forms.Button.Enabled
+
+/// Per-module form. Holds its own React state for every field so text
+/// inputs don't round-trip through Elmish on every keystroke — matches
+/// the pattern documented in CLAUDE.md (`UIToolkit.Forms.Input`).
+/// `onSave` and `onClear` fire only on explicit button clicks.
+/// PascalCase name follows React component conventions so react-refresh
+/// can pick up edits during dev without a full reload.
 [<ReactComponent>]
 let private ModuleForm
     (entry: ModuleConfigEntry)
@@ -505,13 +518,7 @@ let private ModuleForm
                 prop.className "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full"
             ]
 
-        | ConfigFieldKind.String _ ->
-            Html.input [
-                prop.type' "text"
-                prop.value current
-                prop.onChange (fun (v: string) -> setField field.Key v)
-                prop.className "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full"
-            ]
+        | ConfigFieldKind.String _ -> Forms.Input.text current (setField field.Key) ""
 
         | ConfigFieldKind.Choice options ->
             Html.select [
@@ -527,7 +534,7 @@ let private ModuleForm
             prop.className "mb-4"
             prop.children [
                 Html.label [
-                    prop.className "block text-sm font-medium text-gray-700 mb-1"
+                    prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                     prop.children [
                         Html.text field.DisplayName
                         if field.Required then
@@ -536,7 +543,7 @@ let private ModuleForm
                 ]
                 fieldInput field
                 match field.Description with
-                | Some d -> Html.p [ prop.className "text-xs text-gray-500 mt-1"; prop.text d ]
+                | Some d -> Html.p [ prop.className ("text-xs mt-1 " + Tokens.Text.muted); prop.text d ]
                 | None -> Html.none
             ]
         ]
@@ -564,19 +571,23 @@ let private ModuleForm
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text entry.DisplayName ]
             Html.p [
-                prop.className "text-xs text-gray-500 mb-4"
+                prop.className ("text-xs mb-4 " + Tokens.Text.muted)
                 prop.text (msgs.ModuleKeyLabel entry.ModuleKey)
             ]
             match entry.Schema.Fields with
-            | [] -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoEditableConfig ]
+            | [] ->
+                Html.p [
+                    prop.className ("text-sm " + Tokens.Text.muted)
+                    prop.text msgs.NoEditableConfig
+                ]
             | fields ->
                 Html.div [ prop.children (fields |> List.map row) ]
 
                 Html.div [
                     prop.className "flex gap-2 mt-4"
                     prop.children [
-                        Forms.Button.primary msgs.SaveButton onSaveClick
-                        Forms.Button.secondary msgs.ClearAllButton onClear
+                        Forms.Button.primaryWith (saveState msgs status) msgs.SaveButton onSaveClick
+                        Forms.Button.secondaryWith (clearState status true) msgs.ClearAllButton onClear
                     ]
                 ]
 
@@ -631,7 +642,7 @@ let private FlagRow
                         prop.onChange (fun (b: bool) -> setDraft (FlagValue.Bool b))
                     ]
                     Html.span [
-                        prop.className "text-sm text-gray-700"
+                        prop.className ("text-sm " + Tokens.Text.secondary)
                         prop.text (if current then msgs.FlagEnabled else msgs.FlagDisabled)
                     ]
                 ]
@@ -660,7 +671,7 @@ let private FlagRow
             ]
         | None ->
             Html.span [
-                prop.className "inline-block text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600"
+                prop.className ("inline-block text-xs px-2 py-0.5 rounded bg-gray-100 " + Tokens.Text.secondary)
                 prop.text msgs.FlagUsingDefault
             ]
 
@@ -680,26 +691,27 @@ let private FlagRow
                     match flag.Owner with
                     | Some owner ->
                         Html.span [
-                            prop.className "text-xs text-gray-500"
+                            prop.className ("text-xs " + Tokens.Text.muted)
                             prop.text (msgs.FlagOwnerLabel owner)
                         ]
                     | None -> Html.none
                 ]
             ]
             if not (System.String.IsNullOrWhiteSpace flag.Description) then
-                Html.p [ prop.className "text-xs text-gray-500 mb-2"; prop.text flag.Description ]
+                Html.p [
+                    prop.className ("text-xs mb-2 " + Tokens.Text.muted)
+                    prop.text flag.Description
+                ]
             Html.p [
-                prop.className "text-xs text-gray-400 mb-3"
+                prop.className ("text-xs mb-3 " + Tokens.Text.muted)
                 prop.text (msgs.FlagDefaultLabel defaultDisplay)
             ]
             input
             Html.div [
                 prop.className "flex gap-2 mt-3"
                 prop.children [
-                    Forms.Button.primary msgs.SaveOverrideButton (fun () -> onSave draft)
-                    Forms.Button.secondary msgs.ClearOverrideButton (fun () ->
-                        if overrideOpt.IsSome then
-                            onClear ())
+                    Forms.Button.primaryWith (saveState msgs status) msgs.SaveOverrideButton (fun () -> onSave draft)
+                    Forms.Button.secondaryWith (clearState status overrideOpt.IsSome) msgs.ClearOverrideButton onClear
                 ]
             ]
             formStatusView msgs status onDismissStatus
@@ -714,12 +726,18 @@ let private flagsTabView (msgs: TeamConfigMessages) (model: Model) (dispatch: Ms
                 prop.className "text-lg font-semibold mb-1"
                 prop.text msgs.FeatureFlagsHeading
             ]
-            Html.p [ prop.className "text-xs text-gray-500 mb-4"; prop.text msgs.FeatureFlagsHelp ]
+            Html.p [
+                prop.className ("text-xs mb-4 " + Tokens.Text.muted)
+                prop.text msgs.FeatureFlagsHelp
+            ]
             StateViews.notice { Dismiss = msgs.Dismiss } model.FlagsError (fun () -> dispatch DismissFlagsError)
             if not model.FlagsLoaded then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingFlags ]
+                Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.LoadingFlags ]
             elif List.isEmpty model.DeclaredFlags then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoFlagsDeclared ]
+                Html.p [
+                    prop.className ("text-sm " + Tokens.Text.muted)
+                    prop.text msgs.NoFlagsDeclared
+                ]
             else
                 Html.div [
                     prop.children [
@@ -778,7 +796,7 @@ let outputVisibilityView
     (onChoose: TeamVisibilityLevel -> unit)
     : ReactElement =
     let note (text: string) =
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text text ]
+        Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text text ]
 
     let statusLine =
         let settled (notice: Notice) =
@@ -787,7 +805,7 @@ let outputVisibilityView
         match status with
         | Saved -> settled (Notice.Info msgs.OutputVisibilityUpdated)
         | Failed refusal -> settled (Notice.Problem refusal)
-        | Saving -> Html.p [ prop.className "text-sm text-gray-500 mb-3"; prop.text msgs.Saving ]
+        | Saving -> Html.p [ prop.className ("text-sm mb-3 " + Tokens.Text.muted); prop.text msgs.Saving ]
         | Idle -> Html.none
 
     let body =
@@ -800,7 +818,7 @@ let outputVisibilityView
             Html.div [
                 prop.children [
                     Html.p [
-                        prop.className "text-sm font-medium text-gray-800 mb-3"
+                        prop.className ("text-sm font-medium mb-3 " + Tokens.Text.primary)
                         prop.text (outputLevelDescription msgs v.Level)
                     ]
                     statusLine
@@ -817,7 +835,7 @@ let outputVisibilityView
 
                                     Html.label [
                                         prop.key (TeamVisibilityLevel.name level)
-                                        prop.className "flex items-start gap-2 text-sm text-gray-700"
+                                        prop.className ("flex items-start gap-2 text-sm " + Tokens.Text.secondary)
                                         prop.children [
                                             Html.input [
                                                 prop.type'.radio
@@ -837,7 +855,7 @@ let outputVisibilityView
                                                         prop.text (outputLevelLabel msgs level)
                                                     ]
                                                     Html.span [
-                                                        prop.className "block text-xs text-gray-500"
+                                                        prop.className ("block text-xs " + Tokens.Text.muted)
                                                         prop.text (outputLevelDescription msgs level)
                                                     ]
                                                 ]
@@ -857,7 +875,7 @@ let outputVisibilityView
                 prop.text msgs.OutputVisibilityHeading
             ]
             Html.p [
-                prop.className "text-xs text-gray-500 mb-4"
+                prop.className ("text-xs mb-4 " + Tokens.Text.muted)
                 prop.text msgs.OutputVisibilityHelp
             ]
             body
@@ -913,7 +931,7 @@ let outputVisibilityNoticeView (msgs: TeamConfigMessages) (view: TeamOutputVisib
     match view with
     | Some v when v.InTeamScope && v.Enabled ->
         Html.p [
-            prop.className "text-xs text-gray-500"
+            prop.className ("text-xs " + Tokens.Text.muted)
             prop.title msgs.OutputVisibilityNoticeHint
             prop.text (outputLevelDescription msgs v.Level)
         ]
@@ -947,13 +965,19 @@ let private sidebar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> 
         prop.className "w-64 border-r border-border bg-gray-50 p-4"
         prop.children [
             Html.h3 [
-                prop.className "text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
+                prop.className ("text-xs font-semibold uppercase tracking-wide mb-2 " + Tokens.Text.muted)
                 prop.text msgs.ModulesHeading
             ]
             if not model.Loaded then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.SidebarLoading ]
+                Html.p [
+                    prop.className ("text-sm " + Tokens.Text.muted)
+                    prop.text msgs.SidebarLoading
+                ]
             elif List.isEmpty model.Modules then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoConfigurableModules ]
+                Html.p [
+                    prop.className ("text-sm " + Tokens.Text.muted)
+                    prop.text msgs.NoConfigurableModules
+                ]
             else
                 Html.div [
                     prop.className "flex flex-col gap-1"
@@ -967,7 +991,7 @@ let private sidebar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> 
                                     if isSelected then
                                         "bg-brand text-white"
                                     else
-                                        "hover:bg-gray-100 text-gray-700"
+                                        ("hover:bg-gray-100 " + Tokens.Text.secondary)
                                 ]
                                 prop.text entry.DisplayName
                                 prop.onClick (fun _ -> dispatch (SelectModule entry.ModuleKey))
@@ -984,7 +1008,7 @@ let private detail (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> u
             prop.className "flex-1 p-6"
             prop.children [
                 Html.p [
-                    prop.className "text-sm text-gray-500"
+                    prop.className ("text-sm " + Tokens.Text.muted)
                     prop.text (
                         if model.Loaded then
                             msgs.SelectModulePrompt
@@ -1023,28 +1047,18 @@ let private detail (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> u
                 ]
             ]
 
-let private tabButton (label: string) (active: bool) (onClick: unit -> unit) =
-    Html.button [
-        prop.className [
-            "px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-            if active then
-                "border-brand text-brand"
-            else
-                "border-transparent text-gray-500 hover:text-gray-700"
-        ]
-        prop.text label
-        prop.onClick (fun _ -> onClick ())
-    ]
-
 let private tabBar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
-        prop.className "flex gap-1 border-b border-border bg-white px-4"
+        prop.className [ "px-4"; Tokens.Bg.card ]
         prop.children [
-            tabButton msgs.ConfigurationTab (model.ActiveTab = ConfigTab) (fun () -> dispatch (SwitchTab ConfigTab))
-            tabButton msgs.FeatureFlagsTab (model.ActiveTab = FlagsTab) (fun () -> dispatch (SwitchTab FlagsTab))
-
-            tabButton msgs.OutputVisibilityTab (model.ActiveTab = OutputVisibilityTab) (fun () ->
-                dispatch (SwitchTab OutputVisibilityTab))
+            Tabs.bar
+                [
+                    ConfigTab, msgs.ConfigurationTab
+                    FlagsTab, msgs.FeatureFlagsTab
+                    OutputVisibilityTab, msgs.OutputVisibilityTab
+                ]
+                model.ActiveTab
+                (SwitchTab >> dispatch)
         ]
     ]
 

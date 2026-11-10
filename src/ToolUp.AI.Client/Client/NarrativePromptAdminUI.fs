@@ -457,7 +457,7 @@ let private listView (model: Model) (dispatch: Msg -> unit) =
                         prop.children [
                             Html.h2 [ prop.className "text-lg font-semibold"; prop.text "Report wording" ]
                             Html.p [
-                                prop.className "text-xs text-gray-500"
+                                prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                                 prop.text
                                     "The instruction and section guidance of each AI-written report, for this team. The grounding rules are fixed."
                             ]
@@ -471,11 +471,15 @@ let private listView (model: Model) (dispatch: Msg -> unit) =
                 ]
             ]
             match model.Narratives with
-            | Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+            | Loading ->
+                Html.p [
+                    prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
+                    prop.text "Loading…"
+                ]
             | LoadError reason -> Html.p [ prop.className "text-sm text-red-700"; prop.text reason ]
             | Loaded [] ->
                 Html.p [
-                    prop.className "text-sm text-gray-500"
+                    prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
                     prop.text "This deployment declares no AI-written reports."
                 ]
             | Loaded narratives ->
@@ -491,7 +495,7 @@ let private listView (model: Model) (dispatch: Msg -> unit) =
                                         prop.children [
                                             Html.p [ prop.className "font-medium text-sm"; prop.text n.DisplayName ]
                                             Html.p [
-                                                prop.className "text-xs text-gray-500"
+                                                prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                                                 prop.text $"{n.RunKey} · {versionLabel n.CurrentVersion}"
                                             ]
                                         ]
@@ -524,7 +528,7 @@ let private WordingEditor (view: NarrativePromptView) (busy: bool) (dispatch: Ms
         prop.children [
             Html.h3 [ prop.className "font-medium mb-2"; prop.text "Wording in force" ]
             Html.label [
-                prop.className "block text-sm font-medium text-gray-700 mb-1"
+                prop.className ("block text-sm font-medium mb-1 " + Toolup.UIToolkit.Tokens.Text.secondary)
                 prop.text "Instruction"
             ]
             Html.textarea [
@@ -536,7 +540,7 @@ let private WordingEditor (view: NarrativePromptView) (busy: bool) (dispatch: Ms
                 prop.disabled busy
             ]
             Html.p [
-                prop.className "text-xs text-gray-500 mb-3"
+                prop.className ("text-xs mb-3 " + Toolup.UIToolkit.Tokens.Text.muted)
                 prop.text $"Declared: {view.DeclaredPrompt}"
             ]
             for section in view.DeclaredSections do
@@ -545,7 +549,7 @@ let private WordingEditor (view: NarrativePromptView) (busy: bool) (dispatch: Ms
                     prop.className "mb-3"
                     prop.children [
                         Html.label [
-                            prop.className "block text-sm font-medium text-gray-700 mb-1"
+                            prop.className ("block text-sm font-medium mb-1 " + Toolup.UIToolkit.Tokens.Text.secondary)
                             prop.text $"{section.Heading} ({section.SectionId})"
                         ]
                         Html.textarea [
@@ -557,7 +561,7 @@ let private WordingEditor (view: NarrativePromptView) (busy: bool) (dispatch: Ms
                             prop.disabled busy
                         ]
                         Html.p [
-                            prop.className "text-xs text-gray-500"
+                            prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                             prop.text $"Declared: {section.Guidance}"
                         ]
                     ]
@@ -619,7 +623,11 @@ let private regenerateView (model: Model) (view: NarrativePromptView) (dispatch:
             Html.h3 [ prop.className "font-medium mb-2"; prop.text "Last run" ]
             match view.LastRun with
             | Some run -> outcome run
-            | None -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "No run in this team yet." ]
+            | None ->
+                Html.p [
+                    prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
+                    prop.text "No run in this team yet."
+                ]
             Html.div [
                 prop.className "mt-3"
                 prop.children [
@@ -646,10 +654,13 @@ let private regenerateView (model: Model) (view: NarrativePromptView) (dispatch:
                             ]
                         ]
                     | Some RegenerateProgress.Starting ->
-                        Html.p [ prop.className "text-sm text-gray-500"; prop.text "Starting…" ]
+                        Html.p [
+                            prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
+                            prop.text "Starting…"
+                        ]
                     | Some(RegenerateProgress.Awaiting _) ->
                         Html.p [
-                            prop.className "text-sm text-gray-500"
+                            prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
                             prop.text "Running — a report takes a few minutes to write."
                         ]
                     | Some(RegenerateProgress.Landed run) -> Html.div [ prop.children [ outcome run; button ] ]
@@ -657,7 +668,7 @@ let private regenerateView (model: Model) (view: NarrativePromptView) (dispatch:
                         Html.div [
                             prop.children [
                                 Html.p [
-                                    prop.className "text-sm text-gray-500"
+                                    prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
                                     prop.text
                                         "Still running. Its result will appear here, and a run that fails for good is listed under Background jobs."
                                 ]
@@ -680,7 +691,7 @@ let private versionsView (versions: NarrativePromptVersion list) =
             Html.h3 [ prop.className "font-medium mb-2"; prop.text "Earlier versions" ]
             if versions.IsEmpty then
                 Html.p [
-                    prop.className "text-sm text-gray-500"
+                    prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
                     prop.text "None saved; the declared wording is in force."
                 ]
             else
@@ -693,7 +704,7 @@ let private versionsView (versions: NarrativePromptVersion list) =
                                 prop.className "py-2 text-sm"
                                 prop.children [
                                     Html.p [
-                                        prop.className "text-xs text-gray-500"
+                                        prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                                         prop.text (
                                             sprintf
                                                 "Version %d · %s · %s%s"
@@ -736,7 +747,7 @@ let private proposalsView
         prop.children [
             Html.h3 [ prop.className "font-medium mb-1"; prop.text "Proposed wording" ]
             Html.p [
-                prop.className "text-xs text-gray-500 mb-2"
+                prop.className ("text-xs mb-2 " + Toolup.UIToolkit.Tokens.Text.muted)
                 prop.text (
                     sprintf
                         "When the same kind of claim is refused on %d of the last %d runs under one wording, a sentence aimed at it is proposed here. It is never used until you approve it."
@@ -745,7 +756,10 @@ let private proposalsView
                 )
             ]
             if learning.Proposals.IsEmpty then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text "No proposals." ]
+                Html.p [
+                    prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
+                    prop.text "No proposals."
+                ]
             else
                 Html.ul [
                     prop.className "divide-y"
@@ -758,7 +772,7 @@ let private proposalsView
                                 prop.className "py-2 text-sm"
                                 prop.children [
                                     Html.p [
-                                        prop.className "text-xs text-gray-500"
+                                        prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                                         prop.text (
                                             sprintf
                                                 "%s · %s · %s"
@@ -770,7 +784,7 @@ let private proposalsView
                                     Html.p [ prop.className "font-medium"; prop.text p.Sentence ]
                                     for earlier in p.Earlier do
                                         Html.p [
-                                            prop.className "text-xs text-gray-500"
+                                            prop.className ("text-xs " + Toolup.UIToolkit.Tokens.Text.muted)
                                             prop.text $"Tried before: {earlier}"
                                         ]
                                     Html.details [
@@ -832,7 +846,7 @@ let private detailView (model: Model) (view: NarrativePromptView) (dispatch: Msg
             ]
             Html.h2 [ prop.className "text-lg font-semibold"; prop.text view.DisplayName ]
             Html.p [
-                prop.className "text-xs text-gray-500 mb-4"
+                prop.className ("text-xs mb-4 " + Toolup.UIToolkit.Tokens.Text.muted)
                 prop.text $"{view.Title} · {view.RunKey} · {versionLabel (versionInForce view)} in force"
             ]
             banner model dispatch
@@ -845,7 +859,7 @@ let private detailView (model: Model) (view: NarrativePromptView) (dispatch: Msg
                 prop.children [
                     Html.h3 [ prop.className "font-medium mb-1"; prop.text "Grounding rules (fixed)" ]
                     Html.p [
-                        prop.className "text-xs text-gray-500 mb-2"
+                        prop.className ("text-xs mb-2 " + Toolup.UIToolkit.Tokens.Text.muted)
                         prop.text
                             "The model receives these after the wording, on every run. They cannot be edited here, and a report that breaks one is refused, never published."
                     ]
@@ -867,7 +881,11 @@ let private NarrativePromptBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             match model.Open with
             | None -> listView model dispatch
-            | Some Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text "Loading…" ]
+            | Some Loading ->
+                Html.p [
+                    prop.className ("text-sm " + Toolup.UIToolkit.Tokens.Text.muted)
+                    prop.text "Loading…"
+                ]
             | Some(LoadError reason) ->
                 Html.div [
                     prop.children [

@@ -459,7 +459,7 @@ let private standingPill (msgs: JobsAdminMessages) (standing: JobStanding) =
         | JobStanding.InProgress -> "bg-blue-100 text-blue-700 border-blue-200"
         | JobStanding.Succeeded -> "bg-green-100 text-green-700 border-green-200"
         | JobStanding.AttemptCancelled
-        | JobStanding.NotYetRun -> "bg-gray-100 text-gray-700 border-gray-200"
+        | JobStanding.NotYetRun -> ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
 
     Html.span [
         prop.className $"inline-block px-2 py-0.5 text-xs rounded border {cls}"
@@ -489,50 +489,23 @@ let private rerunCell (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg ->
         prop.className "space-y-1"
         prop.children [
             match rerunOffer job with
-            | RerunOffer.Offered when model.Confirming = Some job.JobId ->
-                Html.div [
-                    prop.className "space-y-1"
-                    prop.children [
-                        Html.p [
-                            prop.className "text-xs text-gray-700"
-                            prop.text (msgs.RerunConfirmPrompt job.Handler)
-                        ]
-                        Html.div [
-                            prop.className "space-x-3"
-                            prop.children [
-                                Html.button [
-                                    prop.className "text-xs underline text-red-700"
-                                    prop.text msgs.RerunConfirm
-                                    prop.onClick (fun _ -> dispatch (RerunConfirmed job.JobId))
-                                ]
-                                Html.button [
-                                    prop.className "text-xs underline"
-                                    prop.text msgs.RerunCancel
-                                    prop.onClick (fun _ -> dispatch RerunCancelled)
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
-            | RerunOffer.Offered when not inFlight ->
-                Html.button [
-                    prop.className "text-xs underline"
-                    prop.text msgs.RerunButton
-                    prop.onClick (fun _ -> dispatch (RerunRequested job.JobId))
-                ]
+            | RerunOffer.Offered ->
+                Forms.Button.secondaryWith
+                    (Forms.Button.stateOf inFlight msgs.RerunButton false)
+                    msgs.RerunButton
+                    (fun () -> dispatch (RerunRequested job.JobId))
             | RerunOffer.RefusedDisabled ->
                 Html.p [
-                    prop.className "text-xs text-gray-500"
+                    prop.className [ "text-xs"; Tokens.Text.muted ]
                     prop.text msgs.RerunUnavailableDisabled
                 ]
             | RerunOffer.RefusedCancelled ->
                 Html.p [
-                    prop.className "text-xs text-gray-500"
+                    prop.className [ "text-xs"; Tokens.Text.muted ]
                     prop.text msgs.RerunUnavailableCancelled
                 ]
-            | RerunOffer.Offered -> Html.none
             match progress with
-            | Some text -> Html.p [ prop.className "text-xs text-gray-700"; prop.text text ]
+            | Some text -> Html.p [ prop.className [ "text-xs"; Tokens.Text.secondary ]; prop.text text ]
             | None -> Html.none
         ]
     ]
@@ -554,7 +527,7 @@ let private attemptPill (msgs: JobsAdminMessages) (reading: AttemptReading) =
         | AttemptReading.InProgress
         | AttemptReading.RetryPending -> "bg-blue-100 text-blue-700 border-blue-200"
         | AttemptReading.Succeeded -> "bg-green-100 text-green-700 border-green-200"
-        | AttemptReading.Cancelled -> "bg-gray-100 text-gray-700 border-gray-200"
+        | AttemptReading.Cancelled -> ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
 
     Html.span [
         prop.className $"inline-block px-2 py-0.5 text-xs rounded border {cls}"
@@ -576,7 +549,7 @@ let private attemptItem (msgs: JobsAdminMessages) (job: JobDefinition) (run: Job
         prop.className "py-1"
         prop.children [
             Html.div [
-                prop.className "flex flex-wrap items-center gap-2 text-xs text-gray-700"
+                prop.className ("flex flex-wrap items-center gap-2 text-xs " + Tokens.Text.secondary)
                 prop.children [
                     Html.span [ prop.className "font-medium"; prop.text (msgs.AttemptNumber run.Attempt) ]
                     attemptPill msgs reading
@@ -602,146 +575,152 @@ let private attemptItem (msgs: JobsAdminMessages) (job: JobDefinition) (run: Job
         ]
     ]
 
-let private attemptsRow (msgs: JobsAdminMessages) (model: Model) (job: JobDefinition) =
-    Html.tr [
-        prop.key (string job.JobId + "-attempts")
-        prop.className "border-b border-gray-100 bg-gray-50"
+let private attemptsList (msgs: JobsAdminMessages) (model: Model) (job: JobDefinition) =
+    Html.div [
+        prop.className [ "mt-2 px-3 py-2 rounded"; Tokens.Bg.subtle ]
         prop.children [
-            Html.td [
-                prop.colSpan 4
-                prop.className "px-4 py-2"
-                prop.children [
-                    match model.Attempts.TryFind job.JobId with
-                    | None
-                    | Some Remote.NotAsked
-                    | Some Remote.Loading ->
-                        Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.AttemptsLoading ]
-                    | Some(Remote.Failed message) ->
-                        Html.p [
-                            prop.className "text-xs text-red-700"
-                            prop.text (msgs.AttemptsLoadFailed message)
-                        ]
-                    | Some(Remote.Reloading [])
-                    | Some(Remote.Loaded []) ->
-                        Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoAttempts ]
-                    | Some(Remote.Reloading runs)
-                    | Some(Remote.Loaded runs) -> Html.ul (runs |> List.map (attemptItem msgs job))
+            match model.Attempts.TryFind job.JobId with
+            | None
+            | Some Remote.NotAsked
+            | Some Remote.Loading ->
+                Html.p [
+                    prop.className [ "text-xs"; Tokens.Text.muted ]
+                    prop.text msgs.AttemptsLoading
                 ]
-            ]
+            | Some(Remote.Failed message) ->
+                Html.p [
+                    prop.className "text-xs text-red-700"
+                    prop.text (msgs.AttemptsLoadFailed message)
+                ]
+            | Some(Remote.Reloading [])
+            | Some(Remote.Loaded []) ->
+                Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.NoAttempts ]
+            | Some(Remote.Reloading runs)
+            | Some(Remote.Loaded runs) -> Html.ul (runs |> List.map (attemptItem msgs job))
         ]
     ]
 
-let private summaryRow (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) (job: JobDefinition) =
-    let standing = standingOf job
+/// The job cell: handler, id, status, the attempts toggle, and the
+/// attempts list beneath it when expanded.
+let private jobCell (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) (job: JobDefinition) =
     let expanded = model.Expanded.Contains job.JobId
 
+    Html.div [
+        Html.div [ prop.className "text-sm font-medium"; prop.text job.Handler ]
+        Html.div [
+            prop.className [ "text-xs font-mono"; Tokens.Text.muted ]
+            prop.text (string job.JobId)
+        ]
+        match job.Status with
+        | JobStatus.Disabled ->
+            Html.span [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.JobDisabled ]
+        | JobStatus.Cancelled ->
+            Html.span [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.JobCancelled ]
+        | JobStatus.Active -> Html.none
+        Html.div [
+            Html.button [
+                prop.className [ "text-xs underline"; Tokens.Text.secondary ]
+                prop.ariaExpanded expanded
+                prop.text (if expanded then msgs.HideAttempts else msgs.ShowAttempts)
+                prop.onClick (fun _ -> dispatch (ToggleAttempts job.JobId))
+            ]
+        ]
+        if expanded then
+            attemptsList msgs model job
+    ]
+
+let private lastRunCell (msgs: JobsAdminMessages) (model: Model) (job: JobDefinition) =
     let newer =
         match model.Attempts.TryFind job.JobId with
         | Some(Remote.Loaded runs) -> newerThanRecord job runs
         | _ -> None
 
-    Html.tr [
-        prop.key (string job.JobId)
-        prop.className (
-            if standing = JobStanding.PermanentlyFailed then
-                "border-b border-gray-100 bg-red-50"
-            else
-                "border-b border-gray-100"
-        )
+    Html.div [
+        prop.className "text-sm"
         prop.children [
-            Html.td [
-                prop.className "py-2 pr-4 align-top"
-                prop.children [
-                    Html.div [ prop.className "text-sm font-medium"; prop.text job.Handler ]
-                    Html.div [
-                        prop.className "text-xs text-gray-500 font-mono"
-                        prop.text (string job.JobId)
-                    ]
-                    match job.Status with
-                    | JobStatus.Disabled ->
-                        Html.span [ prop.className "text-xs text-gray-500"; prop.text msgs.JobDisabled ]
-                    | JobStatus.Cancelled ->
-                        Html.span [ prop.className "text-xs text-gray-500"; prop.text msgs.JobCancelled ]
-                    | JobStatus.Active -> Html.none
-                    Html.div [
-                        Html.button [
-                            prop.className "text-xs underline text-gray-600"
-                            prop.ariaExpanded expanded
-                            prop.text (if expanded then msgs.HideAttempts else msgs.ShowAttempts)
-                            prop.onClick (fun _ -> dispatch (ToggleAttempts job.JobId))
-                        ]
-                    ]
+            Html.div [
+                prop.text (job.LastRunAt |> Option.map formatTime |> Option.defaultValue msgs.NeverRun)
+            ]
+            match newer with
+            | Some run ->
+                Html.p [
+                    prop.className "mt-1 text-xs text-blue-700"
+                    prop.text (msgs.NewerAttempt run.Attempt (formatTime run.StartedAt))
                 ]
-            ]
-            Html.td [
-                prop.className "py-2 pr-4 text-sm align-top"
-                prop.children [
-                    Html.div [
-                        prop.text (job.LastRunAt |> Option.map formatTime |> Option.defaultValue msgs.NeverRun)
-                    ]
-                    match newer with
-                    | Some run ->
-                        Html.p [
-                            prop.className "mt-1 text-xs text-blue-700"
-                            prop.text (msgs.NewerAttempt run.Attempt (formatTime run.StartedAt))
-                        ]
-                    | None -> Html.none
-                ]
-            ]
-            Html.td [
-                prop.className "py-2 pr-4 align-top"
-                prop.children [
-                    standingPill msgs standing
-                    match standing, job.LastRunError with
-                    | (JobStanding.PermanentlyFailed | JobStanding.FailingWillRetry), Some error ->
-                        Html.p [
-                            prop.className "mt-1 text-xs text-red-700"
-                            prop.children [
-                                Html.span [ prop.className "font-medium"; prop.text msgs.ReasonLabel ]
-                                Html.span [ prop.className "ml-1 font-mono break-all"; prop.text error ]
-                            ]
-                        ]
-                    | _ -> Html.none
-                    match warningOf job with
-                    | Some warning -> warningNote warning
-                    | None -> Html.none
-                ]
-            ]
-            Html.td [
-                prop.className "py-2 align-top"
-                prop.children [ rerunCell msgs model dispatch job ]
-            ]
+            | None -> Html.none
         ]
     ]
 
-/// A job's summary row, and its attempts list beneath it when expanded.
-let private jobRows (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) (job: JobDefinition) = [
-    summaryRow msgs model dispatch job
-    if model.Expanded.Contains job.JobId then
-        attemptsRow msgs model job
-]
+let private statusCell (msgs: JobsAdminMessages) (job: JobDefinition) =
+    let standing = standingOf job
+
+    Html.div [
+        standingPill msgs standing
+        match standing, job.LastRunError with
+        | (JobStanding.PermanentlyFailed | JobStanding.FailingWillRetry), Some error ->
+            Html.p [
+                prop.className "mt-1 text-xs text-red-700"
+                prop.children [
+                    Html.span [ prop.className "font-medium"; prop.text msgs.ReasonLabel ]
+                    Html.span [ prop.className "ml-1 font-mono break-all"; prop.text error ]
+                ]
+            ]
+        | _ -> Html.none
+        match warningOf job with
+        | Some warning -> warningNote warning
+        | None -> Html.none
+    ]
 
 let private jobsTable (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) (jobs: JobDefinition list) =
     if jobs.IsEmpty then
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoJobs ]
+        Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoJobs ]
     else
-        Html.table [
-            prop.className "w-full text-left"
-            prop.children [
-                Html.thead [
-                    Html.tr [
-                        prop.className "border-b border-gray-200 text-xs uppercase text-gray-500"
-                        prop.children [
-                            Html.th [ prop.className "py-2 pr-4 font-medium"; prop.text msgs.ColumnJob ]
-                            Html.th [ prop.className "py-2 pr-4 font-medium"; prop.text msgs.ColumnLastRun ]
-                            Html.th [ prop.className "py-2 pr-4 font-medium"; prop.text msgs.ColumnStatus ]
-                            Html.th [ prop.className "py-2 font-medium"; prop.text msgs.ColumnActions ]
-                        ]
-                    ]
-                ]
-                Html.tbody (ordered jobs |> List.collect (jobRows msgs model dispatch))
+        Data.table
+            [
+                {
+                    Header = msgs.ColumnJob
+                    Align = Data.Left
+                    Cell = jobCell msgs model dispatch
+                }
+                {
+                    Header = msgs.ColumnLastRun
+                    Align = Data.Left
+                    Cell = lastRunCell msgs model
+                }
+                {
+                    Header = msgs.ColumnStatus
+                    Align = Data.Left
+                    Cell = statusCell msgs
+                }
+                {
+                    Header = msgs.ColumnActions
+                    Align = Data.Left
+                    Cell = rerunCell msgs model dispatch
+                }
             ]
-        ]
+            (ordered jobs)
+
+/// The re-run confirmation, while one is pending.
+let private rerunConfirm (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+    match model.Confirming |> Option.bind (findJob model) with
+    | Some job ->
+        Modal.confirm
+            {
+                Title = msgs.RerunButton
+                Confirm = msgs.RerunConfirm
+                Busy = msgs.RerunStarting
+                Cancel = msgs.RerunCancel
+            }
+            [
+                Html.p [
+                    prop.className [ "text-sm"; Tokens.Text.secondary ]
+                    prop.text (msgs.RerunConfirmPrompt job.Handler)
+                ]
+            ]
+            (fun () -> dispatch (RerunConfirmed job.JobId))
+            (fun () -> dispatch RerunCancelled)
+            false
+    | None -> Html.none
 
 /// The module body as a React COMPONENT, for the reason
 /// `MigrationStatusUI`'s is one: a module's `view` is invoked inline by
@@ -762,24 +741,23 @@ let private JobsAdminBody (model: Model) (dispatch: Msg -> unit) =
                     Html.div [
                         prop.children [
                             Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.Subheading ]
+                            Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
                         ]
                     ]
-                    Html.button [
-                        prop.className "px-3 py-1.5 text-sm border rounded border-gray-300 disabled:opacity-40"
-                        prop.disabled loading
-                        prop.text (if loading then msgs.Refreshing else msgs.Refresh)
-                        prop.onClick (fun _ -> dispatch Refresh)
-                    ]
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf loading msgs.Refreshing false)
+                        msgs.Refresh
+                        (fun () -> dispatch Refresh)
                 ]
             ]
             StateViews.notice { Dismiss = msgs.Dismiss } model.LastError (fun () -> dispatch DismissError)
             match model.Jobs with
             | Remote.NotAsked
-            | Remote.Loading -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Loading -> Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
             | Remote.Failed message -> StateViews.noticeStatic (Notice.Problem message)
             | Remote.Reloading jobs
             | Remote.Loaded jobs -> jobsTable msgs model dispatch jobs
+            rerunConfirm msgs model dispatch
         ]
     ]
 

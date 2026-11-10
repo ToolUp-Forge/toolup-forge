@@ -295,12 +295,12 @@ let private sessionRow
                             if active then
                                 "text-sm font-medium truncate"
                             else
-                                "text-sm font-medium truncate line-through text-gray-400"
+                                ("text-sm font-medium truncate line-through " + Tokens.Text.muted)
                         )
                         prop.text record.DeviceDescriptor
                     ]
                     Html.p [
-                        prop.className "text-xs text-gray-500 mt-0.5"
+                        prop.className [ "text-xs mt-0.5"; Tokens.Text.muted ]
                         prop.text (
                             if active then
                                 msgs.DeviceLastSeen record.AuthProvider (lastSeenLabelWith msgs now record.LastSeenAt)
@@ -314,32 +314,24 @@ let private sessionRow
                 prop.className "shrink-0"
                 prop.children [
                     if not active then
-                        Html.span [ prop.className "text-xs text-gray-400"; prop.text msgs.Revoked ]
+                        Html.span [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Revoked ]
                     elif pending then
                         Html.div [
                             prop.className "flex gap-2"
                             prop.children [
-                                Html.button [
-                                    prop.className "text-xs px-2 py-1 rounded bg-red-600 text-white disabled:opacity-50"
-                                    prop.disabled model.Busy
-                                    prop.text msgs.Confirm
-                                    prop.onClick (fun _ -> dispatch (ConfirmRevoke record.SessionId))
-                                ]
-                                Html.button [
-                                    prop.className "text-xs px-2 py-1 rounded border border-border"
-                                    prop.text msgs.Cancel
-                                    prop.onClick (fun _ -> dispatch CancelRevoke)
-                                ]
+                                Forms.Button.dangerWith
+                                    (Forms.Button.stateOf model.Busy msgs.Confirm false)
+                                    msgs.Confirm
+                                    (fun () -> dispatch (ConfirmRevoke record.SessionId))
+                                Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel (fun () ->
+                                    dispatch CancelRevoke)
                             ]
                         ]
                     else
-                        Html.button [
-                            prop.className
-                                "text-xs px-2 py-1 rounded border border-border hover:bg-gray-50 disabled:opacity-50"
-                            prop.disabled model.Busy
-                            prop.text msgs.SignOut
-                            prop.onClick (fun _ -> dispatch (AskRevoke record.SessionId))
-                        ]
+                        Forms.Button.secondaryWith
+                            (Forms.Button.stateOf false msgs.SignOut model.Busy)
+                            msgs.SignOut
+                            (fun () -> dispatch (AskRevoke record.SessionId))
                 ]
             ]
         ]
@@ -347,7 +339,7 @@ let private sessionRow
 
 // ─── View ────────────────────────────────────────────────────────────
 
-/// Phase 751 — the module body as a React COMPONENT rather than a plain
+/// The module body as a React COMPONENT rather than a plain
 /// render function, so it has a hook site from which to read the
 /// resolved catalog. `view` is invoked inline by the shell's own
 /// render, where a hook would join the shell's hook order and break the
@@ -363,9 +355,9 @@ let private SessionSecurityBody (model: Model) (dispatch: Msg -> unit) =
 
     let body =
         if not model.Loaded then
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
         elif List.isEmpty model.Sessions then
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.EmptyState ]
+            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.EmptyState ]
         else
             Html.div [
                 prop.className "border border-border rounded-lg overflow-hidden bg-white"
@@ -386,34 +378,35 @@ let private SessionSecurityBody (model: Model) (dispatch: Msg -> unit) =
                     Html.div [
                         prop.className "flex gap-2"
                         prop.children [
-                            Html.button [
-                                prop.className "text-sm px-3 py-1.5 rounded bg-red-600 text-white disabled:opacity-50"
-                                prop.disabled model.Busy
-                                prop.text msgs.SignOutEverywhere
-                                prop.onClick (fun _ -> dispatch ConfirmRevokeAll)
-                            ]
-                            Html.button [
-                                prop.className "text-sm px-3 py-1.5 rounded border border-border"
-                                prop.text msgs.Cancel
-                                prop.onClick (fun _ -> dispatch CancelRevokeAll)
-                            ]
+                            Forms.Button.dangerWith
+                                (Forms.Button.stateOf model.Busy msgs.SignOutEverywhere false)
+                                msgs.SignOutEverywhere
+                                (fun () -> dispatch ConfirmRevokeAll)
+                            Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel (fun () ->
+                                dispatch CancelRevokeAll)
                         ]
                     ]
                 ]
             ]
         else
-            Html.button [
-                prop.className "mt-4 text-sm px-3 py-1.5 rounded border border-red-300 text-red-700 disabled:opacity-50"
-                prop.disabled model.Busy
-                prop.text msgs.SignOutEverywhere
-                prop.onClick (fun _ -> dispatch AskRevokeAll)
+            Html.div [
+                prop.className "mt-4"
+                prop.children [
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf false msgs.SignOutEverywhere model.Busy)
+                        msgs.SignOutEverywhere
+                        (fun () -> dispatch AskRevokeAll)
+                ]
             ]
 
     Html.div [
         prop.className "p-6 max-w-3xl"
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
+                prop.text msgs.Subheading
+            ]
             StateViews.notice noticeMsgs model.Error (fun () -> dispatch DismissError)
             StateViews.notice noticeMsgs model.Status (fun () -> dispatch DismissStatus)
             body

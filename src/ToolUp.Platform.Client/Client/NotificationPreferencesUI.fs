@@ -215,7 +215,7 @@ let private cellPicker
     =
     if not category.Suppressible then
         Html.span [
-            prop.className "text-xs text-gray-500 italic"
+            prop.className ("text-xs italic " + Tokens.Text.muted)
             prop.text msgs.AlwaysDelivered
         ]
     else
@@ -253,52 +253,35 @@ let private matrix
     (dispatch: Msg -> unit)
     =
     if List.isEmpty view.Categories then
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoCategories ]
+        Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.NoCategories ]
     elif List.isEmpty view.Channels then
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoChannels ]
+        Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.NoChannels ]
     else
-        Html.table [
-            prop.className "w-full text-sm mb-6"
-            prop.children [
-                Html.thead [
-                    Html.tr [
-                        prop.children [
-                            Html.th [ prop.className "text-left py-2 pr-4"; prop.text msgs.CategoryColumn ]
-                            for channel in view.Channels do
-                                Html.th [
-                                    prop.key (PreferenceChannel.toWireString channel)
-                                    prop.className "text-left py-2 pr-4"
-                                    prop.text (channelLabel msgs channel)
-                                ]
-                        ]
-                    ]
-                ]
-                Html.tbody [
-                    for category in view.Categories do
-                        Html.tr [
-                            prop.key category.Id
-                            prop.className "border-t border-border"
-                            prop.children [
-                                Html.td [
-                                    prop.className "py-2 pr-4 align-top"
-                                    prop.children [
-                                        Html.div [ prop.className "font-medium"; prop.text category.DisplayName ]
-                                        if not (String.IsNullOrWhiteSpace category.Description) then
-                                            Html.div [
-                                                prop.className "text-xs text-gray-500"
-                                                prop.text category.Description
-                                            ]
-                                    ]
-                                ]
-                                for channel in view.Channels do
-                                    Html.td [
-                                        prop.key (PreferenceChannel.toWireString channel)
-                                        prop.className "py-2 pr-4 align-top"
-                                        prop.children [ cellPicker msgs category channel draft dispatch ]
-                                    ]
+        let categoryColumn: Data.Column<NotificationCategory> = {
+            Header = msgs.CategoryColumn
+            Align = Data.Left
+            Cell =
+                fun category ->
+                    Html.div [
+                        Html.div [ prop.className "font-medium"; prop.text category.DisplayName ]
+                        if not (String.IsNullOrWhiteSpace category.Description) then
+                            Html.div [
+                                prop.className [ "text-xs"; Tokens.Text.muted ]
+                                prop.text category.Description
                             ]
-                        ]
-                ]
+                    ]
+        }
+
+        let channelColumn (channel: PreferenceChannel) : Data.Column<NotificationCategory> = {
+            Header = channelLabel msgs channel
+            Align = Data.Left
+            Cell = fun category -> cellPicker msgs category channel draft dispatch
+        }
+
+        Html.div [
+            prop.className "mb-6"
+            prop.children [
+                Data.table (categoryColumn :: List.map channelColumn view.Channels) view.Categories
             ]
         ]
 
@@ -348,7 +331,10 @@ let private QuietHoursForm (current: QuietHours option) (busy: bool) (onApply: Q
                 prop.className "text-sm font-semibold mb-1"
                 prop.text msgs.QuietHoursHeading
             ]
-            Html.p [ prop.className "text-xs text-gray-600 mb-3"; prop.text msgs.QuietHoursBody ]
+            Html.p [
+                prop.className ("text-xs mb-3 " + Tokens.Text.secondary)
+                prop.text msgs.QuietHoursBody
+            ]
             Html.label [
                 prop.className "flex items-center gap-2 text-sm mb-3"
                 prop.children [
@@ -363,51 +349,48 @@ let private QuietHoursForm (current: QuietHours option) (busy: bool) (onApply: Q
             Html.div [
                 prop.className "flex flex-wrap items-end gap-3"
                 prop.children [
-                    Html.label [
-                        prop.className "text-xs"
+                    // A disabled fieldset disables every control inside it.
+                    Html.fieldSet [
+                        prop.disabled (not enabled)
+                        prop.className "flex flex-wrap items-end gap-3 border-0 p-0 m-0"
                         prop.children [
-                            Html.div [ prop.text msgs.QuietHoursStart ]
-                            Html.input [
-                                prop.type' "time"
-                                prop.value start
-                                prop.disabled (not enabled)
-                                prop.onChange (fun (v: string) -> setStart v)
-                                prop.className "border border-border rounded-lg px-2 py-1"
+                            Html.label [
+                                prop.className "text-xs"
+                                prop.children [
+                                    Html.div [ prop.text msgs.QuietHoursStart ]
+                                    Html.input [
+                                        prop.type' "time"
+                                        prop.value start
+                                        prop.onChange (fun (v: string) -> setStart v)
+                                        prop.className "border border-border rounded-lg px-2 py-1"
+                                    ]
+                                ]
+                            ]
+                            Html.label [
+                                prop.className "text-xs"
+                                prop.children [
+                                    Html.div [ prop.text msgs.QuietHoursEnd ]
+                                    Html.input [
+                                        prop.type' "time"
+                                        prop.value finish
+                                        prop.onChange (fun (v: string) -> setFinish v)
+                                        prop.className "border border-border rounded-lg px-2 py-1"
+                                    ]
+                                ]
+                            ]
+                            Html.label [
+                                prop.className "text-xs"
+                                prop.children [
+                                    Html.div [ prop.text msgs.QuietHoursTimeZone ]
+                                    Forms.Input.text zone setZone ""
+                                ]
                             ]
                         ]
                     ]
-                    Html.label [
-                        prop.className "text-xs"
-                        prop.children [
-                            Html.div [ prop.text msgs.QuietHoursEnd ]
-                            Html.input [
-                                prop.type' "time"
-                                prop.value finish
-                                prop.disabled (not enabled)
-                                prop.onChange (fun (v: string) -> setFinish v)
-                                prop.className "border border-border rounded-lg px-2 py-1"
-                            ]
-                        ]
-                    ]
-                    Html.label [
-                        prop.className "text-xs"
-                        prop.children [
-                            Html.div [ prop.text msgs.QuietHoursTimeZone ]
-                            Html.input [
-                                prop.type' "text"
-                                prop.value zone
-                                prop.disabled (not enabled)
-                                prop.onChange (fun (v: string) -> setZone v)
-                                prop.className "border border-border rounded-lg px-2 py-1"
-                            ]
-                        ]
-                    ]
-                    Html.button [
-                        prop.className "text-xs px-3 py-1 border border-border rounded-lg hover:bg-gray-50"
-                        prop.disabled busy
-                        prop.text msgs.ApplyQuietHours
-                        prop.onClick (fun _ -> apply ())
-                    ]
+                    Forms.Button.secondaryWith
+                        (if busy then Forms.Button.Disabled else Forms.Button.Enabled)
+                        msgs.ApplyQuietHours
+                        apply
                 ]
             ]
         ]
@@ -423,10 +406,14 @@ let private NotificationPreferencesBody (model: Model) (dispatch: Msg -> unit) =
         prop.className "p-6 max-w-4xl"
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
+                prop.text msgs.Subheading
+            ]
             StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             (match model.View with
-             | None when not model.Loaded -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+             | None when not model.Loaded ->
+                 Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
              | None -> Html.none
              | Some view ->
                  Html.div [
@@ -436,13 +423,10 @@ let private NotificationPreferencesBody (model: Model) (dispatch: Msg -> unit) =
                          Html.div [
                              prop.className "flex items-center gap-3"
                              prop.children [
-                                 Html.button [
-                                     prop.className
-                                         "text-sm px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90 disabled:opacity-50"
-                                     prop.disabled model.Busy
-                                     prop.text (if model.Busy then msgs.Saving else msgs.Save)
-                                     prop.onClick (fun _ -> dispatch Save)
-                                 ]
+                                 Forms.Button.primaryWith
+                                     (Forms.Button.stateOf model.Busy msgs.Saving false)
+                                     msgs.Save
+                                     (fun () -> dispatch Save)
                                  if model.Saved then
                                      Html.span [ prop.className "text-xs text-green-700"; prop.text msgs.Saved ]
                              ]

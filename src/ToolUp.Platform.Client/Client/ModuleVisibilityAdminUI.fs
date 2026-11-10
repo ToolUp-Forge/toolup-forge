@@ -352,7 +352,7 @@ let private kindButton (label: string) (description: string) (active: bool) (onC
         prop.onClick (fun _ -> onClick ())
         prop.children [
             Html.div [ prop.className "text-sm font-semibold"; prop.text label ]
-            Html.div [ prop.className "text-xs text-gray-500"; prop.text description ]
+            Html.div [ prop.className ("text-xs " + Tokens.Text.muted); prop.text description ]
         ]
     ]
 
@@ -377,7 +377,7 @@ let private moduleRow
                 ]
             else
                 Html.span [
-                    prop.className "text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600"
+                    prop.className ("text-xs px-2 py-0.5 rounded bg-gray-200 " + Tokens.Text.secondary)
                     prop.text msgs.HiddenNow
                 ]
 
@@ -401,27 +401,33 @@ let private resolvedPane (msgs: ModuleVisibilityAdminMessages) (model: Model) =
     let body =
         match model.Resolved with
         | None when not model.ResolvedLoaded ->
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-        | None -> Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoResolutionYet ]
+            Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
+        | None ->
+            Html.p [
+                prop.className ("text-sm " + Tokens.Text.secondary)
+                prop.text msgs.NoResolutionYet
+            ]
         | Some r ->
             let list (label: int -> string) (items: string list) =
                 Html.div [
                     prop.className "mb-3"
                     prop.children [
                         Html.div [
-                            prop.className "text-xs font-medium text-gray-600 mb-1"
+                            prop.className ("text-xs font-medium mb-1 " + Tokens.Text.secondary)
                             prop.text (label (List.length items))
                         ]
                         if List.isEmpty items then
-                            Html.p [ prop.className "text-xs text-gray-400"; prop.text msgs.NoItems ]
+                            Html.p [ prop.className ("text-xs " + Tokens.Text.muted); prop.text msgs.NoItems ]
                         else
                             Html.div [
                                 prop.className "flex flex-wrap gap-1"
                                 prop.children [
                                     for item in items ->
                                         Html.span [
-                                            prop.className
-                                                "font-mono text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 break-all"
+                                            prop.className (
+                                                "font-mono text-xs px-2 py-0.5 rounded bg-gray-100 break-all "
+                                                + Tokens.Text.secondary
+                                            )
                                             prop.text item
                                         ]
                                 ]
@@ -446,7 +452,7 @@ let private resolvedPane (msgs: ModuleVisibilityAdminMessages) (model: Model) =
                 prop.text msgs.ResolvedForYouHeading
             ]
             Html.p [
-                prop.className "text-xs text-gray-500 mb-3"
+                prop.className ("text-xs mb-3 " + Tokens.Text.muted)
                 prop.text msgs.ResolvedForYouHelp
             ]
             body
@@ -454,8 +460,8 @@ let private resolvedPane (msgs: ModuleVisibilityAdminMessages) (model: Model) =
     ]
 
 /// The note field plus the two mutating actions. The note is local React
-/// state so free-typing does not round-trip through Elmish (CLAUDE.md MVU
-/// rule); `onSave` carries its value at submit time. Seeded once from
+/// state, committed on Enter / blur, so free-typing does not round-trip
+/// through Elmish; `onSave` carries its value at submit time. Seeded once from
 /// `model.Note` on mount — a reload after a save must not overwrite what
 /// the operator is mid-way through typing.
 [<ReactComponent>]
@@ -466,51 +472,31 @@ let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit ->
     Html.div [
         prop.children [
             Html.label [
-                prop.className "block text-xs font-medium text-gray-700 mb-1"
+                prop.className ("block text-xs font-medium mb-1 " + Tokens.Text.secondary)
                 prop.text msgs.NoteLabel
             ]
-            Html.input [
-                prop.type' "text"
-                prop.value note
-                prop.placeholder msgs.NotePlaceholder
-                prop.onChange (fun (v: string) -> setNote v)
-                prop.className
-                    "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand w-full text-sm mb-4"
+            Html.div [
+                prop.className "mb-4"
+                prop.children [ Forms.Input.text note setNote msgs.NotePlaceholder ]
             ]
 
             Html.div [
                 prop.className "flex gap-2"
                 prop.children [
-                    Html.button [
-                        prop.className [
-                            "px-4 py-2 text-sm rounded-lg text-white transition-colors"
-                            if model.Busy then
-                                "bg-gray-300 cursor-not-allowed"
-                            else
-                                "bg-brand hover:bg-brand-dark cursor-pointer"
-                        ]
-                        prop.disabled model.Busy
-                        prop.text (if model.Busy then msgs.Working else msgs.SaveProfile)
-                        prop.onClick (fun _ -> onSave note)
-                    ]
-                    Html.button [
-                        prop.className [
-                            "px-4 py-2 text-sm rounded-lg border transition-colors"
-                            if model.Busy || model.StoredProfile.IsNone then
-                                "border-border text-gray-400 cursor-not-allowed"
-                            else
-                                "border-border text-gray-700 hover:border-red-300 hover:text-red-600 cursor-pointer"
-                        ]
-                        prop.disabled (model.Busy || model.StoredProfile.IsNone)
-                        prop.text msgs.ClearProfile
-                        prop.onClick (fun _ -> onClear ())
-                    ]
+                    Forms.Button.primaryWith
+                        (Forms.Button.stateOf model.Busy msgs.Working false)
+                        msgs.SaveProfile
+                        (fun () -> onSave note)
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf false msgs.Working (model.Busy || model.StoredProfile.IsNone))
+                        msgs.ClearProfile
+                        onClear
                 ]
             ]
         ]
     ]
 
-/// Phase 751 — the module body as a React COMPONENT, for the same reason
+/// The module body as a React COMPONENT, for the same reason
 /// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
 /// inline by the shell's own render, so a hook there would join the shell's
 /// hook order and break the moment the active module changed.
@@ -524,7 +510,7 @@ let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
         if List.isEmpty model.RegisteredModuleIds then
             [
                 Html.p [
-                    prop.className "px-3 py-3 text-xs text-gray-500"
+                    prop.className ("px-3 py-3 text-xs " + Tokens.Text.muted)
                     prop.text msgs.NoCuratableModules
                 ]
             ]
@@ -537,13 +523,13 @@ let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
 
     let candidateHeader =
         Html.div [
-            prop.className "px-3 py-2 bg-gray-50 text-xs font-medium text-gray-600"
+            prop.className ("px-3 py-2 bg-gray-50 text-xs font-medium " + Tokens.Text.secondary)
             prop.text (msgs.RegisteredModulesHeader model.RegisteredModuleIds.Length model.Selection.Length)
         ]
 
     let editor =
         if not model.Loaded then
-            Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
         else
             Html.div [
                 prop.className "bg-white rounded-lg border border-border p-4 mb-4"
@@ -552,7 +538,10 @@ let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
                         prop.className "text-sm font-semibold mb-1"
                         prop.text msgs.YourProfileHeading
                     ]
-                    Html.p [ prop.className "text-xs text-gray-500 mb-3"; prop.text msgs.YourProfileHelp ]
+                    Html.p [
+                        prop.className ("text-xs mb-3 " + Tokens.Text.muted)
+                        prop.text msgs.YourProfileHelp
+                    ]
 
                     Html.div [
                         prop.className "flex gap-2 mb-4"
@@ -577,7 +566,10 @@ let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
         prop.className "p-6 max-w-3xl"
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
+                prop.text msgs.Subheading
+            ]
             StateViews.notice noticeMsgs model.Error (fun () -> dispatch DismissError)
             StateViews.notice noticeMsgs model.Status (fun () -> dispatch DismissStatus)
             editor

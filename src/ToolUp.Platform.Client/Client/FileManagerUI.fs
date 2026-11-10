@@ -375,7 +375,7 @@ let private processedDataSection
                         prop.children [
                             Html.span [ prop.className "text-red-600 text-sm"; prop.text "✗" ]
                             Html.span [
-                                prop.className "text-sm text-gray-700"
+                                prop.className ("text-sm " + Tokens.Text.secondary)
                                 prop.text (msgs.ProcessingErrorLine fileName error)
                             ]
                         ]
@@ -458,7 +458,10 @@ let private statusFilterControl (msgs: FileManagerMessages) (model: Model) dispa
     Html.div [
         prop.className "flex items-center gap-2 mb-3"
         prop.children [
-            Html.span [ prop.className "text-sm text-gray-600"; prop.text msgs.FilterByStatusLabel ]
+            Html.span [
+                prop.className ("text-sm " + Tokens.Text.secondary)
+                prop.text msgs.FilterByStatusLabel
+            ]
             Html.select [
                 prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
                 prop.value (filterLabel msgs model.StatusFilter)
@@ -514,7 +517,7 @@ let private FileManagerInputPanel (dispatch: Msg -> unit) =
                         ]
                     )
 
-                    Html.span [ prop.className "text-base text-gray-500"; prop.text msgs.UploadHint ]
+                    Html.span [ prop.className ("text-base " + Tokens.Text.muted); prop.text msgs.UploadHint ]
                 ]
             ]
         ]
@@ -555,8 +558,8 @@ let private FileManagerOutputPanel (displays: DataTypeDisplay list) (model: Mode
 
         match filteredFiles with
         | [||] when model.FilesLoading -> LoadingSlot()
-        | [||] when allFiles.Length = 0 -> Html.p [ prop.className "text-gray-500"; prop.text msgs.NoFilesUploaded ]
-        | [||] -> Html.p [ prop.className "text-gray-500"; prop.text msgs.NoFilesMatchFilter ]
+        | [||] when allFiles.Length = 0 -> Html.p [ prop.className Tokens.Text.muted; prop.text msgs.NoFilesUploaded ]
+        | [||] -> Html.p [ prop.className Tokens.Text.muted; prop.text msgs.NoFilesMatchFilter ]
         | rows ->
             Html.div [
                 prop.children [
@@ -688,7 +691,10 @@ let private FileManagerOutputPanel (displays: DataTypeDisplay list) (model: Mode
             Html.div [
                 prop.className "flex items-center justify-between gap-4"
                 prop.children [
-                    Html.div [ prop.className "text-sm text-gray-600"; prop.text msgs.ResetHelp ]
+                    Html.div [
+                        prop.className ("text-sm " + Tokens.Text.secondary)
+                        prop.text msgs.ResetHelp
+                    ]
                     Html.button [
                         prop.className
                             "text-sm px-3 py-1.5 rounded border border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 transition-colors whitespace-nowrap"

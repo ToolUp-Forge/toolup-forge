@@ -5,6 +5,7 @@ module ProviderProfileUI
 
 open ToolUp.Elmish
 open Feliz
+open Toolup.UIToolkit
 open ToolUp.Platform
 
 // ─── The reusable BYOK provider-profile component (Phase 44) ─────────
@@ -500,13 +501,13 @@ let private healthBadge (msgs: ProviderProfileMessages) (health: ProviderHealth)
         | ProviderHealthStatus.Degraded -> msgs.HealthDegraded, "bg-amber-100 text-amber-700"
         | ProviderHealthStatus.Unhealthy -> msgs.HealthUnhealthy, "bg-red-100 text-red-700"
         | ProviderHealthStatus.NeedsReauthorization -> msgs.HealthNeedsReauthorization, "bg-red-100 text-red-700"
-        | ProviderHealthStatus.Unknown -> msgs.HealthUnknown, "bg-gray-200 text-gray-600"
+        | ProviderHealthStatus.Unknown -> msgs.HealthUnknown, ("bg-gray-200 " + Tokens.Text.secondary)
 
     Html.span [ prop.className $"text-xs px-2 py-0.5 rounded {cls}"; prop.text label ]
 
 let private tagChip (tag: string) =
     Html.span [
-        prop.className "text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700"
+        prop.className [ "text-xs px-2 py-0.5 rounded bg-gray-100"; Tokens.Text.secondary ]
         prop.text tag
     ]
 
@@ -540,7 +541,7 @@ let private entryRow
                         ]
                     ]
                     Html.div [
-                        prop.className "text-xs text-gray-500 font-mono break-all mt-0.5"
+                        prop.className [ "text-xs font-mono break-all mt-0.5"; Tokens.Text.muted ]
                         prop.text (
                             match entry.Model with
                             | Some m -> $"{entry.ProviderId} · {m}"
@@ -618,7 +619,7 @@ let private EditorForm
             prop.className "block mb-3"
             prop.children [
                 Html.span [
-                    prop.className "block text-xs font-medium text-gray-600 mb-1"
+                    prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                     prop.text fieldLabel
                 ]
                 Html.input [
@@ -639,7 +640,10 @@ let private EditorForm
             field msgs.TagsField tags msgs.TagsPlaceholder setTags
 
             if seed.OAuthConnected then
-                Html.p [ prop.className "text-xs text-gray-500 mb-3"; prop.text msgs.OAuthKeyHelp ]
+                Html.p [
+                    prop.className [ "text-xs mb-3"; Tokens.Text.muted ]
+                    prop.text msgs.OAuthKeyHelp
+                ]
             else
                 Html.div [
                     prop.children [
@@ -647,7 +651,7 @@ let private EditorForm
                             prop.className "block mb-1"
                             prop.children [
                                 Html.span [
-                                    prop.className "block text-xs font-medium text-gray-600 mb-1"
+                                    prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                                     prop.text msgs.ApiKeyField
                                 ]
                                 Html.input [
@@ -660,34 +664,36 @@ let private EditorForm
                             ]
                         ]
                         if seed.HasStoredCredential then
-                            Html.p [ prop.className "text-xs text-gray-500 mb-2"; prop.text msgs.ApiKeyKeepHelp ]
+                            Html.p [
+                                prop.className [ "text-xs mb-2"; Tokens.Text.muted ]
+                                prop.text msgs.ApiKeyKeepHelp
+                            ]
                         Html.div [
                             prop.className "flex items-center gap-2 mb-3 flex-wrap"
                             prop.children [
                                 if canVerify then
-                                    Html.button [
-                                        prop.className
-                                            "text-xs px-2 py-1 border border-border rounded hover:border-brand"
-                                        prop.disabled (
-                                            candidate.ApiKey.IsNone || verification = VerificationState.Running
-                                        )
-                                        prop.text (
-                                            if verification = VerificationState.Running then
-                                                msgs.Verifying
-                                            else
-                                                msgs.Verify
-                                        )
-                                        prop.onClick (fun _ ->
+                                    Forms.Button.secondaryWith
+                                        (Forms.Button.stateOf
+                                            (verification = VerificationState.Running)
+                                            msgs.Verifying
+                                            candidate.ApiKey.IsNone)
+                                        msgs.Verify
+                                        (fun () ->
                                             setVerifiedFor apiKey
                                             onVerify candidate)
-                                    ]
                                 else
                                     Html.span [
-                                        prop.className "text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600"
+                                        prop.className [
+                                            "text-xs px-2 py-0.5 rounded bg-gray-200"
+                                            Tokens.Text.secondary
+                                        ]
                                         prop.text msgs.NotVerified
                                     ]
                                 if not canVerify then
-                                    Html.span [ prop.className "text-xs text-gray-500"; prop.text msgs.NotVerifiedHelp ]
+                                    Html.span [
+                                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                                        prop.text msgs.NotVerifiedHelp
+                                    ]
                                 match verification with
                                 | VerificationState.Passed models when verifiedFor = apiKey ->
                                     Html.span [
@@ -714,17 +720,14 @@ let private EditorForm
             Html.div [
                 prop.className "flex items-center gap-2"
                 prop.children [
-                    Html.button [
-                        prop.className "px-3 py-1.5 rounded bg-brand text-white text-sm disabled:opacity-50"
-                        prop.disabled (busy || blocked || candidate.Label = "" || candidate.ProviderId = "")
-                        prop.text msgs.Save
-                        prop.onClick (fun _ -> onSave candidate)
-                    ]
-                    Html.button [
-                        prop.className "px-3 py-1.5 rounded border border-border text-sm"
-                        prop.text msgs.Cancel
-                        prop.onClick (fun _ -> onCancel ())
-                    ]
+                    Forms.Button.primaryWith
+                        (Forms.Button.stateOf
+                            busy
+                            msgs.Save
+                            (blocked || candidate.Label = "" || candidate.ProviderId = ""))
+                        msgs.Save
+                        (fun () -> onSave candidate)
+                    Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel onCancel
                 ]
             ]
         ]
@@ -783,16 +786,22 @@ let private SurfaceRouting
             Html.div [
                 prop.className "flex items-center gap-2 mb-3 flex-wrap"
                 prop.children [
-                    Html.span [ prop.className "text-xs text-gray-600"; prop.text msgs.DefaultRoute ]
+                    Html.span [
+                        prop.className [ "text-xs"; Tokens.Text.secondary ]
+                        prop.text msgs.DefaultRoute
+                    ]
                     picker None (defaultRule |> Option.map _.EntryLabel)
                 ]
             ]
             Html.div [
-                prop.className "text-xs font-medium text-gray-600 mb-1"
+                prop.className [ "text-xs font-medium mb-1"; Tokens.Text.secondary ]
                 prop.text msgs.ContextOverrides
             ]
             if List.isEmpty overrides then
-                Html.p [ prop.className "text-xs text-gray-400 mb-2"; prop.text msgs.NoOverrides ]
+                Html.p [
+                    prop.className [ "text-xs mb-2"; Tokens.Text.muted ]
+                    prop.text msgs.NoOverrides
+                ]
             else
                 Html.div [
                     prop.children [
@@ -823,11 +832,10 @@ let private SurfaceRouting
                         prop.placeholder msgs.ContextPlaceholder
                         prop.onChange setNewContext
                     ]
-                    Html.button [
-                        prop.className "text-xs px-2 py-1 border border-border rounded hover:border-brand"
-                        prop.disabled (newContext.Trim() = "" || List.isEmpty entries)
-                        prop.text msgs.AddOverride
-                        prop.onClick (fun _ ->
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf false msgs.AddOverride (newContext.Trim() = "" || List.isEmpty entries))
+                        msgs.AddOverride
+                        (fun () ->
                             match entries with
                             | [] -> ()
                             | first :: _ ->
@@ -838,7 +846,6 @@ let private SurfaceRouting
                                 }
 
                                 setNewContext "")
-                    ]
                 ]
             ]
         ]
@@ -871,9 +878,15 @@ let private fallbackPane (msgs: ProviderProfileMessages) (model: Model) (dispatc
         prop.className "bg-white rounded-lg border border-border p-4"
         prop.children [
             Html.h3 [ prop.className "text-sm font-semibold mb-1"; prop.text msgs.FallbackHeading ]
-            Html.p [ prop.className "text-xs text-gray-500 mb-3"; prop.text msgs.FallbackHelp ]
+            Html.p [
+                prop.className [ "text-xs mb-3"; Tokens.Text.muted ]
+                prop.text msgs.FallbackHelp
+            ]
             if List.isEmpty ordered then
-                Html.p [ prop.className "text-xs text-gray-400 mb-3"; prop.text msgs.NoFallback ]
+                Html.p [
+                    prop.className [ "text-xs mb-3"; Tokens.Text.muted ]
+                    prop.text msgs.NoFallback
+                ]
             else
                 Html.div [
                     prop.className "mb-3"
@@ -885,7 +898,10 @@ let private fallbackPane (msgs: ProviderProfileMessages) (model: Model) (dispatc
                             Html.div [
                                 prop.className "flex items-center gap-2 mb-1 flex-wrap"
                                 prop.children [
-                                    Html.span [ prop.className "text-xs text-gray-400"; prop.text $"{index + 1}." ]
+                                    Html.span [
+                                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                                        prop.text $"{index + 1}."
+                                    ]
                                     Html.span [ prop.className "text-sm font-mono break-all flex-1"; prop.text label ]
                                     Html.button [
                                         prop.className "text-xs hover:underline"
@@ -943,12 +959,10 @@ let ProviderProfilePanel (config: ProviderProfileConfig) (model: Model) (dispatc
     Html.div [
         prop.className "space-y-4"
         prop.children [
-            Toolup.UIToolkit.StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
+            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
 
-            Toolup.UIToolkit.StateViews.notice
-                { Dismiss = msgs.Dismiss }
-                (statusText |> Option.map Notice.Info)
-                (fun () -> dispatch DismissStatus)
+            StateViews.notice { Dismiss = msgs.Dismiss } (statusText |> Option.map Notice.Info) (fun () ->
+                dispatch DismissStatus)
 
             Html.div [
                 prop.className "bg-white rounded-lg border border-border"
@@ -957,13 +971,22 @@ let ProviderProfilePanel (config: ProviderProfileConfig) (model: Model) (dispatc
                         prop.className "p-4"
                         prop.children [
                             Html.h3 [ prop.className "text-sm font-semibold mb-1"; prop.text msgs.ProvidersHeading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.ProvidersHelp ]
+                            Html.p [
+                                prop.className [ "text-xs"; Tokens.Text.muted ]
+                                prop.text msgs.ProvidersHelp
+                            ]
                         ]
                     ]
                     if not model.Loaded then
-                        Html.p [ prop.className "px-4 pb-4 text-sm text-gray-500"; prop.text msgs.Loading ]
+                        Html.p [
+                            prop.className [ "px-4 pb-4 text-sm"; Tokens.Text.muted ]
+                            prop.text msgs.Loading
+                        ]
                     elif List.isEmpty model.Profile.Entries then
-                        Html.p [ prop.className "px-4 pb-4 text-sm text-gray-600"; prop.text msgs.NoProviders ]
+                        Html.p [
+                            prop.className [ "px-4 pb-4 text-sm"; Tokens.Text.secondary ]
+                            prop.text msgs.NoProviders
+                        ]
                     else
                         Html.div [
                             prop.children [
@@ -1011,11 +1034,14 @@ let ProviderProfilePanel (config: ProviderProfileConfig) (model: Model) (dispatc
                         prop.className "p-4"
                         prop.children [
                             Html.h3 [ prop.className "text-sm font-semibold mb-1"; prop.text msgs.RoutingHeading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.RoutingHelp ]
+                            Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.RoutingHelp ]
                         ]
                     ]
                     if List.isEmpty config.Surfaces then
-                        Html.p [ prop.className "px-4 pb-4 text-sm text-gray-600"; prop.text msgs.NoSurfaces ]
+                        Html.p [
+                            prop.className [ "px-4 pb-4 text-sm"; Tokens.Text.secondary ]
+                            prop.text msgs.NoSurfaces
+                        ]
                     else
                         Html.div [
                             prop.children [

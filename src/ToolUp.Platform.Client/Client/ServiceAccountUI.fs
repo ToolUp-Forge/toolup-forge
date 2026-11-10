@@ -301,7 +301,7 @@ let private permissionSummary (msgs: ServiceAccountMessages) (permissions: Map<s
                 // interpolation hole in a single-quoted string (FS3373),
                 // and `String.concat` needs one.
                 let granted = perms |> List.map (permissionLabel msgs) |> String.concat ", "
-                pill $"{moduleName}: {granted}" "bg-gray-100 text-gray-700 font-mono"
+                pill $"{moduleName}: {granted}" ("bg-gray-100 font-mono " + Tokens.Text.secondary)
         ]
     ]
 
@@ -359,6 +359,7 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
     // button enforces the same rule here rather than letting the operator
     // discover it as an error.
     let canSubmit = not busy && name.Trim() <> "" && not permissions.IsEmpty
+    let blocked = name.Trim() = "" || permissions.IsEmpty
 
     Html.div [
         prop.className "bg-white rounded-lg border border-border p-4 mb-4"
@@ -369,7 +370,7 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
             ]
 
             Html.label [
-                prop.className "block text-xs font-medium text-gray-700 mb-1"
+                prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                 prop.text msgs.NameLabel
             ]
             Html.input [
@@ -382,7 +383,7 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
             ]
 
             Html.label [
-                prop.className "block text-xs font-medium text-gray-700 mb-1"
+                prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                 prop.text msgs.ModulePermissionsLabel
             ]
             Html.div [
@@ -410,43 +411,27 @@ let private CreateAccountForm (busy: bool) (onSubmit: CreateServiceAccountReques
                             Html.option [ prop.value "SchemaOnly"; prop.text msgs.PermissionSchemaOnly ]
                         ]
                     ]
-                    Html.button [
-                        prop.className
-                            "px-3 py-2 text-xs rounded-lg border border-border hover:bg-gray-50 cursor-pointer"
-                        prop.text msgs.AddPermission
-                        prop.onClick (fun _ -> addPermission ())
-                    ]
+                    Forms.Button.secondaryWith Forms.Button.Enabled msgs.AddPermission addPermission
                 ]
             ]
 
             if permissions.IsEmpty then
                 Html.p [
-                    prop.className "text-xs text-gray-500 mb-3"
+                    prop.className [ "text-xs mb-3"; Tokens.Text.muted ]
                     prop.text msgs.NoPermissionsHint
                 ]
             else
                 Html.div [ prop.className "mb-3"; prop.children [ permissionSummary msgs permissions ] ]
 
-            Html.button [
-                prop.className [
-                    "px-4 py-2 text-sm rounded-lg text-white transition-colors"
-                    if canSubmit then
-                        "bg-brand hover:bg-brand-dark cursor-pointer"
-                    else
-                        "bg-gray-300 cursor-not-allowed"
-                ]
-                prop.disabled (not canSubmit)
-                prop.text (if busy then msgs.Working else msgs.CreateAccount)
-                prop.onClick (fun _ ->
-                    if canSubmit then
-                        onSubmit {
-                            DisplayName = name.Trim()
-                            Permissions = permissions
-                        }
+            Forms.Button.primaryWith (Forms.Button.stateOf busy msgs.Working blocked) msgs.CreateAccount (fun () ->
+                if canSubmit then
+                    onSubmit {
+                        DisplayName = name.Trim()
+                        Permissions = permissions
+                    }
 
-                        setName ""
-                        setPermissions Map.empty)
-            ]
+                    setName ""
+                    setPermissions Map.empty)
         ]
     ]
 
@@ -500,19 +485,14 @@ let private MintTokenForm (accountId: string) (busy: bool) (onSubmit: MintServic
                         prop.onChange (fun (v: string) -> setDays v)
                         prop.className "border border-border rounded-lg px-3 py-2 w-24 text-sm"
                     ]
-                    Html.span [ prop.className "self-center text-xs text-gray-500"; prop.text msgs.Days ]
-                    Html.button [
-                        prop.className [
-                            "px-4 py-2 text-sm rounded-lg text-white transition-colors"
-                            if canSubmit then
-                                "bg-brand hover:bg-brand-dark cursor-pointer"
-                            else
-                                "bg-gray-300 cursor-not-allowed"
-                        ]
-                        prop.disabled (not canSubmit)
-                        prop.text msgs.Mint
-                        prop.onClick (fun _ -> submit ())
+                    Html.span [
+                        prop.className [ "self-center text-xs"; Tokens.Text.muted ]
+                        prop.text msgs.Days
                     ]
+                    Forms.Button.primaryWith
+                        (Forms.Button.stateOf busy msgs.Working (label.Trim() = ""))
+                        msgs.Mint
+                        submit
                 ]
             ]
         ]
@@ -523,8 +503,14 @@ let private accountsTable (msgs: ServiceAccountMessages) (model: Model) (dispatc
         Html.div [
             prop.className "bg-white rounded-lg border border-border p-6 text-center"
             prop.children [
-                Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoAccountsHeading ]
-                Html.p [ prop.className "text-xs text-gray-400 mt-1"; prop.text msgs.NoAccountsBody ]
+                Html.p [
+                    prop.className [ "text-sm"; Tokens.Text.secondary ]
+                    prop.text msgs.NoAccountsHeading
+                ]
+                Html.p [
+                    prop.className [ "text-xs mt-1"; Tokens.Text.muted ]
+                    prop.text msgs.NoAccountsBody
+                ]
             ]
         ]
     else
@@ -547,7 +533,7 @@ let private accountsTable (msgs: ServiceAccountMessages) (model: Model) (dispatc
                                             ]
                                             statusBadge msgs account.Status
                                             Html.span [
-                                                prop.className "text-xs text-gray-400 font-mono break-all"
+                                                prop.className [ "text-xs font-mono break-all"; Tokens.Text.muted ]
                                                 prop.text account.AccountId
                                             ]
                                         ]
@@ -558,29 +544,20 @@ let private accountsTable (msgs: ServiceAccountMessages) (model: Model) (dispatc
                             Html.div [
                                 prop.className "flex gap-2 shrink-0"
                                 prop.children [
-                                    Html.button [
-                                        prop.className
-                                            "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50 cursor-pointer"
-                                        prop.text msgs.Tokens
-                                        prop.onClick (fun _ -> dispatch (SelectAccount account.AccountId))
-                                    ]
-                                    Html.button [
-                                        prop.className
-                                            "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50 cursor-pointer"
-                                        prop.disabled model.Busy
-                                        prop.text (
-                                            match account.Status with
-                                            | ServiceAccountStatus.Active -> msgs.Disable
-                                            | ServiceAccountStatus.Disabled -> msgs.Enable
-                                        )
-                                        prop.onClick (fun _ ->
+                                    Forms.Button.secondaryWith Forms.Button.Enabled msgs.Tokens (fun () ->
+                                        dispatch (SelectAccount account.AccountId))
+                                    Forms.Button.secondaryWith
+                                        (Forms.Button.stateOf false msgs.Working model.Busy)
+                                        (match account.Status with
+                                         | ServiceAccountStatus.Active -> msgs.Disable
+                                         | ServiceAccountStatus.Disabled -> msgs.Enable)
+                                        (fun () ->
                                             let next =
                                                 match account.Status with
                                                 | ServiceAccountStatus.Active -> ServiceAccountStatus.Disabled
                                                 | ServiceAccountStatus.Disabled -> ServiceAccountStatus.Active
 
                                             dispatch (SetStatus(account.AccountId, next)))
-                                    ]
                                 ]
                             ]
                         ]
@@ -590,7 +567,7 @@ let private accountsTable (msgs: ServiceAccountMessages) (model: Model) (dispatc
 
 let private tokensTable (msgs: ServiceAccountMessages) (model: Model) (dispatch: Msg -> unit) =
     if List.isEmpty model.Tokens then
-        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoTokensYet ]
+        Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoTokensYet ]
     else
         Html.div [
             prop.className "bg-white rounded-lg border border-border divide-y divide-border"
@@ -618,19 +595,16 @@ let private tokensTable (msgs: ServiceAccountMessages) (model: Model) (dispatch:
                                         ]
                                     ]
                                     Html.p [
-                                        prop.className "text-xs text-gray-500"
+                                        prop.className [ "text-xs"; Tokens.Text.muted ]
                                         prop.text (msgs.TokenIssuedSummary issuedOn token.IssuedBy expiresOn)
                                     ]
                                 ]
                             ]
                             if not token.Revoked then
-                                Html.button [
-                                    prop.className
-                                        "px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-700 hover:bg-red-50 cursor-pointer shrink-0"
-                                    prop.disabled model.Busy
-                                    prop.text msgs.Revoke
-                                    prop.onClick (fun _ -> dispatch (RevokeToken token.TokenId))
-                                ]
+                                Forms.Button.dangerWith
+                                    (Forms.Button.stateOf false msgs.Working model.Busy)
+                                    msgs.Revoke
+                                    (fun () -> dispatch (RevokeToken token.TokenId))
                             else
                                 Html.none
                         ]
@@ -638,7 +612,7 @@ let private tokensTable (msgs: ServiceAccountMessages) (model: Model) (dispatch:
             ]
         ]
 
-/// Phase 751 — the module body as a React COMPONENT rather than a plain
+/// The module body as a React COMPONENT rather than a plain
 /// render function, so it has a hook site from which to read the resolved
 /// catalog. A module's `view` is invoked inline by the shell's own render,
 /// where a hook would join the shell's hook order and break the moment the
@@ -655,7 +629,7 @@ let private ServiceAccountBody (model: Model) (dispatch: Msg -> unit) =
                 prop.children [
                     CreateAccountForm model.Busy (fun request -> dispatch (CreateAccount request))
                     if not model.Loaded then
-                        Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+                        Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
                     else
                         accountsTable msgs model dispatch
                 ]
@@ -666,7 +640,7 @@ let private ServiceAccountBody (model: Model) (dispatch: Msg -> unit) =
             Html.div [
                 prop.children [
                     Html.button [
-                        prop.className "text-xs text-gray-600 hover:underline mb-3"
+                        prop.className [ "text-xs hover:underline mb-3"; Tokens.Text.secondary ]
                         prop.text msgs.BackToList
                         prop.onClick (fun _ -> dispatch BackToList)
                     ]
@@ -687,7 +661,10 @@ let private ServiceAccountBody (model: Model) (dispatch: Msg -> unit) =
         prop.className "p-6 max-w-4xl"
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
+                prop.text msgs.Subheading
+            ]
             (match model.PendingSecret with
              | Some pending -> secretPanel msgs pending dispatch
              | None -> Html.none)
