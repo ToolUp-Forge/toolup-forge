@@ -911,5 +911,25 @@ let tests =
                     (Codemod.migrationOfPhase "1084")
                     (Some CodemodMigration.SnapshotIndex)
                     "the migration is reachable by its phase"
+
+            testCase "every migration resolves by its phase number, 874 included"
+            <| fun () ->
+                Expect.equal
+                    (Codemod.migrationOfPhase "874")
+                    (Some CodemodMigration.OpenAuditRegistry)
+                    "Codemod --phase 874 resolves the open audit registry"
+
+                let unresolved = [
+                    for case in Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<CodemodMigration> do
+                        let migration =
+                            Microsoft.FSharp.Reflection.FSharpValue.MakeUnion(case, [||]) :?> CodemodMigration
+
+                        let phase = (CodemodMigration.label migration).Substring("Phase ".Length)
+
+                        if Codemod.migrationOfPhase phase <> Some migration then
+                            yield CodemodMigration.label migration
+                ]
+
+                Expect.isEmpty unresolved "every migration is reachable by --phase"
         ]
     ]

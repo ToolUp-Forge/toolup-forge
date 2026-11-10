@@ -2741,6 +2741,8 @@ module Codemod =
             CodemodMigration.FailureAsData
             CodemodMigration.AuditFailureAsData
             CodemodMigration.ModuleHost
+            CodemodMigration.OpenAuditRegistry
+            CodemodMigration.AdminPageKit
             CodemodMigration.SnapshotIndex
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
