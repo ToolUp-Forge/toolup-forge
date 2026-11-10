@@ -234,14 +234,8 @@ let private renderControls (msgs: UsageDashboardMessages) (model: Model) (dispat
         ]
     ]
 
-/// Phase 751 — the dashboard body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render, so a hook called there would join the
-/// shell's hook order and break the moment the active module changed.
-[<ReactComponent>]
-let private UsageDashboardBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).UsageDashboard
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: UsageDashboardMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
         prop.className "p-4"
         prop.children [
@@ -261,37 +255,35 @@ let private UsageDashboardBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement = UsageDashboardBody model dispatch
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.UsageDashboard model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.UsageDashboard"
 
-/// Create the built-in usage dashboard admin as an `ErasedModule`.
+/// The built-in usage dashboard admin (`ShellSlots.builtIn` builds its module).
 /// It fills the `UsageDashboard` shell slot (Default / Configured),
 /// which the shell admits on any authenticated surface. The server-side
 /// handler enforces the Owner/Admin gate independently.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Usage"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.usage
-
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Usage"
+        Icon = ToolUp.Platform.Icons.usage
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}
 
 /// Phase 573.B — the administration-landing tile of this built-in's
 /// slot (see `HealthMonitorUI.adminTile` for the full rationale): built

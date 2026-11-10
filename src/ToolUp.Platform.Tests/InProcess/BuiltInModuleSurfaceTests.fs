@@ -299,7 +299,7 @@ let visibilityTests =
         }
 
         test "UsageDashboard declares visibleToAuthenticated" {
-            let m = UsageDashboard.create None
+            let m = ShellSlots.builtIn UsageDashboard.builtIn None
             assertVisibleToAuthenticated "UsageDashboard" m
         }
 
@@ -357,7 +357,7 @@ let visibilityTests =
                 "PlatformAdminUI", PlatformAdminUI.create None PublicUtilityConfig.defaults
                 "TeamManagerUI", ShellSlots.builtIn TeamManagerUI.builtIn None
                 "HealthMonitorUI", ShellSlots.builtIn HealthMonitorUI.builtIn None
-                "UsageDashboard", UsageDashboard.create None
+                "UsageDashboard", ShellSlots.builtIn UsageDashboard.builtIn None
                 "ServiceStatusBoardUI", ShellSlots.builtIn ServiceStatusBoardUI.builtIn None
                 "PermissionsAdminUI", ShellSlots.builtIn PermissionsAdminUI.builtIn None
                 "DataIngestionUI", ShellSlots.builtIn DataIngestionUI.builtIn None

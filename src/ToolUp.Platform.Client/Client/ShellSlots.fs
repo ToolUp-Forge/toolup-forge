@@ -313,7 +313,7 @@ module ShellSlots =
         authenticatedAdmin
             _.UsageDashboard
             UsageDashboard.moduleId
-            UsageDashboard.create
+            (builtIn UsageDashboard.builtIn)
             (Some UsageDashboard.adminTile)
             "UsageDashboard"
 
