@@ -2446,7 +2446,7 @@ module Client =
     // id, and the sidebar six callbacks over it. Built inline in `view`,
     // each wrapper is a FRESH closure on every render, so the props of the
     // module's memo boundary (`React.memo`, a `[<ReactComponent>]` keyed on
-    // props) and of the sidebar's (`Layout.AppShellWith`) change identity on
+    // props) and of the sidebar's (`Layout.AppShell`) change identity on
     // every shell render and neither boundary holds. The loop's own
     // dispatcher is one function for the loop's life, so the program builds
     // the wrappers from it once (`Program.withStableDispatch dispatchers`)
@@ -3107,7 +3107,7 @@ module Client =
 
             // Phase 767 — the sidebar's section titles come from the
             // resolved catalog, like every other shell string.
-            Toolup.Sidebar.buildSectionsWith resolvedCatalog.Sidebar (views @ switcherViews) model.SidebarPrefs
+            Toolup.Sidebar.buildSections resolvedCatalog.Sidebar (views @ switcherViews) model.SidebarPrefs
 
         // Header team switcher — only rendered when the deployment
         // declares a `Team` surface with `Switching = HeaderSwitcher`
@@ -3263,12 +3263,14 @@ module Client =
         }
 
         let shell =
-            Toolup.UIToolkit.Layout.AppShellWith
-                sidebar
-                content
-                chrome.SidePanel
-                combinedHeaderAction
-                config.Shell.InputsPaneWidth
+            Toolup.UIToolkit.Layout.AppShell {
+                Sidebar = sidebar
+                Content = content
+                SidePanel = chrome.SidePanel
+                HeaderAction = combinedHeaderAction
+                IdentityAction = Toolup.UIToolkit.Layout.headerIdentityAction ()
+                InputsWidth = config.Shell.InputsPaneWidth
+            }
 
         // Render the toast renderer alongside the shell. Fixed-positioned
         // containers sit on top of everything else via z-index; the
@@ -3388,7 +3390,7 @@ module Client =
         // Phase 121 — standard dismissible degradation banner. Renders
         // `Html.none` when no boot load has failed (GP 13).
         let degradationBanner =
-            BootDegradation.bannerWith
+            BootDegradation.banner
                 resolvedCatalog.BootDegradation
                 model.Degradations
                 (RetryBootLoad >> dispatch)

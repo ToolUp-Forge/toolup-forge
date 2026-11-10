@@ -108,7 +108,8 @@ let tests =
                 undeclared "Finance" (Some "Reports")
             ]
 
-            let sections = buildSections views freshProfile
+            let sections =
+                buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views freshProfile
 
             Expect.equal
                 (keysOf sections)
@@ -150,7 +151,8 @@ let tests =
                 undeclared "Finance" (Some "Reports")
             ]
 
-            let sections = buildSections views freshProfile
+            let sections =
+                buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views freshProfile
 
             Expect.equal
                 (keysOf sections)
@@ -194,7 +196,7 @@ let tests =
                 }
 
                 Expect.equal
-                    (idsIn (buildSections views reordered) AppKey)
+                    (idsIn (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views reordered) AppKey)
                     [ "Stock"; "Trade"; "Returns" ]
                     "the saved order leads and the rows it does not name keep registration order at the tail"
 
@@ -207,7 +209,7 @@ let tests =
                 }
 
                 Expect.equal
-                    (idsIn (buildSections views legacy) AppKey)
+                    (idsIn (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views legacy) AppKey)
                     [ "Returns"; "Stock"; "Trade" ]
                     "an order saved when the rows were in `_other` still applies to them"
 
@@ -217,7 +219,7 @@ let tests =
                 }
 
                 Expect.equal
-                    (idsIn (buildSections views both) AppKey)
+                    (idsIn (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views both) AppKey)
                     [ "Stock"; "Trade"; "Returns" ]
                     "…and an `_app` order, once saved, wins over it")
 
@@ -268,7 +270,8 @@ let tests =
                 undeclared "Sales" (Some "Analytics")
             ]
 
-            let sections = buildSections views freshProfile
+            let sections =
+                buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views freshProfile
 
             // Placement, not input order, decides position: the switcher was
             // registered first and renders last.
@@ -299,7 +302,8 @@ let tests =
             ]
 
             for area, views in areas do
-                let sections = buildSections views freshProfile
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views freshProfile
 
                 Expect.isFalse (List.isEmpty (idsIn sections OtherKey)) (area + ": the `_other` bucket is populated")
 
@@ -338,7 +342,10 @@ let tests =
             Expect.isEmpty freshProfile.PinnedModuleIds "…with nothing pinned"
 
             let sections =
-                buildSections [ productLanding; undeclared "Sales" (Some "Analytics"); adminSwitcher ] freshProfile
+                buildSections
+                    ToolUp.Platform.MessageCatalog.english.Sidebar
+                    [ productLanding; undeclared "Sales" (Some "Analytics"); adminSwitcher ]
+                    freshProfile
 
             match sectionOf sections AdminAreaId with
             | None -> Expect.isTrue false "the administration switcher is absent from the rail entirely"
@@ -359,7 +366,14 @@ let tests =
                     "it is reachable because it is PLACED, not because the user happened to pin it"
 
             // The reverse trip, from inside the administration area.
-            match sectionOf (buildSections [ adminLanding; productSwitcher ] freshProfile) ProductAreaId with
+            match
+                sectionOf
+                    (buildSections
+                        ToolUp.Platform.MessageCatalog.english.Sidebar
+                        [ adminLanding; productSwitcher ]
+                        freshProfile)
+                    ProductAreaId
+            with
             | None -> Expect.isTrue false "the way back out to the app is absent from the administration rail"
             | Some section ->
                 Expect.equal section.Key TrailingKey "the return switcher is placed the same way"
@@ -376,7 +390,10 @@ let tests =
             }
 
             let sections =
-                buildSections [ productLanding; undeclared "Sales" (Some "Analytics"); adminSwitcher ] prefs
+                buildSections
+                    ToolUp.Platform.MessageCatalog.english.Sidebar
+                    [ productLanding; undeclared "Sales" (Some "Analytics"); adminSwitcher ]
+                    prefs
 
             Expect.equal
                 (idsIn sections PinnedKey)
@@ -397,7 +414,10 @@ let tests =
             }
 
             let sections =
-                buildSections [ productLanding; undeclared "Sales" (Some "Analytics"); adminSwitcher ] prefs
+                buildSections
+                    ToolUp.Platform.MessageCatalog.english.Sidebar
+                    [ productLanding; undeclared "Sales" (Some "Analytics"); adminSwitcher ]
+                    prefs
 
             Expect.equal (idsIn sections HomeKey) [ HomeId ] "the landing is not hideable"
             Expect.equal (idsIn sections TrailingKey) [ AdminAreaId ] "nor is the switcher"
@@ -414,7 +434,10 @@ let tests =
             // point stands — nothing about either id lifts it out of the
             // grouped slot.
             let sections =
-                buildSections [ undeclared HomeId None; undeclared AdminHomeId None ] freshProfile
+                buildSections
+                    ToolUp.Platform.MessageCatalog.english.Sidebar
+                    [ undeclared HomeId None; undeclared AdminHomeId None ]
+                    freshProfile
 
             Expect.equal
                 (keysOf sections)
@@ -458,7 +481,11 @@ let tests =
             }
 
             for prefs in [ freshProfile; noisyPrefs ] do
-                let sections = buildSections [ productLanding; adminSwitcher ] prefs
+                let sections =
+                    buildSections
+                        ToolUp.Platform.MessageCatalog.english.Sidebar
+                        [ productLanding; adminSwitcher ]
+                        prefs
 
                 for key in [ HomeKey; TrailingKey ] do
                     match sections |> List.tryFind (fun s -> s.Key = key) with
@@ -486,7 +513,7 @@ let tests =
             ]
 
             Expect.equal
-                (keysOf (buildSections views prefs))
+                (keysOf (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views prefs))
                 [ HomeKey; AppKey; "Analytics"; TrailingKey; HiddenKey ]
                 "the full section order, with every reserved section populated at once")
     ]

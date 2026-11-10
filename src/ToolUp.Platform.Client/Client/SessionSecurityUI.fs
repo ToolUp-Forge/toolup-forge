@@ -251,7 +251,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 /// widen without reading as a removal in the public-API approval
 /// baseline, so the message-catalog-aware body is the additive
 /// `…With` variant and this delegates with the English catalog,
-/// matching `BootDegradation.bannerWith` / `Components.ModuleBoundary.wrapWith`.
+/// matching `BootDegradation.banner` / `Components.ModuleBoundary.wrapWith`.
 let lastSeenLabelWith (msgs: SessionSecurityMessages) (now: DateTimeOffset) (at: DateTimeOffset) : string =
     let elapsed = now - at
 

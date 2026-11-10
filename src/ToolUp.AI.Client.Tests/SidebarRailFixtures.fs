@@ -416,7 +416,8 @@ let railStates: RailState list = [
 /// The sections the shell would hand the renderer for this state — the
 /// same fold the component itself runs, exposed so a caller can compare a
 /// pure projection (e.g. `railStops`) against the rendered markup.
-let sectionsFor (state: RailState) = buildSections state.Modules state.Prefs
+let sectionsFor (state: RailState) =
+    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar state.Modules state.Prefs
 
 /// A mounted rail: the jsdom window it lives in and the host element the
 /// component rendered into. Phase 1112 — exposed so a pack can drive

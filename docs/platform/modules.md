@@ -631,9 +631,8 @@ render path, including the whole-tree composers below. What keeps it holding is 
 are stable: the shell builds the sidebar's callbacks once per Elmish loop, and a row's icon is the
 element your module declared — so declare icons once (`Icon = myIcon`, a value), not with a
 function that builds a fresh element per call. A fresh element is never wrong, only a rail redrawn
-on every chrome render. A custom shell composed over `Layout.AppShellWith` gets the same boundary
-if it passes the same callback functions from render to render; `Layout.AppShell`, which takes the
-callbacks one by one, keeps building the sidebar inline.
+on every chrome render. A custom shell composed over `Layout.AppShell` gets the same boundary if it
+passes the same callback functions from render to render.
 
 **Your view must read only its arguments.** Under the store, a module's view runs when its own state
 changes — not whenever the shell happens to re-render. A view that reads anything else — a

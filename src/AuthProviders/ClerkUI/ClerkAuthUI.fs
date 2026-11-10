@@ -30,9 +30,9 @@ let SignIn (props: IReactProperty list) : ReactElement =
 let Show (props: IReactProperty list) : ReactElement =
     ReactLegacy.createElement (unbox<ReactElement> clerk?Show, createObj !!props)
 
-/// Phase 1069 — Clerk's `UserButton` as the shell header's identity
-/// action (moved here from `Toolup.UIToolkit.Layout`, so the shell bundle
-/// no longer imports `@clerk/react`). Renders nothing until an active
+/// Clerk's `UserButton` as the shell header's identity action, rendered
+/// through `AppShellProps.IdentityAction` (the shell bundle imports no
+/// `@clerk/react`). Renders nothing until an active
 /// ClerkProvider has mounted: `window.Clerk` (populated by the Clerk SDK
 /// when its provider mounts) is the feature-detection signal, since
 /// `clerk?UserButton` throws at render without one. Bypasses the
@@ -55,7 +55,7 @@ let userButton () : ReactElement =
 /// sign-in screen matches the rest of the app. Tailwind tokens come
 /// from `Toolup.UIToolkit.Tokens`.
 ///
-/// Phase 1069 — wrapping the shell also registers `userButton` as the
+/// Wrapping the shell also registers `userButton` as the
 /// page header's identity action (`Layout.registerHeaderIdentityAction`),
 /// so a Clerk deployment gets the header button with no config change.
 let wrapApp (publishableKey: string) (shell: ReactElement) =

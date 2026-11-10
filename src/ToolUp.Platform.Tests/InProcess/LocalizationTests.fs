@@ -853,16 +853,14 @@ let private skeletonTests =
 // session — carried on the module's model from init. A reference to
 // `MessageCatalog.english` in a module file is a string a deployment that
 // sets `Locale` still renders in English, so the scan below fails on
-// every one outside the allowlist.
+// every one.
 //
 // The scan covers every `*UI.fs` under `src/` (each built-in admin module
 // and each auth-provider client UI) plus the two reducer files whose names
 // do not end in `UI` (the KnowledgeBase client's `ClientModel.fs` and the
-// OIDC client's `OidcTokenStore.fs`), and the two files the allowlist
-// names, so the allowlist is measured against code the scan actually
-// reads. The allowlist holds the two pre-catalog back-compat entry points
-// that render outside both a reducer and a provider; Phase 1075 retires
-// them and deletes the list.
+// OIDC client's `OidcTokenStore.fs`), and the sidebar and boot-degradation
+// files, whose English back-compat entry points are gone: there is no
+// allowlist.
 
 /// The files the reducer-pin scan reads, as `relative * full` paths.
 let private reducerPinFiles () =
@@ -888,11 +886,6 @@ let private reducerPinFiles () =
     |> List.distinct
     |> List.sort
     |> List.map (fun relative -> relative, Path.Combine(root, relative))
-
-/// `(file name, enclosing top-level binding)` pairs admitted by the scan.
-/// Exactly two, both deleted by Phase 1075.
-let private reducerPinAllowlist =
-    set [ "Sidebar.fs", "buildSections"; "BootDegradation.fs", "banner" ]
 
 let private englishPin =
     Regex(@"\bMessageCatalog\.english\b", RegexOptions.Compiled)
@@ -940,17 +933,12 @@ let private reducerPinTests =
                 Expect.isTrue (File.Exists full) $"the scan names {relative}, which does not exist"
         }
 
-        test "no MessageCatalog.english reference outside the two-entry allowlist" {
-            let hits =
+        test "no MessageCatalog.english reference in a module file" {
+            let offending =
                 reducerPinFiles ()
                 |> List.collect (fun (relative, full) ->
                     englishPins (File.ReadAllLines full)
                     |> List.map (fun (line, binding) -> relative, line, binding))
-
-            let offending =
-                hits
-                |> List.filter (fun (relative, _, binding) ->
-                    not (reducerPinAllowlist.Contains(Path.GetFileName relative, binding)))
 
             let report =
                 offending
@@ -959,22 +947,9 @@ let private reducerPinTests =
 
             Expect.isEmpty
                 offending
-                ($"{List.length offending} reference(s) to `MessageCatalog.english` in a module file. A reducer reads `ctx.Messages.<Section>` carried on its model from `init`; a view reads the resolved catalog (Phase 1072):"
+                ($"{List.length offending} reference(s) to `MessageCatalog.english` in a module file. A reducer reads `ctx.Messages.<Section>` carried on its model from `init`; a view reads `RenderContext.Messages`:"
                  + Environment.NewLine
                  + report)
-
-            // The allowlist is measured, not trusted: an entry whose pin is
-            // gone is deleted with it, so the list can only shrink.
-            let present =
-                hits
-                |> List.map (fun (relative, _, binding) -> Path.GetFileName relative, binding)
-                |> Set.ofList
-
-            let stale = Set.difference reducerPinAllowlist present
-
-            Expect.isEmpty
-                stale
-                $"allowlist entries with no pin left — delete them from `reducerPinAllowlist`: %A{stale}"
         }
 
         test "the scan flags a re-added pin, names its binding, and skips a comment — go-red" {
@@ -987,10 +962,6 @@ let private reducerPinTests =
             |]
 
             Expect.equal (englishPins lines) [ 3, "update" ] "one pin, on line 3, inside `update`"
-
-            Expect.isFalse
-                (reducerPinAllowlist.Contains("FileManagerUI.fs", "update"))
-                "a reducer is never on the allowlist"
         }
     ]
 
