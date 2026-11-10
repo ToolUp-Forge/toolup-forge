@@ -243,7 +243,7 @@ let update (msg: Msg) (model: Model) =
 let private statusPill (msgs: DataIngestionMessages) (status: CredentialStatus) =
     let label, cls =
         match status with
-        | NotConfigured -> msgs.StatusNotConfigured, "bg-gray-100 text-gray-700 border-gray-200"
+        | NotConfigured -> msgs.StatusNotConfigured, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
         | NeedsAuthorization -> msgs.StatusNeedsAuthorization, "bg-yellow-100 text-yellow-700 border-yellow-200"
         | Connected _ -> msgs.StatusConnected, "bg-green-100 text-green-700 border-green-200"
         | NeedsReauthorization _ -> msgs.StatusNeedsReauthorization, "bg-red-100 text-red-700 border-red-200"
@@ -257,7 +257,7 @@ let private statusDetail (msgs: DataIngestionMessages) (status: CredentialStatus
     match status with
     | Connected at ->
         Html.span [
-            prop.className "text-xs text-gray-500"
+            prop.className ("text-xs " + Tokens.Text.muted)
             prop.text (msgs.SinceLabel(at.ToString("yyyy-MM-dd HH:mm") + " UTC"))
         ]
     | NeedsReauthorization reason -> Html.span [ prop.className "text-xs text-red-700"; prop.text reason ]
@@ -295,7 +295,7 @@ let private tokenStatusDetail (msgs: DataIngestionMessages) (status: TokenStatus
         match status.LastOutcome, status.LastOutcomeAt with
         | Some(RefreshedOutcome _), Some at ->
             Html.span [
-                prop.className "text-xs text-gray-500"
+                prop.className ("text-xs " + Tokens.Text.muted)
                 prop.text (msgs.AtLabel(at.ToString("yyyy-MM-dd HH:mm") + " UTC"))
             ]
         | Some(TransientErrorOutcome reason), _
@@ -305,14 +305,17 @@ let private tokenStatusDetail (msgs: DataIngestionMessages) (status: TokenStatus
             // Descriptor registered but no terminal audit row yet —
             // typically the first minute after Connect, before the
             // scheduled refresh fires.
-            Html.span [ prop.className "text-xs text-gray-500"; prop.text msgs.AwaitingFirstRefresh ]
+            Html.span [
+                prop.className ("text-xs " + Tokens.Text.muted)
+                prop.text msgs.AwaitingFirstRefresh
+            ]
         | _ -> Html.none
 
     let nextLine =
         match status.NextScheduledRefresh with
         | Some at ->
             Html.span [
-                prop.className "text-xs text-gray-400"
+                prop.className ("text-xs " + Tokens.Text.muted)
                 prop.text (msgs.NextLabel(at.ToString("yyyy-MM-dd HH:mm") + " UTC"))
             ]
         | None -> Html.none
@@ -331,7 +334,7 @@ let private tokenStatusCell (msgs: DataIngestionMessages) (entry: TokenStatus op
     | Some None ->
         // No descriptor — non-OAuth connector or descriptor not yet
         // registered. Neutral dash, no styling.
-        Html.span [ prop.className "text-xs text-gray-400"; prop.text "—" ]
+        Html.span [ prop.className ("text-xs " + Tokens.Text.muted); prop.text "—" ]
     | Some(Some status) ->
         Html.div [
             prop.className "flex flex-col gap-0.5"
@@ -340,39 +343,22 @@ let private tokenStatusCell (msgs: DataIngestionMessages) (entry: TokenStatus op
                 | Some outcome -> tokenOutcomePill msgs outcome
                 | None ->
                     Html.span [
-                        prop.className
-                            "inline-block text-xs px-2 py-0.5 rounded border font-medium bg-gray-100 text-gray-700 border-gray-200"
+                        prop.className (
+                            "inline-block text-xs px-2 py-0.5 rounded border font-medium bg-gray-100 border-gray-200 "
+                            + Tokens.Text.secondary
+                        )
                         prop.text msgs.OutcomePending
                     ]
                 tokenStatusDetail msgs status
             ]
         ]
 
-let private actionButton (label: string) (disabled: bool) (cls: string) (onClick: unit -> unit) =
-    Html.button [
-        prop.className [
-            "px-3 py-1 text-xs font-medium rounded border transition-colors"
-            cls
-            if disabled then
-                "opacity-50 cursor-not-allowed"
-        ]
-        prop.disabled disabled
-        prop.text label
-        prop.onClick (fun _ ->
-            if not disabled then
-                onClick ())
-    ]
-
 let private connectButton (msgs: DataIngestionMessages) (id: DataSourceId) (flowName: string) (dispatch: Msg -> unit) =
-    actionButton msgs.Connect false "bg-brand text-white border-brand hover:bg-brand-dark" (fun () ->
-        dispatch (ConnectClicked(id, flowName)))
+    Forms.Button.primaryWith Forms.Button.Enabled msgs.Connect (fun () -> dispatch (ConnectClicked(id, flowName)))
 
 let private disconnectButton (msgs: DataIngestionMessages) (id: DataSourceId) (busy: bool) (dispatch: Msg -> unit) =
-    actionButton
-        (if busy then msgs.Disconnecting else msgs.Disconnect)
-        busy
-        "bg-white text-gray-700 border-border hover:bg-gray-50"
-        (fun () -> dispatch (DisconnectClicked id))
+    Forms.Button.secondaryWith (Forms.Button.stateOf busy msgs.Disconnecting false) msgs.Disconnect (fun () ->
+        dispatch (DisconnectClicked id))
 
 /// Render the row's action button(s). For OAuth-shaped sources we
 /// derive the flow name from the source's `Kind` by lowercasing +
@@ -435,82 +421,73 @@ let private credentialPanel (msgs: DataIngestionMessages) (config: DataSourceCon
             prop.className "p-4 bg-gray-50 border-t border-border"
             prop.children [
                 Html.p [
-                    prop.className "text-sm text-gray-600"
+                    prop.className ("text-sm " + Tokens.Text.secondary)
                     prop.text (msgs.NoCredentialUIForKind config.Kind)
                 ]
             ]
         ]
 
-let private sourceRow
+/// The source table's columns. The name cell toggles the row's
+/// credential panel, which renders under the table.
+let private sourceColumns
     (msgs: DataIngestionMessages)
     (model: Model)
     (dispatch: Msg -> unit)
-    (config: DataSourceConfig)
-    : ReactElement list =
-    let status =
+    : Data.Column<DataSourceConfig> list =
+    let statusOf (config: DataSourceConfig) =
         model.Statuses |> Map.tryFind config.Id |> Option.defaultValue NotConfigured
 
-    let tokenEntry = model.TokenStatuses |> Map.tryFind config.Id
-
-    let isExpanded =
-        match model.Expanded with
-        | Some id -> id = config.Id
-        | None -> false
-
-    let busy = model.Disconnecting |> Set.contains config.Id
+    let mono (text: string) =
+        Html.span [ prop.className [ "text-xs font-mono"; Tokens.Text.muted ]; prop.text text ]
 
     [
-        Html.tr [
-            prop.className [ "border-t border-border hover:bg-gray-50 cursor-pointer" ]
-            prop.onClick (fun _ -> dispatch (ToggleExpanded config.Id))
-            prop.children [
-                Html.td [
-                    prop.className "px-3 py-2"
-                    prop.children [
-                        Html.div [
-                            prop.className "flex flex-col gap-0.5"
-                            prop.children [ statusPill msgs status; statusDetail msgs status ]
-                        ]
-                    ]
-                ]
-                Html.td [ prop.className "px-3 py-2 font-medium"; prop.text config.Name ]
-                Html.td [
-                    prop.className "px-3 py-2 text-xs text-gray-500 font-mono"
-                    prop.text config.Id
-                ]
-                Html.td [
-                    prop.className "px-3 py-2 text-xs text-gray-500 font-mono"
-                    prop.text config.Kind
-                ]
-                Html.td [
-                    prop.className "px-3 py-2"
-                    prop.children [ tokenStatusCell msgs tokenEntry ]
-                ]
-                Html.td [
-                    prop.className "px-3 py-2"
-                    prop.onClick (fun e -> e.stopPropagation ())
-                    prop.children [ rowActions msgs config status busy dispatch ]
-                ]
-            ]
-        ]
+        {
+            Header = msgs.ColumnStatus
+            Align = Data.Left
+            Cell =
+                fun config ->
+                    let status = statusOf config
 
-        if isExpanded then
-            Html.tr [
-                prop.children [
-                    Html.td [
-                        prop.colSpan 6
-                        prop.className "p-0"
-                        prop.children [
-                            credentialPanel msgs config (fun () ->
-                                // Refresh just the source list +
-                                // statuses; the user is editing this
-                                // particular row so we keep it
-                                // expanded.
-                                dispatch RefreshSources)
-                        ]
+                    Html.div [
+                        prop.className "flex flex-col gap-0.5"
+                        prop.children [ statusPill msgs status; statusDetail msgs status ]
                     ]
-                ]
-            ]
+        }
+        {
+            Header = msgs.ColumnName
+            Align = Data.Left
+            Cell =
+                fun config ->
+                    Html.button [
+                        prop.type' "button"
+                        prop.ariaExpanded (model.Expanded = Some config.Id)
+                        prop.className "font-medium text-left hover:underline"
+                        prop.onClick (fun _ -> dispatch (ToggleExpanded config.Id))
+                        prop.text config.Name
+                    ]
+        }
+        {
+            Header = msgs.ColumnId
+            Align = Data.Left
+            Cell = fun config -> mono config.Id
+        }
+        {
+            Header = msgs.ColumnKind
+            Align = Data.Left
+            Cell = fun config -> mono config.Kind
+        }
+        {
+            Header = msgs.ColumnTokenStatus
+            Align = Data.Left
+            Cell = fun config -> tokenStatusCell msgs (model.TokenStatuses |> Map.tryFind config.Id)
+        }
+        {
+            Header = msgs.ColumnActions
+            Align = Data.Left
+            Cell =
+                fun config ->
+                    rowActions msgs config (statusOf config) (model.Disconnecting |> Set.contains config.Id) dispatch
+        }
     ]
 
 /// Inline credential panel for the create-flow. Renders the per-Kind
@@ -529,11 +506,11 @@ let private createCredentialPanel (msgs: DataIngestionMessages) (kind: string) (
                     prop.className "flex items-center justify-between mb-3"
                     prop.children [
                         Html.h3 [
-                            prop.className "text-sm font-semibold text-gray-900"
+                            prop.className ("text-sm font-semibold " + Tokens.Text.primary)
                             prop.text (msgs.NewSourceHeading kind)
                         ]
                         Html.button [
-                            prop.className "text-xs text-gray-500 hover:underline"
+                            prop.className ("text-xs hover:underline " + Tokens.Text.muted)
                             prop.text msgs.CancelCreate
                             prop.onClick (fun _ -> dispatch CancelCreate)
                         ]
@@ -561,14 +538,17 @@ let private kindSelector (msgs: DataIngestionMessages) (dispatch: Msg -> unit) (
 
     if List.isEmpty kinds then
         Html.div [
-            prop.className "p-4 text-sm text-gray-500 bg-gray-50 border border-border rounded-lg"
+            prop.className ("p-4 text-sm bg-gray-50 border border-border rounded-lg " + Tokens.Text.muted)
             prop.text msgs.NoCredentialUIsRegistered
         ]
     else
         Html.div [
             prop.className "flex items-center gap-2 flex-wrap"
             prop.children [
-                Html.span [ prop.className "text-sm text-gray-600 mr-1"; prop.text msgs.AddDataSource ]
+                Html.span [
+                    prop.className ("text-sm mr-1 " + Tokens.Text.secondary)
+                    prop.text msgs.AddDataSource
+                ]
                 for kind in kinds do
                     let isSelected = creating = Some kind
 
@@ -578,7 +558,7 @@ let private kindSelector (msgs: DataIngestionMessages) (dispatch: Msg -> unit) (
                             if isSelected then
                                 "bg-brand text-white border-brand"
                             else
-                                "bg-white text-gray-700 border-border hover:bg-gray-50"
+                                ("bg-white border-border hover:bg-gray-50 " + Tokens.Text.secondary)
                         ]
                         prop.text $"+ {kind}"
                         prop.onClick (fun _ ->
@@ -598,7 +578,7 @@ let private sourcesTable
     =
     if List.isEmpty sources then
         Html.div [
-            prop.className "text-sm text-gray-500 space-y-3"
+            prop.className ("text-sm space-y-3 " + Tokens.Text.muted)
             prop.children [
                 Html.p [ prop.text msgs.NoSourcesYet ]
                 kindSelector msgs dispatch model.Creating
@@ -621,63 +601,24 @@ let private sourcesTable
                 Html.div [
                     prop.className "border border-border rounded-lg overflow-hidden"
                     prop.children [
-                        Html.table [
-                            prop.className "w-full text-sm"
-                            prop.children [
-                                Html.thead [
-                                    prop.className "bg-gray-50"
-                                    prop.children [
-                                        Html.tr [
-                                            prop.children [
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600 w-44"
-                                                    prop.text msgs.ColumnStatus
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnName
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnId
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnKind
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600 w-48"
-                                                    prop.text msgs.ColumnTokenStatus
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600 w-44"
-                                                    prop.text msgs.ColumnActions
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                                Html.tbody [ prop.children (sources |> List.collect (sourceRow msgs model dispatch)) ]
-                            ]
-                        ]
+                        Data.table (sourceColumns msgs model dispatch) sources
+                        match
+                            model.Expanded
+                            |> Option.bind (fun id -> sources |> List.tryFind (fun s -> s.Id = id))
+                        with
+                        | Some config ->
+                            // Refresh just the source list + statuses; the
+                            // user is editing this row so it stays expanded.
+                            credentialPanel msgs config (fun () -> dispatch RefreshSources)
+                        | None -> Html.none
                     ]
                 ]
             ]
         ]
 
 let private refreshButton (msgs: DataIngestionMessages) (loading: bool) (dispatch: Msg -> unit) =
-    Html.button [
-        prop.className [
-            "px-3 py-1.5 text-sm font-medium rounded border transition-colors"
-            if loading then
-                "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-            else
-                "bg-white text-gray-700 border-border hover:bg-gray-50"
-        ]
-        prop.disabled loading
-        prop.text (if loading then msgs.Refreshing else msgs.Refresh)
-        prop.onClick (fun _ -> dispatch RefreshSources)
-    ]
+    Forms.Button.secondaryWith (Forms.Button.stateOf loading msgs.Refreshing false) msgs.Refresh (fun () ->
+        dispatch RefreshSources)
 
 let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg -> unit) =
     let loading = Remote.isLoading model.Sources
@@ -692,7 +633,10 @@ let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg
                     Html.div [
                         prop.children [
                             Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.SourcesHeading ]
-                            Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.OAuthFootnote ]
+                            Html.p [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text msgs.OAuthFootnote
+                            ]
                         ]
                     ]
                     refreshButton msgs loading dispatch
@@ -710,14 +654,14 @@ let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg
             match model.Sources with
             | Remote.NotAsked
             | Remote.Loading
-            | Remote.Reloading _ -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Reloading _ -> Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
             | Remote.Failed msg ->
                 StateViews.notice noticeMsgs (Some(Notice.Problem msg)) (fun () -> dispatch DismissError)
             | Remote.Loaded sources -> sourcesTable msgs model dispatch sources
         ]
     ]
 
-/// Phase 444 — the module body as a React COMPONENT, so it has a hook
+/// The module body as a React COMPONENT, so it has a hook
 /// site from which to read the resolved catalog. See `HealthMonitorUI`'s
 /// equivalent for why a module's `view` cannot hold the hook itself.
 [<ReactComponent>]
