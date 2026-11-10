@@ -13,6 +13,7 @@
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform.BlobStorage
 open ToolUp.InterPlatform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 
