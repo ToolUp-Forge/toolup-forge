@@ -141,9 +141,11 @@ let private auditTests =
                 Surface = BeaconSurfaceLabel
             }
 
-            do! auditLog.Record("team-acme", BeaconRejected payload)
+            do!
+                auditLog.Record(AuditScope.shard "team-acme", AuditSubject.system "test", BeaconRejected payload)
+                |> AuditRow.orRefuse
 
-            let! trail = auditLog.GetAuditTrail("team-acme", None, Some "BeaconRejected")
+            let! trail = auditLog.GetAuditTrail(AuditScope.shard "team-acme", None, Some "BeaconRejected")
 
             match trail with
             | [ BeaconRejected p ] ->
@@ -163,7 +165,8 @@ let private auditTests =
 
             do!
                 auditLog.Record(
-                    "team-acme",
+                    AuditScope.shard "team-acme",
+                    AuditSubject.system "test",
                     BeaconRejected {
                         ConversationId = Guid.NewGuid()
                         Caller = "bob"
@@ -171,8 +174,9 @@ let private auditTests =
                         Surface = "submit"
                     }
                 )
+                |> AuditRow.orRefuse
 
-            let! trail = auditLog.GetAuditTrail("team-acme", None, Some "BeaconRejected")
+            let! trail = auditLog.GetAuditTrail(AuditScope.shard "team-acme", None, Some "BeaconRejected")
 
             match trail with
             | [ BeaconRejected p ] -> Expect.equal p.Surface "submit" "submit-surface label survives the round-trip"
@@ -185,7 +189,8 @@ let private auditTests =
 
             do!
                 auditLog.Record(
-                    "team-acme",
+                    AuditScope.shard "team-acme",
+                    AuditSubject.system "test",
                     BeaconRejected {
                         ConversationId = Guid.NewGuid()
                         Caller = "bob"
@@ -193,11 +198,12 @@ let private auditTests =
                         Surface = BeaconSurfaceLabel
                     }
                 )
+                |> AuditRow.orRefuse
 
-            let! unrelated = auditLog.GetAuditTrail("team-acme", None, Some "ConversationExported")
+            let! unrelated = auditLog.GetAuditTrail(AuditScope.shard "team-acme", None, Some "ConversationExported")
             Expect.isEmpty unrelated "the filter must not return BeaconRejected under another type"
 
-            let! matched = auditLog.GetAuditTrail("team-acme", None, Some "BeaconRejected")
+            let! matched = auditLog.GetAuditTrail(AuditScope.shard "team-acme", None, Some "BeaconRejected")
             Expect.equal (List.length matched) 1 "one rejection event under its own type"
         }
     ]

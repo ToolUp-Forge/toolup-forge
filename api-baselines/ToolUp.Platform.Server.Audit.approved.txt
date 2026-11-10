@@ -41,12 +41,8 @@ ToolUp.Platform.Audit.AuditLog (class)
 ToolUp.Platform.Audit.AuditLog+AuditMetrics (class)
 ToolUp.Platform.Audit.AuditLog+AuditMetrics.ChainHeadUnreadableTotal : System.String (literal)
 ToolUp.Platform.Audit.AuditLog+AuditMetrics.WriteFailuresTotal : System.String (literal)
-ToolUp.Platform.Audit.AuditLog+AuditWriteRefusedException (class)
-ToolUp.Platform.Audit.AuditLog+AuditWriteRefusedException..ctor(System.String, System.String, System.Exception)
 ToolUp.Platform.Audit.AuditLog+EventStoreAuditLog (class)
-ToolUp.Platform.Audit.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.Metrics.IMetricsSink]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFailurePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.AuditFallbackStore+AuditFallbackStore])
-ToolUp.Platform.Audit.AuditLog+NoOpAuditLog (class)
-ToolUp.Platform.Audit.AuditLog+NoOpAuditLog..ctor()
+ToolUp.Platform.Audit.AuditLog+EventStoreAuditLog..ctor(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.Metrics.IMetricsSink]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditFailurePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.AuditFallbackStore+AuditFallbackStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage])
 ToolUp.Platform.Audit.AuditLogHealthCheck (class)
 ToolUp.Platform.Audit.AuditLogHealthCheck+AuditLogHealthCheck (class)
 ToolUp.Platform.Audit.AuditLogHealthCheck+AuditLogHealthCheck..ctor(ToolUp.Platform.IAuditLog, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -127,8 +123,8 @@ ToolUp.Platform.Audit.ClassificationGate.RedactedPlaceholder : System.String (li
 ToolUp.Platform.Audit.ClassificationGate.decide(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.Audit.ClassificationDecision]], ToolUp.Platform.FieldClassification, ToolUp.Platform.AccessContext) : ToolUp.Platform.Audit.ClassificationDecision
 ToolUp.Platform.Audit.ClassificationGate.defaultPolicy(ToolUp.Platform.ClassificationLevel, ToolUp.Platform.AccessContext) : ToolUp.Platform.Audit.ClassificationDecision
 ToolUp.Platform.Audit.ClassificationGate.readerModule(ToolUp.Platform.ClassificationLevel) : System.String
-ToolUp.Platform.Audit.ClassificationGate.recordWrites(ToolUp.Platform.Audit.IFieldClassifier, ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Audit.ClassificationGate.redactFields(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.Audit.ClassificationDecision]], ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
+ToolUp.Platform.Audit.ClassificationGate.recordWrites(ToolUp.Platform.Audit.IFieldClassifier, ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
+ToolUp.Platform.Audit.ClassificationGate.redactFields(ToolUp.Platform.Audit.IFieldClassifier, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClassificationLevel, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, ToolUp.Platform.Audit.ClassificationDecision]], ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.AuditWriteError]]
 ToolUp.Platform.Audit.ConfigStoreErasureHandler (class)
 ToolUp.Platform.Audit.ConfigStoreErasureHandler.erasureHandler(ToolUp.Platform.Config.IConfigStore) : ToolUp.Platform.Audit.IDataExporter+IErasureHandler
 ToolUp.Platform.Audit.ConfigStoreErasureHandler+ConfigStoreErasureHandler (class)
@@ -162,8 +158,8 @@ ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentSource+Tags.BannerInterac
 ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentSource+Tags.CmpDecision : System.Int32 (literal)
 ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentSource+Tags.ProgrammaticGrant : System.Int32 (literal)
 ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentStateStore (class)
-ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentStateStore.entityBacked(ToolUp.Platform.Infra.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog]) : ToolUp.Platform.Audit.Consent.ConsentStateStore+IConsentStateStore
-ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentStateStore.inMemory(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog]) : ToolUp.Platform.Audit.Consent.ConsentStateStore+IConsentStateStore
+ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentStateStore.entityBacked(ToolUp.Platform.Infra.IEntityStore+IEntityStore, ToolUp.Platform.IAuditLog) : ToolUp.Platform.Audit.Consent.ConsentStateStore+IConsentStateStore
+ToolUp.Platform.Audit.Consent.ConsentStateStore+ConsentStateStore.inMemory(ToolUp.Platform.IAuditLog) : ToolUp.Platform.Audit.Consent.ConsentStateStore+IConsentStateStore
 ToolUp.Platform.Audit.Consent.ConsentStateStore+EntityBackedConsentStateStore (class)
 ToolUp.Platform.Audit.Consent.ConsentStateStore+EntityBackedConsentStateStore..ctor(ToolUp.Platform.Infra.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
 ToolUp.Platform.Audit.Consent.ConsentStateStore+IConsentStateStore (interface)
@@ -210,7 +206,7 @@ ToolUp.Platform.Audit.DSRExportJobHandlerModule.create(ToolUp.Platform.Audit.IBa
 ToolUp.Platform.Audit.DSRExportJobHandlerModule.createWithNotifications(ToolUp.Platform.Audit.IBackgroundExportStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Audit.IDataExporter+IDataExporter], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.Platform.Jobs.IJobHandler
 ToolUp.Platform.Audit.DataObjectOrphanSweep (class)
 ToolUp.Platform.Audit.DataObjectOrphanSweep.SweepHandlerName : System.String (literal)
-ToolUp.Platform.Audit.DataObjectOrphanSweep.sweepScope(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger, System.DateTime, ToolUp.Platform.Audit.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Audit.DataObjectOrphanSweep+OrphanSweepReport]
+ToolUp.Platform.Audit.DataObjectOrphanSweep.sweepScope(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, System.DateTime, ToolUp.Platform.Audit.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Audit.DataObjectOrphanSweep+OrphanSweepReport]
 ToolUp.Platform.Audit.DataObjectOrphanSweep+DataObjectOrphanSweepConfiguredValidator (class)
 ToolUp.Platform.Audit.DataObjectOrphanSweep+DataObjectOrphanSweepConfiguredValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Audit.DataObjectOrphanSweep+DataObjectOrphanSweepJobHandler (class)

@@ -155,9 +155,9 @@ let private freshContacts () : IExternalContactStore =
     registry.Register ExternalContactStore.registration
 
     let entities =
-        BlobEntityStore(dos, blob, registry, None) :> IEntityStore.IEntityStore
+        BlobEntityStore(dos, blob, registry, NoOpAuditLog()) :> IEntityStore.IEntityStore
 
-    ExternalContactStore.entityBacked entities None
+    ExternalContactStore.entityBacked entities (NoOpAuditLog())
 
 /// File a contact with a WhatsApp number, optionally consented on WhatsApp.
 let private seedContactIn

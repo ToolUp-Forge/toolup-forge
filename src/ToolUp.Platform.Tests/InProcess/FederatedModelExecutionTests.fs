@@ -390,7 +390,7 @@ let private dataHost (bindings: Map<string, string>) =
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
@@ -1058,7 +1058,7 @@ let private dataHostGranting
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
@@ -1800,7 +1800,7 @@ let private dataHostRendering
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer
@@ -2461,8 +2461,12 @@ type private CapturingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async { lock events (fun () -> events.Add audit) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
+            lock events (fun () -> events.Add audit)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 [<Literal>]
 let private transitionKey = "sha256:artifact-key"
@@ -2516,7 +2520,7 @@ let private dataHostTransitioning (grant: ModelTransitionAuthority) =
     let fusion: PeerJobFusion = {
         Scheduler = scheduler
         ResultStore = results
-        AuditLog = Some(audit :> IAuditLog)
+        AuditLog = (audit :> IAuditLog)
     }
 
     let peer = DefaultPlatformPeer("data-host") :> IPlatformPeer

@@ -85,13 +85,17 @@ type private RecordingAuditLog() =
                 failtestf "audit wait: %d of %d expected row(s) arrived" recorded.Count count)
 
     interface IAuditLog with
-        member _.Record(_, audit) = async {
+        member _.Record(AuditScope.StreamKey _, _actor, audit) = async {
             lock gate (fun () ->
                 recorded.Add audit
                 Threading.Monitor.PulseAll gate)
+
+            return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return lock gate (fun () -> List.ofSeq recorded) }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
+            return lock gate (fun () -> List.ofSeq recorded)
+        }
 
 let private reporter = ComponentId.ofModule "reporter"
 

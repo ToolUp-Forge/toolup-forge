@@ -59,6 +59,14 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
 
+/// A log that records nothing and never refuses — the test's "no audit".
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+    }
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -90,8 +98,12 @@ type private RecordingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Add((scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// The decorator emits its success row through `Async.Start`, exactly as
 /// it emits its refusal row — best-effort per the `IAuditLog` contract,
@@ -120,9 +132,10 @@ let private registryOf declarations =
 /// that refused — `grantModuleAccess` must not claim to know which.
 type private FailingStore(message: string) =
     interface IPermissionStore with
-        member _.GetTeamPermissions _ = async { return TeamPermissions.empty }
-        member _.GetEffectivePermissions(_, _) = async { return Map.empty }
-        member _.GetModuleExposure _ = async { return Map.empty }
+        member _.GetTeamPermissions _ = async { return Ok TeamPermissions.empty }
+        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
+        member _.GetModuleExposure _ = async { return Ok Map.empty }
+        member _.UpdateTeamPermissions(_, _) = async { return Error message }
         member _.SetModuleExposure(_, _, _) = async { return Error message }
         member _.SetTeamPermissions(_, _) = async { return Error message }
         member _.SetMemberPermissions(_, _, _, _) = async { return Error message }
@@ -381,7 +394,7 @@ let tests =
                         FailingStore message :> IPermissionStore,
                         registry,
                         GrantPolicyGuard.CounterpartyConsentOracle.denyAll,
-                        None,
+                        noAudit,
                         Some "admin-bob"
                     )
                     :> IPermissionStore
@@ -428,7 +441,7 @@ let tests =
                         FailingStore queuedMessage :> IPermissionStore,
                         registry,
                         GrantPolicyGuard.CounterpartyConsentOracle.denyAll,
-                        None,
+                        noAudit,
                         Some "admin-bob"
                     )
                     :> IPermissionStore
@@ -723,8 +736,7 @@ let tests =
                                 registry
                                 grants
                                 verdicts
-                                None
-                                Async.RunSynchronously
+                                noAudit
                                 "t1"
                                 "alice"
                                 moduleName

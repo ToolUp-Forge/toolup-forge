@@ -235,7 +235,8 @@ type InProcessRateLimiter
                     if waited >= slowRateLimitThreshold then
                         do!
                             auditLog.Record(
-                                key.ScopeId,
+                                AuditScope.shard key.ScopeId,
+                                AuditSubject.system "RateLimiter",
                                 RateLimitWaited {
                                     ScopeId = key.ScopeId
                                     Provider = key.Provider
@@ -243,12 +244,14 @@ type InProcessRateLimiter
                                     WaitedMs = int64 waited.TotalMilliseconds
                                 }
                             )
+                            |> AuditRow.orRefuse
                 | Refused reason ->
                     metricsSink.Increment("toolup.ratelimit.refused_total", metricTags key.Provider)
 
                     do!
                         auditLog.Record(
-                            key.ScopeId,
+                            AuditScope.shard key.ScopeId,
+                            AuditSubject.system "RateLimiter",
                             RateLimitRefused {
                                 ScopeId = key.ScopeId
                                 Provider = key.Provider
@@ -256,6 +259,7 @@ type InProcessRateLimiter
                                 Reason = reason
                             }
                         )
+                        |> AuditRow.orRefuse
 
                 return resolved
         }

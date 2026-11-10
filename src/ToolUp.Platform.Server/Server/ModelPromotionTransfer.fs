@@ -432,32 +432,31 @@ module ModelPromotion =
         (outcome: Result<ModelPromotionRecord, ModelPromotionRefusal>)
         : Async<unit> =
         async {
-            try
-                do!
-                    deps.Transition.Audit.Record(
-                        scopeId,
-                        ModelArtifactPromoted {
-                            CompositeKeyHash = promoted.Outcome.CompositeKey.Hash
-                            TargetStatus = ModelArtifactStatus.name promoted.Target
-                            Channel = ModelTransitionChannel.label (ModelTransitionAuthor.channel promoted.Author)
-                            AuthorKind = ModelTransitionAuthor.kind promoted.Author
-                            AuthorId = ModelTransitionAuthor.id promoted.Author
-                            AttachmentHashes = arriving promoted |> List.map _.ContentHash
-                            SigningKeyId = signature |> Option.map _.SigningKeyId |> Option.defaultValue ""
-                            Accepted = Result.isOk outcome
-                            Replayed =
-                                match outcome with
-                                | Ok record -> record.Replayed
-                                | Error _ -> false
-                            Refusal =
-                                match outcome with
-                                | Ok _ -> ""
-                                | Error refusal -> ModelPromotionRefusal.describe refusal
-                            ScopeId = scopeId
-                        }
-                    )
-            with _ ->
-                ()
+            do!
+                deps.Transition.Audit.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.system "ModelPromotion",
+                    ModelArtifactPromoted {
+                        CompositeKeyHash = promoted.Outcome.CompositeKey.Hash
+                        TargetStatus = ModelArtifactStatus.name promoted.Target
+                        Channel = ModelTransitionChannel.label (ModelTransitionAuthor.channel promoted.Author)
+                        AuthorKind = ModelTransitionAuthor.kind promoted.Author
+                        AuthorId = ModelTransitionAuthor.id promoted.Author
+                        AttachmentHashes = arriving promoted |> List.map _.ContentHash
+                        SigningKeyId = signature |> Option.map _.SigningKeyId |> Option.defaultValue ""
+                        Accepted = Result.isOk outcome
+                        Replayed =
+                            match outcome with
+                            | Ok record -> record.Replayed
+                            | Error _ -> false
+                        Refusal =
+                            match outcome with
+                            | Ok _ -> ""
+                            | Error refusal -> ModelPromotionRefusal.describe refusal
+                        ScopeId = scopeId
+                    }
+                )
+                |> AuditRow.bestEffort
         }
 
     /// Judge and (when admitted) execute one promotion transfer.

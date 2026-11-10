@@ -238,7 +238,7 @@ type NotificationPreferenceFilter
         inner: INotificationChannel,
         store: INotificationPreferenceStore,
         categories: NotificationCategory list,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         logger: ILogger,
         clock: unit -> DateTime,
         resolveZone: string -> TimeZoneInfo option
@@ -254,8 +254,8 @@ type NotificationPreferenceFilter
         (userIds: string list)
         =
         async {
-            match auditLog, userIds with
-            | Some log, _ :: _ ->
+            match userIds with
+            | _ :: _ ->
                 let payload: NotificationSilentlySkippedPayload = {
                     NotificationKind = PreferenceChannel.toWireString channel
                     ScopeId = scopeId
@@ -264,7 +264,13 @@ type NotificationPreferenceFilter
                     CorrelationId = correlationId
                 }
 
-                do! log.Record(scopeId, NotificationSilentlySkipped payload)
+                do!
+                    auditLog.Record(
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "NotificationPreferenceFilter",
+                        NotificationSilentlySkipped payload
+                    )
+                    |> AuditRow.orRefuse
             | _ -> ()
         }
 
@@ -390,7 +396,7 @@ type NotificationPreferenceFilter
             inner: INotificationChannel,
             store: INotificationPreferenceStore,
             categories: NotificationCategory list,
-            auditLog: IAuditLog option,
+            auditLog: IAuditLog,
             logger: ILogger
         ) =
         NotificationPreferenceFilter(

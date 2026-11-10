@@ -39,8 +39,12 @@ type private CapturingAuditLog() =
     member _.Recorded = recorded |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Enqueue(scopeId, audit)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private freshTeamStore () =
     let storage = InMemoryBlobStorage() :> IBlobStorage
@@ -68,7 +72,7 @@ let private pendingStore (storage: IBlobStorage) : IPendingInviteStore =
 let private freshShareTokenStore () =
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let secrets = InMemorySecretStore() :> ISecretStore
-    ShareTokenStore.create storage secrets None silentLogger
+    ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
 
 let private ctxFor (userId: string) : HttpContext =
     let services = ServiceCollection()
@@ -710,7 +714,7 @@ let pendingInviteExpiryAuditTests =
             let audit = CapturingAuditLog()
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // Seed three entries that are still valid at upsert time (so
@@ -758,7 +762,7 @@ let pendingInviteExpiryAuditTests =
             let audit = CapturingAuditLog()
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             let issuedAt = DateTime.UtcNow.AddDays -3.0
@@ -825,9 +829,12 @@ type private TrailAuditLog() =
     let recorded = ConcurrentQueue<string * AuditEvent * DateTime>()
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit, DateTime.UtcNow) }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Enqueue(scopeId, audit, DateTime.UtcNow)
+            return Ok()
+        }
 
-        member _.GetAuditTrail(scopeId, dateRange, eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, dateRange, eventType) = async {
             return
                 recorded
                 |> Seq.filter (fun (s, e, at) ->
@@ -869,7 +876,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // A live entry — must stay out of the expired list.
@@ -943,13 +950,14 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             do!
                 (audit :> IAuditLog)
                     .Record(
-                        teamId,
+                        AuditScope.shard teamId,
+                        AuditSubject.system "test",
                         TeamInviteExpired {
                             TeamId = teamId
                             InviteeEmail = "bare@x.com"
@@ -959,6 +967,7 @@ let expiredInviteVisibilityTests =
                             ExpiredAt = DateTime.UtcNow.AddDays -2.0
                         }
                     )
+                |> AuditRow.orRefuse
 
             let ctx = ctxWithPendingStore storage store "alice@example.com"
             let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
@@ -980,7 +989,7 @@ let expiredInviteVisibilityTests =
             let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             // Recorded NOW (inside the GetAuditTrail date pre-filter) with an
@@ -989,7 +998,8 @@ let expiredInviteVisibilityTests =
             do!
                 (audit :> IAuditLog)
                     .Record(
-                        teamId,
+                        AuditScope.shard teamId,
+                        AuditSubject.system "test",
                         TeamInviteExpired {
                             TeamId = teamId
                             InviteeEmail = "old@x.com"
@@ -999,6 +1009,7 @@ let expiredInviteVisibilityTests =
                             ExpiredAt = DateTime.UtcNow.AddDays -40.0
                         }
                     )
+                |> AuditRow.orRefuse
 
             let ctx = ctxWithPendingStore storage store "alice@example.com"
             let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
@@ -1321,7 +1332,7 @@ let checkMyInvitesTests =
                     (expiredEntry teamId "alice@example.com" (DateTime.UtcNow.AddDays -3.0))
 
             let store =
-                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(storage, silentLogger, (audit :> IAuditLog))
                 :> IPendingInviteStore
 
             let ctx = ctxForAuthenticatedUser store (signedInAs email)

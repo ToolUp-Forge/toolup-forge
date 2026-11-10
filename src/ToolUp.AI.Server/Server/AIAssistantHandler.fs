@@ -427,7 +427,7 @@ module ConversationRetention =
     /// fails is reported in `Failures` and left for the next sweep.
     let sweepContainer
         (storage: IBlobStorage)
-        (auditLog: IAuditLog option)
+        (auditLog: IAuditLog)
         (logger: ILogger)
         (now: DateTime)
         (policy: ConversationRetentionPolicy)
@@ -473,21 +473,20 @@ module ConversationRetention =
                             | Ok _ -> None)
 
                     if not purged.IsEmpty then
-                        match auditLog with
-                        | Some audit ->
-                            do!
-                                audit.Record(
-                                    scopeId,
-                                    ConversationsPurged {
-                                        ScopeId = scopeId
-                                        ConversationIds = purged |> List.map string
-                                        PurgedCount = purged.Length
-                                        MaxAgeSeconds = policy.MaxAge |> Option.map (fun a -> int64 a.TotalSeconds)
-                                        MaxCount = policy.MaxCount
-                                        FailedCount = failures.Length
-                                    }
-                                )
-                        | None -> ()
+                        do!
+                            auditLog.Record(
+                                AuditScope.shard scopeId,
+                                AuditSubject.system "ConversationPurge",
+                                ConversationsPurged {
+                                    ScopeId = scopeId
+                                    ConversationIds = purged |> List.map string
+                                    PurgedCount = purged.Length
+                                    MaxAgeSeconds = policy.MaxAge |> Option.map (fun a -> int64 a.TotalSeconds)
+                                    MaxCount = policy.MaxCount
+                                    FailedCount = failures.Length
+                                }
+                            )
+                            |> AuditRow.orRefuse
 
                         logger.Info(
                             sprintf
@@ -545,10 +544,7 @@ type ConversationRetentionSweepJobHandler(services: IServiceProvider, policy: Co
 
             match services.GetService typeof<IBlobStorage> with
             | :? IBlobStorage as storage ->
-                let auditLog =
-                    match services.GetService typeof<IAuditLog> with
-                    | :? IAuditLog as a -> Some a
-                    | _ -> None
+                let auditLog = Background.resolveAuditLog services
 
                 try
                     let! report =
@@ -1283,10 +1279,7 @@ let aiAssistantApi
     // ownership-gate path. `None` in test compositions that bypass
     // `compose` (no DI registration); the gate stays effective — only
     // the audit-trail row is skipped.
-    let auditLogOpt =
-        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as a -> Some a
-        | _ -> None
+    let auditLogOpt = Background.auditLogOf ctx
 
     // Opt-in conversation persistence. Resolves `IConversationStore`
     // once per handler invocation; `null` (the default,
@@ -1673,20 +1666,23 @@ let aiAssistantApi
         logger.Warn
             $"AI SubmitMessage rejected: caller '{userId}' is not the owner of conversation {conversationId} (owner '{ownerOfRecord}', scope '{scope.ScopeId}')."
 
-        match auditLogOpt with
-        | Some auditLog ->
-            let payload: BeaconRejectedPayload = {
-                ConversationId = conversationId
-                Caller = userId
-                Owner = ownerOfRecord
-                Surface = "submit"
-            }
+        let payload: BeaconRejectedPayload = {
+            ConversationId = conversationId
+            Caller = userId
+            Owner = ownerOfRecord
+            Surface = "submit"
+        }
 
-            try
-                do! auditLog.Record(scope.ScopeId, BeaconRejected payload)
-            with ex ->
-                logger.Warn $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
-        | None -> ()
+        try
+            do!
+                auditLogOpt.Record(
+                    StorageScope.auditScope scope,
+                    AuditSubject.UserAudit(UserId userId),
+                    BeaconRejected payload
+                )
+                |> AuditRow.orRefuse
+        with ex ->
+            logger.Warn $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
     }
 
     /// The symmetric ownership gate, shared with the beacon handler. In a

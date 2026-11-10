@@ -1,99 +1,68 @@
 module ToolUp.Platform.Tests.InProcess.PermissionStoreTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Scope.PermissionStore
+open ToolUp.Platform.Scope.AdminMutationApproval
 open ToolUp.Platform.Tests.Contracts
-open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 
 /// Bind the `IPermissionStore` contract test pack to the blob-backed
-/// `PermissionStore`. Each factory call creates a fresh temp-dir
-/// `LocalFileStorage` so tests don't share persisted state.
+/// `PermissionStore` and to every decorator the scope part composes over
+/// it, so the absent / unreadable / corrupt answers hold through each.
+/// A log that records nothing and never refuses.
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+    }
+
 let tests =
-    let factory () =
-        let dir =
-            Path.Combine(Path.GetTempPath(), "toolup-perms-test-" + Guid.NewGuid().ToString("N"))
+    let store (backing: IBlobStorage) =
+        PermissionStore(backing) :> IPermissionStore
 
-        Directory.CreateDirectory dir |> ignore
-        let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
-        PermissionStore(storage) :> IPermissionStore
+    testList "IPermissionStore bindings" [
+        IPermissionStoreContract.tests "PermissionStore" store
 
-    IPermissionStoreContract.tests "PermissionStore" factory
+        IPermissionStoreContract.tests "SanitisingPermissionStore" (fun backing ->
+            StoreIdSanitising.SanitisingPermissionStore(store backing) :> IPermissionStore)
 
-/// Fails every `Download`; everything else passes through, so the document
-/// is present but cannot be read.
-type private DownloadFailingStorage(inner: IBlobStorage) =
-    interface IBlobStorage with
-        member _.CanComposeFrom = false
+        IPermissionStoreContract.tests "GrantPolicyPermissionStore" (fun backing ->
+            GrantPolicyGuard.GrantPolicyPermissionStore(
+                store backing,
+                GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations [
+                    "Governed", GrantPolicy.RequiresAcknowledgement
+                ],
+                noAudit
+            )
+            :> IPermissionStore)
 
-        member _.ComposeFrom(_, _, _) =
-            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
-
-        member _.Download(_, _) = async { return Error "simulated outage" }
-
-        member _.Upload(container, blobName, content) =
-            inner.Upload(container, blobName, content)
-
-        member _.Delete(container, blobName) = inner.Delete(container, blobName)
-        member _.List(container, prefix) = inner.List(container, prefix)
-        member _.Exists(container, blobName) = inner.Exists(container, blobName)
-        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
-
-        member _.DownloadRange(container, blobName, offset, length) =
-            inner.DownloadRange(container, blobName, offset, length)
-
-        member _.Erase(container, prefix, policy, dryRun) =
-            inner.Erase(container, prefix, policy, dryRun)
+        IPermissionStoreContract.tests "DualControlPermissionStore" (fun backing ->
+            DualControlPermissionStore(
+                store backing,
+                {
+                    Scope = AdminMutationScope.PolicyBearingModulesOnly
+                    PendingTtlMinutes = 60
+                },
+                BlobAdminMutationApprovalStore(backing),
+                (fun _ -> false),
+                (fun () -> Some "admin"),
+                (fun () -> DateTimeOffset.UtcNow),
+                noAudit
+            )
+            :> IPermissionStore)
+    ]
 
 let private team = TeamId "t-perms"
 let private blob = "permissions/t-perms.json"
 
-let private refuses (work: Async<'T>) =
-    try
-        work |> Async.RunSynchronously |> ignore
-        false
-    with :? PermissionStoreUnavailableException ->
-        true
-
-/// The store's document behaviour: absent is the bootstrap default, an
-/// unreadable document and an undecodable one refuse (fail closed), and an
-/// undecodable one is quarantined beside itself and never overwritten.
+/// The store-specific half of the document behaviour the contract pack does
+/// not reach: an undecodable document is quarantined beside itself and the
+/// canonical blob is never overwritten.
 let documentTests =
     testList "Phase 1061 — PermissionStore over the document store" [
-        test "an absent document is the bootstrap default" {
-            let store =
-                PermissionStore(InMemoryBlobStorage.InMemoryBlobStorage()) :> IPermissionStore
-
-            let perms = store.GetTeamPermissions team |> Async.RunSynchronously
-            Expect.equal perms TeamPermissions.empty "no document reads as no restrictions"
-        }
-
-        test "a present document that cannot be read refuses reads and writes" {
-            let backing = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
-            let healthy = PermissionStore(backing) :> IPermissionStore
-
-            Expect.isOk
-                (healthy.SetModuleExposure(team, "Reports", ModuleExposure.Hidden)
-                 |> Async.RunSynchronously)
-                "seed a document"
-
-            let before =
-                backing.Download(ScopeKey.PlatformContainer, blob) |> Async.RunSynchronously
-
-            let faulted = PermissionStore(DownloadFailingStorage backing) :> IPermissionStore
-            Expect.isTrue (refuses (faulted.GetTeamPermissions team)) "a read refuses"
-            Expect.isTrue (refuses (faulted.SetTeamDefaults(team, Map.empty))) "a write refuses"
-
-            Expect.equal
-                (backing.Download(ScopeKey.PlatformContainer, blob) |> Async.RunSynchronously)
-                before
-                "the document was not overwritten"
-        }
-
         test "an undecodable document refuses and is quarantined, never overwritten" {
             let backing = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
             let corrupt = Text.Encoding.UTF8.GetBytes "{ not json"
@@ -103,7 +72,8 @@ let documentTests =
             |> ignore
 
             let store = PermissionStore(backing) :> IPermissionStore
-            Expect.isTrue (refuses (store.SetTeamDefaults(team, Map.empty))) "the write refuses"
+
+            Expect.isError (store.SetTeamDefaults(team, Map.empty) |> Async.RunSynchronously) "the write refuses"
 
             let names =
                 backing.List(ScopeKey.PlatformContainer, "permissions/")

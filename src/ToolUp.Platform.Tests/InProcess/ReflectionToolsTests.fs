@@ -92,8 +92,12 @@ type private RecordingAuditLog() =
         |> Seq.length
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock recorded (fun () -> recorded.Add((scopeId, audit))) }
-        member _.GetAuditTrail(_, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock recorded (fun () -> recorded.Add((scopeId, audit)))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 let private platformAdmin: AccessContext = {
     AccessContext.unrestricted (AuthenticatedUser "ops") with

@@ -44,17 +44,21 @@ type private RecordingAuditLog() =
     member _.Recorded = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Add(scopeId, audit)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// A sink that fails on every write. `record`'s contract is that a
 /// failing sink is swallowed — audit emission must never turn a storage
 /// failure into a different failure.
 type private ThrowingAuditLog() =
     interface IAuditLog with
-        member _.Record(_, _) = async { return failwith "audit sink is down" }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return failwith "audit sink is down" }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private run (work: Async<unit>) = Async.RunSynchronously work
 
@@ -171,11 +175,15 @@ let tests =
             test "emits exactly one row, under _platform, carrying every queryable axis" {
                 let sink = RecordingAuditLog()
 
-                run (BlobStorageAuthAudit.record (Some(sink :> IAuditLog)) "aws-s3" "acme-bucket" "Upload" 403 "denied")
+                run (BlobStorageAuthAudit.record (sink :> IAuditLog) "aws-s3" "acme-bucket" "Upload" 403 "denied")
 
                 match authRows sink with
                 | [ scope, payload ] ->
-                    Expect.equal scope BlobStorageAuthAudit.scopeId "recorded under the platform scope"
+                    Expect.equal
+                        scope
+                        (AuditScope.streamKey BlobStorageAuthAudit.scope)
+                        "recorded under the platform scope"
+
                     Expect.equal scope "_platform" "the platform scope is literally _platform"
                     Expect.equal payload.Companion "aws-s3" "companion id"
                     Expect.equal payload.Container "acme-bucket" "bucket / container"
@@ -190,7 +198,7 @@ let tests =
 
                 run (
                     BlobStorageAuthAudit.record
-                        (Some(sink :> IAuditLog))
+                        (sink :> IAuditLog)
                         "azure"
                         "toolup"
                         "List"
@@ -206,9 +214,9 @@ let tests =
             }
 
             test "a deployment that composed no audit log records nothing and does not throw" {
-                // The GP 13 half: `None` is the default every existing
+                // The GP 13 half: `NoOpAuditLog` is the default every existing
                 // consumer gets, and it must cost nothing at all.
-                run (BlobStorageAuthAudit.record None "gcs" "acme-bucket" "Download" 401 "denied")
+                run (BlobStorageAuthAudit.record (NoOpAuditLog()) "gcs" "acme-bucket" "Download" 401 "denied")
             }
 
             test "a failing sink is swallowed — emission never becomes the caller's error" {
@@ -218,7 +226,7 @@ let tests =
                 // the failure path immediately before returning the error
                 // they have always returned. If this could throw, a
                 // storage failure would silently become a different one.
-                run (BlobStorageAuthAudit.record (Some sink) "aws-s3" "acme-bucket" "Delete" 403 "denied")
+                run (BlobStorageAuthAudit.record sink "aws-s3" "acme-bucket" "Delete" 403 "denied")
             }
 
             test "payload stamps a UTC timestamp" {

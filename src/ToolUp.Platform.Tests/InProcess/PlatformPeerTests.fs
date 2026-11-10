@@ -138,9 +138,14 @@ type private RecordingAuditLog() =
     member _.Events = events |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async { events.Add audit }
+        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
+            events.Add audit
+            return Ok()
+        }
 
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return events |> List.ofSeq }
+        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async {
+            return events |> List.ofSeq
+        }
 
 /// Seed a peer's symmetric HS256 signing key into a secret store at the
 /// reserved `_platform` scope under `peers/{peerId}/signing-key` — the
@@ -357,7 +362,7 @@ let private pollFixtureFusion () =
     let fusion: PeerJobFusion = {
         Scheduler = IPlatformPeerContract.StubScheduler()
         ResultStore = store
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
     }
 
     store, fusion

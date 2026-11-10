@@ -1624,6 +1624,18 @@ module GrantAuthoritySurface =
         }
         {
             PathSurface = "IPermissionStore"
+            PathMember = "UpdateTeamPermissions"
+            PathPrincipals = [ PlatformAdminPrincipal; ServiceAccountPrincipal ]
+            PathSatisfies = [
+                SatisfiedByAdminDiscretion
+                SatisfiedByDeclaredEvidence
+                SatisfiedByCounterpartyConsent
+            ]
+            PathDemands =
+                "one guarded read-modify-write; the document it produces is validated against the one it replaces exactly as a whole-document write is, so every entry it adds or widens needs an adequate grant record in the same update"
+        }
+        {
+            PathSurface = "IPermissionStore"
             PathMember = "SetMemberPermissions"
             PathPrincipals = [ PlatformAdminPrincipal; TeamOwnerPrincipal ]
             PathSatisfies = [ SatisfiedByAdminDiscretion ]

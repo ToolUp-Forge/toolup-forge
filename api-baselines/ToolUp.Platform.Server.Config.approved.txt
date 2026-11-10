@@ -9,6 +9,9 @@ ToolUp.Platform.Config.Auth.IdentitySanitiser (class)
 ToolUp.Platform.Config.Auth.IdentitySanitiser.MaxLength : System.Int32 (literal)
 ToolUp.Platform.Config.Auth.IdentitySanitiser.sanitiseScopeId(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
 ToolUp.Platform.Config.Background (class)
+ToolUp.Platform.Config.Background.auditLogOf(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IAuditLog
+ToolUp.Platform.Config.Background.requestActor(System.String, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.AuditSubject
+ToolUp.Platform.Config.Background.resolveAuditLog(System.IServiceProvider) : ToolUp.Platform.IAuditLog
 ToolUp.Platform.Config.Background.start(ToolUp.Platform.Config.Background+DrainSet, ToolUp.Platform.ILogger, System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]) : System.Void
 ToolUp.Platform.Config.Background.tryStart(ToolUp.Platform.Config.Background+DrainSet, ToolUp.Platform.ILogger, System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]) : System.Boolean
 ToolUp.Platform.Config.Background+DrainSet (class)
@@ -438,8 +441,8 @@ ToolUp.Platform.Config.OAuthStateStoreInstanceValidator (class)
 ToolUp.Platform.Config.OAuthStateStoreInstanceValidator+OAuthStateStoreInstanceValidator (class)
 ToolUp.Platform.Config.OAuthStateStoreInstanceValidator+OAuthStateStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.Infra.IOAuthStateStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Config.PerScopeKeyResolver (class)
-ToolUp.Platform.Config.PerScopeKeyResolver.create(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog]) : ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver
-ToolUp.Platform.Config.PerScopeKeyResolver.createWithLogger(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.ILogger) : ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver
+ToolUp.Platform.Config.PerScopeKeyResolver.create(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.IAuditLog) : ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver
+ToolUp.Platform.Config.PerScopeKeyResolver.createWithLogger(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver
 ToolUp.Platform.Config.PerScopeKeyResolver+CryptoShredFanoutContributor (class)
 ToolUp.Platform.Config.PerScopeKeyResolver+CryptoShredFanoutContributor..ctor(ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver)
 ToolUp.Platform.Config.PerScopeKeyResolver+CryptoShredFanoutStatus (class)
@@ -449,8 +452,8 @@ ToolUp.Platform.Config.PerScopeKeyResolver+CryptoShredFanoutStatus.UnwiredDestro
 ToolUp.Platform.Config.PerScopeKeyResolver+CryptoShredFanoutStatus.UnwiredStalenessWindowMinutes : System.Double { get }
 ToolUp.Platform.Config.PerScopeKeyResolver+CryptoShredFanoutStatus.WiredToChannel : System.Boolean { get }
 ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver (class)
-ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
-ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.IAuditLog)
+ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver.DestroyKey(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.EncryptionTypes+KeyResolutionError]]
 ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver.IsWiredToChannel : System.Boolean { get }
 ToolUp.Platform.Config.PerScopeKeyResolver+PerScopeKeyResolver.UnwiredDestroyKeyCount : System.Int32 { get }
@@ -462,8 +465,8 @@ ToolUp.Platform.Config.PerScopeKeyResolverDistributedValidator+PerScopeKeyResolv
 ToolUp.Platform.Config.ProviderOAuthConnect (class)
 ToolUp.Platform.Config.ProviderOAuthConnect.DefaultLeadTime : System.TimeSpan { get }
 ToolUp.Platform.Config.ProviderOAuthConnect.bindEntry(ToolUp.Platform.Infra.IProviderOAuthFlow, ToolUp.Platform.OAuthCorrelationKey, System.DateTime, ToolUp.Platform.ProviderProfile) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfile, System.String]
-ToolUp.Platform.Config.ProviderOAuthConnect.completeConnect(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.Infra.IProviderOAuthFlow, ToolUp.Platform.OAuthCorrelationKey, ToolUp.Platform.Infra.OAuthCredentials, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ToolUp.Platform.Config.ProviderOAuthConnect.refreshEntry(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.Platform.StorageScope, ToolUp.Platform.Infra.IProviderOAuthFlow, ToolUp.Platform.ProviderEntry, System.DateTime, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Config.ProviderOAuthConnect+ProviderOAuthRefreshOutcome]
+ToolUp.Platform.Config.ProviderOAuthConnect.completeConnect(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.Infra.IProviderOAuthFlow, ToolUp.Platform.OAuthCorrelationKey, ToolUp.Platform.Infra.OAuthCredentials, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.Config.ProviderOAuthConnect.refreshEntry(ToolUp.Platform.Providers+IProviderProfile, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.StorageScope, ToolUp.Platform.Infra.IProviderOAuthFlow, ToolUp.Platform.ProviderEntry, System.DateTime, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Config.ProviderOAuthConnect+ProviderOAuthRefreshOutcome]
 ToolUp.Platform.Config.ProviderOAuthConnect+ProviderOAuthRefreshOutcome (class)
 ToolUp.Platform.Config.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.IsNeedsReauthorization : System.Boolean { get }
 ToolUp.Platform.Config.ProviderOAuthConnect+ProviderOAuthRefreshOutcome.IsNotDue : System.Boolean { get }

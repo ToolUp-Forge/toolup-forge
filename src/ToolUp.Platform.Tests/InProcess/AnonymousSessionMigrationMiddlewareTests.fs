@@ -40,12 +40,12 @@ type private RecordingAuditLog() =
     let events = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) =
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) =
             // Eager enqueue — see determinism note above.
             events.Enqueue(scopeId, audit)
-            async.Return()
+            async.Return(Ok())
 
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async.Return []
+        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async.Return []
 
     member _.Events = events |> List.ofSeq
 

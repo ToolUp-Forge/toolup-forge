@@ -50,20 +50,28 @@ module PermissionStoreActionAuthorizer =
             let! effective =
                 match ctx.Subject with
                 | TeamMember(userId, teamId) -> store.GetEffectivePermissions(UserId userId, TeamId teamId)
-                | _ -> async { return ctx.ModulePermissions }
+                | _ -> async { return Ok ctx.ModulePermissions }
 
-            let granted =
-                effective
-                |> Map.tryFind moduleName
-                |> Option.map (List.exists (fun g -> ModulePermission.implies g required))
-                |> Option.defaultValue false
-
-            if granted then
-                return AuthorizationDecision.Allow
-            else
+            match effective with
+            | Error e ->
+                // An unreadable permission document refuses: it is never read
+                // as the empty (unrestricted) map.
                 return
                     AuthorizationDecision.Deny
-                        $"no permission grant for module '%s{moduleName}' covers %A{required} (default-deny)"
+                        $"permissions unavailable, fail-closed: {PermissionStoreError.describe e}"
+            | Ok effective ->
+                let granted =
+                    effective
+                    |> Map.tryFind moduleName
+                    |> Option.map (List.exists (fun g -> ModulePermission.implies g required))
+                    |> Option.defaultValue false
+
+                if granted then
+                    return AuthorizationDecision.Allow
+                else
+                    return
+                        AuthorizationDecision.Deny
+                            $"no permission grant for module '%s{moduleName}' covers %A{required} (default-deny)"
         }
 
     let private evaluateTier (claims: IUserClaims option) (ctx: AccessContext) : Async<AuthorizationDecision> = async {

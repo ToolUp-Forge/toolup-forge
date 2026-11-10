@@ -52,8 +52,12 @@ type private CapturingAuditLog() =
     member _.Events = events |> Seq.map snd |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { events.Enqueue(scopeId, audit) }
-        member _.GetAuditTrail(_, _, _) = async { return events |> Seq.map snd |> Seq.toList }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            events.Enqueue(scopeId, audit)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return events |> Seq.map snd |> Seq.toList }
 
 let private silentLogger =
     { new ILogger with

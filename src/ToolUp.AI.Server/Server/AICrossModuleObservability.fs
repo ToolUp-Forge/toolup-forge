@@ -279,15 +279,12 @@ let computeReport
 // ─── Store read ─────────────────────────────────────────────────────
 
 /// Read + roll up the cross-module reads recorded for `scopeId`.
-let reportFor (auditLogOpt: IAuditLog option) (scopeId: string) : Async<CrossModuleReport> = async {
+let reportFor (auditLogOpt: IAuditLog) (scopeId: string) : Async<CrossModuleReport> = async {
     let now = DateTime.UtcNow
     let window = AIDiagnosticsWindow.rollingWindow
     let windowStart = now - window
 
-    let! events =
-        match auditLogOpt with
-        | None -> async { return [] }
-        | Some auditLog -> auditLog.GetAuditTrail(scopeId, Some(windowStart, now), Some EventType)
+    let! events = auditLogOpt.GetAuditTrail(AuditScope.shard scopeId, Some(windowStart, now), Some EventType)
 
     let rows =
         events
@@ -309,10 +306,7 @@ let private resolveScopeId (ctx: HttpContext) : string =
         | _ -> "anonymous"
 
 let private buildReport (ctx: HttpContext) : Async<CrossModuleReport> =
-    let auditLogOpt =
-        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as log -> Some log
-        | _ -> None
+    let auditLogOpt = ToolUp.Platform.Config.Background.auditLogOf ctx
 
     reportFor auditLogOpt (resolveScopeId ctx)
 

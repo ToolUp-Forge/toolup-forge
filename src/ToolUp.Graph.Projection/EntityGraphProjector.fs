@@ -264,19 +264,25 @@ type ProjectingAuditLog(inner: IAuditLog, projector: unit -> IEntityGraphProject
     }
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
-            // Forward first — audit persistence is never gated on projection.
-            do! inner.Record(scopeId, audit)
+        member _.Record(scope, actor, audit) = async {
+            // Forward first — audit persistence is never gated on projection,
+            // and the inner log's answer is the caller's.
+            match! inner.Record(scope, actor, audit) with
+            | Error e -> return Error e
+            | Ok() ->
+                let scopeId = AuditScope.streamKey scope
 
-            match audit with
-            | EntityCreated p
-            | EntityUpdated p -> do! drive scopeId ((projector ()).SyncEntity(scopeId, p.EntityType, p.EntityId))
-            | EntityDeleted p -> do! drive scopeId ((projector ()).RemoveEntity(scopeId, p.EntityType, p.EntityId))
-            | _ -> ()
+                match audit with
+                | EntityCreated p
+                | EntityUpdated p -> do! drive scopeId ((projector ()).SyncEntity(scopeId, p.EntityType, p.EntityId))
+                | EntityDeleted p -> do! drive scopeId ((projector ()).RemoveEntity(scopeId, p.EntityType, p.EntityId))
+                | _ -> ()
+
+                return Ok()
         }
 
-        member _.GetAuditTrail(scopeId, dateRange, eventType) =
-            inner.GetAuditTrail(scopeId, dateRange, eventType)
+        member _.GetAuditTrail(scope, dateRange, eventType) =
+            inner.GetAuditTrail(scope, dateRange, eventType)
 
 /// Composition helpers for the projection bridge (68d.D). The wiring lives
 /// here (not in `ToolUp.Platform.Server`) because the bridge references

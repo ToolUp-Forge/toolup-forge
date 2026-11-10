@@ -57,8 +57,7 @@ let private mkAuditedPublisher () =
     let registry = EntityRegistry()
     registry.Register<PublicPageEntity>(PublicPageEntity.registration)
 
-    let store =
-        BlobEntityStore(dos, blob, registry, Some(log :> IAuditLog)) :> IEntityStore
+    let store = BlobEntityStore(dos, blob, registry, (log :> IAuditLog)) :> IEntityStore
 
     let publisher =
         PublicRenderingNarrativePagePublisher.create

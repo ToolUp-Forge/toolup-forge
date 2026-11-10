@@ -78,13 +78,15 @@ let exportAuditHandler: HttpHandler =
                 | :? IAuditLog as auditLog ->
                     do!
                         auditLog.Record(
-                            scope.ScopeId,
+                            StorageScope.auditScope scope,
+                            ToolUp.Platform.Config.Background.requestActor "ConversationExport" ctx,
                             ConversationExported {
                                 ConversationId = string req.ConversationId
                                 IncludeToolDetails = req.IncludeToolDetails
                                 ExportedBy = resolveUserId ctx
                             }
                         )
+                        |> AuditRow.orRefuse
                 | _ -> ()
 
                 ctx.Response.StatusCode <- 202

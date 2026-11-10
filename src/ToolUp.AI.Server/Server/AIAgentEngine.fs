@@ -354,7 +354,7 @@ type TurnServices = {
     AnswerGate: AnswerVerifier.AnswerGate option
     MetricRegistry: Grounding.IMetricRegistry option
     /// The audit log and provenance anchors the answer gate's row joins.
-    AuditLog: IAuditLog option
+    AuditLog: IAuditLog
     AnswerAnchors: IAnswerProvenanceAnchors option
 }
 
@@ -384,7 +384,9 @@ module TurnServices =
         CitationNormaliser = optional<ICitationNormaliser> services
         AnswerGate = optional<AnswerVerifier.AnswerGate> services
         MetricRegistry = optional<Grounding.IMetricRegistry> services
-        AuditLog = optional<IAuditLog> services
+        AuditLog =
+            optional<IAuditLog> services
+            |> Option.defaultWith (fun () -> NoOpAuditLog() :> IAuditLog)
         AnswerAnchors = optional<IAnswerProvenanceAnchors> services
     }
 

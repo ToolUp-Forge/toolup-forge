@@ -257,16 +257,20 @@ type private RecordingAuditLog() =
             | _ -> None)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Add((scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async { return [] }
 
 /// `IAuditLog` whose writes always throw — the flaky-store control. The
 /// job's parked result must be unaffected.
 type private ThrowingAuditLog() =
     interface IAuditLog with
-        member _.Record(_scopeId, _audit) = failwith "audit store is unavailable"
+        member _.Record(AuditScope.StreamKey _scopeId, _actor, _audit) = failwith "audit store is unavailable"
 
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async { return [] }
 
 /// Drive one long-running job handler to completion over `payload` and
 /// return the `JobId` it ran under, so a test can assert the parked record
@@ -523,7 +527,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = InMemoryResultStore()
-                AuditLog = None
+                AuditLog = (NoOpAuditLog())
             }
 
             let host = registerGreeter peer [ v1 ] (Some fusion)
@@ -547,7 +551,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = scheduler
                 ResultStore = InMemoryResultStore()
-                AuditLog = None
+                AuditLog = (NoOpAuditLog())
             }
 
             registerGreeter peer [ v1 ] (Some fusion) |> ignore
@@ -582,7 +586,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = store
-                AuditLog = None
+                AuditLog = (NoOpAuditLog())
             }
 
             let host = registerGreeter peer [ v1 ] (Some fusion)
@@ -642,7 +646,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = scheduler
                 ResultStore = InMemoryResultStore()
-                AuditLog = None
+                AuditLog = (NoOpAuditLog())
             }
 
             let host =
@@ -677,7 +681,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = store
-                AuditLog = Some audit
+                AuditLog = audit
             }
 
             let host =
@@ -719,7 +723,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = InMemoryResultStore()
-                AuditLog = Some audit
+                AuditLog = audit
             }
 
             let host =
@@ -771,7 +775,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = scheduler
                 ResultStore = InMemoryResultStore()
-                AuditLog = Some audit
+                AuditLog = audit
             }
 
             let host =
@@ -817,7 +821,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = store
-                AuditLog = None
+                AuditLog = (NoOpAuditLog())
             }
 
             let host =
@@ -858,7 +862,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = store
-                AuditLog = Some(ThrowingAuditLog())
+                AuditLog = (ThrowingAuditLog())
             }
 
             let host =
@@ -903,7 +907,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
                 ResultStore = InMemoryResultStore()
-                AuditLog = Some audit
+                AuditLog = audit
             }
 
             let host =

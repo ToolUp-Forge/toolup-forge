@@ -74,10 +74,10 @@ let storage =
         // at an S3-compatible store (MinIO, Cloudflare R2, Backblaze B2)
         // and switches the client to path-style addressing.
         EndpointUrl = None
-        // Phase 2c — optional audit sink for 401 / 403 rejections. `None`
-        // (the default) records nothing; `Some auditLog` writes one
+        // The audit sink for 401 / 403 rejections. `NoOpAuditLog` (the
+        // default) records nothing; a composed `IAuditLog` writes one
         // `BlobStorageAuthFailed` row per rejected S3 call.
-        AuditLog = None
+        AuditLog = ToolUp.Platform.NoOpAuditLog()
     }
 
 ServerApp.empty
@@ -177,9 +177,9 @@ The `EncryptedBlobStorage` decorator wraps any `IBlobStorage` and applies AES-GC
 // `PerScopeKeyResolver` is a top-level module containing a type of the
 // same name. The constructor takes the secret backend the key material
 // lives in, an IMemoryCache for the resolved per-scope keys, and an
-// `IAuditLog option` for the key-lifecycle trail — not an IBlobStorage.
+// `IAuditLog` for the key-lifecycle trail — not an IBlobStorage.
 let resolver =
-    PerScopeKeyResolver.PerScopeKeyResolver(secretStore, memoryCache, Some auditLog)
+    PerScopeKeyResolver.PerScopeKeyResolver(secretStore, memoryCache, auditLog)
     :> IBlobEncryptionKeyResolver
 
 ServerApp.empty

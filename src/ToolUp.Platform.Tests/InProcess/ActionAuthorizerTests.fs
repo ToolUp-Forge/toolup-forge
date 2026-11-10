@@ -313,16 +313,19 @@ let private authorizerTests =
             | AuthorizationDecision.Allow -> failtest "one unmet requirement must deny"
         }
 
-        testCaseAsync "a throwing backing store fails closed (Deny, no exception)"
+        testCaseAsync "an unreadable backing store fails closed (Deny, no exception)"
         <| async {
+            let blip = PermissionStoreError.Unavailable "storage blip"
+
             let throwing =
                 { new IPermissionStore with
-                    member _.GetTeamPermissions _ = async { return failwith "storage blip" }
+                    member _.GetTeamPermissions _ = async { return Error blip }
                     member _.SetTeamPermissions(_, _) = async { return Ok() }
-                    member _.GetEffectivePermissions(_, _) = async { return failwith "storage blip" }
+                    member _.UpdateTeamPermissions(_, _) = async { return Ok() }
+                    member _.GetEffectivePermissions(_, _) = async { return Error blip }
                     member _.SetMemberPermissions(_, _, _, _) = async { return Ok() }
                     member _.SetTeamDefaults(_, _) = async { return Ok() }
-                    member _.GetModuleExposure _ = async { return failwith "storage blip" }
+                    member _.GetModuleExposure _ = async { return Error blip }
                     member _.SetModuleExposure(_, _, _) = async { return Ok() }
                 }
 

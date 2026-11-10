@@ -46,8 +46,12 @@ type private RecordingAuditLog() =
     member _.Recorded = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add((scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Add((scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// One key, destroyable at will — the crypto-shred half of Phase 22 in
 /// the smallest shape that exercises `ResolveKeyById`.
@@ -146,7 +150,9 @@ let private populate (live: IBlobStorage) =
 
             let registry = EntityRegistry()
             registry.Register<IEntityStoreContract.TestEntity>(IEntityStoreContract.testEntityRegistration)
-            let entities = BlobEntityStore(objects, live, registry, None) :> IEntityStore
+
+            let entities =
+                BlobEntityStore(objects, live, registry, (NoOpAuditLog())) :> IEntityStore
 
             let! savedEntity =
                 entities.Save<IEntityStoreContract.TestEntity>(

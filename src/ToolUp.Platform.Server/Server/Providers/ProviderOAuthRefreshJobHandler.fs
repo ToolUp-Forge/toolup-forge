@@ -151,7 +151,7 @@ type ProviderOAuthRefreshJobHandler
         flows: IProviderOAuthFlow list,
         providerProfile: IProviderProfile,
         secretStore: ISecretStore,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         logger: ILogger
     ) =
 
@@ -234,7 +234,7 @@ let create
     (flows: IProviderOAuthFlow list)
     (providerProfile: IProviderProfile)
     (secretStore: ISecretStore)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (logger: ILogger)
     : IJobHandler =
     ProviderOAuthRefreshJobHandler(flows, providerProfile, secretStore, auditLog, logger) :> IJobHandler

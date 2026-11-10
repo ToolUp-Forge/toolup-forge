@@ -175,11 +175,11 @@ type private CapturingAuditLog() =
     member _.Recorded = recorded |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) =
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) =
             lock recorded (fun () -> recorded.Add((scopeId, audit)))
-            async { return () }
+            async { return Ok() }
 
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async { return [] }
 
 type private ConsentHarness = {
     Client: HttpClient
@@ -298,7 +298,7 @@ let private buildAdUnits () =
     let blob = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
-    let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
     let host =
         Host

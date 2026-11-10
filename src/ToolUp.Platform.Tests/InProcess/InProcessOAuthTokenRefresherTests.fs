@@ -95,9 +95,12 @@ type CapturingAuditLog() =
         entries |> Seq.choose (fun (_, e) -> picker e) |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { entries.Add(scopeId, audit) }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            entries.Add(scopeId, audit)
+            return Ok()
+        }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Fake `HttpMessageHandler` driven by a per-test `respond` function
 /// — the test enqueues a response shape for the next refresh POST.

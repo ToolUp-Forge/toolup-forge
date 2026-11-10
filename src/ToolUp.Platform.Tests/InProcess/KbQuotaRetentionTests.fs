@@ -62,8 +62,12 @@ type private CapturingAuditLog() =
     member _.Events = lock gate (fun () -> events |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add(scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock gate (fun () -> events.Add(scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (container: string) : KnowledgeApiDeps = {
     Storage = storage
@@ -86,7 +90,7 @@ let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (contai
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = createDefault ()
-    AuditLog = None
+    AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
     MarkIngestionFailed = fun _ _ _ -> async.Return()
@@ -488,7 +492,7 @@ let tests =
             }
 
             let! report =
-                sweepScope storage None (Some(audit :> IAuditLog)) noopLogger DateTimeOffset.UtcNow policy "team-sweep"
+                sweepScope storage None ((audit :> IAuditLog)) noopLogger DateTimeOffset.UtcNow policy "team-sweep"
 
             Expect.equal report.Purged [ "stale" ] "only the expired document was purged"
             Expect.equal report.ReclaimedBytes 400L "reclaimed bytes come from the purged document's SizeBytes"
@@ -532,7 +536,7 @@ let tests =
                 sweepScope
                     storage
                     None
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     noopLogger
                     DateTimeOffset.UtcNow
                     KnowledgeRetentionPolicy.retainForever
@@ -562,7 +566,7 @@ let tests =
                 sweepScope
                     storage
                     None
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     noopLogger
                     DateTimeOffset.UtcNow
                     policy
@@ -586,14 +590,7 @@ let tests =
             }
 
             let sweep () =
-                sweepScope
-                    storage
-                    None
-                    (Some(audit :> IAuditLog))
-                    noopLogger
-                    DateTimeOffset.UtcNow
-                    policy
-                    "team-idempotent"
+                sweepScope storage None ((audit :> IAuditLog)) noopLogger DateTimeOffset.UtcNow policy "team-idempotent"
 
             let! first = sweep ()
             let! second = sweep ()

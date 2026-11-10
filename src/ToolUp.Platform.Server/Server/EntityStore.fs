@@ -216,7 +216,7 @@ type BlobEntityStore
         dataObjectStore: IDataObjectStore,
         blobStorage: IBlobStorage,
         registry: EntityRegistry,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         // Phase 19b — optional BM25 sparse index backing `FullText`
         // predicates. `None` (the default via the 4-arg constructor) leaves
         // the store byte-identical to its pre-19b behaviour: no full-text
@@ -556,23 +556,21 @@ type BlobEntityStore
                     do! idx.Upsert scope core.Id chunk
             | _ -> ()
 
-            // Emit audit event. Best-effort — exceptions swallowed so
-            // audit emission never fails the primary write.
-            match auditLog with
-            | Some log ->
-                try
-                    let payload = lifecyclePayload actor core.Type core.Id newVersion
+            // The lifecycle row records a write that has ALREADY committed: a
+            // refusal now would report a persisted entity as failed, so the
+            // row is best-effort here and the seam counts and logs a loss.
+            let payload = lifecyclePayload actor core.Type core.Id newVersion
 
-                    let evt =
-                        if newVersion = 1 then
-                            EntityCreated payload
-                        else
-                            EntityUpdated payload
+            let evt =
+                if newVersion = 1 then
+                    EntityCreated payload
+                else
+                    EntityUpdated payload
 
-                    do! log.Record(scopeId, evt)
-                with _ ->
-                    ()
-            | None -> ()
+            // best-effort-write: the entity write has committed; its row cannot un-commit it
+            do!
+                AuditRow.emit auditLog (AuditScope.shard scopeId) (AuditSubject.system "EntityStore") evt
+                |> AuditRow.bestEffort
 
             return refFromDataObject<'T> savedObject core.Id core.Type
         }
@@ -686,17 +684,14 @@ type BlobEntityStore
                     | None -> ()
 
                     if headVersion > 0 then
-                        match auditLog with
-                        | Some log ->
-                            try
-                                do!
-                                    log.Record(
-                                        scopeId,
-                                        EntityDeleted(lifecyclePayload actor entityType entityId headVersion)
-                                    )
-                            with _ ->
-                                ()
-                        | None -> ()
+                        // best-effort-write: the delete has committed; its row cannot un-commit it
+                        do!
+                            AuditRow.emit
+                                auditLog
+                                (AuditScope.shard scopeId)
+                                (AuditSubject.system "EntityStore")
+                                (EntityDeleted(lifecyclePayload actor entityType entityId headVersion))
+                            |> AuditRow.bestEffort
 
                     return Ok()
                 | Error(Choice1Of2 conflict) -> return Error conflict
@@ -707,13 +702,7 @@ type BlobEntityStore
 
     /// Source-compatible 4-arg constructor — the pre-19b shape. Delegates
     /// to the primary constructor with no sparse index (no full-text).
-    new
-        (
-            dataObjectStore: IDataObjectStore,
-            blobStorage: IBlobStorage,
-            registry: EntityRegistry,
-            auditLog: IAuditLog option
-        ) =
+    new(dataObjectStore: IDataObjectStore, blobStorage: IBlobStorage, registry: EntityRegistry, auditLog: IAuditLog) =
         BlobEntityStore(dataObjectStore, blobStorage, registry, auditLog, None)
 
     /// Phase 973 — reclaim every stale ref in one `(entityType, indexName)`

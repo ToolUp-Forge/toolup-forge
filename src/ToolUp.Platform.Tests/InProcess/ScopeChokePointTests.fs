@@ -179,7 +179,10 @@ let private publicSurfaceTests =
                 |> Array.filter (fun n -> not (n.StartsWith "get_"))
                 |> Array.sort
 
-            Expect.sequenceEqual publicStatics [| "scopeId" |] "the only public function is the accessor"
+            Expect.sequenceEqual
+                publicStatics
+                [| "auditScope"; "scopeId" |]
+                "the only public functions are the accessors: the shard key and the audit trail it projects to"
 
             Expect.isTrue ResolvedScope.anonymous.IsAnonymous "the anonymous scope is public, and says what it is"
         }

@@ -67,7 +67,7 @@ let private mkDeps (storage: IBlobStorage) (policy: KnowledgeUploadPolicy) (cont
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = createDefault ()
-    AuditLog = None
+    AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
     MarkIngestionFailed = fun _ _ _ -> async.Return()

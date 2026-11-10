@@ -536,8 +536,12 @@ type CapturingAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { rows.Enqueue(scopeId, audit) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            rows.Enqueue(scopeId, audit)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Bind the actor cases. `factory` builds the store under test COMPOSED
 /// WITH the audit log the pack hands it, and returns the store, its

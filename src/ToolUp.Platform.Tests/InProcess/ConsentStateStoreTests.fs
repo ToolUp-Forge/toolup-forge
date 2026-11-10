@@ -49,7 +49,7 @@ let private buildEntityStore (tempDir: string) : IEntityStore =
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register ConsentRecord.registration
-    BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    BlobEntityStore(dos, blob, registry, NoOpAuditLog()) :> IEntityStore
 
 let entityBackedTests =
     let factory () =

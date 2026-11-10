@@ -345,7 +345,7 @@ type FileManagementRuntime = {
     /// transition is detected in `getStore`, which has no `HttpContext`
     /// (module APIs resolve stores through it too). `None` matches the
     /// test-harness path.
-    AuditLog: IAuditLog option
+    AuditLog: IAuditLog
 }
 
 module FileManagementRuntime =
@@ -361,7 +361,7 @@ module FileManagementRuntime =
         // multi-hundred-MB body. Override (or `None`) at compose time.
         MaxFileBytes = Some(64L * 1024L * 1024L)
         NotificationChannel = None
-        AuditLog = None
+        AuditLog = NoOpAuditLog()
     }
 
 /// A hook that fires fire-and-forget after every successful
@@ -1215,28 +1215,26 @@ let private announceStoreReset
     (previousEpoch: Guid)
     (currentEpoch: Guid)
     =
-    match runtime.AuditLog with
-    | Some auditLog ->
-        // No configured logger falls back to the console, as the hooks do.
-        let logger =
-            runtime.PostSaveHooksLogger
-            |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+    // No configured logger falls back to the console, as the hooks do.
+    let logger =
+        runtime.PostSaveHooksLogger
+        |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
 
-        let warn =
-            Background.writeFailureLogger "FileManagement" (Some logger) "" "the request"
+    let warn =
+        Background.writeFailureLogger "FileManagement" (Some logger) "" "the request"
 
-        try
-            auditLog.Record(
-                scope.ScopeId,
-                SessionStoreReset {
-                    Container = scope.Container
-                    Reason = SessionStoreResetReasonEvicted
-                }
-            )
-            |> Background.startAudit warn "SessionStoreReset audit"
-        with ex ->
-            warn "SessionStoreReset audit" ex
-    | None -> ()
+    try
+        runtime.AuditLog.Record(
+            StorageScope.auditScope scope,
+            AuditSubject.system "FileManagement",
+            SessionStoreReset {
+                Container = scope.Container
+                Reason = SessionStoreResetReasonEvicted
+            }
+        )
+        |> Background.startAuditRow warn "SessionStoreReset audit"
+    with ex ->
+        warn "SessionStoreReset audit" ex
 
     match runtime.NotificationChannel with
     | Some channel ->
@@ -1407,24 +1405,19 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
     // Audit log is best-effort: emission is fire-and-forget through
     // `Background.startAudit` (Phase 1026), so a missing or failing
     // `IAuditLog` never blocks file operations — a failure is a Warning.
-    let auditLog =
-        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as a -> Some a
-        | _ -> None
+    let auditLog = Background.auditLogOf ctx
 
     let auditWarn =
         Background.writeFailureWarner "FileManagement" (Background.requestLogger ctx) ctx
 
     let recordAudit (event: AuditEvent) =
-        match auditLog with
-        | Some a ->
-            let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+        let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
-            try
-                a.Record(scopeId, event) |> Background.startAudit auditWarn what
-            with ex ->
-                auditWarn what ex
-        | None -> ()
+        try
+            auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "FileManagement", event)
+            |> Background.startAuditRow auditWarn what
+        with ex ->
+            auditWarn what ex
 
     // Owner / Admin write gate for `ResetDataStore` — same shape as
     // `DataIngestionApiHandler.ensureWriteAllowed` and

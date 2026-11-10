@@ -157,8 +157,12 @@ type private CapturingAuditLog() =
         this.Events |> List.filter (fun (_, e) -> AuditEvent.eventTypeName e = name)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add((scopeId, audit))) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock gate (fun () -> events.Add((scopeId, audit)))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private noopLogger =
     { new ILogger with
@@ -238,7 +242,7 @@ let tests =
             // Written now; grace is 24h. This is the in-flight-`Save`
             // case — the sweep must not touch it.
             let report =
-                sweep storage (Some(audit :> IAuditLog)) DateTime.UtcNow (TimeSpan.FromHours 24.0)
+                sweep storage ((audit :> IAuditLog)) DateTime.UtcNow (TimeSpan.FromHours 24.0)
 
             Expect.equal report.OrphansFound 1 "the orphan is found"
             Expect.isEmpty report.Reclaimed "nothing is reclaimed inside the grace window"
@@ -259,7 +263,7 @@ let tests =
             storage.Backdate(container, stranded, now - TimeSpan.FromHours 25.0)
 
             let audit = CapturingAuditLog()
-            let report = sweep storage (Some(audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
+            let report = sweep storage ((audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
 
             Expect.hasLength report.Reclaimed 1 "the orphan is reclaimed once past the grace window"
             Expect.equal report.DeferredByGrace 0 "nothing was deferred"
@@ -307,7 +311,7 @@ let tests =
                 storage.Backdate(container, name, now - TimeSpan.FromDays 400.0)
 
             let audit = CapturingAuditLog()
-            let report = sweep storage (Some(audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
+            let report = sweep storage ((audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
 
             Expect.equal report.OrphansFound 0 "referenced content is not an orphan"
             Expect.isEmpty report.Reclaimed "nothing is reclaimed"
@@ -328,10 +332,10 @@ let tests =
             storage.Backdate(container, stranded, now - TimeSpan.FromHours 25.0)
 
             let audit = CapturingAuditLog()
-            sweep storage (Some(audit :> IAuditLog)) now (TimeSpan.FromHours 24.0) |> ignore
+            sweep storage ((audit :> IAuditLog)) now (TimeSpan.FromHours 24.0) |> ignore
             let firstRunRows = audit.Events.Length
 
-            let second = sweep storage (Some(audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
+            let second = sweep storage ((audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
 
             Expect.equal second.OrphansFound 0 "the second run finds nothing"
             Expect.isEmpty second.Reclaimed "and reclaims nothing"
@@ -352,7 +356,7 @@ let tests =
             let other =
                 sweepScope
                     storage
-                    None
+                    (NoOpAuditLog())
                     noopLogger
                     now
                     (DataObjectOrphanSweepPolicy.forScopes [ "team-other" ])
@@ -375,7 +379,7 @@ let tests =
             storage.RefuseDelete <- fun _ -> true
 
             let audit = CapturingAuditLog()
-            let report = sweep storage (Some(audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
+            let report = sweep storage ((audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
 
             Expect.hasLength report.Failures 1 "the refusal is reported"
             Expect.isEmpty report.Reclaimed "nothing counts as reclaimed"
@@ -644,7 +648,7 @@ let inBandGraceTests =
             storage.Backdate(container, stranded, now - TimeSpan.FromHours 25.0)
 
             let audit = CapturingAuditLog()
-            let report = sweep storage (Some(audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
+            let report = sweep storage ((audit :> IAuditLog)) now (TimeSpan.FromHours 24.0)
 
             Expect.hasLength report.Reclaimed 1 "the scheduled sweep reclaims it once past its own window"
             Expect.equal report.DeferredByGrace 0 "and its accounting is undisturbed"

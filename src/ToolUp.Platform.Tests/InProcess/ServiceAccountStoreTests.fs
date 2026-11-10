@@ -41,7 +41,7 @@ let private freshRoot () =
 let tests =
     let factory () =
         let storage = LocalFileStorage.LocalFileStorage(freshRoot ()) :> IBlobStorage
-        let store = ServiceAccountStore.create storage None silentLogger
+        let store = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         store, "team-a-" + suffix, "team-b-" + suffix
 
@@ -56,7 +56,7 @@ let persistenceTests =
         <| async {
             let root = freshRoot ()
             let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
-            let store = ServiceAccountStore.create storage None silentLogger
+            let store = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
             let scopeId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
 
             let! account =
@@ -120,7 +120,7 @@ let persistenceTests =
             let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
             let scopeId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
 
-            let minting = ServiceAccountStore.create storage None silentLogger
+            let minting = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
 
             let! account =
                 minting.Create {
@@ -152,7 +152,7 @@ let persistenceTests =
             // A SECOND store instance — the portability rule-4 property:
             // nothing authority-bearing is held between calls, so a
             // different node validates the same token identically.
-            let validating = ServiceAccountStore.create storage None silentLogger
+            let validating = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
             let! result = validating.ValidateToken secret
 
             match result with

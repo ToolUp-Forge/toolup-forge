@@ -103,9 +103,6 @@ let private maxRefusals = 20
 [<Literal>]
 let private throttleWindowMinutes = 5.0
 
-[<Literal>]
-let private platformScope = ScopeKey.PlatformContainer
-
 // Documented mutable-state exception to GP 5, and the same one
 // `EncryptionAdminHandler` takes: a refusal counter IS state, and these
 // two dictionaries are the whole of it. Concurrent by construction.
@@ -158,10 +155,10 @@ let private resolveLogger (ctx: HttpContext) : ILogger option =
     | :? ILogger as l -> Some l
     | _ -> None
 
-let private resolveAudit (ctx: HttpContext) : IAuditLog option =
+let private resolveAudit (ctx: HttpContext) : IAuditLog =
     match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-    | :? IAuditLog as a -> Some a
-    | _ -> None
+    | :? IAuditLog as a -> a
+    | _ -> NoOpAuditLog() :> IAuditLog
 
 let private isThrottled (ip: string) : bool =
     match refusals.TryGetValue ip with
@@ -341,19 +338,20 @@ let private decide (ctx: HttpContext) (ip: string) : Async<Decision> = async {
 let private recordAndAuditRefusal (ctx: HttpContext) (ip: string) (reason: string) (handleId: Guid option) = async {
     recordRefusal ip
 
-    match resolveAudit ctx with
-    | Some audit ->
-        do!
-            audit.Record(
-                platformScope,
-                ExternalCallbackRejected {
-                    HandleId = handleId |> Option.map string
-                    Reason = reason
-                    ClientIp = ip
-                    OccurredAt = DateTimeOffset.UtcNow
-                }
-            )
-    | None -> ()
+    let audit = resolveAudit ctx
+
+    do!
+        audit.Record(
+            AuditScope.platform,
+            AuditSubject.system "ExternalComputeCallback",
+            ExternalCallbackRejected {
+                HandleId = handleId |> Option.map string
+                Reason = reason
+                ClientIp = ip
+                OccurredAt = DateTimeOffset.UtcNow
+            }
+        )
+        |> AuditRow.orRefuse
 }
 
 /// Emit the rejection audit + the rate-limited warning. Both, always —
@@ -386,31 +384,32 @@ let private auditResolved
     (attribution: OutcomeAttribution option)
     =
     async {
-        match resolveAudit ctx with
-        | Some audit ->
-            do!
-                audit.Record(
-                    record.Handle.ScopeId,
-                    ExternalCallbackResolved {
-                        HandleId = string record.Handle.HandleId
-                        Backend = record.Handle.Backend
-                        ScopeId = record.Handle.ScopeId
-                        JobRunId = string record.JobRunId
-                        Outcome = ExternalOutcome.label outcome
-                        Resolution = resolution
-                        RunStatus = runStatus
-                        // Phase 486 — attribution, or honest silence. The
-                        // fields are `None` together or `Some` together;
-                        // there is no path that records a worker id
-                        // without having verified a signature for it.
-                        WorkerId = attribution |> Option.map _.WorkerId
-                        WorkerKeyId = attribution |> Option.map _.KeyId
-                        SignatureAlgorithm = attribution |> Option.map (_.Algorithm >> WorkerKeyAlgorithm.label)
-                        ArtifactHash = attribution |> Option.map _.ArtifactHash
-                        OccurredAt = DateTimeOffset.UtcNow
-                    }
-                )
-        | None -> ()
+        let audit = resolveAudit ctx
+
+        do!
+            audit.Record(
+                AuditScope.shard record.Handle.ScopeId,
+                AuditSubject.system "ExternalComputeCallback",
+                ExternalCallbackResolved {
+                    HandleId = string record.Handle.HandleId
+                    Backend = record.Handle.Backend
+                    ScopeId = record.Handle.ScopeId
+                    JobRunId = string record.JobRunId
+                    Outcome = ExternalOutcome.label outcome
+                    Resolution = resolution
+                    RunStatus = runStatus
+                    // Phase 486 — attribution, or honest silence. The
+                    // fields are `None` together or `Some` together;
+                    // there is no path that records a worker id
+                    // without having verified a signature for it.
+                    WorkerId = attribution |> Option.map _.WorkerId
+                    WorkerKeyId = attribution |> Option.map _.KeyId
+                    SignatureAlgorithm = attribution |> Option.map (_.Algorithm >> WorkerKeyAlgorithm.label)
+                    ArtifactHash = attribution |> Option.map _.ArtifactHash
+                    OccurredAt = DateTimeOffset.UtcNow
+                }
+            )
+            |> AuditRow.orRefuse
     }
 
 let private callbackHandler: HttpHandler =

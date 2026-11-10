@@ -410,7 +410,8 @@ let private realStoreOver (events: IEventStore) (audited: bool) =
     let auditLog = AuditLog.EventStoreAuditLog(events, silentLogger) :> IAuditLog
 
     let store =
-        EntityStore.BlobEntityStore(dos, blob, registry, (if audited then Some auditLog else None)) :> IEntityStore
+        EntityStore.BlobEntityStore(dos, blob, registry, (if audited then auditLog else (NoOpAuditLog())))
+        :> IEntityStore
 
     store, auditLog
 
@@ -683,7 +684,9 @@ let auditTests =
             | Applied _ -> ()
             | other -> failtestf "expected Applied, got %A" other
 
-            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
+            let trail =
+                auditLog.GetAuditTrail(AuditScope.shard "team-a", None, None)
+                |> Async.RunSynchronously
 
             match lifecycleRows trail with
             | [ ("EntityCreated", p) ] ->
@@ -755,7 +758,10 @@ let auditTests =
             | Applied _ -> ()
             | other -> failtestf "expected Applied, got %A" other
 
-            let trail = auditLog.GetAuditTrail("team-a", None, None) |> Async.RunSynchronously
+            let trail =
+                auditLog.GetAuditTrail(AuditScope.shard "team-a", None, None)
+                |> Async.RunSynchronously
+
             let rows = lifecycleRows trail
 
             // Compared as a sorted set: the trail orders by OccurredAt,

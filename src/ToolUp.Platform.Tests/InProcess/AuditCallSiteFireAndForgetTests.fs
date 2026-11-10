@@ -85,8 +85,12 @@ let private sinks (failure: (FailureMode * string) option) : Sinks =
     {
         AuditLog =
             { new IAuditLog with
-                member _.Record(_, _) = write ()
-                member _.GetAuditTrail(_, _, _) = async { return [] }
+                member _.Record(AuditScope.StreamKey _, _actor, _) = async {
+                    do! write ()
+                    return Ok()
+                }
+
+                member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
             }
         Hook =
             { new IAuthAuditHook with
@@ -217,7 +221,7 @@ let private serviceAccount: Site = {
     Act =
         fun sinks logger -> async {
             let store =
-                ServiceAccountStore.BlobServiceAccountStore(InMemoryBlobStorage(), Some sinks.AuditLog, logger)
+                ServiceAccountStore.BlobServiceAccountStore(InMemoryBlobStorage(), sinks.AuditLog, logger)
                 :> IServiceAccountStore
 
             let! created =
@@ -241,8 +245,7 @@ let private consent: Site = {
     Source = "InMemoryConsentStateStore"
     Act =
         fun sinks logger -> async {
-            let store =
-                InMemoryConsentStateStore(Some sinks.AuditLog, logger) :> IConsentStateStore
+            let store = InMemoryConsentStateStore(sinks.AuditLog, logger) :> IConsentStateStore
 
             let record =
                 ConsentRecord.create
@@ -350,7 +353,7 @@ let private oauth: Site = {
                     warn
                     profiles
                     secrets
-                    (Some sinks.AuditLog)
+                    (sinks.AuditLog)
                     scope
                     "user-1026"
                     flow
@@ -396,14 +399,15 @@ let private transactionalDelivery: Site = {
 
             let auditLog =
                 { new IAuditLog with
-                    member _.Record(scopeId, event) = async {
+                    member _.Record(AuditScope.StreamKey scopeId, _actor, event) = async {
                         try
-                            return! sinks.AuditLog.Record(scopeId, event)
+                            return! sinks.AuditLog.Record(AuditScope.shard scopeId, AuditSubject.system "test", event)
                         finally
                             written.TrySetResult() |> ignore
                     }
 
-                    member _.GetAuditTrail(a, b, c) = sinks.AuditLog.GetAuditTrail(a, b, c)
+                    member _.GetAuditTrail(AuditScope.StreamKey a, b, c) =
+                        sinks.AuditLog.GetAuditTrail(AuditScope.shard a, b, c)
                 }
 
             let dispatcher =
@@ -520,11 +524,6 @@ let private admitted: Admitted list = [
         Reason = "the helper itself: the started work is wrapped in Async.Catch"
     }
     {
-        File = "Compose/ComposeTeamRuntime.fs"
-        Anchor = "GrantNotificationObserver("
-        Reason = "passed as the observer's schedule; each publish carries its own try/with"
-    }
-    {
         File = "DefaultDeployPipeline.fs"
         Anchor = "Wrap the fire so any unhandled throw"
         Reason = "the started pipeline is wrapped in try/with; emitState swallows its own failures"
@@ -545,39 +544,9 @@ let private admitted: Admitted list = [
         Reason = "the store-reset channel publish runs under its own try/with"
     }
     {
-        File = "GrantPolicyGuard.fs"
-        Anchor = "GrantPolicyRefused payload"
-        Reason = "log.Record inside the started async's try/with"
-    }
-    {
-        File = "GrantPolicyGuard.fs"
-        Anchor = "GrantRecorded payload"
-        Reason = "log.Record inside the started async's try/with"
-    }
-    {
-        File = "GrantConsentStore.fs"
-        Anchor = "resolveLive store verifier auditLog Async.Start"
-        Reason = "passed as resolveLive's schedule; emit wraps log.Record in try/with"
-    }
-    {
-        File = "GrantConsentStore.fs"
-        Anchor = "resolveLive consentStore verifier auditLog Async.Start"
-        Reason = "passed as resolveLive's schedule; emit wraps log.Record in try/with"
-    }
-    {
         File = "IEdgeCache.fs"
         Anchor = "Phase 740 — resolved once per purge"
         Reason = "purgeWithRetry catches each attempt"
-    }
-    {
-        File = "RemotingHelpers.fs"
-        Anchor = "GrantConsentStore.guardDispatchWithConsent"
-        Reason = "passed as guardDispatchWithConsent's schedule; both emit paths use try/with"
-    }
-    {
-        File = "Scope/AdminMutationApproval.fs"
-        Anchor = "let schedule (work: Async<unit>) = Async.Start work"
-        Reason = "the ceremony's schedule; every use goes through emit's try/with"
     }
     {
         File = "Remoting/Jobs.fs"

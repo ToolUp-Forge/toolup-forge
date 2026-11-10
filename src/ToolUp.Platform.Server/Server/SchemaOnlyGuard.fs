@@ -114,12 +114,13 @@ let assertReadAllowed
                 AttemptedResource = resource
             }
 
-            try
-                do! auditLog.Record(scopeId, SchemaOnlyAccessAttempted payload)
-            with _ ->
-                // Audit best-effort — swallow per IAuditLog contract.
-                // The refusal still fires regardless.
-                ()
+            do!
+                auditLog.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.fromSubject ctx.Subject,
+                    SchemaOnlyAccessAttempted payload
+                )
+                |> AuditRow.bestEffort
 
             return Error "schema-only access refused"
         else

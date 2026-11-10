@@ -384,7 +384,7 @@ module OutputVisibilityAudit =
 
     /// A change of a team's output level.
     let levelChanged
-        (audit: IAuditLog option)
+        (audit: IAuditLog)
         (scopeId: string)
         (teamId: string)
         (changedBy: string)
@@ -392,26 +392,25 @@ module OutputVisibilityAudit =
         (newLevel: TeamVisibilityLevel)
         =
         async {
-            match audit with
-            | Some log ->
-                do!
-                    log.Record(
-                        scopeId,
-                        RemotingMethodAudited {
-                            Kind = LevelChangedKind
-                            MethodName = "SetOutputVisibility"
-                            SubjectId = changedBy
-                            CorrelationId = None
-                            Payload =
-                                Map.ofList [
-                                    "teamId", teamId
-                                    "changedBy", changedBy
-                                    "oldLevel", TeamVisibilityLevel.name oldLevel
-                                    "newLevel", TeamVisibilityLevel.name newLevel
-                                ]
-                        }
-                    )
-            | None -> ()
+            do!
+                audit.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.TeamAudit(UserId changedBy, TeamId teamId),
+                    RemotingMethodAudited {
+                        Kind = LevelChangedKind
+                        MethodName = "SetOutputVisibility"
+                        SubjectId = changedBy
+                        CorrelationId = None
+                        Payload =
+                            Map.ofList [
+                                "teamId", teamId
+                                "changedBy", changedBy
+                                "oldLevel", TeamVisibilityLevel.name oldLevel
+                                "newLevel", TeamVisibilityLevel.name newLevel
+                            ]
+                    }
+                )
+                |> AuditRow.orRefuse
         }
 
 // ─── The API ─────────────────────────────────────────────────────
@@ -434,10 +433,7 @@ let teamOutputVisibilityApi (ctx: HttpContext) : TeamOutputVisibilityApi =
         | :? IBlobStorage as s -> Some s
         | _ -> None
 
-    let audit =
-        match services.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as a -> Some a
-        | _ -> None
+    let audit = ToolUp.Platform.Config.Background.resolveAuditLog services
 
     let access =
         match services.GetService(typeof<AccessContext>) with

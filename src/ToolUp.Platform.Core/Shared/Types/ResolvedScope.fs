@@ -78,6 +78,15 @@ module StorageScope =
         | Some(ScopeKey.Team teamId) -> Some teamId
         | _ -> None
 
+    /// The audit trail a storage scope's rows are recorded under: the key it
+    /// was rendered from (`tryKey`), or — for a shape the grammar does not
+    /// render, a claim scope — its `ScopeId` as a shard. Either way the
+    /// stream key is the scope's `ScopeId`, the key every row at rest carries.
+    let auditScope (scope: StorageScope) : AuditScope =
+        match tryKey scope with
+        | Some key -> AuditScope.Scoped key
+        | None -> AuditScope.Shard scope.ScopeId
+
 /// A storage scope the platform's scope resolution minted for the current
 /// request — or the explicit anonymous scope when it minted
 /// none. The representation is private and the mint is internal to the
@@ -170,6 +179,14 @@ module ResolvedScope =
 
     /// The shard key — see `ResolvedScope.ScopeId`.
     let scopeId (scope: ResolvedScope) : string = scope.ScopeId
+
+    /// The audit trail a resolved scope's rows are recorded under: its key's
+    /// (`Key`), or — the anonymous scope, a claim scope — its `ScopeId` as a
+    /// shard. The stream key is the scope's `ScopeId` either way.
+    let auditScope (scope: ResolvedScope) : AuditScope =
+        match scope.Key with
+        | Some key -> AuditScope.Scoped key
+        | None -> AuditScope.Shard scope.ScopeId
 // ─── The two-scope form ─────────────────────────────────────────────
 //
 // Every read and write in the fact tier holds ONE scope. The single place

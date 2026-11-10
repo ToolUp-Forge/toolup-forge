@@ -444,7 +444,8 @@ type ModelEvaluationRunner
                                     | Ok() ->
                                         do!
                                             audit.Record(
-                                                request.ScopeId,
+                                                AuditScope.shard request.ScopeId,
+                                                AuditSubject.system "ModelEvaluation",
                                                 ModelEvaluated {
                                                     CompositeKeyHash = request.ArtifactKeyHash
                                                     ProviderId = providerId
@@ -455,6 +456,7 @@ type ModelEvaluationRunner
                                                     ScopeId = request.ScopeId
                                                 }
                                             )
+                                            |> AuditRow.orRefuse
 
                                         return Ok run
         }
@@ -686,7 +688,8 @@ type ChampionChallengerGate
                         // shape (no new audit vocabulary needed).
                         do!
                             audit.Record(
-                                scopeId,
+                                AuditScope.shard scopeId,
+                                AuditSubject.system "ModelEvaluation",
                                 ModelArtifactTransitionDenied {
                                     CompositeKeyHash = challengerKeyHash
                                     AttemptedStatus = ModelArtifactStatus.name ModelArtifactStatus.Approved
@@ -695,6 +698,7 @@ type ChampionChallengerGate
                                     ScopeId = scopeId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         return Error(PromotionError.GateRefused verdict)
         }

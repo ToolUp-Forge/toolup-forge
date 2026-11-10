@@ -157,7 +157,6 @@ IPeerAuditTransparencyContract
 IPeerBearerAuthContract
 IPeerCapabilityNegotiationContract
 IPeerNonFSharpSdkContract
-IPermissionStoreContract
 IPlatformAIKeyStoreContract
 IPlatformPeerContract
 IPresenceTrackerContract

@@ -60,8 +60,12 @@ type private CapturingAuditLog() =
     member _.Events = lock gate (fun () -> events |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add(scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock gate (fun () -> events.Add(scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private mkDoc (docId: string) (fileName: string) (fileType: string) (source: KnowledgeSource) : KnowledgeDocument = {
     Id = docId
@@ -81,7 +85,7 @@ let private mkDoc (docId: string) (fileName: string) (fileType: string) (source:
 
 let private mkDeps
     (storage: IBlobStorage)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (resolver: IOriginalSourceResolver)
     (queue: IngestionQueue)
     (container: string)
@@ -240,7 +244,7 @@ let private handlerTests =
             let audit = CapturingAuditLog()
 
             let deps =
-                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
+                mkDeps storage ((audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
 
             let! result = getOriginalDocument deps "doc-1"
 
@@ -269,7 +273,7 @@ let private handlerTests =
             let audit = CapturingAuditLog()
 
             let deps =
-                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
+                mkDeps storage ((audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
 
             let! result = getOriginalDocument deps "doc-nope"
             Expect.equal result (Error NotInScope) "typed refusal"
@@ -292,7 +296,7 @@ let private handlerTests =
             let audit = CapturingAuditLog()
 
             let deps =
-                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
+                mkDeps storage ((audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
 
             let! result = getOriginalDocument deps "doc-9"
 
@@ -306,7 +310,7 @@ let private handlerTests =
             let audit = CapturingAuditLog()
 
             let deps =
-                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
+                mkDeps storage ((audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a"
 
             let! result = getOriginalDocument deps "doc-5"
             Expect.equal result (Error NoOriginalAvailable) "typed absence, not an exception"
@@ -321,7 +325,9 @@ let private handlerTests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", Encoding.UTF8.GetBytes "x")
             do! saveIndex storage "team-a" [ mkDoc "doc-1" "report.pdf" "pdf" UploadedFile ]
-            let deps = mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a"
+
+            let deps =
+                mkDeps storage (NoOpAuditLog()) (createDefault ()) (IngestionQueue()) "team-a"
 
             let! result = getOriginalDocument deps "doc-1"
             Expect.isOk result "absent IAuditLog never fails the fetch"
@@ -352,7 +358,7 @@ let private handlerTests =
                         locationViaResolve this storage container doc
                 }
 
-            let deps = mkDeps storage None custom (IngestionQueue()) "team-a"
+            let deps = mkDeps storage (NoOpAuditLog()) custom (IngestionQueue()) "team-a"
             let! result = getOriginalDocument deps "doc-6"
 
             match result with
@@ -369,7 +375,7 @@ let private lineageTests =
         <| async {
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
-            let deps = mkDeps storage None (createDefault ()) queue "team-a"
+            let deps = mkDeps storage (NoOpAuditLog()) (createDefault ()) queue "team-a"
             let csv = "name,score\nalpha,1\nbeta,2\ngamma,3"
             let bytes = Encoding.UTF8.GetBytes csv
 
@@ -971,7 +977,8 @@ module private PreviewCompose =
                 let! _ = storage.Upload("team-a", "knowledge/doc-1/report.pdf", bytes)
                 do! saveIndex storage "team-a" [ mkDoc "doc-1" "report.pdf" "pdf" UploadedFile ]
 
-                let deps = mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a"
+                let deps =
+                    mkDeps storage (NoOpAuditLog()) (createDefault ()) (IngestionQueue()) "team-a"
 
                 let! before = getOriginalDocument deps "doc-1"
 
@@ -1206,7 +1213,7 @@ let private redactedHandlerTests =
             let audit = CapturingAuditLog()
 
             let deps = {
-                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                mkDeps storage ((audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
                     AccessContext = nonReader
             }
 
@@ -1257,7 +1264,7 @@ let private redactedHandlerTests =
             let audit = CapturingAuditLog()
 
             let deps = {
-                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                mkDeps storage ((audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
                     AccessContext = readerOf Pii
             }
 
@@ -1287,7 +1294,7 @@ let private redactedHandlerTests =
             let audit = CapturingAuditLog()
 
             let deps = {
-                mkDeps storage (Some(audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                mkDeps storage ((audit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
                     AccessContext = nonReader
             }
 
@@ -1327,7 +1334,9 @@ let private redactedHandlerTests =
             do! saveIndex storage "team-b" [ mkDoc "doc-9" "brief.md" "md" UploadedFile ]
             do! saveIndex storage "team-a" []
 
-            let deps = mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a"
+            let deps =
+                mkDeps storage (NoOpAuditLog()) (createDefault ()) (IngestionQueue()) "team-a"
+
             let redactor = Redactor.createDefault (fun _ _ -> async.Return [ piiSpan ])
 
             let! foreign = getRedactedOriginalDocument (Some redactor) deps "doc-9"
@@ -1347,7 +1356,7 @@ let private redactedHandlerTests =
             let unredactedAudit = CapturingAuditLog()
 
             let deps = {
-                mkDeps storage (Some(unredactedAudit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
+                mkDeps storage ((unredactedAudit :> IAuditLog)) (createDefault ()) (IngestionQueue()) "team-a" with
                     AccessContext = nonReader
             }
 
@@ -1382,7 +1391,7 @@ let private redactedDeliveryTests =
             do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
 
             let deps = {
-                mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a" with
+                mkDeps storage (NoOpAuditLog()) (createDefault ()) (IngestionQueue()) "team-a" with
                     AccessContext = nonReader
             }
 
@@ -1424,7 +1433,8 @@ let private redactedDeliveryTests =
             let! _ = storage.Upload("team-a", "knowledge/doc-1/brief.md", Encoding.UTF8.GetBytes "plain")
             do! saveIndex storage "team-a" [ mkDoc "doc-1" "brief.md" "md" UploadedFile ]
 
-            let deps = mkDeps storage None (createDefault ()) (IngestionQueue()) "team-a"
+            let deps =
+                mkDeps storage (NoOpAuditLog()) (createDefault ()) (IngestionQueue()) "team-a"
 
             let! viaPhase108 = getOriginalDelivery None deps "doc-1"
             let! viaPhase201 = getOriginalDeliveryRedacted None None deps "doc-1"

@@ -92,7 +92,8 @@ let private classify
         | TransientError reason ->
             do!
                 auditLog.Record(
-                    descriptor.ScopeId,
+                    AuditScope.shard descriptor.ScopeId,
+                    AuditSubject.system "OAuthRefreshJob",
                     OAuthTokenRefreshFailed {
                         Provider = descriptor.Provider
                         ConfigId = descriptor.ConfigId
@@ -101,11 +102,13 @@ let private classify
                         Reason = reason
                     }
                 )
+                |> AuditRow.orRefuse
 
             if attempt >= maxAttempts then
                 do!
                     auditLog.Record(
-                        descriptor.ScopeId,
+                        AuditScope.shard descriptor.ScopeId,
+                        AuditSubject.system "OAuthRefreshJob",
                         OAuthRefreshDeadLettered {
                             Provider = descriptor.Provider
                             ConfigId = descriptor.ConfigId
@@ -114,6 +117,7 @@ let private classify
                             FinalReason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 return JobResult.PermanentFailure(sprintf "exhausted retries after %d attempts: %s" attempt reason)
             else
@@ -121,7 +125,8 @@ let private classify
         | PermanentError reason ->
             do!
                 auditLog.Record(
-                    descriptor.ScopeId,
+                    AuditScope.shard descriptor.ScopeId,
+                    AuditSubject.system "OAuthRefreshJob",
                     OAuthTokenRefreshFailed {
                         Provider = descriptor.Provider
                         ConfigId = descriptor.ConfigId
@@ -130,10 +135,12 @@ let private classify
                         Reason = reason
                     }
                 )
+                |> AuditRow.orRefuse
 
             do!
                 auditLog.Record(
-                    descriptor.ScopeId,
+                    AuditScope.shard descriptor.ScopeId,
+                    AuditSubject.system "OAuthRefreshJob",
                     OAuthRefreshDeadLettered {
                         Provider = descriptor.Provider
                         ConfigId = descriptor.ConfigId
@@ -142,6 +149,7 @@ let private classify
                         FinalReason = reason
                     }
                 )
+                |> AuditRow.orRefuse
 
             return JobResult.PermanentFailure reason
     }

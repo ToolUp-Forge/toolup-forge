@@ -99,7 +99,8 @@ type ForgeAuthContext =
 /// drain replays a write the request fully determined.
 type internal RemotingAuditWork = {
     AuditLog: IAuditLog
-    ScopeId: string
+    Scope: AuditScope
+    Actor: AuditSubject
     Event: ToolUp.Platform.AuditEvent
 }
 
@@ -376,6 +377,13 @@ module internal ApiSeams =
     /// record is enqueued and `Emit` returns without awaiting the write;
     /// when it did not, or the queue is full, the write is inline as it
     /// always was. See `RemotingAuditQueue` for when each applies.
+    /// The row's actor: the request's principal when the request registered
+    /// an `AccessContext`, else the dispatcher itself.
+    let private requestActor (services: System.IServiceProvider) : AuditSubject =
+        match services.GetService(typeof<AccessContext>) with
+        | :? AccessContext as access -> AuditSubject.fromSubject access.Subject
+        | _ -> AuditSubject.system "RemotingDispatcher"
+
     let defaultAuditEmitter: IAuditEmitter =
         { new IAuditEmitter with
             member _.Emit evt = async {
@@ -384,11 +392,13 @@ module internal ApiSeams =
                 | services ->
                     match services.GetService(typeof<IAuditLog>) with
                     | :? IAuditLog as auditLog ->
-                        let scopeId =
+                        let scope =
                             match requestScopeId.Value with
                             | null
-                            | "" -> ScopeKey.PlatformContainer
-                            | s -> s
+                            | "" -> AuditScope.platform
+                            | s -> AuditScope.shard s
+
+                        let actor = requestActor services
 
                         let kindName =
                             match evt.Kind with
@@ -410,13 +420,14 @@ module internal ApiSeams =
                             | :? RemotingAuditQueue as queue ->
                                 queue.TryEnqueue {
                                     AuditLog = auditLog
-                                    ScopeId = scopeId
+                                    Scope = scope
+                                    Actor = actor
                                     Event = event
                                 }
                             | _ -> false
 
                         if not queued then
-                            do! auditLog.Record(scopeId, event)
+                            do! auditLog.Record(scope, actor, event) |> AuditRow.orRefuse
                     | _ -> ()
             }
         }

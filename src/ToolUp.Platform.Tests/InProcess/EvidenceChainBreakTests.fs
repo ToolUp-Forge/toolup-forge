@@ -1585,7 +1585,7 @@ let private corpusKeyId = "corpus-bundle-key"
 let private signingPair () =
     let secrets = CorpusSecretStore() :> ISecretStore
     let signer = DsseEnvelopeSigning.fromSecretStore secrets corpusKeyId Ed25519
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
 
     let artefactSigner =
         DefaultArtefactSigner.createSystem secrets audit corpusKeyId Ed25519

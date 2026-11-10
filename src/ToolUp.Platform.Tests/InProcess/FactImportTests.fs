@@ -80,9 +80,14 @@ type private RecordingAuditLog() =
         this.Events |> List.filter (fun e -> AuditEvent.eventTypeName e = name)
 
     interface IAuditLog with
-        member _.Record(_scopeId, audit) = async { recorded.Enqueue audit }
+        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
+            recorded.Enqueue audit
+            return Ok()
+        }
 
-        member _.GetAuditTrail(_scopeId, _dateRange, _eventType) = async { return recorded |> List.ofSeq }
+        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async {
+            return recorded |> List.ofSeq
+        }
 
 let private scopeA = "team-issuer"
 let private scopeB = "team-importer"
@@ -132,7 +137,7 @@ type private Deployment = {
 /// importing side.
 let private deploymentWith (keyId: string) (gateFor: IFactStore -> IEventStore -> IFactDisclosureGate) = async {
     let secrets = InMemorySecretStore() :> ISecretStore
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let store = BlobFactStore.create (InMemoryBlobStorage.InMemoryBlobStorage()) events
     let gate = gateFor store events
@@ -262,7 +267,7 @@ let private tamperStatement (find: string) (replace: string) (json: string) =
 /// how a test reaches the other levels — the custody has not changed, so
 /// this is a fixture and never a pattern for a composition root.
 let private applicationSignerAt (d: Deployment) (level: AttestationLevel) : IApplicationSigner =
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
 
     {
         ApplicationSigning.inProcess d.Secrets audit d.KeyId Ed25519 "system" with

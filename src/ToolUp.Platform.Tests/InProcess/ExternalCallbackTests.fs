@@ -1038,8 +1038,12 @@ type private CapturingAuditLog() =
     member this.Kinds = this.Events |> List.map (snd >> AuditEvent.eventTypeName)
 
     interface IAuditLog with
-        member _.Record(scopeId: string, audit: AuditEvent) = async { events.Enqueue((scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            events.Enqueue((scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Records warnings so the rate-limited forged-callback signal can be
 /// asserted present — and asserted SUPPRESSED on the repeat, which is the

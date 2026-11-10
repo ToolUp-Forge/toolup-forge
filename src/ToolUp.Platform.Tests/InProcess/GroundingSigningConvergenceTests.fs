@@ -103,7 +103,7 @@ let private draft metric inputHash value : FactDraft = {
 /// An application signer over `secrets` under `keyId`. Composing a second
 /// one over the SAME store under a new id is what a rotation looks like.
 let private applicationSigner (secrets: ISecretStore) (keyId: string) : IApplicationSigner =
-    ApplicationSigning.inProcess secrets (AuditLog.NoOpAuditLog() :> IAuditLog) keyId EcdsaP256 "system"
+    ApplicationSigning.inProcess secrets (NoOpAuditLog() :> IAuditLog) keyId EcdsaP256 "system"
     |> ApplicationSigning.create
 
 /// A seeded fact store plus the collaborators a certificate issuer needs.
@@ -138,7 +138,8 @@ let private newLedgerStorage () =
     LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
 
 let private auditEvent (offset: float) : AuditEnvelope =
-    AuditEnvelope.fromScopeId
+    AuditEnvelope.create
+        AuditSubject.unattributed
         scope
         (DateTime(2026, 8, 22, 9, 0, 0, DateTimeKind.Utc).AddSeconds offset)
         (UserLoggedIn {
@@ -430,7 +431,7 @@ let tests =
         testCaseAsync "the direct certificate path is unchanged, and needs no application signer"
         <| async {
             let secrets = InMemorySecretStore() :> ISecretStore
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
 
             let byteSigner =
                 DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
@@ -461,7 +462,7 @@ let tests =
             // forked the interchange format. Same clock, same key id, same
             // subject: the canonical bytes must match exactly.
             let secrets = InMemorySecretStore() :> ISecretStore
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
             let frozen = DateTime(2026, 8, 22, 10, 30, 0, DateTimeKind.Utc)
             let clock () = frozen
 

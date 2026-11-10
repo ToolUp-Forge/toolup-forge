@@ -116,7 +116,7 @@ let private corruptClaimCase (label: string) (fault: BlobFault) =
             let inner = Fakes.TestBlobStorage() :> IBlobStorage
             let blob = FaultInjectingBlobStorage(inner, seed)
             let secrets = Fakes.TestSecretStore() :> ISecretStore
-            let store = ShareTokenStore.create blob secrets None silentLogger
+            let store = ShareTokenStore.create blob secrets (NoOpAuditLog()) silentLogger
             let scope = tokenScope ()
 
             let! xResult = store.Issue(issueReq scope "form-x" (Some(Some 1)))
@@ -234,7 +234,7 @@ let tests =
                     // double-admit; the claimWriteLock must still hold the invariant.
                     blob.WidenReadWriteGap 15
                     let secrets = Fakes.TestSecretStore() :> ISecretStore
-                    let store = ShareTokenStore.create blob secrets None silentLogger
+                    let store = ShareTokenStore.create blob secrets (NoOpAuditLog()) silentLogger
                     let scope = tokenScope ()
 
                     let! issued = store.Issue(issueReq scope "form-1" (Some(Some 1)))

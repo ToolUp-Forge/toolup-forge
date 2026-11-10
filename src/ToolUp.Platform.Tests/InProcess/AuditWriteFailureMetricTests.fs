@@ -63,7 +63,8 @@ let tests =
 
             // Record must not throw even though the underlying write does.
             auditLog.Record(
-                "team-acme",
+                AuditScope.shard "team-acme",
+                AuditSubject.system "test",
                 UserLoggedIn {
                     UserId = UserId "alice"
                     AuthProvider = "Header"
@@ -89,7 +90,8 @@ let tests =
                 AuditLog.EventStoreAuditLog(store, silentLogger, (fun () -> sink :> IMetricsSink)) :> IAuditLog
 
             auditLog.Record(
-                "team-acme",
+                AuditScope.shard "team-acme",
+                AuditSubject.system "test",
                 UserLoggedIn {
                     UserId = UserId "bob"
                     AuthProvider = "Header"

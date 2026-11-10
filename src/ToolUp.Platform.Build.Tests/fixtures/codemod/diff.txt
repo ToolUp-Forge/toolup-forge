@@ -291,6 +291,24 @@
 @@ L11 [873-job-store-write]
 -    do! jobStore.Save job
 +    do! JobStoreWrite.orRaise <| jobStore.Save job
+@@ L39 [1062-audit-log-argument]
+-    GrantPolicyGuard.guardDispatch registry Map.empty (Some auditLog) Async.Start "t1" "alice" "Reports"
++    GrantPolicyGuard.guardDispatch registry Map.empty auditLog "t1" "alice" "Reports"
+@@ L43 [1062-record-unit]
+-        member _.Record(scopeId, audit) = async { return () }
++        member _.Record(scopeId, audit) = async { return Ok() }
+@@ L43 [1062-record-implementer-scope]
+-        member _.Record(scopeId, audit) = async { return Ok() }
++        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async { return Ok() }
+@@ L44 [1062-get-audit-trail-implementer-scope]
+-        member _.GetAuditTrail(_, _, _) = async { return [] }
++        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+@@ L50 [1062-envelope-from-scope-id]
+-let envelope scopeId at event = AuditEnvelope.fromScopeId scopeId at event
++let envelope scopeId at event = AuditEnvelope.create AuditSubject.unattributed scopeId at event
+@@ L52 [1062-audit-log-option]
+-let sink (audit: IAuditLog option) = audit
++let sink (audit: IAuditLog) = audit
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -403,4 +421,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 101 rewrite(s) across 19 file(s) pending.
+Codemod: 107 rewrite(s) across 19 file(s) pending.

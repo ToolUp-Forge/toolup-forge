@@ -603,7 +603,10 @@ let private gateTests =
             let refused = save r "member" (proposalOf answer) "team"
             Expect.stringContains refused.Text "(store-grant-missing)" refused.Text
 
-            match r.Audit.GetAuditTrail(teamScope.ScopeId, None, Some "PageWriteRefused") |> run with
+            match
+                r.Audit.GetAuditTrail(AuditScope.shard teamScope.ScopeId, None, Some "PageWriteRefused")
+                |> run
+            with
             | [ PageWriteRefused p ] ->
                 Expect.equal p.Reason "grant-missing" "the refusal is audited by cause"
                 Expect.equal p.ActorId "member" "naming the member"

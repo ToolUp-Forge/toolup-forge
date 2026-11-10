@@ -9,6 +9,11 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
 
+/// The row was refused: `Record` answered an `Error` (it never raises).
+let private expectRefused (record: unit -> Result<unit, AuditWriteError>) (message: string) =
+    Expect.isError (record ()) message
+
+
 // ─── Phase 9t — audit-write failure policy ───────────────────────────
 //
 // `AuditFailurePolicy` selects what `EventStoreAuditLog.Record` does
@@ -99,7 +104,7 @@ let tests =
                 :> IAuditLog
 
             // Must not throw.
-            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            auditLog.Record(AuditScope.shard "team-acme", AuditSubject.system "test", sampleAudit (UserId "alice"))
             |> Async.RunSynchronously
         }
 
@@ -108,9 +113,13 @@ let tests =
                 AuditLog.EventStoreAuditLog(FaultingEventStore(), silentLogger, failurePolicy = RefuseAction)
                 :> IAuditLog
 
-            Expect.throwsT<AuditLog.AuditWriteRefusedException>
+            expectRefused
                 (fun () ->
-                    auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+                    auditLog.Record(
+                        AuditScope.shard "team-acme",
+                        AuditSubject.system "test",
+                        sampleAudit (UserId "alice")
+                    )
                     |> Async.RunSynchronously)
                 "the failed audit write must refuse the action"
         }
@@ -131,7 +140,7 @@ let tests =
                 :> IAuditLog
 
             // The action completes; the record spills.
-            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            auditLog.Record(AuditScope.shard "team-acme", AuditSubject.system "test", sampleAudit (UserId "alice"))
             |> Async.RunSynchronously
 
             Expect.equal (fallback.PendingCount()) 1 "one spilled record awaiting replay"
@@ -165,7 +174,7 @@ let tests =
                 :> IAuditLog
 
             // Must not throw; the record is lost (loudly, via the logger).
-            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            auditLog.Record(AuditScope.shard "team-acme", AuditSubject.system "test", sampleAudit (UserId "alice"))
             |> Async.RunSynchronously
 
             Expect.equal (fallback.PendingCount()) 0 "nothing spilled at capacity"
@@ -187,7 +196,7 @@ let tests =
                 )
                 :> IAuditLog
 
-            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            auditLog.Record(AuditScope.shard "team-acme", AuditSubject.system "test", sampleAudit (UserId "alice"))
             |> Async.RunSynchronously
 
             // ...plus a hand-planted corrupt file that sorts FIRST
@@ -226,9 +235,13 @@ let tests =
                 )
                 :> IAuditLog
 
-            Expect.throwsT<AuditLog.AuditWriteRefusedException>
+            expectRefused
                 (fun () ->
-                    auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+                    auditLog.Record(
+                        AuditScope.shard "team-acme",
+                        AuditSubject.system "test",
+                        sampleAudit (UserId "alice")
+                    )
                     |> Async.RunSynchronously)
                 "an Upload that returned Error must refuse the action, exactly as a throwing store does"
 
@@ -250,7 +263,7 @@ let tests =
                 )
                 :> IAuditLog
 
-            auditLog.Record("team-acme", sampleAudit (UserId "alice"))
+            auditLog.Record(AuditScope.shard "team-acme", AuditSubject.system "test", sampleAudit (UserId "alice"))
             |> Async.RunSynchronously
 
             Expect.equal

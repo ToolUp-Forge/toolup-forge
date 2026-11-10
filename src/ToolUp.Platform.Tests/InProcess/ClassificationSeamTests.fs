@@ -34,8 +34,12 @@ type private RecordingAuditLog() =
         |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(_, audit) = async { lock recorded (fun () -> recorded.Add audit) }
-        member _.GetAuditTrail(_, _, _) = async { return List.ofSeq recorded }
+        member _.Record(AuditScope.StreamKey _, _actor, audit) = async {
+            lock recorded (fun () -> recorded.Add audit)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return List.ofSeq recorded }
 
 /// Answers every entity read with the rows it was built with.
 let private entityStoreOf (rows: string list) : IEntityStore =

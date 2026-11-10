@@ -308,7 +308,7 @@ let private exclusionTests =
             let dos = DataObjectStore(blob) :> IDataObjectStore
             let registry = EntityRegistry()
             registry.Register<PublicPageEntity>(PublicPageEntity.registration)
-            let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+            let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
             let teamScopedPage = {
                 mkPage "dashboard" (PageAudience.ScopeGated []) with
@@ -2094,8 +2094,12 @@ let private recordingAuditLog () =
 
     let log =
         { new IAuditLog with
-            member _.Record(scopeId, audit) = async { rows.Enqueue((scopeId, audit)) }
-            member _.GetAuditTrail(_, _, _) = async { return [] }
+            member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+                rows.Enqueue((scopeId, audit))
+                return Ok()
+            }
+
+            member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
         }
 
     rows, log
@@ -2292,8 +2296,8 @@ let private readerProbes: (string * HttpMethod * string * bool) list = [
 /// Phase 1006 — an `IAuditLog` whose every write throws before returning.
 let private throwingAuditLog =
     { new IAuditLog with
-        member _.Record(_, _) = failwith "audit sink unavailable"
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = failwith "audit sink unavailable"
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
     }
 
 /// Phase 1006 — an `IAuthAuditHook` whose write fails asynchronously.

@@ -135,14 +135,14 @@ let private mkPageStore () : IEntityStore =
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<PublicPageEntity>(PublicPageEntity.registration)
-    BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
 // ─── Phase 198 — draft preview-link minting ───────────────────────────
 
 let private mkShareTokenStore () : IShareTokenStore =
     let blob = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
     let secrets = InMemorySecretStore() :> ISecretStore
-    BlobShareTokenStore(blob, secrets, None, NullLogger()) :> IShareTokenStore
+    BlobShareTokenStore(blob, secrets, (NoOpAuditLog()), NullLogger()) :> IShareTokenStore
 
 let private previewScope = "team-x"
 let private previewBaseUrl = "https://cms.example.test"
@@ -495,7 +495,7 @@ let tests =
             let secrets = InMemorySecretStore() :> ISecretStore
 
             let store =
-                BlobShareTokenStore(blob, secrets, None, NullLogger()) :> IShareTokenStore
+                BlobShareTokenStore(blob, secrets, (NoOpAuditLog()), NullLogger()) :> IShareTokenStore
 
             match! ContentPreview.issuePreviewToken store "team-x" "about" "u1" (TimeSpan.FromHours 1.0) with
             | Error e -> failtestf "issue failed: %A" e

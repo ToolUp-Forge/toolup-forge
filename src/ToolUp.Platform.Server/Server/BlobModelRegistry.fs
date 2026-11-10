@@ -311,7 +311,8 @@ type BlobModelRegistry
 
                     do!
                         audit.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.system "ModelRegistry",
                             ModelArtifactRegistered {
                                 CompositeKeyHash = artifact.CompositeKey.Hash
                                 SpecHash = artifact.CompositeKey.SpecHash
@@ -323,6 +324,7 @@ type BlobModelRegistry
                                 ScopeId = scopeId
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     // Phase 651 — the novelty, decided from the version the
                     // store MINTED rather than from the emptiness check
@@ -456,7 +458,8 @@ type BlobModelRegistry
                     let auditDenied (reason: string) = async {
                         do!
                             audit.Record(
-                                scopeId,
+                                AuditScope.shard scopeId,
+                                AuditSubject.system "ModelRegistry",
                                 ModelArtifactTransitionDenied {
                                     CompositeKeyHash = keyHash
                                     AttemptedStatus = ModelArtifactStatus.name target
@@ -465,6 +468,7 @@ type BlobModelRegistry
                                     ScopeId = scopeId
                                 }
                             )
+                            |> AuditRow.orRefuse
                     }
 
                     // Legality first — an illegal edge is refused regardless
@@ -489,7 +493,8 @@ type BlobModelRegistry
                         | Ok updated ->
                             do!
                                 audit.Record(
-                                    scopeId,
+                                    AuditScope.shard scopeId,
+                                    AuditSubject.system "ModelRegistry",
                                     ModelArtifactTransitioned {
                                         CompositeKeyHash = keyHash
                                         FromStatus = ModelArtifactStatus.name from
@@ -498,6 +503,7 @@ type BlobModelRegistry
                                         ScopeId = scopeId
                                     }
                                 )
+                                |> AuditRow.orRefuse
 
                             return Ok updated
         }
@@ -547,7 +553,8 @@ type BlobModelRegistry
                             | Ok updated ->
                                 do!
                                     audit.Record(
-                                        scopeId,
+                                        AuditScope.shard scopeId,
+                                        AuditSubject.system "ModelRegistry",
                                         ModelArtifactProvenanceAttached {
                                             CompositeKeyHash = keyHash
                                             AttachmentHashes = novel |> List.map _.ContentHash
@@ -559,6 +566,7 @@ type BlobModelRegistry
                                             ScopeId = scopeId
                                         }
                                     )
+                                    |> AuditRow.orRefuse
 
                                 return Ok updated
         }

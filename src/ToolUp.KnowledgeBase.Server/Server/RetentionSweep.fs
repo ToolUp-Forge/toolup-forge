@@ -143,7 +143,7 @@ let private contentHashIndex (storage: IBlobStorage) (container: string) : Secon
 let sweepScope
     (storage: IBlobStorage)
     (lifecycle: IIndexLifecycle.IIndexLifecycle option)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (logger: ILogger)
     (now: DateTimeOffset)
     (policy: KnowledgeRetentionPolicy)
@@ -290,21 +290,20 @@ let sweepScope
                 // that expired nothing writes no row: a purge trail
                 // records deletions, not the absence of them.
                 if not purgedIds.IsEmpty then
-                    match auditLog with
-                    | Some audit ->
-                        do!
-                            audit.Record(
-                                scopeId,
-                                KnowledgeDocumentsPurged {
-                                    ScopeId = scopeId
-                                    DocumentIds = purgedIds
-                                    PurgedCount = purgedIds.Length
-                                    ReclaimedBytes = reclaimed
-                                    MaxAgeSeconds = maxAgeSeconds
-                                    OrphanChunkCount = orphanChunks
-                                }
-                            )
-                    | None -> ()
+                    do!
+                        auditLog.Record(
+                            AuditScope.shard scopeId,
+                            AuditSubject.system "KnowledgeRetentionSweep",
+                            KnowledgeDocumentsPurged {
+                                ScopeId = scopeId
+                                DocumentIds = purgedIds
+                                PurgedCount = purgedIds.Length
+                                ReclaimedBytes = reclaimed
+                                MaxAgeSeconds = maxAgeSeconds
+                                OrphanChunkCount = orphanChunks
+                            }
+                        )
+                        |> AuditRow.orRefuse
 
                     logger.Info(
                         sprintf
@@ -362,10 +361,7 @@ type RetentionSweepJobHandler(services: IServiceProvider, policy: KnowledgeReten
                     | :? IIndexLifecycle.IIndexLifecycle as l -> Some l
                     | _ -> None
 
-                let auditLog =
-                    match services.GetService typeof<IAuditLog> with
-                    | :? IAuditLog as a -> Some a
-                    | _ -> None
+                let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog services
 
                 try
                     let! report = sweepScope storage lifecycle auditLog logger DateTimeOffset.UtcNow policy ctx.ScopeId

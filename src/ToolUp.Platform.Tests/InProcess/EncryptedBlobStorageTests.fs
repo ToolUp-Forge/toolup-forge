@@ -229,7 +229,7 @@ let tests =
             let inner = newInnerStorage ()
             let secrets = newSecretStore ()
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create secrets cache None
+            let resolver = PerScopeKeyResolver.create secrets cache (NoOpAuditLog())
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
             let! upload = storage.Upload(container, "doc.bin", samplePayload)
@@ -247,7 +247,7 @@ let tests =
             let inner = newInnerStorage ()
             let secrets = newSecretStore ()
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create secrets cache None
+            let resolver = PerScopeKeyResolver.create secrets cache (NoOpAuditLog())
 
             let teamA = "team-aaa"
             let teamB = "team-bbb"
@@ -279,7 +279,7 @@ let tests =
             let inner = newInnerStorage ()
             let secrets = newSecretStore ()
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create secrets cache None
+            let resolver = PerScopeKeyResolver.create secrets cache (NoOpAuditLog())
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
             let! _ = storage.Upload(container, "doc.bin", samplePayload)
@@ -302,13 +302,13 @@ let tests =
             let inner = newInnerStorage ()
 
             // First resolver instance encrypts.
-            let resolver1 = PerScopeKeyResolver.create secrets (newCache ()) None
+            let resolver1 = PerScopeKeyResolver.create secrets (newCache ()) (NoOpAuditLog())
             let storage1 = EncryptedBlobStorage(inner, resolver1) :> IBlobStorage
             let! _ = storage1.Upload(container, "doc.bin", samplePayload)
 
             // Second resolver instance reads (cold cache) — the key is
             // persisted, so the second instance recovers it.
-            let resolver2 = PerScopeKeyResolver.create secrets (newCache ()) None
+            let resolver2 = PerScopeKeyResolver.create secrets (newCache ()) (NoOpAuditLog())
             let storage2 = EncryptedBlobStorage(inner, resolver2) :> IBlobStorage
             let! download = storage2.Download(container, "doc.bin")
 

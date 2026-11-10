@@ -64,7 +64,7 @@ let private kbDeps (storage: IBlobStorage) (container: string) : KnowledgeApiDep
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
-    AuditLog = None
+    AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
     MarkIngestionFailed = fun _ _ _ -> async.Return()
@@ -221,7 +221,14 @@ let private sweepRefusalKeepsDocListed
         let refusing = DeleteRefusingBlobStorage(inner, (=) refused) :> IBlobStorage
 
         let! report =
-            KnowledgeBase.ServerRetentionSweep.sweepScope refusing None None silentLogger sweepNow sweepPolicy container
+            KnowledgeBase.ServerRetentionSweep.sweepScope
+                refusing
+                None
+                (NoOpAuditLog())
+                silentLogger
+                sweepNow
+                sweepPolicy
+                container
 
         Expect.isEmpty report.Purged "a document whose bytes stayed is not reported purged"
         Expect.isNonEmpty report.Failures "the refusal is reported as a sweep failure"
@@ -233,7 +240,14 @@ let private sweepRefusalKeepsDocListed
         Expect.isTrue stillThere "the refused blob is still at rest"
 
         let! retry =
-            KnowledgeBase.ServerRetentionSweep.sweepScope inner None None silentLogger sweepNow sweepPolicy container
+            KnowledgeBase.ServerRetentionSweep.sweepScope
+                inner
+                None
+                (NoOpAuditLog())
+                silentLogger
+                sweepNow
+                sweepPolicy
+                container
 
         Expect.equal retry.Purged [ doc.Id ] "the next sweep over healthy storage purges it"
     }

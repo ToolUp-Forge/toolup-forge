@@ -127,7 +127,13 @@ type WorkflowEngine
                 Reason = reason
             }
 
-            do! auditLog.Record(scopeId, AuditEvent.WorkflowActionExecuted payload)
+            do!
+                auditLog.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.system "WorkflowEngine",
+                    AuditEvent.WorkflowActionExecuted payload
+                )
+                |> AuditRow.orRefuse
         }
 
     interface IWorkflowEngine with
@@ -299,7 +305,13 @@ type WorkflowEngine
                                                     ToState = transition.To
                                                 }
 
-                                                do! auditLog.Record(scopeId, AuditEvent.WorkflowTransitioned payload)
+                                                do!
+                                                    auditLog.Record(
+                                                        AuditScope.shard scopeId,
+                                                        AuditSubject.system "WorkflowEngine",
+                                                        AuditEvent.WorkflowTransitioned payload
+                                                    )
+                                                    |> AuditRow.orRefuse
 
                                                 // 8. Action invocation
                                                 //    with ledger guard.

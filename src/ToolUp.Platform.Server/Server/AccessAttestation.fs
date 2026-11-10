@@ -432,13 +432,12 @@ let private liveApprovalsFor
     (teamId: string)
     : Async<Result<AttestedApproval list, string>> =
     async {
-        let! perms = async {
-            try
-                let! p = sources.Permissions.GetTeamPermissions(TeamId teamId)
-                return Ok p
-            with ex ->
-                return Error $"permission document for team '{teamId}' could not be read: {ex.Message}"
-        }
+        let! read = sources.Permissions.GetTeamPermissions(TeamId teamId)
+
+        let perms =
+            read
+            |> Result.mapError (fun e ->
+                $"permission document for team '{teamId}' could not be read: {PermissionStoreError.describe e}")
 
         match perms with
         | Error e -> return Error e
@@ -451,10 +450,11 @@ let private liveApprovalsFor
                 if failure.IsNone then
                     let subject = ConsentSubject.create teamId subjectId moduleName
 
-                    // No audit log and no scheduler: an attestation is a
+                    // A no-op audit log: an attestation is a
                     // read, and reading must not raise the tamper alert a
                     // request would (the alert belongs to the guard).
-                    let! resolved = resolveLive sources.Consents sources.ConsentVerifier None ignore now subject party
+                    let! resolved =
+                        resolveLive sources.Consents sources.ConsentVerifier (NoOpAuditLog()) now subject party
 
                     match resolved with
                     | Ok record ->

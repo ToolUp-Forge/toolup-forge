@@ -44,9 +44,12 @@ type private RecordingAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue(scopeId, audit) }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Enqueue(scopeId, audit)
+            return Ok()
+        }
 
-        member _.GetAuditTrail(scopeId, _dateRange, _eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, _eventType) = async {
             return recorded |> Seq.filter (fun (s, _) -> s = scopeId) |> Seq.map snd |> List.ofSeq
         }
 
@@ -110,7 +113,7 @@ let private setup () =
     let audit = RecordingAuditLog()
 
     let inner =
-        ShareTokenStore.create storage secrets (Some(audit :> IAuditLog)) silentLogger
+        ShareTokenStore.create storage secrets ((audit :> IAuditLog)) silentLogger
 
     let channel = InMemoryNotificationChannel(None) :> INotificationChannel
     let decorator = new RevokeOnIssuerRemovedStore(inner, channel, silentLogger)

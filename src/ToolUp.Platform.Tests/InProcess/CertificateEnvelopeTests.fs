@@ -117,7 +117,7 @@ let private body: GroundingCertificateBody = {
 /// Issue a certificate through the ordinary Phase 40 signing path, so the
 /// envelope wraps a genuinely-sealed certificate.
 let private issueCertificate (secrets: ISecretStore) (algorithm: SigningAlgorithm) = async {
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
     let signer = DefaultArtefactSigner.createSystem secrets audit keyId algorithm
     let canonical = GroundingCertificate.canonicalise body
 
@@ -158,7 +158,7 @@ let private applicationSignerAt
     (algorithm: SigningAlgorithm)
     (level: AttestationLevel)
     : IApplicationSigner =
-    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+    let audit = NoOpAuditLog() :> IAuditLog
 
     {
         ApplicationSigning.inProcess secrets audit keyId algorithm "system" with
@@ -180,7 +180,7 @@ let private issueAttested (secrets: ISecretStore) (algorithm: SigningAlgorithm) 
         // The DSSE envelope is signed by the deployment's own key, read
         // back through the artefact signer the application signer
         // provisioned it with — one key story, two artefacts.
-        let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+        let audit = NoOpAuditLog() :> IAuditLog
         let byteSigner = DefaultArtefactSigner.createSystem secrets audit keyId algorithm
         let! publicKey = byteSigner.VerifyKey()
 
@@ -502,7 +502,7 @@ let tests =
             // cryptographically indistinguishable from tampering — and is
             // reported as such, which is the honest verdict.
             let envelopeSigner = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
-            let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+            let audit = NoOpAuditLog() :> IAuditLog
             let artefactSigner = DefaultArtefactSigner.createSystem secrets audit keyId Ed25519
 
             let otherBody =

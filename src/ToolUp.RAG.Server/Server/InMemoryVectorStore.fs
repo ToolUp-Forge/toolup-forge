@@ -152,6 +152,8 @@ type InMemoryVectorStore
         ?notifications: INotificationChannel
     ) =
 
+    let auditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
+
     let log =
         logger
         |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
@@ -321,19 +323,18 @@ type InMemoryVectorStore
             | Some t -> t.RecordIndexLoadError scopeKey
             | None -> ()
 
-            match auditLog with
-            | Some a ->
-                do!
-                    a.Record(
-                        KnowledgeSourceModule.value,
-                        KnowledgeIndexLoadFailed {
-                            ScopeKey = scopeKey
-                            Reason = reason
-                            Bytes = byteLen
-                            BlobLocation = location
-                        }
-                    )
-            | None -> ()
+            do!
+                auditLog.Record(
+                    AuditScope.shard KnowledgeSourceModule.value,
+                    AuditSubject.system "VectorStore",
+                    KnowledgeIndexLoadFailed {
+                        ScopeKey = scopeKey
+                        Reason = reason
+                        Bytes = byteLen
+                        BlobLocation = location
+                    }
+                )
+                |> AuditRow.orRefuse
 
             match notifications with
             | Some ch ->

@@ -10,6 +10,11 @@ open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
 
+/// The row was refused: `Record` answered an `Error` (it never raises).
+let private expectRefused (record: unit -> Result<unit, AuditWriteError>) (message: string) =
+    Expect.isError (record ()) message
+
+
 // ─── Phase 553.A/D — the in-store permission-event hash chain ────────
 //
 // The acceptance this pack is written against, clause by clause:
@@ -133,14 +138,15 @@ let private recordGrants (grants: PermissionChangedPayload list) =
     let auditLog = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
 
     for g in grants do
-        auditLog.Record(scope, PermissionChanged g) |> Async.RunSynchronously
+        auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged g)
+        |> Async.RunSynchronously
 
     store, auditLog
 
 /// Read the chain back the way an auditor does — through the query
 /// seam, not from the writer's in-memory state.
 let private readChain (auditLog: IAuditLog) =
-    auditLog.GetAuditTrail(scope, None, Some PermissionAuditChain.chainedEventType)
+    auditLog.GetAuditTrail(AuditScope.shard scope, None, Some PermissionAuditChain.chainedEventType)
     |> Async.RunSynchronously
     |> PermissionAuditChain.permissionPayloads
 
@@ -400,10 +406,10 @@ let tests =
 
             let auditLog = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
 
-            auditLog.Record(scope, PermissionChanged(grant "alice" "Read"))
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged(grant "alice" "Read"))
             |> Async.RunSynchronously
 
-            auditLog.Record(scope, PermissionChanged(grant "bob" "Write"))
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged(grant "bob" "Write"))
             |> Async.RunSynchronously
 
             let summary = expectIntact (PermissionAuditChain.verify scope (readChain auditLog))
@@ -421,7 +427,7 @@ let tests =
                 AuditLog.EventStoreAuditLog(store, silentLogger, (fun () -> sink :> IMetricsSink), LogAndContinue)
                 :> IAuditLog
 
-            auditLog.Record(scope, PermissionChanged(grant "alice" "Read"))
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged(grant "alice" "Read"))
             |> Async.RunSynchronously
 
             Expect.equal store.Events.Length 1 "the audit row still landed — the action is not un-audited"
@@ -446,9 +452,13 @@ let tests =
                 AuditLog.EventStoreAuditLog(store, silentLogger, (fun () -> sink :> IMetricsSink), RefuseAction)
                 :> IAuditLog
 
-            Expect.throwsT<AuditLog.AuditWriteRefusedException>
+            expectRefused
                 (fun () ->
-                    auditLog.Record(scope, PermissionChanged(grant "alice" "Read"))
+                    auditLog.Record(
+                        AuditScope.shard scope,
+                        AuditSubject.system "test",
+                        PermissionChanged(grant "alice" "Read")
+                    )
                     |> Async.RunSynchronously)
                 "a deployment that would rather fail than be un-audited would rather fail than be un-evidenced"
 
@@ -495,7 +505,8 @@ let tests =
             // Reads throw in this store, so a non-permission event that
             // tried to read the head would refuse. It must not.
             auditLog.Record(
-                scope,
+                AuditScope.shard scope,
+                AuditSubject.system "test",
                 UserLoggedIn {
                     UserId = UserId "alice"
                     AuthProvider = "Header"
@@ -516,7 +527,9 @@ let tests =
             let preChained =
                 PermissionAuditChain.link scope PermissionAuditChain.genesisHash (grant "alice" "Read")
 
-            auditLog.Record(scope, PermissionChanged preChained) |> Async.RunSynchronously
+            auditLog.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged preChained)
+            |> Async.RunSynchronously
+
             let payloads = readChain auditLog
 
             Expect.equal
@@ -538,4 +551,96 @@ let tests =
                     Expect.equal summary.ChainedCount 2 "both records verified"
                 | PermissionAuditChain.ChainBrokenAt b -> failtestf "unexpected break %A at %d" b.Kind b.Position
             })
+        // ── Phase 1062 — the chain head is a document ─────────────────
+        testList "Phase 1062 — the permission chain head is a document" [
+            test "a mixed-era stream verifies: rows chained by the stream reader, then by the head document" {
+                let store = RecordingEventStore()
+
+                // The early era: no head document, the head derived from the
+                // stream on every permission row.
+                let streamEra = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
+
+                for g in [ grant "alice" "Read"; grant "bob" "Write" ] do
+                    Expect.equal
+                        (streamEra.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged g)
+                         |> Async.RunSynchronously)
+                        (Ok())
+                        "an early-era row lands"
+
+                // The document era, over the same stream: the head is seeded
+                // from the stream once and advanced by compare-and-swap.
+                let heads =
+                    ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
+
+                let documentEra =
+                    AuditLog.EventStoreAuditLog(store, silentLogger, chainHeadStorage = heads) :> IAuditLog
+
+                for g in [ grant "carol" "Read"; grant "dave" "Admin" ] do
+                    Expect.equal
+                        (documentEra.Record(AuditScope.shard scope, AuditSubject.system "test", PermissionChanged g)
+                         |> Async.RunSynchronously)
+                        (Ok())
+                        "a document-era row lands"
+
+                match PermissionAuditChain.verify scope (readChain documentEra) with
+                | PermissionAuditChain.ChainIntact summary ->
+                    Expect.equal summary.ChainedCount 4 "all four rows join one chain across the eras"
+                    Expect.equal summary.UnchainedCount 0 "nothing was recorded unchained"
+
+                    let headDoc =
+                        (heads :> ToolUp.Platform.BlobStorage.IBlobStorage)
+                            .Download(ScopeKey.PlatformContainer, $"audit-chain/{scope}.json")
+                        |> Async.RunSynchronously
+
+                    match headDoc, summary.Head with
+                    | Ok bytes, Some head ->
+                        Expect.stringContains
+                            (Text.Encoding.UTF8.GetString bytes)
+                            head
+                            "the head document names the verified head"
+                    | other -> failtestf "expected a head document and a verified head; got %A" other
+                | PermissionAuditChain.ChainBrokenAt b ->
+                    failtestf "unexpected break %A at %d: %s" b.Kind b.Position b.Detail
+            }
+
+            test "once seeded, a permission row reads no stream: the head comes from the document" {
+                let store = ReadFaultingEventStore()
+
+                let heads =
+                    ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
+
+                // Seed the document as an earlier writer would have.
+                let log =
+                    AuditLog.EventStoreAuditLog(
+                        store,
+                        silentLogger,
+                        failurePolicy = RefuseAction,
+                        chainHeadStorage = heads
+                    )
+                    :> IAuditLog
+
+                (heads :> ToolUp.Platform.BlobStorage.IBlobStorage)
+                    .Upload(
+                        ScopeKey.PlatformContainer,
+                        $"audit-chain/{scope}.json",
+                        Text.Encoding.UTF8.GetBytes $"{{\"head\":\"{PermissionAuditChain.genesisHash}\"}}"
+                    )
+                |> Async.RunSynchronously
+                |> ignore
+
+                // The store's stream reads fault: a write that needed one
+                // would refuse under RefuseAction. This one lands.
+                Expect.equal
+                    (log.Record(
+                        AuditScope.shard scope,
+                        AuditSubject.system "test",
+                        PermissionChanged(grant "alice" "Read")
+                     )
+                     |> Async.RunSynchronously)
+                    (Ok())
+                    "the head document answered; no stream scan was made"
+
+                Expect.equal store.Events.Length 1 "the row was written, chained onto the document's head"
+            }
+        ]
     ]

@@ -378,24 +378,24 @@ let private recordDenial (ctx: HttpContext) (verdict: string) (viaSignature: boo
 /// A deployment composing no `IAuditLog` emits nothing and pays nothing
 /// (GP 13), like every other optional seam this endpoint reaches for.
 let private recordDelivery (ctx: HttpContext) (container: string) (id: MediaId) (via: string) =
-    match service<IAuditLog> ctx with
-    | None -> ()
-    | Some log ->
-        let subjectKind, subjectId = AuditSubject.sanitise (subjectOf ctx)
+    let log = ToolUp.Platform.Config.Background.auditLogOf ctx
+    let subjectKind, subjectId = AuditSubject.sanitise (subjectOf ctx)
 
-        let payload: MediaKeyDeliveredPayload = {
-            MediaId = MediaId.value id
-            SubjectKind = subjectKind
-            SubjectId = subjectId
-            ScopeContainer = container
-            AdmissionRoute = via
-            At = DateTime.UtcNow
-        }
+    let payload: MediaKeyDeliveredPayload = {
+        MediaId = MediaId.value id
+        SubjectKind = subjectKind
+        SubjectId = subjectId
+        ScopeContainer = container
+        AdmissionRoute = via
+        At = DateTime.UtcNow
+    }
 
-        try
-            log.Record(container, MediaKeyDelivered payload) |> Async.Start
-        with _ ->
-            ()
+    try
+        log.Record(AuditScope.shard container, AuditSubject.fromSubject (subjectOf ctx), MediaKeyDelivered payload)
+        |> AuditRow.bestEffort
+        |> Async.Start
+    with _ ->
+        ()
 
 /// `GET /api/media/hls-key/{mediaId}` — the gated key endpoint.
 ///

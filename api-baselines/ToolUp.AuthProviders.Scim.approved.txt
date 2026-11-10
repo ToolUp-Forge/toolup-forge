@@ -30,8 +30,8 @@ ToolUp.AuthProviders.ScimHandler+ScimConfigModule.withBaseUrl(System.String, Too
 ToolUp.AuthProviders.ScimHandler+ScimConfigModule.withMapping(ToolUp.AuthProviders.ScimTypes+ScimAttributeMapping, ToolUp.AuthProviders.ScimHandler+ScimConfig) : ToolUp.AuthProviders.ScimHandler+ScimConfig
 ToolUp.AuthProviders.ScimHandler+ScimConfigModule.withSecret(System.String, System.String, ToolUp.AuthProviders.ScimHandler+ScimConfig) : ToolUp.AuthProviders.ScimHandler+ScimConfig
 ToolUp.AuthProviders.ScimHandler+ScimDeps (class)
-ToolUp.AuthProviders.ScimHandler+ScimDeps..ctor(ToolUp.Platform.Config.TeamManagement+ITeamStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.PermissionStore+IPermissionStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], ToolUp.AuthProviders.ScimHandler+ScimConfig)
-ToolUp.AuthProviders.ScimHandler+ScimDeps.Audit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
+ToolUp.AuthProviders.ScimHandler+ScimDeps..ctor(ToolUp.Platform.Config.TeamManagement+ITeamStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.PermissionStore+IPermissionStore], ToolUp.Platform.IAuditLog, ToolUp.AuthProviders.ScimHandler+ScimConfig)
+ToolUp.AuthProviders.ScimHandler+ScimDeps.Audit : ToolUp.Platform.IAuditLog { get }
 ToolUp.AuthProviders.ScimHandler+ScimDeps.Config : ToolUp.AuthProviders.ScimHandler+ScimConfig { get }
 ToolUp.AuthProviders.ScimHandler+ScimDeps.Permissions : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.PermissionStore+IPermissionStore] { get }
 ToolUp.AuthProviders.ScimHandler+ScimDeps.Teams : ToolUp.Platform.Config.TeamManagement+ITeamStore { get }

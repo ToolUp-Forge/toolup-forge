@@ -182,38 +182,36 @@ module private ConsentAudit =
 
     let emit
         (warn: string -> exn -> unit)
-        (auditLog: IAuditLog option)
+        (auditLog: IAuditLog)
         (scopeId: string)
         (kind: string)
         (record: ConsentRecord)
         : unit =
-        match auditLog with
-        | None -> ()
-        | Some log ->
-            let payload =
-                Map [
-                    "subject", record.Subject
-                    "granted", categoryList record.Granted
-                    "denied", categoryList record.Denied
-                    "source", string record.Source
-                ]
+        let payload =
+            Map [
+                "subject", record.Subject
+                "granted", categoryList record.Granted
+                "denied", categoryList record.Denied
+                "source", string record.Source
+            ]
 
-            let event =
-                AuditEvent.RemotingMethodAudited {
-                    Kind = kind
-                    MethodName = "ConsentStateStore.Upsert"
-                    SubjectId = record.Subject
-                    CorrelationId = None
-                    Payload = payload
-                }
+        let event =
+            AuditEvent.RemotingMethodAudited {
+                Kind = kind
+                MethodName = "ConsentStateStore.Upsert"
+                SubjectId = record.Subject
+                CorrelationId = None
+                Payload = payload
+            }
 
-            // Fire-and-forget — never block / fail the consent write.
-            let what = sprintf "%s audit" kind
+        // Fire-and-forget — never block / fail the consent write.
+        let what = sprintf "%s audit" kind
 
-            try
-                log.Record(scopeId, event) |> Background.startAudit warn what
-            with ex ->
-                warn what ex
+        try
+            auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "ConsentStateStore", event)
+            |> Background.startAuditRow warn what
+        with ex ->
+            warn what ex
 
 // ─── Withdrawal helper (shared by both impls) ─────────────────────
 
@@ -243,14 +241,18 @@ module private Withdrawal =
 /// logs a Warning naming it, never failing the write or the host. The
 /// internal primary constructor carries the logger; the public one logs
 /// to the SDK's default `ConsoleLogger`, so the store is never silent.
-type InMemoryConsentStateStore internal (auditLog: IAuditLog option, logger: ILogger) =
+type InMemoryConsentStateStore internal (auditLog: IAuditLog, logger: ILogger) =
     let store = ConcurrentDictionary<string * string, ConsentRecord>()
 
     let warn =
         Background.writeFailureLogger "InMemoryConsentStateStore" (Some logger) "" "the consent write"
 
     /// The public constructor: the default `ConsoleLogger` (see the type's doc).
-    new(?auditLog: IAuditLog) = InMemoryConsentStateStore(auditLog, ConsoleLogger.ConsoleLogger() :> ILogger)
+    new(?auditLog: IAuditLog) =
+        InMemoryConsentStateStore(
+            defaultArg auditLog (NoOpAuditLog() :> IAuditLog),
+            ConsoleLogger.ConsoleLogger() :> ILogger
+        )
 
     interface IConsentStateStore with
         member _.Upsert(scopeId, record) = async {
@@ -307,13 +309,17 @@ type InMemoryConsentStateStore internal (auditLog: IAuditLog option, logger: ILo
 /// logs a Warning naming it, never failing the write or the host. The
 /// internal primary constructor carries the logger; the public one logs
 /// to the SDK's default `ConsoleLogger`, so the store is never silent.
-type EntityBackedConsentStateStore internal (entityStore: IEntityStore, auditLog: IAuditLog option, logger: ILogger) =
+type EntityBackedConsentStateStore internal (entityStore: IEntityStore, auditLog: IAuditLog, logger: ILogger) =
     let warn =
         Background.writeFailureLogger "EntityBackedConsentStateStore" (Some logger) "" "the consent write"
 
     /// The public constructor: the default `ConsoleLogger` (see the type's doc).
     new(entityStore: IEntityStore, ?auditLog: IAuditLog) =
-        EntityBackedConsentStateStore(entityStore, auditLog, ConsoleLogger.ConsoleLogger() :> ILogger)
+        EntityBackedConsentStateStore(
+            entityStore,
+            defaultArg auditLog (NoOpAuditLog() :> IAuditLog),
+            ConsoleLogger.ConsoleLogger() :> ILogger
+        )
 
     interface IConsentStateStore with
         member _.Upsert(scopeId, record) = async {
@@ -360,13 +366,9 @@ type EntityBackedConsentStateStore internal (entityStore: IEntityStore, auditLog
 
 module ConsentStateStore =
     /// Construct the in-memory dev-only store.
-    let inMemory (auditLog: IAuditLog option) : IConsentStateStore =
-        match auditLog with
-        | Some log -> InMemoryConsentStateStore(log) :> _
-        | None -> InMemoryConsentStateStore() :> _
+    let inMemory (auditLog: IAuditLog) : IConsentStateStore =
+        InMemoryConsentStateStore(auditLog) :> _
 
     /// Construct the durable entity-backed store over an `IEntityStore`.
-    let entityBacked (entityStore: IEntityStore) (auditLog: IAuditLog option) : IConsentStateStore =
-        match auditLog with
-        | Some log -> EntityBackedConsentStateStore(entityStore, log) :> _
-        | None -> EntityBackedConsentStateStore(entityStore) :> _
+    let entityBacked (entityStore: IEntityStore) (auditLog: IAuditLog) : IConsentStateStore =
+        EntityBackedConsentStateStore(entityStore, auditLog) :> _

@@ -26,8 +26,6 @@ open ToolUp.Platform.Config
 // `ToolUp.Platform.ConsentEvent` verbatim — the wire is the same
 // record type the client serialises.
 
-let private PlatformScope = ScopeKey.PlatformContainer
-
 let private jsonOptions = PlatformJson.options
 
 let private consentHandler: HttpHandler =
@@ -54,8 +52,12 @@ let private consentHandler: HttpHandler =
                     Background.writeFailureWarner "ConsentApiHandler" (Background.requestLogger ctx) ctx
 
                 try
-                    auditLog.Record(PlatformScope, AuditEvent.ConsentRecorded ev)
-                    |> Background.startAudit warn "ConsentRecorded audit"
+                    auditLog.Record(
+                        AuditScope.platform,
+                        Background.requestActor "ConsentApi" ctx,
+                        AuditEvent.ConsentRecorded ev
+                    )
+                    |> Background.startAuditRow warn "ConsentRecorded audit"
                 with ex ->
                     warn "ConsentRecorded audit" ex
             | _ -> ()

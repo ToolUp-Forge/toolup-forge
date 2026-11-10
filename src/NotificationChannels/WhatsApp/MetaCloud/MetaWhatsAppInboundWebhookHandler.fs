@@ -317,7 +317,8 @@ type MetaWhatsAppInboundWebhookHandler
             for scopeId, recipients in targets do
                 do!
                     auditLog.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "WhatsAppInboundWebhook",
                         NotificationDeliveryFailed {
                             UserId = UserId "system"
                             ScopeId = scopeId
@@ -329,6 +330,7 @@ type MetaWhatsAppInboundWebhookHandler
                             CorrelationId = status.CorrelationId
                         }
                     )
+                    |> AuditRow.orRefuse
 
             return true
     }

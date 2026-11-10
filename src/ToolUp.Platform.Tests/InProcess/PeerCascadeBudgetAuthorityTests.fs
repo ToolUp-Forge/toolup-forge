@@ -91,9 +91,14 @@ type private CapturingAuditLog() =
             |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(_, audit) = async { lock events (fun () -> events.Add audit) }
+        member _.Record(AuditScope.StreamKey _, _actor, audit) = async {
+            lock events (fun () -> events.Add audit)
+            return Ok()
+        }
 
-        member _.GetAuditTrail(_, _, _) = async { return lock events (fun () -> List.ofSeq events) }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
+            return lock events (fun () -> List.ofSeq events)
+        }
 
 let private callerId: PeerIdentity = {
     PeerId = "buyer"

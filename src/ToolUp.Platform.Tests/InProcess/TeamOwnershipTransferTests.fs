@@ -76,13 +76,15 @@ type private CapturingAuditLog() =
     }
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             lock gate (fun () ->
                 recorded.Add((scopeId, audit))
                 Threading.Monitor.PulseAll gate)
+
+            return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 

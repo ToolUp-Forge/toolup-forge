@@ -79,7 +79,8 @@ type HostActionAuditHook(auditLog: IAuditLog, logger: ILogger, ?now: unit -> Dat
 
                     do!
                         auditLog.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.fromSubject principal,
                             HostActionDispatched {
                                 SubjectKind = kind
                                 SubjectId = subjectId
@@ -91,6 +92,7 @@ type HostActionAuditHook(auditLog: IAuditLog, logger: ILogger, ?now: unit -> Dat
                                 OccurredAt = clock ()
                             }
                         )
+                        |> AuditRow.orRefuse
                 with ex ->
                     // Best-effort — an audit-write failure must not affect the
                     // action the caller is about to perform.

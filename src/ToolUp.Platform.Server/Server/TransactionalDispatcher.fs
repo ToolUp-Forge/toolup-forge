@@ -238,7 +238,13 @@ let private runDelivery
                     CorrelationId = correlationId
                 }
 
-                do! auditLog.Record(envelope.ScopeId, NotificationSilentlySkipped payload)
+                do!
+                    auditLog.Record(
+                        AuditScope.shard envelope.ScopeId,
+                        AuditSubject.system "TransactionalDispatcher",
+                        NotificationSilentlySkipped payload
+                    )
+                    |> AuditRow.orRefuse
             else
                 let recipientUserIds, correlationId = auditFieldsOf envelope.Notification
                 let mutable attempt = 1
@@ -264,7 +270,8 @@ let private runDelivery
 
                         do!
                             auditLog.Record(
-                                envelope.ScopeId,
+                                AuditScope.shard envelope.ScopeId,
+                                AuditSubject.system "TransactionalDispatcher",
                                 NotificationSent {
                                     UserId = UserId SystemActorId
                                     ScopeId = envelope.ScopeId
@@ -275,6 +282,7 @@ let private runDelivery
                                     CorrelationId = correlationId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         terminate <- true
                     | SinkResult.Skipped reason ->
@@ -305,7 +313,8 @@ let private runDelivery
 
                             do!
                                 auditLog.Record(
-                                    envelope.ScopeId,
+                                    AuditScope.shard envelope.ScopeId,
+                                    AuditSubject.system "TransactionalDispatcher",
                                     NotificationDeliveryFailed {
                                         UserId = UserId SystemActorId
                                         ScopeId = envelope.ScopeId
@@ -317,6 +326,7 @@ let private runDelivery
                                         CorrelationId = correlationId
                                     }
                                 )
+                                |> AuditRow.orRefuse
                     | SinkResult.PermanentFailure error ->
                         logger.Error(
                             $"%s{LogPrefix} delivery_failed scope=%s{envelope.ScopeId} kind=%s{sinkKindWire} provider=%s{sink.Provider} attempts=%d{attempt} error=%s{error}",
@@ -325,7 +335,8 @@ let private runDelivery
 
                         do!
                             auditLog.Record(
-                                envelope.ScopeId,
+                                AuditScope.shard envelope.ScopeId,
+                                AuditSubject.system "TransactionalDispatcher",
                                 NotificationDeliveryFailed {
                                     UserId = UserId SystemActorId
                                     ScopeId = envelope.ScopeId
@@ -337,6 +348,7 @@ let private runDelivery
                                     CorrelationId = correlationId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         terminate <- true
         finally
@@ -483,7 +495,8 @@ type TransactionalDispatcher
                                 (async {
                                     return!
                                         auditLog.Record(
-                                            task.Envelope.ScopeId,
+                                            AuditScope.shard task.Envelope.ScopeId,
+                                            AuditSubject.system "TransactionalDispatcher",
                                             NotificationDeliveryFailed {
                                                 UserId = UserId SystemActorId
                                                 ScopeId = task.Envelope.ScopeId
@@ -495,6 +508,7 @@ type TransactionalDispatcher
                                                 CorrelationId = correlationId
                                             }
                                         )
+                                        |> AuditRow.orRefuse
                                 })
         with
         | :? OperationCanceledException -> ()

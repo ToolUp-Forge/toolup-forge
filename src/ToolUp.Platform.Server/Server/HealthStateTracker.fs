@@ -193,7 +193,13 @@ let runTick
                     // probes are deployment-wide, not team-scoped.
                     // Mirrors the scope choice used by Phase 9b's
                     // job lifecycle events.
-                    do! auditLog.Record(ScopeKey.PlatformContainer, HealthStateChanged payload)
+                    do!
+                        auditLog.Record(
+                            AuditScope.platform,
+                            AuditSubject.system "HealthStateTracker",
+                            HealthStateChanged payload
+                        )
+                        |> AuditRow.orRefuse
     }
 
 /// `BackgroundService` host for the periodic tracker. The tick body is

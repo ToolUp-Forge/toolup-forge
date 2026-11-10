@@ -212,7 +212,7 @@ let resolveBlobArm (name: string) : Result<BlobArm, string> =
                         ConnectionString = connectionString
                         RootContainer = "toolup-load-" + Guid.NewGuid().ToString("N").Substring(0, 12)
                         ConnectionStringProvider = None
-                        AuditLog = None
+                        AuditLog = ToolUp.Platform.NoOpAuditLog()
                     }
                 // The container is unique per run; the emulator is torn
                 // down with the lane (`docker compose ... down -v`).

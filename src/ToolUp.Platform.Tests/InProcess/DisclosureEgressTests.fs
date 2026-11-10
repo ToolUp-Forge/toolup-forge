@@ -552,7 +552,7 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
-    AuditLog = None
+    AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
     MarkIngestionFailed = fun _ _ _ -> async.Return()

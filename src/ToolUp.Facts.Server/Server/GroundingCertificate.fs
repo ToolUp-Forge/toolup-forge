@@ -705,27 +705,26 @@ module GroundingCertificate =
     /// certificate's OWN `IssuedAt`, not the log write's clock, so the row
     /// and the document can never disagree about when the thing happened.
     let private recordIssuance
-        (audit: IAuditLog option)
+        (audit: IAuditLog)
         (scopeId: string)
         (seal: string)
         (body: GroundingCertificateBody)
         : Async<unit> =
         async {
-            match audit with
-            | None -> return ()
-            | Some audit ->
-                return!
-                    audit.Record(
-                        scopeId,
-                        AuditEvent.CertificateIssued {
-                            Digest = certificateDigest body
-                            Subject = body.Root
-                            KeyId = body.DeploymentKeyId
-                            Seal = seal
-                            Format = body.Format
-                            OccurredAt = body.IssuedAt
-                        }
-                    )
+            return!
+                audit.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.system "GroundingCertificate",
+                    AuditEvent.CertificateIssued {
+                        Digest = certificateDigest body
+                        Subject = body.Root
+                        KeyId = body.DeploymentKeyId
+                        Seal = seal
+                        Format = body.Format
+                        OccurredAt = body.IssuedAt
+                    }
+                )
+                |> AuditRow.orRefuse
         }
 
     /// Verify a certificate **offline** (Phase 565.C): needs only the
@@ -952,7 +951,7 @@ module GroundingCertificate =
     /// not composed by `FactsCompose` today (GP 13), and an issuance that
     /// happened to travel the path a composition root wired by hand would
     /// otherwise be the one issuance the log could not see.
-    type private DefaultIssuer(builder: CertificateBuilder, signer: IArtefactSigner option, audit: IAuditLog option) =
+    type private DefaultIssuer(builder: CertificateBuilder, signer: IArtefactSigner option, audit: IAuditLog) =
 
         interface IGroundingCertificateIssuer with
             member _.Issue(scope, principal, subject, depth) = async {
@@ -972,8 +971,7 @@ module GroundingCertificate =
     /// The attested issuer: seals the built body through the application
     /// signing seam, so the purpose and the signer's attestation level are
     /// framed into the signed bytes alongside the body.
-    type private AttestedIssuer(builder: CertificateBuilder, signer: IApplicationSigner option, audit: IAuditLog option)
-        =
+    type private AttestedIssuer(builder: CertificateBuilder, signer: IApplicationSigner option, audit: IAuditLog) =
 
         interface IAttestedGroundingCertificateIssuer with
             member _.Issue(scope, principal, subject, depth) = async {
@@ -1001,7 +999,7 @@ module GroundingCertificate =
         (signer: IArtefactSigner option)
         (clock: unit -> DateTime)
         : IGroundingCertificateIssuer =
-        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, None)
+        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, NoOpAuditLog())
         :> IGroundingCertificateIssuer
 
     /// The issuer with a UTC wall-clock — the composition default.
@@ -1032,7 +1030,7 @@ module GroundingCertificate =
         (audit: IAuditLog)
         (clock: unit -> DateTime)
         : IGroundingCertificateIssuer =
-        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, Some audit)
+        DefaultIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, audit)
         :> IGroundingCertificateIssuer
 
     /// The logging direct-path issuer with a UTC wall-clock — what
@@ -1061,7 +1059,7 @@ module GroundingCertificate =
         (signer: IApplicationSigner option)
         (clock: unit -> DateTime)
         : IAttestedGroundingCertificateIssuer =
-        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, None)
+        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, NoOpAuditLog())
         :> IAttestedGroundingCertificateIssuer
 
     /// The attested issuer with a UTC wall-clock — the composition default.
@@ -1090,7 +1088,7 @@ module GroundingCertificate =
         (audit: IAuditLog)
         (clock: unit -> DateTime)
         : IAttestedGroundingCertificateIssuer =
-        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, Some audit)
+        AttestedIssuer(CertificateBuilder(graph, store, gate, events, clock), signer, audit)
         :> IAttestedGroundingCertificateIssuer
 
     /// The logging attested issuer with a UTC wall-clock.
@@ -1186,7 +1184,7 @@ module GroundingCertificate =
     let auditTrailLog (audit: IAuditLog) : ICertificateIssuanceLog =
         { new ICertificateIssuanceLog with
             member _.Issued(scopeId) = async {
-                let! events = audit.GetAuditTrail(scopeId, None, Some "CertificateIssued")
+                let! events = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "CertificateIssued")
                 return Ok(issuancesOf events)
             }
         }
@@ -1215,7 +1213,7 @@ module GroundingCertificate =
                 match! integrity () with
                 | Error reason -> return Error reason
                 | Ok() ->
-                    let! events = audit.GetAuditTrail(scopeId, None, Some "CertificateIssued")
+                    let! events = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "CertificateIssued")
                     return Ok(issuancesOf events)
             }
         }
