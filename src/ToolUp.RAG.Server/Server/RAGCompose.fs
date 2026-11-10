@@ -46,6 +46,7 @@ open ToolUp.RAG.CachingEmbeddingProvider
 open ToolUp.RAG.RetrievalPipeline
 open ToolUp.RAG.IngestionService
 open ToolUp.RAG.RAGPromptBuilder
+open ToolUp.RAG.VectorisationHook
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Usage
 open ToolUp.Platform.Config
@@ -207,470 +208,6 @@ type LiveInterfaceContributor(summary: DeploymentReadiness.LiveInterfaceSummary)
 
             return "Live interface", box payload
         }
-
-// ─── Post-save vectorisation hook ────────────────────────────────
-
-/// Build the file-save hook that enqueues processed data for vectorisation.
-/// Looks up the `VectorisationHandler` for the file's data type, generates
-/// chunks, and enqueues a single `DocumentIngestionJob` carrying all of
-/// them. The background service then issues one batched embedding call per
-/// document — see `IngestionBackgroundService` for the cache-warming flow.
-///
-/// When the queue is at capacity, `Enqueue` returns `false`. Because the
-/// drainer (`IngestionBackgroundService`) may simply be behind, we retry
-/// with a short bounded backoff (`enqueueRetryDelaysMs`) before giving up
-/// — most transient saturation clears within that window. The post-save
-/// hook is fire-and-forget (runs after `AddFile` already returned HTTP
-/// 200), so the backoff sleeps never delay the user's upload response.
-/// Only after the retries are exhausted is the document dropped: we log at
-/// `Error` AND write a `DocumentVectorisationDropped` event so the
-/// otherwise-silent loss ("data manager file lands but is not indexed") is
-/// queryable alongside the `DocumentVectorisationSkipped` / `DocumentRejected`
-/// events. KB's own enqueue sites (`UploadDocument`, `AddNote`,
-/// `UpdateNote`, `IngestNarrative`) additionally mark the document `Failed`
-/// so the user sees the rejection in the KB UI; the Data-Manager client
-/// badge for the same is a roadmap follow-on.
-/// Bounded backoff delays (ms) for re-attempting a full ingestion queue.
-/// One entry per retry after the initial attempt — five total tries over
-/// ~1.85s. Runs on the fire-and-forget post-save path, so this does not
-/// add latency to the upload response.
-let private enqueueRetryDelaysMs: int list = [ 100; 250; 500; 1000 ]
-
-/// Sustained-saturation threshold for
-/// `IngestionOverflowPolicy.Refuse`. Once this many documents have been
-/// dropped inside the queue's rolling 60s window, `Refuse` raises
-/// `ConfigPreflightFailedException` from the drop path. A handful of drops
-/// in a minute already means the queue stayed full through the ~1.85s
-/// bounded retry repeatedly — genuine sustained pressure, not a one-off
-/// spike.
-[<Literal>]
-let private refuseSaturationThreshold = 5
-
-/// Emit the drop-observability triple for one document the
-/// ingestion queue could not accept: record it on the queue's `Dropped`
-/// counters, write a `KnowledgeIngestionDropped` audit under
-/// `_platform.knowledge` (deployment-wide, like the corrupt-index trail),
-/// and publish a Warning `SystemMessage` to the uploading user (when the
-/// enqueue carried a user attribution) so the client can surface "this
-/// document could not be indexed — try again in a moment". Both the audit
-/// log and the notification channel are optional / best-effort — a
-/// channel-less / audit-less deployment still bumps the queue counter and
-/// leaves the caller's `Error` log line (GP 13). Mirrors the
-/// `InMemoryVectorStore` corrupt-index emission shape. `scopeKey` is the
-/// vector-store scope key (`platform` / `deployment` / `team:{id}`),
-/// matching `KnowledgeIndexLoadFailedPayload.ScopeKey`.
-let emitIngestionDrop
-    (auditLog: IAuditLog)
-    (notifications: INotificationChannel option)
-    (queue: IngestionQueue)
-    (logger: ILogger)
-    (scopeKey: string)
-    (docId: string)
-    (chunkCount: int)
-    (reason: string)
-    (originatingUserId: UserId option)
-    : Async<unit> =
-    async {
-        queue.RecordDrop()
-
-        try
-            do!
-                auditLog.Record(
-                    AuditScope.shard KnowledgeSourceModule.value,
-                    AuditSubject.system "IngestionQueue",
-                    RagAuditEvent.event (
-                        KnowledgeIngestionDropped {
-                            ScopeKey = scopeKey
-                            DocId = docId
-                            ChunkCount = chunkCount
-                            QueueCapacity = queue.Capacity
-                            Reason = reason
-                        }
-                    )
-                )
-                |> AuditRow.orRefuse
-        with ex ->
-            logger.Warn(sprintf "[RAGCompose] KnowledgeIngestionDropped audit write failed for %s: %s" docId ex.Message)
-
-        match notifications, originatingUserId with
-        | Some ch, Some uid ->
-            try
-                let text =
-                    sprintf
-                        "\"%s\" could not be indexed for search right now — the ingestion queue is saturated. The file is saved; re-upload it in a moment to index it for retrieval."
-                        docId
-
-                do! ch.Publish(uid.Value, Notification.SystemMessage(SystemMessageLevel.Warning, text))
-            with ex ->
-                logger.Warn(sprintf "[RAGCompose] ingestion-drop notification failed for %s: %s" docId ex.Message)
-        | _ -> ()
-    }
-
-let internal makeVectorisationHook
-    (handlers: VectorisationHandler list)
-    (queue: IngestionQueue)
-    (telemetry: IRagTelemetry)
-    (enableSummaries: bool)
-    (maxChunkBytes: int option)
-    (maxDocumentBytes: int option)
-    (eventStore: IEventStore)
-    (ingestionStatusStore: IIngestionStatusStore)
-    (ingestionAttempts: IIngestionAttemptStore)
-    (overflowPolicy: IngestionOverflowPolicy)
-    (auditLog: IAuditLog)
-    (notifications: INotificationChannel)
-    (logger: ILogger)
-    : ProcessedData * ProcessedFileEntry * StorageScope * string -> Async<unit> =
-
-    let jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
-
-    // Write the per-file ingestion status alongside the
-    // `DocumentVectorisation{Skipped,Rejected,Dropped}` events these arms
-    // already emit, so the Data Manager badge surfaces *why* a file
-    // isn't searchable. Best-effort (mirrors `writeEvent`): a status-store
-    // outage degrades to a missing badge, never an escaping exception on
-    // the fire-and-forget post-save path.
-    let setStatus (scopeId: string) (documentId: string) (status: FileIngestionStatus) = async {
-        try
-            do! ingestionStatusStore.Set(scopeId, documentId, status)
-        with ex ->
-            logger.Warn(sprintf "[RAGCompose] ingestion-status write failed for %s: %s" documentId ex.Message)
-    }
-
-    // Begin the file's attempt BEFORE the enqueue, so the first chunk
-    // callback finds it (and its total) persisted. Best-effort like the
-    // status writes: an outage leaves the badge where it was.
-    let beginAttempt (scopeId: string) (documentId: string) (enqueuedChunks: int) = async {
-        let attempt: IngestionAttempt = {
-            AttemptId = System.Guid.NewGuid().ToString("N")
-            EnqueuedChunks = enqueuedChunks
-        }
-
-        try
-            do! ingestionAttempts.Begin(scopeId, documentId, attempt.AttemptId, enqueuedChunks)
-        with ex ->
-            logger.Warn(sprintf "[RAGCompose] ingestion attempt write failed for %s: %s" documentId ex.Message)
-
-        return attempt
-    }
-
-    let writeEvent (scopeId: string) (eventName: string) (payload: obj) = async {
-        try
-            let json = System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions)
-            let evt = Events.create scopeId "ToolUp.RAG" eventName json
-            do! EventStore.writeOrRaise eventStore evt
-        with ex ->
-            logger.Warn(sprintf "[RAGCompose] event-write failed for %s: %s" eventName ex.Message)
-    }
-
-    let utf8ByteLen (s: string) =
-        if isNull s then
-            0
-        else
-            System.Text.Encoding.UTF8.GetByteCount s
-
-    fun (processedData, entry, scope, createdBy) -> async {
-        match handlers |> List.tryFind (fun h -> h.DataTypeId = entry.DataType) with
-        | None ->
-            // Wave 1 Gap #3 — surface the silent drop. Previously this
-            // path was `()`: the file was saved, KB marked the doc
-            // uploaded, but no chunks ever reached retrieval and the
-            // user got no signal. Warn + audit event so KB can render
-            // an "unsupported format" badge and ops dashboards can
-            // alert on the rate.
-            logger.Warn(
-                sprintf
-                    "[RAGCompose] No VectorisationHandler registered for DataType '%s' (file %s). The file is saved but will NOT be indexed for retrieval."
-                    entry.DataType
-                    entry.FileName
-            )
-
-            do!
-                writeEvent scope.ScopeId "DocumentVectorisationSkipped" {|
-                    DocumentId = entry.FileName
-                    FileName = entry.FileName
-                    DataType = entry.DataType
-                    Reason = "no VectorisationHandler registered for this DataType"
-                    Container = scope.Container
-                |}
-
-            do!
-                setStatus
-                    scope.Container
-                    entry.FileName
-                    (FileIngestionStatus.Failed(sprintf "no handler for type %s" entry.DataType))
-        | Some handler ->
-            let chunks = handler.Vectorise processedData
-
-            if not chunks.IsEmpty then
-                // The vector scope is the one the storage container names
-                // (GP 4): a per-user container's chunks stay in that
-                // caller's `User` scope, never `Deployment`.
-                let vectorScope = VectorScope.ofContainer scope
-
-                // Keyed by the file name in the chunk-id grammar.
-                let basePairs =
-                    chunks
-                    |> List.mapi (fun i chunk ->
-                        ChunkId.render {
-                            DocumentId = entry.FileName
-                            Ordinal = i
-                        },
-                        chunk)
-
-                // Optional document-level summary (WS4.1). When the
-                // handler exposes a `Summarise` and the deployment hasn't
-                // disabled it, call it here and append the result with
-                // `_isSummary = "true"` so retrieval can boost it. The
-                // call lives in the post-save path (not inside
-                // `IngestionBackgroundService`) because it's per-document
-                // by nature — repeating it for each chunk would defeat
-                // the purpose.
-                let! summaryPair =
-                    match handler.Summarise, enableSummaries with
-                    | Some f, true -> async {
-                        try
-                            let! summary = f processedData
-
-                            match summary with
-                            | None -> return None
-                            | Some chunk ->
-                                let stamped = {
-                                    chunk with
-                                        Metadata = chunk.Metadata |> Map.add ChunkMetadata.IsSummaryKey "true"
-                                }
-
-                                let id = $"{entry.FileName}:summary"
-                                return Some(id, stamped)
-                        with ex ->
-                            logger.Warn
-                                $"[RAGCompose] Document summary failed for {entry.FileName}: {ex.Message} — indexing without summary chunk."
-
-                            return None
-                      }
-                    | _ -> async.Return None
-
-                let chunkPairs =
-                    match summaryPair with
-                    | Some pair -> basePairs @ [ pair ]
-                    | None -> basePairs
-
-                // Wave 2B Gap #6 — optional per-chunk / per-document size
-                // bound. Default is `None` (no limit, historical behaviour).
-                // When set, refuse the document at the post-save hook and
-                // emit `RAG.DocumentRejected` so KB / dashboards can see
-                // the rejection rate. Cheaper to compute byte counts
-                // once here than to discover an OOM mid-pipeline.
-                let chunkSizes = chunkPairs |> List.map (fun (_, c) -> utf8ByteLen c.Content)
-
-                let totalBytes = chunkSizes |> List.sum
-
-                let oversizeChunk =
-                    match maxChunkBytes with
-                    | Some limit -> chunkSizes |> List.exists (fun n -> n > limit)
-                    | None -> false
-
-                let oversizeDoc =
-                    match maxDocumentBytes with
-                    | Some limit -> totalBytes > limit
-                    | None -> false
-
-                if oversizeChunk || oversizeDoc then
-                    let reason =
-                        if oversizeChunk && oversizeDoc then
-                            "chunk and document size limits exceeded"
-                        elif oversizeChunk then
-                            sprintf
-                                "one or more chunks exceed MaxChunkBytes (%d) — largest = %d bytes"
-                                (Option.defaultValue 0 maxChunkBytes)
-                                (List.max chunkSizes)
-                        else
-                            sprintf
-                                "document total %d bytes exceeds MaxDocumentBytes (%d)"
-                                totalBytes
-                                (Option.defaultValue 0 maxDocumentBytes)
-
-                    logger.Error(
-                        sprintf
-                            "[RAGCompose] DROPPED vectorisation for %s — %s. The file is saved but is not indexed; raise the limit via RagOptions.withMaxChunkBytes / withMaxDocumentBytes, or split the document upstream."
-                            entry.FileName
-                            reason,
-                        None
-                    )
-
-                    do!
-                        writeEvent scope.ScopeId "DocumentRejected" {|
-                            DocumentId = entry.FileName
-                            FileName = entry.FileName
-                            Container = scope.Container
-                            ChunkCount = List.length chunkPairs
-                            TotalBytes = totalBytes
-                            MaxChunkBytes = maxChunkBytes
-                            MaxDocumentBytes = maxDocumentBytes
-                            Reason = reason
-                        |}
-
-                    do! setStatus scope.Container entry.FileName (FileIngestionStatus.Failed reason)
-                else
-
-                    let chunkCount = List.length chunkPairs
-                    let! attempt = beginAttempt scope.Container entry.FileName chunkCount
-
-                    let job: DocumentIngestionJob = {
-                        DocumentId = entry.FileName
-                        DocumentName = entry.FileName
-                        Chunks = chunkPairs
-                        Scope = vectorScope
-                        ScopeId = scope.ScopeId
-                        Container = scope.Container
-                        // The post-save hook fires from session-file storage
-                        // with no per-request `AccessContext` in scope, but
-                        // `AddFile` threads the uploading user's id through the
-                        // hook tuple as `createdBy`, so the ingestion job is
-                        // attributed to the actual user rather than left
-                        // anonymous. An empty/whitespace id (e.g. the "system"
-                        // hydration path) falls back to `None`, preserving the
-                        // historical publish-to-UploadedBy behaviour for
-                        // observers (Wave 2B Gap #7).
-                        OriginatingUserId =
-                            if System.String.IsNullOrWhiteSpace createdBy then
-                                None
-                            else
-                                Some(UserId createdBy)
-                        Attempt = Some attempt
-                    }
-
-                    // Bounded retry: a full queue is often just the drainer
-                    // running behind, so a short backoff usually clears space
-                    // rather than dropping the document. Fire-and-forget path,
-                    // so the sleeps don't delay the upload response.
-                    // `EnqueueAsync`, not `Enqueue`: on a durable
-                    // queue the append is I/O, and this path is already
-                    // inside an async workflow, so there is no reason to
-                    // block a thread on it.
-                    let rec tryEnqueue (delays: int list) = async {
-                        let! accepted = queue.EnqueueAsync job
-
-                        if accepted then
-                            return true
-                        else
-                            match delays with
-                            | [] -> return false
-                            | d :: rest ->
-                                do! Async.Sleep d
-                                return! tryEnqueue rest
-                    }
-
-                    let scopeKey = VectorScope.key vectorScope
-
-                    match overflowPolicy with
-                    | Block ->
-                        // Never drop. Await queue space instead of
-                        // retrying-then-dropping; the upload response has already
-                        // returned, so the wait delays indexing under sustained
-                        // load but never loses a document.
-                        do! queue.EnqueueBlocking job
-                        telemetry.RecordEnqueue(queue.Count, queue.Capacity, true)
-                    | DropWrite
-                    | Refuse ->
-                        let! accepted = tryEnqueue enqueueRetryDelaysMs
-                        telemetry.RecordEnqueue(queue.Count, queue.Capacity, accepted)
-
-                        if not accepted then
-                            // Retries exhausted — permanent data loss for this
-                            // document's searchability. Log at Error so it trips
-                            // error-rate alerting, AND write an event so the drop
-                            // is queryable per-document in the RAG event trail
-                            // (symmetric with DocumentVectorisationSkipped /
-                            // DocumentRejected), not just in the telemetry snapshot.
-                            let attempts = List.length enqueueRetryDelaysMs + 1
-                            let reason = "ingestion queue full after bounded retry"
-
-                            logger.Error(
-                                $"[RAGCompose] Ingestion queue full ({queue.Count}/{queue.Capacity}) after {attempts} attempts — DROPPED vectorisation for {entry.FileName}. The file is saved but is permanently unsearchable until re-uploaded. Raise IngestionQueueCapacity (RagOptions.withIngestionQueueCapacity) or IngestionConcurrency if drops recur.",
-                                None
-                            )
-
-                            do!
-                                writeEvent scope.ScopeId "DocumentVectorisationDropped" {|
-                                    DocumentId = entry.FileName
-                                    FileName = entry.FileName
-                                    Container = scope.Container
-                                    ChunkCount = chunkCount
-                                    QueueDepth = queue.Count
-                                    QueueCapacity = queue.Capacity
-                                    Attempts = attempts
-                                    Reason = reason
-                                |}
-
-                            // Deployment-wide `KnowledgeIngestionDropped`
-                            // audit + Warning `SystemMessage` to the uploader +
-                            // queue `Dropped` counters (rolling 60s + cumulative,
-                            // surfaced on /health/rag).
-                            do!
-                                emitIngestionDrop
-                                    auditLog
-                                    (Some notifications)
-                                    queue
-                                    logger
-                                    scopeKey
-                                    entry.FileName
-                                    chunkCount
-                                    reason
-                                    job.OriginatingUserId
-
-                            do! setStatus scope.Container entry.FileName (FileIngestionStatus.Failed reason)
-                            do! ingestionAttempts.Forget(scope.Container, entry.FileName)
-
-                            // Compliance-grade fail-loud. Under
-                            // `Refuse`, sustained saturation (≥ threshold drops in
-                            // the rolling 60s window) raises
-                            // `ConfigPreflightFailedException`. The post-save hook
-                            // is fire-and-forget and wraps hook exceptions in an
-                            // `Error` log (never crashing the already-sent upload
-                            // response), so this surfaces as a loud, named error in
-                            // the operator log alongside the audit trail rather
-                            // than a silent drop.
-                            if overflowPolicy = Refuse && queue.DroppedLast60s >= refuseSaturationThreshold then
-                                raise (
-                                    ConfigValidatorAggregator.ConfigPreflightFailedException(
-                                        sprintf
-                                            "RAG ingestion queue is sustainedly saturated: %d documents dropped in the last 60s (capacity %d). IngestionOverflowPolicy = Refuse treats this as fail-loud — raise IngestionQueueCapacity / IngestionConcurrency, add a distributed ingestion path, or switch to DropWrite / Block. Most recent drop: '%s'."
-                                            queue.DroppedLast60s
-                                            queue.Capacity
-                                            entry.FileName
-                                    )
-                                )
-    }
-
-// ─── Null blob storage for when no storage is configured ─────────
-
-let private makeNullBlobStorage () : IBlobStorage =
-    { new IBlobStorage with
-        // No bounded multi-part commit primitive here; callers assemble through memory.
-        member _.CanComposeFrom = false
-
-        member _.ComposeFrom(_, _, _) =
-            ToolUp.Platform.BlobStorage.composeNotSupported "the RAG null blob store"
-
-        member _.Upload(_, _, _) = async { return Ok "" }
-        member _.Download(_, _) = async { return Error "no blob storage configured" }
-        member _.DownloadRange(_, _, _, _) = async { return Error "no blob storage configured" }
-        member _.Delete(_, _) = async { return Ok() }
-        member _.List(_, _) = async { return [] }
-        member _.Exists(_, _) = async { return false }
-        member _.GetMetadata(_, _) = async { return Error "no blob storage configured" }
-
-        member _.Erase(_, _, _, _) = async {
-            return
-                Result.Ok {
-                    HandlerName = "blobs"
-                    RecordsAffected = 0
-                    Note = None
-                }
-        }
-    }
-
 
 // ─── The RAG companion: `RagOptions` + `withRAG` ─────────────────────
 //
@@ -852,7 +389,7 @@ type RagOptions = {
     /// Captures `original → clamped` notes whenever a retrieval-defaults
     /// setter clamps an out-of-range value (e.g. `withTopK 0` → `1`,
     /// `withMinScore (Some 1.5)` → `Some 0.99`). The
-    /// `RetrievalDefaultsValidator` surfaces these as a single `Warning`
+    /// `retrievalDefaultsValidator` surfaces these as a single `Warning`
     /// at startup so an operator who typoed a config knob doesn't
     /// silently lose the intended behaviour. Empty in the common case.
     RetrievalDefaultsClampLog: string list
@@ -897,7 +434,7 @@ type RagOptions = {
     /// `RAGVacuumJobHandler` on the `IJobScheduler` that sweeps every scope
     /// on the schedule. REQUIRES `ServerConfig.JobScheduler =
     /// InProcessJobScheduler` (or a distributed scheduler companion) — the
-    /// `VacuumScheduleValidator` warns when the pair is misconfigured.
+    /// `vacuumScheduleValidator` warns when the pair is misconfigured.
     VacuumSchedule: string option
     /// Behaviour when the ingestion queue is full. `DropWrite`
     /// (default) retries with a short bounded backoff then drops the
@@ -905,8 +442,8 @@ type RagOptions = {
     /// `SystemMessage` to the uploader + the queue `Dropped` counters.
     /// `Block` never drops — the post-save hook awaits queue space (delays
     /// indexing under load, never loses a document). `Refuse` drops like
-    /// `DropWrite` but additionally raises `ConfigPreflightFailedException`
-    /// on sustained saturation for compliance-grade fail-loud. Tune via
+    /// `DropWrite`, and sustained saturation is an `Error` finding of the
+    /// `rag-ingestion-instance` validator, for compliance-grade fail-loud. Tune via
     /// `RagOptions.withIngestionQueueOverflowPolicy`.
     OverflowPolicy: IngestionOverflowPolicy
     /// Substitute the entire `IRetrievalPipeline`. `None`
@@ -925,7 +462,7 @@ type RagOptions = {
     /// Durable backing for the ingestion queue. `None`
     /// (default) keeps the process-local `System.Threading.Channels`
     /// queue: correct for one replica and one process lifetime, and the
-    /// reason `RagIngestionInstanceValidator` refuses `ReplicaCount > 1`.
+    /// reason `ragIngestionInstanceValidator` refuses `ReplicaCount > 1`.
     /// `Some store` moves the queue into that store, so documents survive
     /// a restart (an unacknowledged lease is redelivered) and N replicas
     /// drain one queue — which lifts the multi-replica refusal. The
@@ -962,7 +499,7 @@ type RagOptions = {
     /// A process-local cache is correct but per-replica: `EmbeddingCacheKey`
     /// carries no tenant component and each replica keeps its own entries,
     /// so the same text hits on replica A and misses on replica B — which
-    /// is what `TeamModeSharedEmbeddingCacheValidator` warns about under
+    /// is what `teamModeSharedEmbeddingCacheValidator` warns about under
     /// `ReplicaCount > 1`. Composing a cross-replica cache (the shipped
     /// backing is the `ToolUp.EmbeddingCaches.Redis` companion) removes the
     /// divergence **and lifts that warning**, because the premise it rests
@@ -1002,7 +539,7 @@ type RagOptions = {
 /// Does this app's composed `IEmbeddingCache` span replicas?
 ///
 /// This is the exact predicate `composeWithRAG` feeds into
-/// `TeamModeSharedEmbeddingCacheValidator`, exposed so the lift can be
+/// `teamModeSharedEmbeddingCacheValidator`, exposed so the lift can be
 /// asserted (by a deployment's own preflight, or by a test) without
 /// standing up a whole composition. Note what it deliberately does NOT
 /// say: composing `InMemoryEmbeddingCache` explicitly returns `false`,
@@ -1023,7 +560,7 @@ let hasCrossReplicaEmbeddingCache (options: RagOptions) : bool =
 /// state per `VectorScope`?
 ///
 /// The predicate `composeWithRAG` feeds into
-/// `TeamModeLocalEmbedderValidator`, exposed for the same reason as
+/// `teamModeLocalEmbedderValidator`, exposed for the same reason as
 /// `hasCrossReplicaEmbeddingCache` above: a deployment's own preflight
 /// (or a test) can assert the lift without standing up a whole
 /// composition.
@@ -1091,17 +628,12 @@ let private minScoreSpaceValidator
     (space: RetrievalScoreSpace option)
     (minScore: float option)
     : ConfigValidation.IConfigValidator =
-    { new ConfigValidation.IConfigValidator with
-        member _.Name = "rag-min-score-space"
-        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
-
-        member _.Validate() = async {
-            return
-                match RetrievalScoreSpace.thresholdFinding space minScore with
-                | Some message -> ConfigValidation.ValidationResult.Warning message
-                | None -> ConfigValidation.ValidationResult.Ok
-        }
-    }
+    ConfigValidator.create "rag-min-score-space" (fun () -> async {
+        return
+            match RetrievalScoreSpace.thresholdFinding space minScore with
+            | Some message -> ConfigValidation.ValidationResult.Warning message
+            | None -> ConfigValidation.ValidationResult.Ok
+    })
 
 // ─── flush the composition's own stores at a graceful stop ──
 //
@@ -1388,9 +920,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 if isNull ctx.Services then
                     None
                 else
-                    match ctx.Services.GetService(typeof<RagRuntime>) with
-                    | :? RagRuntime as runtime -> Some runtime
-                    | _ -> None
+                    ServiceComposition.tryService<RagRuntime> ctx.Services
 
             match runtime with
             | Some runtime ->
@@ -1544,14 +1074,10 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             | None -> s
 
         // RAG services
-        let blobStorageForRag =
-            match b.Storage with
-            | Some bs -> bs
-            | None ->
-                ragLogger.Warn
-                    "[RAGCompose] No IBlobStorage supplied — vector index persistence is disabled. Ingested chunks will be lost across process restart. Pass `Some storage` (RagOptions.withStorage) for a durable deployment."
-
-                makeNullBlobStorage ()
+        // The application's own store when it supplied one; otherwise the
+        // deployment's resolved store, the one every other platform store
+        // persists through. `RagPersistenceValidator` names the second case.
+        let blobStorageForRag = b.Storage |> Option.defaultValue substrate.Storage
 
         // The keyword index is a composition choice. The default constructs
         // the in-process index; a supplied or analyzer-built index was
@@ -1891,21 +1417,24 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             else
                 s.AddSingleton<PostSaveHook>(
                     System.Func<System.IServiceProvider, PostSaveHook>(fun sp ->
+                        let runtime = RagRuntime.resolve sp
+
                         PostSaveHook(
-                            makeVectorisationHook
-                                b.VectorisationHandlers
-                                queue
-                                telemetry
-                                options.EnableDocumentSummaries
-                                options.MaxChunkBytes
-                                options.MaxDocumentBytes
-                                eventStore
-                                (RagRuntime.resolve sp).IngestionStatusStore
-                                (RagRuntime.resolve sp).IngestionAttempts
-                                options.OverflowPolicy
-                                substrate.AuditLog
-                                notifications
-                                ragLogger
+                            makeVectorisationHook {
+                                Handlers = b.VectorisationHandlers
+                                Queue = queue
+                                Telemetry = telemetry
+                                EnableSummaries = options.EnableDocumentSummaries
+                                MaxChunkBytes = options.MaxChunkBytes
+                                MaxDocumentBytes = options.MaxDocumentBytes
+                                EventStore = eventStore
+                                StatusStore = runtime.IngestionStatusStore
+                                Attempts = runtime.IngestionAttempts
+                                OverflowPolicy = options.OverflowPolicy
+                                AuditLog = substrate.AuditLog
+                                Notifications = notifications
+                                Logger = ragLogger
+                            }
                         ))
                 )
 
@@ -1941,9 +1470,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                         let runtime = RagRuntime.resolve sp
 
                         let getJobScheduler () =
-                            match sp.GetService(typeof<IJobScheduler>) with
-                            | :? IJobScheduler as js -> Some js
-                            | _ -> None
+                            ServiceComposition.tryService<IJobScheduler> sp
 
                         // The service registers the retry handler on the
                         // resolved scheduler at startup (the handler is
@@ -2059,8 +1586,8 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                     (BackgroundUnit.create "rag-tombstone-vacuum" OnceAtStart (fun (sp: System.IServiceProvider) ->
                         { new IHostedService with
                             member _.StartAsync(_ct) =
-                                match sp.GetService(typeof<IJobScheduler>) with
-                                | :? IJobScheduler as scheduler ->
+                                match ServiceComposition.tryService<IJobScheduler> sp with
+                                | Some scheduler ->
                                     scheduler.RegisterHandler(
                                         ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName,
                                         vacuumHandler
@@ -2101,7 +1628,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                                     }
                                     |> Async.StartAsTask
                                     :> System.Threading.Tasks.Task
-                                | _ ->
+                                | None ->
                                     ragLogger.Warn(
                                         "[RAGCompose] withVacuumSchedule is set but JobScheduler = NoJobScheduler — the tombstone auto-vacuum will not run and soft-deleted chunks will accumulate. Set ServerConfig.JobScheduler = InProcessJobScheduler for steady-state memory."
                                     )
@@ -2165,55 +1692,63 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // by every team in the process) no longer holds. Still fires for
         // the unscoped `create ()` / `createPersistent`, which leak exactly
         // as before.
-        ToolUp.RAG.RagConfigValidator.TeamModeLocalEmbedderValidator(
+        ToolUp.RAG.RagConfigValidator.teamModeLocalEmbedderValidator (
             config,
             options.EmbeddingProvider,
             hasScopeKeyedEmbeddingProvider options
         )
         // Refuse (persistent) / warn (ephemeral) when RAG has no durable backing.
-        ToolUp.RAG.RagConfigValidator.RagPersistenceValidator(config, b.Storage.IsSome, options.VectorStore.IsSome)
+        ToolUp.RAG.RagConfigValidator.ragPersistenceValidator (config, b.Storage.IsSome, options.VectorStore.IsSome)
         // Phase 9j follow-up — refuse the in-process ingestion queue under
         // ReplicaCount > 1 (no leasing/redelivery ⇒ silent corpus loss).
         // The refusal is lifted when a DURABLE queue is
         // composed: the premise it rests on (process-local, no
         // redelivery) no longer holds.
-        ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator(config, queue.IsDurable)
+        ToolUp.RAG.RagConfigValidator.ragIngestionInstanceValidator (
+            config,
+            queue.IsDurable,
+            options.OverflowPolicy,
+            (fun () -> queue.DroppedLast60s)
+        )
         // Wave 2A Gap #1 — warn when default InMemoryEmbeddingCache is active
         // under multi-instance Team mode (cache key has no tenant component).
         // The warning is lifted when a CROSS-REPLICA cache is
         // composed: the premise it rests on (each replica keeps its own
         // entries) no longer holds.
-        ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator(
+        ToolUp.RAG.RagConfigValidator.teamModeSharedEmbeddingCacheValidator (
             config,
             hasCrossReplicaEmbeddingCache options
         )
         // Wave 2A Gap #9 — surface the clamp log so silent clamping of
         // operator-supplied values is visible at startup.
-        ToolUp.RAG.RagConfigValidator.RetrievalDefaultsValidator options.RetrievalDefaultsClampLog
+        ToolUp.RAG.RagConfigValidator.retrievalDefaultsValidator options.RetrievalDefaultsClampLog
         // 2026-06-12 audit (RAG Gap 8) — warn when the citation-dev-
         // endpoint override is configured as the retired force-on shape.
-        ToolUp.RAG.RagConfigValidator.CitationDevEndpointValidator config
+        ToolUp.RAG.RagConfigValidator.citationDevEndpointValidator config
         // Surface the steady-state-memory contract: warn when a
         // vacuum schedule is set without a scheduler, or when a persistent
         // deployment has no vacuum schedule at all (tombstones accumulate).
-        ToolUp.RAG.RagConfigValidator.VacuumScheduleValidator(config, options.VacuumSchedule.IsSome)
+        ToolUp.RAG.RagConfigValidator.vacuumScheduleValidator (config, options.VacuumSchedule.IsSome)
         // Warn when an authenticated RAG deployment runs with no
         // rate limiter: retrieval embeds every query, so an unbounded request
         // loop burns embedding spend even behind a proxy (per-query cost, not
         // per-connection). Mode ≠ Anonymous AND RateLimit = RateLimitConfig.none.
-        ToolUp.RAG.RagConfigValidator.RAGRateLimitConfiguredValidator config
+        ToolUp.RAG.RagConfigValidator.ragRateLimitConfiguredValidator config
         // Warn when the dev-only,
         // process-stateful LocalEmbeddingProvider serves a non-team
-        // production shape. The team half is TeamModeLocalEmbedderValidator
+        // production shape. The team half is teamModeLocalEmbedderValidator
         // above; the two partition the deployment space so one problem is
         // never reported twice.
-        ToolUp.RAG.RagConfigValidator.LocalEmbeddingProviderInProductionModeValidator(config, options.EmbeddingProvider)
+        ToolUp.RAG.RagConfigValidator.localEmbeddingProviderInProductionModeValidator (
+            config,
+            options.EmbeddingProvider
+        )
         // Warn when data types are registered but NO
         // module contributes a VectorisationHandler: nothing is ever
         // indexed and there is no error anywhere in that path. Skipped
         // when a retrieval-pipeline override owns the corpus (the same
         // condition `suppressIngestion` uses above).
-        ToolUp.RAG.RagConfigValidator.RAGHandlersRegisteredValidator(
+        ToolUp.RAG.RagConfigValidator.ragHandlersRegisteredValidator (
             b.DataTypes |> List.map _.Id,
             b.VectorisationHandlers |> List.map _.DataTypeId,
             options.RetrievalPipelineOverride.IsSome
@@ -2221,7 +1756,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // Explicit bounds on the tuning knobs. The
         // `with*` setters clamp lower bounds only, so nothing today
         // rejects `withTopK 200` or `withIngestionQueueCapacity 10`.
-        ToolUp.RAG.RagConfigValidator.RAGConfigBoundsValidator {
+        ToolUp.RAG.RagConfigValidator.ragConfigBoundsValidator {
             TopK = options.RetrievalDefaults.TopK
             MinScore = options.RetrievalDefaults.MinScore
             MmrLambda = options.MmrLambda
@@ -2237,7 +1772,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // in-process vector store or keyword index: each replica keeps its
         // own, so retrieval differs by which replica served the turn.
         // Skipped when a retrieval-pipeline override owns the corpus.
-        ToolUp.RAG.RagConfigValidator.InProcessIndexReplicaValidator(
+        ToolUp.RAG.RagConfigValidator.inProcessIndexReplicaValidator (
             config,
             (if options.RetrievalPipelineOverride.IsSome then
                  None
@@ -2470,7 +2005,7 @@ module RagOptions =
     /// so the same text hits on replica A and misses on replica B —
     /// different latency, different metering attribution, different
     /// short-window telemetry. That is what
-    /// `TeamModeSharedEmbeddingCacheValidator` warns about under
+    /// `teamModeSharedEmbeddingCacheValidator` warns about under
     /// `ReplicaCount > 1`, and composing a cross-replica cache **lifts that
     /// warning** rather than merely silencing it.
     ///
@@ -2555,10 +2090,11 @@ module RagOptions =
     /// drops — the post-save hook awaits queue space (the upload response has
     /// already returned, so this delays indexing under sustained load but
     /// never loses a document; suited to bulk backfills). `Refuse` drops like
-    /// `DropWrite` but additionally raises `ConfigPreflightFailedException`
-    /// once sustained saturation is observed in the rolling 60s window — a
-    /// loud, operator-visible signal for compliance-grade deploys that prefer
-    /// a screaming error over a quiet drop.
+    /// `DropWrite`, and once sustained saturation is observed in the rolling
+    /// 60s window the `rag-ingestion-instance` validator reports it as an
+    /// `Error` (preflight and the `/dev/inspect` Validators panel) — a loud,
+    /// operator-visible signal for compliance-grade deploys that prefer a
+    /// screaming error over a quiet drop.
     let withIngestionQueueOverflowPolicy (policy: IngestionOverflowPolicy) (options: RagOptions) : RagOptions = {
         options with
             OverflowPolicy = policy
@@ -2571,7 +2107,7 @@ module RagOptions =
     /// Without this the queue is a process-local `Channels` channel: a
     /// restart mid-ingestion loses every queued document (the per-file
     /// status survives in a non-terminal state, the job does not), and
-    /// `RagIngestionInstanceValidator` refuses `ReplicaCount > 1` because
+    /// `ragIngestionInstanceValidator` refuses `ReplicaCount > 1` because
     /// only the replica that handled an upload can drain it. Composing a
     /// store removes both — **and lifts that refusal**, because the
     /// premise it rests on no longer holds.
@@ -2940,7 +2476,7 @@ module RagOptions =
     /// older than `TombstoneRetention`. REQUIRES `ServerConfig.JobScheduler
     /// = InProcessJobScheduler` (or a distributed scheduler companion) —
     /// without a scheduler the sweep never fires and the
-    /// `VacuumScheduleValidator` warns at startup. Use
+    /// `vacuumScheduleValidator` warns at startup. Use
     /// `withVacuumScheduleCron` for a non-default cadence.
     let withVacuumSchedule (options: RagOptions) : RagOptions = {
         options with

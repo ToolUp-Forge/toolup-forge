@@ -298,7 +298,8 @@ let private sweepTests =
             let marked = run (IngestionRecoverySweep.run surfaces [ "team-alpha" ] logger)
             Expect.equal marked 2 "both the RAG per-file status and the KB document index were swept"
 
-            let docs = run (KnowledgeBase.ServerIndexStorage.loadIndex blob "team-alpha")
+            let read = run (KnowledgeBase.ServerIndexStorage.loadIndex blob "team-alpha")
+            let docs = Expect.wantOk read "the index reads"
 
             match docs |> List.tryHead with
             | Some d ->

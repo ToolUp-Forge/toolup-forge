@@ -710,7 +710,7 @@ let private validate
     (crossReplicaCache: bool)
     : ToolUp.Platform.ConfigValidation.ValidationResult =
     let v =
-        ToolUp.RAG.RagConfigValidator.TeamModeSharedEmbeddingCacheValidator(config, crossReplicaCache)
+        ToolUp.RAG.RagConfigValidator.teamModeSharedEmbeddingCacheValidator (config, crossReplicaCache)
         :> ToolUp.Platform.ConfigValidation.IConfigValidator
 
     v.Validate() |> Async.RunSynchronously

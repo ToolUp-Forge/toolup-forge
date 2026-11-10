@@ -56,18 +56,6 @@ let private normaliseTags (doc: KnowledgeDocument) : KnowledgeDocument =
     else
         doc
 
-let loadIndex (storage: IBlobStorage) (container: string) = async {
-    match! storage.Download(container, indexBlobName) with
-    | Ok bytes ->
-        try
-            return
-                fromJson<KnowledgeDocument list> (Encoding.UTF8.GetString bytes)
-                |> List.map (normaliseVersion >> normaliseTags)
-        with _ ->
-            return []
-    | Error _ -> return []
-}
-
 /// Raised by the guarded index writers when the read-modify-write could
 /// not complete — the index was unreadable or undecodable, the write
 /// failed, or the retry budget was exhausted. Nothing was written. Every
@@ -106,14 +94,12 @@ let saveIndex (storage: IBlobStorage) (container: string) (docs: KnowledgeDocume
 //     different replicas lose no update — a lost precondition re-reads and
 //     replays the change.
 //
-// `loadIndex` / `saveIndex` above are not guarded: `loadIndex` is the read
-// path the listing surfaces use, and it still reads an unreadable index as
-// empty for display; `saveIndex` is a whole-index overwrite (since Phase
-// 863 a refused one raises) kept for seeding a fixed index, and no
-// production writer calls it — a load-map-save over it is exactly the lost
-// update this section exists to prevent.
+// `saveIndex` above is not guarded: it is a whole-index overwrite (a
+// refused one raises) kept for seeding a fixed index, and no production
+// writer calls it — a load-map-save over it is exactly the lost update this
+// section exists to prevent.
 
-let private indexLogger = ConsoleLogger.ConsoleLogger() :> ILogger
+let internal indexLogger = ConsoleLogger.ConsoleLogger() :> ILogger
 
 let private indexCodec: BlobCodec<KnowledgeDocument list> = {
     Encode = fun docs -> (toJson docs: string) |> Encoding.UTF8.GetBytes
@@ -126,6 +112,53 @@ let private indexCodec: BlobCodec<KnowledgeDocument list> = {
                 )
             with ex ->
                 Error ex.Message
+}
+
+/// Why a scope's index could not be read. Absence is not one of them: a
+/// scope that has never held a document has no index, and reads as empty.
+type IndexReadError =
+    /// The index exists and the storage could not read it.
+    | Unreadable of reason: string
+    /// The index was read and did not decode. Its bytes were copied aside
+    /// (`knowledge/index.json.corrupt-<sha256 prefix>`) and the index itself
+    /// left untouched.
+    | Corrupt of reason: string
+
+[<RequireQualifiedAccess>]
+module IndexReadError =
+
+    /// The sentence a refusal and the operator log carry.
+    let describe (error: IndexReadError) : string =
+        match error with
+        | Unreadable reason -> sprintf "the knowledge index for this scope could not be read (%s)" reason
+        | Corrupt reason -> sprintf "the knowledge index for this scope is corrupt (%s)" reason
+
+/// Read the scope's document index. An absent index is `Ok []`; an index
+/// that exists and cannot be read, or does not decode, is an `Error`, never
+/// an empty list. Whatever decides from the index — quota, dedup, versioning,
+/// deletion, retention — refuses on the `Error`; a listing renders it with
+/// `loadListing`.
+let loadIndex (storage: IBlobStorage) (container: string) : Async<Result<KnowledgeDocument list, IndexReadError>> = async {
+    match! BlobSnapshot.read storage indexLogger container indexBlobName indexCodec with
+    | SnapshotLoad.Loaded documents -> return Ok documents
+    | SnapshotLoad.Absent -> return Ok []
+    | SnapshotLoad.Unreadable reason -> return Error(Unreadable reason)
+    | SnapshotLoad.Corrupt(_, reason) -> return Error(Corrupt reason)
+}
+
+/// The scope's documents for a surface that lists them: an unreadable index
+/// renders as an empty list, and the failure is recorded at `Error` on
+/// `logger` so an operator can see why the scope looks empty.
+let loadListing (logger: ILogger) (storage: IBlobStorage) (container: string) : Async<KnowledgeDocument list> = async {
+    match! loadIndex storage container with
+    | Ok documents -> return documents
+    | Error error ->
+        logger.Error(
+            sprintf "[KnowledgeBase] %s; listing the scope '%s' as empty." (IndexReadError.describe error) container,
+            None
+        )
+
+        return []
 }
 
 // One `BlobMapStore` per storage instance, so its capability probe and its
@@ -512,7 +545,7 @@ let persistedStatus (storage: IBlobStorage) (container: string) (docId: string) 
         ->
         return Some record.Status
     | _ ->
-        let! index = loadIndex storage container
+        let! index = loadListing indexLogger storage container
         return index |> List.tryFind (fun d -> d.Id = docId) |> Option.map _.Status
 }
 

@@ -184,7 +184,7 @@ let private ocrUnavailableDetail (ocr: IOcrProvider) (fileName: string) (bytes: 
     let deps: ExtractDeps = {
         Ocr = ocr
         Tables = noOpTables
-        Docx = KnowledgeBase.DocxExtraction.DocxExtractionMode.Flat
+        Docx = DocxExtractionMode.Flat
     }
 
     match
@@ -263,7 +263,7 @@ let private unavailableClassification =
             let deps: ExtractDeps = {
                 Ocr = noOpOcr
                 Tables = noOpTables
-                Docx = KnowledgeBase.DocxExtraction.DocxExtractionMode.Flat
+                Docx = DocxExtractionMode.Flat
             }
 
             let parts =
@@ -280,7 +280,11 @@ let private extractionWiring =
     testList "extraction wiring" [
         test "a scanned PDF yields nothing without a companion" {
             let chunks =
-                extractChunks noOpOcr noOpTables "doc-1" "contract-scan.pdf" (scannedPdf "INVOICE")
+                extractChunks
+                    (ExtractDeps.composed noOpOcr noOpTables DocxExtractionMode.Flat)
+                    "doc-1"
+                    "contract-scan.pdf"
+                    (scannedPdf "INVOICE")
                 |> Async.RunSynchronously
 
             Expect.isEmpty
@@ -306,7 +310,11 @@ let private extractionWiring =
                 )
 
             let chunks =
-                extractChunks (stub :> IOcrProvider) noOpTables "doc-1" "contract-scan.pdf" (scannedPdf "INVOICE")
+                extractChunks
+                    (ExtractDeps.composed (stub :> IOcrProvider) noOpTables DocxExtractionMode.Flat)
+                    "doc-1"
+                    "contract-scan.pdf"
+                    (scannedPdf "INVOICE")
                 |> Async.RunSynchronously
 
             Expect.hasLength chunks 2 "one chunk per OCR page"
@@ -336,7 +344,11 @@ let private extractionWiring =
                 )
 
             let chunks =
-                extractChunks (stub :> IOcrProvider) noOpTables "doc-2" "receipt.png" (syntheticScanJpeg "TOTAL")
+                extractChunks
+                    (ExtractDeps.composed (stub :> IOcrProvider) noOpTables DocxExtractionMode.Flat)
+                    "doc-2"
+                    "receipt.png"
+                    (syntheticScanJpeg "TOTAL")
                 |> Async.RunSynchronously
 
             Expect.hasLength chunks 1 "an image is one page"
@@ -346,7 +358,11 @@ let private extractionWiring =
 
         test "an image upload yields nothing without a companion, and costs no OCR call" {
             let chunks =
-                extractChunks noOpOcr noOpTables "doc-2" "receipt.png" (syntheticScanJpeg "TOTAL")
+                extractChunks
+                    (ExtractDeps.composed noOpOcr noOpTables DocxExtractionMode.Flat)
+                    "doc-2"
+                    "receipt.png"
+                    (syntheticScanJpeg "TOTAL")
                 |> Async.RunSynchronously
 
             Expect.isEmpty chunks "with no companion an image cannot be indexed"
@@ -370,7 +386,11 @@ let private extractionWiring =
                 )
 
             let chunks =
-                extractChunks (stub :> IOcrProvider) noOpTables "doc-3" "sneaky-scan.pdf" (scannedPdf "INVOICE")
+                extractChunks
+                    (ExtractDeps.composed (stub :> IOcrProvider) noOpTables DocxExtractionMode.Flat)
+                    "doc-3"
+                    "sneaky-scan.pdf"
+                    (scannedPdf "INVOICE")
                 |> Async.RunSynchronously
 
             Expect.hasLength chunks 1 "the fallback must recover the page the IsScanned heuristic missed"
@@ -392,8 +412,7 @@ let private extractionWiring =
 
             let chunks =
                 extractChunks
-                    (stub :> IOcrProvider)
-                    noOpTables
+                    (ExtractDeps.composed (stub :> IOcrProvider) noOpTables DocxExtractionMode.Flat)
                     "doc-4"
                     "report.pdf"
                     (textPdf
@@ -563,7 +582,7 @@ let private noopNotifications =
 
 let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: string) : KnowledgeApiDeps = {
     Storage = storage
-    Queue = IngestionQueue()
+    Queue = Some(IngestionQueue())
     OcrProvider = ocr
     TableExtractor = noOpTables
     Notifications = noopNotifications
@@ -587,21 +606,12 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
     PublishInventory = fun () -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
-    UploadPolicy = KnowledgeUploadPolicy.permissive
-    DedupPolicy = KnowledgeDedupPolicy.enabled
-    VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    Policies = KnowledgePolicies.defaults
     // Phase 105 — retention not composed: the pre-105 convention-blob path.
     DataObjectStore = None
-    QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-    RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     // Phase 515 — no scanner composed: the pre-515 upload path.
     ContentScanner = None
-    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = None
-    // Phase 511 — bulk import is not exercised here: archive guards at
-    // their shipped defaults, URL ingestion inert, no transport.
-    ArchiveImportPolicy = ArchiveImportPolicy.defaults
-    UrlIngestionPolicy = UrlIngestionPolicy.disabled
     UrlFetcher = None
 }
 
@@ -609,7 +619,8 @@ let private mkDeps (storage: IBlobStorage) (ocr: IOcrProvider) (container: strin
 /// terminal status is read by polling the persisted index — the same
 /// thing the client's 2s status poll does.
 let rec private waitTerminal (deps: KnowledgeApiDeps) (docId: string) (attempts: int) = async {
-    let! index = loadIndex deps.Storage deps.Scope.Container
+    let! read = loadIndex deps.Storage deps.Scope.Container
+    let index = Expect.wantOk read "the index reads"
 
     match index |> List.tryFind (fun d -> d.Id = docId) with
     | Some d ->
@@ -701,7 +712,8 @@ let private uploadPath =
                 // to Embedding rather than Complete; what this case pins
                 // is that chunks WERE produced and enqueued, which is the
                 // difference the companion makes.
-                let! index = loadIndex storage "team-a"
+                let! read = loadIndex storage "team-a"
+                let index = Expect.wantOk read "the index reads"
 
                 let stored =
                     index |> List.tryFind (fun d -> d.Id = doc.Id) |> Option.defaultValue doc

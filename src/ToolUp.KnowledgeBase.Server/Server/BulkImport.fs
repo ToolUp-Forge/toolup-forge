@@ -476,62 +476,56 @@ let fetchUrl
 // (`ArchiveImportPolicy.defaults`) and the inert one
 // (`UrlIngestionPolicy.disabled`), so it has nothing to warn about.
 
-type private ArchiveImportPolicyValidator(policy: ArchiveImportPolicy) =
-    interface ConfigValidation.IConfigValidator with
-        member _.Name = "knowledge-base:archive-import-policy"
-        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+let private archiveImportPolicyValidator (policy: ArchiveImportPolicy) : ConfigValidation.IConfigValidator =
+    ConfigValidator.create "knowledge-base:archive-import-policy" (fun () -> async {
+        match ArchiveImportPolicy.unguardedLevers policy with
+        | [] -> return ConfigValidation.ValidationResult.Ok
+        | levers ->
+            return
+                ConfigValidation.ValidationResult.Warning(
+                    sprintf
+                        "Knowledge Base archive import leaves %s unbounded (%s). An archive's declared entry sizes are attacker-controlled, so an unguarded expander admits a decompression bomb: the streaming read still refuses an entry that overruns its limit, but with no limit composed there is nothing for it to enforce. Restore the shipped caps with KnowledgeBase.Server.withArchiveImportPolicy ArchiveImportPolicy.defaults, or raise individual levers from defaults rather than clearing them."
+                        (if List.length levers = 1 then
+                             "one guard"
+                         else
+                             sprintf "%d guards" (List.length levers))
+                        (String.concat ", " levers)
+                )
+    })
 
-        member _.Validate() = async {
-            match ArchiveImportPolicy.unguardedLevers policy with
+let private urlIngestionValidator
+    (serverConfig: ServerConfig, policy: UrlIngestionPolicy)
+    : ConfigValidation.IConfigValidator =
+    ConfigValidator.create "knowledge-base:url-ingestion" (fun () -> async {
+        let teamScoped = DeploymentConfig.hasTeamScope serverConfig
+        let hostCount = Set.count policy.AllowedHosts
+
+        // An inert policy is the default posture and is never worth a
+        // line in a preflight report.
+        if UrlIngestionPolicy.isInert policy then
+            return ConfigValidation.ValidationResult.Ok
+        else
+            let findings = [
+                if UrlIngestionPolicy.isBroadAllowlist policy then
+                    sprintf
+                        "the allowlist names %d hosts (at or above the %d-host reviewability threshold), so a stale or mistaken entry is unlikely to be noticed on review"
+                        hostCount
+                        UrlIngestionPolicy.BroadAllowlistThreshold
+                if teamScoped then
+                    "the deployment is Team / MultiTeam scoped, so every tenant can make the SERVER fetch from these hosts — the egress surface is shared, not per-tenant"
+            ]
+
+            match findings with
             | [] -> return ConfigValidation.ValidationResult.Ok
-            | levers ->
+            | _ ->
                 return
                     ConfigValidation.ValidationResult.Warning(
                         sprintf
-                            "Knowledge Base archive import leaves %s unbounded (%s). An archive's declared entry sizes are attacker-controlled, so an unguarded expander admits a decompression bomb: the streaming read still refuses an entry that overruns its limit, but with no limit composed there is nothing for it to enforce. Restore the shipped caps with KnowledgeBase.Server.withArchiveImportPolicy ArchiveImportPolicy.defaults, or raise individual levers from defaults rather than clearing them."
-                            (if List.length levers = 1 then
-                                 "one guard"
-                             else
-                                 sprintf "%d guards" (List.length levers))
-                            (String.concat ", " levers)
-                    )
-        }
-
-type private UrlIngestionValidator(serverConfig: ServerConfig, policy: UrlIngestionPolicy) =
-    interface ConfigValidation.IConfigValidator with
-        member _.Name = "knowledge-base:url-ingestion"
-        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
-
-        member _.Validate() = async {
-            let teamScoped = DeploymentConfig.hasTeamScope serverConfig
-            let hostCount = Set.count policy.AllowedHosts
-
-            // An inert policy is the default posture and is never worth a
-            // line in a preflight report.
-            if UrlIngestionPolicy.isInert policy then
-                return ConfigValidation.ValidationResult.Ok
-            else
-                let findings = [
-                    if UrlIngestionPolicy.isBroadAllowlist policy then
-                        sprintf
-                            "the allowlist names %d hosts (at or above the %d-host reviewability threshold), so a stale or mistaken entry is unlikely to be noticed on review"
+                            "Knowledge Base URL ingestion is enabled for %d host(s) and %s. Redirects are re-gated against this same allowlist and literal IP addresses are always refused, so this is a posture to confirm rather than a defect: narrow the list with KnowledgeBase.Server.withUrlIngestion (UrlIngestionPolicy.allowingHosts [ ... ]), or leave it uncomposed to keep ingestion inert."
                             hostCount
-                            UrlIngestionPolicy.BroadAllowlistThreshold
-                    if teamScoped then
-                        "the deployment is Team / MultiTeam scoped, so every tenant can make the SERVER fetch from these hosts — the egress surface is shared, not per-tenant"
-                ]
-
-                match findings with
-                | [] -> return ConfigValidation.ValidationResult.Ok
-                | _ ->
-                    return
-                        ConfigValidation.ValidationResult.Warning(
-                            sprintf
-                                "Knowledge Base URL ingestion is enabled for %d host(s) and %s. Redirects are re-gated against this same allowlist and literal IP addresses are always refused, so this is a posture to confirm rather than a defect: narrow the list with KnowledgeBase.Server.withUrlIngestion (UrlIngestionPolicy.allowingHosts [ ... ]), or leave it uncomposed to keep ingestion inert."
-                                hostCount
-                                (String.concat "; and " findings)
-                        )
-        }
+                            (String.concat "; and " findings)
+                    )
+    })
 
 /// Phase 511 — override the archive-expansion resource guards. A
 /// deployment that never calls this gets `ArchiveImportPolicy.defaults`,
@@ -545,13 +539,12 @@ type private UrlIngestionValidator(serverConfig: ServerConfig, policy: UrlIngest
 /// `ArchiveImportPolicy.unbounded` states in full).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : ServerApp =
-    let withSingleton =
-        app
-        |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<ArchiveImportPolicy>(policy))
-
-    ServerApp.withConfigValidator
-        (ArchiveImportPolicyValidator(policy) :> ConfigValidation.IConfigValidator)
-        withSingleton
+    app
+    |> KnowledgeBase.ServerUploadPolicy.KnowledgePolicyRegistration.set (fun policies -> {
+        policies with
+            Archive = policy
+    })
+    |> ServerApp.withConfigValidator (archiveImportPolicyValidator policy)
 
 /// Phase 511 — enable fetch-by-URL ingestion for an explicit host
 /// allowlist, and register the transport that performs it.
@@ -574,16 +567,11 @@ let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : Ser
 /// tenants. An empty (inert) allowlist warns about nothing.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withUrlIngestion (policy: UrlIngestionPolicy) (app: ServerApp) : ServerApp =
-    let withSingletons =
-        app
-        |> ServerApp.addServiceConfig (fun s ->
-            s
-                .AddSingleton<UrlIngestionPolicy>(policy)
-                .AddSingleton<IUrlContentFetcher>(HttpUrlContentFetcher() :> IUrlContentFetcher))
-
-    ServerApp.withConfigValidator
-        (UrlIngestionValidator(app.Config, policy) :> ConfigValidation.IConfigValidator)
-        withSingletons
+    app
+    |> KnowledgeBase.ServerUploadPolicy.KnowledgePolicyRegistration.set (fun policies -> { policies with Url = policy })
+    |> ServerApp.addServiceConfig (fun s ->
+        s.AddSingleton<IUrlContentFetcher>(HttpUrlContentFetcher() :> IUrlContentFetcher))
+    |> ServerApp.withConfigValidator (urlIngestionValidator (app.Config, policy))
 
 /// Phase 511 — register a custom URL transport (an egress proxy, a
 /// signed-fetch service) without changing the allowlist semantics. The

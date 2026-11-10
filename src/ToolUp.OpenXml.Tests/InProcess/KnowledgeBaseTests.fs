@@ -13,11 +13,11 @@ open Expecto
 open ToolUp.OpenXml.Tests
 open KnowledgeBase
 
-let private extract (bytes: byte[]) =
+let private extract (mode: SharedTypes.DocxExtractionMode) (bytes: byte[]) =
     let ocr = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     let tables = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
 
-    ServerExtractors.extractChunks ocr tables "doc-1" "fixture.docx" bytes
+    ServerExtractors.extractChunks (ServerExtractors.ExtractDeps.composed ocr tables mode) "doc-1" "fixture.docx" bytes
     |> Async.RunSynchronously
 
 let private flatGolden = [
@@ -25,14 +25,12 @@ let private flatGolden = [
     "[fixture.docx — Section: \"Sub\"]\nOne Two"
 ]
 
-// The flag is process-global compose-time state, so these tests run
-// sequenced and every opt-in is paired with a reset.
 let tests =
-    testSequenced
-    <| testList "KnowledgeBase" [
+    testList "KnowledgeBase" [
         testCase "default DOCX extraction output is unchanged (flat-path golden)"
         <| fun () ->
-            let chunks = extract (Fixtures.buildKnowledgeBaseDocx ())
+            let chunks =
+                extract SharedTypes.DocxExtractionMode.Flat (Fixtures.buildKnowledgeBaseDocx ())
 
             Expect.equal (chunks |> List.map (fun (chunk, _) -> chunk.Content)) flatGolden "flat chunk contents"
 
@@ -43,46 +41,43 @@ let tests =
 
         testCase "structured mode is reachable only by explicit opt-in"
         <| fun () ->
-            try
-                DocxExtraction.enableStructuredDocxExtraction ()
-                let chunks = extract (Fixtures.buildKnowledgeBaseDocx ())
-                let contents = chunks |> List.map (fun (chunk, _) -> chunk.Content)
+            let chunks =
+                extract SharedTypes.DocxExtractionMode.Structured (Fixtures.buildKnowledgeBaseDocx ())
 
-                // Heading PATH keys the chunks (the flat path keys by
-                // innermost heading only)...
-                Expect.equal
-                    contents[0]
-                    "[fixture.docx — Section: \"Intro\"]\nAlpha beta gamma"
-                    "top-level section chunk"
+            let contents = chunks |> List.map (fun (chunk, _) -> chunk.Content)
 
-                Expect.equal
-                    contents[1]
-                    "[fixture.docx — Section: \"Intro › Sub\"]\nOne\nTwo"
-                    "heading-path section chunk"
+            // Heading PATH keys the chunks (the flat path keys by
+            // innermost heading only)...
+            Expect.equal contents[0] "[fixture.docx — Section: \"Intro\"]\nAlpha beta gamma" "top-level section chunk"
 
-                // ...and the table — which the flat path never reaches
-                // (it walks top-level paragraphs only) — becomes a
-                // citable chunk.
-                Expect.equal chunks.Length 3 "table chunk emitted"
-                Expect.stringContains contents[2] "(table)" "table header"
-                Expect.stringContains contents[2] "Col" "table column header in content"
+            Expect.equal contents[1] "[fixture.docx — Section: \"Intro › Sub\"]\nOne\nTwo" "heading-path section chunk"
 
-                Expect.equal
-                    (chunks |> List.map (fun (_, src) -> src.Location))
-                    [
-                        SharedTypes.Section "Intro"
-                        SharedTypes.Section "Intro › Sub"
-                        SharedTypes.Section "Intro › Sub"
-                    ]
-                    "structured source locations"
-            finally
-                DocxExtraction.resetToFlatDocxExtraction ()
+            // ...and the table — which the flat path never reaches
+            // (it walks top-level paragraphs only) — becomes a
+            // citable chunk.
+            Expect.equal chunks.Length 3 "table chunk emitted"
+            Expect.stringContains contents[2] "(table)" "table header"
+            Expect.stringContains contents[2] "Col" "table column header in content"
 
-        testCase "reset restores the byte-for-byte default"
+            Expect.equal
+                (chunks |> List.map (fun (_, src) -> src.Location))
+                [
+                    SharedTypes.Section "Intro"
+                    SharedTypes.Section "Intro › Sub"
+                    SharedTypes.Section "Intro › Sub"
+                ]
+                "structured source locations"
+
+        testCase "a structured extraction leaves the flat default byte-for-byte"
         <| fun () ->
-            DocxExtraction.enableStructuredDocxExtraction ()
-            DocxExtraction.resetToFlatDocxExtraction ()
-            let chunks = extract (Fixtures.buildKnowledgeBaseDocx ())
+            extract SharedTypes.DocxExtractionMode.Structured (Fixtures.buildKnowledgeBaseDocx ())
+            |> ignore
 
-            Expect.equal (chunks |> List.map (fun (chunk, _) -> chunk.Content)) flatGolden "flat golden output restored"
+            let chunks =
+                extract SharedTypes.DocxExtractionMode.Flat (Fixtures.buildKnowledgeBaseDocx ())
+
+            Expect.equal
+                (chunks |> List.map (fun (chunk, _) -> chunk.Content))
+                flatGolden
+                "flat golden output unchanged"
     ]

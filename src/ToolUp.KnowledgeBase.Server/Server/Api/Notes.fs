@@ -115,9 +115,10 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
         else
             let! existing = loadIndex deps.Storage deps.Scope.Container
 
-            match existing |> List.tryFind (fun d -> d.Id = req.DocId) with
-            | None -> return Error "Note not found in this scope."
-            | Some prior ->
+            match existing |> Result.map (List.tryFind (fun d -> d.Id = req.DocId)) with
+            | Error error -> return Error(IndexReadError.describe error)
+            | Ok None -> return Error "Note not found in this scope."
+            | Ok(Some prior) ->
                 match prior.Source with
                 | Note priorNote ->
                     // Persist the raw body FIRST, ahead of the chunk drop,

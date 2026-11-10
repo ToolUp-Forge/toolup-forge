@@ -407,6 +407,7 @@ let private registeredTests =
         KbQuotaRetentionTests.tests
         KbVersioningTests.tests
         KbVersioningTests.ingestionStatusTruth
+        KnowledgeIndexReadTests.tests
         KbObjectRetentionTests.tests
         KbDocumentTagsTests.tests
         KbBulkImportTests.tests

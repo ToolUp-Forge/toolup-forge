@@ -103,11 +103,11 @@ type IngestionOverflowPolicy =
     /// document. Suited to bulk backfills where completeness beats latency.
     | Block
     /// Compliance-grade fail-loud. Behaves like `DropWrite` (drop + audit +
-    /// notify) but additionally raises `ConfigPreflightFailedException` once
-    /// sustained saturation is observed in the rolling 60s window — a loud,
-    /// operator-visible signal (logged by the post-save-hook error path)
-    /// that the deployment is losing documents, for deployments that prefer
-    /// a screaming error over a quiet drop.
+    /// notify), and once sustained saturation is observed in the rolling 60s
+    /// window the `rag-ingestion-instance` validator reports it at `Error` —
+    /// a loud, operator-visible finding that the deployment is losing
+    /// documents, for deployments that prefer a screaming error over a quiet
+    /// drop.
     | Refuse
 
 // ─── durable ingestion-queue seam ─────────────────────
@@ -179,7 +179,7 @@ type IIngestionQueueStore =
 /// behaviour byte for byte).
 type IIngestionQueue =
     /// `true` when the queue is backed by a store that outlives this
-    /// process. Read by `RagIngestionInstanceValidator` — the
+    /// process. Read by `ragIngestionInstanceValidator` — the
     /// multi-replica refusal is lifted only for a durable queue.
     abstract IsDurable: bool
     abstract Capacity: int
@@ -539,7 +539,7 @@ type IngestionQueue
     // identical either way, but `Ack` / `Abandon` have nothing to act on
     // — a process-local channel cannot redeliver, which is precisely the
     // gap the durable arm closes and the reason
-    // `RagIngestionInstanceValidator` refuses multi-replica without it.
+    // `ragIngestionInstanceValidator` refuses multi-replica without it.
     interface IIngestionQueue with
         member _.IsDurable = store.IsSome
         member _.Capacity = cap

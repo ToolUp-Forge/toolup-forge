@@ -118,12 +118,12 @@ let private mkDeps
     (storage: IBlobStorage)
     (queue: IngestionQueue)
     (lifecycle: IIndexLifecycle option)
-    (versioning: KnowledgeVersioningPolicy)
+    (versioning: bool)
     (container: string)
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = queue
+        Queue = Some queue
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = noopNotifications
@@ -147,21 +147,15 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = KnowledgeUploadPolicy.permissive
-        DedupPolicy = KnowledgeDedupPolicy.enabled
-        VersioningPolicy = versioning
+        Policies = {
+            KnowledgePolicies.defaults with
+                Versioning = versioning
+        }
         // Phase 105 — retention not composed: the pre-105 convention-blob path.
         DataObjectStore = None
-        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         // Phase 515 — no scanner composed: the pre-515 upload path.
         ContentScanner = None
-        ScanPolicy = ContentScanPolicy.defaults
         DisclosureGate = None
-        // Phase 511 — bulk import is not exercised here: archive guards at
-        // their shipped defaults, URL ingestion inert, no transport.
-        ArchiveImportPolicy = ArchiveImportPolicy.defaults
-        UrlIngestionPolicy = UrlIngestionPolicy.disabled
         UrlFetcher = None
     }
 
@@ -197,7 +191,8 @@ let private waitForIngest (storage: IBlobStorage) (container: string) (docId: st
     let mutable result = None
 
     while result.IsNone && DateTimeOffset.UtcNow < deadline do
-        let! index = loadIndex storage container
+        let! read = loadIndex storage container
+        let index = Expect.wantOk read "the index reads"
 
         match index |> List.tryFind (fun d -> d.Id = docId) with
         | Some doc ->
@@ -236,7 +231,7 @@ let tests =
             let lifecycle = RecordingIndexLifecycle()
 
             let deps =
-                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) KnowledgeVersioningPolicy.enabled "team-ver-a"
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) true "team-ver-a"
 
             let v1 = csvOf 300 "0299"
             let! first = uploadDocument deps v1 "scores.csv"
@@ -252,7 +247,8 @@ let tests =
             Expect.equal first.Version 1 "the original upload is version 1"
             Expect.equal second.Version 2 "the re-upload is version 2 of the same lineage"
 
-            let! index = loadIndex storage "team-ver-a"
+            let! read = loadIndex storage "team-ver-a"
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 1 "the scope holds exactly ONE document, not two unrelated ones"
 
             Expect.equal
@@ -298,7 +294,7 @@ let tests =
             let lifecycle = RecordingIndexLifecycle()
 
             let deps =
-                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) KnowledgeVersioningPolicy.enabled "team-ver-b"
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) true "team-ver-b"
 
             let! first = uploadDocument deps (csvOf 400 "0399") "report.csv"
             let! longVersion = waitForIngest storage "team-ver-b" first.Id
@@ -328,7 +324,8 @@ let tests =
 
             Expect.isNonEmpty expectedTail "the tail was non-empty, so this assertion is not vacuous"
 
-            let! index = loadIndex storage "team-ver-b"
+            let! read = loadIndex storage "team-ver-b"
+            let index = Expect.wantOk read "the index reads"
 
             Expect.equal
                 (index |> List.head |> _.ChunkCount)
@@ -344,7 +341,7 @@ let tests =
             let lifecycle = RecordingIndexLifecycle()
 
             let deps =
-                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) KnowledgeVersioningPolicy.enabled "team-ver-h"
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) true "team-ver-h"
 
             let! first = uploadDocument deps (csvOf 300 "0299") "report.csv"
             let! longVersion = waitForIngest storage "team-ver-h" first.Id
@@ -397,7 +394,7 @@ let tests =
             let lifecycle = RecordingIndexLifecycle()
 
             let deps =
-                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) KnowledgeVersioningPolicy.enabled "team-ver-c"
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) true "team-ver-c"
 
             let! first = uploadDocument deps (csvOf 300 "0299") "data.csv"
             let! v1 = waitForIngest storage "team-ver-c" first.Id
@@ -442,7 +439,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
 
-            let deps = mkDeps storage queue None KnowledgeVersioningPolicy.enabled "team-ver-d"
+            let deps = mkDeps storage queue None true "team-ver-d"
 
             let bytes = csvOf 40 "0039"
             let! first = uploadDocument deps bytes "same.csv"
@@ -469,12 +466,7 @@ let tests =
 
             // The default a deployment gets when it never opts in.
             let deps =
-                mkDeps
-                    storage
-                    queue
-                    (Some(lifecycle :> IIndexLifecycle))
-                    KnowledgeVersioningPolicy.disabled
-                    "team-ver-e"
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) false "team-ver-e"
 
             let! first = uploadDocument deps (csvOf 300 "0299") "scores.csv"
             let! _ = waitForIngest storage "team-ver-e" first.Id
@@ -486,7 +478,8 @@ let tests =
 
             Expect.notEqual second.Id first.Id "pre-510 behaviour: the re-upload is its own document"
 
-            let! index = loadIndex storage "team-ver-e"
+            let! read = loadIndex storage "team-ver-e"
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 2 "both documents are in the index, unrelated"
             Expect.all index (fun d -> d.Version = 1) "nothing is versioned when versioning is not composed"
 
@@ -510,7 +503,7 @@ let tests =
             let lifecycle = RecordingIndexLifecycle()
 
             let deps =
-                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) KnowledgeVersioningPolicy.enabled "team-ver-f"
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) true "team-ver-f"
 
             let! first = uploadDocument deps (csvOf 40 "0039") "doc.csv"
             let! _ = waitForIngest storage "team-ver-f" first.Id
@@ -535,9 +528,9 @@ let tests =
 
         testCaseAsync "a pre-510 index record (no Version property) loads as version 1 of its own lineage"
         <| async {
-            // `loadIndex` swallows deserialisation failures into an empty
-            // list, and a missing JSON number absorbs to 0 rather than to
-            // anything detectable downstream — so this pins BOTH that the
+            // `loadIndex` refuses an index that does not decode, and a
+            // missing JSON number absorbs to 0 rather than to anything
+            // detectable downstream — so this pins BOTH that the
             // legacy record still loads and that the store's coercion
             // fired.
             let storage = InMemoryBlobStorage() :> IBlobStorage
@@ -547,7 +540,8 @@ let tests =
 
             let! _ = storage.Upload("team-ver-g", "knowledge/index.json", Encoding.UTF8.GetBytes legacyJson)
 
-            let! index = loadIndex storage "team-ver-g"
+            let! read = loadIndex storage "team-ver-g"
+            let index = Expect.wantOk read "the index reads"
 
             match index with
             | [ doc ] ->
@@ -610,7 +604,8 @@ let private awaitJobs (queue: IngestionQueue) : Async<DocumentIngestionJob list>
 }
 
 let private persistedDoc (storage: IBlobStorage) (container: string) (docId: string) = async {
-    let! index = loadIndex storage container
+    let! read = loadIndex storage container
+    let index = Expect.wantOk read "the index reads"
 
     match index |> List.tryFind (fun d -> d.Id = docId) with
     | Some doc -> return doc
@@ -627,7 +622,7 @@ let ingestionStatusTruth =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
 
-            let deps = mkDeps storage queue None KnowledgeVersioningPolicy.enabled container
+            let deps = mkDeps storage queue None true container
 
             let observer = makeIngestionStatusObserver storage None noopLogger
 
@@ -669,7 +664,7 @@ let ingestionStatusTruth =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
 
-            let deps = mkDeps storage queue None KnowledgeVersioningPolicy.disabled container
+            let deps = mkDeps storage queue None false container
 
             let observer = makeIngestionStatusObserver storage None noopLogger
 
@@ -698,7 +693,7 @@ let ingestionStatusTruth =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
 
-            let deps = mkDeps storage queue None KnowledgeVersioningPolicy.enabled container
+            let deps = mkDeps storage queue None true container
 
             let observer = makeIngestionStatusObserver storage None noopLogger
 

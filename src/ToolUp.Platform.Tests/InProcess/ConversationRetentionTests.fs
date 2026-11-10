@@ -107,7 +107,7 @@ let private noopNotifications = Unchecked.defaultof<INotificationChannel>
 
 let private kbDeps (storage: IBlobStorage) : KnowledgeApiDeps = {
     Storage = storage
-    Queue = ToolUp.RAG.IngestionTypes.IngestionQueue()
+    Queue = Some(ToolUp.RAG.IngestionTypes.IngestionQueue())
     OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
     Notifications = noopNotifications
@@ -131,17 +131,10 @@ let private kbDeps (storage: IBlobStorage) : KnowledgeApiDeps = {
     PublishInventory = fun () -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
-    UploadPolicy = KnowledgeUploadPolicy.permissive
-    DedupPolicy = KnowledgeDedupPolicy.enabled
-    VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    Policies = KnowledgePolicies.defaults
     DataObjectStore = None
-    QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-    RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     ContentScanner = None
-    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = None
-    ArchiveImportPolicy = ArchiveImportPolicy.defaults
-    UrlIngestionPolicy = UrlIngestionPolicy.disabled
     UrlFetcher = None
 }
 
@@ -549,7 +542,8 @@ let tests =
                 let! after = storage.Exists(container, noteBodyBlobName docId)
                 Expect.isFalse after "the note body is gone"
 
-                let! index = loadIndex storage container
+                let! read = loadIndex storage container
+                let index = Expect.wantOk read "the index reads"
                 Expect.isEmpty index "the index entry is gone too"
 
                 let! residue = storage.List(container, sprintf "knowledge/%s/" docId)

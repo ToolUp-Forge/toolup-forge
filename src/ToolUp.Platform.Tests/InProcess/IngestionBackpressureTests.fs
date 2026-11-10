@@ -6,7 +6,7 @@ module ToolUp.Platform.Tests.InProcess.IngestionBackpressureTests
 //   * `IngestionQueue` drop counters — `Dropped` (cumulative) + rolling
 //     60s window, bumped by `RecordDrop`; `Policy` default (`DropWrite`);
 //     `Block` policy + `EnqueueBlocking`.
-//   * `RAGCompose.emitIngestionDrop` — the drop-observability triple: a
+//   * `VectorisationHook.emitIngestionDrop` — the drop-observability triple: a
 //     `KnowledgeIngestionDropped` audit under `_platform.knowledge`, a
 //     Warning `SystemMessage` to the uploading user (when attributed), and
 //     the queue counter bump. This is the mechanism behind the acceptance
@@ -118,7 +118,7 @@ let private dropEmission =
             let audit = CapturingAuditLog()
 
             run (
-                ToolUp.RAG.RAGCompose.emitIngestionDrop
+                ToolUp.RAG.VectorisationHook.emitIngestionDrop
                     ((audit :> IAuditLog))
                     None
                     q
@@ -147,7 +147,7 @@ let private dropEmission =
             let notifs = CapturingNotifications()
 
             run (
-                ToolUp.RAG.RAGCompose.emitIngestionDrop
+                ToolUp.RAG.VectorisationHook.emitIngestionDrop
                     (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q
@@ -171,7 +171,7 @@ let private dropEmission =
             let notifs = CapturingNotifications()
 
             run (
-                ToolUp.RAG.RAGCompose.emitIngestionDrop
+                ToolUp.RAG.VectorisationHook.emitIngestionDrop
                     (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q

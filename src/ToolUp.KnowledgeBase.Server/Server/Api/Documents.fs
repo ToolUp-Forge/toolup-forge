@@ -52,24 +52,30 @@ let private contentHashIndex (deps: KnowledgeApiDeps) : SecondaryIndex.BlobIndex
 /// (`Queued` / `ExtractingText` / `Embedding`) and terminal
 /// (`Complete` / `UnsupportedFormat`) documents both dedup: a
 /// double-submit during ingestion is exactly the race this absorbs.
-let private findDuplicate (deps: KnowledgeApiDeps) (contentHash: string) : Async<KnowledgeDocument option> = async {
-    let! refs = (contentHashIndex deps).Lookup contentHash
+let private findDuplicate
+    (deps: KnowledgeApiDeps)
+    (contentHash: string)
+    : Async<Result<KnowledgeDocument option, IndexReadError>> =
+    async {
+        let! refs = (contentHashIndex deps).Lookup contentHash
 
-    match refs with
-    | [] -> return None
-    | refs ->
-        let candidateIds = refs |> List.map fst |> Set.ofList
-        let! index = loadIndex deps.Storage deps.Scope.Container
+        match refs with
+        | [] -> return Ok None
+        | refs ->
+            let candidateIds = refs |> List.map fst |> Set.ofList
+            let! index = loadIndex deps.Storage deps.Scope.Container
 
-        return
-            index
-            |> List.tryFind (fun d ->
-                candidateIds.Contains d.Id
-                && d.ContentHash = Some contentHash
-                && (match d.Status with
-                    | Failed _ -> false
-                    | _ -> true))
-}
+            return
+                index
+                |> Result.map (
+                    List.tryFind (fun d ->
+                        candidateIds.Contains d.Id
+                        && d.ContentHash = Some contentHash
+                        && (match d.Status with
+                            | Failed _ -> false
+                            | _ -> true))
+                )
+    }
 
 // ─── Original retention ───────────────────────────────
 //
@@ -82,7 +88,7 @@ let private findDuplicate (deps: KnowledgeApiDeps) (contentHash: string) : Async
 //
 // **`deps.DataObjectStore = None` is the pre-105 path byte-for-byte**
 // (GP 11 / GP 13): the convention blob, no store call, no metadata
-// envelope. See `KnowledgeObjectRetentionPolicy` for why that is an
+// envelope. See `KnowledgePolicies.ObjectRetention` for why that is an
 // explicit opt-in rather than a DI probe.
 
 /// The conventional blob key for a document's live original. Still the
@@ -95,7 +101,7 @@ let private conventionOriginalBlobName (docId: string) (fileName: string) =
 /// Persist a document's original bytes.
 ///
 /// The store branch uses `objectId = docId` (see
-/// `KnowledgeObjectRetentionPolicy` for why the identity is derived
+/// `KnowledgePolicies.ObjectRetention` for why the identity is derived
 /// rather than stored) and the **`Versioned`** policy — never
 /// `StrictlyVersioned`, whose `Delete` returns `DeleteForbidden` and
 /// would break the delete cascade below. The envelope carries what a
@@ -142,7 +148,7 @@ let private saveOriginal
                     deps.Scope.ScopeId,
                     docId,
                     bytes,
-                    KnowledgeObjectRetentionPolicy.ObjectDataType,
+                    KnowledgePolicies.OriginalObjectDataType,
                     deps.UserId.Value,
                     metadata,
                     Versioned
@@ -654,7 +660,11 @@ let private persistAndIngest
                     IngestionStatusFeed.publish docId ExtractingText
 
                     let! parts, extracted =
-                        extract (ExtractDeps.composed deps.OcrProvider deps.TableExtractor) docId safeName bytes
+                        extract
+                            (ExtractDeps.composed deps.OcrProvider deps.TableExtractor deps.Policies.DocxMode)
+                            docId
+                            safeName
+                            bytes
 
                     // Stamp the structured original-document ref (and its
                     // neutral locator) into each chunk so retrieval surfaces
@@ -793,7 +803,7 @@ let private persistAndIngest
 
 /// The scope's corpus quota, evaluated against the live
 /// index. Returns `Some reason` when admitting one more document of
-/// `incomingBytes` would breach `deps.QuotaPolicy`.
+/// `incomingBytes` would breach `deps.Policies.Quota`.
 ///
 /// `addsDocument` is `false` when the upload supersedes an
 /// existing document rather than adding one. The distinction is
@@ -815,19 +825,21 @@ let private persistAndIngest
 ///     the server-side resolver, so one team's corpus can never consume
 ///     another's headroom (GP 4).
 let private quotaRefusal (deps: KnowledgeApiDeps) (incomingBytes: int64) (addsDocument: bool) : Async<string option> = async {
-    if KnowledgeQuotaPolicy.isUnlimited deps.QuotaPolicy then
+    if KnowledgeQuotaPolicy.isUnlimited deps.Policies.Quota then
         return None
     else
-        let! index = loadIndex deps.Storage deps.Scope.Container
-        let usage = KnowledgeScopeUsage.ofDocuments deps.QuotaPolicy index
+        match! loadIndex deps.Storage deps.Scope.Container with
+        | Error error -> return Some(IndexReadError.describe error)
+        | Ok index ->
+            let usage = KnowledgeScopeUsage.ofDocuments deps.Policies.Quota index
 
-        let effectiveCount =
-            if addsDocument then
-                usage.DocumentCount
-            else
-                max 0 (usage.DocumentCount - 1)
+            let effectiveCount =
+                if addsDocument then
+                    usage.DocumentCount
+                else
+                    max 0 (usage.DocumentCount - 1)
 
-        return KnowledgeQuotaPolicy.exceeds effectiveCount usage.TotalBytes incomingBytes deps.QuotaPolicy
+            return KnowledgeQuotaPolicy.exceeds effectiveCount usage.TotalBytes incomingBytes deps.Policies.Quota
 }
 
 /// The single-item upload path. **Every admission the Knowledge Base
@@ -865,7 +877,7 @@ let uploadDocumentCore
         // rejects whatever survives stripping (control chars, over-length).
         let safeName = Path.GetFileName fileName
         let ext = Path.GetExtension(safeName).ToLowerInvariant().TrimStart('.')
-        let policy = deps.UploadPolicy
+        let policy = deps.Policies.Upload
 
         // Pure pre-persist policy evaluation (GP 9 — a refusal stores nothing
         // and is loud). Filename sanitisation runs regardless of policy; the
@@ -931,24 +943,26 @@ let uploadDocumentCore
         // Returns `None` unless the deployment composed
         // `withDocumentVersioning true`, and reads nothing at all in that
         // case (GP 13) — the pre-510 upload path takes no extra index read.
-        let findPredecessor () : Async<KnowledgeDocument option> = async {
-            if not deps.VersioningPolicy.VersionUploads then
-                return None
+        let findPredecessor () : Async<Result<KnowledgeDocument option, IndexReadError>> = async {
+            if not deps.Policies.Versioning then
+                return Ok None
             else
                 let! index = loadIndex deps.Storage deps.Scope.Container
 
                 return
                     index
-                    |> List.tryFind (fun d ->
-                        d.FileName = safeName
-                        && (match d.Source with
-                            | UploadedFile -> true
-                            | FromNarrative _
-                            | Note _ -> false)
-                        && (match d.Status with
-                            | Failed _
-                            | UploadRejected _ -> false
-                            | _ -> true))
+                    |> Result.map (
+                        List.tryFind (fun d ->
+                            d.FileName = safeName
+                            && (match d.Source with
+                                | UploadedFile -> true
+                                | FromNarrative _
+                                | Note _ -> false)
+                            && (match d.Status with
+                                | Failed _
+                                | UploadRejected _ -> false
+                                | _ -> true))
+                    )
         }
 
         // The corpus quota is checked immediately before a
@@ -961,17 +975,18 @@ let uploadDocumentCore
         // established (dedup, then quota, then persist) is preserved with
         // versioning slotted between quota and persist.
         let persistUnlessOverQuota (contentHash: string option) : Async<KnowledgeDocument> = async {
-            let! predecessor = findPredecessor ()
+            match! findPredecessor () with
+            | Error error -> return refuse (IndexReadError.describe error)
+            | Ok predecessor ->
+                match! quotaRefusal deps (int64 bytes.Length) (Option.isNone predecessor) with
+                | Some reason -> return refuse reason
+                | None ->
+                    let targetDocId =
+                        match predecessor with
+                        | Some prior -> prior.Id
+                        | None -> docId
 
-            match! quotaRefusal deps (int64 bytes.Length) (Option.isNone predecessor) with
-            | Some reason -> return refuse reason
-            | None ->
-                let targetDocId =
-                    match predecessor with
-                    | Some prior -> prior.Id
-                    | None -> docId
-
-                return! persistAndIngest deps bytes targetDocId safeName ext contentHash predecessor
+                    return! persistAndIngest deps bytes targetDocId safeName ext contentHash predecessor
         }
 
         // Run the composed content scanner and audit its verdict.
@@ -994,7 +1009,7 @@ let uploadDocumentCore
             match deps.ContentScanner with
             | None -> return None
             | Some scanner ->
-                let! verdict, refusal = ContentScan.evaluate scanner deps.ScanPolicy bytes safeName
+                let! verdict, refusal = ContentScan.evaluate scanner deps.Policies.Scan bytes safeName
 
                 match verdict with
                 | ScanClean -> ()
@@ -1047,7 +1062,7 @@ let uploadDocumentCore
         | Some reason -> return refuse reason
         | None ->
 
-            if not deps.DedupPolicy.DedupUploads then
+            if not deps.Policies.Dedup then
                 // `withDocumentDedup false` — pre-14x path byte-for-byte
                 // (GP 11): no hash computed, no lookup, no ref written.
                 return! persistUnlessOverQuota None
@@ -1058,11 +1073,11 @@ let uploadDocumentCore
                 // ingestion is skipped, the decision is audited, and the
                 // user sees an Info toast.
                 let contentHash = contentHashOf bytes
-                let! duplicate = findDuplicate deps contentHash
 
-                match duplicate with
-                | None -> return! persistUnlessOverQuota (Some contentHash)
-                | Some existing ->
+                match! findDuplicate deps contentHash with
+                | Error error -> return refuse (IndexReadError.describe error)
+                | Ok None -> return! persistUnlessOverQuota (Some contentHash)
+                | Ok(Some existing) ->
                     deps.Logger.Info(
                         sprintf
                             "[KnowledgeBase] Upload of '%s' deduplicated onto existing document %s (content hash %s)"
@@ -1139,7 +1154,7 @@ let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : A
                 Content = content
             }
         ]
-    | BulkImportSource.Archive(fileName, content) -> return expandArchive deps.ArchiveImportPolicy fileName content
+    | BulkImportSource.Archive(fileName, content) -> return expandArchive deps.Policies.Archive fileName content
     // The compact cases decode to EXACTLY the bytes their
     // `byte[]` twins carry and then take the identical path, so there is
     // one expansion implementation and one admission decision per kind.
@@ -1159,13 +1174,13 @@ let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : A
     | BulkImportSource.ArchiveBase64(fileName, contentBase64) ->
         match BulkImportSource.tryDecodeBase64 contentBase64 with
         | Error reason -> return [ Rejected(fileName, fileName, reason) ]
-        | Ok content -> return expandArchive deps.ArchiveImportPolicy fileName content
+        | Ok content -> return expandArchive deps.Policies.Archive fileName content
     | BulkImportSource.Url url ->
         // The gate runs FIRST and independently of whether a transport
         // exists, so an uncomposed deployment's refusal reads identically
         // to an out-of-allowlist one and neither leaks whether URL
         // ingestion is wired at all.
-        match classifyUrl deps.UrlIngestionPolicy url with
+        match classifyUrl deps.Policies.Url url with
         | Error reason -> return [ Rejected(url, url, reason) ]
         | Ok _ ->
             match deps.UrlFetcher with
@@ -1178,7 +1193,7 @@ let private expandSource (deps: KnowledgeApiDeps) (source: BulkImportSource) : A
                     )
                 ]
             | Some fetcher ->
-                match! fetchUrl fetcher deps.UrlIngestionPolicy url with
+                match! fetchUrl fetcher deps.Policies.Url url with
                 | Ok item -> return [ Expanded item ]
                 | Error reason -> return [ Rejected(url, url, reason) ]
 }
@@ -1394,7 +1409,7 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
 }
 
 let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =
-    loadIndex deps.Storage deps.Scope.Container
+    loadListing deps.Logger deps.Storage deps.Scope.Container
 
 /// The caller's scope usage against the composed quota.
 /// Purely derived from the scope's own document index, so it cannot
@@ -1403,8 +1418,8 @@ let getDocuments (deps: KnowledgeApiDeps) : Async<KnowledgeDocument list> =
 /// `None` caps — which is how a UI distinguishes "unlimited" from
 /// "full".
 let getScopeUsage (deps: KnowledgeApiDeps) : Async<KnowledgeScopeUsage> = async {
-    let! docs = loadIndex deps.Storage deps.Scope.Container
-    return KnowledgeScopeUsage.ofDocuments deps.QuotaPolicy docs
+    let! docs = loadListing deps.Logger deps.Storage deps.Scope.Container
+    return KnowledgeScopeUsage.ofDocuments deps.Policies.Quota docs
 }
 
 /// The version history of one document lineage, newest
@@ -1419,7 +1434,7 @@ let getScopeUsage (deps: KnowledgeApiDeps) : Async<KnowledgeScopeUsage> = async 
 /// (no existence oracle, same posture as `getOriginalDocument`'s
 /// `NotInScope`).
 let getDocumentVersions (deps: KnowledgeApiDeps) (docId: string) : Async<KnowledgeDocumentVersion list> = async {
-    let! index = loadIndex deps.Storage deps.Scope.Container
+    let! index = loadListing deps.Logger deps.Storage deps.Scope.Container
 
     match index |> List.tryFind (fun d -> d.Id = docId) with
     | None -> return []
@@ -1460,10 +1475,10 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
         | Error msg -> return Error msg
         | Ok() ->
             let! existing = loadIndex deps.Storage deps.Scope.Container
-            let prior = existing |> List.tryFind (fun d -> d.Id = docId)
 
-            match prior with
-            | Some doc ->
+            match existing |> Result.map (List.tryFind (fun d -> d.Id = docId)) with
+            | Error error -> return Error(IndexReadError.describe error)
+            | Ok(Some doc) ->
                 // Index deletion runs FIRST, through the unified
                 // lifecycle seam (vector store + sparse index fan-out), and the
                 // `index.json` entry is removed only after it completes clean.
@@ -1566,7 +1581,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                         KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
                         do! deps.PublishInventory()
                         return Ok()
-            | None ->
+            | Ok None ->
                 // Unknown id — preserve the pre-115 idempotent shape (the index
                 // is already in the requested state).
                 clearStatus docId
@@ -1606,7 +1621,12 @@ let private rederiveChunks
                 | Some bytes ->
                     let ext = doc.FileType
 
-                    let! extracted = extractChunks deps.OcrProvider deps.TableExtractor doc.Id doc.FileName bytes
+                    let! extracted =
+                        extractChunks
+                            (ExtractDeps.composed deps.OcrProvider deps.TableExtractor deps.Policies.DocxMode)
+                            doc.Id
+                            doc.FileName
+                            bytes
 
                     return Some(stampOriginalRefs doc.Id doc.FileName ext (int64 bytes.Length) extracted)
             | Note note ->
@@ -1668,9 +1688,10 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
         | Ok() ->
             let! index = loadIndex deps.Storage deps.Scope.Container
 
-            match index |> List.tryFind (fun d -> d.Id = req.DocId) with
-            | None -> return Error "Document not found in this scope."
-            | Some doc ->
+            match index |> Result.map (List.tryFind (fun d -> d.Id = req.DocId)) with
+            | Error error -> return Error(IndexReadError.describe error)
+            | Ok None -> return Error "Document not found in this scope."
+            | Ok(Some doc) ->
                 match doc.Source with
                 | FromNarrative _ ->
                     // Loud, not partial. A narrative's chunks belong to
@@ -1780,11 +1801,12 @@ let private getOriginalDocumentCore
         try
             let! index = loadIndex deps.Storage deps.Scope.Container
 
-            match index |> List.tryFind (fun d -> d.Id = docId) with
-            | None ->
+            match index |> Result.map (List.tryFind (fun d -> d.Id = docId)) with
+            | Error error -> return Error(OriginalRetrievalFailed(IndexReadError.describe error))
+            | Ok None ->
                 do! denied "NotInScope"
                 return Error NotInScope
-            | Some doc ->
+            | Ok(Some doc) ->
                 // Store-first for uploaded files when retention
                 // is composed; the Phase 104 resolver otherwise, and for
                 // every other source kind.
@@ -1938,13 +1960,14 @@ let getOriginalDelivery
             try
                 let! index = loadIndex deps.Storage deps.Scope.Container
 
-                match index |> List.tryFind (fun d -> d.Id = docId) with
-                | None ->
+                match index |> Result.map (List.tryFind (fun d -> d.Id = docId)) with
+                | Error error -> return Error(OriginalRetrievalFailed(IndexReadError.describe error))
+                | Ok None ->
                     // Scope gate. Nothing below this line runs for a caller
                     // who does not own the document — including the mint.
                     do! denied "NotInScope"
                     return Error NotInScope
-                | Some doc ->
+                | Ok(Some doc) ->
                     // A document whose original lives in the
                     // object store has no single signable blob name: the
                     // bytes sit in the store's content-addressed pool
@@ -2070,7 +2093,7 @@ let getSuggestedQuestions (deps: KnowledgeApiDeps) (activeModule: string option)
     // AI-generated suggestions (per the WS4.4 plan) are a
     // follow-up — this v1 is heuristic-only and free.
     try
-        let! docs = loadIndex deps.Storage deps.Scope.Container
+        let! docs = loadListing deps.Logger deps.Storage deps.Scope.Container
 
         let documents, notes =
             docs

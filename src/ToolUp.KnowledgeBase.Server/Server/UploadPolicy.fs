@@ -16,7 +16,37 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-// ─── Phase 119 — KB upload-policy preflight ────────────────────────
+// ─── The one policy registration ──────────────────────────────────
+
+/// The knowledge base's policies are one registered `KnowledgePolicies`
+/// value. Each `with*` builder below sets its own field on it: the record
+/// registered so far (or `KnowledgePolicies.defaults`) is read off the
+/// collection, updated, and written back IN PLACE, so the record keeps the
+/// position its first builder gave it and every other registration keeps
+/// its order.
+module internal KnowledgePolicyRegistration =
+
+    let private update (change: KnowledgePolicies -> KnowledgePolicies) (s: IServiceCollection) : IServiceCollection =
+        let registered =
+            s
+            |> Seq.tryFindIndex (fun d -> d.ServiceType = typeof<KnowledgePolicies> && not d.IsKeyedService)
+
+        match registered with
+        | Some index ->
+            let current =
+                match s[index].ImplementationInstance with
+                | :? KnowledgePolicies as policies -> policies
+                | _ -> KnowledgePolicies.defaults
+
+            s[index] <- ServiceDescriptor.Singleton<KnowledgePolicies>(change current)
+            s
+        | None -> s.AddSingleton<KnowledgePolicies>(change KnowledgePolicies.defaults)
+
+    /// Set one field of the deployment's `KnowledgePolicies`.
+    let set (change: KnowledgePolicies -> KnowledgePolicies) (app: ServerApp) : ServerApp =
+        app |> ServerApp.addServiceConfig (update change)
+
+// ─── Upload-policy preflight ───────────────────────────────────────
 //
 // Warns at startup when the Knowledge Base runs in Team / MultiTeam mode
 // with no `MaxUploadBytes` cap: each upload's full `byte[]` is held in
@@ -26,26 +56,24 @@ open ToolUp.Platform.Compose
 // `AcceptUnboundedUploads` opt-out silences the warning. `Warning` only,
 // never `Error`, so it never aborts startup (GP 11).
 
-type private UploadPolicyValidator(serverConfig: ServerConfig, policy: KnowledgeUploadPolicy) =
-    interface IConfigValidator with
-        member _.Name = "knowledge-base:upload-policy"
-        member _.Timeout = IConfigValidator.defaultTimeout
+let private uploadPolicyValidator
+    (serverConfig: ServerConfig, policy: KnowledgeUploadPolicy)
+    : ConfigValidation.IConfigValidator =
+    ConfigValidator.create "knowledge-base:upload-policy" (fun () -> async {
+        let teamScoped = DeploymentConfig.hasTeamScope serverConfig
 
-        member _.Validate() = async {
-            let teamScoped = DeploymentConfig.hasTeamScope serverConfig
-
-            if KnowledgeUploadPolicy.warnsUncappedInTeamMode teamScoped policy then
-                return
-                    ValidationResult.Warning(
-                        "Knowledge Base upload policy sets no MaxUploadBytes in Team / MultiTeam mode. "
-                        + "Each upload's full byte[] is held in memory through Remoting + extraction, so an "
-                        + "uncapped upload is a per-tenant memory-exhaustion lever. Set a cap via "
-                        + "KnowledgeBase.Server.withUploadPolicy { ... MaxUploadBytes = Some <bytes> }, or accept "
-                        + "unbounded uploads deliberately and silence this warning with AcceptUnboundedUploads = true."
-                    )
-            else
-                return ValidationResult.Ok
-        }
+        if KnowledgeUploadPolicy.warnsUncappedInTeamMode teamScoped policy then
+            return
+                ValidationResult.Warning(
+                    "Knowledge Base upload policy sets no MaxUploadBytes in Team / MultiTeam mode. "
+                    + "Each upload's full byte[] is held in memory through Remoting + extraction, so an "
+                    + "uncapped upload is a per-tenant memory-exhaustion lever. Set a cap via "
+                    + "KnowledgeBase.Server.withUploadPolicy { ... MaxUploadBytes = Some <bytes> }, or accept "
+                    + "unbounded uploads deliberately and silence this warning with AcceptUnboundedUploads = true."
+                )
+        else
+            return ValidationResult.Ok
+    })
 
 /// Compose-time Knowledge Base upload policy (Phase 119): size cap +
 /// extension allowlist + unsupported-type handling, on top of the
@@ -60,12 +88,9 @@ type private UploadPolicyValidator(serverConfig: ServerConfig, policy: Knowledge
 /// (GP 11 / GP 13).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerApp =
-    let register (s: IServiceCollection) =
-        s.AddSingleton<KnowledgeUploadPolicy>(policy)
-
-    let withSingleton = app |> ServerApp.addServiceConfig register
-
-    ServerApp.withConfigValidator (UploadPolicyValidator(app.Config, policy) :> IConfigValidator) withSingleton
+    app
+    |> KnowledgePolicyRegistration.set (fun policies -> { policies with Upload = policy })
+    |> ServerApp.withConfigValidator (uploadPolicyValidator (app.Config, policy))
 
 /// Phase 14x — compose-time lever for KB upload content-hash dedup.
 /// Dedup is ON by default (no call needed): `UploadDocument` SHA-256-
@@ -81,12 +106,8 @@ let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerAp
 /// the AI and RAG companions see it on either side of them.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
-    let policy: KnowledgeDedupPolicy = { DedupUploads = enabled }
-
-    let register (s: IServiceCollection) =
-        s.AddSingleton<KnowledgeDedupPolicy>(policy)
-
-    app |> ServerApp.addServiceConfig register
+    app
+    |> KnowledgePolicyRegistration.set (fun policies -> { policies with Dedup = enabled })
 
 /// Phase 510 — compose-time lever for KB upload **versioning**. OFF by
 /// default: call `withDocumentVersioning true` and a re-upload of an
@@ -102,7 +123,7 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
 /// re-upload lands as a second, unrelated document, no predecessor
 /// lookup runs, and no version or chunk-hash sidecar is written. The
 /// default is OFF rather than ON precisely because versioning changes
-/// what a re-upload MEANS — see `KnowledgeVersioningPolicy` for why a
+/// what a re-upload MEANS — see `KnowledgePolicies.Versioning` for why a
 /// corpus that wants every revision as its own record is a legitimate
 /// shape we must not silently collapse.
 ///
@@ -114,12 +135,8 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
 /// side of them.
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
-    let policy: KnowledgeVersioningPolicy = { VersionUploads = enabled }
-
-    let register (s: IServiceCollection) =
-        s.AddSingleton<KnowledgeVersioningPolicy>(policy)
-
-    app |> ServerApp.addServiceConfig register
+    app
+    |> KnowledgePolicyRegistration.set (fun policies -> { policies with Versioning = enabled })
 
 /// Phase 105 — compose-time lever for routing KB **original documents**
 /// through `IDataObjectStore` rather than writing them as raw blobs at
@@ -149,38 +166,33 @@ let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
 /// (GP 13).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withObjectStoreRetention (enabled: bool) (app: ServerApp) : ServerApp =
-    let policy: KnowledgeObjectRetentionPolicy = {
-        RetainOriginalsInObjectStore = enabled
-    }
-
-    let register (s: IServiceCollection) =
-        s.AddSingleton<KnowledgeObjectRetentionPolicy>(policy)
-
-    app |> ServerApp.addServiceConfig register
+    app
+    |> KnowledgePolicyRegistration.set (fun policies -> {
+        policies with
+            ObjectRetention = enabled
+    })
 
 // ─── Phase 512 — per-scope quota + retention compose hooks ───────────
 
 // ─── Quota preflight ─────────────────────────────────────────────────
 
-type private QuotaPolicyValidator(serverConfig: ServerConfig, policy: KnowledgeQuotaPolicy) =
-    interface IConfigValidator with
-        member _.Name = "knowledge-base:quota-policy"
-        member _.Timeout = IConfigValidator.defaultTimeout
+let private quotaPolicyValidator
+    (serverConfig: ServerConfig, policy: KnowledgeQuotaPolicy)
+    : ConfigValidation.IConfigValidator =
+    ConfigValidator.create "knowledge-base:quota-policy" (fun () -> async {
+        let teamScoped = DeploymentConfig.hasTeamScope serverConfig
 
-        member _.Validate() = async {
-            let teamScoped = DeploymentConfig.hasTeamScope serverConfig
-
-            if teamScoped && KnowledgeQuotaPolicy.isUnlimited policy then
-                return
-                    ValidationResult.Warning(
-                        "Knowledge Base quota policy sets neither MaxDocuments nor MaxBytes in Team / MultiTeam mode. "
-                        + "A single team can then grow its document corpus and vector index without bound, and the only "
-                        + "backstop is the per-file MaxUploadBytes cap. Set a corpus cap via "
-                        + "KnowledgeBase.Server.withKnowledgeQuota { MaxDocuments = Some <n>; MaxBytes = Some <bytes> }."
-                    )
-            else
-                return ValidationResult.Ok
-        }
+        if teamScoped && KnowledgeQuotaPolicy.isUnlimited policy then
+            return
+                ValidationResult.Warning(
+                    "Knowledge Base quota policy sets neither MaxDocuments nor MaxBytes in Team / MultiTeam mode. "
+                    + "A single team can then grow its document corpus and vector index without bound, and the only "
+                    + "backstop is the per-file MaxUploadBytes cap. Set a corpus cap via "
+                    + "KnowledgeBase.Server.withKnowledgeQuota { MaxDocuments = Some <n>; MaxBytes = Some <bytes> }."
+                )
+        else
+            return ValidationResult.Ok
+    })
 
 /// Phase 512 — compose-time per-scope Knowledge Base **corpus** quota:
 /// a document-count ceiling and a total-bytes ceiling, enforced at the
@@ -201,11 +213,9 @@ type private QuotaPolicyValidator(serverConfig: ServerConfig, policy: KnowledgeQ
 /// for quota — pre-512 behaviour byte-for-byte (GP 11 / GP 13).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withKnowledgeQuota (policy: KnowledgeQuotaPolicy) (app: ServerApp) : ServerApp =
-    let withSingleton =
-        app
-        |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<KnowledgeQuotaPolicy>(policy))
-
-    ServerApp.withConfigValidator (QuotaPolicyValidator(app.Config, policy) :> IConfigValidator) withSingleton
+    app
+    |> KnowledgePolicyRegistration.set (fun policies -> { policies with Quota = policy })
+    |> ServerApp.withConfigValidator (quotaPolicyValidator (app.Config, policy))
 
 // ─── Dev usage endpoint (`/dev/knowledge-base/usage`) ────────────────
 
@@ -229,15 +239,12 @@ let private devUsageContainer (ctx: HttpContext) : string =
 
 let private devUsageHandler: HttpHandler =
     fun next (ctx: HttpContext) -> task {
-        let storage =
-            match ctx.RequestServices.GetService typeof<IBlobStorage> with
-            | :? IBlobStorage as s -> Some s
-            | _ -> None
+        let storage = ServiceComposition.tryService<IBlobStorage> ctx.RequestServices
 
         let policy =
-            match ctx.RequestServices.GetService typeof<KnowledgeQuotaPolicy> with
-            | :? KnowledgeQuotaPolicy as p -> p
-            | _ -> KnowledgeQuotaPolicy.unlimited
+            ServiceComposition.tryService<KnowledgePolicies> ctx.RequestServices
+            |> Option.defaultValue KnowledgePolicies.defaults
+            |> _.Quota
 
         let container = devUsageContainer ctx
 
@@ -245,7 +252,7 @@ let private devUsageHandler: HttpHandler =
             match storage with
             | Some s ->
                 async {
-                    let! docs = loadIndex s container
+                    let! docs = loadListing indexLogger s container
                     return KnowledgeScopeUsage.ofDocuments policy docs
                 }
                 |> Async.StartAsTask
@@ -328,15 +335,13 @@ let withKnowledgeQuotaAndUsageEndpoint (policy: KnowledgeQuotaPolicy) (app: Serv
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string list) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
-        let withPolicy = s.AddSingleton<KnowledgeRetentionPolicy>(policy)
-
         if KnowledgeRetentionPolicy.isInert policy || List.isEmpty scopes then
-            withPolicy
+            s
         else
             // Once at start: the sweep runs as a scheduler job, placed by
             // the scheduler's own unit.
             Hosting.register
-                withPolicy
+                s
                 (Hosting.deferredJobs "knowledge-base-retention-sweep" [
                     DeferredScheduledJobDeclaration.create (fun provider ->
                         ScheduledJobDeclaration.create
@@ -347,26 +352,26 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
                         |> ScheduledJobDeclaration.withScopes scopes)
                 ])
 
-    app |> ServerApp.addServiceConfig register
+    app
+    |> KnowledgePolicyRegistration.set (fun policies -> { policies with Retention = policy })
+    |> ServerApp.addServiceConfig register
 
 // ─── Phase 515 — content scanning at the upload boundary ─────────────
 
-type private ContentScanValidator(scanner: IContentScanner, policy: ContentScanPolicy) =
-    interface IConfigValidator with
-        member _.Name = "knowledge-base:content-scanning"
-        member _.Timeout = IConfigValidator.defaultTimeout
-
-        member _.Validate() = async {
-            match policy.OnScanError with
-            | FailClosedOnScanError -> return ValidationResult.Ok
-            | FailOpenOnScanError ->
-                return
-                    ValidationResult.Warning(
-                        sprintf
-                            "Knowledge Base content scanning is composed with '%s' but set to FAIL OPEN. When the scanner is unreachable or errors, uploads are admitted UNSCANNED and the audit row records Refused = false. That is a legitimate posture for defence-in-depth behind another control; if it is not deliberate, compose ContentScanPolicy.failClosed instead."
-                            scanner.Name
-                    )
-        }
+let private contentScanValidator
+    (scanner: IContentScanner, policy: ContentScanPolicy)
+    : ConfigValidation.IConfigValidator =
+    ConfigValidator.create "knowledge-base:content-scanning" (fun () -> async {
+        match policy.OnScanError with
+        | FailClosedOnScanError -> return ValidationResult.Ok
+        | FailOpenOnScanError ->
+            return
+                ValidationResult.Warning(
+                    sprintf
+                        "Knowledge Base content scanning is composed with '%s' but set to FAIL OPEN. When the scanner is unreachable or errors, uploads are admitted UNSCANNED and the audit row records Refused = false. That is a legitimate posture for defence-in-depth behind another control; if it is not deliberate, compose ContentScanPolicy.failClosed instead."
+                        scanner.Name
+                )
+    })
 
 /// Phase 515 — compose-time content scanning at the KB upload boundary.
 /// Registers the scanner and its error policy as DI singletons (read per
@@ -386,9 +391,18 @@ type private ContentScanValidator(scanner: IContentScanner, policy: ContentScanP
 /// read — the pre-515 upload path byte-for-byte (GP 11 / GP 13).
 /// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withContentScanning (scanner: IContentScanner) (policy: ContentScanPolicy) (app: ServerApp) : ServerApp =
-    let withSingletons =
-        app
-        |> ServerApp.addServiceConfig (fun s ->
-            s.AddSingleton<IContentScanner>(scanner).AddSingleton<ContentScanPolicy>(policy))
+    app
+    |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<IContentScanner>(scanner))
+    |> KnowledgePolicyRegistration.set (fun policies -> { policies with Scan = policy })
+    |> ServerApp.withConfigValidator (contentScanValidator (scanner, policy))
 
-    ServerApp.withConfigValidator (ContentScanValidator(scanner, policy) :> IConfigValidator) withSingletons
+// ─── DOCX extraction ─────────────────────────────────────────────────
+
+/// Compose-time choice of the `.docx` extractor. The default is
+/// `DocxExtractionMode.Flat` (per-heading text); `Structured` reads the
+/// OpenXml model, so each chunk is keyed by its full heading path, list
+/// items keep their bullet shape and tables become citable table chunks.
+/// **Sets** `KnowledgePolicies.DocxMode`; a later call replaces it.
+let withDocxExtraction (mode: DocxExtractionMode) (app: ServerApp) : ServerApp =
+    app
+    |> KnowledgePolicyRegistration.set (fun policies -> { policies with DocxMode = mode })

@@ -337,9 +337,10 @@ let previewOriginal
         try
             let! index = loadIndex storage container
 
-            match index |> List.tryFind (fun d -> d.Id = docId) with
-            | None -> return Error NotInScope
-            | Some doc -> return! seam.Preview(storage, container, doc, locator)
+            match index |> Result.map (List.tryFind (fun d -> d.Id = docId)) with
+            | Error error -> return Error(OriginalRetrievalFailed(IndexReadError.describe error))
+            | Ok None -> return Error NotInScope
+            | Ok(Some doc) -> return! seam.Preview(storage, container, doc, locator)
         with ex ->
             return Error(OriginalRetrievalFailed ex.Message)
     }

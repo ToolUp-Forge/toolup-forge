@@ -42,7 +42,7 @@ let publishInventoryUpdate
     : Async<unit> =
     async {
         try
-            let! docs = loadIndex storage container
+            let! docs = loadListing logger storage container
             let! aiContext = loadAIContext storage container
 
             // Heuristic-only suggested questions (WS4.4) — sample doc
@@ -167,7 +167,7 @@ let kbInventoryBuilder (storage: IBlobStorage) (logger: ILogger option) : System
                 match inventoryCache.TryGetValue scope.Container with
                 | true, (expiresAt, payload) when expiresAt > now -> return payload
                 | _ ->
-                    let! docs = loadIndex storage scope.Container
+                    let! docs = loadListing (logger |> Option.defaultValue indexLogger) storage scope.Container
                     let payload = formatInventory docs
 
                     inventoryCache.AddOrUpdate(

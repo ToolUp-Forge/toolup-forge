@@ -241,22 +241,8 @@ let init (ctx: ClientModuleContext) =
     },
     Cmd.batch [ Cmd.ofMsg (LoadDocuments(Start())); Cmd.ofMsg (LoadAIContext(Start())) ]
 
-let private isTerminal (status: IngestionStatus) =
-    match status with
-    | IngestionStatus.Complete _
-    | IngestionStatus.Failed _
-    // Phase 119 — both are end-states; neither progresses, so the poll
-    // loop must not keep waiting on them.
-    | IngestionStatus.UploadRejected _
-    | IngestionStatus.UnsupportedFormat _
-    // Phase 500 — terminal: no OCR companion is composed, so nothing
-    // further will happen to this document. Polling it forever would
-    // keep the 2s loop alive on a state that cannot change.
-    | IngestionStatus.OcrUnavailable _ -> true
-    | _ -> false
-
 let private hasNonTerminal (docs: KnowledgeDocument list) =
-    docs |> List.exists (fun d -> not (isTerminal d.Status))
+    docs |> List.exists (fun d -> not (IngestionStatus.isTerminal d.Status))
 
 /// Schedule a delayed `PollStatuses` dispatch. Used to drive a 2s polling
 /// loop while at least one document is non-terminal — the loop self-terminates
@@ -617,7 +603,8 @@ let update (msg: Msg) (model: Model) =
         // running per session — N parallel `StatusPolled` returns would
         // otherwise each schedule their own next cycle and fan out.
         let nonTerminal =
-            model.Documents |> List.filter (fun d -> not (isTerminal d.Status))
+            model.Documents
+            |> List.filter (fun d -> not (IngestionStatus.isTerminal d.Status))
 
         let fetchCmds =
             nonTerminal

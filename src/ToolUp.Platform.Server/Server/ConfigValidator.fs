@@ -28,6 +28,16 @@ let private blobSentinelKey = "preflight/sentinel.bin"
 [<Literal>]
 let private secretSentinelKey = "_platform_preflight_canary"
 
+/// A validator as a value: its name and its check, at
+/// `IConfigValidator.defaultTimeout`. A validator that needs nothing but the
+/// values it closes over is a call to this, not a class.
+let create (name: string) (validate: unit -> Async<ValidationResult>) : IConfigValidator =
+    { new IConfigValidator with
+        member _.Name = name
+        member _.Timeout = IConfigValidator.defaultTimeout
+        member _.Validate() = validate ()
+    }
+
 /// Shared body for the "gated-refusal" auth validators (`csrf-default-mode`,
 /// `sse-auth-mode`, `header-auth-mode`, `encrypted-secret-store-mode`,
 /// `oauth-secret-encryption-mode`). Each emits its result only when the

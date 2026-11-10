@@ -48,7 +48,7 @@ let private noopNotifications =
 
 let private mkDeps (storage: IBlobStorage) (policy: KnowledgeUploadPolicy) (container: string) : KnowledgeApiDeps = {
     Storage = storage
-    Queue = IngestionQueue()
+    Queue = Some(IngestionQueue())
     OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
     Notifications = noopNotifications
@@ -72,26 +72,15 @@ let private mkDeps (storage: IBlobStorage) (policy: KnowledgeUploadPolicy) (cont
     PublishInventory = fun () -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
-    UploadPolicy = policy
-    // Phase 119 assertions pin the pre-dedup upload path; dedup has its
-    // own pack (`KnowledgeDedupTests`), and each 119 case uploads
-    // distinct bytes anyway.
-    DedupPolicy = KnowledgeDedupPolicy.enabled
-    VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    Policies = {
+        KnowledgePolicies.defaults with
+            Upload = policy
+    }
     // Phase 105 — retention not composed: the pre-105 convention-blob path.
     DataObjectStore = None
-    // Phase 512 — these packs pin pre-512 paths; the unlimited /
-    // retain-forever defaults keep them byte-identical.
-    QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-    RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     // Phase 515 — no scanner composed: the pre-515 upload path.
     ContentScanner = None
-    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = None
-    // Phase 511 — bulk import is not exercised here: archive guards at
-    // their shipped defaults, URL ingestion inert, no transport.
-    ArchiveImportPolicy = ArchiveImportPolicy.defaults
-    UrlIngestionPolicy = UrlIngestionPolicy.disabled
     UrlFetcher = None
 }
 
@@ -103,7 +92,8 @@ let private isRejected =
 /// Poll the persisted index until the document reaches a terminal status
 /// (extraction runs off the request path via `Async.Start`).
 let rec private waitTerminal (deps: KnowledgeApiDeps) (docId: string) (attempts: int) = async {
-    let! idx = loadIndex deps.Storage deps.Scope.Container
+    let! read = loadIndex deps.Storage deps.Scope.Container
+    let idx = Expect.wantOk read "the index reads"
 
     match idx |> List.tryFind (fun d -> d.Id = docId) with
     | Some d ->
@@ -136,7 +126,8 @@ let tests =
 
             // The KB index (knowledge/index.json) loads the document — proof
             // the raw upload did NOT overwrite it with file bytes.
-            let! idx = loadIndex storage "team-a"
+            let! read = loadIndex storage "team-a"
+            let idx = Expect.wantOk read "the index reads"
 
             Expect.equal
                 (idx |> List.map _.Id)
@@ -166,7 +157,8 @@ let tests =
 
             Expect.isTrue (isRejected doc.Status) "oversize upload yields UploadRejected"
 
-            let! idx = loadIndex storage "team-a"
+            let! read = loadIndex storage "team-a"
+            let idx = Expect.wantOk read "the index reads"
             Expect.isEmpty idx "nothing is persisted to the index on rejection"
 
             let! blobs = storage.List("team-a", "knowledge/")
@@ -256,4 +248,60 @@ let tests =
             Expect.isFalse
                 (KnowledgeUploadPolicy.warnsUncappedInTeamMode true accepted)
                 "explicit AcceptUnboundedUploads silences the warning"
+
+        testCase "registration order: every KB builder's registrations land in composition order"
+        <| fun _ ->
+            let app =
+                ServerApp.empty
+                |> KnowledgeBase.Server.withUploadPolicy KnowledgeUploadPolicy.permissive
+                |> KnowledgeBase.Server.withDocumentDedup false
+                |> KnowledgeBase.Server.withDocumentVersioning true
+                |> KnowledgeBase.Server.withObjectStoreRetention true
+                |> KnowledgeBase.Server.withKnowledgeQuota KnowledgeQuotaPolicy.unlimited
+                |> KnowledgeBase.Server.withKnowledgeRetention KnowledgeRetentionPolicy.retainForever []
+                |> KnowledgeBase.ServerUploadPolicy.withContentScanning
+                    (AllowAllContentScanner())
+                    ContentScanPolicy.defaults
+                |> KnowledgeBase.Server.withArchiveImportPolicy ArchiveImportPolicy.defaults
+                |> KnowledgeBase.Server.withUrlIngestion UrlIngestionPolicy.disabled
+                |> KnowledgeBase.Server.withOriginalSourceResolver (createDefault ())
+                |> KnowledgeBase.Server.withIngestionRecovery
+
+            let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+            match ServerApp.serviceConfig app with
+            | Some register -> register services |> ignore
+            | None -> failtest "the KB builders registered nothing"
+
+            // The policy values are data, not registrations of their own:
+            // they are left out, so the order the seams land in is what is pinned.
+            let policyTypes =
+                set [
+                    "KnowledgePolicies"
+                    "KnowledgeUploadPolicy"
+                    "KnowledgeDedupPolicy"
+                    "KnowledgeVersioningPolicy"
+                    "KnowledgeObjectRetentionPolicy"
+                    "KnowledgeQuotaPolicy"
+                    "KnowledgeRetentionPolicy"
+                    "ContentScanPolicy"
+                    "ArchiveImportPolicy"
+                    "UrlIngestionPolicy"
+                ]
+
+            let order =
+                services
+                |> Seq.map _.ServiceType.Name
+                |> Seq.filter (fun name -> not (policyTypes.Contains name))
+                |> List.ofSeq
+
+            Expect.equal
+                order
+                [
+                    "IContentScanner"
+                    "IUrlContentFetcher"
+                    "IOriginalSourceResolver"
+                    "IIngestionRecoverySurface"
+                ]
+                "the seams register in the order the builders were composed"
     ]

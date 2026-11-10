@@ -61,20 +61,21 @@ let private hookOver
     (status: IIngestionStatusStore)
     (storage: BlobStorage.IBlobStorage)
     =
-    ToolUp.RAG.RAGCompose.makeVectorisationHook
-        handlers
-        queue
-        (ToolUp.RAG.RagTelemetry.createNoOp ())
-        false
-        None
-        None
-        (InMemoryEventStore.InMemoryEventStore())
-        status
-        (IngestionAttemptStore.dataManager status storage Logger.silent)
-        DropWrite
-        (NoOpAuditLog())
-        (NotificationChannel.NoOpNotificationChannel())
-        Logger.silent
+    ToolUp.RAG.VectorisationHook.makeVectorisationHook {
+        Handlers = handlers
+        Queue = queue
+        Telemetry = ToolUp.RAG.RagTelemetry.createNoOp ()
+        EnableSummaries = false
+        MaxChunkBytes = None
+        MaxDocumentBytes = None
+        EventStore = InMemoryEventStore.InMemoryEventStore()
+        StatusStore = status
+        Attempts = IngestionAttemptStore.dataManager status storage Logger.silent
+        OverflowPolicy = DropWrite
+        AuditLog = NoOpAuditLog()
+        Notifications = NotificationChannel.NoOpNotificationChannel()
+        Logger = Logger.silent
+    }
 
 /// Run the hook for one saved file and return the job it enqueued.
 let private enqueueFor (scope: StorageScope) (createdBy: string) : Async<DocumentIngestionJob> = async {
