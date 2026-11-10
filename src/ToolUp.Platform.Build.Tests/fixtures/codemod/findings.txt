@@ -1,4 +1,4 @@
-Codemod: 111 site(s) in 20 file(s) need human review (not rewritten):
+Codemod: 112 site(s) in 21 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -24,6 +24,9 @@ Codemod: 111 site(s) in 20 file(s) need human review (not rewritten):
       -> Phase 1071: `FlagsPrefetch` and `ResetCounters` are gone: delete the line from a full `Client.Model` literal. The first-init gates are `AwaitingFirstInit` (a set of boot-source keys), and a module's reset count is its host's `Generation`
     L15 [1071-module-msg-id] let increment dispatch = dispatch (Client.ModuleMsg(box Increment))
       -> Phase 1071: `ModuleMsg` carries the module id: construct `ModuleMsg(moduleId, box message)` and match `ModuleMsg(moduleId, message)`; a message for a module with no host is dropped
+  src/Client/Reports.fs
+    L7 [1073-data-table-columns] Data.table [ "Region"; "Spend" ] [ for r in rows -> [ Html.text r.Region; Html.text (string r.Spend) ] ]
+      -> Phase 1073: `Data.table` takes `Column<'row>` values and the rows themselves: write each header as `{ Header = "…"; Align = Data.Left; Cell = fun row -> … }` (the first column `Left`, figures `Right`) and pass the row values, not pre-rendered element lists
   src/Client/Shell.fs
     L24 [879-slot-field-split] DataManager =
       -> Phase 879: if this is a `ClientConfig` field, it is `Slots.<field> =` now (a nested copy-and-update) — the codemod moves the field only when its mode case is on the same line; a message-catalog field of the same name stays as it is
@@ -250,6 +253,7 @@ Codemod: 111 site(s) in 20 file(s) need human review (not rewritten):
     Phase 1068 — docs/migrations/1068-redesign-d-rate-limit-unification.md
     Phase 1070 — docs/migrations/1070-redesign-e-remote-and-memo-primitives.md
     Phase 1071 — docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md
+    Phase 1073 — docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1079 — docs/migrations/1079-redesign-f-the-connector-kernel.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md

@@ -49,6 +49,8 @@ let private tokenisedFiles = [
     "ToolUp.Platform.UI/Toolkit/Tokens.fs"
     "ToolUp.Platform.UI/Toolkit/Kpi.fs"
     "ToolUp.Platform.UI/Toolkit/Data.fs"
+    "ToolUp.Platform.UI/Toolkit/Tabs.fs"
+    "ToolUp.Platform.UI/Toolkit/Modal.fs"
     "ToolUp.Platform.UI/Toolkit/StateViews.fs"
     "ToolUp.Platform.UI/Toolkit/Forms.fs"
     "ToolUp.Platform.UI/Toolkit/Typography.fs"
@@ -226,6 +228,60 @@ let private stateViewNoticeTest = test "StateViews.notice and StateViews.remote 
     Expect.isFalse (code.Contains "errorBanner") "the caller-less error banner is deleted"
 }
 
+/// The admin page kit — the tab bar, the overlay and its confirmation, the
+/// stateful action buttons and the typed table — takes its colour from the
+/// theming tokens alone, so a light and a dark token set re-skin each piece
+/// with no edit to it, and takes every string from its caller.
+let private adminPageKitTest = test "the admin page kit reads only theming tokens and names no wording" {
+    let pieces = [
+        "ToolUp.Platform.UI/Toolkit/Tabs.fs", [ "let bar " ]
+        "ToolUp.Platform.UI/Toolkit/Modal.fs", [ "let overlay "; "let confirm"; "type ConfirmMessages" ]
+        "ToolUp.Platform.UI/Toolkit/Data.fs", [ "type Column<'row>"; "let table (columns: Column<'row> list)" ]
+        "ToolUp.Platform.UI/Toolkit/Forms.fs",
+        [
+            "type ButtonState"
+            "let primaryWith "
+            "let secondaryWith "
+            "let dangerWith "
+        ]
+        "ToolUp.Platform.UI/Toolkit/Tokens.fs", [ "let muted "; "let subtle "; "let success "; "let danger " ]
+    ]
+
+    for rel, definitions in pieces do
+        let code = readCode rel
+
+        for definition in definitions do
+            Expect.isTrue (code.Contains definition) $"{rel} defines `{definition.Trim()}`"
+
+    for rel in
+        [
+            "ToolUp.Platform.UI/Toolkit/Tabs.fs"
+            "ToolUp.Platform.UI/Toolkit/Modal.fs"
+            "ToolUp.Platform.UI/Toolkit/Data.fs"
+        ] do
+        let code = readCode rel
+
+        let palette =
+            Regex.Matches(
+                code,
+                @"\b(?:bg|text|border)-(?:red|green|gray|slate|amber|yellow|white)(?:-\d+)?\b|#[0-9A-Fa-f]{6}\b"
+            )
+            |> Seq.map _.Value
+            |> List.ofSeq
+
+        Expect.isEmpty palette $"{rel}: a kit colour is a token, never a palette literal (it would not follow a theme)"
+
+        // Every visible string is a parameter: no `prop.text "…"` literal.
+        Expect.isFalse
+            (Regex.IsMatch(code, "prop\.text\s+\"[^\"]"))
+            $"{rel}: a kit string comes from the caller, never a literal"
+
+    let tokens = readCode "ToolUp.Platform.UI/Toolkit/Tokens.fs"
+
+    for token in [ "var(--muted)"; "var(--surface-2)"; "var(--pos)"; "var(--neg)" ] do
+        Expect.isTrue (tokens.Contains token) $"Tokens reads {token}"
+}
+
 /// Phase 1069 — the shell bundle references no vendor UI package. Clerk's
 /// `UserButton` is rendered by the ClerkUI companion, which registers it
 /// as the page header's identity action; `Layout.userButton` renders the
@@ -262,4 +318,5 @@ let tests =
         fallbackLocaleTest
         stateViewNoticeTest
         noVendorImportTest
+        adminPageKitTest
     ]

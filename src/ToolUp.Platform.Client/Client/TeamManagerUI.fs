@@ -1633,7 +1633,7 @@ let private pendingInvitesView (msgs: TeamManagerMessages) (teamId: string) (mod
                 ]
             ]
 
-            Layout.Tabs.tabGroup [ EmailInvites, msgs.PendingInvitesPanel ] subTab (fun _ -> ())
+            Tabs.bar [ EmailInvites, msgs.PendingInvitesPanel ] subTab ignore
 
             Layout.Panel.panel msgs.PendingInvitesPanel [
                 Html.div [

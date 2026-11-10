@@ -97,6 +97,8 @@
     <Compile Include="Toolkit\Typography.fs" />
     <Compile Include="Toolkit\Forms.fs" />
     <Compile Include="Toolkit\Data.fs" />
+    <Compile Include="Toolkit\Tabs.fs" />
+    <Compile Include="Toolkit\Modal.fs" />
     <Compile Include="Toolkit\StateViews.fs" />
     <Compile Include="Toolkit\Kpi.fs" />
   </ItemGroup>

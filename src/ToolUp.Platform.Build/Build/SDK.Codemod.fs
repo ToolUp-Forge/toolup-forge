@@ -91,6 +91,9 @@ type CodemodMigration =
     /// and `ResetCounters` are `Hosts`, and the two first-init gate fields
     /// are `AwaitingFirstInit`.
     | ModuleHost
+    /// `Data.table` takes typed `Column<'row>` values in place of header
+    /// strings and pre-rendered element rows.
+    | AdminPageKit
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -125,6 +128,7 @@ module CodemodMigration =
         | CodemodMigration.AuditFailureAsData ->
             "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
         | CodemodMigration.ModuleHost -> "docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md"
+        | CodemodMigration.AdminPageKit -> "docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -152,6 +156,7 @@ module CodemodMigration =
         | CodemodMigration.FailureAsData -> "Phase 873"
         | CodemodMigration.AuditFailureAsData -> "Phase 1062"
         | CodemodMigration.ModuleHost -> "Phase 1071"
+        | CodemodMigration.AdminPageKit -> "Phase 1073"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1681,6 +1686,13 @@ module Codemod =
             CodemodFileClass.Source
             @"\bModuleMsg\s*\(\s*box\b|\bModuleMsg\s+\w+\s*->"
             "`ModuleMsg` carries the module id: construct `ModuleMsg(moduleId, box message)` and match `ModuleMsg(moduleId, message)`; a message for a module with no host is dropped"
+        // Since 0.42.0 the toolkit's table is typed over its rows.
+        review
+            "1073-data-table-columns"
+            CodemodMigration.AdminPageKit
+            CodemodFileClass.Source
+            @"\bData\.table\s*(?:\[\s*""|\(?\s*\w*[hH]eaders?\b)"
+            "`Data.table` takes `Column<'row>` values and the rows themselves: write each header as `{ Header = \"…\"; Align = Data.Left; Cell = fun row -> … }` (the first column `Left`, figures `Right`) and pass the row values, not pre-rendered element lists"
     ]
 
 
