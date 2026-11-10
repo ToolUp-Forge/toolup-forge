@@ -91,6 +91,10 @@ type CodemodMigration =
     /// and `ResetCounters` are `Hosts`, and the two first-init gate fields
     /// are `AwaitingFirstInit`.
     | ModuleHost
+    /// The three in-process retrieval stores share one snapshot index: the
+    /// HNSW store's own unreadable-snapshot exception is the one
+    /// `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`.
+    | SnapshotIndex
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -125,6 +129,8 @@ module CodemodMigration =
         | CodemodMigration.AuditFailureAsData ->
             "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
         | CodemodMigration.ModuleHost -> "docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md"
+        | CodemodMigration.SnapshotIndex ->
+            "docs/migrations/1084-redesign-g-scopedsnapshotindex-under-the-three-stores.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -152,6 +158,7 @@ module CodemodMigration =
         | CodemodMigration.FailureAsData -> "Phase 873"
         | CodemodMigration.AuditFailureAsData -> "Phase 1062"
         | CodemodMigration.ModuleHost -> "Phase 1071"
+        | CodemodMigration.SnapshotIndex -> "Phase 1084"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1075,6 +1082,23 @@ module Codemod =
             @"^(\s*)ConfigsPrefetch\s*=.*$"
             "$1AwaitingFirstInit = Client.firstInitGates"
             "`ConfigsPrefetch = …` in a full `Client.Model` literal → `AwaitingFirstInit = Client.firstInitGates` (delete the `FlagsPrefetch` line beside it)"
+        // The HNSW store's unreadable-snapshot exception is the one the
+        // shared snapshot index raises.
+        rewrite
+            "1084-hnsw-snapshot-exception"
+            CodemodMigration.SnapshotIndex
+            CodemodFileClass.Source
+            @"\b(?:(?:ToolUp\.RAG\.VectorStores\.Hnsw\.)?HnswVectorStore\.)?HnswScopeSnapshotUnreadableException\b"
+            "ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException"
+            "`HnswScopeSnapshotUnreadableException` → `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException` (its `Fault` says unreadable or corrupt)"
+        // The vector store's exception moved with the index into Infra.
+        rewrite
+            "1084-rag-snapshot-exception-home"
+            CodemodMigration.SnapshotIndex
+            CodemodFileClass.Source
+            @"\b(?:ToolUp\.RAG\.)?InMemoryVectorStore\.RagScopeSnapshotUnreadableException\b"
+            "ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException"
+            "`InMemoryVectorStore.RagScopeSnapshotUnreadableException` → `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -2685,6 +2709,7 @@ module Codemod =
             CodemodMigration.FailureAsData
             CodemodMigration.AuditFailureAsData
             CodemodMigration.ModuleHost
+            CodemodMigration.SnapshotIndex
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

@@ -52,3 +52,7 @@ let envelope scopeId at event = AuditEnvelope.fromScopeId scopeId at event
 let sink (audit: IAuditLog option) = audit
 
 let quiet auditLog = match auditLog with Some log -> log | None -> NoOpAuditLog() :> IAuditLog
+
+let refusedHnsw (ex: exn) = match ex with :? HnswVectorStore.HnswScopeSnapshotUnreadableException -> true | _ -> false
+
+let refusedVector (ex: exn) = match ex with :? InMemoryVectorStore.RagScopeSnapshotUnreadableException -> true | _ -> false

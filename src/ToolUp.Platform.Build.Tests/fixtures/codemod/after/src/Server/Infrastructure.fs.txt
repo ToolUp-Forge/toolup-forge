@@ -52,3 +52,7 @@ let envelope scopeId at event = AuditEnvelope.create AuditSubject.unattributed s
 let sink (audit: IAuditLog) = audit
 
 let quiet auditLog = match auditLog with Some log -> log | None -> NoOpAuditLog() :> IAuditLog
+
+let refusedHnsw (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+
+let refusedVector (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false

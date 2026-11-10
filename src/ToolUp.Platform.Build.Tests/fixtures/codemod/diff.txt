@@ -309,6 +309,12 @@
 @@ L52 [1062-audit-log-option]
 -let sink (audit: IAuditLog option) = audit
 +let sink (audit: IAuditLog) = audit
+@@ L56 [1084-hnsw-snapshot-exception]
+-let refusedHnsw (ex: exn) = match ex with :? HnswVectorStore.HnswScopeSnapshotUnreadableException -> true | _ -> false
++let refusedHnsw (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+@@ L58 [1084-rag-snapshot-exception-home]
+-let refusedVector (ex: exn) = match ex with :? InMemoryVectorStore.RagScopeSnapshotUnreadableException -> true | _ -> false
++let refusedVector (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -421,4 +427,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 107 rewrite(s) across 19 file(s) pending.
+Codemod: 109 rewrite(s) across 19 file(s) pending.

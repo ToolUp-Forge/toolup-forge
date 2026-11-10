@@ -108,10 +108,41 @@ breaks. Callers write through `IVectorStore.upsertBatch store scope chunks`, whi
 batch interface and otherwise falls back to one `Upsert` per chunk, in order — the two paths leave
 the store in the same state. `ToolUp.VectorStores.Pgvector` implements it as one statement per batch.
 
+### One hydration model for the in-process stores
+
+`InMemoryVectorStore`, `InMemoryBM25Index` and `ToolUp.VectorStores.Hnsw` each keep a scope's corpus in process
+memory and persist it as one blob per scope: `_rag/{scope}/index.json`, `_rag/{scope}/bm25.json` and
+`_rag/{scope}/hnsw-index.json`. All three sit on one base, `ScopedSnapshotIndex` in
+`ToolUp.Platform.Infra`, so they share one law:
+
+- **Loading.** A scope loads on first access, once, behind a single-flight gate, so a write cannot land between a
+  concurrent load's read and its replay. No store constructor reads storage. The composition starts the stores it
+  builds, which loads the platform and deployment scopes at boot; a store you construct yourself loads them on first
+  access, or when you call its `Start`.
+- **Absent, unreadable, corrupt.** No blob is an empty scope. A blob that exists but cannot be read refuses every
+  write with `RagScopeSnapshotUnreadableException` (`Fault = Unreadable`), because a write on an empty map would
+  replace the corpus at the next flush; a search skips that scope with a warning, and the next access retries. A
+  blob that reads but does not decode follows the corruption policy.
+- **The corruption policy.** By default a corrupt scope starts empty. With `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION`
+  set it is refused (`Fault = Corrupt`) on every access, searches included, until the blob is repaired; under the
+  composition, a corrupt platform or deployment snapshot then fails the boot. Either way, every store reports it
+  once per scope: the `IndexLoadErrors` telemetry counter, a `KnowledgeIndexLoadFailed` audit row and an Error
+  `SystemMessage` to platform admins. The composition reads the variable once and passes the policy to the stores it
+  constructs; a store you construct takes `corruptPolicy`, and reads the variable when you leave it out.
+- **Flushing.** A write marks its scope dirty and returns. A background loop flushes the dirty scopes every two
+  seconds (`flushIntervalMs`); the vector store also flushes as soon as 100 writes are pending
+  (`flushChunkThreshold`). `Dispose` flushes once more. A scope the keyword index holds no document for has no
+  snapshot at rest: its blob is deleted at the next flush.
+- **Listing.** `ListScopes` answers a loaded scope from memory (a wipe not yet flushed is not listed) and every
+  persisted scope not loaded yet from its blob, so a re-embed sweep after a restart sees the cold ones.
+
+The external stores (`ToolUp.VectorStores.Pgvector`, `ToolUp.SparseIndices.Postgres`) hydrate nothing and are not on
+this base; Pgvector reads `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION` itself, for an undecodable metadata column.
+
 ### Default `InMemoryVectorStore`
 
 - Pre-normalised vectors (cosine similarity = dot product).
-- Debounced `IBlobStorage` persistence — `Index` writes to memory immediately, persists after a 5-second debounce.
+- Persistence, hydration and the corruption policy are the [one hydration model](#one-hydration-model-for-the-in-process-stores) below; a search reads only the requested scopes' own maps.
 - `IDisposable` lifecycle — final flush on shutdown so no chunks are lost.
 - Soft-delete via `_deletedAt` tombstones — `DeleteChunk` writes a tombstone; subsequent `Search` filters them out.
 - `Vacuum` hard-removes tombstones past the retention window.
@@ -123,7 +154,7 @@ Ceiling: ~50,000 chunks before query latency becomes noticeable (1M+ comparisons
 
 Hierarchical Navigable Small World index. Approximate nearest-neighbour; trades ~5% recall accuracy for orders-of-magnitude speedup. Persists the index to `IBlobStorage` for warm restart. Suitable for low-millions of chunks per scope.
 
-Still a **single-process** store: the graph lives in process memory and is snapshotted asynchronously, so two replicas each own a private index.
+Still a **single-process** store: the graph lives in process memory and is snapshotted asynchronously, so two replicas each own a private index. Its entries persist and hydrate under the [same model](#one-hydration-model-for-the-in-process-stores) as the default store; the graph is rebuilt from them on a scope's first search.
 
 ### `ToolUp.VectorStores.Pgvector`
 
