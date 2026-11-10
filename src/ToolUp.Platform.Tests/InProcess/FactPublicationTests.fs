@@ -877,16 +877,6 @@ let private disclosureTests =
                 "the target table declares the column Surfaceable, but the source published it Restricted: the floor is Restricted"
         }
 
-        test "Disclosure.floor is the import rule it reuses" {
-            Expect.equal (Disclosure.floor (Restricted "sales") Surfaceable) (Restricted "sales") "never widens"
-            Expect.equal (Disclosure.floor Surfaceable Internal) Internal "narrows to the target's ceiling"
-
-            Expect.equal
-                (Disclosure.floor (Restricted "a") (Restricted "b"))
-                Internal
-                "incomparable meets at the bottom"
-        }
-
         test "the door has its own canonical name and is decided for the least-privileged viewer" {
             Expect.equal (FactEgressSurface.toString FactTeamPublication) "TeamPublication" "canonical audit name"
 

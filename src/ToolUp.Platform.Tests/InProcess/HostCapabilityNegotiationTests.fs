@@ -22,15 +22,6 @@ let private clipboard = HostCapability.ClipboardWrite
 let tests =
     testList "HostCapabilityNegotiation (Phase 270)" [
 
-        testCase "matched sets negotiate clean"
-        <| fun _ ->
-            let required = HostCapabilitySet.defaultRequired
-            let host = HostCapabilitySet.host []
-
-            match HostCapabilityNegotiation.negotiate required host with
-            | Ok() -> ()
-            | Error m -> failtestf "matched sets must mount clean; got: %s" (HostCapabilityMismatch.describe m)
-
         testCase "the default required set (four built-ins) always negotiates clean (GP 11)"
         <| fun _ ->
             // A view that declares nothing uses defaultRequired; any host

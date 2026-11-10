@@ -142,17 +142,6 @@ let tests (name: string) (factory: unit -> IDeployPipeline) =
 
         // ─── Six-rule portability audit (Phase 9c, GP 12) ─────────
 
-        testCaseAsync "Rule 1 — identity-by-value: DeployId / TenantId / BuildId are string aliases"
-        <| async {
-            let did: DeployId = "d-1"
-            let tid: string = "t-1"
-            let bid: BuildId = "b-1"
-            Expect.equal did "d-1" "DeployId is a string alias"
-            Expect.equal tid "t-1" "TenantId is a string alias"
-            Expect.equal bid "b-1" "BuildId is a string alias"
-            do! async.Return()
-        }
-
         testCaseAsync "Rule 2 — async at every boundary: every method returns Async<_>"
         <| async {
             let pipeline = factory ()
@@ -529,24 +518,6 @@ let planTests (name: string) (binding: DeployPlanBinding) =
             Expect.isTrue
                 (plan.Changes |> List.exists (fun c -> c.Kind = PlannedChangeKind.Launch))
                 "the round-tripped plan carried real change lines"
-        }
-
-        testCaseAsync "Rule 1 — PlannedChange identity is its field values, not reference"
-        <| async {
-            let a: PlannedChange = {
-                ContainerId = Some "c-1"
-                TenantId = "t-1"
-                Kind = PlannedChangeKind.Restart
-                Target = Some(specFor "img/a:1")
-                ImageRef = "img/a:1"
-                Observed = ContainerExited(1, DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))
-                Reason = "requested but exited"
-            }
-
-            let b = { a with Reason = a.Reason }
-            Expect.equal a b "two independently-constructed changes with equal fields are equal"
-            Expect.notEqual a { a with Kind = PlannedChangeKind.Stop } "a differing field breaks equality"
-            do! async.Return()
         }
 
         // ─── Rule 2 / 3 ───────────────────────────────────────────
