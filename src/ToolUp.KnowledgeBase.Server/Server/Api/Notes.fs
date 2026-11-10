@@ -135,11 +135,19 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                         // note text retrievable through the hybrid sparse
                         // leg). Best-effort here: the re-ingestion below
                         // overwrites the same chunk ids, so survivors are
-                        // logged by the seam rather than failing the update.
+                        // logged rather than failing the update.
                         match deps.IndexLifecycle with
                         | Some lifecycle ->
-                            let! _ = lifecycle.DeleteDocument deps.VectorScope req.DocId prior.ChunkCount
-                            ()
+                            let! report = lifecycle.DeleteDocument deps.VectorScope req.DocId prior.ChunkCount
+
+                            if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                                deps.Logger.Warn(
+                                    sprintf
+                                        "[KnowledgeBase] updateNote chunk delete completed partially for docId=%s (scope=%s): %s"
+                                        req.DocId
+                                        deps.Scope.ScopeId
+                                        (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                                )
                         | None -> ()
 
                         let safeTitle = sanitiseTitle title
