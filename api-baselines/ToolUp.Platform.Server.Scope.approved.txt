@@ -15,8 +15,15 @@ ToolUp.Platform.Scope.AdminMutationApproval.reject(ToolUp.Platform.Scope.AdminMu
 ToolUp.Platform.Scope.AdminMutationApproval.widenedModules(ToolUp.Platform.TeamPermissions, ToolUp.Platform.AdminMutation) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Scope.AdminMutationApproval+BlobAdminMutationApprovalStore (class)
 ToolUp.Platform.Scope.AdminMutationApproval+BlobAdminMutationApprovalStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer (class)
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer..ctor(ToolUp.Platform.DualControlSettings, ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.Platform.IAuditLog)
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer.Approvals : ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore { get }
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer.AuditLog : ToolUp.Platform.IAuditLog { get }
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer.IsPolicyBearing : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean] { get }
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer.Settings : ToolUp.Platform.DualControlSettings { get }
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore (class)
-ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.DualControlSettings, ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.Platform.IAuditLog)
+ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.DualControlSettings, ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.Platform.IAuditLog)
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Approvals : ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore { get }
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Approve(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AdminMutationDecision, ToolUp.Platform.AdminMutationRefusal]]
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Inner : ToolUp.Platform.Scope.PermissionStore+IPermissionStore { get }
@@ -24,11 +31,25 @@ ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.ListPendi
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Reject(System.String, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AdminMutationDecision, ToolUp.Platform.AdminMutationRefusal]]
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Settings : ToolUp.Platform.DualControlSettings { get }
 ToolUp.Platform.Scope.AdminMutationApproval+DualControlPermissionStore.Write(System.String, System.String, ToolUp.Platform.AdminMutation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AdminMutationWriteOutcome, ToolUp.Platform.AdminMutationRefusal]]
+ToolUp.Platform.Scope.AdminMutationApproval+GrantPolicyLayer (class)
+ToolUp.Platform.Scope.AdminMutationApproval+GrantPolicyLayer..ctor(ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle, ToolUp.Platform.IAuditLog)
+ToolUp.Platform.Scope.AdminMutationApproval+GrantPolicyLayer.AuditLog : ToolUp.Platform.IAuditLog { get }
+ToolUp.Platform.Scope.AdminMutationApproval+GrantPolicyLayer.Consent : ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle { get }
+ToolUp.Platform.Scope.AdminMutationApproval+GrantPolicyLayer.Registry : ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry { get }
 ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore (interface)
 ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.List(ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PendingAdminMutation], System.String]]
 ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.Propose(ToolUp.Platform.PendingAdminMutation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.Remove(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Scope.AdminMutationApproval+IAdminMutationApprovalStore.TryGet(ToolUp.Platform.TeamId, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PendingAdminMutation], System.String]]
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites (class)
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.AdminMutationApproval+GrantPolicyLayer], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.Scope.PermissionStore+IPermissionStore]]])
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites.DualControl : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.AdminMutationApproval+DualControlLayer] { get }
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites.GrantPolicy : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.AdminMutationApproval+GrantPolicyLayer] { get }
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites.Observe : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.Scope.PermissionStore+IPermissionStore]]] { get }
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites.Store : ToolUp.Platform.Scope.PermissionStore+IPermissionStore { get }
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWritesModule (class)
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWritesModule.asPrincipal(ToolUp.Platform.AccessContext, ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites) : ToolUp.Platform.Scope.PermissionStore+IPermissionStore
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWritesModule.direct(ToolUp.Platform.Scope.PermissionStore+IPermissionStore) : ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites
 ToolUp.Platform.Scope.AdminTokenValidator (class)
 ToolUp.Platform.Scope.AdminTokenValidator+AdminTokenValidator (class)
 ToolUp.Platform.Scope.AdminTokenValidator+AdminTokenValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.BlobEncryption+IBlobEncryptionKeyResolver], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -218,8 +239,8 @@ ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidenceModule (class)
 ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidenceModule.acknowledged(System.String) : ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidence
 ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidenceModule.none : ToolUp.Platform.Scope.GrantPolicyGuard+GrantEvidence { get }
 ToolUp.Platform.Scope.GrantPolicyGuard+GrantPolicyPermissionStore (class)
-ToolUp.Platform.Scope.GrantPolicyGuard+GrantPolicyPermissionStore..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Platform.Scope.GrantPolicyGuard+GrantPolicyPermissionStore..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Scope.GrantPolicyGuard+GrantPolicyPermissionStore..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext)
+ToolUp.Platform.Scope.GrantPolicyGuard+GrantPolicyPermissionStore..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore, ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry, ToolUp.Platform.Scope.GrantPolicyGuard+CounterpartyConsentOracle, ToolUp.Platform.IAuditLog, ToolUp.Platform.AccessContext)
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry (class)
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.GrantPolicy])
 ToolUp.Platform.Scope.GrantPolicyGuard+ModuleGrantPolicyRegistry.Policies : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.GrantPolicy] { get }
@@ -638,24 +659,12 @@ ToolUp.Platform.Scope.StaticJwtAuthProvider+StaticJwtConfig.Audience : Microsoft
 ToolUp.Platform.Scope.StaticJwtAuthProvider+StaticJwtConfig.Issuer : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Scope.StaticJwtAuthProvider+StaticJwtConfig.Secret : System.String { get }
 ToolUp.Platform.Scope.StorageScopeResolver (class)
-ToolUp.Platform.Scope.StorageScopeResolver+AnonymousScopeResolver (class)
-ToolUp.Platform.Scope.StorageScopeResolver+AnonymousScopeResolver..ctor()
-ToolUp.Platform.Scope.StorageScopeResolver+AuthenticatedEphemeralScopeResolver (class)
-ToolUp.Platform.Scope.StorageScopeResolver+AuthenticatedEphemeralScopeResolver..ctor()
-ToolUp.Platform.Scope.StorageScopeResolver+AuthenticatedScopeResolver (class)
-ToolUp.Platform.Scope.StorageScopeResolver+AuthenticatedScopeResolver..ctor()
-ToolUp.Platform.Scope.StorageScopeResolver+IStorageScopeResolver (interface)
-ToolUp.Platform.Scope.StorageScopeResolver+IStorageScopeResolver.Resolve(ToolUp.Platform.ScopeResolutionRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StorageScope, ToolUp.Platform.ScopeResolutionError]]
-ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor (class)
-ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor.fromHttpContext(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.Auth+IAuthProvider) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ScopeResolutionRequest]
-ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor.resolveForContext(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StorageScope, ToolUp.Platform.ScopeResolutionError]]
-ToolUp.Platform.Scope.StorageScopeResolver+ScopeRequestExtractor.userId(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.UserId]
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution (class)
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution.carry(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ResolvedScope) : System.Void
 ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution.forRequest(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ResolvedScope
-ToolUp.Platform.Scope.StorageScopeResolver+TeamScopeResolver (class)
-ToolUp.Platform.Scope.StorageScopeResolver+TeamScopeResolver..ctor(ToolUp.Platform.Config.TeamManagement+ITeamStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
-ToolUp.Platform.Scope.StorageScopeResolver+TeamScopeResolver.InvalidateUser(System.String) : System.Void
+ToolUp.Platform.Scope.StorageScopeResolver+SubjectScope (class)
+ToolUp.Platform.Scope.StorageScopeResolver+SubjectScope.resolve(ToolUp.Platform.ISubjectResolver, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Subject, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]], ToolUp.Platform.SubjectResolutionRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StorageScope, ToolUp.Platform.ScopeResolutionError]]
+ToolUp.Platform.Scope.StorageScopeResolver+SubjectScope.toScopeError(ToolUp.Platform.SubjectResolutionError) : ToolUp.Platform.ScopeResolutionError
 ToolUp.Platform.Scope.StoreIdSanitising (class)
 ToolUp.Platform.Scope.StoreIdSanitising+SanitisingPermissionStore (class)
 ToolUp.Platform.Scope.StoreIdSanitising+SanitisingPermissionStore..ctor(ToolUp.Platform.Scope.PermissionStore+IPermissionStore)
@@ -703,6 +712,31 @@ ToolUp.Platform.Scope.SurfaceEnforcement+SurfaceRequirementRegistryModule.merge(
 ToolUp.Platform.Scope.SurfaceEnforcement+SurfaceRequirementRegistryModule.resolve(ToolUp.Platform.Scope.SurfaceEnforcement+SurfaceRequirementRegistry, System.String, System.String) : ToolUp.Platform.SurfaceRequirement
 ToolUp.Platform.Scope.SurfaceEnforcement+SurfaceRequirementRegistryModule.sdkBuiltInRouteOverrides : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]] { get }
 ToolUp.Platform.Scope.SurfaceEnforcement+SurfaceRequirementRegistryModule.strictDefault : ToolUp.Platform.SurfaceRequirement { get }
+ToolUp.Platform.Scope.TeamAuthority (class)
+ToolUp.Platform.Scope.TeamAuthority.describe(System.String, System.String, ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal) : System.String
+ToolUp.Platform.Scope.TeamAuthority.effectiveRole(ToolUp.Platform.Config.TeamManagement+ITeamStore, ToolUp.Platform.Scope.TeamAuthority+AdminBypass, ToolUp.Platform.AccessContext, ToolUp.Platform.TeamId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]
+ToolUp.Platform.Scope.TeamAuthority.require(ToolUp.Platform.Config.TeamManagement+ITeamStore, ToolUp.Platform.Scope.TeamAuthority+AdminBypass, ToolUp.Platform.AccessContext, ToolUp.Platform.TeamId, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TeamRole, System.Boolean]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamRole, ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal]]
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass (class)
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass.IsMembershipOnly : System.Boolean { get }
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass.IsPlatformAdminIsOwner : System.Boolean { get }
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass.MembershipOnly : ToolUp.Platform.Scope.TeamAuthority+AdminBypass { get }
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass.PlatformAdminIsOwner : ToolUp.Platform.Scope.TeamAuthority+AdminBypass { get }
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass.Tag : System.Int32 { get }
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass+Tags (class)
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass+Tags.MembershipOnly : System.Int32 (literal)
+ToolUp.Platform.Scope.TeamAuthority+AdminBypass+Tags.PlatformAdminIsOwner : System.Int32 (literal)
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal (class)
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal.IsInsufficientRole : System.Boolean { get }
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal.IsNotAMember : System.Boolean { get }
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+InsufficientRole (class)
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+InsufficientRole.Item1 : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+InsufficientRole.Item2 : ToolUp.Platform.TeamRole { get }
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+NotAMember (class)
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+NotAMember.Item : ToolUp.Platform.TeamId { get }
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+Tags (class)
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+Tags.InsufficientRole : System.Int32 (literal)
+ToolUp.Platform.Scope.TeamAuthority+AuthorityRefusal+Tags.NotAMember : System.Int32 (literal)
 ToolUp.Platform.Scope.TeamCreationPolicyValidator (class)
 ToolUp.Platform.Scope.TeamCreationPolicyValidator+TeamCreationPolicyValidator (class)
 ToolUp.Platform.Scope.TeamCreationPolicyValidator+TeamCreationPolicyValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.Infra.IPlatformAdminStore, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])

@@ -225,9 +225,11 @@ ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
 ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
 ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
 ToolUp.Platform.Files.FileManagement+FileManagementRuntime	Singleton
+ToolUp.Platform.Files.FileManagement+ISessionFileStores	Singleton
 ToolUp.Platform.IPendingInviteStore	Singleton
 ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
 ToolUp.Platform.Scope.IPublicationReaderGrantStore	Singleton
+ToolUp.Platform.Scope.AdminMutationApproval+PermissionWrites	Singleton
 ToolUp.Platform.Scope.PermissionStore+IPermissionStore	Singleton
 ToolUp.Platform.Infra.IPlatformAdminStore	Singleton
 ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
@@ -252,10 +254,11 @@ Giraffe.Json+ISerializer	Singleton
 Microsoft.IO.RecyclableMemoryStreamManager	Singleton
 Giraffe.Xml+ISerializer	Singleton
 Giraffe.Negotiation+INegotiationConfig	Singleton
+ToolUp.Platform.Compose.BackgroundUnitRecord	Singleton
+Microsoft.Extensions.Hosting.IHostedService	Singleton
 ToolUp.Platform.ISubjectResolver	Singleton
 ToolUp.Platform.Scope.SurfaceEnforcement+SurfaceRequirementRegistry	Singleton
 ToolUp.Platform.Scope.ModuleVisibilityRoutes+ModuleRouteRegistry	Singleton
-ToolUp.Platform.Scope.StorageScopeResolver+IStorageScopeResolver	Singleton
 ToolUp.Platform.Jobs.DeclaredPrincipalResolver	Singleton
 ToolUp.Platform.IAnonymousSessionMigrator	Singleton
 ToolUp.Platform.AccessContext	Scoped

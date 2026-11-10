@@ -1952,6 +1952,7 @@ type ToolUp.Platform Substrate ToolUp.Platform.Compose
 type ToolUp.Platform SurfaceCoherenceValidator ToolUp.Platform.Config
 type ToolUp.Platform SurfaceEnforcement ToolUp.Platform.Scope
 type ToolUp.Platform SyntheticSampleGenerator ToolUp.Platform.Infra
+type ToolUp.Platform TeamAuthority ToolUp.Platform.Scope
 type ToolUp.Platform TeamCreationPolicyValidator ToolUp.Platform.Scope
 type ToolUp.Platform TeamManagement ToolUp.Platform.Config
 type ToolUp.Platform TeamPolicyStore ToolUp.Platform.Scope
@@ -2027,6 +2028,7 @@ type ToolUp.Platform WorkerSignatureVerifier ToolUp.Platform.Infra
 type ToolUp.Platform WorkerSigningKey ToolUp.Platform.Infra
 type ToolUp.Platform.Auth IdentitySanitiser ToolUp.Platform.Config.Auth
 type ToolUp.Platform.Consent ConsentStateStore ToolUp.Platform.Audit.Consent
+type ToolUp.Platform.Files SessionFileStores ToolUp.Platform.Compose.Files
 type ToolUp.Platform.Metrics ComponentCorrelation ToolUp.Platform.Audit.Metrics
 type ToolUp.Platform.Metrics FanOutMetricsSink ToolUp.Platform.Infra.Metrics
 type ToolUp.Platform.Metrics HistogramSnapshot ToolUp.Platform.Infra.Metrics
