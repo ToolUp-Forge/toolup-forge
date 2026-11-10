@@ -311,7 +311,7 @@ The AI Context page is a UI for the standing-context entries persisted to `_plat
 ```fsharp
 // Custom AI-context page. A page view returns a `PageContent` case —
 // each page picks its own layout.
-let aiContextView (model: Model) (dispatch: Msg -> unit) : PageContent =
+let aiContextView (model: Model) (ctx: RenderContext<Msg>) : PageContent =
     FullWidth(Html.div [ Html.text "standing context" ])
 
 // `withPages` pairs a `PageConfig` with its view. `PageConfig` carries

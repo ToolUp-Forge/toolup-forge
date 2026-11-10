@@ -91,9 +91,9 @@ module PageAmbient =
 
     let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = failwith "ambient"
 
-    let documentsView (model: Model) (dispatch: Msg -> unit) : PageContent = failwith "ambient"
+    let documentsView (model: Model) (ctx: RenderContext<Msg>) : PageContent = failwith "ambient"
 
-    let notesView (model: Model) (dispatch: Msg -> unit) : PageContent = failwith "ambient"
+    let notesView (model: Model) (ctx: RenderContext<Msg>) : PageContent = failwith "ambient"
 
     /// Parses the `CustomNotification` payload published under
     /// `SharedTypes.IngestionStatusNotificationKey`.

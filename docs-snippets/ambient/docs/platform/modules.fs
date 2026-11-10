@@ -39,7 +39,7 @@ module PageAmbient =
 
     let update: Msg -> Model -> Model * Cmd<Msg> = failwith "ambient"
 
-    let view: Model -> (Msg -> unit) -> ReactElement * ReactElement = failwith "ambient"
+    let view: Model -> RenderContext<Msg> -> PageContent = failwith "ambient"
 
     /// The per-pane renderers the multi-page example composes into its
     /// `PageContent` cases.

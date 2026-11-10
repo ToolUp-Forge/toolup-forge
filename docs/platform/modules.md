@@ -360,11 +360,11 @@ Single-page modules (the default) set one view with `ClientModule.withView`; its
 Multi-page modules opt in with `ClientModule.withPages`, which takes one `(PageConfig, view)` pair per page — the `PageConfig` supplies the sidebar `Route` / `Title` / `Icon`, and the view returns a `PageContent` value directly (`SplitPanel | Stacked | FullWidth | Dashboard | Custom`), picking its own layout shape:
 
 ```fsharp
-let datasetView model dispatch : PageContent =
-    SplitPanel(leftPanel model dispatch, rightPanel model dispatch)
+let datasetView model (ctx: RenderContext<Msg>) : PageContent =
+    SplitPanel(leftPanel model ctx.Dispatch, rightPanel model ctx.Dispatch)
 
-let analyseView model dispatch : PageContent =
-    FullWidth(analysisGrid model dispatch)
+let analyseView model (ctx: RenderContext<Msg>) : PageContent =
+    FullWidth(analysisGrid model ctx.Dispatch)
 
 let registerSalesAnalysis () : ErasedModule =
     let icon = Icon.ofUrl "/svg/sales.svg"
