@@ -60,7 +60,7 @@ module AdAnalytics =
 
 [<ReactComponent>]
 let AdSlot (config: ClientConfig) (slot: AdSlotConfig) : ReactElement =
-    match config.AdPanel with
+    match config.PublicUtility.AdPanel with
     | NoAdPanel -> Html.none
     | EnabledAdPanel panelConfig ->
         let insRef = React.useElementRef ()

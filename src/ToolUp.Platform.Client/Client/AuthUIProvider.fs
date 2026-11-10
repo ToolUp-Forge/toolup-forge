@@ -3,18 +3,13 @@
 
 namespace ToolUp.Platform
 
-// Phase 494 — this file must keep dispatching the deprecated
-// `ClerkAuthUI` case (an [<Obsolete>] alias for
-// `ProviderAuthUI ("clerk", _)`) until its major-version removal.
-#nowarn "44"
-
 open Feliz
 
 /// Registry for sign-in UI handlers supplied by companion packages.
 ///
 /// Phase 13a — companions (OidcClient, ClerkUI, future providers)
 /// export `let handler : string * AuthUIHandler` values; consumers
-/// add them to `ClientConfig.Handlers.AuthUIHandlers` at compose
+/// add them to `ClientConfig.Composition.Handlers.AuthUIHandlers` at compose
 /// time. `SDK.Client.program` reads that list once at boot and calls
 /// `setHandlers` here; `gate` then looks up the handler matching the
 /// active `AuthUIMode` per render.
@@ -39,7 +34,7 @@ module AuthUIProvider =
     let mutable private handlers: Map<string, AuthUIHandler> = Map.empty
 
     /// Called once by `SDK.Client.program` with the value from
-    /// `ClientConfig.Handlers.AuthUIHandlers`. Idempotent re-installs
+    /// `ClientConfig.Composition.Handlers.AuthUIHandlers`. Idempotent re-installs
     /// are supported but in practice only happen if a test harness
     /// re-runs the boot sequence. Duplicate tags within the supplied
     /// list collapse to last-wins (the SDK's `Client.run` validator
@@ -64,7 +59,7 @@ module AuthUIProvider =
     ///
     /// `ProviderAuthUI (tag, _)` — and the tag-fixed forms `OidcAuthUI`
     /// / the deprecated `ClerkAuthUI` — require the matching handler to
-    /// be wired into `ClientConfig.Handlers.AuthUIHandlers`; missing
+    /// be wired into `ClientConfig.Composition.Handlers.AuthUIHandlers`; missing
     /// handlers normally fail loud at `Client.run` (validator step),
     /// but the per-render fallback path here also `failwith`s
     /// defensively in case a deployment skipped `Client.run` (e.g.
@@ -91,10 +86,10 @@ module AuthUIProvider =
             | Some h -> h cfg shell
             | None ->
                 failwithf
-                    "ClientConfig.AuthUI = ProviderAuthUI (\"%s\", _) but no handler with tag \"%s\" is registered \
-                     in ClientConfig.Handlers.AuthUIHandlers. Add the companion-exported handler value for that tag \
+                    "ClientConfig.Auth.AuthUI = ProviderAuthUI (\"%s\", _) but no handler with tag \"%s\" is registered \
+                     in ClientConfig.Composition.Handlers.AuthUIHandlers. Add the companion-exported handler value for that tag \
                      (e.g. `ToolUp.AuthProviders.ClerkRegister.handler` for \"clerk\") to \
-                     ClientConfig.Handlers.AuthUIHandlers, or set ClientConfig.AuthUI to \
+                     ClientConfig.Composition.Handlers.AuthUIHandlers, or set ClientConfig.Auth.AuthUI to \
                      NoAuthUI / a different provider."
                     tag
                     tag
@@ -103,10 +98,10 @@ module AuthUIProvider =
             | Some h -> h (box cfg) shell
             | None ->
                 failwith
-                    "ClientConfig.AuthUI = OidcAuthUI _ but no handler with tag \"oidc\" is registered \
-                     in ClientConfig.Handlers.AuthUIHandlers. Add \
+                    "ClientConfig.Auth.AuthUI = OidcAuthUI _ but no handler with tag \"oidc\" is registered \
+                     in ClientConfig.Composition.Handlers.AuthUIHandlers. Add \
                      `ToolUp.AuthProviders.OidcRegister.handler` from the OidcClient companion \
-                     to ClientConfig.Handlers.AuthUIHandlers, or set ClientConfig.AuthUI to \
+                     to ClientConfig.Composition.Handlers.AuthUIHandlers, or set ClientConfig.Auth.AuthUI to \
                      NoAuthUI / a different provider."
         | _, PasskeyAuthUI cfg ->
             // Phase 443 — WebAuthn / passkey. Same tag-dispatch shape as
@@ -115,18 +110,8 @@ module AuthUIProvider =
             | Some h -> h (box cfg) shell
             | None ->
                 failwith
-                    "ClientConfig.AuthUI = PasskeyAuthUI _ but no handler with tag \"passkey\" is registered \
-                     in ClientConfig.Handlers.AuthUIHandlers. Add \
+                    "ClientConfig.Auth.AuthUI = PasskeyAuthUI _ but no handler with tag \"passkey\" is registered \
+                     in ClientConfig.Composition.Handlers.AuthUIHandlers. Add \
                      `ToolUp.AuthProviders.PasskeyRegister.handler` from the PasskeyClient companion \
-                     to ClientConfig.Handlers.AuthUIHandlers, or set ClientConfig.AuthUI to \
-                     NoAuthUI / a different provider."
-        | _, ClerkAuthUI cfg ->
-            match Map.tryFind "clerk" handlers with
-            | Some h -> h (box cfg) shell
-            | None ->
-                failwith
-                    "ClientConfig.AuthUI = ClerkAuthUI _ but no handler with tag \"clerk\" is registered \
-                     in ClientConfig.Handlers.AuthUIHandlers. Add \
-                     `ToolUp.AuthProviders.ClerkRegister.handler` from the ClerkUI companion \
-                     to ClientConfig.Handlers.AuthUIHandlers, or set ClientConfig.AuthUI to \
+                     to ClientConfig.Composition.Handlers.AuthUIHandlers, or set ClientConfig.Auth.AuthUI to \
                      NoAuthUI / a different provider."

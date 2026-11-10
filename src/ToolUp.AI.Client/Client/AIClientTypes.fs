@@ -4,8 +4,9 @@
 namespace ToolUp.AI
 
 open Feliz
+open ToolUp.Platform
 
-// ─── Client-only AI assistant branding + mode ────────────────────
+// ─── Client-only AI assistant branding + slot fills ──────────────
 //
 // `AIAssistantBranding` (in `Shared/AITypes.fs`) carries `Icon: string`
 // because the server's `AIAssistantServerConfig.Branding` nests it and
@@ -15,13 +16,6 @@ open Feliz
 // `ToolUp.AIProviders.Claude.Icons.claude`). Splitting the two types
 // keeps each side simple: the server's branding stays in shared types,
 // the client's branding lives here in client-only territory.
-//
-// The DU case `ConfiguredAIAssistant` was previously parameterised
-// with the shared `AIAssistantBranding`; it now takes the new client
-// record. App callers see no friction — they construct
-// `ConfiguredAIAssistant { Name = ...; Icon = ...; ShowSidePanel = ...
-// }` exactly as before, and F# infers the new record type from the
-// `Icon` field's type.
 
 /// Client-side branding for the AI assistant module and side panel.
 /// Carries a typed `ReactElement` for the icon so the sidebar can
@@ -37,17 +31,41 @@ type AIAssistantClientBranding = {
     ShowSidePanel: bool
 }
 
-/// Controls whether/how the AI assistant appears in the platform. Three
-/// cases — off, the built-in assistant, the built-in assistant rebranded.
-/// Unlike the shell's `SlotFill` it has no `External` case: the assistant
-/// cannot yet be replaced by a deployment's own, nor its family emptied
-/// slot by slot, until Phase 1074 makes the AI family slots. Client-only —
-/// server-side AI configuration goes through `AIAssistantServerConfig`
-/// directly.
-type AIAssistantMode =
-    /// No AI assistant — modules provide their own AI or none is needed.
-    | NoAIAssistant
-    /// Use the platform's built-in AI assistant UI (default name/icon).
-    | DefaultAIAssistant
-    /// Use the platform's built-in AI assistant with custom branding.
-    | ConfiguredAIAssistant of AIAssistantClientBranding
+/// Phase 1074 — what fills each of the AI companion's shell slots. The
+/// assistant family is three slots of the shell's slot table (declared
+/// through `ShellSlotFills.Extensions`), so a deployment can empty or
+/// replace any of them as it can every built-in: the assistant page, the
+/// per-user AI settings, and the platform-admin keys page. Client-only —
+/// server-side AI configuration goes through `AIAssistantServerConfig`.
+type AISlotFills = {
+    /// The AI assistant page. `Configured branding` renames it, sets its
+    /// icon and decides whether the conversation side panel shows; the
+    /// side panel shows for `Default` and `External`, and never for
+    /// `Empty`.
+    AIAssistant: SlotFill<AIAssistantClientBranding>
+    /// The per-user AI settings page (bring-your-own key, model choice).
+    /// Present beside the assistant whatever the deployment's key policy:
+    /// under a platform-only policy it renders a managed-by-deployment
+    /// notice, so enabling BYOK later is a policy flip, not a module-list
+    /// change.
+    AISettings: SlotFill<ModuleLabel>
+    /// The platform-admin keys page. Its sidebar group's role gate hides
+    /// it from non-admin callers.
+    PlatformAIKeys: SlotFill<ModuleLabel>
+}
+
+/// The AI slots' fills.
+module AISlotFills =
+    /// The built-in assistant family, each page under its own name.
+    let defaults: AISlotFills = {
+        AIAssistant = SlotFill.Default
+        AISettings = SlotFill.Default
+        PlatformAIKeys = SlotFill.Default
+    }
+
+    /// No AI page at all, and no side panel.
+    let empty: AISlotFills = {
+        AIAssistant = SlotFill.Empty
+        AISettings = SlotFill.Empty
+        PlatformAIKeys = SlotFill.Empty
+    }

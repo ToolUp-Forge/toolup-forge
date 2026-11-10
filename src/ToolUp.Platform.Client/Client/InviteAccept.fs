@@ -305,8 +305,8 @@ let renderWith (config: ClientConfig) : unit =
         CsrfClient.prefetch ()
 
         let locale =
-            MessageCatalog.resolveLocale config.Locale None (MessageCatalogProvider.browserLocale ())
+            MessageCatalog.resolveLocale config.Locale.Mode None (MessageCatalogProvider.browserLocale ())
 
-        let catalog = MessageCatalog.resolve locale config.MessageCatalogOverride
+        let catalog = MessageCatalog.resolve locale config.Locale.MessageCatalogOverride
 
         ReactDOM.createRoot(root).render (MessageCatalogProvider.provider catalog (InviteAccept()))

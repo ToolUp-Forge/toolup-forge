@@ -14,15 +14,16 @@ module ToolUp.AI.Client.AIClientConfig
 //     open ToolUp.AI
 //     open ToolUp.AI.Client
 //
-//     let aiMode =
-//         ConfiguredAIAssistant {
-//             Name = "Claude"
-//             Icon = ToolUp.AIProviders.Claude.Icons.claude
-//             ShowSidePanel = true
-//         }
-//     AIClientConfig.withAIAssistant aiMode config modules
-//     |> Program.withReactSynchronous "elmish-app"
-//     |> Program.run
+//     let aiSlots = {
+//         AISlotFills.defaults with
+//             AIAssistant =
+//                 SlotFill.Configured {
+//                     Name = "Claude"
+//                     Icon = ToolUp.AIProviders.Claude.Icons.claude
+//                     ShowSidePanel = true
+//                 }
+//     }
+//     AIClientConfig.run aiSlots config modules
 //
 // Apps that do not want AI skip this module entirely and call
 // Client.run directly.
@@ -353,21 +354,22 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
 
 // ─── Side-panel chrome ───────────────────────────────────────────
 
-let private isAiEnabled (mode: AIAssistantMode) =
-    match mode with
-    | NoAIAssistant -> false
-    | ConfiguredAIAssistant cfg -> cfg.ShowSidePanel
-    | _ -> true
+let private isAiEnabled (fills: AISlotFills) =
+    match fills.AIAssistant with
+    | SlotFill.Empty -> false
+    | SlotFill.Configured branding -> branding.ShowSidePanel
+    | SlotFill.Default
+    | SlotFill.External _ -> true
 
 let private sidePanelView
-    (mode: AIAssistantMode)
+    (fills: AISlotFills)
     (activeModule: string)
     (activePage: string option)
     (activeNarrative: ToolUp.Platform.Narrative.NarrativeDocument option)
     (model: SidePanelModel)
     (dispatch: SidePanelMsg -> unit)
     : ReactElement option =
-    if isAiEnabled mode && model.Open then
+    if isAiEnabled fills && model.Open then
         // Capture the in-flight task in the cancel closure so the component
         // can fire the cancel without knowing about Guid types.
         let onCancel =
@@ -390,11 +392,11 @@ let private sidePanelView
         None
 
 let private sidePanelHeaderAction
-    (mode: AIAssistantMode)
+    (fills: AISlotFills)
     (model: SidePanelModel)
     (dispatch: SidePanelMsg -> unit)
     : ReactElement option =
-    if isAiEnabled mode then
+    if isAiEnabled fills then
         Some(
             Html.div [
                 prop.className "flex items-center gap-2"
@@ -425,51 +427,33 @@ let private sidePanelHeaderAction
     else
         None
 
-// ─── Module-list transformation ──────────────────────────────────
+// ─── The AI slots ─────────────────────────────────────────────────
 
-/// Append the built-in AI assistant + AI settings module pages based
-/// on mode. No-op when mode is NoAIAssistant.
-///
-/// AISettings carries `withGroup "Admin"`, so its position in the
-/// module list determines whether the Admin sidebar section sits
-/// above or below the app's declared groups. Appending puts AISettings
-/// after the app's modules — the SDK's `prepareModules` then appends
-/// the rest of its Admin built-ins after that, so AISettings joins
-/// the trailing Admin block at the bottom of the sidebar rather than
-/// dragging the whole Admin section up to the top.
-///
-/// AIAssistant is ungrouped and always lands in the `_other` section
-/// (rendered last by `Sidebar.buildSections`), so its position in the
-/// list doesn't affect section ordering — appended for symmetry with
-/// the function name and AISettings.
-///
-/// The settings module always appears alongside the assistant (not
-/// gated on deployment policy) — the UI itself detects PlatformOnly
-/// via an empty `ListAvailable` response and renders a
-/// managed-by-deployment notice in that case. Keeping the module
-/// present in the sidebar means enabling BYOK in the future is a
-/// policy flip, not a module-list change.
-let appendAssistantModule (mode: AIAssistantMode) (modules: ErasedModule list) : ErasedModule list =
-    // Platform Admin keys module is appended alongside the
-    // assistant + settings modules. Visibility filtering at sidebar-
-    // render time hides it from non-admin callers, so the
-    // unconditional append is safe regardless of deployment shape.
-    match mode with
-    | NoAIAssistant -> modules
-    | DefaultAIAssistant ->
-        modules
-        @ [
-            AIAssistantUI.create None
-            AISettingsUI.create ()
-            PlatformAIKeysAdminUI.create ()
-        ]
-    | ConfiguredAIAssistant cfg ->
-        modules
-        @ [
-            AIAssistantUI.create (Some cfg)
-            AISettingsUI.create ()
-            PlatformAIKeysAdminUI.create ()
-        ]
+/// Phase 1074 — the assistant family's slots, as the shell's companion
+/// slot entries (`ShellSlotFills.Extensions`), in the order the pages
+/// compose: the assistant, the AI settings, the platform-admin keys. The
+/// family sits after the app's own modules and ahead of the shell's
+/// administration built-ins — where the three pages always sat — so the
+/// AI settings page (grouped "Admin") joins the trailing admin block rather
+/// than dragging it to the top of the sidebar.
+let slotExtensions (fills: AISlotFills) : SlotExtension list = [
+    SlotExtension.ofFill "AIAssistant" AIAssistantUI.create fills.AIAssistant
+    SlotExtension.ofFill
+        "AISettings"
+        (fun label -> AISettingsUI.create () |> Option.foldBack SlotExtension.relabel label)
+        fills.AISettings
+    SlotExtension.ofFill
+        "PlatformAIKeys"
+        (fun label -> PlatformAIKeysAdminUI.create () |> Option.foldBack SlotExtension.relabel label)
+        fills.PlatformAIKeys
+]
+
+/// Phase 1074 — `config` with the AI slots filled by `fills`, after any
+/// companion slots it already carries.
+let withAISlots (fills: AISlotFills) (config: ClientConfig) : ClientConfig = {
+    config with
+        Slots.Extensions = config.Slots.Extensions @ slotExtensions fills
+}
 
 // ─── The composer's view, with one set of dispatchers per loop ──
 //
@@ -505,7 +489,7 @@ let internal composerDispatchersFor (dispatch: OuterMsg -> unit) : ComposerDispa
 // input the chrome reads is in the key, compared by reference (the
 // narrative too: a module that provides one re-renders the chrome when its
 // extractor returns a new document, which is the chrome reading what it
-// shows). The mode and the module list are fixed for the view's life, so
+// shows). The slot fills and the module list are fixed for the view's life, so
 // the memo belongs to the view (`composerView`), not to the module.
 
 let private sameInputs (a: obj array) (b: obj array) =
@@ -517,7 +501,7 @@ let private sameInputs (a: obj array) (b: obj array) =
 /// store-bound `Client.viewSlicedOver` (`run`). Build it once per program:
 /// the view it returns keeps the last chrome record it built.
 let internal composerView
-    (mode: AIAssistantMode)
+    (fills: AISlotFills)
     (allModules: ErasedModule list)
     (shellView: Client.ExtraChrome -> Client.Model -> Client.Dispatchers -> ReactElement)
     : OuterModel -> ComposerDispatchers -> ReactElement =
@@ -542,8 +526,8 @@ let internal composerView
         chromeOf (
             key,
             fun () -> {
-                HeaderAction = sidePanelHeaderAction mode model.SidePanel sidePanelDispatch
-                SidePanel = sidePanelView mode activeModule activePage narrative model.SidePanel sidePanelDispatch
+                HeaderAction = sidePanelHeaderAction fills model.SidePanel sidePanelDispatch
+                SidePanel = sidePanelView fills activeModule activePage narrative model.SidePanel sidePanelDispatch
             }
         )
 
@@ -593,7 +577,7 @@ let internal streamSubscription (dispatch: OuterMsg -> unit) : IDisposable =
 // expose a Program's pieces post-construction, so the shell pieces are
 // stitched into the outer Program at build time.
 let private composerProgram
-    (mode: AIAssistantMode)
+    (fills: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
     (shellViewFor: ErasedModule list -> Client.ExtraChrome -> Client.Model -> Client.Dispatchers -> ReactElement)
@@ -617,7 +601,7 @@ let private composerProgram
     // subscription ends across page-navigation and hot-reload rather than
     // leaking into the next page / next build.
     let sseEffect: EffectHandle<OuterMsg> option =
-        if isAiEnabled mode then
+        if isAiEnabled fills then
             Some(EffectHandle.programLifetime "ai-sse-events" streamSubscription)
         else
             None
@@ -639,7 +623,7 @@ let private composerProgram
     // `Client.view` bypassed `AuthUIProvider.gate` entirely, so a
     // deployment that opted into OIDC sign-in while wiring AI via
     // `AIClientConfig.run` never rendered the sign-in screen.
-    let outerView = composerView mode allModules (shellViewFor allModules)
+    let outerView = composerView fills allModules (shellViewFor allModules)
 
     // The reporter, the trace and the stable dispatch are the shell's own
     // builder's (`Client.programOver`), so this composer and `Client.program`
@@ -686,42 +670,42 @@ let private composerProgram
     | None -> progWithShellEffects
 
 /// Wrap the shell Program with side-panel state, SSE subscription, and
-/// AI chrome. Pass-through behaviour when mode is NoAIAssistant — the
-/// wrapper is still built (so types line up) but the SSE subscription
-/// and chrome are both disabled.
+/// AI chrome, over `modules` as given: it adds no AI page (`program` and
+/// `run` fill the AI slots first, `withAISlots`). With the assistant slot
+/// `Empty` the wrapper is still built (so types line up) but the SSE
+/// subscription and chrome are both disabled.
 ///
 /// Its view renders the whole shell per message (`Client.viewWithSignIn`),
 /// so any React binding can mount it; `run` mounts the store-bound
 /// composition instead.
 let withSidePanel
-    (mode: AIAssistantMode)
+    (fills: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
     : Program<unit, OuterModel, OuterMsg, ReactElement> =
-    composerProgram mode config modules (fun allModules -> Client.viewWithSignIn config allModules)
+    composerProgram fills config modules (fun allModules -> Client.viewWithSignIn config allModules)
 
-/// Build the Elmish `Program` with the AI assistant module prepended,
+/// Build the Elmish `Program` with the AI slots filled (`withAISlots`),
 /// the side-panel state machine wrapped around the shell, the SSE
 /// subscription wired, and the chrome rendered alongside the module
 /// view. Use this when you want to layer additional chrome (custom
 /// metrics overlay, debug panel, error boundary) before mounting React.
 /// For the common case, use `AIClientConfig.run` instead.
 let program
-    (mode: AIAssistantMode)
+    (fills: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
     : Program<unit, OuterModel, OuterMsg, ReactElement> =
-    let modules' = appendAssistantModule mode modules
-    withSidePanel mode config modules'
+    withSidePanel fills (withAISlots fills config) modules
 
 /// Build the AI-augmented Program and run it against React mounted at
 /// `"elmish-app"`. Mirrors `Client.run` for the AI-enabled case so the
 /// composition reads the same regardless of which companions are imported.
 ///
-/// Consults `ClientConfig.PublicEntryDispatchers` first; any dispatcher
+/// Consults `ClientConfig.Composition.PublicEntryDispatchers` first; any dispatcher
 /// that returns `true` short-circuits the full AI shell bootstrap (the
 /// dispatcher has rendered its own minimal program).
-let run (mode: AIAssistantMode) (config: ClientConfig) (modules: ErasedModule list) : unit =
+let run (fills: AISlotFills) (config: ClientConfig) (modules: ErasedModule list) : unit =
     // Install the request seam BEFORE consulting
     // PublicEntryDispatchers so dispatchers that fire authenticated
     // requests get the same header attachment any other request gets.
@@ -740,7 +724,7 @@ let run (mode: AIAssistantMode) (config: ClientConfig) (modules: ErasedModule li
         let store = ModelStore.create<OuterModel, OuterMsg> ()
         let shell = Client.shellStore store _.Shell
 
-        composerProgram mode config (appendAssistantModule mode modules) (fun allModules ->
+        composerProgram fills (withAISlots fills config) modules (fun allModules ->
             Client.viewSlicedOver shell config allModules)
         |> Program.withReactStore store "elmish-app"
         |> Program.run

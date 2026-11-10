@@ -28,21 +28,19 @@ let private clerkHandler (payload: obj) (shell: ReactElement) : ReactElement =
     ClerkAuthUI.wrapApp cfg.PublishableKey shell
 
 /// The tag this companion registers under in
-/// `ClientConfig.Handlers.AuthUIHandlers` — the same key
+/// `ClientConfig.Composition.Handlers.AuthUIHandlers` — the same key
 /// `ProviderAuthUI` dispatches on.
 [<Literal>]
 let Tag = "clerk"
 
 /// Companion-exported AuthUI handler. Add to
-/// `ClientConfig.Handlers.AuthUIHandlers` to enable Clerk sign-in.
+/// `ClientConfig.Composition.Handlers.AuthUIHandlers` to enable Clerk sign-in.
 let handler: string * AuthUIHandler = Tag, clerkHandler
 
 /// Phase 494 — typed smart constructor for the vendor-neutral
-/// `ClientConfig.AuthUI` case. Builds
+/// `ClientConfig.Auth.AuthUI` case. Builds
 /// `ProviderAuthUI ("clerk", box cfg)` so the consumer never boxes by
 /// hand and no vendor-named SDK case appears in its config:
 ///
-///   AuthUI = ClerkRegister.authUI { PublishableKey = key }
-///
-/// Replaces the deprecated `ClerkAuthUI cfg` core case.
+///   Auth.AuthUI = ClerkRegister.authUI { PublishableKey = key }
 let authUI (cfg: ClerkUIConfig) : AuthUIMode = ProviderAuthUI(Tag, box cfg)

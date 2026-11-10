@@ -1116,7 +1116,7 @@ let private settingsTabView (msgs: PlatformAdminMessages) (model: Model) (dispat
 /// active module changed. A component of its own has a stable identity and
 /// its own hook order.
 [<ReactComponent>]
-let private PlatformAdminBody (config: ClientConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+let private PlatformAdminBody (config: PublicUtilityConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let msgs = (MessageCatalogProvider.useMessages ()).PlatformAdmin
 
     let content =
@@ -1155,17 +1155,17 @@ let private PlatformAdminBody (config: ClientConfig) (model: Model) (dispatch: M
         ]
     ]
 
-/// View factory closed over the active `ClientConfig` so the public-utility
-/// widgets can read consent / ad / premium substrate state. The
+/// View factory closed over the deployment's `PublicUtilityConfig` so the
+/// public-utility widgets can read ad / premium substrate state. The
 /// public-utility widgets append below the existing tab content when
-/// `ClientConfig.PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
+/// `PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
 ///
 /// Renders as a single full-width pane (via `withFullWidthView` in
 /// `create`) rather than the legacy `body, Html.none` `SplitPanel`
 /// tuple — the admin tabs (admin list, teams table, settings) have no
 /// "controls left / output right" affordance and were being squashed
 /// into the left third of the shell by the SplitPanel wrap.
-let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+let private viewWith (config: PublicUtilityConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     PlatformAdminBody config model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
@@ -1189,7 +1189,7 @@ let moduleId = "_sdk.PlatformAdmin"
 /// `ServerConfig.ModuleNames` keys (RBAC permission entries) keyed
 /// to it don't have to migrate. The display name and group label
 /// are presentation only.
-let create (config: ModuleLabel option) (clientConfig: ClientConfig) : ErasedModule =
+let create (config: ModuleLabel option) (publicUtility: PublicUtilityConfig) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Platform Management"
 
     let icon =
@@ -1203,7 +1203,7 @@ let create (config: ModuleLabel option) (clientConfig: ClientConfig) : ErasedMod
     }
     |> ToolUp.Platform.ClientModule.withContextInit init
     |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView (viewWith clientConfig)
+    |> ToolUp.Platform.ClientModule.withFullWidthView (viewWith publicUtility)
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
