@@ -123,6 +123,7 @@ let tests =
                             "Directory.Packages.props"
                             "src/Client/App.fs"
                             "src/Client/Grid.fs"
+                            "src/Client/Hosting.fs"
                             "src/Client/Shell.fs"
                             "src/Server/Assistant.fs"
                             "src/Server/Config.fs"
@@ -169,6 +170,7 @@ let tests =
                             "Directory.Packages.props"
                             "src/Client/App.fs"
                             "src/Client/Grid.fs"
+                            "src/Client/Hosting.fs"
                             "src/Client/Shell.fs"
                             "src/Server/AiRag.fs"
                             "src/Server/Already.fs"
@@ -261,7 +263,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 22 file(s) visited, 105 rewrite(s) in 18 file(s), 109 site(s) for review."
+                        "Codemod: 23 file(s) visited, 107 rewrite(s) in 19 file(s), 113 site(s) for review."
                         "summary")
         ]
 

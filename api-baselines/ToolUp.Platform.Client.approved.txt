@@ -2978,6 +2978,91 @@ ToolUp.Platform.BootDegradation+BootDegradation.Label : System.String { get }
 ToolUp.Platform.BootDegradation+BootDegradation.OccurredAt : System.DateTime { get }
 ToolUp.Platform.BootDegradation+BootDegradation.Retryable : System.Boolean { get }
 ToolUp.Platform.BootDegradation+BootDegradation.Source : System.String { get }
+ToolUp.Platform.BootSources (class)
+ToolUp.Platform.BootSources.all`2() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]
+ToolUp.Platform.BootSources.firstInitGates`2(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
+ToolUp.Platform.BootSources.issuedAtBoot`2(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]
+ToolUp.Platform.BootSources.label`2(ToolUp.Platform.BootSourceMessages, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : System.String
+ToolUp.Platform.BootSources.reissuedBy`2(ToolUp.Platform.BootSources+ResetTrigger, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]
+ToolUp.Platform.BootSources.retryable`2(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : System.Boolean
+ToolUp.Platform.BootSources.tryFind`2(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]
+ToolUp.Platform.BootSources+BootLoads`2 (class)
+ToolUp.Platform.BootSources+BootLoads`2..ctor(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]])
+ToolUp.Platform.BootSources+BootLoads`2.ActiveTeam : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Configs : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.DataSnapshot : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Flags : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Permissions : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.PlatformInfo : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.PlatformRole : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.TeamAutoSelect : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.TeamRole : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Teams : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootScope (class)
+ToolUp.Platform.BootSources+BootScope.Boot : ToolUp.Platform.BootSources+BootScope { get }
+ToolUp.Platform.BootSources+BootScope.IsBoot : System.Boolean { get }
+ToolUp.Platform.BootSources+BootScope.IsOnDemand : System.Boolean { get }
+ToolUp.Platform.BootSources+BootScope.IsReported : System.Boolean { get }
+ToolUp.Platform.BootSources+BootScope.IsTeamBoot : System.Boolean { get }
+ToolUp.Platform.BootSources+BootScope.OnDemand : ToolUp.Platform.BootSources+BootScope { get }
+ToolUp.Platform.BootSources+BootScope.Reported : ToolUp.Platform.BootSources+BootScope { get }
+ToolUp.Platform.BootSources+BootScope.Tag : System.Int32 { get }
+ToolUp.Platform.BootSources+BootScope.TeamBoot : ToolUp.Platform.BootSources+BootScope { get }
+ToolUp.Platform.BootSources+BootScope+Tags (class)
+ToolUp.Platform.BootSources+BootScope+Tags.Boot : System.Int32 (literal)
+ToolUp.Platform.BootSources+BootScope+Tags.OnDemand : System.Int32 (literal)
+ToolUp.Platform.BootSources+BootScope+Tags.Reported : System.Int32 (literal)
+ToolUp.Platform.BootSources+BootScope+Tags.TeamBoot : System.Int32 (literal)
+ToolUp.Platform.BootSources+BootSource`2 (class)
+ToolUp.Platform.BootSources+BootSource`2..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSourceMessages, System.String], ToolUp.Platform.BootSources+BootScope, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSources+BootLoads`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.BootSources+ResetTrigger])
+ToolUp.Platform.BootSources+BootSource`2.ClearedBy : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.BootSources+ResetTrigger] { get }
+ToolUp.Platform.BootSources+BootSource`2.GatesFirstInit : System.Boolean { get }
+ToolUp.Platform.BootSources+BootSource`2.Key : System.String { get }
+ToolUp.Platform.BootSources+BootSource`2.Label : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSourceMessages, System.String] { get }
+ToolUp.Platform.BootSources+BootSource`2.Load : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSources+BootLoads`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]] { get }
+ToolUp.Platform.BootSources+BootSource`2.Retryable : System.Boolean { get }
+ToolUp.Platform.BootSources+BootSource`2.Scope : ToolUp.Platform.BootSources+BootScope { get }
+ToolUp.Platform.BootSources+Key (class)
+ToolUp.Platform.BootSources+Key.ActiveTeam : System.String (literal)
+ToolUp.Platform.BootSources+Key.AuthBridge : System.String (literal)
+ToolUp.Platform.BootSources+Key.Configs : System.String (literal)
+ToolUp.Platform.BootSources+Key.DataSnapshot : System.String (literal)
+ToolUp.Platform.BootSources+Key.Flags : System.String (literal)
+ToolUp.Platform.BootSources+Key.Permissions : System.String (literal)
+ToolUp.Platform.BootSources+Key.PlatformInfo : System.String (literal)
+ToolUp.Platform.BootSources+Key.PlatformRole : System.String (literal)
+ToolUp.Platform.BootSources+Key.SidebarPrefs : System.String (literal)
+ToolUp.Platform.BootSources+Key.TeamAutoSelect : System.String (literal)
+ToolUp.Platform.BootSources+Key.TeamRole : System.String (literal)
+ToolUp.Platform.BootSources+Key.Teams : System.String (literal)
+ToolUp.Platform.BootSources+ResetKind (class)
+ToolUp.Platform.BootSources+ResetKind.IsLocaleSwitch : System.Boolean { get }
+ToolUp.Platform.BootSources+ResetKind.IsTeamSwitch : System.Boolean { get }
+ToolUp.Platform.BootSources+ResetKind.IsTokenAcquired : System.Boolean { get }
+ToolUp.Platform.BootSources+ResetKind.Tag : System.Int32 { get }
+ToolUp.Platform.BootSources+ResetKind.TokenAcquired : ToolUp.Platform.BootSources+ResetKind { get }
+ToolUp.Platform.BootSources+ResetKind+LocaleSwitch (class)
+ToolUp.Platform.BootSources+ResetKind+LocaleSwitch.locale : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.BootSources+ResetKind+Tags (class)
+ToolUp.Platform.BootSources+ResetKind+Tags.LocaleSwitch : System.Int32 (literal)
+ToolUp.Platform.BootSources+ResetKind+Tags.TeamSwitch : System.Int32 (literal)
+ToolUp.Platform.BootSources+ResetKind+Tags.TokenAcquired : System.Int32 (literal)
+ToolUp.Platform.BootSources+ResetKind+TeamSwitch (class)
+ToolUp.Platform.BootSources+ResetKind+TeamSwitch.teamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.BootSources+ResetKindModule (class)
+ToolUp.Platform.BootSources+ResetKindModule.trigger(ToolUp.Platform.BootSources+ResetKind) : ToolUp.Platform.BootSources+ResetTrigger
+ToolUp.Platform.BootSources+ResetTrigger (class)
+ToolUp.Platform.BootSources+ResetTrigger.IsLocaleSwitch : System.Boolean { get }
+ToolUp.Platform.BootSources+ResetTrigger.IsTeamSwitch : System.Boolean { get }
+ToolUp.Platform.BootSources+ResetTrigger.IsTokenAcquired : System.Boolean { get }
+ToolUp.Platform.BootSources+ResetTrigger.LocaleSwitch : ToolUp.Platform.BootSources+ResetTrigger { get }
+ToolUp.Platform.BootSources+ResetTrigger.Tag : System.Int32 { get }
+ToolUp.Platform.BootSources+ResetTrigger.TeamSwitch : ToolUp.Platform.BootSources+ResetTrigger { get }
+ToolUp.Platform.BootSources+ResetTrigger.TokenAcquired : ToolUp.Platform.BootSources+ResetTrigger { get }
+ToolUp.Platform.BootSources+ResetTrigger+Tags (class)
+ToolUp.Platform.BootSources+ResetTrigger+Tags.LocaleSwitch : System.Int32 (literal)
+ToolUp.Platform.BootSources+ResetTrigger+Tags.TeamSwitch : System.Int32 (literal)
+ToolUp.Platform.BootSources+ResetTrigger+Tags.TokenAcquired : System.Int32 (literal)
 ToolUp.Platform.Bootstrap.Hydration (class)
 ToolUp.Platform.Bootstrap.Hydration.isPrerendered() : System.Boolean
 ToolUp.Platform.Bootstrap.Hydration.run(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
@@ -3080,11 +3165,13 @@ ToolUp.Platform.Client.buildQueryBus(Microsoft.FSharp.Collections.FSharpList`1[T
 ToolUp.Platform.Client.currentNarrative(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Model) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.Platform.Client.dispatchers(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.Client+Dispatchers
 ToolUp.Platform.Client.emptyChrome : ToolUp.Platform.Client+ExtraChrome { get }
+ToolUp.Platform.Client.firstInitGates : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.Client.init(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], Microsoft.FSharp.Core.Unit) : System.Tuple`2[ToolUp.Platform.Client+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.Platform.Client.installRequestSeam(ToolUp.Platform.ClientConfig) : System.Void
 ToolUp.Platform.Client.moduleIdentityReport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.String
 ToolUp.Platform.Client.moduleIdentityTable(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleIdentityRow]
-ToolUp.Platform.Client.observeModuleStates(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], ToolUp.Platform.Client+Model) : System.Void
+ToolUp.Platform.Client.moduleState(System.String, ToolUp.Platform.Client+Model) : Microsoft.FSharp.Core.FSharpOption`1[System.Object]
+ToolUp.Platform.Client.observeModuleStates(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleHost], ToolUp.Platform.Client+Model) : System.Void
 ToolUp.Platform.Client.prepareModules(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
 ToolUp.Platform.Client.program(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Msg, Fable.React.ReactElement]
 ToolUp.Platform.Client.programLifetimeEffects(ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Elmish.EffectHandle`1[ToolUp.Platform.Client+Msg]]
@@ -3118,7 +3205,7 @@ ToolUp.Platform.Client+InitPhase+Tags.Prefetching : System.Int32 (literal)
 ToolUp.Platform.Client+InitPhase+Tags.Ready : System.Int32 (literal)
 ToolUp.Platform.Client+InitPhase+Tags.Reprefetching : System.Int32 (literal)
 ToolUp.Platform.Client+Model (class)
-ToolUp.Platform.Client+Model..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], SidebarPreferences+UserSidebarPreferences, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], ToolUp.Platform.ModuleArea, System.Boolean, ToolUp.Platform.Remote`2[Microsoft.FSharp.Core.Unit, System.String], ToolUp.Platform.Remote`2[Microsoft.FSharp.Core.Unit, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32], ToolUp.Platform.Client+InitPhase, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootDegradation+BootDegradation], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], ToolUp.Platform.CommandPaletteNav+PaletteState, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Client+Model..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleHost], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], SidebarPreferences+UserSidebarPreferences, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], ToolUp.Platform.ModuleArea, System.Boolean, Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.Client+InitPhase, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootDegradation+BootDegradation], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], ToolUp.Platform.CommandPaletteNav+PaletteState, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Client+Model.AccessibleModules : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessibleModulesResponse] { get }
 ToolUp.Platform.Client+Model.ActiveModuleId : System.String { get }
 ToolUp.Platform.Client+Model.ActivePageRoute : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -3126,21 +3213,19 @@ ToolUp.Platform.Client+Model.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1
 ToolUp.Platform.Client+Model.ActiveTeamLoadCompleted : System.Boolean { get }
 ToolUp.Platform.Client+Model.ActiveTeamRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
 ToolUp.Platform.Client+Model.AppAccessRefused : System.Boolean { get }
+ToolUp.Platform.Client+Model.AwaitingFirstInit : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.Client+Model.CommandPalette : ToolUp.Platform.CommandPaletteNav+PaletteState { get }
-ToolUp.Platform.Client+Model.ConfigsPrefetch : ToolUp.Platform.Remote`2[Microsoft.FSharp.Core.Unit, System.String] { get }
 ToolUp.Platform.Client+Model.CurrentArea : ToolUp.Platform.ModuleArea { get }
 ToolUp.Platform.Client+Model.Degradations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootDegradation+BootDegradation] { get }
-ToolUp.Platform.Client+Model.FlagsPrefetch : ToolUp.Platform.Remote`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+ToolUp.Platform.Client+Model.Hosts : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleHost] { get }
 ToolUp.Platform.Client+Model.InitPhase : ToolUp.Platform.Client+InitPhase { get }
 ToolUp.Platform.Client+Model.LocaleOverride : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Client+Model.ModuleConfigs : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]] { get }
-ToolUp.Platform.Client+Model.ModuleStates : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object] { get }
 ToolUp.Platform.Client+Model.MyTeams : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo] { get }
 ToolUp.Platform.Client+Model.PlatformConfig : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.Client+Model.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
 ToolUp.Platform.Client+Model.PrefetchedProcessedData : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
 ToolUp.Platform.Client+Model.ProcessedData : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry] { get }
-ToolUp.Platform.Client+Model.ResetCounters : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Int32] { get }
 ToolUp.Platform.Client+Model.ResolvedFlags : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue] { get }
 ToolUp.Platform.Client+Model.ShowAllModules : System.Boolean { get }
 ToolUp.Platform.Client+Model.SidebarPrefs : SidebarPreferences+UserSidebarPreferences { get }
@@ -3942,6 +4027,10 @@ ToolUp.Platform.ModuleEvents.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[System
 ToolUp.Platform.ModuleGroupingValidator (class)
 ToolUp.Platform.ModuleGroupingValidator.result(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ModuleGroupingValidator.validate(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
+ToolUp.Platform.ModuleHost (class)
+ToolUp.Platform.ModuleHost..ctor(System.Object, System.Int32)
+ToolUp.Platform.ModuleHost.Generation : System.Int32 { get }
+ToolUp.Platform.ModuleHost.State : System.Object { get }
 ToolUp.Platform.ModuleLabel (class)
 ToolUp.Platform.ModuleLabel..ctor(System.String, Fable.React.ReactElement)
 ToolUp.Platform.ModuleLabel.Icon : Fable.React.ReactElement { get }
@@ -4369,6 +4458,7 @@ ToolUp.Platform.SidebarVisibility.decide`1(Microsoft.FSharp.Core.FSharpFunc`2[m,
 ToolUp.Platform.SidebarVisibility.defaults : ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs { get }
 ToolUp.Platform.SidebarVisibility.isAdminSidebarGroup(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
 ToolUp.Platform.SidebarVisibility.isPlatformAdminSidebarGroup(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
+ToolUp.Platform.SidebarVisibility.noActiveTeamAdmits(ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs, ToolUp.Platform.SidebarVisibility+SidebarModuleFacts) : System.Boolean
 ToolUp.Platform.SidebarVisibility.visibleIds`1(Microsoft.FSharp.Core.FSharpFunc`2[m, ToolUp.Platform.SidebarVisibility+SidebarModuleFacts], ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs, Microsoft.FSharp.Collections.FSharpList`1[m]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.SidebarVisibility.visible`1(Microsoft.FSharp.Core.FSharpFunc`2[m, ToolUp.Platform.SidebarVisibility+SidebarModuleFacts], ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs, Microsoft.FSharp.Collections.FSharpList`1[m]) : Microsoft.FSharp.Collections.FSharpList`1[m]
 ToolUp.Platform.SidebarVisibility+NavigationDecision (class)

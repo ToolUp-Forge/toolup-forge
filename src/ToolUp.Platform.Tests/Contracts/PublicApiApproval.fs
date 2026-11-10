@@ -95,20 +95,21 @@ module ToolUp.Platform.Tests.Contracts.PublicApiApproval
 //      publishes; it has no business policing code no consumer can call.
 //
 // ── Regeneration path (`--update`) ──
-// Set `TOOLUP_APPROVE_API=1` and run the Platform pack; every baseline is
-// rewritten from the live surface (additive growth folded in, deliberate
-// removals accepted) deterministically — sorted by type then member, so
-// re-runs produce no spurious reordering diffs:
+// Admit the `api` stem (`Approval.fs`, `projections.json`) and run the
+// approval pack; every baseline is rewritten from the live surface
+// (additive growth folded in, deliberate removals accepted)
+// deterministically — sorted by type then member, so re-runs produce no
+// spurious reordering diffs:
 //
-//   $env:TOOLUP_APPROVE_API = "1"
-//   dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
-//   $env:TOOLUP_APPROVE_API = $null
+//   $env:TOOLUP_APPROVE = "api"
+//   dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj
+//   $env:TOOLUP_APPROVE = $null
 //
-// **Scope it.** `=1` rewrites all ~95 baselines, which is how a session
-// regenerating one assembly ends up hand-reverting other sessions'
+// **Scope it.** The whole stem rewrites every baseline, which is how a
+// session regenerating one assembly ends up hand-reverting other sessions'
 // hunks. Name the assemblies instead — see `approveScope`:
 //
-//   $env:TOOLUP_APPROVE_API = "ToolUp.Platform.Core,ToolUp.Platform.Server"
+//   $env:TOOLUP_APPROVE = "api:ToolUp.Platform.Core,api:ToolUp.Platform.Server"
 //
 // A scope naming an assembly the run does not discover FAILS rather than
 // regenerating nothing, because a filtered regen that silently matched
@@ -171,65 +172,21 @@ let activeConfig () =
 /// `toolup-forge/api-baselines/` — the committed `.approved.txt` files.
 let baselineDir (root: string) = Path.Combine(root, "api-baselines")
 
-/// Regeneration path: `TOOLUP_APPROVE_API=1` rewrites baselines instead
-/// of comparing. Whether ANY regeneration is armed — see
-/// `approveModeFor` for which assemblies it actually covers.
-let approveModeOn () =
-    match Environment.GetEnvironmentVariable "TOOLUP_APPROVE_API" with
-    | null
-    | "" -> false
-    | _ -> true
+/// Whether ANY baseline is to be rewritten on this run: the `api` stem of
+/// the one approval reading (`Approval.fs`). `TOOLUP_APPROVE=api` rewrites
+/// every built baseline; see `approveScope` for the names form.
+let approveModeOn () = Approve.admit "api"
 
-/// The assemblies a regeneration run is scoped to, or `None` for "every
-/// discovered baseline" — the historical, and still the default,
-/// behaviour of `TOOLUP_APPROVE_API=1`.
-///
-/// **Why a scope exists at all.** `=1` rewrites every built baseline —
-/// ~95 files — so a session regenerating ONE assembly's surface also
-/// folds in whatever unrelated additive drift and EOL churn the tree
-/// happens to be carrying, including files a concurrent session has in
-/// flight. Three agents in one day had to hand-revert foreign hunks
-/// before committing (Phase 318 ship report). The recipe those sessions
-/// were following — regen everything, then `git restore` all but your
-/// targets — works, but it is a manual filter applied AFTER the damage
-/// is on disk, and it only protects the baselines the session thought to
-/// name.
-///
-/// So: `TOOLUP_APPROVE_API=ToolUp.Platform.Core` regenerates exactly that
-/// one, and a comma- or semicolon-separated list scopes to several:
-///
-///   $env:TOOLUP_APPROVE_API = "ToolUp.Platform.Core,ToolUp.Platform.Server"
-///
-/// `=1` / `=true` keep meaning "all of them", so nothing that worked
-/// before changes (GP 11). Matching is by assembly name — the baseline
-/// file stem — case-insensitively, with a trailing `.approved.txt`
-/// tolerated so a name pasted from a failure message works.
-let approveScope () : Set<string> option =
-    match Environment.GetEnvironmentVariable "TOOLUP_APPROVE_API" with
-    | null
-    | "" -> None
-    | v when v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase) -> None
-    | v ->
-        v.Split([| ','; ';' |], StringSplitOptions.RemoveEmptyEntries)
-        |> Array.map (fun name ->
-            let trimmed = name.Trim()
-
-            if trimmed.EndsWith(".approved.txt", StringComparison.OrdinalIgnoreCase) then
-                trimmed.Substring(0, trimmed.Length - ".approved.txt".Length)
-            else
-                trimmed)
-        |> Array.filter (String.IsNullOrWhiteSpace >> not)
-        |> Set.ofArray
-        |> Some
+/// The assemblies a regeneration run is scoped to, or `None` for every
+/// discovered baseline. `TOOLUP_APPROVE=api:ToolUp.Platform.Core` rewrites
+/// exactly that one, and `api:A,api:B` several. Prefer it to the whole stem:
+/// a whole-stem run rewrites every built baseline (~190 files), folding in
+/// whatever unrelated additive drift and EOL churn the tree carries,
+/// including files a concurrent session has in flight.
+let approveScope () : Set<string> option = Approve.scope "api"
 
 /// Whether THIS assembly's baseline is to be rewritten on this run.
-let approveModeFor (assemblyName: string) =
-    approveModeOn ()
-    && (match approveScope () with
-        | None -> true
-        | Some names ->
-            names
-            |> Set.exists (fun n -> n.Equals(assemblyName, StringComparison.OrdinalIgnoreCase)))
+let approveModeFor (assemblyName: string) = Approve.admitName "api" assemblyName
 
 // ─── Packable-set discovery (mirrors the Pack glob) ──────────────────
 
@@ -1121,7 +1078,8 @@ let private bullets (tokens: string list) =
 
 let private regenRecipe (assemblyName: string) =
     sprintf
-        "  $env:TOOLUP_APPROVE_API = \"1\"\n  dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj\n  $env:TOOLUP_APPROVE_API = $null\n\nthen commit api-baselines/%s.approved.txt in the SAME PR."
+        "  $env:TOOLUP_APPROVE = \"api:%s\"\n  dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj\n  $env:TOOLUP_APPROVE = $null\n\nthen commit api-baselines/%s.approved.txt in the SAME PR."
+        assemblyName
         assemblyName
 
 /// The gate's failure text for a drift, or `None` when the surface matches
@@ -1300,7 +1258,7 @@ let describeObsoleteDefects (assemblyName: string) (defects: (ObsoleteMember * s
 // which is a review event rather than a chore imposed on every PR.
 //
 // **The regeneration path is the SAME switch the api-baselines use**
-// (`TOOLUP_APPROVE_API`), scoped the same way, for the reason Phase 259
+// (the `api` stem of `TOOLUP_APPROVE`), scoped the same way, for the reason Phase 259
 // gives: a reviewer accepting the tree's current shape wants one pass,
 // and a second env var would need its own config surface to say the same
 // thing. A scoped regen rewrites only its own assemblies' lines.
@@ -1549,7 +1507,7 @@ let private sampleTokens (subjects: DocSubject list) =
 /// ratchet at whatever coverage it actually has rather than escaping it.
 let describeMissingDocCoverageFloor (assemblyName: string) (measured: DocCoverage) : string =
     sprintf
-        "%s: no doc-coverage floor recorded in api-baselines/doc-coverage.approved.txt. This is a NEW public package (or a line that was hand-edited into an unparseable shape). Measured now: %d/%d documented (%.1f%%). Record the floor with the same switch the api-baselines use and commit it in the SAME PR:\n\n  $env:TOOLUP_APPROVE_API = \"%s\"\n  dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj\n  $env:TOOLUP_APPROVE_API = $null\n\nNothing is broken — a package with no recorded floor is simply outside the ratchet, which is the one state this gate cannot allow. Policy: docs/platform/doc-coverage.md."
+        "%s: no doc-coverage floor recorded in api-baselines/doc-coverage.approved.txt. This is a NEW public package (or a line that was hand-edited into an unparseable shape). Measured now: %d/%d documented (%.1f%%). Record the floor with the same switch the api-baselines use and commit it in the SAME PR:\n\n  $env:TOOLUP_APPROVE = \"api:%s\"\n  dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj\n  $env:TOOLUP_APPROVE = $null\n\nNothing is broken — a package with no recorded floor is simply outside the ratchet, which is the one state this gate cannot allow. Policy: docs/platform/doc-coverage.md."
         assemblyName
         measured.Documented
         measured.Total
@@ -1574,7 +1532,7 @@ let describeDocCoverageRegression
         None
     else
         sprintf
-            "%s: public XML-doc coverage REGRESSED — %d undocumented public member(s) against a recorded floor of %d (+%d). Coverage is now %d/%d (%.1f%%); the floor was recorded at %d/%d (%.1f%%).\n\nNOTHING IS BROKEN and no public surface has drifted: this is about doc comments, not shapes. It fires for exactly two reasons, and the remedy differs:\n\n  * a NEW public member landed without a doc comment — document it. The tracked public surface IS the contracted surface (GP 11), and an adopter meets it through hover-docs and the generated reference, not the source.\n  * an existing doc comment was DELETED, or moved off the public surface — restore it, or accept the loss by regenerating the floor in the same PR.\n\nUndocumented members in this assembly (a sample — not necessarily the new ones):\n%s\n\nTo accept the new level deliberately:\n\n  $env:TOOLUP_APPROVE_API = \"%s\"\n  dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj\n  $env:TOOLUP_APPROVE_API = $null\n\nthen commit api-baselines/doc-coverage.approved.txt in the SAME PR. Improving coverage never fails this gate — only regressing it does. Policy, threshold and the ratchet plan toward the 1.0 tag: docs/platform/doc-coverage.md."
+            "%s: public XML-doc coverage REGRESSED — %d undocumented public member(s) against a recorded floor of %d (+%d). Coverage is now %d/%d (%.1f%%); the floor was recorded at %d/%d (%.1f%%).\n\nNOTHING IS BROKEN and no public surface has drifted: this is about doc comments, not shapes. It fires for exactly two reasons, and the remedy differs:\n\n  * a NEW public member landed without a doc comment — document it. The tracked public surface IS the contracted surface (GP 11), and an adopter meets it through hover-docs and the generated reference, not the source.\n  * an existing doc comment was DELETED, or moved off the public surface — restore it, or accept the loss by regenerating the floor in the same PR.\n\nUndocumented members in this assembly (a sample — not necessarily the new ones):\n%s\n\nTo accept the new level deliberately:\n\n  $env:TOOLUP_APPROVE = \"api:%s\"\n  dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj\n  $env:TOOLUP_APPROVE = $null\n\nthen commit api-baselines/doc-coverage.approved.txt in the SAME PR. Improving coverage never fails this gate — only regressing it does. Policy, threshold and the ratchet plan toward the 1.0 tag: docs/platform/doc-coverage.md."
             current.Assembly
             now
             before

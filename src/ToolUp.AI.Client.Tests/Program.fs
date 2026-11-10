@@ -73,6 +73,8 @@ let allTests =
         // silent-no-op regression).
         ShellLifetimeEffectsTests.tests
         ShellUpdateEffectsTests.tests
+        BootSourcesTests.tests
+        ModuleHostTests.tests
         BrowserHistoryTests.tests
         // Phase 879 - shell slots: the prepared module list and the
         // built-ins' admin tiles over reference configurations, pinned by

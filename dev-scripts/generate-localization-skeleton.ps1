@@ -1,38 +1,7 @@
 #Requires -Version 7.0
-# Phase 767 — regenerate the translation skeleton for `MessageCatalog`:
-#
-#   docs/platform/message-catalog-skeleton.fs    every catalog leaf, keyed by
-#                                                section and field, with its
-#                                                English text in a comment —
-#                                                the file a consumer copies to
-#                                                author a second language
-#
-# It is a projection of `MessageCatalog.english` (src/ToolUp.Platform.Core/
-# Shared/MessageCatalog.fs), rendered by the golden-file test in
-# `LocalizationTests` (the platform test pack). This script drives that test in
-# regeneration mode: with TOOLUP_REGEN_LOCALIZATION_SKELETON=1 set it writes the
-# file instead of comparing. Run it after adding, removing or rewording a catalog
-# field, then commit the updated skeleton alongside the catalog change.
-#
-# The skeleton is also COMPILED into the test project, so a field the catalog
-# has renamed or removed fails the build here, naming the field. If that is the
-# failure you are looking at, delete docs/platform/message-catalog-skeleton.fs
-# and run this script again — the fsproj includes the file only when it exists,
-# so the build goes through and the regenerated file will not set the vanished
-# field.
-
-$ErrorActionPreference = "Stop"
-Set-Location $PSScriptRoot/..
-
-# The regen env var only changes the one golden-file test (it writes its
-# artefact instead of comparing); every other test in the pack runs normally.
-$env:TOOLUP_REGEN_LOCALIZATION_SKELETON = "1"
-try {
-    dotnet run --project src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj `
-        -- --filter-test-list "translation skeleton"
-}
-finally {
-    Remove-Item Env:TOOLUP_REGEN_LOCALIZATION_SKELETON -ErrorAction SilentlyContinue
-}
-
-Write-Host "Regenerated docs/platform/message-catalog-skeleton.fs" -ForegroundColor Green
+# Retired: regenerating docs/platform/message-catalog-skeleton.fs is `dev-scripts/regen.ps1 localization-skeleton`, which reads the
+# row from projections.json. This name forwards there until 0.43.0, the same window
+# the retired TOOLUP_REGEN_* switches are read for.
+Write-Host "generate-*.ps1 is retired: running dev-scripts/regen.ps1 localization-skeleton" -ForegroundColor Yellow
+& "$PSScriptRoot/regen.ps1" localization-skeleton
+exit $LASTEXITCODE

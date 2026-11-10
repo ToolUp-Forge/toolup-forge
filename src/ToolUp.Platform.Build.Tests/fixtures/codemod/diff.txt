@@ -61,6 +61,14 @@
 @@ L21 [815-elmish-error-handler]
 -    |> Program.withErrorHandler onError
 +    |> Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))
+--- a/src/Client/Hosting.fs
++++ b/src/Client/Hosting.fs
+@@ L6 [1071-module-state-read]
+-    model.ModuleStates |> Map.tryFind model.ActiveModuleId
++    model |> Client.moduleState model.ActiveModuleId
+@@ L10 [1071-first-init-gates]
+-    ConfigsPrefetch = Remote.Loading
++    AwaitingFirstInit = Client.firstInitGates
 --- a/src/Client/Shell.fs
 +++ b/src/Client/Shell.fs
 @@ L9 [879-module-label]
@@ -413,4 +421,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 105 rewrite(s) across 18 file(s) pending.
+Codemod: 107 rewrite(s) across 19 file(s) pending.

@@ -113,6 +113,8 @@
              regression class. -->
         <Compile Include="ShellLifetimeEffectsTests.fs" />
         <Compile Include="ShellUpdateEffectsTests.fs" />
+        <Compile Include="BootSourcesTests.fs" />
+        <Compile Include="ModuleHostTests.fs" />
         <Compile Include="BrowserHistoryTests.fs" />
         <!-- Phase 879 - the prepared module list and the built-ins' admin
              tiles over reference configurations, pinned by baselines

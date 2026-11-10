@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.BrandKitLayoutTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Reflection
 open System.Text.RegularExpressions
@@ -100,10 +101,9 @@ let private baselinePath () =
 
     Path.Combine(repoRoot, "src", "ToolUp.Platform.Tests", "Support", "brandkit-markup.approved.txt")
 
-/// `TOOLUP_APPROVE_BRANDKIT=1` rewrites the baseline instead of comparing
+/// `TOOLUP_APPROVE=brandkit` rewrites the baseline instead of comparing
 /// against it — the deliberate route for an intentional markup change.
-let private approveMode () =
-    not (String.IsNullOrEmpty(Environment.GetEnvironmentVariable "TOOLUP_APPROVE_BRANDKIT"))
+let private approveMode () = Approve.admit "brandkit"
 
 let private loadBaseline () : Map<string, string> =
     let path = baselinePath ()

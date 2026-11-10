@@ -1,0 +1,263 @@
+{
+  "$comment": "Every generated artefact in this repository: where it is, what renders it, the stem that approves a regeneration (TOOLUP_APPROVE=<stem>, read by Approval.fs), the test or check that holds it to its renderer, and how to regenerate it (dev-scripts/regen.ps1 <stem>). `.fantomasignore` is rendered from the rows marked fantomasIgnore and from `outputs` (dotnet run --project Build.fsproj -- Projections --render), and ProjectionsTests holds the file, this registry and the switch reads in the test tree to each other.",
+  "projections": [
+    {
+      "path": "api-baselines/*.approved.txt",
+      "render": "PublicApiApproval.renderSurface: each packable assembly's public surface",
+      "stem": "api",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/PublicApiApprovalTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj" }
+    },
+    {
+      "path": "api-baselines/doc-coverage.approved.txt",
+      "render": "PublicApiApproval: the recorded public XML-doc coverage floor per assembly",
+      "stem": "api",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/PublicApiApprovalTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj" }
+    },
+    {
+      "path": "src/ToolUp.Platform.Tests/Contracts/conformance-coverage.approved.txt",
+      "render": "ConformanceCoverage: the replaceable seams and the contract packs that run them",
+      "stem": "api",
+      "heldBy": "src/ToolUp.Platform.Build.Tests/ConformanceCoverageTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj", "filter": "ConformanceCoverage" }
+    },
+    {
+      "path": "composition-baselines/*",
+      "render": "CompositionBaselineTests: the reference composition, event topology, data footprint, authorization surface, rule manifest and default DI descriptors",
+      "stem": "composition",
+      "heldBy": "src/ToolUp.Platform.Tests/Composition/CompositionBaselineTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj", "filter": "CompositionBaseline" }
+    },
+    {
+      "path": "src/ToolUp.Platform.Tests/Support/brandkit-markup.approved.txt",
+      "render": "BrandKitLayoutTests: the brand-kit layout library's markup",
+      "stem": "brandkit",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/BrandKitLayoutTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "ToolUp.BrandKit" }
+    },
+    {
+      "path": "src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs",
+      "render": "the remoting generator's decoders over every API record Core declares",
+      "stem": "platform-decoders",
+      "heldBy": "src/ToolUp.Platform.Tests/Remoting/PlatformDecodersGenerationTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "Phase 801" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonEncoders.fs",
+      "render": "the remoting generator's json-encoders emission over every API record's return types",
+      "stem": "platform-decoders",
+      "heldBy": "src/ToolUp.Platform.Tests/Remoting/PlatformJsonEncodersGenerationTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "Platform JSON encoders" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs",
+      "render": "the remoting generator's JSON emission over every API record's argument types",
+      "stem": "platform-json-decoders",
+      "heldBy": "src/ToolUp.Platform.Tests/Remoting/GeneratorFidelityTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "Phase 69k" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "src/ToolUp.Platform.Client/Client/Remoting/PlatformClientProxies.fs",
+      "render": "the remoting generator's client-proxies emission over every platform API record",
+      "stem": "platform-client-proxies",
+      "heldBy": "src/ToolUp.Platform.Tests/Remoting/ClientProxyGenerationTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "Phase 853" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "src/ToolUp.Platform.Tests/Remoting/ReadCatalogClientProxies.fs",
+      "render": "the remoting generator's client-proxies emission over the ReadCatalogApi test fixture",
+      "stem": "platform-client-proxies",
+      "heldBy": "src/ToolUp.Platform.Tests/Remoting/ClientProxyGenerationTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "Phase 853" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "docs/reference/config-reference.md",
+      "render": "ConfigKeys.keys: every configuration key, for a reader",
+      "stem": "config-reference",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/ConfigReferenceTests.fs",
+      "regen": { "target": "GenerateConfigReference" }
+    },
+    {
+      "path": "docs/reference/toolup.config.schema.json",
+      "render": "ConfigKeys.keys: the manifest-bindable subset, for an editor",
+      "stem": "config-reference",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/ConfigReferenceTests.fs",
+      "regen": { "target": "GenerateConfigReference" }
+    },
+    {
+      "path": "docs/operations/env-vars.md",
+      "render": "ConfigKeys.keys: the Description column of the operations tables (the page is otherwise hand-authored)",
+      "stem": "config-reference",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/ConfigReferenceTests.fs",
+      "regen": { "target": "GenerateConfigReference" }
+    },
+    {
+      "path": "DEPLOYMENT.md",
+      "render": "ConfigKeys.keys: the generated region naming the keys that refuse a typo and what the boot seal covers",
+      "stem": "config-reference",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/ConfigReferenceTests.fs",
+      "regen": { "target": "GenerateConfigReference" }
+    },
+    {
+      "path": "docs/reference/audit-event-reference.md",
+      "render": "the AuditEvent union and the audit codec registry",
+      "stem": "audit-event-reference",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/AuditEventRegistryTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj", "filter": "Phase 114" }
+    },
+    {
+      "path": "docs/platform/message-catalog-skeleton.fs",
+      "render": "MessageCatalog.english: the translation skeleton a consumer copies to author a second language",
+      "stem": "localization-skeleton",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/LocalizationTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "translation skeleton" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "tests/elmish-proof-corpus/*-cases.txt",
+      "render": "the extracted ring and subscription-diff models over the seeded campaign",
+      "stem": "elmish-proof-corpus",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "Phase 788" }
+    },
+    {
+      "path": "docs/platform/trust-boundaries.md",
+      "render": "TrustBoundaries.all: the public page of the trust boundaries",
+      "stem": "trust-boundaries",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/TrustBoundaryTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj", "filter": "the public page" }
+    },
+    {
+      "path": "wire-fixtures/*",
+      "render": "FederationWireCorpus.emit: the federation-seam wire corpus, written into the specification home",
+      "stem": "wire-fixtures",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/FederationWireConformanceTests.fs",
+      "regen": { "project": "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj", "filter": "corpus shape" },
+      "external": "TOOLUP_FEDERATION_SPEC_DIR"
+    },
+    {
+      "path": "src/ToolUp.OpenXml.Tests/Corpus/*.txt",
+      "render": "the OpenXml import and emit over each corpus fixture: model, package and residue",
+      "stem": "openxml-goldens",
+      "heldBy": "src/ToolUp.OpenXml.Tests/Corpus/Goldens.fs",
+      "regen": { "project": "src/ToolUp.OpenXml.Tests/ToolUp.OpenXml.Tests.fsproj" }
+    },
+    {
+      "path": "src/ToolUp.Sdk/build/ToolUp.Sdk.props",
+      "render": "SdkManifest: the meta-manifest's package list, each resolved through its version group",
+      "stem": "sdk-manifest",
+      "heldBy": "src/ToolUp.Platform.Build.Tests/SdkManifestTests.fs",
+      "regen": { "target": "GenerateSdkManifest" }
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "render": "the ThirdPartyNotices target: the licences of every packed dependency",
+      "stem": "third-party-notices",
+      "heldBy": "src/ToolUp.Platform.Build/Build/SDK.Build.fs",
+      "regen": { "target": "ThirdPartyNotices" }
+    },
+    {
+      "path": "docs/reference/v1-readiness.md",
+      "render": "V1Readiness.render: the v1.0 readiness scorecard",
+      "stem": "v1-readiness",
+      "heldBy": "src/ToolUp.Platform.Build.Tests/V1ReadinessTests.fs",
+      "regen": { "target": "V1Readiness" },
+      "committed": false
+    },
+    {
+      "path": "docs-snippets/corpus-floor.txt",
+      "render": "DocGates.rewriteMark: the compiled-doc-snippet high-water mark, raised by the gate",
+      "stem": "doc-snippets",
+      "heldBy": "src/ToolUp.Platform.Build.Tests/DocGatesTests.fs",
+      "regen": { "target": "VerifyDocSnippets" }
+    },
+    {
+      "path": "docs-snippets/known-drift.txt",
+      "render": "VerifyDocSnippets --update-baseline: the snippet-drift baseline, held empty",
+      "stem": "doc-snippets",
+      "heldBy": "src/ToolUp.Platform.Build.Tests/DocGatesTests.fs",
+      "regen": { "target": "VerifyDocSnippets", "args": [ "--update-baseline" ] }
+    },
+    {
+      "path": "src/ToolUp.Remoting.Analyzers/analyzer-inventory.json",
+      "render": "the TUA rules' sites over every tracked src/**/*.fs",
+      "stem": "analyzers",
+      "heldBy": "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj",
+      "regen": { "target": "VerifyAnalyzers" }
+    },
+    {
+      "path": "docs/platform/analyzer-rules.md",
+      "render": "the TUA rule catalogue",
+      "stem": "analyzers",
+      "heldBy": "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj",
+      "regen": { "target": "VerifyAnalyzers" }
+    },
+    {
+      "path": "gate-reads.json",
+      "render": "GateManifest: what the gate reads and deliberately does not",
+      "stem": "gate",
+      "heldBy": "src/ToolUp.Platform.Build.Tests/GateManifestTests.fs",
+      "regen": { "target": "Gate", "args": [ "--render" ] }
+    },
+    {
+      "path": ".fantomasignore",
+      "render": "Projections.renderFantomasIgnore: this registry's fantomasIgnore rows and outputs",
+      "stem": "projections",
+      "heldBy": "src/ToolUp.Platform.Tests/InProcess/ProjectionsTests.fs",
+      "regen": { "target": "Projections", "args": [ "--render" ] }
+    },
+    {
+      "path": "proofs/oracle/custard/",
+      "render": "the F* extractor's F# output for every proved module, the support library and the project",
+      "stem": "proofs",
+      "heldBy": "proofs/check.ps1",
+      "regen": { "script": "proofs/check.ps1" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "proofs/oracle/fable/FStarCustard.fs",
+      "render": "derived from the extracted support library by the proof leg",
+      "stem": "proofs",
+      "heldBy": "proofs/check.ps1",
+      "regen": { "script": "proofs/check.ps1" },
+      "fantomasIgnore": true
+    },
+    {
+      "path": "samples/HelloWorld-AOT/HelloWorld.AOT/Generated/",
+      "render": "the remoting generator's emission, rewritten after every build of HelloWorld.AOT.Contract",
+      "stem": "aot-sample",
+      "heldBy": "samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj",
+      "regen": { "build": "samples/HelloWorld-AOT/HelloWorld.AOT.Contract/HelloWorld.AOT.Contract.fsproj" },
+      "fantomasIgnore": true,
+      "committed": false
+    }
+  ],
+  "outputs": [
+    {
+      "path": "docs-snippets/generated/",
+      "why": "VerifyDocSnippets extracts every in-scope fsharp block here; it reproduces a doc's text verbatim"
+    },
+    {
+      "path": "**/docs-snippets/generated/",
+      "why": "the same, under a worktree or a nested checkout"
+    },
+    {
+      "path": "proofs/.fstar/",
+      "why": "the proof leg's downloaded toolchain"
+    },
+    {
+      "path": "proofs/.cache/",
+      "why": "F*'s .checked cache"
+    },
+    {
+      "path": "proofs/.extract/",
+      "why": "the fresh extraction the proof leg byte-diffs against proofs/oracle/custard/"
+    }
+  ]
+}

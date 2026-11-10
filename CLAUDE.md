@@ -495,7 +495,7 @@ Adding an SDK→SDK dependency reachable from the packaged-module template there
 | `dco` | — (CI-only: a commit-message lint; PR only, since direct-to-main is this repo's integration path) | — | PR only |
 | `fable-wire-smoke` | WireTests, WireFable | Tree, Node | yes |
 | `ai-wire-conformance` | WireConformance, WireConformanceFable | Tree, Node | yes |
-| `verify-all` | 57 rows, every `Local` row of the full lane: Platform, Platform.Remoting, Platform.Infra, Platform.Config, Platform.Scope, Platform.Jobs, Platform.Audit, Platform.PublicApi, Forms, Scheduling, AIProviders, Stripe, Build, RemotingAnalyzers, Cli, Voice, AICookbooks, Algorithms, AlgorithmProviders, CloudParity, ArtefactSigning, ReportingDocx, ReportingXlsx, DataSources, OpenXml, OpenXmlSpreadsheet, AssetStore, SvgRasterizerSkia, Reporting, Offline, CompanionsIsolation, AIEvaluation, TriageCalibration, Tabular, Classification, DataSubject, ReportingHtmlPdf, Webhooks, JobSchedulers, NotificationChannels, AuditSinks, Storage, Secrets, EmbeddingProviders, EntityStores, TimeSeriesStores, FeatureFlagProviders, Media, GateReconcile, Fable, Samples, Analyzers, ScopeLiterals, ServiceConfigFold, FuaranCoResolution, FuaranCoBuild, MergeDrivers | Tree, Git, Docker, Network, Browser, Node, 105 env var(s) | yes |
+| `verify-all` | 57 rows, every `Local` row of the full lane: Platform, Platform.Remoting, Platform.Infra, Platform.Config, Platform.Scope, Platform.Jobs, Platform.Audit, Platform.PublicApi, Forms, Scheduling, AIProviders, Stripe, Build, RemotingAnalyzers, Cli, Voice, AICookbooks, Algorithms, AlgorithmProviders, CloudParity, ArtefactSigning, ReportingDocx, ReportingXlsx, DataSources, OpenXml, OpenXmlSpreadsheet, AssetStore, SvgRasterizerSkia, Reporting, Offline, CompanionsIsolation, AIEvaluation, TriageCalibration, Tabular, Classification, DataSubject, ReportingHtmlPdf, Webhooks, JobSchedulers, NotificationChannels, AuditSinks, Storage, Secrets, EmbeddingProviders, EntityStores, TimeSeriesStores, FeatureFlagProviders, Media, GateReconcile, Fable, Samples, Analyzers, ScopeLiterals, ServiceConfigFold, FuaranCoResolution, FuaranCoBuild, MergeDrivers | Tree, Git, Docker, Network, Browser, Node, 106 env var(s) | yes |
 | `cloud-parity` | CloudParity | Tree, Docker, 8 env var(s) | yes |
 | `fable-tier` | Fable | Tree, Node | yes |
 | `doc-snippets` | DocSnippets | Tree | yes |
@@ -640,19 +640,26 @@ The rules that matter when a phase touches public surface:
   assembly that merely takes it as a parameter/return renders only the type NAME and needs no regen.
   After a surgical regen, re-run the FULL test pack — not just the approval filter — to catch a
   downstream baseline you missed.
-- **Scope the regen — `TOOLUP_APPROVE_API` takes assembly NAMES, not just `1`.**
-  `TOOLUP_APPROVE_API="ToolUp.Platform.Core,ToolUp.Platform.Server"` rewrites exactly those
+- **Every generated artefact is a row of [`projections.json`](projections.json), and one switch
+  regenerates it.** A row names the artefact, what renders it, the STEM that approves a regeneration,
+  the check that holds it and how to regenerate it; `ProjectionsTests` holds the registry to the tree
+  and `.fantomasignore` is its render (`dotnet run --project Build.fsproj -- Projections --render`).
+  The baselines are stem `api`. `TOOLUP_APPROVE` is the one switch (`src/ToolUp.Platform.Tests/Contracts/Approval.fs`),
+  and `pwsh ./dev-scripts/regen.ps1 <stem>` runs a stem's regeneration from its rows (`-List` names
+  the stems). The old switches (`TOOLUP_APPROVE_API`, `TOOLUP_REGEN_*`, …) are read until 0.43.0 and
+  print the spelling that replaces them.
+- **Scope the regen by NAME.** `TOOLUP_APPROVE=api:ToolUp.Platform.Core,api:ToolUp.Platform.Server`
+  (or `regen.ps1 api -Name ToolUp.Platform.Core,ToolUp.Platform.Server`) rewrites exactly those
   baselines and leaves every other one untouched and unconsulted; a name the run does not discover
-  fails the gate rather than regenerating nothing. Prefer this to `=1` always — it is the surgical
-  filter, applied before anything reaches disk.
-  **`TOOLUP_APPROVE_API=1` still rewrites EVERY built baseline** (~95 files), folding in unrelated
-  additive drift and EOL-only churn, which is what the named form exists to avoid: three agents in
-  one day had to hand-revert foreign hunks after an unscoped regen. If you do use `=1`, run the
-  approval pack with `dotnet run` (it builds every packable project first), then `git restore` every baseline except
-  your surgical targets and stage those by name. Either way, verify the real diff WITHOUT the env
-  var — approve mode passes trivially, so its green proves nothing. Never run an unscoped regen in a
-  shared working tree (it rewrites files concurrent sessions have in flight), and never apply
-  baseline hunks with `git apply --3way` there (it writes the shared index as a side effect).
+  fails the gate rather than regenerating nothing. Prefer it always — it is the surgical filter,
+  applied before anything reaches disk.
+  **The whole stem (`TOOLUP_APPROVE=api`) rewrites EVERY built baseline**, folding in unrelated
+  additive drift and EOL-only churn, which is what the named form exists to avoid. If you do use it,
+  run the approval pack with `dotnet run` (it builds every packable project first), then `git restore`
+  every baseline except your surgical targets and stage those by name. Either way, verify the real
+  diff WITHOUT the switch — approve mode passes trivially, so its green proves nothing. Never run an
+  unscoped regen in a shared working tree (it rewrites files concurrent sessions have in flight), and
+  never apply baseline hunks with `git apply --3way` there (it writes the shared index as a side effect).
 - **A worktree regen is only valid against the HEAD it is pinned to.** If surface lands between your
   pin and your apply, copying the regenerated file back silently deletes the landed lines — re-pin
   against the current HEAD copy, apply only your own hunks, and diff-verify zero foreign removals.

@@ -4,6 +4,7 @@
 module ToolUp.Platform.Tests.InProcess.ElmishProofOracleTests
 
 open System
+open ToolUp.Platform.Tests.Contracts
 open System.IO
 open System.Numerics
 open System.Reflection
@@ -140,11 +141,7 @@ let private repoRoot () =
 let private corpusPath (file: string) =
     Path.Combine(repoRoot (), CorpusDir, file)
 
-let private regenCorpus () =
-    match Environment.GetEnvironmentVariable "TOOLUP_REGEN_ELMISH_PROOF_CORPUS" with
-    | null
-    | "" -> false
-    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+let private regenCorpus () = Approve.admit "elmish-proof-corpus"
 
 let private renderRingCorpus () =
     String.concat

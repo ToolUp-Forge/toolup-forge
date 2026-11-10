@@ -1,33 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// The pure baseline comparer shared by the public-API approval gate and
-/// the release-time SemVer-bump check.
+/// The one grammar of a rendered public-API baseline, and the comparer
+/// built on it.
 ///
-/// **Extracted by Phase 260, unchanged.** Every line below was Phase
-/// 175's, as hardened by Phase 618 (both directions fail) and left
-/// exception-free by Phase 258 (an `[<Obsolete>]` marker is an ADDED
-/// line, so it classifies additive with no special case). The move is
-/// behaviour-preserving; `PublicApiApproval` opens this module and its
-/// callers are unchanged.
+/// `PublicApiApproval.renderSurface` writes the text; `parse` is the one
+/// reader of it. Every consumer of the baseline text reads it here: the
+/// approval gate (`compareSurface`), the release bump (`SemVerBump.fs`), the
+/// generated changelog (`Changelog.fs`) and the documentation gates
+/// (`DocGates.fs`, which hold doc blocks and source comments to the surface
+/// the baselines render). A second parser would be a second idea of what the
+/// surface is, and the two would disagree exactly where a rename made the
+/// answer matter. `dev-scripts/merge-baselines.ps1` is the one reader that is
+/// not F#; it is held to this grammar by the merge-driver round-trip check.
 ///
-/// **Why it is its own file.** Phase 260 computes the release bump from
-/// the same set difference, and its module (`SemVerBump.fs`, repo root)
-/// is compiled into `Build.fsproj` and into the Build test pack — neither
-/// of which can reference `MetadataLoadContext`, so neither can compile
-/// `PublicApiApproval.fs`. The alternative was a second tokeniser, and a
-/// second tokeniser here is not a style question: `isCompilerVersionDependent`
-/// below excludes a token whose presence depends on which SDK feature
-/// band built the DLL, and a copy that forgot it would read an ordinary
-/// band difference as ELEVEN removed members — i.e. would demand a
-/// breaking bump for a change nobody made. That exact skew reddened CI on
-/// 2026-08-19. One tokeniser, three readers.
-///
-/// BCL-only and free of both Expecto and FAKE, so it can be source-linked
-/// wherever the rule is needed.
+/// BCL-only and free of both Expecto and FAKE, so it is source-linked into
+/// the root build driver and the Build test pack, neither of which can
+/// reference `MetadataLoadContext` and so neither can compile
+/// `PublicApiApproval.fs`.
 module ToolUp.Platform.Tests.Contracts.SurfaceDiff
 
 open System
+open System.Text.RegularExpressions
 
 // The F# compiler stopped emitting the legacy `(SerializationInfo,
 // StreamingContext)` constructor on exception declarations in SDK
@@ -51,24 +45,118 @@ open System
 let isCompilerVersionDependent (l: string) =
     l.EndsWith "..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)"
 
-/// The tokens a comparison sees: non-blank, non-comment lines, minus the
-/// band-dependent ctor above. Public because it is the answer to "does
-/// this baseline text carry any tracked surface at all", which Phase 261's
-/// documentation-coverage gate asks of a baseline before grading it — a
-/// third reader of the one tokeniser, and the reason it is worth having
-/// exactly one.
-let significantLines (text: string) =
-    text.Replace("\r\n", "\n").Split('\n')
-    |> Array.map _.TrimEnd()
-    |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#") && not (isCompilerVersionDependent l))
+/// One member line under a rendered type.
+type SurfaceMember = {
+    /// The rendered text up to its first `(` or space: `send`, `.ctor`,
+    /// `Body`. Generic arity is kept (`ask`2`).
+    Name: string
+    /// The line after `<type>.`, exactly as rendered.
+    Rendered: string
+    /// The line is the deprecation MARKER beside a member (`…  (obsolete)`),
+    /// not a member of its own.
+    Obsolete: bool
+}
+
+/// One type a baseline renders, with the member lines that hang off it.
+type SurfaceType = {
+    /// The full name; a nested type keeps its `+`.
+    Full: string
+    /// `class`, `interface`, `struct`, `enum` or `delegate`.
+    Kind: string
+    /// Every significant line starting `<Full>.`, in file order.
+    Members: SurfaceMember list
+}
+
+/// A baseline's text, read once.
+type Surface = {
+    /// The tokens a comparison sees: non-blank, non-comment lines, minus the
+    /// band-dependent constructor (`isCompilerVersionDependent`).
+    Lines: string array
+    /// The type headers (`<full> (<kind>)`), in file order.
+    Types: SurfaceType list
+    /// Types the renderer could not enumerate
+    /// (`<full>  # <members unavailable: …>`). Unknown, never empty.
+    Unreadable: Set<string>
+}
+
+let private typeHeader =
+    Regex(@"^(\S+) \((class|interface|struct|enum|delegate)\)$", RegexOptions.Compiled)
+
+let private unreadableLine =
+    Regex(@"^(\S+)\s+# <members unavailable", RegexOptions.Compiled)
+
+/// Read a baseline's text: its tokens, its types and the member lines under
+/// each, and the types it could not enumerate. A line belongs to EVERY type
+/// whose full name followed by `.` begins it, which is how a member line is
+/// attributed whatever order the renderer sorted it into.
+let parse (text: string) : Surface =
+    let lines =
+        text.Replace("\r\n", "\n").Split('\n')
+        |> Array.map _.TrimEnd()
+        |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#") && not (isCompilerVersionDependent l))
+
+    let headers =
+        lines
+        |> Array.choose (fun l ->
+            let m = typeHeader.Match l
+
+            if m.Success then
+                Some(m.Groups[1].Value, m.Groups[2].Value)
+            else
+                None)
+
+    let known = headers |> Array.map fst |> Set.ofArray
+
+    let byOwner =
+        lines
+        |> Seq.collect (fun l -> seq {
+            for i in 1 .. l.Length - 1 do
+                if l[i] = '.' && known.Contains(l.Substring(0, i)) then
+                    let rendered = l.Substring(i + 1)
+                    let cut = rendered.IndexOfAny [| '('; ' ' |]
+
+                    yield
+                        l.Substring(0, i),
+                        {
+                            Name = (if cut >= 0 then rendered.Substring(0, cut) else rendered)
+                            Rendered = rendered
+                            Obsolete = rendered.EndsWith "  (obsolete)"
+                        }
+        })
+        |> Seq.groupBy fst
+        |> Seq.map (fun (owner, ms) -> owner, ms |> Seq.map snd |> List.ofSeq)
+        |> Map.ofSeq
+
+    {
+        Lines = lines
+        Types =
+            headers
+            |> Array.map (fun (full, kind) -> {
+                Full = full
+                Kind = kind
+                Members = byOwner.TryFind full |> Option.defaultValue []
+            })
+            |> List.ofArray
+        Unreadable =
+            lines
+            |> Array.choose (fun l ->
+                let m = unreadableLine.Match l
+                if m.Success then Some m.Groups[1].Value else None)
+            |> Set.ofArray
+    }
+
+/// The tokens a comparison sees (`Surface.Lines`). Public because it is the
+/// answer to "does this baseline text carry any tracked surface at all",
+/// which the documentation-coverage gate asks of a baseline before grading it.
+let significantLines (text: string) = (parse text).Lines
 
 /// Significant tokens of `candidates` that `present` does not carry.
 /// Both directions of the comparison are this same set difference — which
 /// is why neither arm can drift from the other in how it tokenises.
-let private missingFrom (present: string) (candidates: string) : string list =
-    let presentSet = significantLines present |> Set.ofArray
+let private missingFrom (present: Surface) (candidates: Surface) : string list =
+    let presentSet = present.Lines |> Set.ofArray
 
-    significantLines candidates
+    candidates.Lines
     |> Array.filter (fun l -> not (presentSet.Contains l))
     |> Array.sortWith (fun a b -> String.CompareOrdinal(a, b))
     |> List.ofArray
@@ -76,12 +164,14 @@ let private missingFrom (present: string) (candidates: string) : string list =
 /// Tokens present in `baseline` but absent from `current` — i.e. removed,
 /// renamed, or retyped public members. A non-empty result is a BREAKING
 /// diff.
-let removedMembers (baseline: string) (current: string) : string list = missingFrom current baseline
+let removedMembers (baseline: string) (current: string) : string list =
+    missingFrom (parse current) (parse baseline)
 
 /// Tokens present in `current` but absent from `baseline` — i.e. new public
 /// types, members, or overloads. Non-breaking, but UNFOLDED: the baseline
 /// must be regenerated and committed with the change (Phase 618).
-let addedMembers (baseline: string) (current: string) : string list = missingFrom baseline current
+let addedMembers (baseline: string) (current: string) : string list =
+    missingFrom (parse baseline) (parse current)
 
 /// The two-directional comparison. `Removed` is breaking; `Added` is
 /// non-breaking but unfolded. Both fail the gate — see the drift-policy
@@ -96,7 +186,11 @@ module SurfaceDrift =
     let isClean (d: SurfaceDrift) =
         List.isEmpty d.Removed && List.isEmpty d.Added
 
-let compareSurface (baseline: string) (current: string) : SurfaceDrift = {
-    Removed = removedMembers baseline current
-    Added = addedMembers baseline current
-}
+let compareSurface (baseline: string) (current: string) : SurfaceDrift =
+    let b = parse baseline
+    let c = parse current
+
+    {
+        Removed = missingFrom c b
+        Added = missingFrom b c
+    }

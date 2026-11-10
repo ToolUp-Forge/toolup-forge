@@ -86,6 +86,11 @@ type CodemodMigration =
     /// `Result<unit, AuditWriteError>`, `IAuditLog option` and the `schedule`
     /// parameters are gone, and `IPermissionStore`'s reads answer a `Result`.
     | AuditFailureAsData
+    /// The client shell hosts every module through one function over
+    /// `Model.Hosts`, and the boot sources are one table: `ModuleStates`
+    /// and `ResetCounters` are `Hosts`, and the two first-init gate fields
+    /// are `AwaitingFirstInit`.
+    | ModuleHost
     /// Audit events are an open registry: a companion's events left Core's
     /// `AuditEvent` for the companion's own family, and an archive is read
     /// with the audit options.
@@ -123,6 +128,7 @@ module CodemodMigration =
         | CodemodMigration.FailureAsData -> "docs/migrations/873-portable-infrastructure-interfaces.md"
         | CodemodMigration.AuditFailureAsData ->
             "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
+        | CodemodMigration.ModuleHost -> "docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md"
         | CodemodMigration.OpenAuditRegistry -> "docs/migrations/874-open-audit-event-registry.md"
 
     /// The phase label the renderings print.
@@ -150,6 +156,7 @@ module CodemodMigration =
         | CodemodMigration.ConnectorKernel -> "Phase 1079"
         | CodemodMigration.FailureAsData -> "Phase 873"
         | CodemodMigration.AuditFailureAsData -> "Phase 1062"
+        | CodemodMigration.ModuleHost -> "Phase 1071"
         | CodemodMigration.OpenAuditRegistry -> "Phase 874"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
@@ -1058,6 +1065,22 @@ module Codemod =
             @"\b((?:ToolUp\.Platform\.)?IAuditLog)\s+option\b"
             "$1"
             "`IAuditLog option` → `IAuditLog` (pass `NoOpAuditLog()` where `None` was passed)"
+        // A module's state is read through its host.
+        rewrite
+            "1071-module-state-read"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\b([\w.]+)\.ModuleStates\s*\|>\s*Map\.tryFind\s+"
+            "$1 |> Client.moduleState "
+            "`model.ModuleStates |> Map.tryFind id` → `model |> Client.moduleState id` (the shell keeps a `ModuleHost` per module in `Model.Hosts`)"
+        // The two first-init gate fields are one set.
+        rewrite
+            "1071-first-init-gates"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"^(\s*)ConfigsPrefetch\s*=.*$"
+            "$1AwaitingFirstInit = Client.firstInitGates"
+            "`ConfigsPrefetch = …` in a full `Client.Model` literal → `AwaitingFirstInit = Client.firstInitGates` (delete the `FlagsPrefetch` line beside it)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1643,6 +1666,27 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmatch\s+\w*[aA]udit\w*\s+with\b"
             "if this matches an audit log's `Some` / `None`, the log is no longer optional: keep the `Some` arm over the value (over `NoOpAuditLog` it does what the `None` arm did)"
+        // Every other read or write of the module-state map.
+        review
+            "1071-module-states"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\bModuleStates\b"
+            "`Model.ModuleStates` is `Model.Hosts : Map<string, ModuleHost>`: a module's state is `host.State` (`Client.moduleState id model`), and a full model literal writes `Hosts = Map.empty` or `Hosts = Map.ofList [ id, { State = box state; Generation = 0 } ]`; `Client.observeModuleStates` takes the prior `Hosts`"
+        // Fields with no successor of their own.
+        review
+            "1071-removed-shell-fields"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\b(?:FlagsPrefetch|ResetCounters)\b"
+            "`FlagsPrefetch` and `ResetCounters` are gone: delete the line from a full `Client.Model` literal. The first-init gates are `AwaitingFirstInit` (a set of boot-source keys), and a module's reset count is its host's `Generation`"
+        // Since 0.41.0 the shell's module message names its module.
+        review
+            "1071-module-msg-id"
+            CodemodMigration.ModuleHost
+            CodemodFileClass.Source
+            @"\bModuleMsg\s*\(\s*box\b|\bModuleMsg\s+\w+\s*->"
+            "`ModuleMsg` carries the module id: construct `ModuleMsg(moduleId, box message)` and match `ModuleMsg(moduleId, message)`; a message for a module with no host is dropped"
         // A companion's audit events left Core's union for its own family.
         review
             "874-moved-audit-case"
@@ -2660,6 +2704,7 @@ module Codemod =
             CodemodMigration.ConnectorKernel
             CodemodMigration.FailureAsData
             CodemodMigration.AuditFailureAsData
+            CodemodMigration.ModuleHost
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 
