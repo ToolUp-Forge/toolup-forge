@@ -177,6 +177,7 @@ ToolUp.Platform.Config.ConfigStore.tryProjectExact`1(Microsoft.FSharp.Core.FShar
 ToolUp.Platform.Config.ConfigStore+BlobConfigStore (class)
 ToolUp.Platform.Config.ConfigStore+BlobConfigStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.Config.ConfigValidator (class)
+ToolUp.Platform.Config.ConfigValidator.create(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConfigValidation+ValidationResult]]) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.Platform.Config.ConfigValidator.gatedAuthValidation(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ConfigValidation+ValidationResult]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConfigValidation+ValidationResult]
 ToolUp.Platform.Config.ConfigValidator.secretStorePreflightTimeout(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : System.TimeSpan
 ToolUp.Platform.Config.ConfigValidator+BlobStorageValidator (class)

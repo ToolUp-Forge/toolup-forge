@@ -171,7 +171,6 @@ ToolUp.RAG.RAGCitationDevEndpoint.routes : Microsoft.FSharp.Collections.FSharpLi
 ToolUp.RAG.RAGCompose (class)
 ToolUp.RAG.RAGCompose.composeRAG(ToolUp.RAG.RAGCompose+RagOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.RAG.RAGCompose.defaultRetrievalFraming : System.String { get }
-ToolUp.RAG.RAGCompose.emitIngestionDrop(ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache(ToolUp.RAG.RAGCompose+RagOptions) : System.Boolean
 ToolUp.RAG.RAGCompose.hasScopeKeyedEmbeddingProvider(ToolUp.RAG.RAGCompose+RagOptions) : System.Boolean
 ToolUp.RAG.RAGCompose.isInProcessSparseIndex(ToolUp.Platform.Infra.ISparseIndex+ISparseIndex) : System.Boolean
@@ -344,20 +343,20 @@ ToolUp.RAG.RagAuditEvents+RagAuditEventModule.event(ToolUp.RAG.RagAuditEvents+Ra
 ToolUp.RAG.RagAuditEvents+RagAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.RAG.RagAuditEvents+RagAuditEvent] { get }
 ToolUp.RAG.RagAuditEvents+RagAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RagAuditEvents+RagAuditEvent]
 ToolUp.RAG.RagConfigValidator (class)
-ToolUp.RAG.RagConfigValidator+ChunkingConfigValidator (class)
-ToolUp.RAG.RagConfigValidator+ChunkingConfigValidator..ctor(System.String, ToolUp.RAG.Chunking+ChunkingConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+CitationDevEndpointValidator (class)
-ToolUp.RAG.RagConfigValidator+CitationDevEndpointValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+InProcessIndexReplicaValidator (class)
-ToolUp.RAG.RagConfigValidator+InProcessIndexReplicaValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+LocalEmbeddingProviderInProductionModeValidator (class)
-ToolUp.RAG.RagConfigValidator+LocalEmbeddingProviderInProductionModeValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+RAGConfigBoundsValidator (class)
-ToolUp.RAG.RagConfigValidator+RAGConfigBoundsValidator..ctor(ToolUp.RAG.RagConfigValidator+RagConfigBounds, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+RAGHandlersRegisteredValidator (class)
-ToolUp.RAG.RagConfigValidator+RAGHandlersRegisteredValidator..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+RAGRateLimitConfiguredValidator (class)
-ToolUp.RAG.RagConfigValidator+RAGRateLimitConfiguredValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.RAG.RagConfigValidator.RefuseSaturationThreshold : System.Int32 (literal)
+ToolUp.RAG.RagConfigValidator.chunkingConfigValidator(System.String, ToolUp.RAG.Chunking+ChunkingConfig) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.citationDevEndpointValidator(ToolUp.Platform.ServerConfig) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.inProcessIndexReplicaValidator(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.localEmbeddingProviderInProductionModeValidator(ToolUp.Platform.ServerConfig, ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.ragConfigBoundsValidator(ToolUp.RAG.RagConfigValidator+RagConfigBounds) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.ragHandlersRegisteredValidator(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.ragIngestionInstanceValidator(ToolUp.Platform.ServerConfig, System.Boolean, ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.ragPersistenceValidator(ToolUp.Platform.ServerConfig, System.Boolean, System.Boolean) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.ragRateLimitConfiguredValidator(ToolUp.Platform.ServerConfig) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.retrievalDefaultsValidator(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.teamModeLocalEmbedderValidator(ToolUp.Platform.ServerConfig, ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, System.Boolean) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.teamModeSharedEmbeddingCacheValidator(ToolUp.Platform.ServerConfig, System.Boolean) : ToolUp.Platform.ConfigValidation+IConfigValidator
+ToolUp.RAG.RagConfigValidator.vacuumScheduleValidator(ToolUp.Platform.ServerConfig, System.Boolean) : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.RAG.RagConfigValidator+RagConfigBounds (class)
 ToolUp.RAG.RagConfigValidator+RagConfigBounds..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double], System.Double, System.Boolean, System.Int32, System.Int32, System.Int32)
 ToolUp.RAG.RagConfigValidator+RagConfigBounds.IngestionConcurrency : System.Int32 { get }
@@ -369,18 +368,6 @@ ToolUp.RAG.RagConfigValidator+RagConfigBounds.SnippetCharLimit : System.Int32 { 
 ToolUp.RAG.RagConfigValidator+RagConfigBounds.TopK : System.Int32 { get }
 ToolUp.RAG.RagConfigValidator+RagDurabilityContributor (class)
 ToolUp.RAG.RagConfigValidator+RagDurabilityContributor..ctor(System.Boolean, System.Boolean, System.Boolean)
-ToolUp.RAG.RagConfigValidator+RagIngestionInstanceValidator (class)
-ToolUp.RAG.RagConfigValidator+RagIngestionInstanceValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+RagPersistenceValidator (class)
-ToolUp.RAG.RagConfigValidator+RagPersistenceValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+RetrievalDefaultsValidator (class)
-ToolUp.RAG.RagConfigValidator+RetrievalDefaultsValidator..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+TeamModeLocalEmbedderValidator (class)
-ToolUp.RAG.RagConfigValidator+TeamModeLocalEmbedderValidator..ctor(ToolUp.Platform.ServerConfig, ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator (class)
-ToolUp.RAG.RagConfigValidator+TeamModeSharedEmbeddingCacheValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
-ToolUp.RAG.RagConfigValidator+VacuumScheduleValidator (class)
-ToolUp.RAG.RagConfigValidator+VacuumScheduleValidator..ctor(ToolUp.Platform.ServerConfig, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.RAG.RagConfigValidator+VectorisationHandlerContributor (class)
 ToolUp.RAG.RagConfigValidator+VectorisationHandlerContributor..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.RAG.RagHealthHandler (class)
@@ -634,3 +621,5 @@ ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.TopK : System.Int32 { get 
 ToolUp.RAG.RetrievalTracers+KnowledgeRetrievedPayload.TopScore : System.Double { get }
 ToolUp.RAG.RetrievalTracers+NoOpRetrievalTracer (class)
 ToolUp.RAG.RetrievalTracers+NoOpRetrievalTracer..ctor()
+ToolUp.RAG.VectorisationHook (class)
+ToolUp.RAG.VectorisationHook.emitIngestionDrop(ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.ILogger, System.String, System.String, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
