@@ -97,6 +97,31 @@ module TempDir =
         Directory.CreateDirectory path |> ignore
         new TempDir(family, path)
 
+    let private runOwned = Collections.Concurrent.ConcurrentBag<TempDir>()
+
+    let private deleteRunOwnedAtExit =
+        lazy
+            AppDomain.CurrentDomain.ProcessExit.Add(fun _ ->
+                for dir in runOwned do
+                    // Best effort: a directory still held here is left for
+                    // the gate's temp census to name, never raised at exit.
+                    try
+                        (dir :> IDisposable).Dispose()
+                    with _ ->
+                        ())
+
+    /// Create a directory that lives as long as the test process and is
+    /// deleted when it exits. For a fixture whose directory must outlive
+    /// the case that made it: a contract pack's factory, which hands back a
+    /// store and has nowhere to dispose it, or a scheduler fixture whose
+    /// background jobs still write after the case's assertions are done.
+    /// Prefer `create` with `use` wherever the case owns the lifetime.
+    let forRun (family: string) : TempDir =
+        let dir = create family
+        deleteRunOwnedAtExit.Force()
+        runOwned.Add dir
+        dir
+
     /// Run an async body with a fresh directory, deleting it when the body
     /// finishes, faults or is cancelled. For bodies where a `use` binding
     /// would end before the work does.

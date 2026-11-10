@@ -379,10 +379,8 @@ let tenantFleetTests =
         // through `BlobIndex.pathSafeSegment` so the `|` is
         // percent-encoded before it reaches the filesystem,
         // surviving Windows NTFS path validation. Mirrors the
-        // BlobEntityStoreTests binding shape. The contract owns the
-        // fleet's lifetime and has no disposal hook, so the directory is
-        // left for the run's temp census rather than disposed here.
-        let tempDir = TempDir.create "fleet-test"
+        // BlobEntityStoreTests binding shape.
+        let tempDir = TempDir.forRun "fleet-test"
         let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()

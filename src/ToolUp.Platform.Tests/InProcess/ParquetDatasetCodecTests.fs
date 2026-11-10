@@ -118,7 +118,7 @@ let contractTests =
         (fun () -> ParquetDatasetCodec() :> IDatasetCodec)
         // The contract pack owns each store's lifetime through a bare
         // factory, so the directory behind it is not disposed here.
-        (fun () -> parquetStore (TempDir.create "parquet-test"))
+        (fun () -> parquetStore (TempDir.forRun "parquet-test"))
 
 let codecTests =
     testList "ParquetDatasetCodec — codec-specific" [

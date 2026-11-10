@@ -90,12 +90,12 @@ pack that writes its own `InMemorySecretStore`, `RecordingAuditLog`, `SilentLogg
 
 | Need | Shipped | Where |
 |---|---|---|
-| a secret store | `Fakes.TestSecretStore()` (`.Seed`) | `Testing/Fakes.fs` |
+| a secret store | `TestSecretStore()` (`.Seed`; also reached as `Fakes.TestSecretStore`) | `Testing/CoreFakes.fs` |
 | an audit log that records | `TestAuditLog()` (`.Records`, `.Events`, `.Recording`) | `Testing/Recording.fs` |
 | a metrics sink that records | `Fakes.TestMetricsSink()` (`.Increments`, `.Observations`, `.Gauges`) | `Testing/Fakes.fs` |
 | a logger | `Logger.silent`, `Logger.recording ()` (`.Lines`, `.MessagesAt`, `.Contains`) | `Testing/Loggers.fs` |
 | any other double that records | `Recording<'T>` | `Testing/Recording.fs` |
-| a fixture directory | `TempDir.create "<family>"`, `TempDir.withDir` | `Testing/TempDir.fs` |
+| a fixture directory | `TempDir.create "<family>"`, `TempDir.withDir`, `TempDir.forRun` (owned by the run) | `Testing/TempDir.fs` |
 | the time, or a wait | `Clock.system`, `Clock.fixedAt`, `Clock.waitUntil` | `Testing/Clock.fs` |
 | the four server fakes together | `ServerHarness.createDefaultFakes ()` | `Testing/ServerHarness.fs` |
 
@@ -104,8 +104,8 @@ double is not widened for one pack. A double that does something the shipped one
 that fails writes, a log that refuses) stays local under a name that says so (`FailingSecretStore`),
 never under the shipped double's name. A part pack (`ToolUp.Platform.Tests.Infra` and the rest of the
 family) may not reference the Testing package, which reaches the umbrella; it compiles the Core-only
-helper files by source link (`Recording.fs`, `Clock.fs`, `TempDir.fs`, `Loggers.fs`, and `Fakes.fs` in a
-part pack that reaches the Scope part), never by copy; a companion pack links the ones it uses the same way.
+helper files by source link (`Recording.fs`, `Clock.fs`, `TempDir.fs`, `Loggers.fs`, `CoreFakes.fs`, and
+`Fakes.fs` in a pack that reaches the Scope part), never by copy; a companion pack links the ones it uses the same way.
 
 **A double the code under test writes from another thread records into a `Recording<'T>`.** A bare
 `ResizeArray` read while a background job, a timer or a callback appends to it throws "Collection was

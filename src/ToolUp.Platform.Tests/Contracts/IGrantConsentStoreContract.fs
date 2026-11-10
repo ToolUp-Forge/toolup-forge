@@ -175,10 +175,8 @@ let contractTests (name: string) (factory: unit -> IGrantConsentStore) =
             })
     ]
 
-/// The pack's factory has no teardown hook, so each directory outlives its
-/// case; the family name attributes it in the census.
 let private freshBlobStore () =
-    let dir = TempDir.create "grantconsent"
+    let dir = TempDir.forRun "grantconsent"
     BlobGrantConsentStore(LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage) :> IGrantConsentStore
 
 let tests =

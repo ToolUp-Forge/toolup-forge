@@ -162,10 +162,7 @@ let private send (sink: INotificationSink) (whatsApp: WhatsAppEnvelope) =
 
 let private unroutableFactory () =
     let secretStore =
-        let root =
-            Path.Combine(Path.GetTempPath(), "toolup-tests-twilio-wa-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory root |> ignore
+        let root = (TempDir.forRun "tests-twilio-wa").Path
         FileSecretStore.FileSecretStore(root) :> ISecretStore
 
     TwilioWhatsAppNotificationSink.create

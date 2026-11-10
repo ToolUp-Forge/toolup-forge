@@ -13,9 +13,7 @@ open ToolUp.Platform.Testing
 /// implementations: `InMemoryConversationStore` (dictionary-backed,
 /// dev/test variant — documented Rule 4 exception) and
 /// `PersistentConversationStore` over the local-disk-backed
-/// `DataObjectStore`. The contract's factory has no teardown hook, so
-/// each persistent case's directory outlives it; the family name
-/// attributes it in the census.
+/// `DataObjectStore`.
 let tests =
     let inMemoryFactory () =
         let store = ConversationStore.InMemoryConversationStore() :> IConversationStore
@@ -23,7 +21,7 @@ let tests =
         store, "team-a-" + suffix, "team-b-" + suffix
 
     let persistentFactory () =
-        let tempDir = TempDir.create "cs-test"
+        let tempDir = TempDir.forRun "cs-test"
         let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
         let objectStore = DataObjectStore.DataObjectStore(blob) :> IDataObjectStore
 

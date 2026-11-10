@@ -79,9 +79,9 @@ let private storeContract (label: string) (factory: unit -> IIngestionStatusStor
     ]
 
 /// The store outlives this factory and the contract has no teardown hook,
-/// so the directory is not disposed here.
+/// so the directory lives until the test process exits.
 let private dataObjectBackedFactory () : IIngestionStatusStore =
-    let tempDir = TempDir.create "ingstatus"
+    let tempDir = TempDir.forRun "ingstatus"
     let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     IngestionStatusStore.create dos (Some logger)

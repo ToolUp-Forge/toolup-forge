@@ -73,7 +73,7 @@ let private buildScheduler (dir: TempDir) =
 let private telemetryTests =
     testList "InProcessJobScheduler — IJobSchedulerTelemetry" [
         test "fresh scheduler reports zero missed ticks and no last-drift" {
-            use dir = TempDir.create "jobsched-tests"
+            let dir = TempDir.forRun "jobsched-tests"
             let scheduler = buildScheduler dir :> IJobSchedulerTelemetry
             let snap = scheduler.Snapshot()
 
@@ -83,7 +83,7 @@ let private telemetryTests =
         }
 
         test "consecutive snapshots advance GeneratedAt" {
-            use dir = TempDir.create "jobsched-tests"
+            let dir = TempDir.forRun "jobsched-tests"
             let scheduler = buildScheduler dir :> IJobSchedulerTelemetry
             let first = scheduler.Snapshot()
             Clock.system.Delay(TimeSpan.FromMilliseconds 5.0) |> Async.RunSynchronously
@@ -93,7 +93,7 @@ let private telemetryTests =
         }
 
         test "InProcessJobScheduler upcasts to IJobSchedulerTelemetry" {
-            use dir = TempDir.create "jobsched-tests"
+            let dir = TempDir.forRun "jobsched-tests"
             let scheduler = buildScheduler dir
 
             match (scheduler :> obj) with
@@ -592,7 +592,7 @@ let private buildHandoffAt (dir: TempDir) (dispatcher: IExternalComputeDispatche
     }
 
 let private buildHandoff (dispatcher: IExternalComputeDispatcher) : HandoffFixture =
-    buildHandoffAt (TempDir.create "jobsched-handoff") dispatcher
+    buildHandoffAt (TempDir.forRun "jobsched-handoff") dispatcher
 
 /// Register `handler` and schedule a `Manual` job, so dispatch happens
 /// exactly when the test calls `TriggerOnce` — no wall-clock dependency.
@@ -1015,7 +1015,7 @@ let private handoffTests =
         }
 
         test "319.D — a handle persisted before a restart is polled to completion after it" {
-            use dir = TempDir.create "jobsched-restart"
+            let dir = TempDir.forRun "jobsched-restart"
 
             // ─── Instance 1: submit and hand off. ───
             let dispatcher1 = FakeExternalDispatcher("gpu-pool")
@@ -1539,9 +1539,9 @@ let private defect1064Tests =
 /// dispatches directly — so disposal is the whole of the teardown.
 let private restartBindingWith (bindRing: bool) =
     let factory () =
-        // Not disposed: the contract pack opens and closes schedulers over
+        // Run-owned: the contract pack opens and closes schedulers over
         // this binding and has no teardown for the binding itself.
-        let dir = TempDir.create "jobsched-restart"
+        let dir = TempDir.forRun "jobsched-restart"
 
         let binding: IJobSchedulerContract.RestartableScheduler = {
             Open =
@@ -2360,17 +2360,15 @@ let sharedLockTests =
     ]
 
 let tests =
-    // The contract factories below have no teardown hook, so their
-    // directories are created unowned and outlive the run.
     let factory () =
-        let scheduler = buildScheduler (TempDir.create "jobsched-tests") :> IJobScheduler
+        let scheduler = buildScheduler (TempDir.forRun "jobsched-tests") :> IJobScheduler
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         scheduler, "team-a-" + suffix, "team-b-" + suffix
 
     testList "InProcessJobScheduler" [
         IJobSchedulerContract.tests "InProcessJobScheduler" factory
         IJobSchedulerContract.failingStoreTests "InProcessJobScheduler" (fun decorate handler ->
-            let dir = TempDir.create "jobsched-tests"
+            let dir = TempDir.forRun "jobsched-tests"
             let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 

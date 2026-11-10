@@ -10,7 +10,7 @@ open ToolUp.Platform.Testing
 
 /// Per-test temp directory for the backing `LocalFileStorage`.
 let private tempDir () =
-    TempDir.create "persistent-event-store-tests"
+    TempDir.forRun "persistent-event-store-tests"
 
 /// Build a fresh `PersistentEventStore` over a temp-backed
 /// `LocalFileStorage`. Each test gets its own isolated store — the
@@ -40,8 +40,7 @@ let private makeEvent
 
 /// Contract tests — delegate to the shared pack. Retention is
 /// `unlimited` so nothing the contract writes gets swept out from
-/// under it. The factory has no teardown hook, so each directory outlives
-/// its case; the family name attributes it in the census.
+/// under it.
 let contractTests =
     let factory () =
         makeStore (tempDir ()) EventRetentionPolicy.unlimited

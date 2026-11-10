@@ -13,9 +13,7 @@ open ToolUp.Platform.Testing
 /// implementations: `InMemoryResultStore` (in-process dictionary,
 /// dev/test variant) and `PersistentResultStore` (over the
 /// blob-backed `DataObjectStore` rooted in a fresh temp directory
-/// per factory call). The factory has no teardown hook, so each
-/// directory outlives its case; the family name attributes it in the
-/// census.
+/// per factory call).
 let tests =
     let inMemoryFactory () =
         let store = ResultStore.InMemoryResultStore() :> IResultStore
@@ -23,7 +21,7 @@ let tests =
         store, "team-a-" + suffix, "team-b-" + suffix
 
     let persistentFactory () =
-        let tempDir = TempDir.create "rs-test"
+        let tempDir = TempDir.forRun "rs-test"
         let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
         let objectStore = DataObjectStore.DataObjectStore(blob) :> IDataObjectStore
         let store = ResultStore.PersistentResultStore(objectStore) :> IResultStore

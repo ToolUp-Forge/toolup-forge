@@ -52,10 +52,8 @@ let private buildEntityStore (tempDir: string) : IEntityStore =
     BlobEntityStore(dos, blob, registry, NoOpAuditLog()) :> IEntityStore
 
 let entityBackedTests =
-    // The contract's factory has no teardown hook, so each directory
-    // outlives its case; the family name attributes it in the census.
     let factory () =
-        let tempDir = TempDir.create "consent-test"
+        let tempDir = TempDir.forRun "consent-test"
         let entityStore = buildEntityStore tempDir.Path
         let store = EntityBackedConsentStateStore(entityStore) :> IConsentStateStore
         let scopeA, scopeB = freshScopes ()

@@ -22,11 +22,9 @@ open ToolUp.Platform.Testing
 // not a directory. The pack asserts the property the interface can
 // promise (no returned record carries the secret); this binding asserts
 // the property THIS implementation can be held to (no persisted byte
-// does either). The contract's factory has no teardown hook, so each of
-// its directories outlives the case; the family name attributes it in
-// the census.
+// does either).
 
-let private freshRoot () = TempDir.create "serviceaccount-tests"
+let private freshRoot () = TempDir.forRun "serviceaccount-tests"
 
 let tests =
     let factory () =

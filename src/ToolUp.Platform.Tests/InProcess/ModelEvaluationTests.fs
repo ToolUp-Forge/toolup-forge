@@ -61,7 +61,7 @@ type private Stack = {
 /// through `runnerStore` applied to the stack's data-object store (so a test
 /// can count the runner's reads alone).
 let private stackOver (runnerStore: IDataObjectStore -> IDataObjectStore) (fitProvider: IModelFitProvider) : Stack =
-    let tempDir = TempDir.create "eval-test"
+    let tempDir = TempDir.forRun "eval-test"
     let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     let datasets = BlobDatasetStore.create dataObjects
@@ -547,7 +547,7 @@ type private ResolvingStack = {
 }
 
 let private freshResolvingStack () : ResolvingStack =
-    let tempDir = TempDir.create "eval-resolve"
+    let tempDir = TempDir.forRun "eval-resolve"
     let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     let datasets = BlobDatasetStore.create dataObjects

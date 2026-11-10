@@ -43,9 +43,7 @@ let inMemoryTests =
 // against `IUsageLog`; the flusher is what's under test for blob
 // persistence + rollup-file layout + scope partitioning. The
 // per-(scope, day) lock + RecordId dedup logic is exercised by the
-// underlying `UsageBatchFlusher.flushBucket` invocations. The contract's
-// factory has no teardown hook, so each directory outlives its case; the
-// family name attributes it in the census.
+// underlying `UsageBatchFlusher.flushBucket` invocations.
 
 let private flushPolicy: BatchFlushPolicy = {
     FlushAtCount = 1 // Flush eagerly so tests don't wait
@@ -69,7 +67,7 @@ type private SyncFlushUsageLog(inner: IUsageLog, flusher: UsageLog.UsageBatchFlu
 
 let blobTests =
     let factory () =
-        let dir = TempDir.create "usage-log-tests"
+        let dir = TempDir.forRun "usage-log-tests"
         let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
         let flusher =

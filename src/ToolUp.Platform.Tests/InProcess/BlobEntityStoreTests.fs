@@ -371,9 +371,7 @@ let private storeTests =
 /// share filesystem state.
 let tests =
     let factory () =
-        // The contract pack's factory has no disposal hook, so the directory
-        // outlives the case; the family attributes it in the gate's temp census.
-        let tempDir = (TempDir.create "entity-test").Path
+        let tempDir = (TempDir.forRun "entity-test").Path
         let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
@@ -386,9 +384,7 @@ let tests =
     /// Phase 806 — the same substrate, composed WITH the audit log the
     /// actor pack hands it.
     let auditedFactory (auditLog: IAuditLog) =
-        // The contract pack's factory has no disposal hook, so the directory
-        // outlives the case; the family attributes it in the gate's temp census.
-        let tempDir = (TempDir.create "entity-audit").Path
+        let tempDir = (TempDir.forRun "entity-audit").Path
         let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
@@ -399,9 +395,7 @@ let tests =
     /// removal of an index ref (`*.ref`) while the pack's switch says so: the
     /// state a refused `BlobIndex.Remove` leaves behind.
     let refusingFactory (refuseIndexRemoval: unit -> bool) =
-        // The contract pack's factory has no disposal hook, so the directory
-        // outlives the case; the family attributes it in the gate's temp census.
-        let tempDir = (TempDir.create "entity-stale").Path
+        let tempDir = (TempDir.forRun "entity-stale").Path
         let inner = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
 
         let blob =

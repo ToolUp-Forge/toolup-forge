@@ -16,10 +16,9 @@ open ToolUp.Platform.Testing
 /// The contract pack's `factory ()` returns the same `book` instance
 /// across assertions — tests use unique `scope-test-{guid}` ids so a
 /// shared storage doesn't cross-pollute. This matches the
-/// `INotificationChannelContract` binding style. The list has no teardown
-/// hook, so the directory outlives it; the family attributes it.
+/// `INotificationChannelContract` binding style.
 let tests =
-    let root = TempDir.create "tests-addrbook"
+    let root = TempDir.forRun "tests-addrbook"
 
     let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
 

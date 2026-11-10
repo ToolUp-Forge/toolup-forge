@@ -16,8 +16,7 @@ open ToolUp.Platform.Testing
 // fresh temp directory per factory call. Cross-test isolation is
 // thus structural: each factory call gets its own filesystem
 // subtree, two scope ids are GUID-suffixed, no test sees another's
-// blobs. A contract factory has no teardown hook, so its directory
-// outlives the case; the family name attributes it in the census.
+// blobs.
 
 let private tempStorage (root: TempDir) =
     LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
@@ -49,7 +48,7 @@ let private mkDefinition (scopeId: string) (handler: string) (nextRunAt: DateTim
 
 let contractTests =
     let factory () =
-        let storage = tempStorage (TempDir.create "jobstore-tests")
+        let storage = tempStorage (TempDir.forRun "jobstore-tests")
         let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
         let store = JobStore.create storage eventStore
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -59,7 +58,7 @@ let contractTests =
         IJobStoreContract.tests "BlobJobStore" factory
         IJobStoreContract.failingBackendTests "BlobJobStore" (fun () ->
             let storage =
-                InMemoryBlobStorage.WriteRefusingBlobStorage(tempStorage (TempDir.create "jobstore-tests"))
+                InMemoryBlobStorage.WriteRefusingBlobStorage(tempStorage (TempDir.forRun "jobstore-tests"))
                 :> IBlobStorage
 
             let store =
@@ -77,7 +76,7 @@ let contractTests =
 /// default store's durability is `IBlobStorage`'s, not its own.
 let restartContractTests =
     let factory () =
-        let root = TempDir.create "jobstore-restart"
+        let root = TempDir.forRun "jobstore-restart"
 
         let binding: IJobStoreContract.ReopenableStore = {
             Open =

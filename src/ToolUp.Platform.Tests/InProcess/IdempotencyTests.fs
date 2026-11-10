@@ -59,10 +59,8 @@ let tests =
             InMemoryIdempotencyStore() :> IIdempotencyStore)
 
         IIdempotencyStoreContract.tests "BlobIdempotencyStore" (fun () ->
-            // Each factory call gets a fresh temp dir so runs don't alias. The
-            // contract pack has no teardown hook, so the store outlives this
-            // factory and the directory is not disposed here.
-            let tempDir = TempDir.create "idem"
+            // Each factory call gets a fresh temp dir so runs don't alias.
+            let tempDir = TempDir.forRun "idem"
 
             let blob =
                 LocalFileStorage.LocalFileStorage(tempDir.Path) :> ToolUp.Platform.BlobStorage.IBlobStorage

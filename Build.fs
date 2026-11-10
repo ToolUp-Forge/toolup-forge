@@ -255,73 +255,12 @@ let main args =
         else
             None
 
-    /// The fixture families whose directories a full run is known to leave
-    /// behind, each with the reason. A contract pack whose factory hands back
-    /// a store with no disposal hook cannot dispose the directory the store
-    /// lives in, so the directory outlives its case; the remedy is the
-    /// contract's factory answering an `IDisposable`, after which the family
-    /// leaves this list (a listed family a full run did NOT leave behind is
-    /// itself a finding, so the list only shrinks).
-    let tempLeakAllowance: Map<string, string> =
-        let factory =
-            "a contract factory with no disposal hook: the store it returns outlives the case"
-
-        let background =
-            "a scheduler fixture: background jobs still write into the directory when the case ends"
-
-        let unswept =
-            "a pack that does not reference the Testing package keeps its own temp root for an empty secret store"
-
-        [
-            "cas-resilient-tests", factory
-            "cas-tests", factory
-            "compute-budget-fit", background
-            "consent-test", factory
-            "cs-test", factory
-            "do-test", factory
-            "ds-test", factory
-            "entity-audit", factory
-            "entity-stale", factory
-            "entity-test", factory
-            "eval-resolve", factory
-            "eval-test", factory
-            "fitbatch-sched", background
-            "fitbatch-tests", background
-            "flags-test", factory
-            "fleet-test", factory
-            "grantconsent", factory
-            "idem", factory
-            "ingstatus", factory
-            "jobsched-handoff", background
-            "jobsched-restart", background
-            "jobsched-tests", background
-            "jobstore-restart", factory
-            "jobstore-tests", factory
-            "metadata-filter", factory
-            "modelexec-tests", factory
-            "multisite-tests", factory
-            "oauth-refresher-tests", factory
-            "parquet-test", factory
-            "persistent-event-store-tests", factory
-            "providerprofile-tests", factory
-            "publicrendering-tests", factory
-            "rs-test", factory
-            "secret-test", factory
-            "serviceaccount-tests", factory
-            "sharetoken-tests", factory
-            "storeseam", factory
-            "tag-filter", factory
-            "test", factory
-            "tests-addrbook", factory
-            "tests-meta-whatsapp", unswept
-            "tests-sg", unswept
-            "tests-twilio", unswept
-            "tests-twilio-wa", unswept
-            "tests-webpush", unswept
-            "transfer-test", factory
-            "usage-log-tests", factory
-        ]
-        |> Map.ofList
+    /// The fixture families a run is allowed to leave behind, each with the
+    /// reason; empty, and it only shrinks (a listed family a full run did NOT
+    /// leave behind is itself a finding). A fixture whose directory must
+    /// outlive its case (a contract factory, a scheduler fixture) takes
+    /// `TempDir.forRun`, which the test process deletes when it exits.
+    let tempLeakAllowance: Map<string, string> = Map.empty
 
     /// A fixture that creates a directory owns its deletion. After the packs
     /// have run, every `TempDir`-shaped directory left in this run's temp root

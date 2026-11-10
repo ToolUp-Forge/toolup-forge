@@ -19,6 +19,7 @@ testCase "the store survives a restart" <| fun () ->
   (a SQLite pool, a watcher, a scanner) makes the first attempt fail on Windows, so the delete retries a
   bounded number of times; a directory already gone is not an error; any other failure surfaces after the
   last attempt, because a leak that is swallowed is a leak nobody fixes.
+- `TempDir.forRun "<family>"` is the same directory owned by the test process (below).
 - `TempDir.withDir "<family>" (fun path -> async { … })` scopes a directory to an async body, for the
   shapes where a `use` binding would end before the work does.
 - `TempDir.familyOf "<directory name>"` inverts the naming, so a census of the temp root attributes each
@@ -29,11 +30,14 @@ in the directory name on purpose: when a run leaves something behind, the family
 A test file converted to `TempDir` keeps the prefix it used before (`toolup-jobsched-tests-…` became the
 family `jobsched-tests`).
 
+**A directory that must outlive its case is owned by the run: `TempDir.forRun "<family>"`.** A contract
+pack's factory hands back a store and has nowhere to dispose the directory it lives in; a scheduler
+fixture's background jobs still write after the case's assertions are done (a directory disposed under
+them is recreated by the next write). `forRun` creates the same `toolup-<family>-<guid>` directory and the
+test process deletes it when it exits. Prefer `create` with `use` wherever the case owns the lifetime.
+
 **Nothing in a test pack calls `Path.GetTempPath()` itself.** The exceptions are named where they stand:
-a test that asserts something about the temp root, a path that must NOT exist and is never created, and
-a contract factory whose signature hands back a store with no disposal hook (the directory outlives the
-factory; those sites say so in a comment and are the next sweep's, by changing the contract's factory to
-answer an `IDisposable`).
+a test that asserts something about the temp root, and a path that must NOT exist and is never created.
 
 ## The gate proves it
 
@@ -42,8 +46,8 @@ answer an `IDisposable`).
 leaves nothing in the machine's temp directory and a sibling session's directories are never mistaken for
 this run's. After the packs, the `GateReconcile` leg censuses the run's root: every `TempDir`-shaped
 directory left there is printed by family and removed, and a family outside `tempLeakAllowance` in
-`Build.fs` fails the leg, naming it. The allowance holds the contract-factory families, each with its
-reason, and only shrinks: under the full lane a listed family that left nothing behind fails the leg too.
+`Build.fs` fails the leg, naming it. The allowance is empty and only shrinks: under the full lane a listed
+family that left nothing behind fails the leg too.
 
 The Build pack's `TestDoubleCensusTests` holds the sources to the same rule: no file under
 `src/ToolUp.Platform.Tests` calls `Path.GetTempPath()` outside its named exceptions.

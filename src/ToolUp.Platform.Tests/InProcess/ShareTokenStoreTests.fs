@@ -16,13 +16,11 @@ open ToolUp.Platform.Testing
 // blob-backed impl over `LocalFileStorage` rooted in a fresh temp
 // directory per factory call. The signing key is auto-generated and
 // persisted into the shipped `Fakes.TestSecretStore` — no dependency on
-// `FileSecretStore` to keep the test setup minimal. The
-// contract's factory has no teardown hook, so each directory outlives its
-// case; the family name attributes it in the census.
+// `FileSecretStore` to keep the test setup minimal.
 
 let tests =
     let factory () =
-        let root = TempDir.create "sharetoken-tests"
+        let root = TempDir.forRun "sharetoken-tests"
         let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
         let secrets = Fakes.TestSecretStore() :> ISecretStore
 

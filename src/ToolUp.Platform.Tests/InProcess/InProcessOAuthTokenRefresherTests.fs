@@ -109,9 +109,7 @@ let private mkSubstrate (root: TempDir) =
 
 let contractTests =
     let factory () =
-        // The contract's factory has no teardown hook, so the directory
-        // outlives the case; the family name attributes it in the census.
-        let scheduler = mkSubstrate (TempDir.create "oauth-refresher-tests")
+        let scheduler = mkSubstrate (TempDir.forRun "oauth-refresher-tests")
         let secretStore = Fakes.TestSecretStore() :> ISecretStore
         let auditLog = CapturingAuditLog() :> IAuditLog
         let metricsSink = NoOpMetricsSink() :> IMetricsSink
@@ -197,7 +195,7 @@ let httpPathTests =
 
         testCaseAsync "200 + JSON body → Refreshed + access-token persisted + audit emitted"
         <| async {
-            use root = TempDir.create "oauth-refresher-tests"
+            let root = TempDir.forRun "oauth-refresher-tests"
 
             let respond _ =
                 jsonResponse
@@ -245,7 +243,7 @@ let httpPathTests =
 
         testCaseAsync "400 + invalid_grant → TokenInvalidatedByProvider + audit emitted"
         <| async {
-            use root = TempDir.create "oauth-refresher-tests"
+            let root = TempDir.forRun "oauth-refresher-tests"
 
             let respond _ =
                 jsonResponse HttpStatusCode.BadRequest """{"error":"invalid_grant"}"""
@@ -270,7 +268,7 @@ let httpPathTests =
 
         testCaseAsync "500 → TransientError"
         <| async {
-            use root = TempDir.create "oauth-refresher-tests"
+            let root = TempDir.forRun "oauth-refresher-tests"
 
             let respond _ =
                 jsonResponse HttpStatusCode.InternalServerError "upstream broken"
@@ -287,7 +285,7 @@ let httpPathTests =
 
         testCaseAsync "401 (no invalid_grant) → PermanentError"
         <| async {
-            use root = TempDir.create "oauth-refresher-tests"
+            let root = TempDir.forRun "oauth-refresher-tests"
 
             let respond _ =
                 jsonResponse HttpStatusCode.Unauthorized """{"error":"invalid_client"}"""
@@ -389,7 +387,7 @@ let rotationHardeningTests =
 
         testCaseAsync "rotated-refresh persist failure bails before access/expiry write (write-ordering)"
         <| async {
-            use root = TempDir.create "oauth-refresher-tests"
+            let root = TempDir.forRun "oauth-refresher-tests"
 
             let store = ControllableSecretStore()
             let iface = store :> ISecretStore
@@ -440,7 +438,7 @@ let rotationHardeningTests =
 
         testCaseAsync "concurrent refreshes serialise — no double-spend of a rotating token (single-flight)"
         <| async {
-            use root = TempDir.create "oauth-refresher-tests"
+            let root = TempDir.forRun "oauth-refresher-tests"
 
             let store = Fakes.TestSecretStore()
             let iface = store :> ISecretStore

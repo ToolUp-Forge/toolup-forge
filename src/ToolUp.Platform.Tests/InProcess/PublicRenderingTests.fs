@@ -37,9 +37,9 @@ let private writeFile (path: string) (contents: string) =
 
 /// A fixture root for a value that outlives this call (an API handed to a
 /// contract pack, a content root handed to a composition), so its directory
-/// is not disposed here. A test body scopes its own with `use`.
+/// lives until the test process exits. A test body scopes its own with `use`.
 let private mkFixtureDir () : string =
-    (TempDir.create "publicrendering-tests").Path
+    (TempDir.forRun "publicrendering-tests").Path
 
 let private seedCanonicalFixture (root: string) : unit =
     writeFile

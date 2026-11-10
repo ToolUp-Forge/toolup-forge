@@ -91,9 +91,10 @@ type private Stack = {
     Audit: TestAuditLog
 }
 
-/// The stack has no teardown, so its directory is not disposed.
+/// The stack has no teardown, so its directory lives until the test
+/// process exits.
 let private freshStack (limits: ProvenanceAttachmentLimits) : Stack =
-    let tempDir = TempDir.create "transfer-test"
+    let tempDir = TempDir.forRun "transfer-test"
     let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     let audit = TestAuditLog()

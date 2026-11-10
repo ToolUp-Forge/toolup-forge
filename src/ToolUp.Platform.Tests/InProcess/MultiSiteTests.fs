@@ -26,9 +26,9 @@ open ToolUp.Platform.Testing
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 /// A content root holding one home page. Sites built over it outlive any
-/// one scope here, so the directory is not disposed.
+/// one scope here, so the directory lives until the test process exits.
 let private mkSiteRoot (title: string) : string =
-    let dir = TempDir.create "multisite-tests"
+    let dir = TempDir.forRun "multisite-tests"
 
     File.WriteAllText(dir.File "index.md", sprintf "---\ntitle: %s\nlayout: page\n---\n\nHome body." title)
 

@@ -152,7 +152,7 @@ let tests =
     testList "ModelFitBatch" [
         testCaseAsync "a batch of N registers N outcomes with distinct composite keys, retrievable by batch id"
         <| async {
-            use registryDir = TempDir.create "fitbatch-tests"
+            let registryDir = TempDir.forRun "fitbatch-tests"
             let registry = freshRegistry registryDir
             let audit = TestAuditLog()
 
@@ -184,7 +184,7 @@ let tests =
 
         testCaseAsync "one failing item leaves sibling outcomes intact; the failure is data"
         <| async {
-            use registryDir = TempDir.create "fitbatch-tests"
+            let registryDir = TempDir.forRun "fitbatch-tests"
             let registry = freshRegistry registryDir
             let audit = TestAuditLog()
 
@@ -230,7 +230,7 @@ let tests =
 
         testCaseAsync "QueryPage paginates deterministically and filters conjoin"
         <| async {
-            use registryDir = TempDir.create "fitbatch-tests"
+            let registryDir = TempDir.forRun "fitbatch-tests"
             let registry = freshRegistry registryDir
             let audit = TestAuditLog()
 
@@ -322,9 +322,9 @@ let tests =
 
         testCaseAsync "submit audits the batch as a unit and enqueues one item job per request"
         <| async {
-            use schedulerDir = TempDir.create "fitbatch-sched"
+            let schedulerDir = TempDir.forRun "fitbatch-sched"
             let scheduler = buildScheduler schedulerDir
-            use registryDir = TempDir.create "fitbatch-tests"
+            let registryDir = TempDir.forRun "fitbatch-tests"
             let registry = freshRegistry registryDir
             let audit = TestAuditLog()
 
@@ -383,7 +383,7 @@ let tests =
 
         testCaseAsync "batch validation refuses empty / uncorrelatable / cross-scope batches as typed data"
         <| async {
-            use schedulerDir = TempDir.create "fitbatch-sched"
+            let schedulerDir = TempDir.forRun "fitbatch-sched"
             let scheduler = buildScheduler schedulerDir
             let audit = TestAuditLog()
 
@@ -416,7 +416,7 @@ let tests =
 
         testCaseAsync "a batch-of-one item is semantically the single-item envelope path"
         <| async {
-            use registryDir = TempDir.create "fitbatch-tests"
+            let registryDir = TempDir.forRun "fitbatch-tests"
             let registry = freshRegistry registryDir
             let audit = TestAuditLog()
 

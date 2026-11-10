@@ -21,9 +21,7 @@ open ToolUp.Platform.Testing
 /// blob storage.
 let private contractTests =
     let factory () =
-        // The contract pack's factory has no disposal hook, so the directory
-        // outlives the case; the family attributes it in the gate's temp census.
-        let tempDir = (TempDir.create "do-test").Path
+        let tempDir = (TempDir.forRun "do-test").Path
         let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let store = DataObjectStore(blob) :> IDataObjectStore
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)

@@ -74,7 +74,7 @@ type private UnitStatingProvider() =
         }
 
 let private freshFixtureWith (fitProviders: IModelFitProvider list) : Fixture =
-    let root = TempDir.create "modelexec-tests"
+    let root = TempDir.forRun "modelexec-tests"
     let blob = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     let audit = TestAuditLog()

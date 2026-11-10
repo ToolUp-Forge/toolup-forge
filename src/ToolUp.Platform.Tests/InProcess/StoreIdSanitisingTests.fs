@@ -127,10 +127,8 @@ let private inMemoryBackedContract =
         buildStores (InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage))
 
 let private localFileBackedContract =
-    // The pack's factory has no teardown hook, so each directory outlives
-    // its case; the family name attributes it in the census.
     StoreIdSanitisingContract.tests "local-file blob backend" (fun () ->
-        let root = TempDir.create "storeseam"
+        let root = TempDir.forRun "storeseam"
         buildStores (LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage))
 
 [<Tests>]

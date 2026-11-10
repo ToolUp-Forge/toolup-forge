@@ -1095,11 +1095,11 @@ type private FitFixture = {
 }
 
 let private newFitFixture (budget: ComputeBudget) (clock: TestClock) =
-    // Not disposed: the job scheduler is still running the item jobs a batch
-    // enqueued when a case ends, and pulling the directory out from under it
-    // crashes the pack with an unhandled write failure on a background thread.
-    // The family attributes the directory in the gate's temp census.
-    let dir = TempDir.create "compute-budget-fit"
+    // Deleted at process exit, not with the case: the job scheduler is still
+    // running the item jobs a batch enqueued when a case ends, and pulling the
+    // directory out from under it crashes the pack with an unhandled write
+    // failure on a background thread.
+    let dir = TempDir.forRun "compute-budget-fit"
     let root = dir.Path
 
     let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage

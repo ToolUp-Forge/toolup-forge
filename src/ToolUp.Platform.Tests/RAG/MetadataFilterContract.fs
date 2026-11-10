@@ -117,7 +117,7 @@ let private retrieve (bound: Bound) (filters: Map<string, string> option) (topK:
 /// The default pipeline: an `InMemoryVectorStore` seeded through
 /// `IRetrievalPipeline.Index`, which is the production ingestion path.
 let private bindDefaultPipeline () : Bound =
-    let tempDir = TempDir.create "metadata-filter"
+    let tempDir = TempDir.forRun "metadata-filter"
     let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
@@ -481,7 +481,7 @@ let private tagRows: (string * string list * string) list = [
 ]
 
 let private bindTagPipeline () : Bound =
-    let tempDir = TempDir.create "tag-filter"
+    let tempDir = TempDir.forRun "tag-filter"
     let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =

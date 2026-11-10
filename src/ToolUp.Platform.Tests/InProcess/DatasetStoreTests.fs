@@ -28,7 +28,7 @@ open ToolUp.Platform.Testing
 // result-for-result, and falls back to it when ranged reads are refused (the
 // encryption decorator's posture).
 
-let private freshDir () = TempDir.create "ds-test"
+let private freshDir () = TempDir.forRun "ds-test"
 
 let private baseDataObjects (dir: TempDir) =
     let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
@@ -373,8 +373,6 @@ let private rangedReadTests =
     ]
 
 let tests =
-    // The contract's factory has no teardown hook, so each directory
-    // outlives its case; the family name attributes it in the census.
     let factory () : IDatasetStore =
         BlobDatasetStore.create (baseDataObjects (freshDir ()))
 
