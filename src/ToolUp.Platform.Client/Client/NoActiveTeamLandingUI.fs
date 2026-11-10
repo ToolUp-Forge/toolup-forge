@@ -137,7 +137,7 @@ let private statusLine (msgs: NoActiveTeamLandingMessages) (state: CheckState) :
     // literal this file authors, so there is nothing here to translate.
     | CheckState.Failed message -> Html.p [ prop.className $"{Tokens.Colours.error} text-sm"; prop.text message ]
 
-/// Phase 751 — a component, so it has a hook site for the catalog. The
+/// A component, so it has a hook site for the catalog. The
 /// heading, body and rail label stay `cfg`-supplied: they are the
 /// DEPLOYMENT's words about its own product, not SDK chrome.
 [<ReactComponent>]
@@ -154,15 +154,19 @@ let private NoActiveTeamLandingBody
             Html.div [
                 prop.className "max-w-md text-center space-y-4"
                 prop.children [
-                    Html.h2 [ prop.className "text-xl font-semibold text-gray-800"; prop.text cfg.Title ]
-                    Html.p [ prop.className "text-sm text-gray-600 leading-relaxed"; prop.text cfg.Body ]
-                    statusLine msgs model.State
-                    Html.button [
-                        prop.className Tokens.Button.primary
-                        prop.text msgs.CheckForInvitations
-                        prop.disabled (model.State = CheckState.Checking)
-                        prop.onClick (fun _ -> dispatch CheckInvites)
+                    Html.h2 [
+                        prop.className [ "text-xl font-semibold"; Tokens.Text.primary ]
+                        prop.text cfg.Title
                     ]
+                    Html.p [
+                        prop.className [ "text-sm leading-relaxed"; Tokens.Text.secondary ]
+                        prop.text cfg.Body
+                    ]
+                    statusLine msgs model.State
+                    Forms.Button.primaryWith
+                        (Forms.Button.stateOf (model.State = CheckState.Checking) msgs.Checking false)
+                        msgs.CheckForInvitations
+                        (fun () -> dispatch CheckInvites)
                 ]
             ]
         ]
