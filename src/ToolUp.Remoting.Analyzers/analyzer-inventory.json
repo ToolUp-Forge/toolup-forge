@@ -484,16 +484,9 @@
     },
     {
       "rule": "TUA003",
-      "reason": "Construction loads the two eager scopes once (Phase 861); Dispose flushes once at shutdown.",
+      "reason": "Dispose flushes the in-process retrieval stores once at shutdown; IDisposable is synchronous.",
       "sites": {
-        "src/ToolUp.RAG.Server/Server/InMemoryBM25Index.fs": 3
-      }
-    },
-    {
-      "rule": "TUA003",
-      "reason": "Construction loads the two eager scopes once (Phase 861); Dispose flushes once at shutdown.",
-      "sites": {
-        "src/ToolUp.RAG.Server/Server/InMemoryVectorStore.fs": 3
+        "src/ToolUp.Platform.Server/Server/Rag/ScopedSnapshotIndex.fs": 1
       }
     },
     {
@@ -501,13 +494,6 @@
       "reason": "The analyser's own whole-tree run, a build-time tool that blocks on the compiler service's parse.",
       "sites": {
         "src/ToolUp.Remoting.Analyzers/TreeScan.fs": 1
-      }
-    },
-    {
-      "rule": "TUA003",
-      "reason": "Construction loads the two eager scopes once (Phase 861: a failed load leaves the scope lazy); Dispose flushes once at shutdown.",
-      "sites": {
-        "src/VectorStores/Hnsw/HnswVectorStore.fs": 3
       }
     },
     {
