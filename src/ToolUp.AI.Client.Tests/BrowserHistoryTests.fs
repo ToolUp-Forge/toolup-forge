@@ -243,7 +243,7 @@ let tests =
     testList "Browser history (Phase 1240)" [
         testList "multi-page routes" [
             testCase "a Composition page opens from its sidebar entry" (fun () ->
-                let inspector = CompositionInspectorUI.create None
+                let inspector = ShellSlots.builtIn CompositionInspectorUI.builtIn None
                 let modules = [ singlePage "home" (ResizeArray()); inspector ]
                 let model = boot ClientConfig.defaults modules
 

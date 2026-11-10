@@ -386,7 +386,7 @@ module ShellSlots =
         authenticatedAdmin
             _.CompositionInspector
             CompositionInspectorUI.moduleId
-            CompositionInspectorUI.create
+            (builtIn CompositionInspectorUI.builtIn)
             None
             "CompositionInspector"
 
