@@ -203,131 +203,29 @@ let private staleAliceNowBob (rig: StaleQueryRig) (id: string) = async {
 let tests =
     testList "EntityQuery" [
 
-        testCaseAsync "Eq predicate matches exact-value entries"
-        <| async {
-            let store, scope = mkStore ()
-            do! seed store scope
-
-            let q =
-                EntityQuery.forType<Item> ItemType |> EntityQuery.where (Eq("Owner", "alice"))
-
-            let! result = store.Query<Item>(scope, q)
-
-            match result with
-            | Result.Ok items ->
-                Expect.hasLength items 2 "alice has 2 items"
-                let ids = items |> List.map _.Id |> List.sort
-                Expect.equal ids [ "i-1"; "i-2" ] "alice's items"
-            | Result.Error e -> failwithf "expected Ok, got %A" e
-        }
-
-        testCaseAsync "And predicate intersects two Eq results"
-        <| async {
-            let store, scope = mkStore ()
-            do! seed store scope
-
-            let q =
-                EntityQuery.forType<Item> ItemType
-                |> EntityQuery.where (And(Eq("Owner", "alice"), Eq("Status", "active")))
-
-            let! result = store.Query<Item>(scope, q)
-
-            match result with
-            | Result.Ok items ->
-                Expect.hasLength items 1 "alice + active has 1"
-                Expect.equal items.Head.Id "i-1" "matched item"
-            | Result.Error e -> failwithf "expected Ok, got %A" e
-        }
-
-        testCaseAsync "Or predicate unions two Eq results"
-        <| async {
-            let store, scope = mkStore ()
-            do! seed store scope
-
-            let q =
-                EntityQuery.forType<Item> ItemType
-                |> EntityQuery.where (Or(Eq("Owner", "alice"), Eq("Owner", "carol")))
-
-            let! result = store.Query<Item>(scope, q)
-
-            match result with
-            | Result.Ok items ->
-                Expect.hasLength items 3 "alice (2) + carol (1) = 3 items"
-                let owners = items |> List.map _.Owner |> List.distinct |> List.sort
-                Expect.equal owners [ "alice"; "carol" ] "owners present"
-            | Result.Error e -> failwithf "expected Ok, got %A" e
-        }
-
-        testCaseAsync "In predicate matches any of several values"
-        <| async {
-            let store, scope = mkStore ()
-            do! seed store scope
-
-            let q =
-                EntityQuery.forType<Item> ItemType
-                |> EntityQuery.where (In("Status", [ "active"; "blocked" ]))
-
-            let! result = store.Query<Item>(scope, q)
-
-            match result with
-            | Result.Ok items ->
-                // 3 active + 1 blocked
-                Expect.hasLength items 4 "active + blocked = 4 items"
-            | Result.Error e -> failwithf "expected Ok, got %A" e
-        }
-
-        testCaseAsync "Ne predicate returns complement"
-        <| async {
-            let store, scope = mkStore ()
-            do! seed store scope
-
-            let q =
-                EntityQuery.forType<Item> ItemType |> EntityQuery.where (Ne("Owner", "alice"))
-
-            let! result = store.Query<Item>(scope, q)
-
-            match result with
-            | Result.Ok items ->
-                // 5 total - 2 alice = 3 non-alice
-                Expect.hasLength items 3 "non-alice has 3"
-                let owners = items |> List.map _.Owner |> List.distinct |> List.sort
-                Expect.equal owners [ "bob"; "carol" ] "no alice in results"
-            | Result.Error e -> failwithf "expected Ok, got %A" e
-        }
-
-        testCaseAsync "Gte predicate matches range above threshold"
-        <| async {
-            let store, scope = mkStore ()
-            do! seed store scope
-
-            let q =
-                EntityQuery.forType<Item> ItemType |> EntityQuery.where (Gte("Priority", "02"))
-
-            let! result = store.Query<Item>(scope, q)
-
-            match result with
-            | Result.Ok items ->
-                // priorities 02 (i-2, i-5) + 03 (i-4) = 3
-                Expect.hasLength items 3 "priority >= 02 has 3 items"
-            | Result.Error e -> failwithf "expected Ok, got %A" e
-        }
-
-        testCaseAsync "Lt predicate matches strict-below"
-        <| async {
-            let store, scope = mkStore ()
-            do! seed store scope
-
-            let q =
-                EntityQuery.forType<Item> ItemType |> EntityQuery.where (Lt("Priority", "02"))
-
-            let! result = store.Query<Item>(scope, q)
-
-            match result with
-            | Result.Ok items ->
-                // priority 01: i-1, i-3
-                Expect.hasLength items 2 "priority < 02 has 2 items"
-            | Result.Error e -> failwithf "expected Ok, got %A" e
-        }
+        // Over `seed`: i-1 alice/active/01, i-2 alice/completed/02, i-3 bob/active/01,
+        // i-4 bob/blocked/03, i-5 carol/active/02.
+        for name, predicate, expected in
+            [
+                "Eq predicate matches exact-value entries", Eq("Owner", "alice"), [ "i-1"; "i-2" ]
+                "And predicate intersects two Eq results", And(Eq("Owner", "alice"), Eq("Status", "active")), [ "i-1" ]
+                "Or predicate unions two Eq results",
+                Or(Eq("Owner", "alice"), Eq("Owner", "carol")),
+                [ "i-1"; "i-2"; "i-5" ]
+                "In predicate matches any of several values",
+                In("Status", [ "active"; "blocked" ]),
+                [ "i-1"; "i-3"; "i-4"; "i-5" ]
+                "Ne predicate returns complement", Ne("Owner", "alice"), [ "i-3"; "i-4"; "i-5" ]
+                "Gte predicate matches range above threshold", Gte("Priority", "02"), [ "i-2"; "i-4"; "i-5" ]
+                "Lt predicate matches strict-below", Lt("Priority", "02"), [ "i-1"; "i-3" ]
+            ] do
+            testCaseAsync name
+            <| async {
+                let store, scope = mkStore ()
+                do! seed store scope
+                let! ids = queryIds store scope predicate
+                Expect.equal ids expected $"Query(where {predicate}) answers exactly these ids"
+            }
 
         testCaseAsync "OrderBy + Skip + Take produces deterministic paging"
         <| async {
