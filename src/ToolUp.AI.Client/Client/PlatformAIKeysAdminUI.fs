@@ -273,7 +273,10 @@ let private KeyRow
                 prop.className "flex items-baseline gap-3"
                 prop.children [
                     Html.span [ prop.className "font-medium text-sm"; prop.text descriptor.DisplayName ]
-                    Html.span [ prop.className "text-xs text-gray-500 font-mono"; prop.text descriptor.Id ]
+                    Html.span [
+                        prop.className ("text-xs font-mono " + Tokens.Text.muted)
+                        prop.text descriptor.Id
+                    ]
                     if hasKey then
                         Html.span [
                             prop.className "inline-block px-2 py-0.5 rounded text-xs bg-green-100 text-green-700"
@@ -281,7 +284,9 @@ let private KeyRow
                         ]
                     else
                         Html.span [
-                            prop.className "inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600"
+                            prop.className (
+                                "inline-block px-2 py-0.5 rounded text-xs bg-gray-100 " + Tokens.Text.secondary
+                            )
                             prop.text "No key"
                         ]
                 ]
@@ -309,7 +314,7 @@ let private KeyRow
                             if canSave then
                                 "bg-violet-500 hover:bg-violet-600 text-white"
                             else
-                                "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                ("bg-gray-200 cursor-not-allowed " + Tokens.Text.muted)
                         ]
                         prop.disabled (not canSave)
                         prop.onClick (fun _ ->
@@ -319,8 +324,10 @@ let private KeyRow
                         prop.text (if hasKey then "Rotate" else "Save")
                     ]
                     Html.button [
-                        prop.className
-                            "px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        prop.className (
+                            "px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed "
+                            + Tokens.Text.secondary
+                        )
                         prop.disabled (loading || not hasKey)
                         prop.onClick (fun _ -> onTest ())
                         prop.text "Test"
@@ -340,7 +347,7 @@ let private KeyRow
 let private platformSection (model: Model) (dispatch: Msg -> unit) =
     Layout.Panel.panel "Platform-wide AI keys" [
         Html.p [
-            prop.className "text-sm text-gray-600 mb-3"
+            prop.className ("text-sm mb-3 " + Tokens.Text.secondary)
             prop.text
                 "Default keys for every request. Per-team overrides (configured below) take precedence over these when a team's user resolves the corresponding provider."
         ]
@@ -375,14 +382,14 @@ let private platformSection (model: Model) (dispatch: Msg -> unit) =
 let private teamSection (model: Model) (dispatch: Msg -> unit) =
     Layout.Panel.panel "Per-team AI keys" [
         Html.p [
-            prop.className "text-sm text-gray-600 mb-3"
+            prop.className ("text-sm mb-3 " + Tokens.Text.secondary)
             prop.text
                 "Override the platform-wide keys for a specific team. Useful when a team brings its own paid plan or has a stricter compliance posture that requires a separate vendor account."
         ]
 
         if model.Teams.IsEmpty then
             Html.p [
-                prop.className "text-sm text-gray-500 py-2"
+                prop.className ("text-sm py-2 " + Tokens.Text.muted)
                 prop.text "No teams configured in this deployment."
             ]
         else
@@ -392,7 +399,7 @@ let private teamSection (model: Model) (dispatch: Msg -> unit) =
                         prop.className "mb-3"
                         prop.children [
                             Html.label [
-                                prop.className "block text-sm font-medium text-gray-700 mb-1"
+                                prop.className ("block text-sm font-medium mb-1 " + Tokens.Text.secondary)
                                 prop.text "Team"
                             ]
                             Html.select [
@@ -444,14 +451,14 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
             Layout.Panel.panel "AI keys" [
                 bannerView banner dispatch
                 Html.p [
-                    prop.className "text-sm text-gray-600"
+                    prop.className ("text-sm " + Tokens.Text.secondary)
                     prop.text "Manage AI provider API keys for this deployment. Use the panels on the right."
                 ]
             ]
         | None ->
             Layout.Panel.panel "AI keys" [
                 Html.p [
-                    prop.className "text-sm text-gray-600"
+                    prop.className ("text-sm " + Tokens.Text.secondary)
                     prop.text
                         "Manage AI provider API keys for this deployment. The current key value is never displayed — once stored, the only way to retrieve it is from the source (Anthropic / OpenAI / Google console)."
                 ]
