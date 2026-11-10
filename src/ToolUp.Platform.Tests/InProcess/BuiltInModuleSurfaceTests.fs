@@ -378,3 +378,121 @@ let visibilityTests =
                 Expect.isFalse (m.Visibility AnonymousKind) (sprintf "%s must hide from AnonymousKind" label)
         }
     ]
+
+// ─── Each built-in is one BuiltIn value over the view contract ─────────
+//
+// A built-in exports a `BuiltIn` value that `ShellSlots.builtIn` builds, and
+// its view takes the shell's `RenderContext`; the `create` pipelines and the
+// `[<ReactComponent>] XxxBody` components that existed only to read the
+// catalog through a hook are gone. Read from the sources, because the
+// property is about how the module is written.
+
+/// Repo root (`toolup-forge`) from the running assembly.
+let private repoRoot () =
+    let assemblyDir =
+        System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+
+    System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+/// The client module files: every `*UI.fs` under `src/`, plus the three
+/// built-ins whose names do not end in `UI`.
+let private clientModuleFiles () =
+    let src = System.IO.Path.Combine(repoRoot (), "src")
+    let client = System.IO.Path.Combine(src, "ToolUp.Platform.Client", "Client")
+
+    let named = [
+        System.IO.Path.Combine(client, "Home.fs")
+        System.IO.Path.Combine(client, "AdminHome.fs")
+        System.IO.Path.Combine(client, "UsageDashboard.fs")
+    ]
+
+    let uiFiles =
+        System.IO.Directory.EnumerateFiles(src, "*UI.fs", System.IO.SearchOption.AllDirectories)
+        |> Seq.filter (fun f ->
+            let segments = f.Split([| '\\'; '/' |])
+
+            not (
+                segments
+                |> Array.exists (fun seg -> seg = "bin" || seg = "obj" || seg = "node_modules")
+            ))
+        |> List.ofSeq
+
+    named @ uiFiles |> List.distinct |> List.sort
+
+/// `XxxBody` components: a `[<ReactComponent>]` whose binding is named `…Body`.
+let internal hookSiteBodies (lines: string array) : string list = [
+    for i in 0 .. lines.Length - 2 do
+        if lines[i].Trim() = "[<ReactComponent>]" then
+            let m =
+                System.Text.RegularExpressions.Regex.Match(
+                    lines[i + 1],
+                    @"^\s*let\s+(?:private\s+|internal\s+)?(\w+Body)\b"
+                )
+
+            if m.Success then
+                yield m.Groups[1].Value
+]
+
+let builtInContractTests =
+    testList "every built-in is one BuiltIn value over the view contract" [
+        test "the scan reads the client module files" {
+            let files = clientModuleFiles ()
+            Expect.isGreaterThanOrEqual (List.length files) 30 "the module files the scan reads"
+        }
+
+        test "no client module declares a hook-site body" {
+            let offending = [
+                for f in clientModuleFiles () do
+                    for body in hookSiteBodies (System.IO.File.ReadAllLines f) do
+                        yield $"{System.IO.Path.GetFileName f}: {body}"
+            ]
+
+            Expect.isEmpty
+                offending
+                "a [<ReactComponent>] body that exists to read the catalog through a hook; the view reads `ctx.Messages` from its RenderContext"
+        }
+
+        test "no built-in module file defines a create pipeline" {
+            let createSite =
+                System.Text.RegularExpressions.Regex(
+                    @"^let create \(",
+                    System.Text.RegularExpressions.RegexOptions.Multiline
+                )
+
+            let offending = [
+                for f in clientModuleFiles () do
+                    if createSite.IsMatch(System.IO.File.ReadAllText f) then
+                        yield System.IO.Path.GetFileName f
+            ]
+
+            Expect.isEmpty offending "a built-in exports a `BuiltIn` value that `ShellSlots.builtIn` builds"
+        }
+
+        test "every slot the shell fills with an SDK module builds a BuiltIn value" {
+            let slots =
+                System.IO.File.ReadAllText(
+                    System.IO.Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "ShellSlots.fs")
+                )
+
+            Expect.isFalse
+                (System.Text.RegularExpressions.Regex.IsMatch(slots, @"\b\w+(?:UI|Home|Dashboard)\.create\b"))
+                "a slot row calls a module's create"
+
+            Expect.isGreaterThanOrEqual
+                (System.Text.RegularExpressions.Regex.Matches(slots, @"\bbuiltIn\b[^\n]*\.builtIn\b").Count)
+                25
+                "the slot rows build the built-ins' BuiltIn values"
+        }
+
+        test "the scan flags a re-added hook-site body — go-red" {
+            let lines = [|
+                "[<ReactComponent>]"
+                "let private TeamManagerBody (model: Model) (dispatch: Msg -> unit) ="
+                "    let msgs = (MessageCatalogProvider.useMessages ()).TeamManager"
+                "[<ReactComponent>]"
+                "let private QuietHoursForm (current: int) ="
+            |]
+
+            Expect.equal (hookSiteBodies lines) [ "TeamManagerBody" ] "the body is flagged; a stateful form is not"
+        }
+    ]

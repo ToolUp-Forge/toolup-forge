@@ -51,6 +51,7 @@ let private registeredTests =
         SessionRegistryTests.derivationTests
         SessionRegistryTests.blobBackedTests
         BuiltInModuleSurfaceTests.tests
+        BuiltInModuleSurfaceTests.builtInContractTests
         ModuleVisibilityContractTests.resolutionTests
         ModuleVisibilityContractTests.ungovernedTests
         ModuleVisibilityContractTests.scopeWalkTests
@@ -78,7 +79,7 @@ let private deliberatelyUnregistered = [
     {
         TestRegistrationGuard.Binding = "ToolUp.Platform.Tests.InProcess.BuiltInModuleSurfaceTests.visibilityTests"
         TestRegistrationGuard.Reason =
-            "constructs the SDK's built-in CLIENT-side UI modules (FileManagerUI.create, "
+            "constructs the SDK's built-in CLIENT-side UI modules (FileManagerUI.builtIn, "
             + "DataSubjectRequestAdminUI.builtIn, HealthMonitorUI.builtIn, …), whose bodies touch `Icons` — "
             + "Fable `importDefault` dummy code that throws under .NET. It is a Fable-tier pack, same class "
             + "as the HomeOverviewTests client-tier landing test in the ToolUp.AI.Client.Tests Fable "
