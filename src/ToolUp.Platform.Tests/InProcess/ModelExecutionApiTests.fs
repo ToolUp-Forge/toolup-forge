@@ -17,6 +17,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 600 — model-execution submitter API conformance ──────────────
 //
@@ -31,14 +32,6 @@ open ToolUp.Platform.Compose
 // totality (a throwing substrate surfaces as `Unexpected` data, never a
 // bare wire exception).
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private silentChannel =
     { new INotificationChannel with
         member _.Publish(_, _) = async { return () }
@@ -46,25 +39,14 @@ let private silentChannel =
         member _.Unsubscribe(_) = async { return () }
     }
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
 /// The full default substrate stack a submitter-facing deployment
-/// composes, temp-dir isolated per fixture.
+/// composes, temp-dir isolated per fixture. The fixture has no teardown,
+/// so its directory is not disposed.
 type private Fixture = {
     Scheduler: IJobScheduler
     Registry: IModelRegistry
     Datasets: IDatasetStore
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
     Providers: ModelFitProviderRegistry
 }
 
@@ -92,16 +74,12 @@ type private UnitStatingProvider() =
         }
 
 let private freshFixtureWith (fitProviders: IModelFitProvider list) : Fixture =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-modelexec-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+    let root = TempDir.create "modelexec-tests"
+    let blob = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
-    let schedRoot = Path.Combine(root, "sched")
-    Directory.CreateDirectory schedRoot |> ignore
+    let schedRoot = root.Sub "sched"
     let schedStorage = LocalFileStorage.LocalFileStorage(schedRoot) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create schedStorage eventStore
@@ -113,7 +91,7 @@ let private freshFixtureWith (fitProviders: IModelFitProvider list) : Fixture =
                 EventStore = eventStore
                 NotificationChannel = silentChannel
                 Config = ServerConfig.defaults
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = (NoOpActivitySink())
             }
             : JobScheduler.SchedulerDeps)
@@ -127,7 +105,7 @@ let private freshFixtureWith (fitProviders: IModelFitProvider list) : Fixture =
     // The item handler registered exactly as a consumer wires it.
     scheduler.RegisterHandler(
         ModelFitBatch.ItemHandlerName,
-        ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) silentLogger
+        ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) Logger.silent
     )
 
     {
@@ -396,7 +374,7 @@ let private unitTests =
                 SubmitterClass = SubmitterClass.Human
             }
 
-            match! ModelFitEnvelope.runFit providers (RecordingAuditLog() :> IAuditLog) request with
+            match! ModelFitEnvelope.runFit providers (TestAuditLog() :> IAuditLog) request with
             | Error(ModelFitError.GateUnitMismatch mismatch) ->
                 Expect.equal
                     mismatch
@@ -420,7 +398,7 @@ let private unitTests =
                     ]
             }
 
-            match! ModelFitEnvelope.runFit providers (RecordingAuditLog() :> IAuditLog) stated with
+            match! ModelFitEnvelope.runFit providers (TestAuditLog() :> IAuditLog) stated with
             | Ok outcome ->
                 Expect.equal outcome.DiagnosticUnits (Map [ "mean", "1" ]) "the provider's units are kept"
                 Expect.equal (outcome.GateVerdicts |> List.map _.Unit) [ Some "1" ] "and the verdict's"
@@ -479,14 +457,11 @@ let private unitTests =
 
         testCaseAsync "a record stored before units could be stated reads back as stating none"
         <| async {
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-modelexec-units-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory root |> ignore
-            let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+            use root = TempDir.create "modelexec-units"
+            let blob = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
 
             let registry =
-                BlobModelRegistry.create (DataObjectStore(blob)) (RecordingAuditLog() :> IAuditLog)
+                BlobModelRegistry.create (DataObjectStore(blob)) (TestAuditLog() :> IAuditLog)
 
             let key =
                 FitCompositeKey.compute "pre-units" "op-1011/input@v1" 1L "reference" "1.0.0"
@@ -522,7 +497,7 @@ let private unitTests =
             // before Phase 1011 has: no `DiagnosticUnits`, no verdict `Unit`.
             let mutable rewritten = 0
 
-            for file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories) do
+            for file in Directory.EnumerateFiles(root.Path, "*", SearchOption.AllDirectories) do
                 let text = File.ReadAllText file
 
                 if text.Contains "\"DiagnosticUnits\"" then

@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Testing
 
 // ─── BlobDocumentStore<'T> — the three invariants, List, Delete ────────
 //
@@ -20,13 +21,6 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 // more reads at once than its degree.
 
 type private Doc = { Name: string; Count: int }
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 /// Passes everything through to `inner` except: `Download` of a name
 /// `failRead` selects answers `Error`; the conditional seam is implemented
@@ -114,7 +108,7 @@ let private container = ScopeKey.container scope
 let private path name = DocPath.ofString $"docs/{name}.json"
 
 let private storeOver (storage: IBlobStorage) =
-    BlobDocumentStore<Doc>(storage, BlobCodec.json<Doc>, SilentLogger())
+    BlobDocumentStore<Doc>(storage, BlobCodec.json<Doc>, Logger.silent)
 
 let private run work = Async.RunSynchronously work
 

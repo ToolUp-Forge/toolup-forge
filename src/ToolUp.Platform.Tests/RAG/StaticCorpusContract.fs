@@ -16,6 +16,7 @@ open ToolUp.RAG.StaticCorpus
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Testing
 
 // ─── Phase 63 — StaticCorpus contract + determinism ──────────────────
 //
@@ -365,13 +366,6 @@ let tests =
         // ── 63.E / 63.G — packer + determinism over the filesystem ──
         testList "Packer" [
 
-            let tempRoot () =
-                let d =
-                    Path.Combine(Path.GetTempPath(), "scidx-test-" + Guid.NewGuid().ToString("N"))
-
-                Directory.CreateDirectory d |> ignore
-                d
-
             let writeDocs (dir: string) (files: (string * string) list) =
                 for (name, content) in files do
                     let p = Path.Combine(dir, name)
@@ -417,162 +411,152 @@ let tests =
                 e, (fun () -> calls)
 
             test "pack twice over an unchanged corpus → byte-identical .scidx" {
-                let dir = tempRoot ()
+                use root = TempDir.create "scidx-test"
+                let dir = root.Path
 
-                try
-                    writeDocs dir [
-                        "a.md", "# A\n\n## S1\n\ntext one here\n"
-                        "b.md", "# B\n\n## S2\n\ntext two here\n"
-                    ]
+                writeDocs dir [
+                    "a.md", "# A\n\n## S1\n\ntext one here\n"
+                    "b.md", "# B\n\n## S2\n\ntext two here\n"
+                ]
 
-                    let config = mkConfig dir
+                let config = mkConfig dir
 
-                    Packer.pack packEmbedder config fixedUtc None
-                    |> Async.RunSynchronously
-                    |> ignore
+                Packer.pack packEmbedder config fixedUtc None
+                |> Async.RunSynchronously
+                |> ignore
 
-                    let bytes1 = outputBytes config
+                let bytes1 = outputBytes config
 
-                    Packer.pack packEmbedder config fixedUtc None
-                    |> Async.RunSynchronously
-                    |> ignore
+                Packer.pack packEmbedder config fixedUtc None
+                |> Async.RunSynchronously
+                |> ignore
 
-                    let bytes2 = outputBytes config
-                    Expect.equal bytes2 bytes1 "same MDs + model + packer version + builtUtc ⇒ byte-identical .scidx"
-                finally
-                    Directory.Delete(dir, true)
+                let bytes2 = outputBytes config
+                Expect.equal bytes2 bytes1 "same MDs + model + packer version + builtUtc ⇒ byte-identical .scidx"
             }
 
             test "editing one file changes only that file's chunks" {
-                let dir = tempRoot ()
+                use root = TempDir.create "scidx-test"
+                let dir = root.Path
 
-                try
-                    writeDocs dir [
-                        "a.md", "# A\n\n## S1\n\napple banana\n"
-                        "b.md", "# B\n\n## S2\n\ncherry date\n"
-                    ]
+                writeDocs dir [
+                    "a.md", "# A\n\n## S1\n\napple banana\n"
+                    "b.md", "# B\n\n## S2\n\ncherry date\n"
+                ]
 
-                    let config = mkConfig dir
+                let config = mkConfig dir
 
-                    Packer.pack packEmbedder config fixedUtc None
-                    |> Async.RunSynchronously
-                    |> ignore
+                Packer.pack packEmbedder config fixedUtc None
+                |> Async.RunSynchronously
+                |> ignore
 
-                    let before = Serialization.deserialize (outputBytes config)
+                let before = Serialization.deserialize (outputBytes config)
 
-                    // Touch only a.md.
-                    writeDocs dir [ "a.md", "# A\n\n## S1\n\napple banana elderberry\n" ]
+                // Touch only a.md.
+                writeDocs dir [ "a.md", "# A\n\n## S1\n\napple banana elderberry\n" ]
 
-                    Packer.pack packEmbedder config fixedUtc None
-                    |> Async.RunSynchronously
-                    |> ignore
+                Packer.pack packEmbedder config fixedUtc None
+                |> Async.RunSynchronously
+                |> ignore
 
-                    let after = Serialization.deserialize (outputBytes config)
+                let after = Serialization.deserialize (outputBytes config)
 
-                    let chunkFor (src: string) (c: StaticCorpus) =
-                        c.Chunks |> Array.filter (fun ch -> ch.Source = src)
+                let chunkFor (src: string) (c: StaticCorpus) =
+                    c.Chunks |> Array.filter (fun ch -> ch.Source = src)
 
-                    Expect.equal
-                        (chunkFor "b.md" after)
-                        (chunkFor "b.md" before)
-                        "b.md's chunks (body + embedding) are untouched"
+                Expect.equal
+                    (chunkFor "b.md" after)
+                    (chunkFor "b.md" before)
+                    "b.md's chunks (body + embedding) are untouched"
 
-                    Expect.notEqual (chunkFor "a.md" after) (chunkFor "a.md" before) "a.md's chunks changed"
-                finally
-                    Directory.Delete(dir, true)
+                Expect.notEqual (chunkFor "a.md" after) (chunkFor "a.md" before) "a.md's chunks changed"
             }
 
             test "the on-disk embedding cache makes a re-pack embed nothing" {
-                let dir = tempRoot ()
+                use root = TempDir.create "scidx-test"
+                let dir = root.Path
 
-                try
-                    writeDocs dir [
-                        "a.md", "# A\n\n## S1\n\nalpha beta\n"
-                        "b.md", "# B\n\n## S2\n\ngamma delta\n"
-                    ]
+                writeDocs dir [
+                    "a.md", "# A\n\n## S1\n\nalpha beta\n"
+                    "b.md", "# B\n\n## S2\n\ngamma delta\n"
+                ]
 
-                    let config = mkConfig dir
-                    let cacheDir = Some(Path.Combine(dir, ".cache"))
+                let config = mkConfig dir
+                let cacheDir = Some(Path.Combine(dir, ".cache"))
 
-                    let e1, calls1 = counting packEmbedder
-                    Packer.pack e1 config fixedUtc cacheDir |> Async.RunSynchronously |> ignore
-                    Expect.isGreaterThan (calls1 ()) 0 "first pack embeds every chunk"
+                let e1, calls1 = counting packEmbedder
+                Packer.pack e1 config fixedUtc cacheDir |> Async.RunSynchronously |> ignore
+                Expect.isGreaterThan (calls1 ()) 0 "first pack embeds every chunk"
 
-                    let e2, calls2 = counting packEmbedder
-                    Packer.pack e2 config fixedUtc cacheDir |> Async.RunSynchronously |> ignore
-                    Expect.equal (calls2 ()) 0 "second pack hits the disk cache for every chunk — no embedder calls"
-                finally
-                    Directory.Delete(dir, true)
+                let e2, calls2 = counting packEmbedder
+                Packer.pack e2 config fixedUtc cacheDir |> Async.RunSynchronously |> ignore
+                Expect.equal (calls2 ()) 0 "second pack hits the disk cache for every chunk — no embedder calls"
             }
 
             test "excludes remove matching files; the corpus records model + packer version" {
-                let dir = tempRoot ()
+                use root = TempDir.create "scidx-test"
+                let dir = root.Path
 
-                try
-                    writeDocs dir [
-                        "keep.md", "# K\n\n## S\n\nkeep me\n"
-                        "drafts/skip.md", "# D\n\n## S\n\nskip me\n"
-                    ]
+                writeDocs dir [
+                    "keep.md", "# K\n\n## S\n\nkeep me\n"
+                    "drafts/skip.md", "# D\n\n## S\n\nskip me\n"
+                ]
 
-                    let config = {
-                        mkConfig dir with
-                            Exclude = [ "drafts/**" ]
-                    }
+                let config = {
+                    mkConfig dir with
+                        Exclude = [ "drafts/**" ]
+                }
 
-                    Packer.pack packEmbedder config fixedUtc None
-                    |> Async.RunSynchronously
-                    |> ignore
+                Packer.pack packEmbedder config fixedUtc None
+                |> Async.RunSynchronously
+                |> ignore
 
-                    let corpus = Serialization.deserialize (outputBytes config)
+                let corpus = Serialization.deserialize (outputBytes config)
 
-                    Expect.isFalse
-                        (corpus.Chunks |> Array.exists (fun c -> c.Source.Contains "skip"))
-                        "excluded files contribute no chunks"
+                Expect.isFalse
+                    (corpus.Chunks |> Array.exists (fun c -> c.Source.Contains "skip"))
+                    "excluded files contribute no chunks"
 
-                    Expect.isTrue
-                        (corpus.Chunks |> Array.exists (fun c -> c.Source = "keep.md"))
-                        "included files are packed"
+                Expect.isTrue
+                    (corpus.Chunks |> Array.exists (fun c -> c.Source = "keep.md"))
+                    "included files are packed"
 
-                    Expect.equal corpus.EmbeddingModel packEmbedder.ModelId "corpus records the embedding model id"
-                    Expect.equal corpus.PackerVersion Packer.PackerVersion "corpus records the packer version"
-                finally
-                    Directory.Delete(dir, true)
+                Expect.equal corpus.EmbeddingModel packEmbedder.ModelId "corpus records the embedding model id"
+                Expect.equal corpus.PackerVersion Packer.PackerVersion "corpus records the packer version"
             }
 
             test "incremental pack skips when inputs are unchanged and re-packs when they change (63.F)" {
-                let dir = tempRoot ()
+                use root = TempDir.create "scidx-test"
+                let dir = root.Path
 
-                try
-                    writeDocs dir [ "a.md", "# A\n\n## S1\n\nfirst\n" ]
-                    let config = mkConfig dir
+                writeDocs dir [ "a.md", "# A\n\n## S1\n\nfirst\n" ]
+                let config = mkConfig dir
 
-                    let first =
-                        Packer.packIncremental packEmbedder config fixedUtc None
-                        |> Async.RunSynchronously
+                let first =
+                    Packer.packIncremental packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
 
-                    match first with
-                    | Packer.Packed _ -> ()
-                    | Packer.Skipped -> failtest "the first pack must not be skipped"
+                match first with
+                | Packer.Packed _ -> ()
+                | Packer.Skipped -> failtest "the first pack must not be skipped"
 
-                    // Unchanged inputs ⇒ skipped.
-                    let second =
-                        Packer.packIncremental packEmbedder config fixedUtc None
-                        |> Async.RunSynchronously
+                // Unchanged inputs ⇒ skipped.
+                let second =
+                    Packer.packIncremental packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
 
-                    Expect.equal second Packer.Skipped "unchanged inputs ⇒ the second pack is a no-op"
+                Expect.equal second Packer.Skipped "unchanged inputs ⇒ the second pack is a no-op"
 
-                    // Change a file ⇒ re-packs.
-                    writeDocs dir [ "a.md", "# A\n\n## S1\n\nsecond\n" ]
+                // Change a file ⇒ re-packs.
+                writeDocs dir [ "a.md", "# A\n\n## S1\n\nsecond\n" ]
 
-                    let third =
-                        Packer.packIncremental packEmbedder config fixedUtc None
-                        |> Async.RunSynchronously
+                let third =
+                    Packer.packIncremental packEmbedder config fixedUtc None
+                    |> Async.RunSynchronously
 
-                    match third with
-                    | Packer.Packed _ -> ()
-                    | Packer.Skipped -> failtest "a changed input must force a re-pack"
-                finally
-                    Directory.Delete(dir, true)
+                match third with
+                | Packer.Packed _ -> ()
+                | Packer.Skipped -> failtest "a changed input must force a re-pack"
             }
         ]
 

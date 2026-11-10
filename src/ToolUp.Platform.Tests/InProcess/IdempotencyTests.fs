@@ -9,6 +9,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 
 // ─── Phase 69f — idempotency-key residuals ────────────────────────────
 //
@@ -58,27 +59,23 @@ let tests =
             InMemoryIdempotencyStore() :> IIdempotencyStore)
 
         IIdempotencyStoreContract.tests "BlobIdempotencyStore" (fun () ->
-            // Each factory call gets a fresh temp dir so runs don't alias.
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "toolup-idem-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory tempDir |> ignore
+            // Each factory call gets a fresh temp dir so runs don't alias. The
+            // contract pack has no teardown hook, so the store outlives this
+            // factory and the directory is not disposed here.
+            let tempDir = TempDir.create "idem"
 
             let blob =
-                LocalFileStorage.LocalFileStorage(tempDir) :> ToolUp.Platform.BlobStorage.IBlobStorage
+                LocalFileStorage.LocalFileStorage(tempDir.Path) :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             BlobIdempotencyStore(blob) :> IIdempotencyStore)
 
         // ── Phase 164 — TTL sweep job ──
         testCaseAsync "IdempotencySweepJob removes only TTL-expired entries; live entries still replay"
         <| async {
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "toolup-idem-sweep-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory tempDir |> ignore
+            use tempDir = TempDir.create "idem-sweep"
 
             let blob =
-                LocalFileStorage.LocalFileStorage(tempDir) :> ToolUp.Platform.BlobStorage.IBlobStorage
+                LocalFileStorage.LocalFileStorage(tempDir.Path) :> ToolUp.Platform.BlobStorage.IBlobStorage
 
             let store = BlobIdempotencyStore(blob)
             let istore = store :> IIdempotencyStore

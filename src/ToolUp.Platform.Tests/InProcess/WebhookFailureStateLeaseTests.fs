@@ -17,6 +17,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 16a — the webhook dispatcher's failure-state lease ────────
 //
@@ -50,14 +51,6 @@ open ToolUp.Platform.Jobs
 
 // ─── Substrate doubles ───────────────────────────────────────────────
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 /// Always-500 receiver: every attempt fails, so every delivery walks its
 /// whole ladder and dead-letters. Never touches the network.
 type private AlwaysFailingHandler() =
@@ -85,34 +78,6 @@ let private permissiveRateLimiter =
     { new IRateLimiter with
         member _.Wait(_key) = async { return Proceed }
     }
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 // ─── Lock instrumentation ────────────────────────────────────────────
 
@@ -291,7 +256,7 @@ let private buildReplicas (replicaCount: int) (lockFor: int -> IDistributedLock)
     let rendezvous = RendezvousRegistry(baseRegistry, gate)
     let registry = rendezvous :> IWebhookRegistry
     let deliveryLog = WebhookRegistry.createDeliveryLog storage
-    let secretStore = InMemorySecretStore() :> ISecretStore
+    let secretStore = Fakes.TestSecretStore() :> ISecretStore
     let urlPolicy: WebhookUrlValidator.WebhookUrlPolicy = allowlistedPolicy
 
     let dispatchers = [
@@ -305,7 +270,7 @@ let private buildReplicas (replicaCount: int) (lockFor: int -> IDistributedLock)
                     EventStore = eventStore
                     HttpClient = httpClient
                     RetryPolicy = retryPolicy
-                    Logger = silentLogger
+                    Logger = Logger.silent
                     ActivitySink = (NoOpActivitySink() :> IActivitySink)
                     SecretStore = secretStore
                     GetRateLimiter = (fun () -> permissiveRateLimiter)
@@ -445,9 +410,9 @@ let tests =
                         EventStore = eventStore
                         HttpClient = succeedingClient
                         RetryPolicy = retryPolicy
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink = (NoOpActivitySink() :> IActivitySink)
-                        SecretStore = (InMemorySecretStore() :> ISecretStore)
+                        SecretStore = (Fakes.TestSecretStore() :> ISecretStore)
                         GetRateLimiter = (fun () -> permissiveRateLimiter)
                         UrlPolicy = allowlistedPolicy
                     }

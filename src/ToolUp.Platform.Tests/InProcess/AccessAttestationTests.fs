@@ -34,7 +34,6 @@ module ToolUp.Platform.Tests.InProcess.AccessAttestationTests
 // holder actually runs.
 
 open System
-open System.Collections.Concurrent
 open System.Text
 open Expecto
 open ToolUp.Platform
@@ -47,39 +46,9 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Fixtures: the deployment key ────────────────────────────────────
-
-/// Minimal in-memory `ISecretStore` — the envelope signer provisions the
-/// deployment key into it on first use, and the public key is read back
-/// out of the same store through the Phase 40 signer.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 let private keyId = "deploy-v1"
 
@@ -87,7 +56,7 @@ let private keyId = "deploy-v1"
 /// fetch from `/_platform/signing-key/{keyId}`. Ed25519 so a signature is
 /// deterministic and the whole-envelope determinism claim is testable.
 let private deploymentKey () =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let audit = NoOpAuditLog() :> IAuditLog
     let byteSigner = DefaultArtefactSigner.createSystem secrets audit keyId Ed25519
     let publicKey = byteSigner.VerifyKey() |> Async.RunSynchronously

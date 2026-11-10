@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.ModelEvaluationTests
 
 open System
-open System.IO
 open System.Text
 open System.Security.Cryptography
 open System.Text.Json
@@ -18,6 +17,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 456 — model evaluation & champion-challenger harness ─────────
 //
@@ -45,50 +45,27 @@ open ToolUp.Platform.Compose
 
 let private t0 = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(_: string) = ()
-        member _.Error(_: string, _: exn option) = ()
-    }
-
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
 /// The full default modelling stack over one fresh temp dir: blob-backed
 /// datasets + data objects, the blob model registry, the reference fit +
-/// score providers, the Phase 454 scorer, and the Phase 456 runner.
+/// score providers, the Phase 454 scorer, and the Phase 456 runner. The
+/// stack has no teardown, so its directory is not disposed.
 type private Stack = {
     Datasets: IDatasetStore
     DataObjects: IDataObjectStore
     Registry: IModelRegistry
     Runner: IModelEvaluationRunner
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
 }
 
 /// The stack over `fitProvider`, its evaluation runner reading and writing
 /// through `runnerStore` applied to the stack's data-object store (so a test
 /// can count the runner's reads alone).
 let private stackOver (runnerStore: IDataObjectStore -> IDataObjectStore) (fitProvider: IModelFitProvider) : Stack =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-eval-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "eval-test"
+    let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     let datasets = BlobDatasetStore.create dataObjects
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let registry = BlobModelRegistry.create dataObjects audit
 
     let fitProviders = ModelFitProviderRegistry [ fitProvider ]
@@ -228,16 +205,16 @@ let private fitAndRegister (stack: Stack) (scope: string) (seed: int64) (vintage
     | Error e -> return failwithf "register failed: %s" (ModelRegistryError.describe e)
 }
 
-let private evaluatedRows (audit: RecordingAuditLog) =
+let private evaluatedRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelEvaluated p -> Some p
         | _ -> None)
 
-let private deniedRows (audit: RecordingAuditLog) =
+let private deniedRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelArtifactTransitionDenied p -> Some p
         | _ -> None)
@@ -570,14 +547,11 @@ type private ResolvingStack = {
 }
 
 let private freshResolvingStack () : ResolvingStack =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-eval-resolve-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "eval-resolve"
+    let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     let datasets = BlobDatasetStore.create dataObjects
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let registry = BlobModelRegistry.create dataObjects audit
     let provider = ResolvingProvider(dataObjects)
 
@@ -1252,7 +1226,7 @@ let tests =
             let! _ = seedVintage stack.Datasets "team-1" "holdout" 0.0
 
             let sweep =
-                VintageReevaluationJobHandler.create stack.Runner stack.Datasets silentLogger
+                VintageReevaluationJobHandler.create stack.Runner stack.Datasets Logger.silent
 
             let payload =
                 JobPayload.serialise<ReevaluationSweepRequest> {
@@ -1289,7 +1263,7 @@ let tests =
             | Error e -> failtestf "idempotent re-registration failed: %s" (EvaluationError.describe e)
 
             let sweep =
-                VintageReevaluationJobHandler.create stack.Runner stack.Datasets silentLogger
+                VintageReevaluationJobHandler.create stack.Runner stack.Datasets Logger.silent
 
             let payload =
                 JobPayload.serialise<ReevaluationSweepRequest> {
@@ -1342,7 +1316,7 @@ let tests =
             let! holdout = seedVintage stack.Datasets "team-1" "holdout" 0.0
             let! artifact = fitAndRegister stack "team-1" 1L holdout
 
-            let handler = ModelEvaluationJobHandler.create stack.Runner silentLogger
+            let handler = ModelEvaluationJobHandler.create stack.Runner Logger.silent
 
             let goodPayload =
                 JobPayload.serialise<EvaluationRequest> {

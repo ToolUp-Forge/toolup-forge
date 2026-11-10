@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.FederatedIdentitySanitisationTests
 
 open System
-open System.Collections.Concurrent
 open System.Text
 open Expecto
 open ToolUp.InterPlatform
@@ -13,6 +12,7 @@ open ToolUp.AuthProviders
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config.Auth
+open ToolUp.Platform.Testing
 
 // ─── Phase 334 — federated-identity sanitisation PARITY ──────────────
 //
@@ -193,34 +193,6 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
 
 // ─── Boundary 2 — the peer `iss` claim ───────────────────────────────
 
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 let private signingKey = "federated-identity-parity-shared-signing-key-0123456789"
 
 let private receiverId: PeerIdentity = {
@@ -234,14 +206,12 @@ let private receiverId: PeerIdentity = {
 /// otherwise perform resolves, so the only thing that can refuse the
 /// token is the shape check on `iss`.
 let private secretsFor (peerIds: string seq) =
-    let store = InMemorySecretStore() :> ISecretStore
+    let store = Fakes.TestSecretStore()
 
     for id in peerIds do
-        store.SetSecret("_platform", $"peers/{id}/signing-key", signingKey)
-        |> Async.RunSynchronously
-        |> ignore
+        store.Seed("_platform", $"peers/{id}/signing-key", signingKey)
 
-    store
+    store :> ISecretStore
 
 /// Mint through the provider's own issue path (which Phase 334 leaves
 /// unguarded by design — the caller id comes from local composition, not

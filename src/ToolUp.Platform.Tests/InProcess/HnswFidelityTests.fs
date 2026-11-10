@@ -15,6 +15,7 @@ open ToolUp.Platform.Tests.Support
 open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── HNSW recall-fidelity + latency smoke ────────────────────────
 //
@@ -39,29 +40,21 @@ open ToolUp.Platform.Compose
 // lean dep surface — and flat-scan cosine *is* the exact NN that
 // InMemoryVectorStore would compute anyway).
 
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-
+/// The store and one disposable that releases the store, then deletes
+/// its directory.
 let private newStoreWith (parameters: HnswVectorStore.HnswParameters) =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-hnsw-fidelity-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "hnsw-fidelity"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new HnswVectorStore.HnswVectorStore(
-            storage,
-            SilentLogger() :> ILogger,
-            flushIntervalMs = 50,
-            parameters = parameters
-        )
+        new HnswVectorStore.HnswVectorStore(storage, Logger.silent, flushIntervalMs = 50, parameters = parameters)
 
-    store :> IVectorStore, store :> IDisposable
+    store :> IVectorStore,
+    { new IDisposable with
+        member _.Dispose() =
+            (store :> IDisposable).Dispose()
+            (tempDir :> IDisposable).Dispose()
+    }
 
 let private newStore () =
     newStoreWith HnswVectorStore.HnswParameters.defaults

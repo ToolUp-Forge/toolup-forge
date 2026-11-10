@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.RAG.QueryRewriteContract
 
 open System
-open System.IO
 open System.Threading
 open Expecto
 open ToolUp.Platform
@@ -18,6 +17,7 @@ open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 506 — conversation-aware retrieval / query rewrite ────────
 //
@@ -74,13 +74,6 @@ type private BowEmbedder() =
         member _.Dimensions = dim
         member _.ProviderId = "test"
         member _.ModelId = "bow-v1"
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 // ── Test rewriters ──
 
@@ -202,18 +195,11 @@ let private access =
 /// (and optional timeout override), seeded through `IRetrievalPipeline.Index`
 /// — the production ingestion path.
 let private bindPipeline (rewriter: IQueryRewriter option) (timeoutMs: int option) : Bound =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-query-rewrite-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "query-rewrite"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
-            storage,
-            logger = SilentLogger(),
-            flushIntervalMs = 60000
-        )
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
     let tracer = CapturingTracer()
 
@@ -245,11 +231,7 @@ let private bindPipeline (rewriter: IQueryRewriter option) (timeoutMs: int optio
         Dispose =
             fun () ->
                 (store :> IDisposable).Dispose()
-
-                try
-                    Directory.Delete(tempDir, true)
-                with _ ->
-                    ()
+                (tempDir :> IDisposable).Dispose()
     }
 
 /// Retrieve and return the winning chunk id (the pipeline is asked for

@@ -4,12 +4,12 @@
 module ToolUp.Platform.Tests.InProcess.VirtualDatasetTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // --- Phase 487 -- virtual (zero-copy) dataset bindings ------------------
 //
@@ -93,25 +93,8 @@ let private okv =
     | Ok v -> v
     | Error(e: DatasetError) -> failtestf "expected Ok; got %s" (DatasetError.describe e)
 
-/// Records every audit call so a test can assert on the spill lifecycle rows.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
-let private freshDataObjects () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-virtual-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private freshDataObjects (dir: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     DataObjectStore(blob) :> IDataObjectStore
 
 let private reader (frames: Map<string, DatasetSchema * DatasetRow list>) =
@@ -205,8 +188,9 @@ let tests =
         testCaseAsync "compute-handoff spill is created, referenceable, TTL-deleted, and both steps audited"
         <| async {
             let r = reader (Map [ binding.QuerySpec, (schema, sixRows) ])
-            let dataObjects = freshDataObjects ()
-            let audit = RecordingAuditLog()
+            use dir = TempDir.create "virtual-test"
+            let dataObjects = freshDataObjects dir
+            let audit = TestAuditLog()
 
             let labels = [ DataProvenanceLabel.Classified "restricted" ]
 
@@ -243,14 +227,14 @@ let tests =
 
             let created =
                 audit.Events
-                |> List.choose (fun (_, e) ->
+                |> List.choose (fun e ->
                     match e with
                     | DatasetSpillCreated p -> Some p
                     | _ -> None)
 
             let deleted =
                 audit.Events
-                |> List.choose (fun (_, e) ->
+                |> List.choose (fun e ->
                     match e with
                     | DatasetSpillDeleted p -> Some p
                     | _ -> None)

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.Contracts.ITenantLifecycleContract
 
 open System
-open System.IO
 open Expecto
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
@@ -14,6 +13,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 54 — ITenantLifecycle contract pack ───────────────────────
 //
@@ -73,13 +73,6 @@ let private lifecycleScope (scopeId: string) : StorageScope = {
     Persist = true
 }
 
-let private newTempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-54g-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
-
 let private newConfigStore () : IConfigStore =
     ConfigStore.create (InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage)
 
@@ -90,9 +83,9 @@ let private newTeamStore () : ITeamStore =
     )
     :> ITeamStore
 
-let private newKeyResolver () : PerScopeKeyResolver.PerScopeKeyResolver =
+let private newKeyResolver (dir: TempDir) : PerScopeKeyResolver.PerScopeKeyResolver =
     PerScopeKeyResolver.create
-        (FileSecretStore.FileSecretStore(baseDir = newTempDir ()) :> ISecretStore)
+        (FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore)
         (new MemoryCache(MemoryCacheOptions()) :> IMemoryCache)
         (NoOpAuditLog())
 
@@ -433,7 +426,8 @@ let tests =
 
         testCaseAsync "EncryptionKeyProvisionLifecycle pre-creates the per-scope key on provision"
         <| async {
-            let resolver = newKeyResolver ()
+            use dir = TempDir.create "54g-test"
+            let resolver = newKeyResolver dir
             let provider = providerOf [ typeof<IBlobEncryptionKeyResolver>, box resolver ]
             let hook = EncryptionKeyProvisionLifecycle.create provider
 
@@ -448,7 +442,8 @@ let tests =
 
         testCaseAsync "EncryptionKeyProvisionLifecycle is idempotent — re-provision keeps the same key"
         <| async {
-            let resolver = newKeyResolver ()
+            use dir = TempDir.create "54g-test"
+            let resolver = newKeyResolver dir
             let provider = providerOf [ typeof<IBlobEncryptionKeyResolver>, box resolver ]
             let hook = EncryptionKeyProvisionLifecycle.create provider
 
@@ -466,8 +461,10 @@ let tests =
 
         testCaseAsync "EncryptionKeyProvisionLifecycle skips under a non-PerScope resolver"
         <| async {
+            use dir = TempDir.create "54g-test"
+
             let single =
-                SingleKeyResolver.create (FileSecretStore.FileSecretStore(baseDir = newTempDir ()) :> ISecretStore)
+                SingleKeyResolver.create (FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore)
 
             let provider = providerOf [ typeof<IBlobEncryptionKeyResolver>, box single ]
             let hook = EncryptionKeyProvisionLifecycle.create provider
@@ -481,7 +478,8 @@ let tests =
         // crypto-shreds. Provision → key resolves; offboard → KeyDestroyed.
         testCaseAsync "provision mints the per-scope key and offboard crypto-shreds it (symmetry)"
         <| async {
-            let resolver = newKeyResolver ()
+            use dir = TempDir.create "54g-test"
+            let resolver = newKeyResolver dir
             let provider = providerOf [ typeof<IBlobEncryptionKeyResolver>, box resolver ]
             let provisionHook = EncryptionKeyProvisionLifecycle.create provider
             let offboardHook = EncryptionKeyLifecycle.create provider

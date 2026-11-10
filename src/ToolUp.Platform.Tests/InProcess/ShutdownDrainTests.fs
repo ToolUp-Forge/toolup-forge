@@ -39,14 +39,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
-
-let private quietLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
+open ToolUp.Platform.Testing
 
 /// Poll `condition` every 20 ms for up to `timeoutMs`. The timeout is the
 /// failure path, never the schedule: a green run returns as soon as it holds.
@@ -177,13 +170,13 @@ let private retrievalStores =
             // The restart: fresh stores over the same storage, which hydrate
             // from what the stopped process persisted.
             use vectors =
-                new InMemoryVectorStore(storage, logger = quietLogger, flushIntervalMs = 60000)
+                new InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
             let! stored = (vectors :> IVectorStore).ListChunks Deployment false
             Expect.equal (stored |> List.map fst) [ "c1" ] "the vector store's acknowledged write survived the stop"
 
             use keywords =
-                new InMemoryBM25Index(storage, logger = quietLogger, flushIntervalMs = 60000)
+                new InMemoryBM25Index(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
             let! hits = (keywords :> ISparseIndex).Search [ Deployment ] "revenue" 5
 
@@ -255,7 +248,7 @@ let private ingestionService (q: IngestionQueue) (pipeline: IRetrievalPipeline) 
         (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
         []
         1
-        quietLogger
+        Logger.silent
         (ToolUp.RAG.RagTelemetry.createNoOp ())
         (ToolUp.Platform.Infra.Usage.NoOpUsageLog())
         (ToolUp.Platform.Infra.Usage.NoOpTeamQuotaPolicy())
@@ -432,7 +425,7 @@ let private scheduler () =
             EventStore = eventStore
             NotificationChannel = silentChannel
             Config = ServerConfig.defaults
-            Logger = quietLogger
+            Logger = Logger.silent
             ActivitySink = (NoOpActivitySink())
         }
         : JobScheduler.SchedulerDeps)
@@ -505,38 +498,46 @@ let private jobScheduler =
 
 // ─── Background.start ────────────────────────────────────────────────
 
-type private CapturingLogger() =
-    let lines = Collections.Concurrent.ConcurrentQueue<string * string>()
-
-    member _.Lines = List.ofSeq lines
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn m = lines.Enqueue("warn", m)
-
-        member _.Error(m, ex) =
-            lines.Enqueue("error", m + (ex |> Option.map (fun e -> " | " + e.Message) |> Option.defaultValue ""))
+/// The warn and error lines a logger was given, tagged by severity; an
+/// error line carries its exception's message.
+let private warnAndErrorLines (logger: TestLogger) =
+    logger.Lines
+    |> List.choose (fun line ->
+        match line.Severity with
+        | LogSeverity.Warn -> Some("warn", line.Message)
+        | LogSeverity.Error ->
+            Some(
+                "error",
+                line.Message
+                + (line.Exception
+                   |> Option.map (fun e -> " | " + e.Message)
+                   |> Option.defaultValue "")
+            )
+        | _ -> None)
 
 let private background =
     testList "Background.start" [
         testCaseAsync "a throw is caught and logged under the label, never left to take the process down"
         <| async {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let drain = Background.DrainSet()
 
             Background.start drain logger "[Probe] event=work_failed" (async { failwith "boom" })
 
             let! drained = drain.WaitAsync(CancellationToken.None) |> Async.AwaitTask
             Expect.isTrue drained "the work ended"
-            Expect.equal logger.Lines [ "error", "[Probe] event=work_failed | boom" ] "logged once, with the label"
+
+            Expect.equal
+                (warnAndErrorLines logger)
+                [ "error", "[Probe] event=work_failed | boom" ]
+                "logged once, with the label"
         }
 
         testCaseAsync "the drain set waits for running work, and reports a window that closed first"
         <| async {
             let drain = Background.DrainSet()
             let release = TaskCompletionSource()
-            Background.start drain quietLogger "[Probe]" (Async.AwaitTask release.Task)
+            Background.start drain Logger.silent "[Probe]" (Async.AwaitTask release.Task)
 
             Expect.equal drain.Count 1 "the work is tracked"
 
@@ -552,7 +553,7 @@ let private background =
 
         testCaseAsync "cancellation reaches the work through its async context, and nothing new starts after it"
         <| async {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let drain = Background.DrainSet()
             let started = TaskCompletionSource()
             let observed = TaskCompletionSource()
@@ -578,7 +579,11 @@ let private background =
             Background.start drain logger "[Late]" (async { ran <- true })
             do! Async.Sleep 100
             Expect.isFalse ran "work offered to a cancelled set is not started"
-            Expect.exists logger.Lines (fun (_, m) -> m.StartsWith "[Late]" && m.Contains "not started") "and says so"
+
+            Expect.exists
+                (warnAndErrorLines logger)
+                (fun (_, m) -> m.StartsWith "[Late]" && m.Contains "not started")
+                "and says so"
         }
     ]
 

@@ -11,6 +11,7 @@ open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 491 — the governed outbound signal feed ───────────────────
 //
@@ -170,37 +171,8 @@ type private DecisionSink() =
 // would let the revocation cases pass against a feed that checked
 // nothing.
 
-type private InMemorySecretStore() =
-    let store =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 let private secretsFor (peerIds: string list) : ISecretStore =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
 
     for peerId in peerIds do
         use ec = ECDsa.Create(ECCurve.NamedCurves.nistP256)

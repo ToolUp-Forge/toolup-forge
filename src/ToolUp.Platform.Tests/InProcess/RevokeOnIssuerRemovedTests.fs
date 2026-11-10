@@ -1,9 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.RevokeOnIssuerRemovedTests
 
 open System
-open System.Collections.Concurrent
 open System.Diagnostics
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -14,6 +12,7 @@ open ToolUp.Platform.Tests.InProcess.ShareTokenStoreTests
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── RevokeOnIssuerRemoved — Phase 66 C.5 integration tests (D.8) ────
 //
@@ -30,36 +29,14 @@ open ToolUp.Platform.Compose
 // fire-and-forget, so assertions poll with a short timeout rather than
 // reading sequentially.
 
-/// Recording `IAuditLog` capturing every `(scopeId, event)` pair.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
-    member _.Events = recorded |> Seq.toList
-
-    member _.ShareTokenRevocations =
-        recorded
-        |> Seq.choose (fun (scope, evt) ->
-            match evt with
-            | AuditEvent.ShareTokenRevoked p -> Some(scope, p)
-            | _ -> None)
-        |> Seq.toList
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Enqueue(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, _eventType) = async {
-            return recorded |> Seq.filter (fun (s, _) -> s = scopeId) |> Seq.map snd |> List.ofSeq
-        }
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
+/// Every `ShareTokenRevoked` row recorded so far, with the scope it was
+/// written under.
+let private shareTokenRevocations (audit: TestAuditLog) =
+    audit.Records
+    |> List.choose (fun r ->
+        match r.Event with
+        | AuditEvent.ShareTokenRevoked p -> Some(r.StreamKey, p)
+        | _ -> None)
 
 let private mkIssue scopeId resourceId issuedBy : ShareTokenIssueRequest = {
     ScopeId = scopeId
@@ -103,20 +80,16 @@ let private deliveryTimeout = TimeSpan.FromSeconds 15.0
 /// Fresh `(decorator, inner, channel, audit, teamId)` per test so
 /// concurrent runs over the same temp-dir root cannot interfere
 /// (team ids are GUID-suffixed).
-let private setup () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-revoke-issuer-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
-    let secrets = InMemorySecretStore() :> ISecretStore
-    let audit = RecordingAuditLog()
+let private setup (root: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
+    let audit = TestAuditLog()
 
     let inner =
-        ShareTokenStore.create storage secrets ((audit :> IAuditLog)) silentLogger
+        ShareTokenStore.create storage secrets ((audit :> IAuditLog)) Logger.silent
 
     let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-    let decorator = new RevokeOnIssuerRemovedStore(inner, channel, silentLogger)
+    let decorator = new RevokeOnIssuerRemovedStore(inner, channel, Logger.silent)
     let teamId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
     decorator, inner, channel, audit, teamId
 
@@ -136,7 +109,8 @@ let tests =
 
         testCaseAsync "MembershipChanged.Removed revokes the leaver's claims and leaves others intact"
         <| async {
-            let decorator, inner, channel, audit, teamId = setup ()
+            use root = TempDir.create "revoke-issuer-tests"
+            let decorator, inner, channel, audit, teamId = setup root
             use _ = decorator
 
             let! _ = inner.Issue(mkIssue teamId "form-1" "alice")
@@ -160,7 +134,8 @@ let tests =
 
         testCaseAsync "Revocation emits ShareTokenRevoked audit attributed to the system actor"
         <| async {
-            let decorator, inner, channel, audit, teamId = setup ()
+            use root = TempDir.create "revoke-issuer-tests"
+            let decorator, inner, channel, audit, teamId = setup root
             use _ = decorator
 
             let! _ = inner.Issue(mkIssue teamId "form-a" "carol")
@@ -168,11 +143,12 @@ let tests =
 
             do! publishRemoved channel (TeamId teamId) (UserId "carol")
 
-            let! audited = pollUntil deliveryTimeout (fun () -> async { return audit.ShareTokenRevocations.Length = 2 })
+            let! audited =
+                pollUntil deliveryTimeout (fun () -> async { return (shareTokenRevocations audit).Length = 2 })
 
             Expect.isTrue audited "two ShareTokenRevoked audit events recorded"
 
-            let revocations = audit.ShareTokenRevocations
+            let revocations = shareTokenRevocations audit
 
             Expect.all
                 revocations
@@ -185,7 +161,8 @@ let tests =
 
         testCaseAsync "Re-delivery of the same Removed event is idempotent — no double revocation, no extra audit"
         <| async {
-            let decorator, inner, channel, audit, teamId = setup ()
+            use root = TempDir.create "revoke-issuer-tests"
+            let decorator, inner, channel, audit, teamId = setup root
             use _ = decorator
 
             let! _ = inner.Issue(mkIssue teamId "form-x" "dave")
@@ -193,7 +170,7 @@ let tests =
             do! publishRemoved channel (TeamId teamId) (UserId "dave")
 
             let! firstPass =
-                pollUntil deliveryTimeout (fun () -> async { return audit.ShareTokenRevocations.Length = 1 })
+                pollUntil deliveryTimeout (fun () -> async { return (shareTokenRevocations audit).Length = 1 })
 
             Expect.isTrue firstPass "first delivery revoked + audited once"
 
@@ -203,7 +180,7 @@ let tests =
             do! publishRemoved channel (TeamId teamId) (UserId "dave")
             do! Async.Sleep 300
 
-            Expect.equal audit.ShareTokenRevocations.Length 1 "no second audit event on redelivery"
+            Expect.equal (shareTokenRevocations audit).Length 1 "no second audit event on redelivery"
 
             let! claims = inner.ListByIssuer(teamId, UserId "dave")
             Expect.equal claims.Length 1 "still exactly one claim"
@@ -212,7 +189,8 @@ let tests =
 
         testCaseAsync "Non-Removed membership changes are ignored"
         <| async {
-            let decorator, inner, channel, audit, teamId = setup ()
+            use root = TempDir.create "revoke-issuer-tests"
+            let decorator, inner, channel, audit, teamId = setup root
             use _ = decorator
 
             let! _ = inner.Issue(mkIssue teamId "form-add" "erin")
@@ -240,12 +218,13 @@ let tests =
             let! claims = inner.ListByIssuer(teamId, UserId "erin")
             Expect.equal claims.Length 1 "claim still present"
             Expect.isFalse (claims |> List.exists _.Revoked) "no revocation from non-Removed events"
-            Expect.equal audit.ShareTokenRevocations.Length 0 "no audit events from non-Removed events"
+            Expect.equal (shareTokenRevocations audit).Length 0 "no audit events from non-Removed events"
         }
 
         testCaseAsync "Dispose unsubscribes — events after teardown do not revoke"
         <| async {
-            let decorator, inner, channel, audit, teamId = setup ()
+            use root = TempDir.create "revoke-issuer-tests"
+            let decorator, inner, channel, audit, teamId = setup root
 
             let! _ = inner.Issue(mkIssue teamId "form-dispose" "frank")
 
@@ -256,6 +235,6 @@ let tests =
 
             let! claims = inner.ListByIssuer(teamId, UserId "frank")
             Expect.isFalse (claims |> List.exists _.Revoked) "no revocation after Dispose unsubscribed the handler"
-            Expect.equal audit.ShareTokenRevocations.Length 0 "no audit events after Dispose"
+            Expect.equal (shareTokenRevocations audit).Length 0 "no audit events after Dispose"
         }
     ]

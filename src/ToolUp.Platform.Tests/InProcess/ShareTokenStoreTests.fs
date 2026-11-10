@@ -1,8 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.ShareTokenStoreTests
 
 open System
-open System.Collections.Concurrent
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -10,64 +8,25 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── BlobShareTokenStore — IShareTokenStore contract binding ─────────
 //
 // Binds the `IShareTokenStore` contract pack to the Phase 21b default
 // blob-backed impl over `LocalFileStorage` rooted in a fresh temp
 // directory per factory call. The signing key is auto-generated and
-// persisted into an `InMemorySecretStore` defined locally — no
-// dependency on `FileSecretStore` to keep the test setup minimal.
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
-/// Trivial in-memory `ISecretStore` for the share-token signing key.
-/// Production deployments use `FileSecretStore` / `EncryptedSecretStore`
-/// / cloud-vault companions.
-type InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
+// persisted into the shipped `Fakes.TestSecretStore` — no dependency on
+// `FileSecretStore` to keep the test setup minimal. The
+// contract's factory has no teardown hook, so each directory outlives its
+// case; the family name attributes it in the census.
 
 let tests =
     let factory () =
-        let root =
-            Path.Combine(Path.GetTempPath(), "toolup-sharetoken-tests-" + Guid.NewGuid().ToString("N"))
+        let root = TempDir.create "sharetoken-tests"
+        let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
+        let secrets = Fakes.TestSecretStore() :> ISecretStore
 
-        Directory.CreateDirectory(root) |> ignore
-        let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
-        let secrets = InMemorySecretStore() :> ISecretStore
-
-        let store = ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
+        let store = ShareTokenStore.create storage secrets (NoOpAuditLog()) Logger.silent
 
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         store, "team-a-" + suffix, "team-b-" + suffix
@@ -130,17 +89,13 @@ let private readFailureMessage = "simulated transient read failure"
 /// A fresh `LocalFileStorage` + secret store, shared between the
 /// issuing store and the faulted one so both resolve the same signing
 /// key and a token issued by the first validates against the second.
-let private harness () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-sharetoken-readfail-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let backing = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
-    let secrets = InMemorySecretStore() :> ISecretStore
+let private harness (root: TempDir) =
+    let backing = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     backing, secrets
 
 let private storeOver (storage: IBlobStorage) (secrets: ISecretStore) =
-    ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
+    ShareTokenStore.create storage secrets (NoOpAuditLog()) Logger.silent
 
 let private request scopeId : ShareTokenIssueRequest = {
     ScopeId = scopeId
@@ -159,8 +114,8 @@ let private claimBlob (claim: ShareTokenClaim) =
 /// Issue a token against the unfaulted store, then hand back a store
 /// whose reads of that token's claim blob fail while `Exists` still
 /// answers truthfully.
-let private issueThenFaultRead scopeId = async {
-    let backing, secrets = harness ()
+let private issueThenFaultRead (root: TempDir) scopeId = async {
+    let backing, secrets = harness root
     let issuing = storeOver backing secrets
     let! issued = issuing.Issue(request scopeId)
 
@@ -182,7 +137,8 @@ let readPathTests =
 
         testCaseAsync "Validate reports StorageFailed, not NotFound, when the claim blob is present but unreadable"
         <| async {
-            let! token, store = issueThenFaultRead "team-validate-fail"
+            use root = TempDir.create "sharetoken-readfail"
+            let! token, store = issueThenFaultRead root "team-validate-fail"
             let! result = store.Validate token.Token
 
             match result with
@@ -193,7 +149,8 @@ let readPathTests =
 
         testCaseAsync "MarkUsed reports StorageFailed, not NotFound, on an unreadable claim blob"
         <| async {
-            let! token, store = issueThenFaultRead "team-markused-fail"
+            use root = TempDir.create "sharetoken-readfail"
+            let! token, store = issueThenFaultRead root "team-markused-fail"
             let! result = store.MarkUsed(token.Claim.ScopeId, token.Claim.TokenId)
 
             match result with
@@ -204,7 +161,8 @@ let readPathTests =
 
         testCaseAsync "Revoke reports StorageFailed, not NotFound, on an unreadable claim blob"
         <| async {
-            let! token, store = issueThenFaultRead "team-revoke-fail"
+            use root = TempDir.create "sharetoken-readfail"
+            let! token, store = issueThenFaultRead root "team-revoke-fail"
             let! result = store.Revoke(token.Claim.ScopeId, token.Claim.TokenId, UserId "alice")
 
             match result with
@@ -218,7 +176,8 @@ let readPathTests =
         // would be a different defect in the mirror position.
         testCaseAsync "a genuinely absent claim blob is still NotFound"
         <| async {
-            let backing, secrets = harness ()
+            use root = TempDir.create "sharetoken-readfail"
+            let backing, secrets = harness root
             let store = storeOver backing secrets
             let! issued = store.Issue(request "team-absent")
 

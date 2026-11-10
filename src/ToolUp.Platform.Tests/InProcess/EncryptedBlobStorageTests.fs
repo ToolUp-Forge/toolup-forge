@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.EncryptedBlobStorageTests
 
 open System
-open System.IO
 open System.Text
 open Expecto
 open Microsoft.Extensions.Caching.Memory
@@ -14,6 +13,7 @@ open ToolUp.Platform.Secrets
 open DataManagementTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 // ─── Phase 22 EncryptedBlobStorage tests ────────────────────────────
 //
@@ -24,18 +24,13 @@ open ToolUp.Platform.Config
 // `ISecretStore`. Mirrors the testing pattern in `LocalFileStorageTests.fs`
 // and `FileSecretStoreTests.fs`.
 
-let private newTempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-enc-test-" + Guid.NewGuid().ToString("N"))
+let private newTempDir () = TempDir.create "enc-test"
 
-    Directory.CreateDirectory dir |> ignore
-    dir
+let private newSecretStore (dir: TempDir) : ISecretStore =
+    FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
-let private newSecretStore () : ISecretStore =
-    FileSecretStore.FileSecretStore(baseDir = newTempDir ()) :> ISecretStore
-
-let private newInnerStorage () : IBlobStorage =
-    LocalFileStorage.LocalFileStorage(newTempDir ()) :> IBlobStorage
+let private newInnerStorage (dir: TempDir) : IBlobStorage =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 let private newCache () : IMemoryCache =
     new MemoryCache(MemoryCacheOptions()) :> IMemoryCache
@@ -98,9 +93,14 @@ let private keyMaterialTests =
     testList "Phase 1060 — key material is unchanged for every container" [
         testCaseAsync "the scope handed to the key resolver is the pre-1060 scope, byte for byte"
         <| async {
-            let resolver = RecordingKeyResolver(SingleKeyResolver.create (newSecretStore ()))
+            use secretsDir = newTempDir ()
+            use innerDir = newTempDir ()
 
-            let storage = EncryptedBlobStorage(newInnerStorage (), resolver) :> IBlobStorage
+            let resolver =
+                RecordingKeyResolver(SingleKeyResolver.create (newSecretStore secretsDir))
+
+            let storage =
+                EncryptedBlobStorage(newInnerStorage innerDir, resolver) :> IBlobStorage
 
             for container in keyMaterialContainers do
                 let! _ = storage.Upload(container, "doc.bin", samplePayload)
@@ -123,8 +123,10 @@ let tests =
 
         testCaseAsync "SingleKeyResolver round-trip preserves bytes"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             let resolver = SingleKeyResolver.create secrets
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
@@ -143,8 +145,10 @@ let tests =
             // Whole-blob AES-GCM: a mid-blob ciphertext range is
             // undecryptable, so the decorator must refuse rather than
             // silently materialise + decrypt the whole blob.
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             let resolver = SingleKeyResolver.create secrets
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
@@ -168,8 +172,10 @@ let tests =
             // composed target would `Download` as an unparseable
             // envelope, i.e. a corrupt object rather than a loud
             // failure.
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             let resolver = SingleKeyResolver.create secrets
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
@@ -200,8 +206,10 @@ let tests =
 
         testCaseAsync "SingleKeyResolver — inner storage holds ciphertext (not plaintext)"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             let resolver = SingleKeyResolver.create secrets
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
@@ -226,8 +234,10 @@ let tests =
 
         testCaseAsync "PerScopeKeyResolver round-trip preserves bytes"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cache = newCache ()
             let resolver = PerScopeKeyResolver.create secrets cache (NoOpAuditLog())
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
@@ -244,8 +254,10 @@ let tests =
 
         testCaseAsync "PerScopeKeyResolver — different scopes get different keys"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cache = newCache ()
             let resolver = PerScopeKeyResolver.create secrets cache (NoOpAuditLog())
 
@@ -276,8 +288,10 @@ let tests =
 
         testCaseAsync "PerScopeKeyResolver — DestroyKey makes blob undecryptable"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cache = newCache ()
             let resolver = PerScopeKeyResolver.create secrets cache (NoOpAuditLog())
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
@@ -298,8 +312,10 @@ let tests =
 
         testCaseAsync "PerScopeKeyResolver — keys persist across resolver restarts"
         <| async {
-            let secrets = newSecretStore ()
-            let inner = newInnerStorage ()
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
 
             // First resolver instance encrypts.
             let resolver1 = PerScopeKeyResolver.create secrets (newCache ()) (NoOpAuditLog())
@@ -319,8 +335,10 @@ let tests =
 
         testCaseAsync "Pass-through ops — Exists / GetMetadata / List / Delete bypass crypto"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             let resolver = SingleKeyResolver.create secrets
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
@@ -351,8 +369,10 @@ let tests =
 
         testCaseAsync "Envelope decryption fails when ciphertext is tampered"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             let resolver = SingleKeyResolver.create secrets
             let storage = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
 
@@ -398,8 +418,10 @@ let tests =
         // only this confirming test, per the migration doc.
         testCaseAsync "Phase 30d — synthetic sample persisted via IDataObjectStore.Save is encrypted at rest"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             let resolver = SingleKeyResolver.create secrets
             let encrypted = EncryptedBlobStorage(inner, resolver) :> IBlobStorage
             let store = DataObjectStore.DataObjectStore(encrypted) :> IDataObjectStore

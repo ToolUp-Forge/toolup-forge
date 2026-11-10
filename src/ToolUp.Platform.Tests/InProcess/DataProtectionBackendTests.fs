@@ -11,6 +11,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 329 — fail-loud DataProtection key-ring backend ───────────
 //
@@ -26,20 +27,16 @@ open ToolUp.Platform.Compose
 //      read is distinguishable from a genuinely-empty first-boot ring
 //      (which stays silent — GP 11).
 
-/// Captures `Warn` and `Error` lines so the tests can assert on the
-/// read-failure diagnostic (and its absence on the healthy / first-boot
-/// paths) and on the write-failure diagnostic.
-type private CapturingLogger() =
-    let warns = System.Collections.Generic.List<string>()
-    let errors = System.Collections.Generic.List<string * exn option>()
-    member _.Warns = List.ofSeq warns
-    member _.Errors = List.ofSeq errors
+/// The `Warn` lines a recording logger saw — the read-failure diagnostic
+/// (and its absence on the healthy / first-boot paths).
+let private warns (log: TestLogger) = log.MessagesAt LogSeverity.Warn
 
-    interface ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(m: string) = warns.Add m
-        member _.Error(m: string, ex: exn option) = errors.Add((m, ex))
+/// The `Error` lines a recording logger saw, with their exceptions — the
+/// write-failure diagnostic.
+let private errors (log: TestLogger) =
+    log.Lines
+    |> List.filter (fun line -> line.Severity = LogSeverity.Error)
+    |> List.map (fun line -> line.Message, line.Exception)
 
 /// An unreachable backend — every operation raises, the way a
 /// misconfigured container / dead endpoint surfaces through a real
@@ -108,7 +105,7 @@ let private validate (storage: #IBlobStorage) : ValidationResult =
 
     v.Validate() |> Async.RunSynchronously
 
-let private repository (storage: #IBlobStorage) (logger: CapturingLogger) =
+let private repository (storage: #IBlobStorage) (logger: TestLogger) =
     BlobXmlRepository(storage, logger :> ILogger) :> Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository
 
 [<Tests>]
@@ -187,43 +184,47 @@ let tests =
         // ── BlobXmlRepository Warn on read failure ──
 
         test "key-ring List failure → empty ring + a Warn naming container and prefix" {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let repo = repository (UnreachableBlobStorage()) logger
 
             let elements = repo.GetAllElements()
 
             Expect.equal elements.Count 0 "an unreadable backend degrades to an empty ring (behaviour unchanged)"
-            Expect.hasLength logger.Warns 1 "exactly one Warn for the List failure"
-            Expect.stringContains logger.Warns[0] BlobDpKeyRing.Container "the Warn names the container"
-            Expect.stringContains logger.Warns[0] BlobDpKeyRing.Prefix "the Warn names the key-ring prefix"
+            Expect.hasLength (warns logger) 1 "exactly one Warn for the List failure"
+            Expect.stringContains (List.item 0 (warns logger)) BlobDpKeyRing.Container "the Warn names the container"
+            Expect.stringContains (List.item 0 (warns logger)) BlobDpKeyRing.Prefix "the Warn names the key-ring prefix"
 
             Expect.stringContains
-                logger.Warns[0]
+                (List.item 0 (warns logger))
                 "connection refused (simulated backend outage)"
                 "the Warn carries the underlying error"
         }
 
         test "genuinely-empty first-boot ring → empty + NO Warn (distinguishable from a read failure)" {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let repo = repository (InMemoryBlobStorage()) logger
 
             Expect.equal (repo.GetAllElements()).Count 0 "first boot: no keys yet"
-            Expect.isEmpty logger.Warns "a legitimately-empty ring is silent — only a read failure warns"
+            Expect.isEmpty (warns logger) "a legitimately-empty ring is silent — only a read failure warns"
         }
 
         test "per-key Download failure → key skipped + a Warn naming the blob" {
             let keyBlob = BlobDpKeyRing.Prefix + "key-abc.xml"
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let repo = repository (DownloadFailingBlobStorage [ keyBlob ]) logger
 
             Expect.equal (repo.GetAllElements()).Count 0 "the undownloadable key is skipped"
-            Expect.hasLength logger.Warns 1 "exactly one Warn for the failed key"
-            Expect.stringContains logger.Warns[0] keyBlob "the Warn names the failing blob"
-            Expect.stringContains logger.Warns[0] "access denied (simulated)" "the Warn carries the underlying error"
+            Expect.hasLength (warns logger) 1 "exactly one Warn for the failed key"
+            Expect.stringContains (List.item 0 (warns logger)) keyBlob "the Warn names the failing blob"
+
+            Expect.stringContains
+                (List.item 0 (warns logger))
+                "access denied (simulated)"
+                "the Warn carries the underlying error"
         }
 
         test "healthy round-trip: StoreElement → GetAllElements returns the element, no Warn (GP 11)" {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let repo = repository (InMemoryBlobStorage()) logger
 
             repo.StoreElement(XElement.Parse "<key id=\"k1\" />", "key-k1")
@@ -231,8 +232,8 @@ let tests =
 
             Expect.hasLength elements 1 "the persisted key reads back"
             Expect.equal (elements[0].Attribute(XName.Get "id").Value) "k1" "byte-for-byte round-trip"
-            Expect.isEmpty logger.Warns "a healthy backend is silent"
-            Expect.isEmpty logger.Errors "a healthy store emits no write-failure diagnostic (GP 11)"
+            Expect.isEmpty (warns logger) "a healthy backend is silent"
+            Expect.isEmpty (errors logger) "a healthy store emits no write-failure diagnostic (GP 11)"
         }
 
         // ── BlobXmlRepository Error on WRITE failure ──
@@ -248,13 +249,13 @@ let tests =
         // turn a transient blob hiccup into a live request failure).
 
         test "key-ring StoreElement write refusal → an Error naming container and blob" {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let repo = repository (WriteDeniedBlobStorage()) logger
 
             repo.StoreElement(XElement.Parse "<key id=\"k1\" />", "key-k1")
 
-            Expect.hasLength logger.Errors 1 "exactly one Error for the refused write"
-            let message, ex = logger.Errors[0]
+            Expect.hasLength (errors logger) 1 "exactly one Error for the refused write"
+            let message, ex = (errors logger)[0]
             Expect.stringContains message BlobDpKeyRing.Container "the Error names the container"
             Expect.stringContains message (BlobDpKeyRing.Prefix + "key-k1.xml") "the Error names the blob"
 
@@ -265,11 +266,11 @@ let tests =
 
             Expect.stringContains message "NOT persisted" "the Error states the consequence"
             Expect.isNone ex "a refused `Result.Error` carries no exception"
-            Expect.isEmpty logger.Warns "the write failure is Error-class, not Warn-class"
+            Expect.isEmpty (warns logger) "the write failure is Error-class, not Warn-class"
         }
 
         test "key-ring StoreElement throw → an Error carrying the exception (not re-raised)" {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let repo = repository (UnreachableBlobStorage()) logger
 
             // Must not raise: ASP.NET propagates a `StoreElement` throw
@@ -277,8 +278,8 @@ let tests =
             // here would fail live requests at the rotation moment.
             repo.StoreElement(XElement.Parse "<key id=\"k1\" />", "key-k1")
 
-            Expect.hasLength logger.Errors 1 "exactly one Error for the throwing backend"
-            let message, ex = logger.Errors[0]
+            Expect.hasLength (errors logger) 1 "exactly one Error for the throwing backend"
+            let message, ex = (errors logger)[0]
 
             Expect.stringContains
                 message

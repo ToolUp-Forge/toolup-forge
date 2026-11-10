@@ -11,6 +11,7 @@ open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 770 — the seam-aware service provider ──────────────────────
 //
@@ -66,36 +67,11 @@ type private Named(name: string) =
 type ScopedThing() =
     member val Id = Guid.NewGuid()
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<AuditEvent>()
-    let gate = obj ()
-    member _.Events = lock gate (fun () -> List.ofSeq recorded)
-
-    /// The deny observer writes fire-and-forget, so a test asserting on
-    /// rows waits for them; event-driven, capped, and loud on timeout.
-    member _.WaitFor(count: int) =
-        let cap = TimeSpan.FromSeconds 30.0
-        let sw = Diagnostics.Stopwatch.StartNew()
-
-        lock gate (fun () ->
-            while recorded.Count < count && sw.Elapsed < cap do
-                Threading.Monitor.Wait(gate, cap - sw.Elapsed) |> ignore
-
-            if recorded.Count < count then
-                failtestf "audit wait: %d of %d expected row(s) arrived" recorded.Count count)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _, _actor, audit) = async {
-            lock gate (fun () ->
-                recorded.Add audit
-                Threading.Monitor.PulseAll gate)
-
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
-            return lock gate (fun () -> List.ofSeq recorded)
-        }
+/// The deny observer writes fire-and-forget, so a test asserting on rows
+/// waits for them; event-driven, capped, and loud on timeout.
+let private waitForRows (audit: TestAuditLog) (count: int) =
+    if not (audit.Recording.WaitUntil((fun rows -> List.length rows >= count), TimeSpan.FromSeconds 30.0)) then
+        failtestf "audit wait: %d of %d expected row(s) arrived" audit.Recording.Count count
 
 let private reporter = ComponentId.ofModule "reporter"
 
@@ -170,7 +146,7 @@ let private refusal =
         testCase "an ungranted seam resolved by hand is the framework's own 'not registered'"
         <| fun _ ->
             let confined =
-                SeamAwareServiceProvider(provider (), reporter, confinementOver (verifiedGate (RecordingAuditLog())))
+                SeamAwareServiceProvider(provider (), reporter, confinementOver (verifiedGate (TestAuditLog())))
 
             Expect.isNull
                 (confined.GetService typeof<Seams.IAIProvider>)
@@ -186,13 +162,13 @@ let private refusal =
 
         testCase "the refusal carries the Phase 688 denial onto the audit path"
         <| fun _ ->
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let confined =
                 SeamAwareServiceProvider(provider (), reporter, confinementOver (verifiedGate audit))
 
             confined.GetService typeof<Seams.IAIProvider> |> ignore
-            audit.WaitFor 1
+            waitForRows audit 1
 
             match audit.Events with
             | [ AuditEvent.CompositionCapabilityRefused _ ] -> ()
@@ -201,7 +177,7 @@ let private refusal =
         testCase "the provider cannot be stepped around by asking for the container"
         <| fun _ ->
             let confined =
-                SeamAwareServiceProvider(provider (), reporter, confinementOver (verifiedGate (RecordingAuditLog())))
+                SeamAwareServiceProvider(provider (), reporter, confinementOver (verifiedGate (TestAuditLog())))
 
             Expect.isTrue
                 (obj.ReferenceEquals(confined.GetService typeof<IServiceProvider>, confined))
@@ -225,7 +201,7 @@ let private transparency =
             let raw = provider ()
 
             let confined =
-                SeamAwareServiceProvider(raw, reporter, confinementOver (verifiedGate (RecordingAuditLog())))
+                SeamAwareServiceProvider(raw, reporter, confinementOver (verifiedGate (TestAuditLog())))
 
             Expect.isTrue
                 (obj.ReferenceEquals(
@@ -246,7 +222,7 @@ let private transparency =
                 SeamAwareServiceProvider(
                     scope.ServiceProvider,
                     reporter,
-                    confinementOver (verifiedGate (RecordingAuditLog()))
+                    confinementOver (verifiedGate (TestAuditLog()))
                 )
 
             let viaConfined = confined.GetService typeof<ScopedThing> :?> ScopedThing
@@ -256,7 +232,7 @@ let private transparency =
 
         testCase "granted seams are observed; refused ones are not"
         <| fun _ ->
-            let confinement = confinementOver (verifiedGate (RecordingAuditLog()))
+            let confinement = confinementOver (verifiedGate (TestAuditLog()))
             let confined = SeamAwareServiceProvider(provider (), reporter, confinement)
             confined.GetService typeof<Seams.IBlobStorage> |> ignore
             confined.GetService typeof<Seams.IAIProvider> |> ignore
@@ -377,7 +353,7 @@ let private wiring =
             let app =
                 ServerApp.empty
                 |> ServerApp.addModule (reporterModule ())
-                |> SeamAuthorityEnforcement.confine (verifiedGate (RecordingAuditLog()))
+                |> SeamAuthorityEnforcement.confine (verifiedGate (TestAuditLog()))
 
             let ctx = requestFor app
             let original = ctx.RequestServices
@@ -408,7 +384,7 @@ let private wiring =
             let app =
                 ServerApp.empty
                 |> ServerApp.addModule (reporterModule ())
-                |> SeamAuthorityEnforcement.confine (verifiedGate (RecordingAuditLog()))
+                |> SeamAuthorityEnforcement.confine (verifiedGate (TestAuditLog()))
 
             let ctx = requestFor app
             let original = ctx.RequestServices
@@ -434,7 +410,7 @@ let private wiring =
             let app =
                 ServerApp.empty
                 |> ServerApp.addModules [ reporterModule (); other ]
-                |> SeamAuthorityEnforcement.confine (verifiedGate (RecordingAuditLog()))
+                |> SeamAuthorityEnforcement.confine (verifiedGate (TestAuditLog()))
 
             let ctx = requestFor app
 

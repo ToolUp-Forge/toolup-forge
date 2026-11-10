@@ -4,13 +4,13 @@
 module ToolUp.Platform.Tests.InProcess.ModelPromotionPolicyTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 645 — registry promotion policies ────────────────────────────
 //
@@ -44,27 +44,6 @@ open ToolUp.Platform.Jobs
 
 let private t0 = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(_: string) = ()
-        member _.Error(_: string, _: exn option) = ()
-    }
-
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
 /// An evaluation runner that raises on the one method a policy reads — the
 /// "policy evaluation error" arm. Everything else is unreachable here and
 /// says so rather than returning a plausible empty value.
@@ -83,17 +62,13 @@ let private scope = "team-1"
 type private Stack = {
     Registry: IModelRegistry
     DataObjects: IDataObjectStore
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
 }
 
-let private freshStack () : Stack =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-promotion-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private freshStack (dir: TempDir) : Stack =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
     {
         Registry = BlobModelRegistry.create dataObjects audit
@@ -155,23 +130,23 @@ let private statusOf (stack: Stack) (keyHash: string) = async {
     | Error e -> return failwithf "get failed: %s" (ModelRegistryError.describe e)
 }
 
-let private attributedRows (audit: RecordingAuditLog) =
+let private attributedRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelArtifactTransitionAttributed p -> Some p
         | _ -> None)
 
-let private policyRows (audit: RecordingAuditLog) =
+let private policyRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelPromotionPolicyEvaluated p -> Some p
         | _ -> None)
 
-let private supersededRows (audit: RecordingAuditLog) =
+let private supersededRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelArtifactSuperseded p -> Some p
         | _ -> None)
@@ -208,17 +183,14 @@ let tests =
 
         testCaseAsync "a decision is read through its artifact's bucket, not by listing the scope"
         <| async {
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "toolup-promotion-count-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory tempDir |> ignore
+            use tempDir = TempDir.create "promotion-count"
 
             let counting =
                 ToolUp.Platform.Tests.Contracts.IModelRegistryContract.CountingDataObjectStore(
-                    DataObjectStore(LocalFileStorage.LocalFileStorage(tempDir))
+                    DataObjectStore(LocalFileStorage.LocalFileStorage(tempDir.Path))
                 )
 
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let stack = {
                 Registry = BlobModelRegistry.create counting audit
@@ -440,7 +412,8 @@ let tests =
         // ─── The evaluator, over the real registry ──────────────────────
 
         testAsync "a refit within tolerance auto-promotes and supersedes the incumbent explicitly" {
-            let stack = freshStack ()
+            use dir = TempDir.create "promotion-test"
+            let stack = freshStack dir
 
             let evaluator =
                 ModelPromotionPolicyEvaluator.create [ tolerantPolicy ] (depsOf stack None)
@@ -511,7 +484,8 @@ let tests =
         }
 
         testAsync "a refit outside tolerance queues for curation and stays where the lifecycle holds it" {
-            let stack = freshStack ()
+            use dir = TempDir.create "promotion-test"
+            let stack = freshStack dir
 
             let evaluator =
                 ModelPromotionPolicyEvaluator.create [ tolerantPolicy ] (depsOf stack None)
@@ -565,7 +539,8 @@ let tests =
         testAsync "a policy evaluation error queues rather than promoting" {
             // The metric source raises. Nothing about the candidate is
             // known, so the only safe verdict is the human's.
-            let stack = freshStack ()
+            use dir = TempDir.create "promotion-test"
+            let stack = freshStack dir
 
             let policy = {
                 tolerantPolicy with
@@ -601,7 +576,8 @@ let tests =
             // The same fail-safe with the source simply never composed —
             // a configuration mistake, not a fault, and it must not promote
             // either.
-            let stack2 = freshStack ()
+            use dir2 = TempDir.create "promotion-test"
+            let stack2 = freshStack dir2
 
             let evaluator2 =
                 ModelPromotionPolicyEvaluator.create [ policy ] (depsOf stack2 None)
@@ -618,7 +594,8 @@ let tests =
         }
 
         testAsync "with no declared policy everything queues" {
-            let stack = freshStack ()
+            use dir = TempDir.create "promotion-test"
+            let stack = freshStack dir
             let evaluator = ModelPromotionPolicyEvaluator.create [] (depsOf stack None)
 
             let! artifact = register stack 1L [ "error", 0.0; "score", 1.0 ]
@@ -648,7 +625,8 @@ let tests =
         }
 
         testAsync "a proven floor breach is rejected through the same seam" {
-            let stack = freshStack ()
+            use dir = TempDir.create "promotion-test"
+            let stack = freshStack dir
 
             let policy = {
                 PromotionPolicy.create "floored" with
@@ -690,7 +668,8 @@ let tests =
             // author cannot carry one it controls. A policy record IS the
             // deployment's declaration — and one that declares no grant is a
             // legitimate dry run, not a broken policy.
-            let stack = freshStack ()
+            use dir = TempDir.create "promotion-test"
+            let stack = freshStack dir
 
             let dryRun = {
                 tolerantPolicy with
@@ -729,12 +708,13 @@ let tests =
         }
 
         testAsync "the evaluation job handler maps a malformed payload and a missing artifact" {
-            let stack = freshStack ()
+            use dir = TempDir.create "promotion-test"
+            let stack = freshStack dir
 
             let evaluator =
                 ModelPromotionPolicyEvaluator.create [ tolerantPolicy ] (depsOf stack None)
 
-            let handler = ModelPromotionJobHandler.create evaluator silentLogger
+            let handler = ModelPromotionJobHandler.create evaluator Logger.silent
 
             let jobCtx (payload: string) : JobContext = {
                 JobId = Guid.NewGuid()

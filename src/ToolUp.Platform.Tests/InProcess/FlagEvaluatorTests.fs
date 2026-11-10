@@ -1,39 +1,18 @@
 module ToolUp.Platform.Tests.InProcess.FlagEvaluatorTests
 
 open System
-open System.Collections.Concurrent
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.FeatureFlagStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-
-// ─── Test doubles ────────────────────────────────────────────────
-
-/// In-memory logger that records every warning. Used to assert the
-/// "unknown-key reads log a warning" rule — this is deliberate typo
-/// protection.
-type private RecordingLogger() =
-    let warnings = ConcurrentBag<string>()
-
-    member _.Warnings = warnings |> Seq.toList
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn msg = warnings.Add msg
-        member _.Error(_, _) = ()
+open ToolUp.Platform.Testing
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-let private makeStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-flageval-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private makeStore (dir: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     BlobFeatureFlagStore(storage) :> IFeatureFlagStore
 
 let private boolFlag key defaultValue = {
@@ -65,7 +44,8 @@ let tests =
         // ── Declared-default fallback ────────────────────────────
         testCaseAsync "IsEnabled — declared default used when no scope set"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ boolFlag "m.f" true ]
             let eval = FlagEvaluator.create store decl None
             let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
@@ -75,7 +55,8 @@ let tests =
 
         testCaseAsync "ResolveVariant — declared default used when no scope set"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ variantFlag "m.theme" [ "legacy"; "new" ] "legacy" ]
             let eval = FlagEvaluator.create store decl None
             let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
@@ -86,22 +67,25 @@ let tests =
         // ── Unknown-key typo protection ──────────────────────────
         testCaseAsync "Unknown key — IsEnabled returns false + logs warning"
         <| async {
-            let store = makeStore ()
-            let logger = RecordingLogger()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
+            let logger = Logger.recording ()
             let eval = FlagEvaluator.create store [] (Some(logger :> ILogger))
             let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
             let! v = eval.IsEnabled "typo.key" ctx
             Expect.isFalse v "undeclared key defaults to false"
 
             Expect.isTrue
-                (logger.Warnings |> List.exists (fun w -> w.Contains "typo.key"))
+                (logger.MessagesAt LogSeverity.Warn
+                 |> List.exists (fun w -> w.Contains "typo.key"))
                 "warning mentions the typo'd key"
         }
 
         // ── Scope-walk precedence ────────────────────────────────
         testCaseAsync "Team override wins over Platform"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ boolFlag "m.f" false ]
             let eval = FlagEvaluator.create store decl None
 
@@ -115,7 +99,8 @@ let tests =
 
         testCaseAsync "User override wins over Team"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ boolFlag "m.f" false ]
             let eval = FlagEvaluator.create store decl None
 
@@ -129,7 +114,8 @@ let tests =
 
         testCaseAsync "Platform override applied when no User/Team set"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ boolFlag "m.f" false ]
             let eval = FlagEvaluator.create store decl None
 
@@ -142,7 +128,8 @@ let tests =
 
         testCaseAsync "Anonymous mode — only Platform is read; User/Team scopes ignored"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ boolFlag "m.f" false ]
             let eval = FlagEvaluator.create store decl None
 
@@ -160,7 +147,8 @@ let tests =
 
         testCaseAsync "Individual mode — skips Team even if a team flag exists"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ boolFlag "m.f" false ]
             let eval = FlagEvaluator.create store decl None
 
@@ -175,7 +163,8 @@ let tests =
 
         testCaseAsync "Team mode with no active team — still walks User + Platform"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let decl = [ boolFlag "m.f" false ]
             let eval = FlagEvaluator.create store decl None
 
@@ -193,7 +182,8 @@ let tests =
         // ── TryEvaluate primitive ────────────────────────────────
         testCaseAsync "TryEvaluate returns None when no scope has set the key"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let eval = FlagEvaluator.create store [ boolFlag "m.f" true ] None
             let ctx = AccessContexts.forSubject (Subject.TeamMember("alice", "teamA"))
             let! v = eval.TryEvaluate "m.f" ctx
@@ -202,7 +192,8 @@ let tests =
 
         testCaseAsync "TryEvaluate surfaces the winning scope's value verbatim"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
             let eval = FlagEvaluator.create store [ variantFlag "m.v" [ "a"; "b" ] "a" ] None
             let value = FlagValue.Variant([ "a"; "b" ], "b")
             do! setFlag store (FlagScope.Team "teamA") "m.v" value
@@ -215,8 +206,9 @@ let tests =
         // ── Schema drift ─────────────────────────────────────────
         testCaseAsync "IsEnabled on a Variant-typed override falls back + warns"
         <| async {
-            let store = makeStore ()
-            let logger = RecordingLogger()
+            use dir = TempDir.create "flageval-test"
+            let store = makeStore dir
+            let logger = Logger.recording ()
             let decl = [ boolFlag "m.f" true ]
             let eval = FlagEvaluator.create store decl (Some(logger :> ILogger))
 
@@ -228,6 +220,6 @@ let tests =
             let! v = eval.IsEnabled "m.f" ctx
             Expect.isTrue v "falls back to declared default"
 
-            Expect.isNonEmpty logger.Warnings "schema-drift warning recorded"
+            Expect.isNonEmpty (logger.MessagesAt LogSeverity.Warn) "schema-drift warning recorded"
         }
     ]

@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.ModelFitBatchTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -15,6 +14,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 599 — batch fit submission + bulk retrieval ──────────────────
 //
@@ -40,14 +40,6 @@ open ToolUp.Platform.Compose
 // with synthesised `JobContext`s (the IModelFitProviderContract pattern) —
 // the scheduler's dispatch loop is hosting-only and not started in tests.
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private silentChannel =
     { new INotificationChannel with
         member _.Publish(_, _) = async { return () }
@@ -55,40 +47,17 @@ let private silentChannel =
         member _.Unsubscribe(_) = async { return () }
     }
 
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
 let private providers =
     ModelFitProviderRegistry [ ReferenceModelFitProvider.create () ]
 
-/// A fresh blob-backed model registry (full default stack, temp-dir
-/// isolated) plus its recording audit log.
-let private freshRegistry () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-fitbatch-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+/// A fresh blob-backed model registry (full default stack) over `root`.
+let private freshRegistry (root: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
-    let audit = RecordingAuditLog()
-    BlobModelRegistry.create dataObjects (audit :> IAuditLog), audit
+    BlobModelRegistry.create dataObjects (TestAuditLog() :> IAuditLog)
 
-let private buildScheduler () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-fitbatch-sched-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private buildScheduler (root: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
     let config = ServerConfig.defaults
@@ -99,7 +68,7 @@ let private buildScheduler () =
             EventStore = eventStore
             NotificationChannel = silentChannel
             Config = config
-            Logger = silentLogger
+            Logger = Logger.silent
             ActivitySink = (NoOpActivitySink() :> IActivitySink)
         }
         : JobScheduler.SchedulerDeps)
@@ -183,11 +152,12 @@ let tests =
     testList "ModelFitBatch" [
         testCaseAsync "a batch of N registers N outcomes with distinct composite keys, retrievable by batch id"
         <| async {
-            let registry, _ = freshRegistry ()
-            let audit = RecordingAuditLog()
+            use registryDir = TempDir.create "fitbatch-tests"
+            let registry = freshRegistry registryDir
+            let audit = TestAuditLog()
 
             let handler =
-                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) silentLogger
+                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) Logger.silent
 
             let batch = batchOf "team-1" "wave-7" [ 1L .. 20L ]
             let! results = executeItems handler batch
@@ -214,11 +184,12 @@ let tests =
 
         testCaseAsync "one failing item leaves sibling outcomes intact; the failure is data"
         <| async {
-            let registry, _ = freshRegistry ()
-            let audit = RecordingAuditLog()
+            use registryDir = TempDir.create "fitbatch-tests"
+            let registry = freshRegistry registryDir
+            let audit = TestAuditLog()
 
             let handler =
-                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) silentLogger
+                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) Logger.silent
 
             let good = batchOf "team-1" "wave-8" [ 1L .. 10L ]
 
@@ -259,11 +230,12 @@ let tests =
 
         testCaseAsync "QueryPage paginates deterministically and filters conjoin"
         <| async {
-            let registry, _ = freshRegistry ()
-            let audit = RecordingAuditLog()
+            use registryDir = TempDir.create "fitbatch-tests"
+            let registry = freshRegistry registryDir
+            let audit = TestAuditLog()
 
             let handler =
-                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) silentLogger
+                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) Logger.silent
 
             let batch = batchOf "team-1" "wave-9" [ 1L .. 25L ]
             let! _ = executeItems handler batch
@@ -350,15 +322,17 @@ let tests =
 
         testCaseAsync "submit audits the batch as a unit and enqueues one item job per request"
         <| async {
-            let scheduler = buildScheduler ()
-            let registry, _ = freshRegistry ()
-            let audit = RecordingAuditLog()
+            use schedulerDir = TempDir.create "fitbatch-sched"
+            let scheduler = buildScheduler schedulerDir
+            use registryDir = TempDir.create "fitbatch-tests"
+            let registry = freshRegistry registryDir
+            let audit = TestAuditLog()
 
             // The item handler must be registered for Schedule to accept the
             // handler name (consumer-wired, like the Phase 454 scorer).
             scheduler.RegisterHandler(
                 ModelFitBatch.ItemHandlerName,
-                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) silentLogger
+                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) Logger.silent
             )
 
             let batch = batchOf "team-1" "wave-10" [ 1L .. 5L ]
@@ -373,10 +347,10 @@ let tests =
                 Expect.isEmpty s.ScheduleFailures "no enqueue failures"
 
             let batchRows =
-                audit.Events
-                |> List.choose (fun (scope, e) ->
-                    match e with
-                    | ModelFitBatchSubmitted p -> Some(scope, p)
+                audit.Records
+                |> List.choose (fun r ->
+                    match r.Event with
+                    | ModelFitBatchSubmitted p -> Some(r.StreamKey, p)
                     | _ -> None)
 
             Expect.equal (List.length batchRows) 1 "exactly one batch-level audit row"
@@ -409,8 +383,9 @@ let tests =
 
         testCaseAsync "batch validation refuses empty / uncorrelatable / cross-scope batches as typed data"
         <| async {
-            let scheduler = buildScheduler ()
-            let audit = RecordingAuditLog()
+            use schedulerDir = TempDir.create "fitbatch-sched"
+            let scheduler = buildScheduler schedulerDir
+            let audit = TestAuditLog()
 
             let refused (batch: FitRequestBatch) = async {
                 match! ModelFitBatch.submit scheduler (audit :> IAuditLog) "operator-1" batch with
@@ -441,16 +416,17 @@ let tests =
 
         testCaseAsync "a batch-of-one item is semantically the single-item envelope path"
         <| async {
-            let registry, _ = freshRegistry ()
-            let audit = RecordingAuditLog()
+            use registryDir = TempDir.create "fitbatch-tests"
+            let registry = freshRegistry registryDir
+            let audit = TestAuditLog()
 
             let handler =
-                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) silentLogger
+                ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) Logger.silent
 
             let request = fitRequest "team-1" 77L
 
             // Single-item path.
-            let! single = ModelFitEnvelope.runFit providers (RecordingAuditLog() :> IAuditLog) request
+            let! single = ModelFitEnvelope.runFit providers (TestAuditLog() :> IAuditLog) request
 
             let singleOutcome =
                 match single with

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.ProviderProfileApiTests
 
 open System
-open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
@@ -12,6 +11,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 44 — IProviderProfileApi + the reusable BYOK component ────
 //
@@ -37,41 +37,13 @@ open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 /// Handler over a fresh blob-backed store and a fresh secret store, in
 /// the user scope of an authenticated caller (no team gate in play —
 /// the team arm is `AISettingsHandler`'s, verbatim, and is covered by
 /// that handler's own pack).
 let private build () =
     let services = ServiceCollection()
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
     let store = BlobProviderProfile.create storage
 

@@ -20,6 +20,7 @@ open System.Text
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Build transcript + sealed deploy record ─────────────────────────
 //
@@ -449,18 +450,8 @@ let deployRecordCanonicalFormTests =
 // ─── Verification ────────────────────────────────────────────────────
 
 let private withTempTree (body: string -> 'a) : 'a =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-deployrecord-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-
-    try
-        body root
-    finally
-        try
-            Directory.Delete(root, true)
-        with _ ->
-            ()
+    use root = TempDir.create "deployrecord"
+    body root.Path
 
 let deployRecordVerificationTests =
     testList "Phase 656 — sealed deploy-record verification" [

@@ -4,12 +4,12 @@
 module ToolUp.Platform.Tests.Contracts.IModelRegistryContract
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 453 — IModelRegistry conformance pack ────────────────────────
 //
@@ -89,19 +89,6 @@ type CountingDataObjectStore(inner: IDataObjectStore) =
         member _.DeleteIfVersion(scopeId, objectId, expectedVersion) =
             (inner :?> IConditionalDataObjectStore).DeleteIfVersion(scopeId, objectId, expectedVersion)
 
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
 /// Records every lineage link so a test can assert the artifact →
 /// dataset-version edge. The query methods return empty graphs — the
 /// registry only ever calls `Record`.
@@ -142,16 +129,12 @@ type private RecordingLineageStore() =
                 }
         }
 
-/// A fresh blob-backed registry over its own temp directory, plus the audit
-/// + lineage recorders wired into it. Each call is fully isolated.
-let private freshRegistry () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-mr-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+/// A fresh blob-backed registry over the case's own temp directory, plus the
+/// audit + lineage recorders wired into it. Each call is fully isolated.
+let private freshRegistry (dir: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let lineage = RecordingLineageStore()
     let registry = BlobModelRegistry.createWithLineage dataObjects audit lineage
     registry, audit, lineage
@@ -195,7 +178,8 @@ let tests =
 
         testCaseAsync "a fit outcome registers once under its composite key; the artifact carries the fit core"
         <| async {
-            let registry, audit, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, audit, _ = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 42L
 
             let! result = registry.Register("team-1", o, "alice", Map [ "branch", "main" ], "first fit")
@@ -213,7 +197,7 @@ let tests =
             let registered =
                 audit.Events
                 |> List.choose (function
-                    | _, ModelArtifactRegistered p -> Some p
+                    | ModelArtifactRegistered p -> Some p
                     | _ -> None)
 
             Expect.equal registered.Length 1 "exactly one ModelArtifactRegistered row"
@@ -222,7 +206,8 @@ let tests =
 
         testCaseAsync "re-registering an identical composite key is idempotent — not a new artifact, no new version"
         <| async {
-            let registry, audit, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, audit, _ = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 42L
 
             let! first = registry.Register("team-1", o, "alice", Map.empty, "")
@@ -237,7 +222,7 @@ let tests =
             let registered =
                 audit.Events
                 |> List.filter (function
-                    | _, ModelArtifactRegistered _ -> true
+                    | ModelArtifactRegistered _ -> true
                     | _ -> false)
 
             Expect.equal registered.Length 1 "an idempotent re-register emits no second audit row"
@@ -245,7 +230,8 @@ let tests =
 
         testCaseAsync "a changed seed or vintage yields a distinct artifact"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
             let! a = registry.Register("team-1", outcome "spec-a" "team-1/sales@v1" 1L, "alice", Map.empty, "")
             let! b = registry.Register("team-1", outcome "spec-a" "team-1/sales@v1" 2L, "alice", Map.empty, "")
             let! c = registry.Register("team-1", outcome "spec-a" "team-1/sales@v2" 1L, "alice", Map.empty, "")
@@ -261,15 +247,12 @@ let tests =
 
         testCaseAsync "a query by spec hash reads its bucket and one artifact per match, not the scope"
         <| async {
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "toolup-mr-count-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory tempDir |> ignore
+            use tempDir = TempDir.create "mr-count"
 
             let counting =
-                CountingDataObjectStore(DataObjectStore(LocalFileStorage.LocalFileStorage(tempDir)))
+                CountingDataObjectStore(DataObjectStore(LocalFileStorage.LocalFileStorage(tempDir.Path)))
 
-            let registry = BlobModelRegistry.create counting (RecordingAuditLog())
+            let registry = BlobModelRegistry.create counting (TestAuditLog())
 
             for i in 1..8 do
                 let! _ = registry.Register("team-1", outcome $"spec-{i}" "team-1/sales@v1" 1L, "alice", Map.empty, "")
@@ -289,7 +272,8 @@ let tests =
 
         testCaseAsync "query-by-spec-hash returns the full vintage history of one modelling decision in one call"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
             // Same spec, three vintages/seeds — one modelling decision.
             let! _ = registry.Register("team-1", outcome "spec-a" "team-1/sales@v1" 1L, "alice", Map.empty, "")
             let! _ = registry.Register("team-1", outcome "spec-a" "team-1/sales@v2" 1L, "alice", Map.empty, "")
@@ -307,7 +291,8 @@ let tests =
 
         testCaseAsync "query-by-status filters on the lifecycle state"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
             let o1 = outcome "spec-a" "team-1/sales@v1" 1L
             let o2 = outcome "spec-b" "team-1/sales@v1" 1L
             let! _ = registry.Register("team-1", o1, "alice", Map.empty, "")
@@ -333,7 +318,8 @@ let tests =
 
         testCaseAsync "an Owner can Approve; the transition appends a version and is audited"
         <| async {
-            let registry, audit, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, audit, _ = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 1L
             let! _ = registry.Register("team-1", o, "alice", Map.empty, "")
 
@@ -353,7 +339,7 @@ let tests =
             let transitioned =
                 audit.Events
                 |> List.choose (function
-                    | _, ModelArtifactTransitioned p -> Some p
+                    | ModelArtifactTransitioned p -> Some p
                     | _ -> None)
 
             Expect.equal transitioned.Length 1 "exactly one ModelArtifactTransitioned row"
@@ -364,7 +350,8 @@ let tests =
 
         testCaseAsync "a non-admin cannot Approve — refused as Forbidden and audited"
         <| async {
-            let registry, audit, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, audit, _ = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 1L
             let! _ = registry.Register("team-1", o, "alice", Map.empty, "")
 
@@ -392,7 +379,7 @@ let tests =
             let denied =
                 audit.Events
                 |> List.choose (function
-                    | _, ModelArtifactTransitionDenied p -> Some p
+                    | ModelArtifactTransitionDenied p -> Some p
                     | _ -> None)
 
             Expect.equal denied.Length 1 "the refusal is audited (GP 6)"
@@ -401,7 +388,8 @@ let tests =
 
         testCaseAsync "an illegal lifecycle edge is refused as typed data"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 1L
             let! _ = registry.Register("team-1", o, "alice", Map.empty, "")
 
@@ -422,7 +410,8 @@ let tests =
 
         testCaseAsync "Retire is legal from Fitted and available without an elevated role"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 1L
             let! _ = registry.Register("team-1", o, "alice", Map.empty, "")
 
@@ -440,7 +429,8 @@ let tests =
 
         testCaseAsync "registration emits the artifact → dataset-version lineage edge (8a)"
         <| async {
-            let registry, _, lineage = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, lineage = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 1L
             let! _ = registry.Register("team-1", o, "alice", Map.empty, "")
 
@@ -453,7 +443,8 @@ let tests =
 
         testCaseAsync "artifacts are scope-isolated (GP 4)"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
             let o = outcome "spec-a" "team-1/sales@v1" 1L
             let! _ = registry.Register("team-a", o, "alice", Map.empty, "")
 
@@ -469,7 +460,8 @@ let tests =
 
         testCaseAsync "Get on an unknown key is NotFound"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
             let! result = registry.Get("team-1", "no-such-hash")
 
             match result with
@@ -479,7 +471,8 @@ let tests =
 
         testCaseAsync "a declared novelty capability is honoured: one Created, then Replayed"
         <| async {
-            let registry, _, _ = freshRegistry ()
+            use dir = TempDir.create "mr-test"
+            let registry, _, _ = freshRegistry dir
 
             match registry.Capabilities.Novelty with
             | None -> failtest "the reference registry declares its novelty"

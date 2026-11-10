@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.GroundingCertificateTests
 
 open System
-open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
@@ -12,6 +11,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // ─── Phase 565 — grounding certificates ──────────────────────────────
 //
@@ -21,38 +21,6 @@ open ToolUp.Platform.Audit
 // acceptance bar: issue→verify round-trip, tamper detection on any byte
 // change, the disclosure predicate withholding a fact's structure (and its
 // value never appearing), and the GP-13 no-signing-substrate refusal.
-
-/// Minimal in-memory `ISecretStore` — the `DefaultArtefactSigner`
-/// auto-provisions its signing key into it on first use, and the
-/// `DefaultArtefactVerifier` resolves the public key back out of the same
-/// store (the "offline against the deployment public key" path).
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 let private scope = "team-cert"
 
@@ -126,7 +94,7 @@ let private storedV1KeyId = "grounding-v1-fixture"
 
 /// A verifier that knows only the stored v1 key.
 let private storedV1Verifier () : Async<IArtefactVerifier> = async {
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let! _ = secrets.SetSecret(ScopeKey.PlatformContainer, "signing/" + storedV1KeyId, storedV1Key)
     return DefaultArtefactVerifier.create secrets
 }
@@ -208,7 +176,7 @@ let private v2Tests =
 
         testCaseAsync "a narrative certificate seals its admissions in document order, and any edit to one fails"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v2" Ed25519
             let verifier = DefaultArtefactVerifier.create secrets
@@ -322,7 +290,7 @@ let tests =
         <| async {
             // One shared secret store binds signer + verifier (the
             // deployment key + its public component).
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
             let verifier = DefaultArtefactVerifier.create secrets
@@ -359,7 +327,7 @@ let tests =
 
         testCaseAsync "any byte change to the sealed body fails verification (tamper detection)"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
             let verifier = DefaultArtefactVerifier.create secrets
@@ -400,7 +368,7 @@ let tests =
         testCaseAsync
             "a withheld fact discloses id + policy only; its value never appears; a disclosable fact carries its method"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
 
@@ -473,7 +441,7 @@ let tests =
 
         testCaseAsync "an answer's recorded plan joins its certificate exactly as it joins the answer chain"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let audit = NoOpAuditLog() :> IAuditLog
             let signer = DefaultArtefactSigner.createSystem secrets audit "grounding-v1" Ed25519
 

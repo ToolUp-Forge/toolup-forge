@@ -18,12 +18,12 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Scope.Teams.TeamInvitationHandler
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
-open ToolUp.Platform.Tests.InProcess.ShareTokenStoreTests
 open ToolUp.Platform.Tests.Support
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Scope.Teams
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 3d — team-invitation handler contract tests ─────────────────
 //
@@ -71,7 +71,7 @@ let private pendingStore (storage: IBlobStorage) : IPendingInviteStore =
 
 let private freshShareTokenStore () =
     let storage = InMemoryBlobStorage() :> IBlobStorage
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
 
 let private ctxFor (userId: string) : HttpContext =

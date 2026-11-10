@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.DatasetRevintageTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -12,6 +11,7 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra.Tracing
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 601 — assembly re-vintage trigger + scheduling ───────────────
 //
@@ -32,32 +32,8 @@ open ToolUp.Platform.Jobs
 //     payload and maps refusal classes to the right `JobResult`;
 //   * success is audited with spec hash + source + produced versions.
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
-let private freshStores () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-revintage-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private freshStores (root: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     let datasets = BlobDatasetStore.create dataObjects
     let executor = DatasetAssemblyExecutor.create datasets
@@ -137,8 +113,9 @@ let tests =
     testList "DatasetRevintage" [
         testCaseAsync "unchanged sources — deterministic replay yields a new immutable version with dedup'd content"
         <| async {
-            let datasets, executor = freshStores ()
-            let audit = RecordingAuditLog()
+            use root = TempDir.create "revintage-tests"
+            let datasets, executor = freshStores root
+            let audit = TestAuditLog()
             let! producedRef = seedAndAssemble datasets executor "team-1"
 
             let! original = datasets.GetVersion("team-1", producedRef.DatasetId, producedRef.Version)
@@ -173,8 +150,9 @@ let tests =
 
         testCaseAsync "changed source — the replay re-binds to the latest vintage and provenance names it"
         <| async {
-            let datasets, executor = freshStores ()
-            let audit = RecordingAuditLog()
+            use root = TempDir.create "revintage-tests"
+            let datasets, executor = freshStores root
+            let audit = TestAuditLog()
             let! producedRef = seedAndAssemble datasets executor "team-1"
 
             // The "weekly refresh": upstream appends v2 with a new row.
@@ -207,7 +185,7 @@ let tests =
             // Audit carries spec ref + produced versions (GP 6).
             let rows =
                 audit.Events
-                |> List.choose (fun (_, e) ->
+                |> List.choose (fun e ->
                     match e with
                     | DatasetRevintaged p -> Some p
                     | _ -> None)
@@ -219,8 +197,9 @@ let tests =
 
         testCaseAsync "a source that no longer resolves is a typed refusal"
         <| async {
-            let datasets, executor = freshStores ()
-            let audit = RecordingAuditLog()
+            use root = TempDir.create "revintage-tests"
+            let datasets, executor = freshStores root
+            let audit = TestAuditLog()
             let! producedRef = seedAndAssemble datasets executor "team-1"
 
             // Delete the upstream source (Versioned → delete allowed).
@@ -235,8 +214,9 @@ let tests =
 
         testCaseAsync "a version with no recorded spec is NoRecordedSpec, and a missing version is VersionNotFound"
         <| async {
-            let datasets, executor = freshStores ()
-            let audit = RecordingAuditLog()
+            use root = TempDir.create "revintage-tests"
+            let datasets, executor = freshStores root
+            let audit = TestAuditLog()
 
             let! created = datasets.Create("team-1", "plain", sourceSchema, rowsV1, "u1", Map.empty, Versioned)
 
@@ -269,12 +249,13 @@ let tests =
 
         testCaseAsync "the revintage job handler round-trips its payload and maps refusals to JobResults"
         <| async {
-            let datasets, executor = freshStores ()
-            let audit = RecordingAuditLog()
+            use root = TempDir.create "revintage-tests"
+            let datasets, executor = freshStores root
+            let audit = TestAuditLog()
             let! producedRef = seedAndAssemble datasets executor "team-1"
 
             let handler =
-                DatasetRevintageJobHandler.create executor datasets (audit :> IAuditLog) silentLogger
+                DatasetRevintageJobHandler.create executor datasets (audit :> IAuditLog) Logger.silent
 
             let ctx (payload: string) : JobContext = {
                 JobId = Guid.NewGuid()

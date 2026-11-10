@@ -4,13 +4,13 @@
 module ToolUp.Platform.Tests.InProcess.DatasetAssemblyTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // --- Phase 452 -- DatasetAssemblyExecutor tests -------------------------
 //
@@ -21,12 +21,8 @@ open ToolUp.Platform.Jobs
 // executor correctness across the source + transform space and the replay
 // determinism the out-of-time evaluation story depends on.
 
-let private freshStore () : IDatasetStore =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-assembly-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private freshStore (dir: TempDir) : IDatasetStore =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     BlobDatasetStore.create dataObjects
 
@@ -76,7 +72,8 @@ let tests =
         testCaseAsync
             "join + resample + lag + filter + split lands versions whose provenance names every source; replay is a new vintage with the same spec hash"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "assembly-test"
+            let store = freshStore dir
             let ts = InMemoryTimeSeriesStore.create ()
             let executor = DatasetAssemblyExecutor.createWithTimeSeries store ts
 
@@ -183,7 +180,8 @@ let tests =
 
         testCaseAsync "resample folds each aggregate correctly over the bucket"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "assembly-test"
+            let store = freshStore dir
             let tsStore = InMemoryTimeSeriesStore.create ()
             let executor = DatasetAssemblyExecutor.createWithTimeSeries store tsStore
 
@@ -258,7 +256,8 @@ let tests =
 
         testCaseAsync "join key mismatch is refused"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "assembly-test"
+            let store = freshStore dir
             let executor = DatasetAssemblyExecutor.create store
 
             let! _ = store.Create("s", "left", unitsSchema, unitRows, "u", Map.empty, Versioned)
@@ -293,7 +292,8 @@ let tests =
 
         testCaseAsync "lag emits typed leading nulls, never silent zeros"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "assembly-test"
+            let store = freshStore dir
             let tsStore = InMemoryTimeSeriesStore.create ()
             let executor = DatasetAssemblyExecutor.createWithTimeSeries store tsStore
 
@@ -335,7 +335,8 @@ let tests =
 
         testCaseAsync "unit-hash split is deterministic across replays"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "assembly-test"
+            let store = freshStore dir
             let executor = DatasetAssemblyExecutor.create store
 
             let schema: DatasetSchema = {
@@ -388,7 +389,8 @@ let tests =
         }
         testCaseAsync "every aggregation folds a known bucket to a real value, never a silent zero"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "assembly-test"
+            let store = freshStore dir
             let executor = DatasetAssemblyExecutor.create store
 
             let schema: DatasetSchema = {
@@ -448,7 +450,8 @@ let tests =
 
         testCaseAsync "a unit spelled like the missing-unit sentinel never shares a missing unit's bucket"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "assembly-test"
+            let store = freshStore dir
             let executor = DatasetAssemblyExecutor.create store
 
             let schema: DatasetSchema = {

@@ -7,6 +7,7 @@ open ToolUp.Platform.Metrics
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 437 — per-component resource envelopes ─────────────────────
 //
@@ -25,21 +26,6 @@ open ToolUp.Platform.Compose
 //     undeclared component and present only for declared dimensions.
 
 // ── stubs ─────────────────────────────────────────────────────────────
-
-/// A metric sink that records `Increment` calls, so a refusal's
-/// observability is asserted rather than assumed.
-type private RecordingMetricsSink() =
-    let increments = ResizeArray<string * Map<string, string>>()
-
-    member _.Increments = List.ofSeq increments
-
-    interface IMetricsSink with
-        member _.Record(_name, _value, _tags) = ()
-
-        member _.Increment(name, tags) =
-            lock increments (fun () -> increments.Add(name, tags))
-
-        member _.SetGauge(_name, _value, _tags) = ()
 
 /// A job handler that records the PEAK number of simultaneous executions
 /// it ever saw, holding each execution until `release` is set. The gate's
@@ -150,7 +136,7 @@ let tests =
         <| fun _ ->
             use release = new ManualResetEventSlim(false)
             let probe = ConcurrencyProbeHandler release
-            let sink = RecordingMetricsSink()
+            let sink = Fakes.TestMetricsSink()
 
             let gated =
                 ResourceEnvelopeEnforcement.gateHandler
@@ -307,7 +293,7 @@ let tests =
                     budgeted
                     (ResourceEnvelope.unconstrained |> ResourceEnvelope.withMaxQueueDepth 4)
 
-            let sink = RecordingMetricsSink()
+            let sink = Fakes.TestMetricsSink()
             let observe = Some(sink :> IMetricsSink)
 
             Expect.equal

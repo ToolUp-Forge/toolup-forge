@@ -18,6 +18,7 @@ open ToolUp.ContainerSchedulers.DockerLocal.Scheduler
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 26 substrate — in-process bindings for the contract packs ─
 //
@@ -283,14 +284,6 @@ type InMemoryDeployPipeline() =
 
 // ─── Deterministic IJobScheduler double for the deploy-plane bindings ─
 
-let private nullLogger =
-    { new ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
-    }
-
 /// Minimal `IJobScheduler` double for binding the shipped
 /// `JobSchedulerBuildOrchestrator`. Registers handlers, persists
 /// registrations, and — when `dispatchOnTrigger` — executes the job's
@@ -386,12 +379,11 @@ let tenantFleetTests =
         // through `BlobIndex.pathSafeSegment` so the `|` is
         // percent-encoded before it reaches the filesystem,
         // surviving Windows NTFS path validation. Mirrors the
-        // BlobEntityStoreTests binding shape.
-        let tempDir =
-            Path.Combine(Path.GetTempPath(), "toolup-fleet-test-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory tempDir |> ignore
-        let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+        // BlobEntityStoreTests binding shape. The contract owns the
+        // fleet's lifetime and has no disposal hook, so the directory is
+        // left for the run's temp census rather than disposed here.
+        let tempDir = TempDir.create "fleet-test"
+        let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
         registry.Register<Tenant>(Tenant.registration)
@@ -403,15 +395,7 @@ let tenantFleetTests =
 
         let deployPipeline = InMemoryDeployPipeline() :> IDeployPipeline
 
-        let logger =
-            { new ILogger with
-                member _.Debug(_) = ()
-                member _.Info(_) = ()
-                member _.Warn(_) = ()
-                member _.Error(_, _) = ()
-            }
-
-        EntityStoreTenantFleet(entityStore, containerScheduler, deployPipeline, logger) :> ITenantFleet
+        EntityStoreTenantFleet(entityStore, containerScheduler, deployPipeline, Logger.silent) :> ITenantFleet
 
     ITenantFleetContract.tests "EntityStoreTenantFleet" factory
 
@@ -426,7 +410,10 @@ let buildOrchestratorTests =
         let eventStore =
             ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-        ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator.create (DeployPlaneJobScheduler false) eventStore nullLogger
+        ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator.create
+            (DeployPlaneJobScheduler false)
+            eventStore
+            Logger.silent
         :> IBuildOrchestrator
 
     IBuildOrchestratorContract.tests "JobSchedulerBuildOrchestrator" factory
@@ -447,13 +434,13 @@ let deployPipelineTests =
             ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator.create
                 (DeployPlaneJobScheduler true)
                 eventStore
-                nullLogger
+                Logger.silent
 
         ToolUp.Platform.Infra.DefaultDeployPipeline.create
             orchestrator
             (InMemoryContainerScheduler())
             eventStore
-            nullLogger
+            Logger.silent
         :> IDeployPipeline
 
     IDeployPipelineContract.tests "DefaultDeployPipeline" factory
@@ -670,7 +657,7 @@ let deployPlanDefaultPipelineTests =
                     (InMemoryBuildOrchestrator())
                     scheduler
                     eventStore
-                    nullLogger
+                    Logger.silent
                 :> IDeployPipeline
     }
 
@@ -1013,11 +1000,11 @@ let defaultPipelineRollbackTests =
             ToolUp.Platform.Jobs.JobSchedulerBuildOrchestrator.create
                 (DeployPlaneJobScheduler true)
                 eventStore
-                nullLogger
+                Logger.silent
             :> IBuildOrchestrator
 
         let pipeline =
-            ToolUp.Platform.Infra.DefaultDeployPipeline.create orchestrator containerScheduler eventStore nullLogger
+            ToolUp.Platform.Infra.DefaultDeployPipeline.create orchestrator containerScheduler eventStore Logger.silent
             :> IDeployPipeline
 
         orchestrator, pipeline

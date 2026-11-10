@@ -8,6 +8,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── BlobServiceAccountStore — contract binding (Phase 527) ──────────
 //
@@ -21,27 +22,16 @@ open ToolUp.Platform.Scope
 // not a directory. The pack asserts the property the interface can
 // promise (no returned record carries the secret); this binding asserts
 // the property THIS implementation can be held to (no persisted byte
-// does either).
+// does either). The contract's factory has no teardown hook, so each of
+// its directories outlives the case; the family name attributes it in
+// the census.
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
-let private freshRoot () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-serviceaccount-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    root
+let private freshRoot () = TempDir.create "serviceaccount-tests"
 
 let tests =
     let factory () =
-        let storage = LocalFileStorage.LocalFileStorage(freshRoot ()) :> IBlobStorage
-        let store = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
+        let storage = LocalFileStorage.LocalFileStorage((freshRoot ()).Path) :> IBlobStorage
+        let store = ServiceAccountStore.create storage (NoOpAuditLog()) Logger.silent
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         store, "team-a-" + suffix, "team-b-" + suffix
 
@@ -54,9 +44,9 @@ let persistenceTests =
 
         testCaseAsync "no persisted byte anywhere under the root contains the minted secret"
         <| async {
-            let root = freshRoot ()
-            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
-            let store = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
+            use root = freshRoot ()
+            let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
+            let store = ServiceAccountStore.create storage (NoOpAuditLog()) Logger.silent
             let scopeId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
 
             let! account =
@@ -92,7 +82,7 @@ let persistenceTests =
             // spill, an index blob, a future cache — so enumerating what
             // we already know about would defeat it.
             let offenders =
-                Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                Directory.EnumerateFiles(root.Path, "*", SearchOption.AllDirectories)
                 |> Seq.filter (fun path -> File.ReadAllText(path).Contains secret)
                 |> List.ofSeq
 
@@ -105,7 +95,7 @@ let persistenceTests =
             // passes just as happily against a broken enumerator, an
             // empty directory, or a secret that was never minted.
             let accountIdHits =
-                Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                Directory.EnumerateFiles(root.Path, "*", SearchOption.AllDirectories)
                 |> Seq.filter (fun path -> File.ReadAllText(path).Contains account.AccountId)
                 |> List.ofSeq
 
@@ -116,11 +106,11 @@ let persistenceTests =
 
         testCaseAsync "a token surviving a fresh store instance over the same storage still validates"
         <| async {
-            let root = freshRoot ()
-            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+            use root = freshRoot ()
+            let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
             let scopeId = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
 
-            let minting = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
+            let minting = ServiceAccountStore.create storage (NoOpAuditLog()) Logger.silent
 
             let! account =
                 minting.Create {
@@ -152,7 +142,7 @@ let persistenceTests =
             // A SECOND store instance — the portability rule-4 property:
             // nothing authority-bearing is held between calls, so a
             // different node validates the same token identically.
-            let validating = ServiceAccountStore.create storage (NoOpAuditLog()) silentLogger
+            let validating = ServiceAccountStore.create storage (NoOpAuditLog()) Logger.silent
             let! result = validating.ValidateToken secret
 
             match result with

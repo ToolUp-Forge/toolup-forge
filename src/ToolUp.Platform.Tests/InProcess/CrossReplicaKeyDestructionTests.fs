@@ -2,7 +2,6 @@ module ToolUp.Platform.Tests.InProcess.CrossReplicaKeyDestructionTests
 
 open System
 open System.Collections.Concurrent
-open System.IO
 open System.Text
 open System.Text.Json
 open Expecto
@@ -18,6 +17,7 @@ open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Config.NotificationChannel
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 open ToolUp.Platform.Config
 
 // ─── Phase 22b — cross-replica encryption-key destruction ────────────
@@ -42,18 +42,13 @@ open ToolUp.Platform.Config
 // serving plaintext. If a future change makes both cases fail for some
 // unrelated reason, the control fails and says so.
 
-let private newTempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-22b-test-" + Guid.NewGuid().ToString("N"))
+let private newTempDir () = TempDir.create "22b-test"
 
-    Directory.CreateDirectory dir |> ignore
-    dir
+let private newSecretStore (dir: TempDir) : ISecretStore =
+    FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
-let private newSecretStore () : ISecretStore =
-    FileSecretStore.FileSecretStore(baseDir = newTempDir ()) :> ISecretStore
-
-let private newInnerStorage () : IBlobStorage =
-    LocalFileStorage.LocalFileStorage(newTempDir ()) :> IBlobStorage
+let private newInnerStorage (dir: TempDir) : IBlobStorage =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 let private newCache () : IMemoryCache =
     new MemoryCache(MemoryCacheOptions()) :> IMemoryCache
@@ -67,39 +62,28 @@ let private samplePayload =
 let private container = "team-offboarded-tenant"
 let private scopeId = "offboarded-tenant"
 
-/// Recording `IAuditLog`. The acknowledgement is written off the
-/// channel's delivery thread (`Async.Start`), so reads go through
-/// `waitForEvent` rather than assuming it has landed by the time
-/// `DestroyKey` returns.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
+/// The recorded events of one type, oldest first.
+let private ofType (log: TestAuditLog) (eventType: string) =
+    log.Events |> List.filter (fun e -> AuditEvent.eventTypeName e = eventType)
 
-    member _.Events = recorded |> Seq.map snd |> List.ofSeq
+/// The acknowledgement is written off the channel's delivery thread
+/// (`Async.Start`), so reads wait on the recording rather than assuming it
+/// has landed by the time `DestroyKey` returns: block until at least
+/// `count` events of `eventType` are recorded, or the budget expires.
+/// Returns what it found either way so the caller asserts on the count
+/// rather than on a timeout boolean.
+let private waitForEvent (log: TestAuditLog) (eventType: string) (count: int) = async {
+    log.Recording.WaitUntil(
+        (fun rows ->
+            rows
+            |> List.filter (fun r -> AuditEvent.eventTypeName r.Event = eventType)
+            |> List.length
+            >= count),
+        TimeSpan.FromSeconds 5.0
+    )
+    |> ignore
 
-    member this.OfType(eventType: string) =
-        this.Events |> List.filter (fun e -> AuditEvent.eventTypeName e = eventType)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scope, _actor, audit) = async {
-            recorded.Enqueue(scope, audit)
-            return Result.Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
-/// Poll until at least `count` events of `eventType` are recorded, or the
-/// budget expires. Returns what it found either way so the caller asserts
-/// on the count rather than on a timeout boolean.
-let private waitForEvent (log: RecordingAuditLog) (eventType: string) (count: int) = async {
-    let deadline = DateTime.UtcNow.AddSeconds 5.0
-
-    let mutable found = log.OfType eventType
-
-    while found.Length < count && DateTime.UtcNow < deadline do
-        do! Async.Sleep 10
-        found <- log.OfType eventType
-
-    return found
+    return ofType log eventType
 }
 
 /// Grace period before asserting an event was NOT recorded. Absence
@@ -119,8 +103,10 @@ let private fanoutTests =
             // No WireToChannel on B: this is pre-Phase-22b behaviour, and
             // it must still be reproducible, or the test below proves
             // nothing about the fanout.
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cacheA = newCache ()
             use cacheB = newCache ()
 
@@ -155,8 +141,10 @@ let private fanoutTests =
         testCaseAsync
             "DestroyKey on A evicts B's cache — B's decrypt fails with the key-destroyed error, never plaintext"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cacheA = newCache ()
             use cacheB = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
@@ -188,13 +176,15 @@ let private fanoutTests =
         testCaseAsync
             "A records EncryptionKeyDestroyed and no self-acknowledgement; B records exactly one acknowledgement"
         <| async {
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cacheA = newCache ()
             use cacheB = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let auditA = RecordingAuditLog()
-            let auditB = RecordingAuditLog()
+            let auditA = TestAuditLog()
+            let auditB = TestAuditLog()
 
             let replicaA = PerScopeKeyResolver.create secrets cacheA ((auditA :> IAuditLog))
             let replicaB = PerScopeKeyResolver.create secrets cacheB ((auditB :> IAuditLog))
@@ -213,12 +203,12 @@ let private fanoutTests =
 
             // A: the destroy, and nothing acknowledging its own broadcast.
             Expect.equal
-                (auditA.OfType "EncryptionKeyDestroyed" |> List.length)
+                (ofType auditA "EncryptionKeyDestroyed" |> List.length)
                 1
                 "A records exactly one EncryptionKeyDestroyed"
 
             Expect.isEmpty
-                (auditA.OfType "EncryptionKeyDestroyAcknowledged")
+                (ofType auditA "EncryptionKeyDestroyAcknowledged")
                 "A must not acknowledge its own destroy — the in-process channel echoes the publish back, and a self-ack would make a fleet of one look like a confirmed fanout"
 
             // B: exactly one acknowledgement, naming itself and A.
@@ -250,7 +240,7 @@ let private fanoutTests =
             | other -> failtestf "expected one EncryptionKeyDestroyAcknowledged payload, got %A" other
 
             Expect.isEmpty
-                (auditB.OfType "EncryptionKeyDestroyed")
+                (ofType auditB "EncryptionKeyDestroyed")
                 "B did not perform the destroy, so it must not claim to have"
         }
 
@@ -259,11 +249,13 @@ let private fanoutTests =
             // GP 11: a single-replica deployment must be unchanged. Its
             // fanout is a publish it receives itself, and that must
             // produce no forensic event at all.
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cache = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let resolver = PerScopeKeyResolver.create secrets cache ((audit :> IAuditLog))
             do! resolver.WireToChannel channel
@@ -277,12 +269,12 @@ let private fanoutTests =
             do! settleForAbsence ()
 
             Expect.equal
-                (audit.OfType "EncryptionKeyDestroyed" |> List.length)
+                (ofType audit "EncryptionKeyDestroyed" |> List.length)
                 1
                 "the destroy is recorded exactly as before Phase 22b"
 
             Expect.isEmpty
-                (audit.OfType "EncryptionKeyDestroyAcknowledged")
+                (ofType audit "EncryptionKeyDestroyAcknowledged")
                 "a lone replica has nothing to acknowledge to itself"
 
             let! after = storage.Download(container, "doc.bin")
@@ -303,7 +295,8 @@ let private envelopeTests =
             // Subscribe a bare handler alongside the resolvers to capture
             // the wire payload — the contract is the envelope, so assert
             // on the bytes rather than only on the effect.
-            let secrets = newSecretStore ()
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cache = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
             let captured = ConcurrentQueue<string>()
@@ -352,11 +345,13 @@ let private envelopeTests =
             // acknowledgement is skipped because the envelope's fields
             // were never sent, and fabricating an actor would be worse
             // than omitting the row.
-            let inner = newInnerStorage ()
-            let secrets = newSecretStore ()
+            use innerDir = newTempDir ()
+            let inner = newInnerStorage innerDir
+            use secretsDir = newTempDir ()
+            let secrets = newSecretStore secretsDir
             use cache = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let replica = PerScopeKeyResolver.create secrets cache ((audit :> IAuditLog))
             do! replica.WireToChannel(channel, "replica-b")
@@ -388,7 +383,7 @@ let private envelopeTests =
             | Result.Error msg -> Expect.stringContains msg "destroyed" "legacy payload still evicts the cache"
 
             Expect.isEmpty
-                (audit.OfType "EncryptionKeyDestroyAcknowledged")
+                (ofType audit "EncryptionKeyDestroyAcknowledged")
                 "a legacy payload carries none of the acknowledgement's fields, so no row is fabricated"
         }
     ]
@@ -421,8 +416,8 @@ let private servicesWith (resolver: IBlobEncryptionKeyResolver option) (channel:
 
     services
 
-let private perScopeResolver () : IBlobEncryptionKeyResolver =
-    PerScopeKeyResolver.create (newSecretStore ()) (newCache ()) (NoOpAuditLog()) :> IBlobEncryptionKeyResolver
+let private perScopeResolver (dir: TempDir) : IBlobEncryptionKeyResolver =
+    PerScopeKeyResolver.create (newSecretStore dir) (newCache ()) (NoOpAuditLog()) :> IBlobEncryptionKeyResolver
 
 let private validate (config: ServerConfig) (services: IServiceCollection) : ValidationResult =
     let v =
@@ -434,9 +429,11 @@ let private validatorTests =
     testList "KeyDestroyAckCoverageValidator" [
 
         test "Team + PerScopeKeyResolver + in-memory channel → Warning" {
+            use dir = newTempDir ()
+
             let services =
                 servicesWith
-                    (Some(perScopeResolver ()))
+                    (Some(perScopeResolver dir))
                     (Some(InMemoryNotificationChannel(None) :> INotificationChannel))
 
             match validate (cfg Surfaces.team) services with
@@ -453,8 +450,10 @@ let private validatorTests =
         }
 
         test "MultiTeam + PerScopeKeyResolver + no-op channel → Warning (no-op reaches nobody at all)" {
+            use dir = newTempDir ()
+
             let services =
-                servicesWith (Some(perScopeResolver ())) (Some(NoOpNotificationChannel() :> INotificationChannel))
+                servicesWith (Some(perScopeResolver dir)) (Some(NoOpNotificationChannel() :> INotificationChannel))
 
             match validate (cfg Surfaces.multiTeam) services with
             | Warning msg -> Expect.stringContains msg "MultiTeam" "names the deployment shape"
@@ -462,8 +461,10 @@ let private validatorTests =
         }
 
         test "Team + PerScopeKeyResolver + distributed channel → Ok" {
+            use dir = newTempDir ()
+
             let services =
-                servicesWith (Some(perScopeResolver ())) (Some(FakeDistributedChannel() :> INotificationChannel))
+                servicesWith (Some(perScopeResolver dir)) (Some(FakeDistributedChannel() :> INotificationChannel))
 
             Expect.equal
                 (validate (cfg Surfaces.team) services)
@@ -472,7 +473,8 @@ let private validatorTests =
         }
 
         test "Team + SingleKeyResolver + in-memory channel → Ok (no DestroyKey path to fan out)" {
-            let single = SingleKeyResolver.create (newSecretStore ())
+            use dir = newTempDir ()
+            let single = SingleKeyResolver.create (newSecretStore dir)
 
             let services =
                 servicesWith (Some single) (Some(InMemoryNotificationChannel(None) :> INotificationChannel))
@@ -481,9 +483,11 @@ let private validatorTests =
         }
 
         test "Individual + PerScopeKeyResolver + in-memory channel → Ok (not a Team/MultiTeam shape)" {
+            use dir = newTempDir ()
+
             let services =
                 servicesWith
-                    (Some(perScopeResolver ()))
+                    (Some(perScopeResolver dir))
                     (Some(InMemoryNotificationChannel(None) :> INotificationChannel))
 
             Expect.equal
@@ -500,7 +504,9 @@ let private validatorTests =
         }
 
         test "No channel registered → Ok (nothing to assess)" {
-            let services = servicesWith (Some(perScopeResolver ())) None
+            use dir = newTempDir ()
+
+            let services = servicesWith (Some(perScopeResolver dir)) None
 
             Expect.equal
                 (validate (cfg Surfaces.team) services)

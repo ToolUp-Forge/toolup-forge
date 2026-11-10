@@ -14,6 +14,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // Deliberately NOT opening `ToolUp.Platform.ConfigValidation` here —
 // its `ValidationResult` cases (`Ok | Warning | Error`) would shadow
@@ -38,72 +39,36 @@ open ToolUp.Platform.Compose
 
 // ─── Fakes ───────────────────────────────────────────────────────────
 
-/// Audit capture. The production handler calls `Async.Start` on the
-/// recorder (fire-and-forget onto the thread pool), so a test asserting
-/// on the row waits for a write it deliberately did not await; the
-/// bootstrap path awaits records directly and needs no wait at all.
-type private CapturingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    let gate = obj ()
+/// The production handler calls `Async.Start` on the recorder
+/// (fire-and-forget onto the thread pool), so a test asserting on the row
+/// waits for a write it deliberately did not await; the bootstrap path
+/// awaits records directly and needs no wait at all.
+///
+/// Event-driven, not polled: the wait wakes on every write, so this
+/// returns the instant the matching row lands, and the cap only bites when
+/// the row is not coming at all. A timeout fails HERE, naming what did
+/// arrive — the deny-observer fixtures' 5s wall-clock poll expired under
+/// machine load on 2026-08-24 and blamed the downstream audit claim instead
+/// of the scheduler; this fixture's old 1s cap was tighter still.
+let private waitForEventOfKind (audit: TestAuditLog) (eventTypeName: string) : Async<AuditEvent> = async {
+    let cap = TimeSpan.FromSeconds 30.0
 
-    member _.Recorded = lock gate (fun () -> List.ofSeq recorded)
+    let isKind (ev: AuditEvent) =
+        AuditEvent.eventTypeName ev = eventTypeName
 
-    /// Event-driven, not polled: `Record` pulses the monitor, so this
-    /// returns the instant the matching row lands, and the cap only
-    /// bites when the row is not coming at all. A timeout fails HERE,
-    /// naming what did arrive — the deny-observer fixtures' 5s
-    /// wall-clock poll expired under machine load on 2026-08-24 and
-    /// blamed the downstream audit claim instead of the scheduler; this
-    /// fixture's old 1s cap was tighter still.
-    member _.WaitForEventOfKind(eventTypeName: string) : Async<AuditEvent> = async {
-        let cap = TimeSpan.FromSeconds 30.0
-        let sw = Diagnostics.Stopwatch.StartNew()
+    audit.Recording.WaitUntil((fun rows -> rows |> List.exists (fun row -> isKind row.Event)), cap)
+    |> ignore
 
-        return
-            lock gate (fun () ->
-                let find () =
-                    recorded
-                    |> Seq.tryFind (fun (_, ev) -> AuditEvent.eventTypeName ev = eventTypeName)
-
-                let mutable hit = find ()
-
-                while hit.IsNone && sw.Elapsed < cap do
-                    let remaining = cap - sw.Elapsed
-
-                    if remaining > TimeSpan.Zero then
-                        Threading.Monitor.Wait(gate, remaining) |> ignore
-
-                    hit <- find ()
-
-                match hit with
-                | Some(_, ev) -> ev
-                | None ->
-                    failtestf
-                        "audit wait: no '%s' event within %.0fs (events that DID arrive: %A) — with an event-driven wait this long the handler's fire-and-forget write never happened (it is not merely late); the assertion after this wait has NOT been evaluated"
-                        eventTypeName
-                        cap.TotalSeconds
-                        (recorded |> Seq.map (fun (_, ev) -> AuditEvent.eventTypeName ev) |> List.ofSeq))
-    }
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            lock gate (fun () ->
-                recorded.Add((scopeId, audit))
-                Threading.Monitor.PulseAll gate)
-
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-/// Silent `ILogger` for bootstrap tests (a real `ConsoleLogger` would
-/// flood the runner).
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
+    return
+        match audit.Events |> List.tryFind isKind with
+        | Some ev -> ev
+        | None ->
+            failtestf
+                "audit wait: no '%s' event within %.0fs (events that DID arrive: %A) — with an event-driven wait this long the handler's fire-and-forget write never happened (it is not merely late); the assertion after this wait has NOT been evaluated"
+                eventTypeName
+                cap.TotalSeconds
+                (audit.Events |> List.map AuditEvent.eventTypeName)
+}
 
 // ─── Handler test fixtures ───────────────────────────────────────────
 
@@ -192,7 +157,7 @@ let tests =
 
         testCaseAsync "Admin caller under PlatformAdminOnly: CreateTeam succeeds"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             // Seed the caller as a Platform Admin.
@@ -209,7 +174,7 @@ let tests =
 
         testCaseAsync "Non-admin caller under PlatformAdminOnly: CreateTeam denied"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             // bob is NOT in the admin store.
@@ -230,7 +195,7 @@ let tests =
 
         testCaseAsync "Non-admin caller under AnyAuthenticatedUser: CreateTeam succeeds (pre-5f shape)"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
@@ -245,7 +210,7 @@ let tests =
 
         testCaseAsync "Non-admin deny emits TeamCreationDenied audit"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let ctx = ctxFor "carol" teamStore adminStore (auditLog :> IAuditLog)
@@ -255,7 +220,7 @@ let tests =
 
             // Handler emits audit via `Async.Start`; the fixture's wait
             // is event-driven and fails with attribution on a timeout.
-            let! ev = auditLog.WaitForEventOfKind "TeamCreationDenied"
+            let! ev = waitForEventOfKind auditLog "TeamCreationDenied"
 
             match ev with
             | AuditEvent.TeamCreationDenied payload ->
@@ -266,7 +231,7 @@ let tests =
 
         testCaseAsync "GetTeamCreationPolicy returns the configured value"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let ctx = ctxFor "alice" teamStore adminStore (auditLog :> IAuditLog)
@@ -286,15 +251,15 @@ let tests =
         <| async {
             do!
                 withEnv None None None (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let teamStore = freshTeamStore () :> ITeamStore
 
-                    do! BootstrapTeam.bootstrap (SilentLogger()) auditLog teamStore
+                    do! BootstrapTeam.bootstrap Logger.silent auditLog teamStore
 
                     let! teams = teamStore.ListTeams()
                     Expect.isEmpty teams "no team created when env var is unset"
 
-                    let capture = (auditLog :?> CapturingAuditLog).Recorded
+                    let capture = (auditLog :?> TestAuditLog).Events
                     Expect.isEmpty capture "no audit emitted on no-op"
                 })
         }
@@ -303,10 +268,10 @@ let tests =
         <| async {
             do!
                 withEnv (Some "Bootstrap Co") (Some "boot0001") (Some "admin-1") (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let teamStore = freshTeamStore () :> ITeamStore
 
-                    do! BootstrapTeam.bootstrap (SilentLogger()) auditLog teamStore
+                    do! BootstrapTeam.bootstrap Logger.silent auditLog teamStore
 
                     let! teams = teamStore.ListTeams()
                     Expect.hasLength teams 1 "exactly one team created"
@@ -326,19 +291,19 @@ let tests =
         <| async {
             do!
                 withEnv (Some "Acme") (Some "acme0001") (Some "admin-2") (fun () -> async {
-                    let auditLog = CapturingAuditLog()
+                    let auditLog = TestAuditLog()
                     let teamStore = freshTeamStore () :> ITeamStore
 
-                    do! BootstrapTeam.bootstrap (SilentLogger()) (auditLog :> IAuditLog) teamStore
+                    do! BootstrapTeam.bootstrap Logger.silent (auditLog :> IAuditLog) teamStore
 
-                    let recorded = auditLog.Recorded
-                    let kinds = recorded |> List.map (fun (_, ev) -> AuditEvent.eventTypeName ev)
+                    let recorded = auditLog.Events
+                    let kinds = recorded |> List.map AuditEvent.eventTypeName
                     Expect.contains kinds "TeamCreated" "TeamCreated audit emitted"
                     Expect.contains kinds "MemberAdded" "MemberAdded audit emitted"
 
                     let teamCreatedActor =
                         recorded
-                        |> List.tryPick (fun (_, ev) ->
+                        |> List.tryPick (fun ev ->
                             match ev with
                             | TeamCreated p -> Some p.UserId
                             | _ -> None)
@@ -347,7 +312,7 @@ let tests =
 
                     let memberAddedActor =
                         recorded
-                        |> List.tryPick (fun (_, ev) ->
+                        |> List.tryPick (fun ev ->
                             match ev with
                             | MemberAdded p -> Some(p.UserId, p.AffectedUserId, p.Role)
                             | _ -> None)
@@ -363,24 +328,24 @@ let tests =
         <| async {
             do!
                 withEnv (Some "Once Only") None (Some "admin-3") (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let teamStore = freshTeamStore () :> ITeamStore
 
-                    do! BootstrapTeam.bootstrap (SilentLogger()) auditLog teamStore
+                    do! BootstrapTeam.bootstrap Logger.silent auditLog teamStore
                     let! firstRun = teamStore.ListTeams()
                     Expect.hasLength firstRun 1 "first invocation creates one team"
 
-                    let auditCountAfterFirst = (auditLog :?> CapturingAuditLog).Recorded.Length
+                    let auditCountAfterFirst = (auditLog :?> TestAuditLog).Events.Length
 
                     // Second invocation with the env var STILL SET —
                     // bootstrap must no-op because the store is no
                     // longer empty.
-                    do! BootstrapTeam.bootstrap (SilentLogger()) auditLog teamStore
+                    do! BootstrapTeam.bootstrap Logger.silent auditLog teamStore
 
                     let! secondRun = teamStore.ListTeams()
                     Expect.hasLength secondRun 1 "second invocation is a no-op (store still has exactly one team)"
 
-                    let auditCountAfterSecond = (auditLog :?> CapturingAuditLog).Recorded.Length
+                    let auditCountAfterSecond = (auditLog :?> TestAuditLog).Events.Length
 
                     Expect.equal auditCountAfterSecond auditCountAfterFirst "no audit emitted on second invocation"
                 })
@@ -390,12 +355,12 @@ let tests =
         <| async {
             do!
                 withEnv (Some "Should Not Create") None (Some "admin-4") (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let teamStore = freshTeamStore ()
                     // Pre-populate the store with an unrelated team.
                     let! _ = teamStore.CreateTeam(TeamId "preexisting", "Pre-existing")
 
-                    do! BootstrapTeam.bootstrap (SilentLogger()) auditLog (teamStore :> ITeamStore)
+                    do! BootstrapTeam.bootstrap Logger.silent auditLog (teamStore :> ITeamStore)
 
                     let! teams = (teamStore :> ITeamStore).ListTeams()
                     Expect.hasLength teams 1 "still exactly one team (the pre-existing one)"
@@ -407,10 +372,10 @@ let tests =
         <| async {
             do!
                 withEnv (Some "Half Configured") None None (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let teamStore = freshTeamStore () :> ITeamStore
 
-                    do! BootstrapTeam.bootstrap (SilentLogger()) auditLog teamStore
+                    do! BootstrapTeam.bootstrap Logger.silent auditLog teamStore
 
                     let! teams = teamStore.ListTeams()
                     Expect.isEmpty teams "no team created when admin env var is missing"
@@ -423,7 +388,7 @@ let tests =
         <| async {
             do!
                 withEnv None None None (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let adminStore = freshAdminStore auditLog
                     let config = teamConfig PlatformAdminOnly
 
@@ -449,7 +414,7 @@ let tests =
         <| async {
             do!
                 withEnv None None (Some "admin-5") (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let adminStore = freshAdminStore auditLog
 
                     let v =
@@ -468,7 +433,7 @@ let tests =
         <| async {
             do!
                 withEnv None None None (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let adminStore = freshAdminStore auditLog
                     let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "preseeded-admin")
 
@@ -488,7 +453,7 @@ let tests =
         <| async {
             do!
                 withEnv None None None (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let adminStore = freshAdminStore auditLog
 
                     let v =
@@ -507,7 +472,7 @@ let tests =
         <| async {
             do!
                 withEnv None None None (fun () -> async {
-                    let auditLog = CapturingAuditLog() :> IAuditLog
+                    let auditLog = TestAuditLog() :> IAuditLog
                     let adminStore = freshAdminStore auditLog
 
                     let config = {
@@ -579,7 +544,7 @@ let tests =
         // ── Validator metadata smoke ────────────────────────────────
 
         test "Validator metadata is well-formed" {
-            let auditLog = CapturingAuditLog() :> IAuditLog
+            let auditLog = TestAuditLog() :> IAuditLog
             let adminStore = freshAdminStore auditLog
 
             let v1 =
@@ -664,7 +629,7 @@ let integrityTests =
 
         testCaseAsync "Owner-write failure rolls back the team (no orphan, no TeamCreated audit)"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let realStore = freshTeamStore () :> ITeamStore
             let failing = AddMemberFailingStore(realStore) :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
@@ -684,15 +649,14 @@ let integrityTests =
 
             // TeamCreated is only emitted once the team is whole — it must
             // never fire for a rolled-back create.
-            let kinds =
-                auditLog.Recorded |> List.map (fun (_, ev) -> AuditEvent.eventTypeName ev)
+            let kinds = auditLog.Events |> List.map AuditEvent.eventTypeName
 
             Expect.isFalse (List.contains "TeamCreated" kinds) "no TeamCreated audit on a rolled-back create"
         }
 
         testCaseAsync "CreateTeam rejects a blank name (server-side)"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
@@ -710,7 +674,7 @@ let integrityTests =
 
         testCaseAsync "CreateTeam rejects an over-length name (server-side)"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
@@ -735,7 +699,7 @@ let quotaTests =
 
         testCaseAsync "Quota unset → unlimited team creation (unchanged)"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
@@ -751,7 +715,7 @@ let quotaTests =
 
         testCaseAsync "Quota set → rejected once the limit is reached"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let ctx = ctxFor "bob" teamStore adminStore (auditLog :> IAuditLog)
@@ -779,7 +743,7 @@ let quotaTests =
 
         testCaseAsync "Platform Admin is exempt from the quota"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")
@@ -800,7 +764,7 @@ let quotaTests =
 
         testCaseAsync "Quota is inert under PlatformAdminOnly"
         <| async {
-            let auditLog = CapturingAuditLog()
+            let auditLog = TestAuditLog()
             let teamStore = freshTeamStore () :> ITeamStore
             let adminStore = freshAdminStore (auditLog :> IAuditLog)
             let! _ = adminStore.AssignPlatformAdmin(UserId "_bootstrap", UserId "alice")

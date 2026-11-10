@@ -56,6 +56,7 @@ open ToolUp.Platform.Tests.InProcess.FederationWireCorpus
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── The canonical contract ──────────────────────────────────────────
 //
@@ -402,14 +403,9 @@ let private runProcess (launch: RuntimeLaunch) (extra: string list) (workingDire
             TimedOut = false
         }
 
-/// A scratch directory under the test binary's own output, so a probe or
-/// a run never writes into the repo tree.
-let private scratchDir (name: string) =
-    let path =
-        Path.Combine(Path.GetTempPath(), "toolup-cross-runtime", $"{name}-{Guid.NewGuid():N}")
-
-    Directory.CreateDirectory path |> ignore
-    path
+/// A scratch directory under the temp root, deleted when disposed, so a
+/// probe or a run never writes into the repo tree.
+let private scratchDir (name: string) = TempDir.create $"cross-runtime-{name}"
 
 /// `docs/interplatform/cross-runtime/` — the committed drivers.
 let driverDir () =
@@ -422,12 +418,13 @@ let driverDir () =
 /// (an `.mjs` importing a `.ts`), so a node that passes it can run the
 /// real thing.
 let probeNode () : RuntimeAvailability =
-    let dir = scratchDir "node-probe"
+    use scratch = scratchDir "node-probe"
+    let dir = scratch.Path
 
-    File.WriteAllText(Path.Combine(dir, "probe.ts"), $"export const marker: string = \"{probeMarker}\";\n")
+    File.WriteAllText(scratch.File "probe.ts", $"export const marker: string = \"{probeMarker}\";\n")
 
     File.WriteAllText(
-        Path.Combine(dir, "probe.mjs"),
+        scratch.File "probe.mjs",
         "const m = await import(\"./probe.ts\");\nprocess.stdout.write(m.marker);\n"
     )
 
@@ -471,13 +468,14 @@ let probeNode () : RuntimeAvailability =
 /// install prompt — so, again, the probe runs code rather than trusting a
 /// name.
 let probePython () : RuntimeAvailability =
-    let dir = scratchDir "python-probe"
+    use scratch = scratchDir "python-probe"
+    let dir = scratch.Path
 
     let script =
         "import sys, json, uuid, urllib.request, dataclasses, typing\n"
         + $"sys.stdout.write('{probeMarker}' if sys.version_info >= (3, 8) else 'too-old')\n"
 
-    File.WriteAllText(Path.Combine(dir, "probe.py"), script)
+    File.WriteAllText(scratch.File "probe.py", script)
 
     let candidates = [
         {
@@ -522,46 +520,10 @@ let probePython () : RuntimeAvailability =
 
 let private signingKey = "cross-runtime-conformance-shared-signing-key-0123456789"
 
-/// The per-file in-memory `ISecretStore` every peer pack in this tier
-/// carries — kept local rather than shared for the same reason they do:
-/// a fixture that several packs mutate is a fixture that couples them.
-type private InMemorySecretStore() =
-    let store =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, value -> return Some value
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (scope, _) -> scope = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 let private secrets () =
-    let store = InMemorySecretStore() :> ISecretStore
-
-    store.SetSecret("_platform", $"peers/{callerPeer.PeerId}/signing-key", signingKey)
-    |> Async.RunSynchronously
-    |> ignore
-
-    store
+    let store = Fakes.TestSecretStore()
+    store.Seed("_platform", $"peers/{callerPeer.PeerId}/signing-key", signingKey)
+    store :> ISecretStore
 
 /// The token the drivers present, minted by the live signing helper and
 /// addressed to the receiver — so a foreign runtime crosses the same
@@ -768,10 +730,11 @@ let execute
     (emitClient: PeerContractSchema -> string)
     (mutate: string -> string)
     : Result<RuntimeRun, string> =
-    let dir = scratchDir runtime
+    use scratch = scratchDir runtime
+    let dir = scratch.Path
     let generated = emitClient schema
-    File.WriteAllText(Path.Combine(dir, clientFile), mutate generated)
-    File.Copy(Path.Combine(driverDir (), driverFile), Path.Combine(dir, driverFile))
+    File.WriteAllText(scratch.File clientFile, mutate generated)
+    File.Copy(Path.Combine(driverDir (), driverFile), scratch.File driverFile)
 
     let auth = JwtPeerAuthProvider(secrets (), receiverPeer.PeerId) :> IPeerAuthProvider
     let peer = platformPeer ()

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.HnswVectorStoreTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -10,18 +9,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
-
-/// Silence the per-flush directory-name warnings: `LocalFileStorage` on
-/// Windows can't materialise the `team:<id>` segment of the persisted
-/// path, but the in-memory store and graph build are unaffected and the
-/// tests never reload from disk. These tests exercise behaviour, not
-/// the persistence subsystem.
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
+open ToolUp.Platform.Testing
 
 // Per-scope vector. Each scope gets a single-axis-aligned unit vector so a
 // query against the same axis is the obvious nearest neighbour within its
@@ -40,30 +28,36 @@ let private chunk content tag : TextChunk = {
     Metadata = Map.ofList [ "tag", tag ]
 }
 
-let private newStore () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-hnsw-test-" + Guid.NewGuid().ToString("N"))
+/// One disposable that releases the store, then deletes its directory.
+let private disposingBoth (store: IDisposable) (dir: TempDir) =
+    { new IDisposable with
+        member _.Dispose() =
+            store.Dispose()
+            (dir :> IDisposable).Dispose()
+    }
 
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
-    let logger = SilentLogger() :> ILogger
+/// The logger is silent to drop the per-flush directory-name warnings:
+/// `LocalFileStorage` on Windows can't materialise the `team:<id>` segment
+/// of the persisted path, but the in-memory store and graph build are
+/// unaffected and the tests never reload from disk. These tests exercise
+/// behaviour, not the persistence subsystem.
+let private newStore () =
+    let tempDir = TempDir.create "hnsw-test"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new HnswVectorStore.HnswVectorStore(storage, logger, flushIntervalMs = 50)
+        new HnswVectorStore.HnswVectorStore(storage, Logger.silent, flushIntervalMs = 50)
 
-    store :> IVectorStore, store :> IDisposable
+    store :> IVectorStore, disposingBoth store tempDir
 
 let private newInMemoryStore () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-inmem-vec-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "inmem-vec-test"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = SilentLogger())
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent)
 
-    store :> IVectorStore, store :> IDisposable
+    store :> IVectorStore, disposingBoth store tempDir
 
 /// `IVectorStore` deterministic-ordering contract (RAG Gap 7, Investigate
 /// gaps 2026-06-12): equal-score matches must come back in a stable total
@@ -128,20 +122,15 @@ let private unitVector (index: int) : float32 array =
 
 let private chunkIdOf (i: int) = sprintf "c%04d" i
 
-let private newConcreteStore (parameters: HnswVectorStore.HnswParameters) =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-hnsw-1007-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private newConcreteStore (dir: TempDir) (parameters: HnswVectorStore.HnswParameters) =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
     new HnswVectorStore.HnswVectorStore(
         storage,
-        logger = SilentLogger(),
+        logger = Logger.silent,
         flushIntervalMs = 60000,
         parameters = parameters
-    ),
-    tempDir
+    )
 
 let private upsertRange (store: IVectorStore) (from: int) (count: int) = async {
     for i in from .. from + count - 1 do
@@ -291,7 +280,8 @@ let tests =
         }
 
         testAsync "Phase 1007: a write into a built scope adds to the graph and never rebuilds it" {
-            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use dir = TempDir.create "hnsw-1007"
+            let store = newConcreteStore dir HnswVectorStore.HnswParameters.defaults
             use _ = store
             let vs = store :> IVectorStore
             do! upsertRange vs 0 200
@@ -311,7 +301,8 @@ let tests =
         }
 
         testAsync "Phase 1007: a deleted chunk never returns, and topK stays full" {
-            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use dir = TempDir.create "hnsw-1007"
+            let store = newConcreteStore dir HnswVectorStore.HnswParameters.defaults
             use _ = store
             let vs = store :> IVectorStore
             do! upsertRange vs 0 200
@@ -339,7 +330,8 @@ let tests =
         }
 
         testAsync "Phase 1007: an overwrite retires the old vector; a same-vector rewrite keeps its node" {
-            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use dir = TempDir.create "hnsw-1007"
+            let store = newConcreteStore dir HnswVectorStore.HnswParameters.defaults
             use _ = store
             let vs = store :> IVectorStore
             do! upsertRange vs 0 100
@@ -371,7 +363,8 @@ let tests =
         }
 
         testAsync "Phase 1007: a restore revives the chunk's node; a vacuumed chunk stays retired" {
-            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use dir = TempDir.create "hnsw-1007"
+            let store = newConcreteStore dir HnswVectorStore.HnswParameters.defaults
             use _ = store
             let vs = store :> IVectorStore
             do! upsertRange vs 0 100
@@ -400,7 +393,8 @@ let tests =
                     TombstoneRebuildFraction = 0.1
             }
 
-            let store, _ = newConcreteStore parameters
+            use dir = TempDir.create "hnsw-1007"
+            let store = newConcreteStore dir parameters
             use _ = store
             let vs = store :> IVectorStore
             do! upsertRange vs 0 100
@@ -429,7 +423,8 @@ let tests =
         }
 
         testAsync "Phase 1007: a cold load builds the graph once from the persisted entries" {
-            let store, dir = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use dir = TempDir.create "hnsw-1007"
+            let store = newConcreteStore dir HnswVectorStore.HnswParameters.defaults
             let vs = store :> IVectorStore
 
             for i in 0..19 do
@@ -440,8 +435,8 @@ let tests =
 
             use reloaded =
                 new HnswVectorStore.HnswVectorStore(
-                    LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage,
-                    logger = SilentLogger(),
+                    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage,
+                    logger = Logger.silent,
                     flushIntervalMs = 60000
                 )
 
@@ -493,7 +488,7 @@ let tests =
                 ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
             use store =
-                new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+                new HnswVectorStore.HnswVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
             let vs = store :> IVectorStore
             let scopeCount = 20000
@@ -553,9 +548,9 @@ let tests =
         // loaded scope first, and an unreadable snapshot refuses it. Over
         // the in-memory blob double, because these laws are ABOUT reloading
         // from storage (the `team:<id>` segment cannot materialise on a
-        // Windows `LocalFileStorage`, see `SilentLogger` above).
+        // Windows `LocalFileStorage`, see `newStore` above).
         ToolUp.Platform.Tests.Contracts.IVectorStoreContract.tests "HnswVectorStore" (fun storage ->
-            new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+            new HnswVectorStore.HnswVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
             :> IVectorStore)
 
         ToolUp.Platform.Tests.Contracts.IVectorStoreContract.unreadableSnapshotTests
@@ -564,6 +559,6 @@ let tests =
             | :? RagScopeSnapshotUnreadableException -> true
             | _ -> false)
             (fun storage ->
-                new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+                new HnswVectorStore.HnswVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
                 :> IVectorStore)
     ]

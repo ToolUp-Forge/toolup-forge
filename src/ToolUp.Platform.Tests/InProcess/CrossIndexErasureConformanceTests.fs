@@ -22,6 +22,7 @@ open ToolUp.SparseIndices.Postgres.PostgresFullTextIndex
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 204 — cross-index erasure conformance (property) ───────────
 //
@@ -60,13 +61,6 @@ open ToolUp.Platform.Compose
 // full-text index (Phase 893) on its live arm, gated on
 // `TOOLUP_PG_FULLTEXT_CONNECTION_STRING`. Probed: with that index's
 // `Erase` turned into a dry run, both Postgres properties go red.
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 /// One axis-aligned unit vector for every chunk and for every query, so
 /// cosine similarity is ~1 across the whole corpus. That removes ranking
@@ -244,7 +238,7 @@ type private SparseFactory = IBlobStorage -> ISparseIndex * (unit -> unit)
 let private bm25Factory: SparseFactory =
     fun storage ->
         let bm25 =
-            new InMemoryBM25Index(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+            new InMemoryBM25Index(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
         bm25 :> ISparseIndex, (fun () -> (bm25 :> IDisposable).Dispose())
 
@@ -255,7 +249,7 @@ let private bm25Factory: SparseFactory =
 /// `IndexLifecycleTests` established.
 let private bootWith (sparseFactory: SparseFactory) (storage: IBlobStorage) (cache: IEmbeddingCache) : Harness =
     let vectorStore =
-        new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+        new InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
     let vs = vectorStore :> IVectorStore
     let sparse, closeSparse = sparseFactory storage
@@ -1134,10 +1128,10 @@ let tests =
             let cache = InMemoryEmbeddingCache() :> IEmbeddingCache
 
             use vectorStore =
-                new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+                new InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
             use bm25 =
-                new InMemoryBM25Index(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+                new InMemoryBM25Index(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
             let vs = vectorStore :> IVectorStore
             let sparse = bm25 :> ISparseIndex
@@ -1202,10 +1196,10 @@ let tests =
             let cache = InMemoryEmbeddingCache() :> IEmbeddingCache
 
             use vectorStore =
-                new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+                new InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
             use bm25 =
-                new InMemoryBM25Index(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+                new InMemoryBM25Index(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
             let vs = vectorStore :> IVectorStore
             let sparse = bm25 :> ISparseIndex
@@ -1406,7 +1400,7 @@ let tests =
         // (Phase 726 covered the two deletes; this holds all of them), and
         // an unreadable snapshot refuses it.
         ToolUp.Platform.Tests.Contracts.IVectorStoreContract.tests "InMemoryVectorStore" (fun storage ->
-            new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000) :> IVectorStore)
+            new InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000) :> IVectorStore)
 
         ToolUp.Platform.Tests.Contracts.IVectorStoreContract.unreadableSnapshotTests
             "InMemoryVectorStore"
@@ -1414,5 +1408,5 @@ let tests =
             | :? RagScopeSnapshotUnreadableException -> true
             | _ -> false)
             (fun storage ->
-                new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000) :> IVectorStore)
+                new InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000) :> IVectorStore)
     ]

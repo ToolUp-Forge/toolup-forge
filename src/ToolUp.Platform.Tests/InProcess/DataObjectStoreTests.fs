@@ -10,6 +10,7 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 /// Bind the `IDataObjectStore` contract test pack to the blob-backed
 /// `DataObjectStore` over a `LocalFileStorage` substrate. Each factory
@@ -20,10 +21,9 @@ open ToolUp.Platform.Infra
 /// blob storage.
 let private contractTests =
     let factory () =
-        let tempDir =
-            Path.Combine(Path.GetTempPath(), "toolup-do-test-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory tempDir |> ignore
+        // The contract pack's factory has no disposal hook, so the directory
+        // outlives the case; the family attributes it in the gate's temp census.
+        let tempDir = (TempDir.create "do-test").Path
         let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let store = DataObjectStore(blob) :> IDataObjectStore
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -304,19 +304,6 @@ type ExistsHidingBlobStorage(inner: IBlobStorage, hidden: string -> bool) =
         member _.UploadWithETag(container, blobName, content, condition) =
             (inner :?> IConditionalBlobStorage).UploadWithETag(container, blobName, content, condition)
 
-type private WarnRecordingLogger() =
-    let warnings = ResizeArray<string>()
-    member _.Warnings = lock warnings (fun () -> List.ofSeq warnings)
-
-    interface ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-
-        member _.Warn(message: string) =
-            lock warnings (fun () -> warnings.Add message)
-
-        member _.Error(_: string, _: exn option) = ()
-
 let private v4 = "objects/o1/v4.json"
 
 let private phase967Tests =
@@ -387,7 +374,7 @@ let private phase967Tests =
 
         testAsync "DeleteIfVersion: a delete that already failed keeps its own error and logs the stuck claim" {
             let! inner, _ = seeded ()
-            let logger = WarnRecordingLogger()
+            let logger = Logger.recording ()
 
             let store =
                 DataObjectStore(
@@ -402,7 +389,9 @@ let private phase967Tests =
                 Expect.isFalse (msg.Contains v4) "the claim is not folded into the delete's own error"
             | other -> failtestf "expected DeleteFailed(StorageFailure), got %A" other
 
-            let stuck = logger.Warnings |> List.filter (fun w -> w.Contains v4)
+            let stuck =
+                logger.MessagesAt LogSeverity.Warn |> List.filter (fun w -> w.Contains v4)
+
             Expect.equal stuck.Length 1 "the stuck claim is logged once, at Warn, naming the blob"
         }
 

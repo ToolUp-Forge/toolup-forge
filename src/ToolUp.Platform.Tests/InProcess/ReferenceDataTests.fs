@@ -9,6 +9,7 @@ open System.Text
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 let private columns: ReferenceColumn list = [
     {
@@ -143,83 +144,73 @@ let tests =
 
         testCase "verifyAll names every failure: a missing file, a bad hash and a repeated id"
         <| fun _ ->
-            let directory =
-                Path.Combine(Path.GetTempPath(), "toolup-reference-" + Guid.NewGuid().ToString "N")
+            use dir = TempDir.create "reference"
+            let directory = dir.Path
 
-            Directory.CreateDirectory directory |> ignore
+            File.WriteAllText(Path.Combine(directory, "fiscal.csv"), good)
+            let dataset, _ = declare good
+
+            let verified = ReferenceData.verifyAll directory [ dataset ]
+            Expect.equal verified.Length 1 "a good file verifies"
+
+            let missing = {
+                dataset with
+                    Id = "missing"
+                    Source = "missing.csv"
+            }
+
+            let tampered = {
+                dataset with
+                    Id = "tampered"
+                    ContentHash = "sha256:00"
+            }
 
             try
-                File.WriteAllText(Path.Combine(directory, "fiscal.csv"), good)
-                let dataset, _ = declare good
-
-                let verified = ReferenceData.verifyAll directory [ dataset ]
-                Expect.equal verified.Length 1 "a good file verifies"
-
-                let missing = {
-                    dataset with
-                        Id = "missing"
-                        Source = "missing.csv"
-                }
-
-                let tampered = {
-                    dataset with
-                        Id = "tampered"
-                        ContentHash = "sha256:00"
-                }
-
-                try
-                    ReferenceData.verifyAll directory [ missing; tampered; tampered ] |> ignore
-                    failtest "verified"
-                with :? ReferenceDataRefusedException as refused ->
-                    Expect.stringContains refused.Message "'missing'" "the missing file"
-                    Expect.stringContains refused.Message "'tampered' is declared more than once" "the repeat"
-                    Expect.stringContains refused.Message "sha256:00" "the bad hash"
-            finally
-                Directory.Delete(directory, true)
+                ReferenceData.verifyAll directory [ missing; tampered; tampered ] |> ignore
+                failtest "verified"
+            with :? ReferenceDataRefusedException as refused ->
+                Expect.stringContains refused.Message "'missing'" "the missing file"
+                Expect.stringContains refused.Message "'tampered' is declared more than once" "the repeat"
+                Expect.stringContains refused.Message "sha256:00" "the bad hash"
 
         testCase "withReferenceData refuses at the call, and what verifies is readable by id afterwards"
         <| fun _ ->
-            let directory =
-                Path.Combine(Path.GetTempPath(), "toolup-reference-" + Guid.NewGuid().ToString "N")
+            use dir = TempDir.create "reference"
+            let directory = dir.Path
 
-            Directory.CreateDirectory directory |> ignore
+            let path = Path.Combine(directory, "fiscal.csv")
+            File.WriteAllText(path, good)
 
-            try
-                let path = Path.Combine(directory, "fiscal.csv")
-                File.WriteAllText(path, good)
+            let dataset = {
+                fst (declare good) with
+                    Source = path
+            }
 
-                let dataset = {
-                    fst (declare good) with
-                        Source = path
-                }
+            let other = { dataset with Id = "other" }
 
-                let other = { dataset with Id = "other" }
+            let app =
+                ServerApp.empty
+                |> ServerApp.withReferenceData [ dataset ]
+                |> ServerApp.withReferenceData [ other ]
 
-                let app =
+            let services = ServiceCollection()
+            (ServerApp.serviceConfig app).Value services |> ignore
+            use provider = services.BuildServiceProvider()
+
+            let registry = provider.GetRequiredService<IReferenceData>()
+            Expect.isSome (registry.Dataset "fiscal") "the first call's dataset"
+            Expect.isSome (registry.Dataset "other") "the second call's dataset"
+            Expect.isNone (registry.Dataset "never") "nothing else"
+
+            Expect.throwsT<ReferenceDataRefusedException>
+                (fun () ->
                     ServerApp.empty
-                    |> ServerApp.withReferenceData [ dataset ]
-                    |> ServerApp.withReferenceData [ other ]
-
-                let services = ServiceCollection()
-                (ServerApp.serviceConfig app).Value services |> ignore
-                use provider = services.BuildServiceProvider()
-
-                let registry = provider.GetRequiredService<IReferenceData>()
-                Expect.isSome (registry.Dataset "fiscal") "the first call's dataset"
-                Expect.isSome (registry.Dataset "other") "the second call's dataset"
-                Expect.isNone (registry.Dataset "never") "nothing else"
-
-                Expect.throwsT<ReferenceDataRefusedException>
-                    (fun () ->
-                        ServerApp.empty
-                        |> ServerApp.withReferenceData [
-                            {
-                                dataset with
-                                    ContentHash = "sha256:00"
-                            }
-                        ]
-                        |> ignore)
-                    "a dataset that does not verify stops the composition"
-            finally
-                Directory.Delete(directory, true)
+                    |> ServerApp.withReferenceData [
+                        {
+                            dataset with
+                                ContentHash = "sha256:00"
+                        }
+                    ]
+                    |> ignore)
+                "a dataset that does not verify stops the composition"
     ]

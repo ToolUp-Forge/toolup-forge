@@ -13,6 +13,7 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.DataSources.Parquet
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 598 — ParquetDatasetCodec conformance ────────────────────────
 //
@@ -25,19 +26,12 @@ open ToolUp.Platform.Infra
 // codec — so the output is not self-certifying), and typed refusals on
 // schema mismatch / foreign bytes.
 
-let private freshDir () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-parquet-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    tempDir
-
-let private baseDataObjects () =
-    let blob = LocalFileStorage.LocalFileStorage(freshDir ()) :> IBlobStorage
+let private baseDataObjects (dir: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     DataObjectStore(blob) :> IDataObjectStore
 
-let private parquetStore () =
-    BlobDatasetStore.createWithCodec (baseDataObjects ()) (ParquetDatasetCodec())
+let private parquetStore (dir: TempDir) =
+    BlobDatasetStore.createWithCodec (baseDataObjects dir) (ParquetDatasetCodec())
 
 let private t0 = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
 
@@ -122,7 +116,9 @@ let contractTests =
     IDatasetStoreContract.testsWithCodec
         "BlobDatasetStore (blob-backed, Parquet codec)"
         (fun () -> ParquetDatasetCodec() :> IDatasetCodec)
-        parquetStore
+        // The contract pack owns each store's lifetime through a bare
+        // factory, so the directory behind it is not disposed here.
+        (fun () -> parquetStore (TempDir.create "parquet-test"))
 
 let codecTests =
     testList "ParquetDatasetCodec — codec-specific" [
@@ -179,8 +175,10 @@ let codecTests =
 
         testCaseAsync "Cross-codec parity — same rows through both codecs give identical ReadPage results"
         <| async {
-            let jsonStore = BlobDatasetStore.create (baseDataObjects ())
-            let pqStore = parquetStore ()
+            use jsonDir = TempDir.create "parquet-test"
+            use pqDir = TempDir.create "parquet-test"
+            let jsonStore = BlobDatasetStore.create (baseDataObjects jsonDir)
+            let pqStore = parquetStore pqDir
 
             let seed (store: IDatasetStore) = async {
                 let! created =
@@ -219,7 +217,8 @@ let codecTests =
 
         testCaseAsync "GetContentRef tags the parquet format under the Parquet composition"
         <| async {
-            let store = parquetStore ()
+            use dir = TempDir.create "parquet-test"
+            let store = parquetStore dir
 
             let! _ = store.Create("scope-a", "ds", allTypesSchema, allTypesRows, "u1", Map.empty, StrictlyVersioned)
 

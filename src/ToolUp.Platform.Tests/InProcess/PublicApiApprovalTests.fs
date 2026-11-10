@@ -21,6 +21,7 @@ open System.Reflection
 open Expecto
 open ToolUp.Platform.Tests.Contracts.SurfaceDiff
 open ToolUp.Platform.Tests.Contracts.PublicApiApproval
+open ToolUp.Platform.Testing
 
 let private root = repoRoot ()
 let private config = activeConfig ()
@@ -996,33 +997,27 @@ let private docCoverageFixtures =
         // surface-less needs no sidecar, measures nothing, and is never
         // heard from again.
         test "an assembly with no tracked surface needs no documentation file" {
-            let scratch =
-                Path.Combine(Path.GetTempPath(), "toolup-doccoverage-" + System.Guid.NewGuid().ToString("N"))
+            use dir = TempDir.create "doccoverage"
+            let scratch = dir.Path
 
-            try
-                Directory.CreateDirectory(Path.Combine(scratch, "api-baselines")) |> ignore
+            Directory.CreateDirectory(Path.Combine(scratch, "api-baselines")) |> ignore
 
-                let write (name: string) (body: string) =
-                    File.WriteAllText(Path.Combine(scratch, "api-baselines", name + ".approved.txt"), body)
+            let write (name: string) (body: string) =
+                File.WriteAllText(Path.Combine(scratch, "api-baselines", name + ".approved.txt"), body)
 
-                // A content-only package: the generated header and nothing else.
-                write "Demo.ContentOnly" "# Public API baseline — Demo.ContentOnly\n# Do not edit by hand.\n"
-                write "Demo.Real" "# Public API baseline — Demo.Real\nDemo.Widget (class)\n"
+            // A content-only package: the generated header and nothing else.
+            write "Demo.ContentOnly" "# Public API baseline — Demo.ContentOnly\n# Do not edit by hand.\n"
+            write "Demo.Real" "# Public API baseline — Demo.Real\nDemo.Widget (class)\n"
 
-                Expect.isFalse
-                    (hasTrackedSurface scratch "Demo.ContentOnly")
-                    "a baseline of comments records no surface, so there is nothing for a documentation file to document"
+            Expect.isFalse
+                (hasTrackedSurface scratch "Demo.ContentOnly")
+                "a baseline of comments records no surface, so there is nothing for a documentation file to document"
 
-                Expect.isTrue (hasTrackedSurface scratch "Demo.Real") "one member line is a tracked surface"
+            Expect.isTrue (hasTrackedSurface scratch "Demo.Real") "one member line is a tracked surface"
 
-                Expect.isTrue
-                    (hasTrackedSurface scratch "Demo.Missing")
-                    "a package with no committed baseline is already failing the drift arm; reading it as surface-less here would let the two findings cancel"
-            finally
-                try
-                    Directory.Delete(scratch, true)
-                with _ ->
-                    ()
+            Expect.isTrue
+                (hasTrackedSurface scratch "Demo.Missing")
+                "a package with no committed baseline is already failing the drift arm; reading it as surface-less here would let the two findings cancel"
         }
 
         // The end-to-end arm: the doc-comment ids this pack computes are

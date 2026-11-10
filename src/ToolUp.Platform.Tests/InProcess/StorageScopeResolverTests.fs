@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.StorageScopeResolverTests
 
 open System
-open System.IO
 open Microsoft.Extensions.Caching.Memory
 open Expecto
 open ToolUp.Platform
@@ -12,6 +11,7 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── Shared helpers ──────────────────────────────────────────────────
 
@@ -31,12 +31,8 @@ let private alice: AuthenticatedUser = {
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
 }
 
-let private freshStorage () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-scope-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private freshStorage (dir: TempDir) =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 // ─── AnonymousScopeResolver ──────────────────────────────────────────
 //
@@ -161,8 +157,8 @@ let private authenticatedTests =
 
 // ─── TeamScopeResolver ───────────────────────────────────────────────
 
-let private makeTeamResolver () =
-    let storage = freshStorage ()
+let private makeTeamResolver (dir: TempDir) =
+    let storage = freshStorage dir
     let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
     let teamStore = TeamStore(storage, notifications)
     let cache = new MemoryCache(MemoryCacheOptions()) :> IMemoryCache
@@ -177,8 +173,8 @@ let private makeTeamResolver () =
 /// stale window a caller would actually hit — a direct-to-store
 /// removal by a script, or a second instance in a multi-node
 /// deployment whose channel is in-process — cannot be reproduced.
-let private makeDetachedTeamResolver () =
-    let storage = freshStorage ()
+let private makeDetachedTeamResolver (dir: TempDir) =
+    let storage = freshStorage dir
     let storeChannel = InMemoryNotificationChannel(None) :> INotificationChannel
     let resolverChannel = InMemoryNotificationChannel(None) :> INotificationChannel
     let teamStore = TeamStore(storage, storeChannel)
@@ -211,7 +207,8 @@ let private teamTests =
     testList "TeamScopeResolver" [
         testCaseAsync "Resolves authenticated team member to team-scoped, persistent"
         <| async {
-            let teamStore, resolver = makeTeamResolver ()
+            use dir = TempDir.create "scope-test"
+            let teamStore, resolver = makeTeamResolver dir
             do! seedTeam teamStore "alice" "acme"
 
             let request = { emptyRequest with User = Some alice }
@@ -226,7 +223,8 @@ let private teamTests =
 
         testCaseAsync "Rejects authenticated user with no active team"
         <| async {
-            let _, resolver = makeTeamResolver ()
+            use dir = TempDir.create "scope-test"
+            let _, resolver = makeTeamResolver dir
             let request = { emptyRequest with User = Some alice }
 
             match! (resolver :> IStorageScopeResolver).Resolve request with
@@ -236,7 +234,8 @@ let private teamTests =
 
         testCaseAsync "Rejects requests without a user"
         <| async {
-            let _, resolver = makeTeamResolver ()
+            use dir = TempDir.create "scope-test"
+            let _, resolver = makeTeamResolver dir
 
             match! (resolver :> IStorageScopeResolver).Resolve emptyRequest with
             | Ok _ -> failtest "Expected Error NotAuthenticated"
@@ -245,7 +244,8 @@ let private teamTests =
 
         testCaseAsync "Rejects anonymous users"
         <| async {
-            let _, resolver = makeTeamResolver ()
+            use dir = TempDir.create "scope-test"
+            let _, resolver = makeTeamResolver dir
 
             let request = {
                 emptyRequest with
@@ -259,7 +259,8 @@ let private teamTests =
 
         testCaseAsync "Member removed from active team resolves to NoActiveTeam after invalidation"
         <| async {
-            let teamStore, resolver = makeTeamResolver ()
+            use dir = TempDir.create "scope-test"
+            let teamStore, resolver = makeTeamResolver dir
             do! seedTeam teamStore "alice" "acme"
             do! addCoOwner teamStore "acme"
 
@@ -288,7 +289,8 @@ let private teamTests =
             // Detached channels: the store's `Removed` event never
             // reaches the resolver, so its cached active-team entry
             // stays stale — the window this test exists to cover.
-            let teamStore, resolver = makeDetachedTeamResolver ()
+            use dir = TempDir.create "scope-test"
+            let teamStore, resolver = makeDetachedTeamResolver dir
             do! seedTeam teamStore "alice" "acme"
             do! addCoOwner teamStore "acme"
 
@@ -315,7 +317,8 @@ let private teamTests =
 
         testCaseAsync "InvalidateUser forces a re-fetch after SetActiveTeam changes"
         <| async {
-            let teamStore, resolver = makeTeamResolver ()
+            use dir = TempDir.create "scope-test"
+            let teamStore, resolver = makeTeamResolver dir
             do! seedTeam teamStore "alice" "first-team"
 
             let request = { emptyRequest with User = Some alice }

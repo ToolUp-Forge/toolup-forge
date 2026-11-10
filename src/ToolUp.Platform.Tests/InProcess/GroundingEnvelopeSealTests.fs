@@ -12,6 +12,7 @@ open ToolUp.Facts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 684 — the grounding envelope, sealed past boot ────────────
 //
@@ -30,21 +31,6 @@ open ToolUp.Platform.Compose
 // Every probe below therefore has a twin, and the two profiles are
 // probed separately because `Standard` records exactly what `Verified`
 // refuses and a summary line cannot tell them apart.
-
-// ─── Doubles ─────────────────────────────────────────────────────────
-
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -149,15 +135,15 @@ let private flip (facet: GroundingFacet) (subject: string) (value: string) (enve
 let private refusalCodes (refusals: GroundingMutationRefusal list) =
     refusals |> List.map GroundingMutationRefusal.code |> List.sort
 
-let private mutations (audit: RecordingAuditLog) = [
-    for _, event in audit.Events do
+let private mutations (audit: TestAuditLog) = [
+    for event in audit.Events do
         match event with
         | GroundingEnvelopeMutated payload -> payload
         | _ -> ()
 ]
 
-let private refusals (audit: RecordingAuditLog) = [
-    for _, event in audit.Events do
+let private refusals (audit: TestAuditLog) = [
+    for event in audit.Events do
         match event with
         | GroundingMutationRefused payload -> payload
         | _ -> ()
@@ -372,7 +358,7 @@ let tests =
         // ─── Direction A — a recorded chain verifies ──────────────────
 
         testAsync "a chain of recorded mutations verifies, and each row carries both digests" {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let sealedEnvelope = envelopeOf (groundedApp None)
 
             let mutator =
@@ -441,7 +427,7 @@ let tests =
         }
 
         testAsync "an empty chain verifies against the sealed envelope" {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let sealedEnvelope = envelopeOf (groundedApp (Some "computed:rollup"))
 
             let mutator =
@@ -484,7 +470,7 @@ let tests =
         }
 
         testAsync "under the verified profile the next mutation after an out-of-path change is refused" {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let sealedEnvelope = envelopeOf (groundedApp None)
 
             // A deployment holding MUTABLE grounding state: `observe`
@@ -607,7 +593,7 @@ let tests =
         // ─── The other refusals ───────────────────────────────────────
 
         testAsync "a mutation computed against a superseded envelope is refused under the verified profile" {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let sealedEnvelope = envelopeOf (groundedApp None)
 
             let mutator =
@@ -639,7 +625,7 @@ let tests =
         }
 
         testAsync "a mutation naming a declaration that did not move is refused" {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let sealedEnvelope = envelopeOf (groundedApp None)
 
             let mutator =
@@ -660,7 +646,7 @@ let tests =
 
         testAsync "a mutation that moves nothing is refused under BOTH profiles" {
             for profile in [ CompositionProfile.Standard; CompositionProfile.Verified ] do
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
                 let sealedEnvelope = envelopeOf (groundedApp None)
 
                 let mutator =
@@ -682,7 +668,7 @@ let tests =
         // ─── Outside the profile, nothing changes (GP 13) ─────────────
 
         testAsync "under the standard profile the same findings are recorded and the mutation lands" {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let sealedEnvelope = envelopeOf (groundedApp None)
             let mutable live = sealedEnvelope
 
@@ -736,7 +722,7 @@ let tests =
                 FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None (groundedApp None)
 
             let services = ServiceCollection()
-            services.AddSingleton<IAuditLog>(RecordingAuditLog()) |> ignore
+            services.AddSingleton<IAuditLog>(TestAuditLog()) |> ignore
 
             match ServerApp.serviceConfig composed with
             | None -> failtest "the composed deployment registered nothing"

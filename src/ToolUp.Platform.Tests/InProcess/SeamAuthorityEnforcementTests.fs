@@ -8,6 +8,7 @@ open ToolUp.Platform.VectorisationTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 691 — the seam gate's first production call site ───────────
 //
@@ -212,50 +213,23 @@ let private exactGrants (modules: ServerModule list) : SeamGrantSignature =
         entry.ReachComponent, SeamGrant.ofSeams entry.ReachedSeams)
     |> Map.ofList
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    let gate = obj ()
-    member _.Events = lock gate (fun () -> List.ofSeq recorded)
+/// The deny observer is fire-and-forget by contract (`Async.Start` onto
+/// the thread pool), so a test asserting on the rows waits for writes it
+/// deliberately did not await. Event-driven, not polled: the wait wakes on
+/// every write, so this returns the instant the `count`-th row lands, and
+/// the cap only bites when the rows are not coming at all. A timeout fails
+/// HERE, naming what did arrive — a 5s wall-clock poll once expired under
+/// machine load and the failure blamed the Phase 658 ledger claim instead
+/// of the scheduler (2026-08-24, VerifyAll beside a second pack).
+let private waitForRows (audit: TestAuditLog) (count: int) =
+    let cap = TimeSpan.FromSeconds 30.0
 
-    /// The deny observer is fire-and-forget by contract (`Async.Start`
-    /// onto the thread pool), so a test asserting on the rows waits for
-    /// writes it deliberately did not await. Event-driven, not polled:
-    /// `Record` pulses the monitor, so this returns the instant the
-    /// `count`-th row lands, and the cap only bites when the rows are
-    /// not coming at all. A timeout fails HERE, naming what did arrive
-    /// — a 5s wall-clock poll once expired under machine load and the
-    /// failure blamed the Phase 658 ledger claim instead of the
-    /// scheduler (2026-08-24, VerifyAll beside a second pack).
-    member _.WaitFor(count: int) =
-        let cap = TimeSpan.FromSeconds 30.0
-        let sw = Diagnostics.Stopwatch.StartNew()
-
-        lock gate (fun () ->
-            while recorded.Count < count && sw.Elapsed < cap do
-                let remaining = cap - sw.Elapsed
-
-                if remaining > TimeSpan.Zero then
-                    Threading.Monitor.Wait(gate, remaining) |> ignore
-
-            if recorded.Count < count then
-                failtestf
-                    "audit wait: %d of %d expected row(s) arrived within %.0fs — with an event-driven wait this long the deny observer's write never happened (it is not merely late); the ledger assertion after this wait has NOT been evaluated"
-                    recorded.Count
-                    count
-                    cap.TotalSeconds)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            lock gate (fun () ->
-                recorded.Add(scopeId, audit)
-                Threading.Monitor.PulseAll gate)
-
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
-            return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq)
-        }
+    if not (audit.Recording.WaitUntil((fun rows -> List.length rows >= count), cap)) then
+        failtestf
+            "audit wait: %d of %d expected row(s) arrived within %.0fs — with an event-driven wait this long the deny observer's write never happened (it is not merely late); the ledger assertion after this wait has NOT been evaluated"
+            audit.Recording.Count
+            count
+            cap.TotalSeconds
 
 // ── 1. the derivation is the shipped projection, not a second map ─────
 
@@ -552,7 +526,7 @@ let private profileBinding =
 
         testCase "Standard with nothing declared admits the whole composition"
         <| fun _ ->
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let modules = realComposition ()
 
             Expect.equal
@@ -564,7 +538,7 @@ let private profileBinding =
 
         testCase "Verified with no capability signature is refused before any reach is checked"
         <| fun _ ->
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             Expect.equal
                 (SeamAuthorityEnforcement.verifyAudited
@@ -579,7 +553,7 @@ let private profileBinding =
 
         testCase "Verified with an envelope but no grant signature is refused by name"
         <| fun _ ->
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let modules = realComposition ()
 
             Expect.equal
@@ -595,7 +569,7 @@ let private profileBinding =
 
         testCase "Verified with complete declarations admits the composition"
         <| fun _ ->
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let modules = realComposition ()
 
             Expect.equal
@@ -611,7 +585,7 @@ let private profileBinding =
 
         testCase "a reach refusal reaches the audit path as CompositionCapabilityRefused"
         <| fun _ ->
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let m = referenceModule ()
             let reached = (SeamAuthorityEnforcement.reachOf m).ReachedSeams
             let grants = Map.ofList [ componentOf m, SeamGrant.ofSeams [] ]
@@ -632,11 +606,11 @@ let private profileBinding =
             | Error(SeamAuthorityRefusal.Reaches denials) ->
                 Expect.hasLength denials (List.length reached) "every reach must be refused"
 
-                audit.WaitFor(List.length reached)
+                waitForRows audit (List.length reached)
 
                 let refusals =
                     audit.Events
-                    |> List.filter (fun (_, e) ->
+                    |> List.filter (fun e ->
                         match e with
                         | AuditEvent.CompositionCapabilityRefused _ -> true
                         | _ -> false)

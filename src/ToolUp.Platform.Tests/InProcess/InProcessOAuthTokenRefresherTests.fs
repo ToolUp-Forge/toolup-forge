@@ -2,7 +2,6 @@ module ToolUp.Platform.Tests.InProcess.InProcessOAuthTokenRefresherTests
 
 open System
 open System.Collections.Concurrent
-open System.IO
 open System.Net
 open System.Net.Http
 open System.Threading
@@ -18,6 +17,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── InProcessOAuthTokenRefresher — IOAuthTokenRefresher contract + HTTP-path tests ──
 //
@@ -37,51 +37,12 @@ open ToolUp.Platform.Jobs
 
 // ─── Fakes / stubs ───────────────────────────────────────────────
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private silentChannel =
     { new INotificationChannel with
         member _.Publish(_, _) = async { return () }
         member _.Subscribe(_, _) = async { return Guid.NewGuid() }
         member _.Unsubscribe(_) = async { return () }
     }
-
-type InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    member _.Snapshot() =
-        store |> Seq.map (fun kv -> kv.Key, kv.Value) |> List.ofSeq
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 /// Captures emitted audit events so HTTP-path tests can assert the
 /// `OAuthTokenRefreshed` / `OAuthRefreshTokenInvalidated` audit family
@@ -112,12 +73,8 @@ type FakeHttpHandler(respond: HttpRequestMessage -> HttpResponseMessage) =
 
 // ─── Substrate factory shared by both test layers ────────────────
 
-let private mkSubstrate () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-oauth-refresher-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory(root) |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private mkSubstrate (root: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
 
@@ -130,7 +87,7 @@ let private mkSubstrate () =
                 EventStore = eventStore
                 NotificationChannel = silentChannel
                 Config = config
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = (NoOpActivitySink() :> IActivitySink)
             }
             : JobScheduler.SchedulerDeps)
@@ -152,8 +109,10 @@ let private mkSubstrate () =
 
 let contractTests =
     let factory () =
-        let scheduler = mkSubstrate ()
-        let secretStore = InMemorySecretStore() :> ISecretStore
+        // The contract's factory has no teardown hook, so the directory
+        // outlives the case; the family name attributes it in the census.
+        let scheduler = mkSubstrate (TempDir.create "oauth-refresher-tests")
+        let secretStore = Fakes.TestSecretStore() :> ISecretStore
         let auditLog = CapturingAuditLog() :> IAuditLog
         let metricsSink = NoOpMetricsSink() :> IMetricsSink
         let rateLimiter = NoOpRateLimiter() :> IRateLimiter
@@ -169,7 +128,14 @@ let contractTests =
             )
 
         let refresher =
-            InProcessOAuthTokenRefresher.create scheduler secretStore auditLog metricsSink rateLimiter http silentLogger
+            InProcessOAuthTokenRefresher.create
+                scheduler
+                secretStore
+                auditLog
+                metricsSink
+                rateLimiter
+                http
+                Logger.silent
 
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         refresher :> IOAuthTokenRefresher, "team-" + suffix
@@ -178,9 +144,9 @@ let contractTests =
 
 // ─── HTTP-path tests ─────────────────────────────────────────────
 
-let private mkBench (respond: HttpRequestMessage -> HttpResponseMessage) =
-    let scheduler = mkSubstrate ()
-    let secretStore = InMemorySecretStore()
+let private mkBench (root: TempDir) (respond: HttpRequestMessage -> HttpResponseMessage) =
+    let scheduler = mkSubstrate root
+    let secretStore = Fakes.TestSecretStore()
     let auditLog = CapturingAuditLog()
     let metricsSink = NoOpMetricsSink() :> IMetricsSink
     let rateLimiter = NoOpRateLimiter() :> IRateLimiter
@@ -194,7 +160,7 @@ let private mkBench (respond: HttpRequestMessage -> HttpResponseMessage) =
             metricsSink
             rateLimiter
             http
-            silentLogger
+            Logger.silent
 
     let scope = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
 
@@ -231,12 +197,14 @@ let httpPathTests =
 
         testCaseAsync "200 + JSON body → Refreshed + access-token persisted + audit emitted"
         <| async {
+            use root = TempDir.create "oauth-refresher-tests"
+
             let respond _ =
                 jsonResponse
                     HttpStatusCode.OK
                     """{"access_token":"new-access","expires_in":3600,"refresh_token":"rt-rotated"}"""
 
-            let refresher, secretStore, auditLog, descriptor = mkBench respond
+            let refresher, secretStore, auditLog, descriptor = mkBench root respond
             do! (refresher :> IOAuthTokenRefresher).RegisterDescriptor descriptor
 
             let! result = (refresher :> IOAuthTokenRefresher).RefreshNow(descriptor.Provider, descriptor.ConfigId)
@@ -246,27 +214,24 @@ let httpPathTests =
                 Expect.isGreaterThan newExpiry (DateTimeOffset.UtcNow.AddMinutes 30.0) "expiry ~1h out"
             | other -> failtestf "Expected Refreshed, got %A" other
 
-            let storeSnapshot = secretStore.Snapshot()
+            let secrets = secretStore :> ISecretStore
 
             let accessKey = OAuthRefreshDescriptor.accessTokenKey descriptor
 
             let expiryKey = OAuthRefreshDescriptor.accessExpiryKey descriptor
 
-            let access = storeSnapshot |> List.tryFind (fun (k, _) -> snd k = accessKey)
+            let! access = secrets.GetSecret(descriptor.ScopeId, accessKey)
 
-            Expect.isSome access "access token persisted"
-            Expect.equal (snd access.Value) "new-access" "access token matches body"
+            Expect.equal access (Some "new-access") "access token persisted and matches body"
 
-            let expiry = storeSnapshot |> List.tryFind (fun (k, _) -> snd k = expiryKey)
+            let! expiry = secrets.GetSecret(descriptor.ScopeId, expiryKey)
 
             Expect.isSome expiry "access expiry persisted"
 
             // Rotated refresh token persisted under the descriptor's key.
-            let refresh =
-                storeSnapshot |> List.tryFind (fun (k, _) -> snd k = descriptor.RefreshTokenKey)
+            let! refresh = secrets.GetSecret(descriptor.ScopeId, descriptor.RefreshTokenKey)
 
-            Expect.isSome refresh "refresh token present"
-            Expect.equal (snd refresh.Value) "rt-rotated" "refresh token rotated"
+            Expect.equal refresh (Some "rt-rotated") "refresh token rotated"
 
             let refreshedAudits =
                 auditLog.Filter(fun e ->
@@ -280,10 +245,12 @@ let httpPathTests =
 
         testCaseAsync "400 + invalid_grant → TokenInvalidatedByProvider + audit emitted"
         <| async {
+            use root = TempDir.create "oauth-refresher-tests"
+
             let respond _ =
                 jsonResponse HttpStatusCode.BadRequest """{"error":"invalid_grant"}"""
 
-            let refresher, _, auditLog, descriptor = mkBench respond
+            let refresher, _, auditLog, descriptor = mkBench root respond
             do! (refresher :> IOAuthTokenRefresher).RegisterDescriptor descriptor
 
             let! result = (refresher :> IOAuthTokenRefresher).RefreshNow(descriptor.Provider, descriptor.ConfigId)
@@ -303,10 +270,12 @@ let httpPathTests =
 
         testCaseAsync "500 → TransientError"
         <| async {
+            use root = TempDir.create "oauth-refresher-tests"
+
             let respond _ =
                 jsonResponse HttpStatusCode.InternalServerError "upstream broken"
 
-            let refresher, _, _, descriptor = mkBench respond
+            let refresher, _, _, descriptor = mkBench root respond
             do! (refresher :> IOAuthTokenRefresher).RegisterDescriptor descriptor
 
             let! result = (refresher :> IOAuthTokenRefresher).RefreshNow(descriptor.Provider, descriptor.ConfigId)
@@ -318,10 +287,12 @@ let httpPathTests =
 
         testCaseAsync "401 (no invalid_grant) → PermanentError"
         <| async {
+            use root = TempDir.create "oauth-refresher-tests"
+
             let respond _ =
                 jsonResponse HttpStatusCode.Unauthorized """{"error":"invalid_client"}"""
 
-            let refresher, _, _, descriptor = mkBench respond
+            let refresher, _, _, descriptor = mkBench root respond
             do! (refresher :> IOAuthTokenRefresher).RegisterDescriptor descriptor
 
             let! result = (refresher :> IOAuthTokenRefresher).RefreshNow(descriptor.Provider, descriptor.ConfigId)
@@ -383,8 +354,12 @@ type ControllableSecretStore() =
         }
 
 /// Build a refresher over a caller-supplied secret store + fake upstream.
-let private mkRefresher (secretStore: ISecretStore) (respond: HttpRequestMessage -> HttpResponseMessage) =
-    let scheduler = mkSubstrate ()
+let private mkRefresher
+    (root: TempDir)
+    (secretStore: ISecretStore)
+    (respond: HttpRequestMessage -> HttpResponseMessage)
+    =
+    let scheduler = mkSubstrate root
     let auditLog = CapturingAuditLog()
     let metricsSink = NoOpMetricsSink() :> IMetricsSink
     let rateLimiter = NoOpRateLimiter() :> IRateLimiter
@@ -397,7 +372,7 @@ let private mkRefresher (secretStore: ISecretStore) (respond: HttpRequestMessage
         metricsSink
         rateLimiter
         http
-        silentLogger
+        Logger.silent
 
 let private mkDescriptor (scope: string) =
     OAuthRefreshDescriptor.withDefaults
@@ -414,6 +389,8 @@ let rotationHardeningTests =
 
         testCaseAsync "rotated-refresh persist failure bails before access/expiry write (write-ordering)"
         <| async {
+            use root = TempDir.create "oauth-refresher-tests"
+
             let store = ControllableSecretStore()
             let iface = store :> ISecretStore
             let scope = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -435,7 +412,7 @@ let rotationHardeningTests =
                     HttpStatusCode.OK
                     """{"access_token":"new-access","expires_in":3600,"refresh_token":"rt-rotated"}"""
 
-            let refresher = mkRefresher iface respond
+            let refresher = mkRefresher root iface respond
             do! (refresher :> IOAuthTokenRefresher).RegisterDescriptor descriptor
 
             let! result = (refresher :> IOAuthTokenRefresher).RefreshNow(descriptor.Provider, descriptor.ConfigId)
@@ -463,7 +440,9 @@ let rotationHardeningTests =
 
         testCaseAsync "concurrent refreshes serialise — no double-spend of a rotating token (single-flight)"
         <| async {
-            let store = InMemorySecretStore()
+            use root = TempDir.create "oauth-refresher-tests"
+
+            let store = Fakes.TestSecretStore()
             let iface = store :> ISecretStore
             let scope = "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
             let descriptor = mkDescriptor scope
@@ -506,7 +485,7 @@ let rotationHardeningTests =
                     else
                         jsonResponse HttpStatusCode.BadRequest """{"error":"invalid_grant"}""")
 
-            let refresher = mkRefresher iface respond
+            let refresher = mkRefresher root iface respond
             let rIface = refresher :> IOAuthTokenRefresher
             do! rIface.RegisterDescriptor descriptor
 
@@ -534,10 +513,7 @@ let rotationHardeningTests =
             Expect.hasLength refreshed 2 "both serialised refreshes succeed against the rotating upstream"
 
             // The store holds the twice-rotated token (each call rotated once, in order).
-            let finalRefresh =
-                store.Snapshot()
-                |> List.tryFind (fun (k, _) -> snd k = descriptor.RefreshTokenKey)
-                |> Option.map snd
+            let! finalRefresh = iface.GetSecret(scope, descriptor.RefreshTokenKey)
 
             Expect.equal finalRefresh (Some "rt-original-r-r") "store holds the twice-rotated refresh token"
         }

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.PeerBearerAuthTests
 
 open System
-open System.Collections.Concurrent
 open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
@@ -13,6 +12,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── PeerBearerAuthMiddleware contract binding ───────────────────────
 //
@@ -24,37 +24,9 @@ open ToolUp.Platform.Scope
 // binding. Cloud / Vault bindings would compose the same pack with
 // their own seeded backend.
 
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 let private contractTests =
     let factory () =
-        let store = InMemorySecretStore() :> ISecretStore
+        let store = Fakes.TestSecretStore() :> ISecretStore
 
         let seed (peerName, token) =
             // Mirrors the production seeding shape: peer bearers live
@@ -83,7 +55,7 @@ let private hardeningTests =
             ctx.Request.Headers["X-Peer-Name"] <- StringValues "../evil"
             ctx.Request.Headers["Authorization"] <- StringValues "Bearer whatever"
 
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = Fakes.TestSecretStore() :> ISecretStore
             let! outcome = authenticate store ctx
 
             match outcome with

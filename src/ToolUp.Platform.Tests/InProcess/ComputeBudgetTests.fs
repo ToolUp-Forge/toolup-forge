@@ -74,14 +74,6 @@ open ToolUp.Platform.Testing
 
 // ── doubles ──────────────────────────────────────────────────────────────
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private silentChannel =
     { new INotificationChannel with
         member _.Publish(_, _) = async { return () }
@@ -943,7 +935,7 @@ let private storeTests =
             "a budget round-trips, and an unconfigured scope is unrestricted"
             (async {
                 let blobs = InMemoryBlobStorage() :> IBlobStorage
-                let store = BlobComputeBudgetStore(blobs, silentLogger) :> IComputeBudgetStore
+                let store = BlobComputeBudgetStore(blobs, Logger.silent) :> IComputeBudgetStore
 
                 let! before = store.GetBudget "never-configured"
 
@@ -979,7 +971,7 @@ let private storeTests =
                     )
                     |> Async.Ignore
 
-                let store = BlobComputeBudgetStore(blobs, silentLogger) :> IComputeBudgetStore
+                let store = BlobComputeBudgetStore(blobs, Logger.silent) :> IComputeBudgetStore
                 let! read = store.GetBudget scope
                 Expect.isTrue (ComputeBudget.isUnrestricted read) "unreadable reads as unrestricted"
             })
@@ -991,7 +983,7 @@ let private storeTests =
                 let blobs = InMemoryBlobStorage() :> IBlobStorage
 
                 let store =
-                    BlobComputeBudgetStore(blobs, silentLogger, clock = clock.Fn) :> IComputeBudgetStore
+                    BlobComputeBudgetStore(blobs, Logger.silent, clock = clock.Fn) :> IComputeBudgetStore
 
                 let admitAny = fun (_: ComputeBudgetUsage) -> Ok()
 
@@ -1041,7 +1033,7 @@ let private storeTests =
                     )
                     |> Async.Ignore
 
-                let store = BlobComputeBudgetStore(blobs, silentLogger) :> IComputeBudgetStore
+                let store = BlobComputeBudgetStore(blobs, Logger.silent) :> IComputeBudgetStore
                 let! read = store.ReadUsage("team-b", "2026-08")
                 Expect.equal read.Spent 0M "the foreign envelope is not read as team-b's spend"
                 Expect.equal read.InFlight 0 "nor its in-flight count"
@@ -1053,7 +1045,7 @@ let private storeTests =
                 // A negative in-flight count would silently grant extra
                 // concurrency — the one direction this may not fail in.
                 let blobs = InMemoryBlobStorage() :> IBlobStorage
-                let store = BlobComputeBudgetStore(blobs, silentLogger) :> IComputeBudgetStore
+                let store = BlobComputeBudgetStore(blobs, Logger.silent) :> IComputeBudgetStore
 
                 do! store.Settle(scope, "2026-08", 0M)
                 do! store.Settle(scope, "2026-08", 0M)
@@ -1070,7 +1062,7 @@ let private storeTests =
                 // -then-write would admit every one of these, because each
                 // reads the same pre-burst count.
                 let blobs = InMemoryBlobStorage() :> IBlobStorage
-                let store = BlobComputeBudgetStore(blobs, silentLogger) :> IComputeBudgetStore
+                let store = BlobComputeBudgetStore(blobs, Logger.silent) :> IComputeBudgetStore
                 let limits = ComputeBudgetLimits.concurrency 1
 
                 let decide (usage: ComputeBudgetUsage) =
@@ -1103,10 +1095,12 @@ type private FitFixture = {
 }
 
 let private newFitFixture (budget: ComputeBudget) (clock: TestClock) =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-451-" + Guid.NewGuid().ToString "N")
-
-    Directory.CreateDirectory root |> ignore
+    // Not disposed: the job scheduler is still running the item jobs a batch
+    // enqueued when a case ends, and pulling the directory out from under it
+    // crashes the pack with an unhandled write failure on a background thread.
+    // The family attributes the directory in the gate's temp census.
+    let dir = TempDir.create "compute-budget-fit"
+    let root = dir.Path
 
     let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
@@ -1125,7 +1119,7 @@ let private newFitFixture (budget: ComputeBudget) (clock: TestClock) =
                 EventStore = eventStore
                 NotificationChannel = silentChannel
                 Config = ServerConfig.defaults
-                Logger = silentLogger
+                Logger = Logger.silent
                 ActivitySink = (NoOpActivitySink())
             }
             : JobScheduler.SchedulerDeps)
@@ -1137,7 +1131,7 @@ let private newFitFixture (budget: ComputeBudget) (clock: TestClock) =
 
     scheduler.RegisterHandler(
         ModelFitBatch.ItemHandlerName,
-        ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) silentLogger
+        ModelFitBatchItemJobHandler.create providers registry (audit :> IAuditLog) Logger.silent
     )
 
     let budgetStore =
@@ -1210,65 +1204,55 @@ let private fitEnqueueTests =
 
                 let fixture = newFitFixture budget clock
 
-                try
-                    // The handler resolves the caller's config scope from
-                    // the `AccessContext`, so the subject id IS the budget
-                    // scope — pass the one the fixture configured.
-                    let api = apiFor fixture scope
+                // The handler resolves the caller's config scope from
+                // the `AccessContext`, so the subject id IS the budget
+                // scope — pass the one the fixture configured.
+                let api = apiFor fixture scope
 
-                    // First agent submission consumes the allowance of one.
-                    let! first = api.SubmitFit(ModelExecutionPeerContract.ofWireSubmission (peerSubmission "agent" 1L))
+                // First agent submission consumes the allowance of one.
+                let! first = api.SubmitFit(ModelExecutionPeerContract.ofWireSubmission (peerSubmission "agent" 1L))
 
-                    Expect.isOk first "the peer's first agent fit fits the allowance"
+                Expect.isOk first "the peer's first agent fit fits the allowance"
 
-                    // Second is refused — and refused with the TYPED shape,
-                    // not flattened into InvalidSubmission (plan D6).
-                    let! second = api.SubmitFit(ModelExecutionPeerContract.ofWireSubmission (peerSubmission "agent" 2L))
+                // Second is refused — and refused with the TYPED shape,
+                // not flattened into InvalidSubmission (plan D6).
+                let! second = api.SubmitFit(ModelExecutionPeerContract.ofWireSubmission (peerSubmission "agent" 2L))
 
-                    match second with
-                    | Error(ModelExecutionRefusal.BudgetDenied denial) ->
-                        Expect.equal denial.SubmitterClass "agent" "the refusal names the peer's declared class"
+                match second with
+                | Error(ModelExecutionRefusal.BudgetDenied denial) ->
+                    Expect.equal denial.SubmitterClass "agent" "the refusal names the peer's declared class"
 
-                        Expect.equal
-                            denial.Dimension
-                            (ComputeBudgetDimension.label ComputeBudgetDimension.PeriodAllowance)
-                            "the allowance dimension is named"
+                    Expect.equal
+                        denial.Dimension
+                        (ComputeBudgetDimension.label ComputeBudgetDimension.PeriodAllowance)
+                        "the allowance dimension is named"
 
-                        Expect.equal denial.Quota 1M "the quota is enumerable data, not a string"
-                        Expect.equal denial.Spent 1M "and so is the spend"
-                    | Error other ->
-                        failtest $"expected a typed BudgetDenied, got: {ModelExecutionRefusal.describe other}"
-                    | Ok _ -> failtest "expected the agent's second fit to be refused"
+                    Expect.equal denial.Quota 1M "the quota is enumerable data, not a string"
+                    Expect.equal denial.Spent 1M "and so is the spend"
+                | Error other -> failtest $"expected a typed BudgetDenied, got: {ModelExecutionRefusal.describe other}"
+                | Ok _ -> failtest "expected the agent's second fit to be refused"
 
-                    // The control: the SAME submission declared human is
-                    // admitted, under the same budget, in the same fixture.
-                    let! human = api.SubmitFit(ModelExecutionPeerContract.ofWireSubmission (peerSubmission "human" 3L))
+                // The control: the SAME submission declared human is
+                // admitted, under the same budget, in the same fixture.
+                let! human = api.SubmitFit(ModelExecutionPeerContract.ofWireSubmission (peerSubmission "human" 3L))
 
-                    Expect.isOk human "a human-declared peer submission is unconstrained here"
+                Expect.isOk human "a human-declared peer submission is unconstrained here"
 
-                    // And the refusal was audited under the fit-enqueue
-                    // surface, not the external-compute one.
-                    match
-                        (rowsOf fixture.Audit)
-                        |> List.tryPick (fun (_, e) ->
-                            match e with
-                            | ComputeBudgetDenied p -> Some p
-                            | _ -> None)
-                    with
-                    | Some payload ->
-                        Expect.equal
-                            payload.Surface
-                            ComputeBudgetSurface.ModelFitEnqueue
-                            "the fit-enqueue enforcement point is named on the audit row"
-                    | None -> failtest "expected a ComputeBudgetDenied row"
-                finally
-                    // The temp root is deliberately NOT deleted: the job
-                    // scheduler is still running the item jobs this batch
-                    // enqueued, and pulling the directory out from under it
-                    // crashes the whole pack with an unhandled write
-                    // failure on a background thread. Same posture as
-                    // ModelExecutionApiTests — the OS owns TEMP.
-                    ()
+                // And the refusal was audited under the fit-enqueue
+                // surface, not the external-compute one.
+                match
+                    (rowsOf fixture.Audit)
+                    |> List.tryPick (fun (_, e) ->
+                        match e with
+                        | ComputeBudgetDenied p -> Some p
+                        | _ -> None)
+                with
+                | Some payload ->
+                    Expect.equal
+                        payload.Surface
+                        ComputeBudgetSurface.ModelFitEnqueue
+                        "the fit-enqueue enforcement point is named on the audit row"
+                | None -> failtest "expected a ComputeBudgetDenied row"
             })
 
         testCaseAsync
@@ -1284,59 +1268,50 @@ let private fitEnqueueTests =
 
                 let fixture = newFitFixture budget clock
 
-                try
-                    let request (seed: int64) : FitRequest = {
+                let request (seed: int64) : FitRequest = {
+                    ScopeId = scope
+                    DatasetVersion = {
                         ScopeId = scope
-                        DatasetVersion = {
-                            ScopeId = scope
-                            DatasetId = "weekly-panel"
-                            Version = 1
-                        }
-                        SpecRef = ModelSpecRef.ofPayload """{"opaque":"spec"}"""
-                        ProviderKind = ReferenceModelFitProvider.Kind
-                        Seed = seed
-                        Gates = []
-                        SubmitterClass = SubmitterClass.AgentInitiated
+                        DatasetId = "weekly-panel"
+                        Version = 1
                     }
+                    SpecRef = ModelSpecRef.ofPayload """{"opaque":"spec"}"""
+                    ProviderKind = ReferenceModelFitProvider.Kind
+                    Seed = seed
+                    Gates = []
+                    SubmitterClass = SubmitterClass.AgentInitiated
+                }
 
-                    let batch: FitRequestBatch = {
-                        BatchId = "wave-1"
-                        ScopeId = scope
-                        // Three items against an allowance of two.
-                        Requests = [ request 1L; request 2L; request 3L ]
-                    }
+                let batch: FitRequestBatch = {
+                    BatchId = "wave-1"
+                    ScopeId = scope
+                    // Three items against an allowance of two.
+                    Requests = [ request 1L; request 2L; request 3L ]
+                }
 
-                    let! result =
-                        ModelFitBatch.submitBudgeted
-                            fixture.Scheduler
-                            (fixture.Audit :> IAuditLog)
-                            (Some fixture.Guard)
-                            "agent-1"
-                            batch
+                let! result =
+                    ModelFitBatch.submitBudgeted
+                        fixture.Scheduler
+                        (fixture.Audit :> IAuditLog)
+                        (Some fixture.Guard)
+                        "agent-1"
+                        batch
 
-                    match result with
-                    | Error(FitBatchError.BudgetDenied _) -> ()
-                    | Error other -> failtest $"expected a budget denial, got: {FitBatchError.describe other}"
-                    | Ok _ -> failtest "expected the over-large batch to be refused"
+                match result with
+                | Error(FitBatchError.BudgetDenied _) -> ()
+                | Error other -> failtest $"expected a budget denial, got: {FitBatchError.describe other}"
+                | Ok _ -> failtest "expected the over-large batch to be refused"
 
-                    let! usage = fixture.Budget.ReadUsage(scope, "2026-08")
-                    Expect.equal usage.Spent 0M "every reservation taken before the refusal was released"
-                    Expect.equal usage.InFlight 0 "and no slot is stranded"
+                let! usage = fixture.Budget.ReadUsage(scope, "2026-08")
+                Expect.equal usage.Spent 0M "every reservation taken before the refusal was released"
+                Expect.equal usage.InFlight 0 "and no slot is stranded"
 
-                    // Nothing was enqueued and nothing was audited as
-                    // submitted — a refused batch leaves no residue.
-                    Expect.equal
-                        ((countOf "ModelFitBatchSubmitted" fixture.Audit))
-                        0
-                        "no submission row for work that never happened"
-                finally
-                    // The temp root is deliberately NOT deleted: the job
-                    // scheduler is still running the item jobs this batch
-                    // enqueued, and pulling the directory out from under it
-                    // crashes the whole pack with an unhandled write
-                    // failure on a background thread. Same posture as
-                    // ModelExecutionApiTests — the OS owns TEMP.
-                    ()
+                // Nothing was enqueued and nothing was audited as
+                // submitted — a refused batch leaves no residue.
+                Expect.equal
+                    ((countOf "ModelFitBatchSubmitted" fixture.Audit))
+                    0
+                    "no submission row for work that never happened"
             })
 
         testCaseAsync
@@ -1352,46 +1327,37 @@ let private fitEnqueueTests =
                         (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.allowance 1M))
                         clock
 
-                try
-                    let request (seed: int64) : FitRequest = {
+                let request (seed: int64) : FitRequest = {
+                    ScopeId = scope
+                    DatasetVersion = {
                         ScopeId = scope
-                        DatasetVersion = {
-                            ScopeId = scope
-                            DatasetId = "weekly-panel"
-                            Version = 1
-                        }
-                        SpecRef = ModelSpecRef.ofPayload """{"opaque":"spec"}"""
-                        ProviderKind = ReferenceModelFitProvider.Kind
-                        Seed = seed
-                        Gates = []
-                        SubmitterClass = SubmitterClass.AgentInitiated
+                        DatasetId = "weekly-panel"
+                        Version = 1
                     }
+                    SpecRef = ModelSpecRef.ofPayload """{"opaque":"spec"}"""
+                    ProviderKind = ReferenceModelFitProvider.Kind
+                    Seed = seed
+                    Gates = []
+                    SubmitterClass = SubmitterClass.AgentInitiated
+                }
 
-                    let batch: FitRequestBatch = {
-                        BatchId = "wave-2"
-                        ScopeId = scope
-                        Requests = [ request 1L; request 2L; request 3L ]
-                    }
+                let batch: FitRequestBatch = {
+                    BatchId = "wave-2"
+                    ScopeId = scope
+                    Requests = [ request 1L; request 2L; request 3L ]
+                }
 
-                    // The same batch that was refused above, against the
-                    // same budget — but with no guard passed.
-                    let! result = ModelFitBatch.submit fixture.Scheduler (fixture.Audit :> IAuditLog) "agent-1" batch
+                // The same batch that was refused above, against the
+                // same budget — but with no guard passed.
+                let! result = ModelFitBatch.submit fixture.Scheduler (fixture.Audit :> IAuditLog) "agent-1" batch
 
-                    match result with
-                    | Ok submission -> Expect.equal submission.ItemCount 3 "every item was enqueued"
-                    | Error e -> failtest $"expected admission with no budget composed: {FitBatchError.describe e}"
+                match result with
+                | Ok submission -> Expect.equal submission.ItemCount 3 "every item was enqueued"
+                | Error e -> failtest $"expected admission with no budget composed: {FitBatchError.describe e}"
 
-                    let! usage = fixture.Budget.ReadUsage(scope, "2026-08")
-                    Expect.equal usage.Spent 0M "the budget store was never touched"
-                    Expect.equal ((countOf "ComputeBudgetDenied" fixture.Audit)) 0 "and nothing was refused"
-                finally
-                    // The temp root is deliberately NOT deleted: the job
-                    // scheduler is still running the item jobs this batch
-                    // enqueued, and pulling the directory out from under it
-                    // crashes the whole pack with an unhandled write
-                    // failure on a background thread. Same posture as
-                    // ModelExecutionApiTests — the OS owns TEMP.
-                    ()
+                let! usage = fixture.Budget.ReadUsage(scope, "2026-08")
+                Expect.equal usage.Spent 0M "the budget store was never touched"
+                Expect.equal ((countOf "ComputeBudgetDenied" fixture.Audit)) 0 "and nothing was refused"
             })
     ]
 
