@@ -28,6 +28,7 @@
          gate in the repo. Same reasoning as ToolUp.AIProviders.Tests,
          and the same shape. -->
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\CoreFakes.fs" Link="Testing\CoreFakes.fs" />
         <Compile Include="Support\TestFakes.fs" />
         <Compile Include="Support\RemoteDataSourceContract.fs" />
         <!-- Phase 10d — the local-file half: an in-process IBlobStorage and

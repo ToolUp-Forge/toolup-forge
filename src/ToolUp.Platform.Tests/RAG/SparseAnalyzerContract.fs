@@ -18,6 +18,7 @@ open ToolUp.SparseIndices.Snowball.SnowballAnalyzer
 open ToolUp.SparseIndices.Cjk
 open ToolUp.SparseIndices.Cjk.CjkAnalyzer
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 501 — sparse-analyzer contract ─────────────────────────
 //
@@ -39,22 +40,6 @@ open ToolUp.Platform.Infra
 // The failure this whole seam guards against is silent: index-time terms that
 // disagree with query-time terms do not raise anything, they just stop
 // matching, and the symptom is "retrieval got worse" months later.
-
-/// ILogger double that records every line, so the tests can assert on the
-/// re-analysis notice (an Info line, not a warning — re-analysis is the
-/// correct response to a changed analyzer, not a fault).
-type private CapturingLogger() =
-    let infos = ResizeArray<string>()
-    let warnings = ResizeArray<string>()
-
-    member _.Infos = List.ofSeq infos
-    member _.Warnings = List.ofSeq warnings
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info message = infos.Add message
-        member _.Warn message = warnings.Add message
-        member _.Error(_, _) = ()
 
 let private chunk content : TextChunk = {
     Content = content
@@ -199,7 +184,7 @@ let tests =
                 |> Async.RunSynchronously
                 |> ignore
 
-                let logger = CapturingLogger()
+                let logger = Logger.recording ()
 
                 use index = new InMemoryBM25Index(storage, logger = logger, flushIntervalMs = 60000)
 
@@ -208,7 +193,8 @@ let tests =
                 Expect.equal (results |> List.map _.ChunkId) [ "doc-1" ] "a pre-501 snapshot must still answer queries"
 
                 Expect.isEmpty
-                    (logger.Infos |> List.filter (fun i -> i.Contains "re-analysed"))
+                    (logger.MessagesAt LogSeverity.Info
+                     |> List.filter (fun i -> i.Contains "re-analysed"))
                     "a pre-501 snapshot under the default analyzer must NOT be re-analysed — it was written by that analyzer"
             }
         ]
@@ -263,7 +249,7 @@ let tests =
                 let storage = InMemoryBlobStorage() :> IBlobStorage
                 seed storage None morphologyCorpus
 
-                let logger = CapturingLogger()
+                let logger = Logger.recording ()
                 let snowball = SnowballAnalyzer.english ()
 
                 use index =
@@ -282,7 +268,8 @@ let tests =
                     "after re-analysis the stemmed query must reach the identity-indexed document"
 
                 Expect.isNonEmpty
-                    (logger.Infos |> List.filter (fun i -> i.Contains "re-analysed"))
+                    (logger.MessagesAt LogSeverity.Info
+                     |> List.filter (fun i -> i.Contains "re-analysed"))
                     "the re-analysis must be announced once per scope — an unexplained index rebuild is worse than a loud one"
             }
 
@@ -317,7 +304,7 @@ let tests =
                 let storage = InMemoryBlobStorage() :> IBlobStorage
                 seed storage (Some withStop) morphologyCorpus
 
-                let logger = CapturingLogger()
+                let logger = Logger.recording ()
 
                 use index =
                     new InMemoryBM25Index(storage, logger = logger, flushIntervalMs = 60000, analyzer = withoutStop)
@@ -326,7 +313,8 @@ let tests =
                 index.Start() |> Async.RunSynchronously
 
                 Expect.isNonEmpty
-                    (logger.Infos |> List.filter (fun i -> i.Contains "re-analysed"))
+                    (logger.MessagesAt LogSeverity.Info
+                     |> List.filter (fun i -> i.Contains "re-analysed"))
                     "changing an option must invalidate the persisted terms"
             }
         ]

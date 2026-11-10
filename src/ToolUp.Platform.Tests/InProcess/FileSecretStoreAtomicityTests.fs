@@ -5,6 +5,7 @@ open System.IO
 open Expecto
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 // ─── FileSecretStore — atomic read-modify-write ──────────────────────
 //
@@ -19,15 +20,11 @@ open ToolUp.Platform.Config
 // These tests drive genuine concurrency (Async.Parallel) at one scope file
 // and assert no lost update; they fail if the RMW is un-serialised.
 
-/// Fresh store over a unique temp directory, plus that directory so a test
-/// can inspect the on-disk file. The `baseDir` ctor param keeps every
+/// Fresh store over the case's own temp directory, which a test can also
+/// inspect for the on-disk file. The `baseDir` ctor param keeps every
 /// instance isolated — no cwd manipulation, safe to run in parallel.
-let private freshStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-secret-atomic-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    (FileSecretStore.FileSecretStore(baseDir = dir) :> ISecretStore), dir
+let private freshStore (dir: TempDir) =
+    FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
 let private setOk (store: ISecretStore) scope key value = async {
     match! store.SetSecret(scope, key, value) with
@@ -39,7 +36,8 @@ let tests =
     testList "FileSecretStoreAtomicity" [
         testCaseAsync "N concurrent SetSecret calls with distinct keys all survive"
         <| async {
-            let store, _ = freshStore ()
+            use dir = TempDir.create "secret-atomic"
+            let store = freshStore dir
             let scope = "team-concurrent"
             let n = 40
 
@@ -62,7 +60,8 @@ let tests =
 
         testCaseAsync "SetSecret racing DeleteSecret on different keys leaves both results consistent"
         <| async {
-            let store, _ = freshStore ()
+            use dir = TempDir.create "secret-atomic"
+            let store = freshStore dir
             let scope = "team-race"
 
             // Seed two keys.
@@ -94,7 +93,8 @@ let tests =
 
         testCaseAsync "many concurrent updates to the SAME key converge to one of the written values"
         <| async {
-            let store, _ = freshStore ()
+            use dir = TempDir.create "secret-atomic"
+            let store = freshStore dir
             let scope = "team-samekey"
             let n = 25
 
@@ -115,7 +115,8 @@ let tests =
 
         testCaseAsync "single-writer sequential behaviour is unchanged"
         <| async {
-            let store, dir = freshStore ()
+            use dir = TempDir.create "secret-atomic"
+            let store = freshStore dir
             let scope = "team-seq"
 
             do! setOk store scope "A" "1"
@@ -132,10 +133,10 @@ let tests =
 
             // The scope file is a single well-formed JSON object — the
             // temp-then-rename never leaves a torn or leftover file.
-            let scopeFile = Path.Combine(dir, $"secrets-{scope}.json")
+            let scopeFile = dir.File $"secrets-{scope}.json"
             Expect.isTrue (File.Exists scopeFile) "the scope file exists after writes"
 
-            let leftovers = Directory.GetFiles(dir, $"secrets-{scope}.json.tmp-*")
+            let leftovers = Directory.GetFiles(dir.Path, $"secrets-{scope}.json.tmp-*")
             Expect.equal (Array.length leftovers) 0 "no temp files are left behind"
         }
     ]

@@ -6,6 +6,7 @@ open System.Threading
 open Expecto
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 // ─── FileSecretStore - cancellable, non-blocking reads (Phase 6k) ────
 //
@@ -45,25 +46,20 @@ open ToolUp.Platform.Config
 // is either timing-flaky or a process-global side effect in a shared
 // test binary. Recorded rather than faked.
 
-let private freshDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-secret-cancel-" + Guid.NewGuid().ToString("N"))
+let private freshDir () = TempDir.create "secret-cancel"
 
-    Directory.CreateDirectory dir |> ignore
-    dir
-
-let private writeSecrets (dir: string) (fileName: string) (json: string) =
-    File.WriteAllText(Path.Combine(dir, fileName), json)
+let private writeSecrets (dir: TempDir) (fileName: string) (json: string) =
+    File.WriteAllText(dir.File fileName, json)
 
 let tests =
     testList "FileSecretStoreCancellation" [
 
         testCase "a cancelled read raises rather than reporting the secret absent"
         <| fun () ->
-            let dir = freshDir ()
+            use dir = freshDir ()
             writeSecrets dir "secrets.json" """{ "ANTHROPIC_API_KEY": "sk-live" }"""
 
-            let store = FileSecretStore.FileSecretStore(baseDir = dir) :> ISecretStore
+            let store = FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
             use cts = new CancellationTokenSource()
             cts.Cancel()
@@ -90,10 +86,10 @@ let tests =
 
         testCase "an uncancelled read still resolves the platform file"
         <| fun () ->
-            let dir = freshDir ()
+            use dir = freshDir ()
             writeSecrets dir "secrets.json" """{ "ANTHROPIC_API_KEY": "sk-live" }"""
 
-            let store = FileSecretStore.FileSecretStore(baseDir = dir) :> ISecretStore
+            let store = FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
             let value =
                 store.GetSecret("_platform", "ANTHROPIC_API_KEY") |> Async.RunSynchronously
@@ -105,10 +101,10 @@ let tests =
             // Every failure that is NOT cancellation keeps the historic
             // swallow-and-return-empty fallback. A half-written or
             // hand-edited secrets file must not take the process down.
-            let dir = freshDir ()
+            use dir = freshDir ()
             writeSecrets dir "secrets.json" "{ this is not json"
 
-            let store = FileSecretStore.FileSecretStore(baseDir = dir) :> ISecretStore
+            let store = FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
             let value = store.GetSecret("_platform", "SOME_KEY") |> Async.RunSynchronously
 
@@ -116,10 +112,10 @@ let tests =
 
         testCase "ListKeys is cancellable on the same terms as GetSecret"
         <| fun () ->
-            let dir = freshDir ()
+            use dir = freshDir ()
             writeSecrets dir "secrets-team-a.json" """{ "K": "v" }"""
 
-            let store = FileSecretStore.FileSecretStore(baseDir = dir) :> ISecretStore
+            let store = FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
             use cts = new CancellationTokenSource()
             cts.Cancel()
@@ -137,11 +133,11 @@ let tests =
 
         testCase "the scoped read path resolves its per-scope file"
         <| fun () ->
-            let dir = freshDir ()
+            use dir = freshDir ()
             writeSecrets dir "secrets-team-a.json" """{ "TEAM_KEY": "team-value" }"""
             writeSecrets dir "secrets.json" """{ "PLATFORM_KEY": "platform-value" }"""
 
-            let store = FileSecretStore.FileSecretStore(baseDir = dir) :> ISecretStore
+            let store = FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
             Expect.equal
                 (store.GetSecret("team-a", "TEAM_KEY") |> Async.RunSynchronously)

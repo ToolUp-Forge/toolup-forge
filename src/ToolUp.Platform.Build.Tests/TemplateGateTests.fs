@@ -7,6 +7,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Platform.Build
+open ToolUp.Platform.Testing
 open ToolUp.Forge
 
 // ─── Phase 754 — the stranger's-package guard, proven in both ────────
@@ -157,16 +158,8 @@ let tests =
         testList "TemplateGate.privatePackagesFolder" [
 
             let withScratchRoot (body: string -> unit) =
-                let temp =
-                    Path.Combine(Path.GetTempPath(), "toolup-tgp-" + Guid.NewGuid().ToString "N")
-
-                Directory.CreateDirectory temp |> ignore
-
-                try
-                    body temp
-                finally
-                    if Directory.Exists temp then
-                        Directory.Delete(temp, true)
+                use scratch = TempDir.create "tgp"
+                body scratch.Path
 
             /// The retired two-path guess `VerifyTemplates` used to make,
             /// reproduced here only to demonstrate what it misses — this is

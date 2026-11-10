@@ -20,6 +20,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Audit.Metrics
+open ToolUp.Platform.Testing
 
 // ─── Phase 466 — ad-analytics silent-degradation observability ───────
 //
@@ -69,22 +70,11 @@ type private CapturingMetricsSink() =
         member _.Increment(name, tags) = increments.Enqueue(name, tags)
         member _.SetGauge(_name, _value, _tags) = ()
 
-/// Records warnings so the rate-limited signal can be asserted present
-/// — and asserted SUPPRESSED on the repeat, which is the half a "the
-/// warning fired" test would miss.
-type private CapturingLogger() =
-    let warns = ConcurrentQueue<string>()
-
-    member _.Warnings = warns |> List.ofSeq
-
-    member this.WarningsContaining(fragment: string) =
-        this.Warnings |> List.filter (fun w -> w.Contains fragment)
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn msg = warns.Enqueue msg
-        member _.Error(_, _) = ()
+/// The recorded warnings containing `fragment`, so the rate-limited
+/// signal can be asserted present — and asserted SUPPRESSED on the
+/// repeat, which is the half a "the warning fired" test would miss.
+let private warningsContaining (logger: TestLogger) (fragment: string) =
+    logger.MessagesAt LogSeverity.Warn |> List.filter (fun w -> w.Contains fragment)
 
 /// An `IRateLimitStore` whose write side answers with a scripted
 /// result. The faulting form is the double the acceptance criterion
@@ -104,7 +94,7 @@ let private allowingStore () =
 type private Harness = {
     Client: HttpClient
     Metrics: CapturingMetricsSink
-    Logger: CapturingLogger
+    Logger: TestLogger
     Dispose: unit -> unit
 }
 
@@ -120,7 +110,7 @@ let private build (store: IRateLimitStore option) : Harness =
     |> Async.RunSynchronously
 
     let metrics = CapturingMetricsSink()
-    let logger = CapturingLogger()
+    let logger = Logger.recording ()
 
     let host =
         Host
@@ -218,12 +208,12 @@ let tests =
                     "tagged with the endpoint that fail-opened"
 
                 Expect.equal
-                    (h.Logger.WarningsContaining "event=rate_limit_store_failed" |> List.length)
+                    (warningsContaining h.Logger "event=rate_limit_store_failed" |> List.length)
                     1
                     "one Warn names the fail-open"
 
                 Expect.stringContains
-                    (h.Logger.WarningsContaining "event=rate_limit_store_failed" |> List.head)
+                    (warningsContaining h.Logger "event=rate_limit_store_failed" |> List.head)
                     "simulated rate-limit store outage"
                     "and carries the store's own reason"
             finally
@@ -244,7 +234,7 @@ let tests =
                 Expect.equal (h.Metrics.CountOf storeFailures) 4 "every occurrence is counted"
 
                 Expect.equal
-                    (h.Logger.WarningsContaining "event=rate_limit_store_failed" |> List.length)
+                    (warningsContaining h.Logger "event=rate_limit_store_failed" |> List.length)
                     1
                     "while only the first occurrence in the window is logged"
             finally
@@ -258,7 +248,7 @@ let tests =
                 let response = post h impressionPath (validImpressionBody ())
                 Expect.equal response.StatusCode HttpStatusCode.NoContent "admitted"
                 Expect.equal (h.Metrics.CountOf storeFailures) 0 "no store-failure increment on the healthy path"
-                Expect.isEmpty (h.Logger.WarningsContaining "event=rate_limit_store_failed") "and no warning"
+                Expect.isEmpty (warningsContaining h.Logger "event=rate_limit_store_failed") "and no warning"
             finally
                 h.Dispose()
         }
@@ -297,7 +287,7 @@ let tests =
                     "tagged with the endpoint that dropped it"
 
                 Expect.equal
-                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.length)
+                    (warningsContaining h.Logger "event=malformed_payload" |> List.length)
                     1
                     "one Warn names the drop"
             finally
@@ -330,7 +320,7 @@ let tests =
                 Expect.equal (h.Metrics.CountOf malformedPayloads) 3 "every dropped event is counted"
 
                 Expect.equal
-                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.length)
+                    (warningsContaining h.Logger "event=malformed_payload" |> List.length)
                     1
                     "while a flood from one address produces one line per window"
             finally
@@ -344,7 +334,7 @@ let tests =
                 let response = post h impressionPath (validImpressionBody ())
                 Expect.equal response.StatusCode HttpStatusCode.NoContent "recorded"
                 Expect.equal (h.Metrics.CountOf malformedPayloads) 0 "no parse-drop increment on the happy path"
-                Expect.isEmpty (h.Logger.WarningsContaining "event=malformed_payload") "and no warning"
+                Expect.isEmpty (warningsContaining h.Logger "event=malformed_payload") "and no warning"
             finally
                 h.Dispose()
         }
@@ -392,12 +382,12 @@ let tests =
                     "under the same endpoint tag a malformed body uses"
 
                 Expect.equal
-                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.length)
+                    (warningsContaining h.Logger "event=malformed_payload" |> List.length)
                     1
                     "one Warn names the drop"
 
                 Expect.stringContains
-                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.head)
+                    (warningsContaining h.Logger "event=malformed_payload" |> List.head)
                     "reason=null-body"
                     "and distinguishes the cause from a truncated body, which the counter deliberately does not"
             finally
@@ -435,7 +425,7 @@ let tests =
                 Expect.equal (h.Metrics.CountOf malformedPayloads) 1 "unchanged: still counted"
 
                 Expect.stringContains
-                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.head)
+                    (warningsContaining h.Logger "event=malformed_payload" |> List.head)
                     "reason=null-body"
                     "no body and a null body are the same story for an operator"
             finally
@@ -452,7 +442,7 @@ let tests =
                 post h impressionPath malformedBody |> ignore
 
                 Expect.stringContains
-                    (h.Logger.WarningsContaining "event=malformed_payload" |> List.head)
+                    (warningsContaining h.Logger "event=malformed_payload" |> List.head)
                     "reason=malformed-body"
                     "the two causes stay distinguishable on the log line"
             finally

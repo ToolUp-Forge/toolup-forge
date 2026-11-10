@@ -15,6 +15,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 480 — bilateral clean-room template approval ──────────────
 //
@@ -137,39 +138,10 @@ let private dispatch (registration: PeerContractRegistration) =
 // and a stub signer that returned "ok" would let every case here pass
 // against a gate that checked nothing cryptographic at all.
 
-type private InMemorySecretStore() =
-    let store =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 /// A secret store holding a private + public P-256 key for each named
 /// peer, under the Phase 343 key names the signer reads.
 let private secretsFor (peerIds: string list) : ISecretStore =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
 
     for peerId in peerIds do
         use ec = ECDsa.Create(ECCurve.NamedCurves.nistP256)
@@ -517,7 +489,7 @@ let signatureTests =
             // A receiver holding only PUBLIC keys verifies everything
             // and forges nothing — the posture a host-only deployment
             // should have.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
 
             use ec = ECDsa.Create(ECCurve.NamedCurves.nistP256)
 

@@ -4,8 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.DeploymentVerificationReportTests
 
 open System
-open System.Collections.Concurrent
-open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
@@ -20,6 +18,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 686 — the one-command deployment verification report ──────
 //
@@ -60,46 +59,12 @@ open ToolUp.Platform.Compose
 
 let private scope = "_platform"
 
-/// An `IAuditLog` honouring both filters, so a probe cannot pass against
-/// a read path that ignores them.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
-
-    member _.All = recorded |> Seq.map snd |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Enqueue((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, eventType) = async {
-            return
-                recorded
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> Seq.filter (fun e ->
-                    match eventType with
-                    | None -> true
-                    | Some wanted -> AuditEvent.eventTypeName e = wanted)
-                |> List.ofSeq
-                |> List.rev
-        }
-
 /// Phase 693 — a job handler that does nothing, so a probe module can
 /// declare a job registration (and therefore imply `IJobScheduler`)
 /// without a scheduler being involved.
 type private NoopSeamJobHandler() =
     interface IJobHandler with
         member _.Execute _ = async { return JobResult.Success }
-
-/// Phase 693 — an audit log the seam gate's deny observer can write to
-/// without a probe asserting on it. The refusal path is Phase 688's and
-/// is proved there; what the mapper probes is the mirror it produces.
-type private SilentSeamAuditLog() =
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// A service provider over an explicit type→instance table. Small on
 /// purpose: the report resolves exactly two services (the evidence and
@@ -449,12 +414,8 @@ let private ledgerSettings: ChainedLedgerSettings = {
     PathPrefix = Some "verification"
 }
 
-let private newLedgerStorage () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-deployment-verification", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private newLedgerStorage (dir: TempDir) =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 /// Append a handful of real audit rows through a real chained sink.
 let private seedLedger (storage: IBlobStorage) = async {
@@ -570,10 +531,10 @@ let tests =
             }
 
             test "records one audited-read row carrying the verdict digest" {
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
                 let report = runReport (healthyEvidence ()) ((audit :> IAuditLog))
 
-                match audit.All with
+                match audit.Events with
                 | [ DeploymentVerified payload ] ->
                     Expect.equal payload.Actor "probe" "the row names who ran the report"
                     Expect.equal payload.VerdictDigest report.VerdictDigest "the row commits to the report's digest"
@@ -593,10 +554,10 @@ let tests =
                 // widened it into a second copy of the report would move
                 // a deployment-wide evidence summary onto a surface with
                 // its own readers and its own export paths.
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
                 runReport (healthyEvidence ()) ((audit :> IAuditLog)) |> ignore
 
-                match audit.All with
+                match audit.Events with
                 | [ DeploymentVerified payload ] ->
                     let flattened = String.Join(" ", payload.Sections)
 
@@ -748,7 +709,8 @@ let tests =
             }
 
             test "audit ledger — a real dropped record, positioned" {
-                let storage = newLedgerStorage ()
+                use dir = TempDir.create "deployment-verification"
+                let storage = newLedgerStorage dir
                 seedLedger storage |> Async.RunSynchronously
                 dropMiddleRecord storage |> Async.RunSynchronously
 
@@ -1731,7 +1693,7 @@ let tests =
 
                 let outcome =
                     SeamAuthorityEnforcement.verifyAudited
-                        (SilentSeamAuditLog() :> IAuditLog)
+                        (NoOpAuditLog() :> IAuditLog)
                         scope
                         CompositionProfile.Standard
                         (Some effectEnvelope)

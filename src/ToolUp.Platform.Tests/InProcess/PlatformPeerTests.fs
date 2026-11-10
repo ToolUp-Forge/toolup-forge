@@ -10,7 +10,6 @@ module ToolUp.Platform.Tests.InProcess.PlatformPeerTests
 // scheduled it.
 
 open System
-open System.Collections.Concurrent
 open System.Net.Http
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
@@ -28,6 +27,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── IPlatformPeerContract — in-process binding + worked example ─────
 //
@@ -82,36 +82,6 @@ let private sellerId: PeerIdentity = {
 
 let private v1: ContractVersion = { Major = 1; Minor = 0 }
 
-/// In-memory `ISecretStore` — the canonical binding for the JWT auth
-/// provider, which reads the per-peer signing key on every call.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 /// `IPeerClient` decorator that stashes the `RootRequestId` the proxy
 /// generated for an outbound call before delegating to the real
 /// transport. The buyer side never sees the cascade id otherwise (the
@@ -131,22 +101,6 @@ type private RecordingPeerClient(inner: IPeerClient, captured: string ref) =
             match cancellationToken with
             | Some ct -> inner.PollJob(target, contractId, jobId, ct)
             | None -> inner.PollJob(target, contractId, jobId)
-
-/// `IAuditLog` that retains every recorded event for inspection. The
-/// peer host records `PeerCallCompleted` best-effort per inbound call.
-type private RecordingAuditLog() =
-    let events = ConcurrentBag<AuditEvent>()
-    member _.Events = events |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
-            events.Add audit
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async {
-            return events |> List.ofSeq
-        }
 
 /// Seed a peer's symmetric HS256 signing key into a secret store at the
 /// reserved `_platform` scope under `peers/{peerId}/signing-key` — the
@@ -205,7 +159,7 @@ let private buyerProxyConfig (client: IPeerClient) : PeerProxyConfig = {
     HopBudget = 8
 }
 
-let private peerCallRootRequestIds (audit: RecordingAuditLog) =
+let private peerCallRootRequestIds (audit: TestAuditLog) =
     audit.Events
     |> List.choose (fun e ->
         match e with
@@ -224,8 +178,8 @@ let workedExampleTests =
             // Both deployments hold the buyer's signing key: the buyer
             // signs its bearer token with it, the seller verifies against
             // the same key. (Shared out of band in production.)
-            let buyerSecrets = InMemorySecretStore() :> ISecretStore
-            let sellerSecrets = InMemorySecretStore() :> ISecretStore
+            let buyerSecrets = Fakes.TestSecretStore() :> ISecretStore
+            let sellerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey buyerSecrets buyerId.PeerId signingKey
             seedSigningKey sellerSecrets buyerId.PeerId signingKey
 
@@ -239,7 +193,7 @@ let workedExampleTests =
 
             seller.RegisterContract directoryHost.Registration
 
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let host = buildSellerHost sellerAuth seller audit
             host.Start()
             use testClient = host.GetTestClient()
@@ -282,8 +236,8 @@ let workedExampleTests =
 
             // The seller trusts `sellerKey` for the buyer; the buyer signs
             // with a different key, so the HS256 signature will not verify.
-            let buyerSecrets = InMemorySecretStore() :> ISecretStore
-            let sellerSecrets = InMemorySecretStore() :> ISecretStore
+            let buyerSecrets = Fakes.TestSecretStore() :> ISecretStore
+            let sellerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey buyerSecrets buyerId.PeerId buyerWrongKey
             seedSigningKey sellerSecrets buyerId.PeerId sellerKey
 
@@ -297,7 +251,7 @@ let workedExampleTests =
 
             seller.RegisterContract directoryHost.Registration
 
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let host = buildSellerHost sellerAuth seller audit
             host.Start()
             use testClient = host.GetTestClient()
@@ -381,14 +335,14 @@ let jobPollOwnershipTests =
 
             // The seller trusts both peers' signing keys — the intruder
             // is a *validated* peer, just not the scheduling caller.
-            let sellerSecrets = InMemorySecretStore() :> ISecretStore
+            let sellerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey sellerSecrets buyerId.PeerId buyerKey
             seedSigningKey sellerSecrets intruderId.PeerId intruderKey
 
-            let buyerSecrets = InMemorySecretStore() :> ISecretStore
+            let buyerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey buyerSecrets buyerId.PeerId buyerKey
 
-            let intruderSecrets = InMemorySecretStore() :> ISecretStore
+            let intruderSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey intruderSecrets intruderId.PeerId intruderKey
 
             let sellerAuth = JwtPeerAuthProvider(sellerSecrets) :> IPeerAuthProvider
@@ -410,7 +364,7 @@ let jobPollOwnershipTests =
                 )
 
             let seller = DefaultPlatformPeer() :> IPlatformPeer
-            let host = buildSellerHostWith (Some fusion) sellerAuth seller (RecordingAuditLog())
+            let host = buildSellerHostWith (Some fusion) sellerAuth seller (TestAuditLog())
             host.Start()
             use testClient = host.GetTestClient()
 
@@ -471,7 +425,7 @@ let jobPollOwnershipTests =
 
         testCaseAsync "an unauthenticated poll is refused before any store read"
         <| async {
-            let sellerSecrets = InMemorySecretStore() :> ISecretStore
+            let sellerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey sellerSecrets buyerId.PeerId "buyer-signing-key-0123456789abcdefghijkl"
             let sellerAuth = JwtPeerAuthProvider(sellerSecrets) :> IPeerAuthProvider
 
@@ -487,7 +441,7 @@ let jobPollOwnershipTests =
                 )
 
             let seller = DefaultPlatformPeer() :> IPlatformPeer
-            let host = buildSellerHostWith (Some fusion) sellerAuth seller (RecordingAuditLog())
+            let host = buildSellerHostWith (Some fusion) sellerAuth seller (TestAuditLog())
             host.Start()
             use testClient = host.GetTestClient()
 
@@ -560,7 +514,7 @@ let audienceBindingTests =
     // the HS256 signature verifies on every case below — isolating the
     // audience decision from the signature decision.
     let receiverSecrets () =
-        let s = InMemorySecretStore() :> ISecretStore
+        let s = Fakes.TestSecretStore() :> ISecretStore
         seedSigningKey s issuer signingKey
         s
 

@@ -8,13 +8,9 @@ open Expecto
 open ToolUp.Cli
 open ToolUp.Cli.Dispatch
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
-let private tempDir () =
-    let path =
-        Path.Combine(Path.GetTempPath(), "toolup-cli-test-" + System.Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory path |> ignore
-    path
+let private tempDir () = TempDir.create "cli-test"
 
 let private validArgs (outDir: string) = [
     "--server-project"
@@ -84,36 +80,32 @@ let tests =
         }
 
         test "emit writes the four artefacts with tokens substituted" {
-            let dir = tempDir ()
+            use scratch = tempDir ()
+            let dir = scratch.Path
 
-            try
-                let code = DockerEmitCommand.command.Run(validArgs dir)
-                Expect.equal code ExitOk "emit succeeds"
+            let code = DockerEmitCommand.command.Run(validArgs dir)
+            Expect.equal code ExitOk "emit succeeds"
 
-                for name in [ "Dockerfile"; ".dockerignore"; "healthcheck.sh"; "compose.yml" ] do
-                    Expect.isTrue (File.Exists(Path.Combine(dir, name))) (sprintf "%s emitted" name)
+            for name in [ "Dockerfile"; ".dockerignore"; "healthcheck.sh"; "compose.yml" ] do
+                Expect.isTrue (File.Exists(Path.Combine(dir, name))) (sprintf "%s emitted" name)
 
-                let compose = File.ReadAllText(Path.Combine(dir, "compose.yml"))
-                Expect.stringContains compose "myapp:dev" "image token substituted in compose.yml"
-                Expect.isFalse (compose.Contains "{{image-name}}") "no unsubstituted tokens remain"
+            let compose = File.ReadAllText(Path.Combine(dir, "compose.yml"))
+            Expect.stringContains compose "myapp:dev" "image token substituted in compose.yml"
+            Expect.isFalse (compose.Contains "{{image-name}}") "no unsubstituted tokens remain"
 
-                let dockerfile = File.ReadAllText(Path.Combine(dir, "Dockerfile"))
-                Expect.stringContains dockerfile "MyApp-Server" "server-project token substituted in Dockerfile"
-            finally
-                Directory.Delete(dir, true)
+            let dockerfile = File.ReadAllText(Path.Combine(dir, "Dockerfile"))
+            Expect.stringContains dockerfile "MyApp-Server" "server-project token substituted in Dockerfile"
         }
 
         test "emit refuses to overwrite without --force, then obeys --force" {
-            let dir = tempDir ()
+            use scratch = tempDir ()
+            let dir = scratch.Path
 
-            try
-                Expect.equal (DockerEmitCommand.command.Run(validArgs dir)) ExitOk "first emit"
-                // Second emit without --force must refuse (runtime error).
-                Expect.equal (DockerEmitCommand.command.Run(validArgs dir)) ExitRuntimeError "clash without --force → 1"
-                // With --force it overwrites and succeeds.
-                Expect.equal (DockerEmitCommand.command.Run(validArgs dir @ [ "--force" ])) ExitOk "force → 0"
-            finally
-                Directory.Delete(dir, true)
+            Expect.equal (DockerEmitCommand.command.Run(validArgs dir)) ExitOk "first emit"
+            // Second emit without --force must refuse (runtime error).
+            Expect.equal (DockerEmitCommand.command.Run(validArgs dir)) ExitRuntimeError "clash without --force → 1"
+            // With --force it overwrites and succeeds.
+            Expect.equal (DockerEmitCommand.command.Run(validArgs dir @ [ "--force" ])) ExitOk "force → 0"
         }
 
         test "emit reports a usage error for missing required args" {

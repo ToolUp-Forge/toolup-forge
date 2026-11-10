@@ -23,6 +23,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 827 — WhatsApp as a channel ───────────────────────────────
 //
@@ -52,31 +53,13 @@ type private RecordingChannel() =
         member _.Subscribe(_, _) = async { return (Guid.NewGuid(): NotificationSubscriptionId) }
         member _.Unsubscribe _ = async { () }
 
-type private RecordingAuditLog() =
-    let events = ConcurrentQueue<string * AuditEvent>()
-
-    member this.Refusals =
-        events
-        |> Seq.toList
-        |> List.choose (fun (_, e) ->
-            match e with
-            | NotificationDeliveryRefused p -> Some p
-            | _ -> None)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            events.Enqueue((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
+/// The `NotificationDeliveryRefused` rows an audit log recorded.
+let private refusalsIn (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (fun e ->
+        match e with
+        | NotificationDeliveryRefused p -> Some p
+        | _ -> None)
 
 /// An in-memory `IWhatsAppTemplateRegistry`: a fixed set of templates,
 /// and a count of lookups so a test can show the registry was (or was
@@ -237,12 +220,12 @@ let private templated
 let private policy
     (templates: IWhatsAppTemplateRegistry)
     (contacts: IExternalContactStore option)
-    : RecordingChannel * RecordingAuditLog * INotificationChannel =
+    : RecordingChannel * TestAuditLog * INotificationChannel =
     let beneath = RecordingChannel()
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
     let filter =
-        WhatsAppSendPolicyFilter(beneath, templates, contacts, (audit :> IAuditLog), SilentLogger(), fun () -> now)
+        WhatsAppSendPolicyFilter(beneath, templates, contacts, (audit :> IAuditLog), Logger.silent, fun () -> now)
 
     beneath, audit, filter :> INotificationChannel
 
@@ -456,7 +439,7 @@ let tests =
 
                 Expect.isEmpty beneath.Published "nothing reaches the channel beneath, so no sink runs"
 
-                match audit.Refusals with
+                match refusalsIn audit with
                 | [ refusal ] ->
                     Expect.equal refusal.Reason "outside_24h_window_no_template" "the window reason"
                     Expect.equal refusal.Reason WhatsAppSendPolicy.OutsideWindowReason "the published literal"
@@ -477,7 +460,10 @@ let tests =
 
                 Expect.isEmpty beneath.Published "refused"
 
-                Expect.equal (audit.Refusals |> List.map _.Reason) [ WhatsAppSendPolicy.OutsideWindowReason ] "audited"
+                Expect.equal
+                    (refusalsIn audit |> List.map _.Reason)
+                    [ WhatsAppSendPolicy.OutsideWindowReason ]
+                    "audited"
             }
 
             testCaseAsync "a contact who wrote in two hours ago receives the free-form reply"
@@ -492,7 +478,7 @@ let tests =
                 do! channel.Publish(scope, freeForm [ RecipientId.External recent ])
 
                 Expect.equal beneath.RecipientsSeen [ RecipientId.External recent ] "admitted"
-                Expect.isEmpty audit.Refusals "no refusal"
+                Expect.isEmpty (refusalsIn audit) "no refusal"
             }
 
             testCaseAsync "a mixed envelope keeps the in-window contact and refuses the rest"
@@ -517,7 +503,7 @@ let tests =
 
                 Expect.equal beneath.RecipientsSeen [ RecipientId.External recent ] "only the in-window contact"
 
-                match audit.Refusals with
+                match refusalsIn audit with
                 | [ refusal ] ->
                     Expect.equal refusal.ContactIds [ stale ] "the stale contact"
                     Expect.equal refusal.RecipientHashes.Length 2 "the stale contact AND the platform user"
@@ -532,7 +518,10 @@ let tests =
 
                 Expect.isEmpty beneath.Published "a business-initiated message must be a template"
 
-                Expect.equal (audit.Refusals |> List.map _.Reason) [ WhatsAppSendPolicy.OutsideWindowReason ] "audited"
+                Expect.equal
+                    (refusalsIn audit |> List.map _.Reason)
+                    [ WhatsAppSendPolicy.OutsideWindowReason ]
+                    "audited"
             }
 
             testCaseAsync "fail closed: no contact store, or an unknown contact, refuses"
@@ -545,8 +534,8 @@ let tests =
 
                 Expect.isEmpty beneath.Published "no store"
                 Expect.isEmpty beneathB.Published "unknown contact"
-                Expect.equal audit.Refusals.Length 1 "audited (no store)"
-                Expect.equal auditB.Refusals.Length 1 "audited (unknown contact)"
+                Expect.equal (List.length (refusalsIn audit)) 1 "audited (no store)"
+                Expect.equal (List.length (refusalsIn auditB)) 1 "audited (unknown contact)"
             }
 
             testCaseAsync "a template send is not window-gated"
@@ -565,7 +554,7 @@ let tests =
                 do! channel.Publish(scope, notification)
 
                 Expect.equal beneath.Published [ scope, notification ] "published exactly as sent"
-                Expect.isEmpty audit.Refusals "no refusal"
+                Expect.isEmpty (refusalsIn audit) "no refusal"
             }
         ]
 
@@ -581,7 +570,7 @@ let tests =
                 Expect.equal registry.Lookups 1 "the registry was asked"
 
                 Expect.equal
-                    (audit.Refusals |> List.map _.Reason)
+                    (refusalsIn audit |> List.map _.Reason)
                     [ WhatsAppSendPolicy.TemplateUnknownReason ]
                     "typed reason"
             }
@@ -603,7 +592,7 @@ let tests =
                 Expect.isEmpty beneath.Published "refused"
 
                 Expect.equal
-                    (audit.Refusals |> List.map _.Reason)
+                    (refusalsIn audit |> List.map _.Reason)
                     [ WhatsAppSendPolicy.TemplateArityReason ]
                     "typed reason"
             }
@@ -622,7 +611,7 @@ let tests =
                 Expect.isEmpty beneath.Published "fr_FR is not approved"
 
                 Expect.equal
-                    (audit.Refusals |> List.map _.Reason)
+                    (refusalsIn audit |> List.map _.Reason)
                     [ WhatsAppSendPolicy.TemplateLanguageReason ]
                     "typed reason"
 
@@ -654,7 +643,7 @@ let tests =
                 Expect.isEmpty beneath.Published "refused"
 
                 Expect.equal
-                    (audit.Refusals |> List.map _.Reason)
+                    (refusalsIn audit |> List.map _.Reason)
                     [ WhatsAppSendPolicy.TemplateUnknownReason ]
                     "fail closed"
             }
@@ -687,7 +676,7 @@ let tests =
                 Expect.isEmpty beneath.Published "both refused"
 
                 Expect.equal
-                    (audit.Refusals |> List.map _.Reason)
+                    (refusalsIn audit |> List.map _.Reason)
                     [ WhatsAppSendPolicy.NoContentReason; WhatsAppSendPolicy.TemplateAndBodyReason ]
                     "typed reasons"
             }
@@ -713,7 +702,7 @@ let tests =
                     "untouched"
 
                 Expect.equal registry.Lookups 0 "the registry is not consulted"
-                Expect.isEmpty audit.Refusals "no refusal"
+                Expect.isEmpty (refusalsIn audit) "no refusal"
             }
         ]
 
@@ -723,14 +712,14 @@ let tests =
                 let store = freshStore ()
                 let! smsOnly = seedContact store "SmsOnly" [ NotificationKind.SinkKind.Sms ] (Some(now.AddHours -1.0))
                 let beneath, policyAudit, policyChannel = policy (noTemplates ()) (Some store)
-                let consentAudit = RecordingAuditLog()
+                let consentAudit = TestAuditLog()
 
                 let consent =
                     ExternalContactConsentFilter(
                         policyChannel,
                         Some store,
                         (consentAudit :> IAuditLog),
-                        SilentLogger(),
+                        Logger.silent,
                         fun () -> now
                     )
                     :> INotificationChannel
@@ -740,11 +729,11 @@ let tests =
                 Expect.isEmpty beneath.Published "refused"
 
                 Expect.equal
-                    (consentAudit.Refusals |> List.map (fun r -> r.Reason, r.NotificationKind))
+                    (refusalsIn consentAudit |> List.map (fun r -> r.Reason, r.NotificationKind))
                     [ ExternalContactConsent.NoOptInReason, whatsAppWire ]
                     "refused for want of a WhatsApp consent, under the WhatsApp kind"
 
-                Expect.isEmpty policyAudit.Refusals "the window rule never saw a recipient without consent"
+                Expect.isEmpty (refusalsIn policyAudit) "the window rule never saw a recipient without consent"
             }
 
             testCaseAsync
@@ -757,14 +746,14 @@ let tests =
                     seedContact store "Stale" [ NotificationKind.SinkKind.WhatsApp ] (Some(now.AddDays -5.0))
 
                 let beneath, policyAudit, policyChannel = policy (noTemplates ()) (Some store)
-                let consentAudit = RecordingAuditLog()
+                let consentAudit = TestAuditLog()
 
                 let consent =
                     ExternalContactConsentFilter(
                         policyChannel,
                         Some store,
                         (consentAudit :> IAuditLog),
-                        SilentLogger(),
+                        Logger.silent,
                         fun () -> now
                     )
                     :> INotificationChannel
@@ -778,12 +767,12 @@ let tests =
                 Expect.isEmpty beneath.Published "neither is delivered"
 
                 Expect.equal
-                    (consentAudit.Refusals |> List.collect _.ContactIds)
+                    (refusalsIn consentAudit |> List.collect _.ContactIds)
                     [ unconsented ]
                     "consent refuses the unconsented contact"
 
                 Expect.equal
-                    (policyAudit.Refusals |> List.collect _.ContactIds)
+                    (refusalsIn policyAudit |> List.collect _.ContactIds)
                     [ consented ]
                     "the window rule sees ONLY the consented one"
             }
@@ -802,8 +791,8 @@ let tests =
                     new TransactionalDispatcher.TransactionalDispatcher(
                         [ sink :> INotificationSink ],
                         FakeConfigStore(prefs),
-                        RecordingAuditLog(),
-                        SilentLogger(),
+                        TestAuditLog(),
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )
@@ -842,7 +831,7 @@ let tests =
                         [ sink :> INotificationSink ],
                         FakeConfigStore(Map.empty),
                         audit,
-                        SilentLogger(),
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )
@@ -873,7 +862,7 @@ let tests =
 
             test "the send policy is composed only when a WhatsApp sink is registered (GP 13)" {
                 let inner = RecordingChannel() :> INotificationChannel
-                let audit = RecordingAuditLog() :> IAuditLog
+                let audit = TestAuditLog() :> IAuditLog
 
                 // No dispatcher at all.
                 let bare = ServiceCollection().BuildServiceProvider()
@@ -884,7 +873,7 @@ let tests =
                             (bare :> IServiceProvider)
                             inner
                             audit
-                            (SilentLogger()),
+                            Logger.silent,
                         inner
                     ))
                     "no dispatcher: the channel is returned as-is"
@@ -897,7 +886,7 @@ let tests =
                         ],
                         FakeConfigStore(Map.empty),
                         audit,
-                        SilentLogger(),
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )
@@ -913,7 +902,7 @@ let tests =
                             (emailServices.BuildServiceProvider() :> IServiceProvider)
                             inner
                             audit
-                            (SilentLogger()),
+                            Logger.silent,
                         inner
                     ))
                     "no WhatsApp sink: the channel is returned as-is"
@@ -924,7 +913,7 @@ let tests =
                         [ InMemoryWhatsAppSink true :> INotificationSink ],
                         FakeConfigStore(Map.empty),
                         audit,
-                        SilentLogger(),
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )
@@ -939,7 +928,7 @@ let tests =
                         (services.BuildServiceProvider() :> IServiceProvider)
                         inner
                         audit
-                        (SilentLogger())
+                        Logger.silent
                 with
                 | :? WhatsAppSendPolicyFilter -> ()
                 | other -> failtestf "expected the send policy, got %s" (other.GetType().Name)
@@ -952,8 +941,8 @@ let tests =
                     new TransactionalDispatcher.TransactionalDispatcher(
                         sinks,
                         FakeConfigStore(Map.empty),
-                        RecordingAuditLog(),
-                        SilentLogger(),
+                        TestAuditLog(),
+                        Logger.silent,
                         TransactionalRetryPolicy.defaults,
                         NoOpActivitySink() :> IActivitySink
                     )

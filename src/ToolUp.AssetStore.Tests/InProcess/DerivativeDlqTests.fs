@@ -23,6 +23,11 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
+
+/// How many times `metric` was incremented, across all tag sets.
+let private countOf (metrics: Fakes.TestMetricsSink) (metric: string) =
+    metrics.Increments |> List.filter (fst >> (=) metric) |> List.length
 
 let private container = "user-dlq"
 
@@ -199,7 +204,7 @@ let tests =
         testCase
             "a poison payload exhausts the budget → StatusFailed + dead-letter record + failure notification + counter"
         <| fun () ->
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
 
             let fixture =
                 Fixture(
@@ -231,8 +236,8 @@ let tests =
                     |> Async.RunSynchronously
                     |> ignore
 
-            Expect.equal (metrics.CountOf DerivativeJobs.RetryMetric) 2 "one retry counter per non-exhausting attempt"
-            Expect.equal (metrics.CountOf DerivativeJobs.FailedMetric) 0 "nothing terminal yet"
+            Expect.equal (countOf metrics DerivativeJobs.RetryMetric) 2 "one retry counter per non-exhausting attempt"
+            Expect.equal (countOf metrics DerivativeJobs.FailedMetric) 0 "nothing terminal yet"
 
             // Attempt 3 exhausts the budget.
             match fixture.RunAttempt 3 with
@@ -268,7 +273,7 @@ let tests =
             | other -> failtestf "expected exactly one failure notification, got %A" other
 
             // 4. The counter.
-            Expect.equal (metrics.CountOf DerivativeJobs.FailedMetric) 1 "one terminal-failure counter"
+            Expect.equal (countOf metrics DerivativeJobs.FailedMetric) 1 "one terminal-failure counter"
 
             Expect.equal
                 (metrics.Increments |> List.map fst |> List.distinct |> List.sort)
@@ -277,7 +282,7 @@ let tests =
 
         testCase "a permanent failure dead-letters on the first attempt without spending the budget"
         <| fun () ->
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
 
             let renderer =
                 CountingMimeRenderer(Array.empty, FailWith = Some(DecodeFailed "corrupt original"))
@@ -301,12 +306,12 @@ let tests =
             | Some dead -> Expect.equal dead.Attempts 1 "dead-lettered on the first attempt"
             | None -> failtest "expected a dead-letter record for a permanent failure"
 
-            Expect.equal (metrics.CountOf DerivativeJobs.RetryMetric) 0 "a permanent failure is not a retry"
-            Expect.equal (metrics.CountOf DerivativeJobs.FailedMetric) 1 "one terminal-failure counter"
+            Expect.equal (countOf metrics DerivativeJobs.RetryMetric) 0 "a permanent failure is not a retry"
+            Expect.equal (countOf metrics DerivativeJobs.FailedMetric) 1 "one terminal-failure counter"
 
         testCase "a transient failure that later succeeds resolves to ready with no dead-letter record"
         <| fun () ->
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
             let renderer = poisonRenderer ()
 
             let fixture =
@@ -338,8 +343,8 @@ let tests =
                 (fixture.PayloadsUnder DerivativeJobs.DerivativeFailedNotificationKey)
                 "no failure notification"
 
-            Expect.equal (metrics.CountOf DerivativeJobs.FailedMetric) 0 "no terminal-failure counter"
-            Expect.equal (metrics.CountOf DerivativeJobs.RetryMetric) 1 "the one retry that happened is counted"
+            Expect.equal (countOf metrics DerivativeJobs.FailedMetric) 0 "no terminal-failure counter"
+            Expect.equal (countOf metrics DerivativeJobs.RetryMetric) 1 "the one retry that happened is counted"
 
             // And the derivative is genuinely servable afterwards.
             match
@@ -390,7 +395,7 @@ let tests =
             // A deployment that wants the notification and the counters
             // but not a persisted record gets exactly that — the flags
             // are not a single switch wearing three names.
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
 
             let fixture =
                 Fixture(
@@ -415,7 +420,7 @@ let tests =
                 Expect.stringContains payload "false" "and reports that nothing was persisted"
             | other -> failtestf "expected the failure notification to survive, got %A" other
 
-            Expect.equal (metrics.CountOf DerivativeJobs.FailedMetric) 1 "counters survive"
+            Expect.equal (countOf metrics DerivativeJobs.FailedMetric) 1 "counters survive"
 
             Expect.isNone DerivativeObservability.disabled.Metrics "the shipped disabled posture holds no sink"
 

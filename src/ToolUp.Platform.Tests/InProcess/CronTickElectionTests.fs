@@ -2,7 +2,6 @@ module ToolUp.Platform.Tests.InProcess.CronTickElectionTests
 
 open System
 open System.Collections.Concurrent
-open System.IO
 open System.Threading
 open System.Threading.Tasks
 open Expecto
@@ -13,6 +12,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 766 — the cron tick is a single-leader election ───────────
 //
@@ -61,25 +61,6 @@ open ToolUp.Platform.Jobs
 // no longer being placed and the control arm is where to look first.
 
 // ─── Substrate doubles ───────────────────────────────────────────────
-
-/// Records every `Info` line. The scheduler names each election outcome
-/// in a structured log event (`cron_tick_skipped_contended` /
-/// `cron_tick_skipped_not_due`), and those are the deterministic
-/// observables for "the loser finished by SKIPPING" — a loser that ran
-/// would have released a lease instead.
-type private RecordingLogger() =
-    let lines = ConcurrentQueue<string>()
-
-    member _.Lines = lines |> List.ofSeq
-
-    member _.Has(fragment: string) =
-        lines |> Seq.exists (fun l -> l.Contains fragment)
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info m = lines.Enqueue m
-        member _.Warn m = lines.Enqueue m
-        member _.Error(m, _) = lines.Enqueue m
 
 let private silentChannel =
     { new INotificationChannel with
@@ -193,7 +174,10 @@ type private ParkingHandler(holdUntil: Task) =
 type private Replica = {
     Store: IJobStore
     Lock: ReplicaLock
-    Logger: RecordingLogger
+    /// The scheduler names each election outcome in a structured log
+    /// event (`cron_tick_skipped_contended` / `cron_tick_skipped_not_due`),
+    /// the deterministic observables for "the loser finished by SKIPPING".
+    Logger: TestLogger
     Scheduler: JobScheduler.InProcessJobScheduler
 }
 
@@ -202,7 +186,7 @@ type private Replica = {
 /// logger, and the lock view the arm hands it.
 let private replicaOver (storage: IBlobStorage) (eventStore: IEventStore) (handler: IJobHandler) (lck: ReplicaLock) =
     let store = JobStore.create storage eventStore
-    let logger = RecordingLogger()
+    let logger = Logger.recording ()
 
     let scheduler =
         JobScheduler.create
@@ -235,12 +219,7 @@ let private replicaOver (storage: IBlobStorage) (eventStore: IEventStore) (handl
         Scheduler = scheduler
     }
 
-let private freshRoot () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-cron-election-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    root
+let private freshRoot () = TempDir.create "cron-election"
 
 /// Register one every-minute cron job through `replica` and make it
 /// OVERDUE by two minutes, so a tick at `DateTime.UtcNow` finds it due
@@ -309,7 +288,8 @@ let tests =
 
         testCase "a single replica runs a due cron job once and a second tick at the same instant re-runs nothing"
         <| fun () ->
-            let storage = LocalFileStorage.LocalFileStorage(freshRoot ()) :> IBlobStorage
+            use root = freshRoot ()
+            let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let handler = ParkingHandler(Task.CompletedTask)
 
@@ -354,7 +334,8 @@ let tests =
             // due job and contends. Under election B returns at once.
             // Pre-766, B queued on `acquireBlocking`, won after A
             // released, re-read an `Active` job and ran it again.
-            let storage = LocalFileStorage.LocalFileStorage(freshRoot ()) :> IBlobStorage
+            use root = freshRoot ()
+            let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let shared = InProcessDistributedLock.create ()
             let lockA = ReplicaLock(shared, None)
@@ -381,14 +362,14 @@ let tests =
             let settled =
                 waitFor deadline (fun () ->
                     lockA.Releases >= 1
-                    && (b.Logger.Has "cron_tick_skipped_contended" || lockB.Releases >= 1))
+                    && (b.Logger.Contains "cron_tick_skipped_contended" || lockB.Releases >= 1))
                 |> Async.RunSynchronously
 
             Expect.isTrue settled "both replicas should have finished with the tick"
             Expect.equal handler.Invocations 1 "the due job must run exactly once across both replicas"
             Expect.equal (succeededRuns a scope jobId) 1 "exactly one Succeeded run row in the shared store"
             Expect.isGreaterThanOrEqual lockB.Contentions 1 "B's acquire should have found A holding the lease"
-            Expect.isTrue (b.Logger.Has "cron_tick_skipped_contended") "B should have recorded the contended skip"
+            Expect.isTrue (b.Logger.Contains "cron_tick_skipped_contended") "B should have recorded the contended skip"
             Expect.equal lockB.Releases 0 "B never held the lease, so it has nothing to release"
 
         testCase "two replicas sharing one lease store: a loser admitted after the winner released re-reads and skips"
@@ -399,7 +380,8 @@ let tests =
             // for an occurrence that no longer exists. The in-lease
             // re-read must see `NextRunAt` advanced past the tick and
             // skip. Pre-766 (and under election alone) B ran the job.
-            let storage = LocalFileStorage.LocalFileStorage(freshRoot ()) :> IBlobStorage
+            use root = freshRoot ()
+            let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let shared = InProcessDistributedLock.create ()
             let lockA = ReplicaLock(shared, None)
@@ -435,7 +417,7 @@ let tests =
             Expect.equal handler.Invocations 1 "the due job must run exactly once across both replicas"
             Expect.equal (succeededRuns a scope jobId) 1 "exactly one Succeeded run row in the shared store"
             Expect.equal lockB.Contentions 0 "B's acquire was placed after A's release, so it must not have contended"
-            Expect.isTrue (b.Logger.Has "cron_tick_skipped_not_due") "B should have recorded the not-due skip"
+            Expect.isTrue (b.Logger.Contains "cron_tick_skipped_not_due") "B should have recorded the not-due skip"
 
         testCase "CONTROL — two replicas with their own lock tables double-run the job (the shape the election closes)"
         <| fun () ->
@@ -445,7 +427,8 @@ let tests =
             // still due (A is parked, so nothing has advanced), and both
             // run. If this arm ever passes with one run, the overlap the
             // shared-lease arms rely on is not being placed.
-            let storage = LocalFileStorage.LocalFileStorage(freshRoot ()) :> IBlobStorage
+            use root = freshRoot ()
+            let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let lockA = ReplicaLock(InProcessDistributedLock.create (), None)
             let lockB = ReplicaLock(InProcessDistributedLock.create (), None)

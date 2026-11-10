@@ -5,6 +5,7 @@ open System.Diagnostics
 open System.IO
 open Expecto
 open ToolUp.Platform.Tests.Contracts.ArchitectureFitness
+open ToolUp.Platform.Testing
 
 // ─── Phase 174 — architecture-fitness dependency-direction gate ───────
 //
@@ -580,12 +581,10 @@ let private tryGit (dir: string) (args: string) : bool =
 /// violation in four places: one in scope, three not. `asGitCheckout`
 /// selects which enumeration strategy the tree exercises.
 ///
-/// Returns the root; the caller deletes it.
-let private plantFixtureTree (asGitCheckout: bool) : string =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-phase635-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
+/// Returns the tree; disposing it deletes it.
+let private plantFixtureTree (asGitCheckout: bool) : TempDir =
+    let tree = TempDir.create "phase635"
+    let root = tree.Path
 
     writeFixtureFile root ".gitignore" ".claude/worktrees/\nscratch/\n"
 
@@ -612,13 +611,7 @@ let private plantFixtureTree (asGitCheckout: bool) : string =
         tryGit root "init -q ." |> ignore
         tryGit (Path.Combine(root, "nested-checkout")) "init -q ." |> ignore
 
-    root
-
-let private deleteFixtureTree (root: string) =
-    try
-        Directory.Delete(root, true)
-    with _ ->
-        () // a leftover temp tree is not worth failing a gate over
+    tree
 
 /// Segment test against the path *relative to `root`*. Never against the
 /// absolute path — the checkout under test may itself live under any of
@@ -629,102 +622,96 @@ let private phase635Tests =
     testList "Phase 635 — checkout-scoped enumeration" [
 
         test "git-derived enumeration excludes ignored paths and nested checkouts" {
-            let root = plantFixtureTree true
+            use tree = plantFixtureTree true
+            let root = tree.Path
 
-            try
-                match gitCheckoutFiles root with
-                | None ->
-                    skiptest
-                        "no usable git CLI — the fallback walk is covered by its own test below, but the git strategy this repo actually takes cannot be exercised here"
-                | Some _ ->
-                    // Verify the probe, not just the verdict: everything
-                    // below is only meaningful because git answered.
-                    let files = enumerateCheckoutFiles root
+            match gitCheckoutFiles root with
+            | None ->
+                skiptest
+                    "no usable git CLI — the fallback walk is covered by its own test below, but the git strategy this repo actually takes cannot be exercised here"
+            | Some _ ->
+                // Verify the probe, not just the verdict: everything
+                // below is only meaningful because git answered.
+                let files = enumerateCheckoutFiles root
 
-                    let named name =
-                        files |> List.exists (fun p -> Path.GetFileName p = name)
+                let named name =
+                    files |> List.exists (fun p -> Path.GetFileName p = name)
 
-                    Expect.isTrue (named "Violation.fsproj") "an ordinary project of the checkout must be enumerated"
+                Expect.isTrue (named "Violation.fsproj") "an ordinary project of the checkout must be enumerated"
 
-                    Expect.isEmpty
-                        (files |> List.filter (containsSegment root "/.claude/"))
-                        "a concurrent session's worktree under .claude/ must never be enumerated — this is the failure the phase exists to close"
+                Expect.isEmpty
+                    (files |> List.filter (containsSegment root "/.claude/"))
+                    "a concurrent session's worktree under .claude/ must never be enumerated — this is the failure the phase exists to close"
 
-                    Expect.isEmpty
-                        (files |> List.filter (containsSegment root "/scratch/"))
-                        "an ordinary gitignored directory must be excluded too. If this failed, the enumeration is matching a hardcoded path list rather than asking git, and it will drift the next time anyone edits .gitignore"
+                Expect.isEmpty
+                    (files |> List.filter (containsSegment root "/scratch/"))
+                    "an ordinary gitignored directory must be excluded too. If this failed, the enumeration is matching a hardcoded path list rather than asking git, and it will drift the next time anyone edits .gitignore"
 
-                    Expect.isEmpty
-                        (files |> List.filter (containsSegment root "/nested-checkout/"))
-                        "a second checkout that is not gitignored must still be excluded — git reports an untracked nested repository as a directory, never as its files"
-            finally
-                deleteFixtureTree root
+                Expect.isEmpty
+                    (files |> List.filter (containsSegment root "/nested-checkout/"))
+                    "a second checkout that is not gitignored must still be excluded — git reports an untracked nested repository as a directory, never as its files"
         }
 
         test "the same violation is caught in scope and ignored out of scope" {
-            let root = plantFixtureTree true
+            use tree = plantFixtureTree true
+            let root = tree.Path
 
-            try
-                match gitCheckoutFiles root with
-                | None -> skiptest "no usable git CLI — see the enumeration test above"
-                | Some _ ->
-                    let findings =
-                        enumerateCheckoutFiles root
-                        |> List.filter (fun p -> p.EndsWith ".fsproj")
-                        |> List.collect (fun path -> scanProjectSuppressions path (File.ReadAllText path))
+            match gitCheckoutFiles root with
+            | None -> skiptest "no usable git CLI — see the enumeration test above"
+            | Some _ ->
+                let findings =
+                    enumerateCheckoutFiles root
+                    |> List.filter (fun p -> p.EndsWith ".fsproj")
+                    |> List.collect (fun path -> scanProjectSuppressions path (File.ReadAllText path))
 
-                    // Four copies of the violation are planted; exactly
-                    // one is this checkout's. An exclusion that also
-                    // swallowed the real one would be a silent gate.
-                    Expect.hasLength
-                        findings
-                        1
-                        (sprintf
-                            "exactly the in-scope violation must be reported. Findings:\n%s"
-                            (findings |> List.map formatSourceFinding |> String.concat "\n"))
+                // Four copies of the violation are planted; exactly
+                // one is this checkout's. An exclusion that also
+                // swallowed the real one would be a silent gate.
+                Expect.hasLength
+                    findings
+                    1
+                    (sprintf
+                        "exactly the in-scope violation must be reported. Findings:\n%s"
+                        (findings |> List.map formatSourceFinding |> String.concat "\n"))
 
-                    Expect.equal
-                        (Path.GetFileName findings[0].File)
-                        "Violation.fsproj"
-                        "the surviving finding must be the one under src/, not a copy from a worktree, an ignored directory or a nested checkout"
-            finally
-                deleteFixtureTree root
+                Expect.equal
+                    (Path.GetFileName findings[0].File)
+                    "Violation.fsproj"
+                    "the surviving finding must be the one under src/, not a copy from a worktree, an ignored directory or a nested checkout"
         }
 
         test "the fallback walk still excludes .claude/ when git cannot answer" {
             // Same tree with no git anywhere in it, so `gitCheckoutFiles`
             // returns None and the prune-list walk takes over.
-            let root = plantFixtureTree false
+            use tree = plantFixtureTree false
+            let root = tree.Path
 
-            try
-                // Verify the probe: if the temp directory happens to sit
-                // inside someone's work tree, git answers and this test
-                // would silently exercise the git path instead. Skip
-                // rather than assert — a machine whose TEMP is inside a
-                // repo is unusual, not broken, and a false red here would
-                // be the very class of failure this phase closes.
-                if (gitCheckoutFiles root).IsSome then
-                    skiptest "TEMP is itself inside a git work tree, so the no-git fallback cannot be isolated here"
+            // Verify the probe: if the temp directory happens to sit
+            // inside someone's work tree, git answers and this test
+            // would silently exercise the git path instead. Skip
+            // rather than assert — a machine whose TEMP is inside a
+            // repo is unusual, not broken, and a false red here would
+            // be the very class of failure this phase closes.
+            if (gitCheckoutFiles root).IsSome then
+                skiptest "TEMP is itself inside a git work tree, so the no-git fallback cannot be isolated here"
 
-                let files = enumerateCheckoutFiles root
+            let files = enumerateCheckoutFiles root
 
-                Expect.isTrue
-                    (files |> List.exists (fun p -> Path.GetFileName p = "Violation.fsproj"))
-                    "the fallback must still enumerate the checkout's own sources"
+            Expect.isTrue
+                (files |> List.exists (fun p -> Path.GetFileName p = "Violation.fsproj"))
+                "the fallback must still enumerate the checkout's own sources"
 
-                Expect.isEmpty
-                    (files |> List.filter (containsSegment root "/.claude/"))
-                    "the prune list must keep .claude/ out even without git — this is the case it was written for"
+            Expect.isEmpty
+                (files |> List.filter (containsSegment root "/.claude/"))
+                "the prune list must keep .claude/ out even without git — this is the case it was written for"
 
-                // Stated rather than hidden: the fallback cannot read
-                // .gitignore, so it does walk trees git would have
-                // excluded. That is why it is the fallback and not the
-                // strategy.
-                Expect.isTrue
-                    (files |> List.exists (containsSegment root "/scratch/"))
-                    "the fallback is expected to be weaker than git here; if it stopped being so, the prune list grew a second copy of .gitignore and this test should become an isEmpty"
-            finally
-                deleteFixtureTree root
+            // Stated rather than hidden: the fallback cannot read
+            // .gitignore, so it does walk trees git would have
+            // excluded. That is why it is the fallback and not the
+            // strategy.
+            Expect.isTrue
+                (files |> List.exists (containsSegment root "/scratch/"))
+                "the fallback is expected to be weaker than git here; if it stopped being so, the prune list grew a second copy of .gitignore and this test should become an isEmpty"
         }
 
         test "the live checkout's file set carries no foreign worktree" {

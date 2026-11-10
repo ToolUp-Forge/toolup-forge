@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.UsageLogTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -11,6 +10,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Usage
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── In-process bindings — IUsageLog contract ────────────────────
 //
@@ -45,21 +45,6 @@ let inMemoryTests =
 // per-(scope, day) lock + RecordId dedup logic is exercised by the
 // underlying `UsageBatchFlusher.flushBucket` invocations.
 
-let private tempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-usage-log-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
-
-let private testLogger =
-    { new ILogger with
-        member _.Debug(_message: string) = ()
-        member _.Info(_message: string) = ()
-        member _.Warn(_message: string) = ()
-        member _.Error(_message: string, _ex: exn option) = ()
-    }
-
 let private flushPolicy: BatchFlushPolicy = {
     FlushAtCount = 1 // Flush eagerly so tests don't wait
     FlushInterval = TimeSpan.FromMilliseconds 50.0
@@ -82,11 +67,11 @@ type private SyncFlushUsageLog(inner: IUsageLog, flusher: UsageLog.UsageBatchFlu
 
 let blobTests =
     let factory () =
-        let dir = tempDir ()
-        let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+        let dir = TempDir.forRun "usage-log-tests"
+        let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
         let flusher =
-            new UsageLog.UsageBatchFlusher(blobStorage, flushPolicy, testLogger, None)
+            new UsageLog.UsageBatchFlusher(blobStorage, flushPolicy, Logger.silent, None)
 
         let inner = UsageLog.BlobUsageLog(blobStorage, flusher) :> IUsageLog
         let log = SyncFlushUsageLog(inner, flusher) :> IUsageLog

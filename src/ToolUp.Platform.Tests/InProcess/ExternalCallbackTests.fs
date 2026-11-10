@@ -21,6 +21,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 320 — completion-callback ingress + idempotent resolution ──
 //
@@ -46,14 +47,6 @@ open ToolUp.Platform.Compose
 //   * the scope cross-check is asserted against a DELIBERATELY forged
 //     record, so the check is shown to fire rather than shown not to
 //     complain.
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 let private handleFor (scope: string) (backend: string) = {
     HandleId = Guid.NewGuid()
@@ -512,7 +505,7 @@ let private build (dispatcher: IExternalComputeDispatcher) (handleStore: IExtern
                     EventStore = eventStore
                     NotificationChannel = channel
                     Config = ServerConfig.defaults
-                    Logger = silentLogger
+                    Logger = Logger.silent
                     ActivitySink = NoOpActivitySink() :> IActivitySink
                 }
                 : JobScheduler.SchedulerDeps)
@@ -529,7 +522,7 @@ let private build (dispatcher: IExternalComputeDispatcher) (handleStore: IExtern
                     EventStore = eventStore
                     NotificationChannel = channel
                     Config = ServerConfig.defaults
-                    Logger = silentLogger
+                    Logger = Logger.silent
                     ActivitySink = NoOpActivitySink() :> IActivitySink
                 }
                 : JobScheduler.SchedulerDeps)
@@ -583,7 +576,7 @@ let private buildPair
                         EventStore = eventStore
                         NotificationChannel = channel
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink = NoOpActivitySink() :> IActivitySink
                     }
                     : JobScheduler.SchedulerDeps)
@@ -599,7 +592,7 @@ let private buildPair
                         EventStore = eventStore
                         NotificationChannel = channel
                         Config = ServerConfig.defaults
-                        Logger = silentLogger
+                        Logger = Logger.silent
                         ActivitySink = NoOpActivitySink() :> IActivitySink
                     }
                     : JobScheduler.SchedulerDeps)
@@ -1029,35 +1022,16 @@ let private schedulerTests =
 // what a caller observes — a 403 for a wrong secret, a 200 for a
 // duplicate — and none of that is reachable from the parts.
 
-/// Collects audit events so the "every resolution is audited" and "every
-/// refusal is audited" criteria can be asserted rather than assumed.
-type private CapturingAuditLog() =
-    let events = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
+/// The kinds of the audit events recorded, so the "every resolution is
+/// audited" and "every refusal is audited" criteria can be asserted rather
+/// than assumed.
+let private kinds (audit: TestAuditLog) =
+    audit.Events |> List.map AuditEvent.eventTypeName
 
-    member _.Events = events |> List.ofSeq
-    member this.Kinds = this.Events |> List.map (snd >> AuditEvent.eventTypeName)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            events.Enqueue((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-/// Records warnings so the rate-limited forged-callback signal can be
+/// The warnings logged, so the rate-limited forged-callback signal can be
 /// asserted present — and asserted SUPPRESSED on the repeat, which is the
 /// half that a "the warning fired" test would miss.
-type private CapturingLogger() =
-    let warns = System.Collections.Concurrent.ConcurrentQueue<string>()
-
-    member _.Warnings = warns |> List.ofSeq
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn msg = warns.Enqueue msg
-        member _.Error(_, _) = ()
+let private warnings (log: TestLogger) = log.MessagesAt LogSeverity.Warn
 
 /// A sink that records what it was asked to resolve and answers with a
 /// scripted resolution — so the handler's HTTP mapping is tested
@@ -1075,8 +1049,8 @@ type private ScriptedSink(answer: ExternalResolution) =
 
 type private IngressHarness = {
     Client: HttpClient
-    Audit: CapturingAuditLog
-    Logger: CapturingLogger
+    Audit: TestAuditLog
+    Logger: TestLogger
     Store: IExternalHandleStore option
     Sink: ScriptedSink option
     Dispose: unit -> unit
@@ -1088,8 +1062,8 @@ let private buildIngress (store: IExternalHandleStore option) (sink: ScriptedSin
     // per harness or the tests inherit each other's counts.
     ExternalComputeCallback.resetThrottleState ()
 
-    let audit = CapturingAuditLog()
-    let logger = CapturingLogger()
+    let audit = TestAuditLog()
+    let logger = Logger.recording ()
 
     let host =
         Host
@@ -1178,10 +1152,10 @@ let private ingressTests =
                 // pass a status-code-only assertion.
                 Expect.equal sink.Calls [ handle.HandleId, runId ] "the sink was driven with the stored routing"
 
-                Expect.contains h.Audit.Kinds "ExternalCallbackResolved" "the resolution was audited"
+                Expect.contains (kinds h.Audit) "ExternalCallbackResolved" "the resolution was audited"
 
                 Expect.isEmpty
-                    (h.Audit.Kinds |> List.filter ((=) "ExternalCallbackRejected"))
+                    ((kinds h.Audit) |> List.filter ((=) "ExternalCallbackRejected"))
                     "and nothing was recorded as a refusal"
             finally
                 h.Dispose()
@@ -1203,10 +1177,10 @@ let private ingressTests =
                 // not reach the sink at all.
                 Expect.isEmpty sink.Calls "the sink was never driven"
 
-                Expect.contains h.Audit.Kinds "ExternalCallbackRejected" "the refusal was audited"
+                Expect.contains (kinds h.Audit) "ExternalCallbackRejected" "the refusal was audited"
 
                 Expect.isTrue
-                    (h.Logger.Warnings
+                    ((warnings h.Logger)
                      |> List.exists (fun w -> w.Contains "callback_refused" && w.Contains "secret-mismatch"))
                     "a forged-callback warning names the reason"
 
@@ -1236,9 +1210,9 @@ let private ingressTests =
                     postCallback h (Some wrong) (payloadFor handle.HandleId) |> ignore
 
                 let refusalWarnings =
-                    h.Logger.Warnings |> List.filter (fun w -> w.Contains "callback_refused")
+                    (warnings h.Logger) |> List.filter (fun w -> w.Contains "callback_refused")
 
-                let refusalAudits = h.Audit.Kinds |> List.filter ((=) "ExternalCallbackRejected")
+                let refusalAudits = (kinds h.Audit) |> List.filter ((=) "ExternalCallbackRejected")
 
                 Expect.equal (List.length refusalWarnings) 1 "five refusals, ONE warning"
                 Expect.equal (List.length refusalAudits) 5 "but five audit rows"
@@ -1257,7 +1231,7 @@ let private ingressTests =
 
                 Expect.equal response.StatusCode HttpStatusCode.Forbidden "403"
                 Expect.isEmpty sink.Calls "the sink was never driven"
-                Expect.contains h.Audit.Kinds "ExternalCallbackRejected" "audited"
+                Expect.contains (kinds h.Audit) "ExternalCallbackRejected" "audited"
             finally
                 h.Dispose()
         }
@@ -1275,7 +1249,7 @@ let private ingressTests =
                 Expect.isEmpty sink.Calls "the sink was never driven"
 
                 Expect.isTrue
-                    (h.Logger.Warnings |> List.exists (fun w -> w.Contains "unknown-handle"))
+                    ((warnings h.Logger) |> List.exists (fun w -> w.Contains "unknown-handle"))
                     "the internal reason distinguishes it from a bad secret"
             finally
                 h.Dispose()
@@ -1322,7 +1296,7 @@ let private ingressTests =
                     Expect.equal response.StatusCode HttpStatusCode.Forbidden $"403 for %s{body}"
 
                 Expect.isTrue
-                    (h.Logger.Warnings |> List.exists (fun w -> w.Contains "malformed-body"))
+                    ((warnings h.Logger) |> List.exists (fun w -> w.Contains "malformed-body"))
                     "the internal reason says malformed"
             finally
                 h.Dispose()
@@ -1343,10 +1317,10 @@ let private ingressTests =
                 Expect.equal response.StatusCode HttpStatusCode.OK "200, NOT 409"
                 Expect.stringContains (bodyOf response) "already-resolved" "the body distinguishes the case"
 
-                Expect.contains h.Audit.Kinds "ExternalCallbackResolved" "the no-op is audited too"
+                Expect.contains (kinds h.Audit) "ExternalCallbackResolved" "the no-op is audited too"
 
                 Expect.isEmpty
-                    (h.Audit.Kinds |> List.filter ((=) "ExternalCallbackRejected"))
+                    ((kinds h.Audit) |> List.filter ((=) "ExternalCallbackRejected"))
                     "a duplicate is not a refusal"
             finally
                 h.Dispose()
@@ -1367,11 +1341,11 @@ let private ingressTests =
                 Expect.equal response.StatusCode HttpStatusCode.Forbidden "403"
 
                 Expect.isTrue
-                    (h.Logger.Warnings
+                    ((warnings h.Logger)
                      |> List.exists (fun w -> w.Contains "callback_refused" && w.Contains "scope-mismatch"))
                     "the GP 4 refusal is warned about"
 
-                Expect.contains h.Audit.Kinds "ExternalCallbackRejected" "and audited as a refusal"
+                Expect.contains (kinds h.Audit) "ExternalCallbackRejected" "and audited as a refusal"
             finally
                 h.Dispose()
         }
@@ -1389,7 +1363,7 @@ let private ingressTests =
                 Expect.equal response.StatusCode HttpStatusCode.ServiceUnavailable "503"
 
                 Expect.isEmpty
-                    (h.Audit.Kinds |> List.filter ((=) "ExternalCallbackRejected"))
+                    ((kinds h.Audit) |> List.filter ((=) "ExternalCallbackRejected"))
                     "a misconfiguration is not recorded as a forged callback"
             finally
                 h.Dispose()
@@ -1404,7 +1378,7 @@ let private ingressTests =
                 let response = postCallback h (Some secret) (payloadFor handle.HandleId)
 
                 Expect.equal response.StatusCode HttpStatusCode.ServiceUnavailable "503"
-                Expect.contains h.Audit.Kinds "ExternalCallbackResolved" "the authenticated attempt is on the trail"
+                Expect.contains (kinds h.Audit) "ExternalCallbackResolved" "the authenticated attempt is on the trail"
             finally
                 h.Dispose()
         }
@@ -1461,7 +1435,7 @@ let private composeTests =
                 blobStore
                 eventStore
                 channel
-                silentLogger
+                Logger.silent
                 (NoOpActivitySink() :> IActivitySink)
                 None
                 (LateBound<IJobScheduler option>("job scheduler", None))
@@ -1501,7 +1475,7 @@ let private composeTests =
                 blobStore
                 eventStore
                 channel
-                silentLogger
+                Logger.silent
                 (NoOpActivitySink() :> IActivitySink)
                 None
                 (LateBound<IJobScheduler option>("job scheduler", None))
@@ -1546,7 +1520,7 @@ let private composeTests =
                 (plainBlobStorage ())
                 eventStore
                 channel
-                silentLogger
+                Logger.silent
                 (NoOpActivitySink() :> IActivitySink)
                 None
                 (LateBound<IJobScheduler option>("job scheduler", None))

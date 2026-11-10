@@ -8,6 +8,7 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Testing
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 
@@ -22,7 +23,7 @@ open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 let private utf8 (s: string) = Encoding.UTF8.GetBytes s
 
 let private newProvider () =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = TestSecretStore() :> ISecretStore
     let audit = InMemoryAuditLog()
 
     let provider =
@@ -82,7 +83,7 @@ let tests =
         // its publish pipeline.
         testCase "registration never displaces an already-composed signer"
         <| fun _ ->
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = TestSecretStore() :> ISecretStore
             let audit = InMemoryAuditLog()
 
             let existing =
@@ -138,7 +139,7 @@ let tests =
 
         testCaseAsync "the ledger persists lifecycle events across instances"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = TestSecretStore() :> ISecretStore
             let writer = SecretStoreSigningKeyLedger.create secrets
 
             do! ApplicationSigning.activate writer "system" "k1" |> Async.Ignore
@@ -229,7 +230,7 @@ let tests =
         // before this surface existed: signatures are judged on bytes.
         testCaseAsync "a provider with no ledger verifies on the signature alone"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = TestSecretStore() :> ISecretStore
             let audit = InMemoryAuditLog()
 
             let provider =

@@ -10,6 +10,7 @@ open Expecto
 open ToolUp.InterPlatform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 18c — federation primitives (fan-out + cascade) ───────────
 //
@@ -20,6 +21,14 @@ open ToolUp.Platform.Compose
 // firing caller-side before the wire). No TestServer: the orchestration
 // is pure over a caller-supplied call thunk, so the substrate is exercised
 // directly without standing up a peer host.
+
+/// A clock whose delays never complete: the slow peer of an early-return
+/// case waits on it, so it cannot answer before the fast peers however
+/// loaded the machine is (a wall-clock sleep only made that likely).
+let private parked: Clock = {
+    Now = fun () -> DateTimeOffset.UnixEpoch
+    Delay = fun _ -> Async.AwaitTask(Threading.Tasks.TaskCompletionSource<unit>().Task)
+}
 
 let private peer id = { PeerId = id; DisplayName = id }
 
@@ -105,7 +114,7 @@ let fanoutTests =
                 if t.Peer.PeerId = "fast" then
                     return Ok 42
                 else
-                    do! Async.Sleep 1000
+                    do! parked.Delay(TimeSpan.FromMilliseconds 1000.0)
                     return Ok 0
             }
 
@@ -120,7 +129,7 @@ let fanoutTests =
 
             let call (t: TargetPeer) = async {
                 if t.Peer.PeerId = "slow" then
-                    do! Async.Sleep 1000
+                    do! parked.Delay(TimeSpan.FromMilliseconds 1000.0)
                     return Ok 0
                 else
                     return Ok 9
@@ -138,7 +147,7 @@ let fanoutTests =
 
             let call (t: TargetPeer) = async {
                 if t.Peer.PeerId = "slow" then
-                    do! Async.Sleep 2000
+                    do! parked.Delay(TimeSpan.FromMilliseconds 2000.0)
                     return Ok 0
                 else
                     return Ok 1
@@ -168,7 +177,7 @@ let fanoutTests =
                 if now > peakInFlight.Value then
                     peakInFlight.Value <- now
 
-                do! Async.Sleep 60
+                do! Clock.system.Delay(TimeSpan.FromMilliseconds 60.0)
                 Interlocked.Decrement(&inFlight.contents) |> ignore
                 return Ok 1
             }
@@ -194,7 +203,7 @@ let fanoutTests =
                 if now > peakInFlight.Value then
                     peakInFlight.Value <- now
 
-                do! Async.Sleep 60
+                do! Clock.system.Delay(TimeSpan.FromMilliseconds 60.0)
                 Interlocked.Decrement(&inFlight.contents) |> ignore
                 return Ok 1
             }
@@ -212,7 +221,7 @@ let fanoutTests =
                 if t.Peer.PeerId = "p1" || t.Peer.PeerId = "p2" then
                     return Ok 9
                 else
-                    do! Async.Sleep 2000
+                    do! parked.Delay(TimeSpan.FromMilliseconds 2000.0)
                     return Ok 0
             }
 

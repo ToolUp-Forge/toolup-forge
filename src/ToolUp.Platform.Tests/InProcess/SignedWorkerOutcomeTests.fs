@@ -16,6 +16,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 486 — signed worker outcomes ──────────────────────────────
 //
@@ -1120,17 +1121,6 @@ type private CapturingAuditLog() =
 
         member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
-type private CapturingLogger() =
-    let warns = System.Collections.Concurrent.ConcurrentQueue<string>()
-
-    member _.Warnings = warns |> List.ofSeq
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn msg = warns.Enqueue msg
-        member _.Error(_, _) = ()
-
 /// Records what it was asked to resolve. **The load-bearing assertion in
 /// every refusal test is that this stayed empty** — a gate that audits a
 /// refusal while still driving the run is precisely the defect a
@@ -1170,7 +1160,7 @@ type private PostureDispatcher(isolating: bool) =
 type private Harness = {
     Client: HttpClient
     Audit: CapturingAuditLog
-    Logger: CapturingLogger
+    Logger: TestLogger
     Sink: ScriptedSink
     Store: IExternalHandleStore
     Dispose: unit -> unit
@@ -1183,7 +1173,7 @@ let private buildHarness
     ExternalComputeCallback.resetThrottleState ()
 
     let audit = CapturingAuditLog()
-    let logger = CapturingLogger()
+    let logger = Logger.recording ()
     let sink = ScriptedSink()
     let store = InMemoryExternalHandleStore() :> IExternalHandleStore
 
@@ -1331,7 +1321,7 @@ let private ingressTests =
                 Expect.isEmpty h.Audit.Resolutions "and nothing was audited as a resolution"
 
                 Expect.isTrue
-                    (h.Logger.Warnings
+                    (h.Logger.MessagesAt LogSeverity.Warn
                      |> List.exists (fun w -> w.Contains "callback_signature_refused" && w.Contains "REPLAY"))
                     "and the warning explains what a hash mismatch means"
 

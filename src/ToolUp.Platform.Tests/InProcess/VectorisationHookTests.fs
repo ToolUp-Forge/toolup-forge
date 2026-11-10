@@ -23,13 +23,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Files
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
+open ToolUp.Platform.Testing
 
 let private unitVec: float32 array =
     Array.init 8 (fun i -> if i = 0 then 1.0f else 0.0f)
@@ -76,11 +70,11 @@ let private hookOver
         None
         (InMemoryEventStore.InMemoryEventStore())
         status
-        (IngestionAttemptStore.dataManager status storage (SilentLogger()))
+        (IngestionAttemptStore.dataManager status storage Logger.silent)
         DropWrite
         (NoOpAuditLog())
         (NotificationChannel.NoOpNotificationChannel())
-        (SilentLogger())
+        Logger.silent
 
 /// Run the hook for one saved file and return the job it enqueued.
 let private enqueueFor (scope: StorageScope) (createdBy: string) : Async<DocumentIngestionJob> = async {
@@ -127,7 +121,7 @@ let tests =
             use store =
                 new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
                     storage,
-                    logger = SilentLogger(),
+                    logger = Logger.silent,
                     flushIntervalMs = 60000
                 )
 
@@ -188,7 +182,7 @@ let tests =
             // One durable status store per "replica", over the same backend.
             let replicaStatus () =
                 IngestionStatusStore.create
-                    (DataObjectStore.DataObjectStore(storage, SilentLogger()) :> IDataObjectStore)
+                    (DataObjectStore.DataObjectStore(storage, Logger.silent) :> IDataObjectStore)
                     None
 
             let threeChunks: VectorisationHandler = {
@@ -245,9 +239,9 @@ let tests =
                 let replicaStore = replicaStatus ()
 
                 ToolUp.RAG.IngestionObserver.create
-                    (IngestionAttemptStore.dataManager replicaStore storage (SilentLogger()))
+                    (IngestionAttemptStore.dataManager replicaStore storage Logger.silent)
                     None
-                    (SilentLogger())
+                    Logger.silent
 
             let first = replica ()
             let second = replica ()
@@ -379,7 +373,7 @@ let stagedTests =
 
                     DataObjectStore.DataObjectStore(
                         ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage(),
-                        SilentLogger()
+                        Logger.silent
                     )
                     :> IDataObjectStore)
             )

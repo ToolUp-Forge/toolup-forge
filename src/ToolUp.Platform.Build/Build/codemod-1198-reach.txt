@@ -8285,6 +8285,10 @@ ToolUp.Platform.SidebarVisibility RequiresPlatformAdmin
 ToolUp.Platform.SidebarVisibility RequiresTeamOwnerAdmin
 ToolUp.Platform.SmokeTests Fail
 ToolUp.Platform.SmokeTests Pass
+ToolUp.Platform.Testing Debug
+ToolUp.Platform.Testing Error
+ToolUp.Platform.Testing Info
+ToolUp.Platform.Testing Warn
 ToolUp.Platform.Testing.FaultInjectingBlobStorage Always
 ToolUp.Platform.Testing.FaultInjectingBlobStorage DownloadCorrupt
 ToolUp.Platform.Testing.FaultInjectingBlobStorage DownloadGarbage

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.Graph.EntityGraphProjectionTests
 
 open System
-open System.IO
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Graph
@@ -16,6 +15,7 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 68d — Entity↔Graph projection bridge test pack ───────────
 //
@@ -99,14 +99,15 @@ type private Env = {
     Store: IEntityStore
     Graph: IGraphStore
     Projector: IEntityGraphProjection
-}
+    Dir: TempDir
+} with
+
+    interface IDisposable with
+        member this.Dispose() = (this.Dir :> IDisposable).Dispose()
 
 let private makeEnv (autoProject: bool) : Env =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-egp-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let dir = TempDir.create "egp-test"
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register authorReg
@@ -131,6 +132,7 @@ let private makeEnv (autoProject: bool) : Env =
         Store = store
         Graph = graph
         Projector = projector
+        Dir = dir
     }
 
 let private nodeIdOf entityType entityId =
@@ -189,7 +191,7 @@ let tests =
         testCaseAsync
             "sync: create propagates node + edge automatically"
             (async {
-                let env = makeEnv true
+                use env = makeEnv true
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
 
                 let! _ =
@@ -211,7 +213,7 @@ let tests =
         testCaseAsync
             "sync: update re-projects the node in place (still one node)"
             (async {
-                let env = makeEnv true
+                use env = makeEnv true
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
 
                 let! _ =
@@ -232,7 +234,7 @@ let tests =
         testCaseAsync
             "sync: delete removes the node (+ incident edges)"
             (async {
-                let env = makeEnv true
+                use env = makeEnv true
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
 
                 let! _ =
@@ -250,7 +252,7 @@ let tests =
         testCaseAsync
             "sync: re-applying the same mutation is idempotent (deterministic ids)"
             (async {
-                let env = makeEnv false
+                use env = makeEnv false
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
                 let! r1 = env.Projector.SyncEntity("team-a", "Author", "a1")
                 let! r2 = env.Projector.SyncEntity("team-a", "Author", "a1")
@@ -265,7 +267,7 @@ let tests =
         testCaseAsync
             "sync: an unknown entity type surfaces retryable data, never a throw (rule 3)"
             (async {
-                let env = makeEnv false
+                use env = makeEnv false
                 let! result = env.Projector.SyncEntity("team-a", "Ghost", "x")
                 Expect.equal result (Error(UnknownProjectedType "Ghost")) "unknown type → typed error, not exception"
             })
@@ -274,7 +276,7 @@ let tests =
         testCaseAsync
             "rebuild: bootstraps a graph over an existing entity store (counts correct)"
             (async {
-                let env = makeEnv false // no auto-projection — simulate a pre-existing store
+                use env = makeEnv false // no auto-projection — simulate a pre-existing store
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
 
                 let! _ =
@@ -292,7 +294,7 @@ let tests =
         testCaseAsync
             "rebuild: a second run over an unchanged store is a no-op (idempotent)"
             (async {
-                let env = makeEnv false
+                use env = makeEnv false
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
 
                 let! _ =
@@ -306,7 +308,7 @@ let tests =
         testCaseAsync
             "rebuild: removes an orphan node whose source entity is gone"
             (async {
-                let env = makeEnv false
+                use env = makeEnv false
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
                 let! _ = env.Projector.RebuildProjection("team-a")
                 // Inject an orphan directly into the graph (no backing entity).
@@ -326,7 +328,7 @@ let tests =
         testCaseAsync
             "rebuild: heals a missed delete/mutation signal (drift recovery)"
             (async {
-                let env = makeEnv false
+                use env = makeEnv false
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
 
                 let! _ =
@@ -348,7 +350,7 @@ let tests =
         testCaseAsync
             "isolation: a tenant's entities project only into its own graph scope"
             (async {
-                let env = makeEnv true
+                use env = makeEnv true
                 let! _ = env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)
                 let! _ = env.Store.Save("team-b", EntityPrincipal.ofPrincipal "tester", mkAuthor "a2" "Grace" 1906 9.0m)
 
@@ -391,11 +393,8 @@ let tests =
                 "the registered IAuditLog is the untouched original")
 
         testCase "compose: opting in registers the projector + decorates the audit log" (fun () ->
-            let tempDir =
-                Path.Combine(Path.GetTempPath(), "toolup-egp-wire-" + Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory tempDir |> ignore
-            let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+            use dir = TempDir.create "egp-wire"
+            let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
             let dos = DataObjectStore(blob) :> IDataObjectStore
             let registry = EntityRegistry()
             registry.Register authorReg
@@ -446,7 +445,7 @@ let tests =
             testCaseAsync
                 "rule 3 — sync failures are data, not exceptions"
                 (async {
-                    let env = makeEnv false
+                    use env = makeEnv false
                     let! result = env.Projector.SyncEntity("team-a", "NotEnrolled", "x")
 
                     match result with
@@ -460,7 +459,7 @@ let tests =
                     // Two unrelated entities, projected in either order, reach the
                     // same graph state — the bridge promises ordering only within
                     // a single entity, never across entities.
-                    let env = makeEnv false
+                    use env = makeEnv false
 
                     let! _ =
                         env.Store.Save("team-a", EntityPrincipal.ofPrincipal "tester", mkAuthor "a1" "Ada" 1990 12.5m)

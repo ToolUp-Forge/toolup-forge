@@ -11,6 +11,7 @@ open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── ToolUp.DataSources.BigQuery ──────────────────────────────────
 
@@ -125,7 +126,7 @@ let private credentialTests =
             // Distinguishing "the JSON you pasted is not a
             // service-account key" from "GCP rejected your key" is the
             // difference between a two-minute fix and an afternoon.
-            let source = BigQueryDataSource.create (InMemorySecretStore())
+            let source = BigQueryDataSource.create (TestSecretStore())
 
             let ctx =
                 config "bq-1" "BigQuery" baseScope |> context "test-scope" (Some "not json")
@@ -138,7 +139,7 @@ let private credentialTests =
 
         testCaseAsync "no credential at all is CredentialMissing"
         <| async {
-            let source = BigQueryDataSource.create (InMemorySecretStore())
+            let source = BigQueryDataSource.create (TestSecretStore())
             let ctx = config "bq-1" "BigQuery" baseScope |> context "test-scope" None
 
             match! source.Connect ctx with
@@ -148,7 +149,7 @@ let private credentialTests =
 
         testCaseAsync "a misconfigured ConnectionScope fails BEFORE any credential is touched"
         <| async {
-            let store = InMemorySecretStore()
+            let store = ReadCountingSecretStore(TestSecretStore())
             let source = BigQueryDataSource.create store
 
             let ctx =

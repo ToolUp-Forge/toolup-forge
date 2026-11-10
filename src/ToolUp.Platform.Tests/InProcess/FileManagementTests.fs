@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.FileManagementTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -14,6 +13,7 @@ open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Files
+open ToolUp.Platform.Testing
 
 // Persisted-ProcessedFileEntry coverage: round-trip across a simulated
 // server restart, stale-DataType branch, loader prefix-filter, delete
@@ -93,15 +93,15 @@ type private TestRig = {
     Store: SessionFileStore
     DataObjects: IDataObjectStore
     Scope: StorageScope
-    TempDir: string
-}
+    Dir: TempDir
+} with
+
+    interface IDisposable with
+        member this.Dispose() = (this.Dir :> IDisposable).Dispose()
 
 let private mkRig (dataTypes: DataType list) : TestRig =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-fm-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+    let dir = TempDir.create "fm-test"
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
 
@@ -118,7 +118,7 @@ let private mkRig (dataTypes: DataType list) : TestRig =
         Store = store
         DataObjects = dos
         Scope = scope
-        TempDir = dir
+        Dir = dir
     }
 
 /// Reconstruct a `SessionFileStore` over the same backing
@@ -158,20 +158,13 @@ type private GatedListing(inner: IBlobStorage, gate: Threading.Tasks.Task) =
         member _.ComposeFrom(c, t, s) = inner.ComposeFrom(c, t, s)
         member _.Erase(c, p, policy, dryRun) = inner.Erase(c, p, policy, dryRun)
 
-let private tempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-fm-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
-
 let tests =
     testList "FileManagement" [
 
         testCaseAsync "round-trip: persisted entry survives reconstruction without re-running Process"
         <| async {
             let count1 = ref 0
-            let rig = mkRig [ mkDataType count1 ]
+            use rig = mkRig [ mkDataType count1 ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -197,7 +190,7 @@ let tests =
         testCaseAsync
             "Phase 817 — the typed summary envelope survives the sidecar round trip, and decodes back on the server"
         <| async {
-            let rig = mkRig [ mkTypedDataType TestTypeId ]
+            use rig = mkRig [ mkTypedDataType TestTypeId ]
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
 
@@ -326,7 +319,7 @@ let tests =
         testCaseAsync "stale DataType: entry surfaces error when its type is no longer registered"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -349,7 +342,7 @@ let tests =
         testCaseAsync "loader filter: entry sidecars don't appear as phantom files in GetFiles"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -370,7 +363,7 @@ let tests =
         testCaseAsync "delete cascade: removing a file also removes its entry sidecar"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -397,7 +390,7 @@ let tests =
         testCaseAsync "ReprocessFile: re-runs Process and refreshes the entry"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -418,7 +411,7 @@ let tests =
         testCaseAsync "ReprocessFile: missing file returns Error"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! reprocessResult = rig.Store.ReprocessFile("does-not-exist.csv", "alice")
 
@@ -430,7 +423,7 @@ let tests =
         testCaseAsync "ResetDataStore: wipes every file plus its sidecar and clears in-memory state"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! r1 = rig.Store.AddFile(upload "a.csv" csv, "alice")
             let! r2 = rig.Store.AddFile(upload "b.csv" csv, "alice")
@@ -452,7 +445,7 @@ let tests =
 
         testCaseAsync "ResetDataStore: empty store returns 0 without errors"
         <| async {
-            let rig = mkRig [ mkDataType (ref 0) ]
+            use rig = mkRig [ mkDataType (ref 0) ]
             let! reset = rig.Store.ResetDataStore()
             Expect.equal reset 0 "empty reset returns 0"
         }
@@ -460,7 +453,7 @@ let tests =
         testCaseAsync "ResetDataStore: leaves unrelated namespaced objects (e.g. entity store) untouched"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "a.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -546,7 +539,8 @@ let tests =
         testCaseAsync "two requests during hydration both wait on the one hydration and neither holds a thread"
         <| async {
             let gate = Threading.Tasks.TaskCompletionSource()
-            let blobs = GatedListing(LocalFileStorage.LocalFileStorage(tempDir ()), gate.Task)
+            use dir = TempDir.create "fm-hydration"
+            let blobs = GatedListing(LocalFileStorage.LocalFileStorage(dir.Path), gate.Task)
             let dos = DataObjectStore(blobs) :> IDataObjectStore
             let stores = new SessionFileStores.SessionFileStores(60.0) :> ISessionFileStores
 

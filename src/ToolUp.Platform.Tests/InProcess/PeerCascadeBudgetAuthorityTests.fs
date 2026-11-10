@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.PeerCascadeBudgetAuthorityTests
 
 open System
-open System.Collections.Concurrent
 open System.IO
 open System.Text
 open Microsoft.AspNetCore.Http
@@ -15,6 +14,7 @@ open ToolUp.InterPlatform
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 331 — receiver-side cascade-budget authority ──────────────
 //
@@ -50,56 +50,13 @@ open ToolUp.Platform.Compose
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ToolUp.Platform.Secrets.ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
-/// Records every audit row the host emits, so the "the audit carries the
-/// DERIVED correlation id" claim is read off the log rather than assumed.
-type private CapturingAuditLog() =
-    let events = ResizeArray<AuditEvent>()
-
-    member _.PeerRows =
-        lock events (fun () ->
-            events
-            |> Seq.choose (function
-                | PeerAudit(PeerCallCompleted p) -> Some p
-                | _ -> None)
-            |> List.ofSeq)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _, _actor, audit) = async {
-            lock events (fun () -> events.Add audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
-            return lock events (fun () -> List.ofSeq events)
-        }
+/// The completed-call rows the host audited, so the "the audit carries
+/// the DERIVED correlation id" claim is read off the log rather than assumed.
+let private peerRows (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (function
+        | PeerAudit(PeerCallCompleted p) -> Some p
+        | _ -> None)
 
 let private callerId: PeerIdentity = {
     PeerId = "buyer"
@@ -163,7 +120,7 @@ let private receiver (auth: IPeerAuthProvider) (policy: PeerCascadePolicy option
             }
     }
 
-    let audit = CapturingAuditLog()
+    let audit = TestAuditLog()
     let services = ServiceCollection()
     services.AddSingleton<IPeerAuthProvider>(auth) |> ignore
     services.AddSingleton<IPlatformPeer>(peer) |> ignore
@@ -228,13 +185,13 @@ let private drive
     (wire: PeerCallContext)
     =
     async {
-        let secrets = InMemorySecretStore() :> ToolUp.Platform.Secrets.ISecretStore
+        let secrets = Fakes.TestSecretStore() :> ToolUp.Platform.Secrets.ISecretStore
         seedSigningKey secrets callerId.PeerId callerKey
         let auth = authFor secrets
         let! token = issue (issuerFor secrets) callerId
         let captured, audit, peer, services = receiver auth policy localPeerId
         let! status, body = post services token envelopeId wire |> Async.AwaitTask
-        return status, body, List.ofSeq captured, audit.PeerRows, peer
+        return status, body, List.ofSeq captured, peerRows audit, peer
     }
 
 /// A well-behaved single-hop call, exactly as `JsonRpcPeerClient.create`

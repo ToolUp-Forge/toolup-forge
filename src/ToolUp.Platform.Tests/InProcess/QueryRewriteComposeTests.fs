@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.QueryRewriteComposeTests
 
 open System
-open System.IO
 open System.Threading
 open Expecto
 open Microsoft.Extensions.DependencyInjection
@@ -16,6 +15,7 @@ open ToolUp.Platform.Infra.IQueryRewriter
 open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 506 — the compose pickup for `IQueryRewriter` ─────────────
 //
@@ -68,13 +68,6 @@ type private BowEmbedder() =
         member _.Dimensions = dim
         member _.ProviderId = "test"
         member _.ModelId = "bow-v1"
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 /// Always substitutes `rewritten`, counting calls so a test can assert the
 /// stage did NOT run as well as that it did.
@@ -141,18 +134,11 @@ type private Bound = {
 }
 
 let private newVectorStore () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-query-rewrite-compose-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "query-rewrite-compose"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
-            storage,
-            logger = SilentLogger(),
-            flushIntervalMs = 60000
-        )
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
     store, tempDir
 
@@ -183,11 +169,7 @@ let private composedOver (sp: ServiceProvider) : Bound =
         Dispose =
             fun () ->
                 (store :> IDisposable).Dispose()
-
-                try
-                    Directory.Delete(tempDir, true)
-                with _ ->
-                    ()
+                (tempDir :> IDisposable).Dispose()
     }
 
 /// A pipeline that never had query-rewrite wiring at all — the control for
@@ -205,11 +187,7 @@ let private neverWired () : Bound =
         Dispose =
             fun () ->
                 (store :> IDisposable).Dispose()
-
-                try
-                    Directory.Delete(tempDir, true)
-                with _ ->
-                    ()
+                (tempDir :> IDisposable).Dispose()
     }
 
 let private withBound (bound: Bound) (f: Bound -> unit) =

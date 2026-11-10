@@ -9,11 +9,9 @@ module ToolUp.Platform.Tests.InProcess.ScimProvisioningTests
 // scope isolation, and the RFC 7643/7644 wire model.
 
 open System
-open System.Collections.Concurrent
 open System.IO
 open System.Text
 open System.Text.Json
-open System.Threading
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
@@ -28,6 +26,7 @@ open ToolUp.AuthProviders.ScimHandler
 open ToolUp.AuthProviders.ScimRoutes
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 open ToolUp.Platform.Compose
 
 // ─── SCIM 2.0 provisioning conformance pack ──────────────────────────
@@ -106,70 +105,26 @@ module private Fixtures =
             """{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","path":"members","value":[{"value":"%s","type":"Group"}]}]}"""
             groupId
 
-// ─── Recording audit log ─────────────────────────────────────────────
-
-/// Audit emission is fire-and-forget (`Async.Start`), matching
-/// `PlatformApiHandler`, so an assertion cannot simply read the list
-/// after the call returns. `waitFor` polls to a bounded timeout rather
-/// than sleeping a fixed interval: a sleep long enough to be reliable
-/// makes the pack slow, and one short enough to be fast makes it flaky.
-type private RecordingAuditLog() =
-    let events = ConcurrentQueue<string * AuditEvent>()
-
-    member _.Events = events |> Seq.toList
-
-    member this.WaitFor(count: int) : (string * AuditEvent) list =
-        let deadline = DateTime.UtcNow.AddSeconds 5.0
-
-        while events.Count < count && DateTime.UtcNow < deadline do
-            Thread.Sleep 10
-
-        this.Events
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            events.Enqueue(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-type private InMemorySecretStore(seed: (string * string * string) list) =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    do
-        for scope, key, value in seed do
-            store[(scope, key)] <- value
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 // ─── Harness ─────────────────────────────────────────────────────────
 
 let private teamId = "acme-engineering"
 let private teamName = "Acme Engineering"
+
+/// Audit emission is fire-and-forget (`Async.Start`), matching
+/// `PlatformApiHandler`, so an assertion cannot simply read the rows
+/// after the call returns. This waits on the writes themselves, to a
+/// bounded timeout, rather than sleeping a fixed interval.
+let private waitForAudit (audit: TestAuditLog) (count: int) : (string * AuditEvent) list =
+    audit.Recording.WaitUntil((fun rows -> List.length rows >= count), TimeSpan.FromSeconds 5.0)
+    |> ignore
+
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
+
+/// A secret store holding the team's SCIM bearer token.
+let private storeWithToken () =
+    let secrets = Fakes.TestSecretStore()
+    secrets.Seed("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token")
+    secrets
 
 /// A fresh world: real `TeamStore`, real blob storage, a recording
 /// audit log, one seeded team whose Owner already exists (a team with
@@ -179,7 +134,7 @@ let private freshWorld () =
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
     let teams = TeamStore(storage, notifications) :> ITeamStore
-    let auditLog = RecordingAuditLog()
+    let auditLog = TestAuditLog()
 
     async {
         let! _ = teams.CreateTeam(TeamId teamId, teamName)
@@ -337,7 +292,7 @@ let tests =
 
                 // The audit trail: added, role-changed, removed — every
                 // one stamped with the SCIM actor.
-                let events = auditLog.WaitFor 3 |> List.map snd
+                let events = waitForAudit auditLog 3 |> List.map snd
 
                 let kinds =
                     events
@@ -390,7 +345,7 @@ let tests =
                     "Okta's stringly boolean deprovisioned the member"
 
                 let removals =
-                    auditLog.WaitFor 3
+                    waitForAudit auditLog 3
                     |> List.map snd
                     |> List.choose (fun e ->
                         match e with
@@ -448,7 +403,7 @@ let tests =
                 // create, alan via replace) — the replace did NOT
                 // re-add the two members it already had.
                 let adds =
-                    auditLog.WaitFor 2
+                    waitForAudit auditLog 2
                     |> List.map snd
                     |> List.choose (fun e ->
                         match e with
@@ -625,8 +580,7 @@ let tests =
             test "an unauthenticated request is refused with a SCIM error body" {
                 let teams, auditLog, _ = freshWorld ()
 
-                let secrets =
-                    InMemorySecretStore [ ("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token") ]
+                let secrets = storeWithToken ()
 
                 let config = ScimConfig.create teamId
 
@@ -652,8 +606,7 @@ let tests =
             test "a wrong token is refused" {
                 let teams, auditLog, _ = freshWorld ()
 
-                let secrets =
-                    InMemorySecretStore [ ("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token") ]
+                let secrets = storeWithToken ()
 
                 let config = ScimConfig.create teamId
 
@@ -675,7 +628,7 @@ let tests =
             test "the gate is fail-CLOSED when no token is configured" {
                 let teams, auditLog, _ = freshWorld ()
                 // Secret store present but holding nothing.
-                let secrets = InMemorySecretStore []
+                let secrets = Fakes.TestSecretStore()
                 let config = ScimConfig.create teamId
 
                 let ctx, out =
@@ -697,8 +650,7 @@ let tests =
             test "a correct token reaches the resource" {
                 let teams, auditLog, _ = freshWorld ()
 
-                let secrets =
-                    InMemorySecretStore [ ("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token") ]
+                let secrets = storeWithToken ()
 
                 let config = ScimConfig.create teamId
 
@@ -733,8 +685,7 @@ let tests =
             test "a POST create round-trips through the route table" {
                 let teams, auditLog, _ = freshWorld ()
 
-                let secrets =
-                    InMemorySecretStore [ ("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token") ]
+                let secrets = storeWithToken ()
 
                 let config = ScimConfig.create teamId
 
@@ -759,8 +710,7 @@ let tests =
             test "a deprovisioning PATCH answers 204" {
                 let teams, auditLog, _ = freshWorld ()
 
-                let secrets =
-                    InMemorySecretStore [ ("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token") ]
+                let secrets = storeWithToken ()
 
                 let config = ScimConfig.create teamId
 
@@ -788,8 +738,7 @@ let tests =
             test "group creation and deletion are refused with 501" {
                 let teams, auditLog, _ = freshWorld ()
 
-                let secrets =
-                    InMemorySecretStore [ ("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token") ]
+                let secrets = storeWithToken ()
 
                 let config = ScimConfig.create teamId
 
@@ -825,8 +774,7 @@ let tests =
             test "the discovery documents are well-formed and declare the real capabilities" {
                 let teams, auditLog, _ = freshWorld ()
 
-                let secrets =
-                    InMemorySecretStore [ ("team-" + teamId, ScimConfig.DefaultTokenKey, "the-token") ]
+                let secrets = storeWithToken ()
 
                 let config = ScimConfig.create teamId
 

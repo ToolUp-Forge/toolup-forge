@@ -6,6 +6,7 @@ module ToolUp.ArtefactSigning.Tests.InProcess.SigningProviderConformanceTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Testing
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Contracts
 open ToolUp.ArtefactSigning.Tests.Support
@@ -44,7 +45,7 @@ let private fixtureOver
     ()
     : ISigningProviderConformance.SigningProviderFixture =
 
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = TestSecretStore() :> ISecretStore
     let ledger = SecretStoreSigningKeyLedger.create secrets
 
     let activate (p: SigningProvider) =

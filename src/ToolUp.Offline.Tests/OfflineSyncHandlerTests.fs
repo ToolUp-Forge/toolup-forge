@@ -24,6 +24,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 24 — replay-handler tests ─────────────────────────────────
 //
@@ -384,29 +385,17 @@ let conflictTests =
 let private decodeLifecycle (evt: ModuleEvent) : EntityLifecycleEventPayload =
     JsonSerializer.Deserialize<EntityLifecycleEventPayload>(evt.Payload, jsonOptions)
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
-/// A REAL `BlobEntityStore` over a temp directory, composed with the
+/// A REAL `BlobEntityStore` over `dir`, composed with the
 /// SDK-default audit log over `events` — the composition Phase 24
 /// recorded the double row against, and since Phase 806 the ONLY place
 /// a replay's lifecycle row is recorded. Returns the store and its audit
 /// log. `auditLog = None` composes the store with no audit at all.
-let private realStoreOver (events: IEventStore) (audited: bool) =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-offline-audit-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private realStoreOver (dir: TempDir) (events: IEventStore) (audited: bool) =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore.DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityStore.EntityRegistry()
     registry.Register(EntityRegistration.create<Inspection> "Inspection")
-    let auditLog = AuditLog.EventStoreAuditLog(events, silentLogger) :> IAuditLog
+    let auditLog = AuditLog.EventStoreAuditLog(events, Logger.silent) :> IAuditLog
 
     let store =
         EntityStore.BlobEntityStore(dos, blob, registry, (if audited then auditLog else (NoOpAuditLog())))
@@ -416,9 +405,9 @@ let private realStoreOver (events: IEventStore) (audited: bool) =
 
 /// The audited real store over an in-memory event store, so a test can
 /// read the trail both ways.
-let private realStoreWithAudit () =
+let private realStoreWithAudit (dir: TempDir) =
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
-    let store, auditLog = realStoreOver events true
+    let store, auditLog = realStoreOver dir events true
     store, auditLog, events
 
 /// The lifecycle rows in a trail, oldest first, as `(case, payload)`.
@@ -489,7 +478,8 @@ let auditTests =
 
         test "an applied replay records ONE row carrying the real user and BOTH timestamps" {
             let events = CapturingEventStore()
-            let store, _ = realStoreOver events true
+            use scratch = TempDir.create "offline-audit"
+            let store, _ = realStoreOver scratch events true
             let before = DateTime.UtcNow.AddSeconds -1.0
 
             let api =
@@ -537,7 +527,8 @@ let auditTests =
 
         test "a replay over an existing entity audits as an update" {
             let events = CapturingEventStore()
-            let store, _ = realStoreOver events true
+            use scratch = TempDir.create "offline-audit"
+            let store, _ = realStoreOver scratch events true
 
             let seeded =
                 store.SaveIfVersion<Inspection>(
@@ -578,7 +569,8 @@ let auditTests =
             // A conflict changed nothing, so auditing it would record a
             // write that did not happen.
             let events = CapturingEventStore()
-            let store, _ = realStoreOver events true
+            use scratch = TempDir.create "offline-audit"
+            let store, _ = realStoreOver scratch events true
 
             let seeded =
                 store.Save<Inspection>(
@@ -618,7 +610,8 @@ let auditTests =
             // OccurredAt, so a row backdated behind it is never
             // delivered. Pinned here in both directions.
             let events = CapturingEventStore()
-            let store, _ = realStoreOver events true
+            use scratch = TempDir.create "offline-audit"
+            let store, _ = realStoreOver scratch events true
 
             let api =
                 offlineSyncApi
@@ -671,7 +664,8 @@ let auditTests =
         }
 
         test "the provenance round-trips through EventStoreAuditLog.GetAuditTrail" {
-            let store, auditLog, _ = realStoreWithAudit ()
+            use scratch = TempDir.create "offline-audit"
+            let store, auditLog, _ = realStoreWithAudit scratch
 
             let api =
                 offlineSyncApi
@@ -711,7 +705,8 @@ let auditTests =
             // handler's (real user, origination time). Since Phase 806
             // there is one emitter, so there is one row by construction;
             // pinned anyway, because it is the property.
-            let store, auditLog, _ = realStoreWithAudit ()
+            use scratch = TempDir.create "offline-audit"
+            let store, auditLog, _ = realStoreWithAudit scratch
 
             let api =
                 offlineSyncApi
@@ -792,7 +787,8 @@ let auditTests =
         test
             "a store composed without an audit log records nothing for a replay — the handler holds no audit log of its own" {
             let events = CapturingEventStore()
-            let store, _ = realStoreOver events false
+            use scratch = TempDir.create "offline-audit"
+            let store, _ = realStoreOver scratch events false
 
             let api =
                 offlineSyncApi

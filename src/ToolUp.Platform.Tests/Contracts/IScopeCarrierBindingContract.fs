@@ -11,6 +11,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── IScopeCarrierBinding contract pack (Phase 935) ─────────────────
 //
@@ -110,10 +111,8 @@ let tests (name: string) (factory: unit -> RestartableScheduler) =
             let binding = factory ()
             let scope = mint binding.ScopeId
 
-            let ringRoot =
-                IO.Path.Combine(IO.Path.GetTempPath(), "toolup-carrier-ring-" + Guid.NewGuid().ToString("N"))
-
-            IO.Directory.CreateDirectory ringRoot |> ignore
+            use scratch = TempDir.create "carrier-ring"
+            let ringRoot = scratch.Path
 
             let ring = LocalFileStorage.LocalFileStorage(ringRoot) :> BlobStorage.IBlobStorage
 

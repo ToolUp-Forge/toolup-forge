@@ -1,26 +1,21 @@
 module ToolUp.Platform.Tests.InProcess.LocalStorageEncryptionValidatorTests
 
-open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
-let private newTempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-validator-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
+let private newTempDir () = TempDir.create "validator-test"
 
 let tests =
     testList "LocalStorageEncryptionValidator" [
         testCaseAsync "Returns Warning when underlying storage is LocalFileStorage"
         <| async {
-            let storage = LocalFileStorage.LocalFileStorage(newTempDir ()) :> IBlobStorage
+            use dir = newTempDir ()
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let validator =
                 LocalStorageEncryptionValidator.LocalFileStorageEncryptionAtRestValidator(storage) :> IConfigValidator
@@ -41,10 +36,12 @@ let tests =
             // wrapping it in EncryptedBlobStorage. The validator should
             // see the wrapper, not the inner LocalFileStorage, and
             // return Ok.
-            let inner = LocalFileStorage.LocalFileStorage(newTempDir ()) :> IBlobStorage
+            use innerDir = newTempDir ()
+            use secretsDir = newTempDir ()
+            let inner = LocalFileStorage.LocalFileStorage(innerDir.Path) :> IBlobStorage
 
             let secrets =
-                FileSecretStore.FileSecretStore(baseDir = newTempDir ()) :> Secrets.ISecretStore
+                FileSecretStore.FileSecretStore(baseDir = secretsDir.Path) :> Secrets.ISecretStore
 
             let resolver = SingleKeyResolver.create secrets
 

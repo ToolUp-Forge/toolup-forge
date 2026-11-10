@@ -33,6 +33,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 322 — the HTTP/REST external-compute companion ─────────────
 //
@@ -499,19 +500,6 @@ type private RotatingSecretStore() =
                 |> List.ofSeq
         }
 
-type private RecordingLogger() =
-    let lines = ConcurrentQueue<string>()
-    member _.Lines = lines |> Seq.toList
-
-    member _.Contains(needle: string) =
-        lines |> Seq.exists (fun line -> line.Contains needle)
-
-    interface ILogger with
-        member _.Debug message = lines.Enqueue("DEBUG " + message)
-        member _.Info message = lines.Enqueue("INFO " + message)
-        member _.Warn message = lines.Enqueue("WARN " + message)
-        member _.Error(message, _) = lines.Enqueue("ERROR " + message)
-
 /// Records every resolution the ingress drives, so the push path is
 /// asserted on the OBSERVABLE EFFECT rather than on an HTTP 200.
 type private RecordingCompletionSink() =
@@ -594,7 +582,7 @@ let private dispatcherFor (stub: StubComputeService) =
         (configFor stub)
         (RotatingSecretStore() :> ISecretStore)
         sharedHttpClient.Value
-        (RecordingLogger() :> ILogger)
+        Logger.silent
 
 // ── 322.F — the Phase 324 contract pack, unmodified ────────────────────
 
@@ -863,7 +851,7 @@ let private configTests =
                         broken
                         (RotatingSecretStore() :> ISecretStore)
                         sharedHttpClient.Value
-                        (RecordingLogger() :> ILogger)
+                        Logger.silent
                     |> ignore)
                 "a config whose every poll would read the same URL must not produce a dispatcher"
         }
@@ -897,7 +885,7 @@ let private composeTests =
                     (configFor stub)
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             Expect.equal
                 app.Config.ExternalCompute
@@ -914,7 +902,7 @@ let private composeTests =
                     (configFor stub)
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             let services = ServiceCollection()
 
@@ -937,7 +925,7 @@ let private composeTests =
                     (configFor stub)
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             Expect.isTrue
                 (app.HealthChecks
@@ -960,7 +948,7 @@ let private composeTests =
                     noHealth
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             Expect.isNone
                 (HttpComputeHealth.tryHealthCheck dispatcher)
@@ -1039,11 +1027,7 @@ let private authTests =
                 |> HttpComputeConfig.withAuth (HttpComputeAuth.bearer "compute-token")
 
             let dispatcher =
-                HttpComputeDispatcher.create
-                    config
-                    (secrets :> ISecretStore)
-                    sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                HttpComputeDispatcher.create config (secrets :> ISecretStore) sharedHttpClient.Value Logger.silent
 
             match! dispatcher.Submit("team-rotate", ExternalWorkSpec.create "train" "{}") with
             | Error e -> failtestf "the first submission must be accepted; got %s" e.Message
@@ -1090,7 +1074,7 @@ let private authTests =
                     config
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match! dispatcher.Submit("team-nosecret", ExternalWorkSpec.create "train" "{}") with
             | Ok handle -> failtestf "an unresolvable credential must not submit work; got %A" handle
@@ -1114,11 +1098,7 @@ let private authTests =
                 |> HttpComputeConfig.withAuth (HttpComputeAuth.apiKey "X-Api-Key" "api-key")
 
             let dispatcher =
-                HttpComputeDispatcher.create
-                    config
-                    (secrets :> ISecretStore)
-                    sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                HttpComputeDispatcher.create config (secrets :> ISecretStore) sharedHttpClient.Value Logger.silent
 
             let! result = dispatcher.Submit("team-apikey", ExternalWorkSpec.create "train" "{}")
             Expect.isTrue (Result.isOk result) "accepted"
@@ -1223,7 +1203,7 @@ let private submitTests =
                     config
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             let! result = dispatcher.Submit("team-opaque", ExternalWorkSpec.create "train" "not json at all")
 
@@ -1334,7 +1314,7 @@ let private classificationTests =
                     config
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match! dispatcher.Submit("team-timeout", ExternalWorkSpec.create "train" "{}") with
             | Ok handle -> failtestf "an unanswered request must not mint a handle; got %A" handle
@@ -1365,7 +1345,7 @@ let private classificationTests =
                     config
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match! dispatcher.Submit("team-unreachable", ExternalWorkSpec.create "train" "{}") with
             | Ok handle -> failtestf "nothing was reached; got %A" handle
@@ -1543,7 +1523,7 @@ let private pollTests =
                     config
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match! dispatcher.Submit("team-html", ExternalWorkSpec.create "train" "{}") with
             | Error e -> failtestf "submission must be accepted; got %s" e.Message
@@ -1564,7 +1544,7 @@ let private cancelTests =
         testCaseAsync "a service with no cancel endpoint is a logged no-op, not a throw"
         <| async {
             use stub = startStub ()
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let config = { configFor stub with Cancel = None }
 
@@ -1595,7 +1575,7 @@ let private cancelTests =
         testCaseAsync "cancelling a unit the service has forgotten is a no-op, not an error"
         <| async {
             use stub = startStub ()
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let dispatcher =
                 HttpComputeDispatcher.create
@@ -1621,7 +1601,7 @@ let private cancelTests =
         testCaseAsync "a cancel the service rejects is logged, and does not throw across the boundary"
         <| async {
             use stub = startStub ()
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             // A cancel URL pointing at a route the stub does not serve
             // with POST — the service answers, and answers no.
@@ -1651,7 +1631,7 @@ let private cancelTests =
                 }
 
             Expect.isTrue
-                (logger.Lines |> List.exists (fun line -> line.Contains "cancel_"))
+                (logger.Contains "cancel_")
                 "Cancel returns unit by contract, so a rejection is logged and the caller confirms through Poll"
         }
     ]
@@ -1684,7 +1664,7 @@ let private callbackTests =
                     config
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match!
                 (dispatcher :> IExternalComputeDispatcher).Submit("team-push", ExternalWorkSpec.create "train" "{}")
@@ -1753,7 +1733,7 @@ let private callbackTests =
                     config
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match!
                 (dispatcher :> IExternalComputeDispatcher).Submit("team-push", ExternalWorkSpec.create "train" "{}")
@@ -1832,7 +1812,7 @@ let private callbackTests =
         testCaseAsync "a service the credential cannot be delivered to still runs — the cost is latency, never a job"
         <| async {
             use stub = startStub ()
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let config =
                 configFor stub
@@ -1878,7 +1858,7 @@ let private callbackTests =
                     "the failure is logged and named, and says the run resolves by poll"
 
                 Expect.isFalse
-                    (logger.Lines |> List.exists (fun line -> line.Contains "s3cret"))
+                    (logger.Contains "s3cret")
                     "and NO log line carries the secret — AcceptCallbackCredential's one hard prohibition"
 
                 match! (dispatcher :> IExternalComputeDispatcher).Poll handle with
@@ -1916,7 +1896,7 @@ let private probeTests =
                      |> HttpComputeConfig.withRequestTimeout (TimeSpan.FromSeconds 2.0))
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match HttpComputeHealth.tryHealthCheck unreachable with
             | None -> failtest "a probe was expected"
@@ -1940,11 +1920,7 @@ let private probeTests =
                 |> HttpComputeConfig.withAuth (HttpComputeAuth.bearer "compute-token")
 
             let dispatcher =
-                HttpComputeDispatcher.createTyped
-                    config
-                    (secrets :> ISecretStore)
-                    sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                HttpComputeDispatcher.createTyped config (secrets :> ISecretStore) sharedHttpClient.Value Logger.silent
 
             let validator =
                 HttpComputeHealth.configValidator dispatcher (secrets :> ISecretStore)
@@ -1980,7 +1956,7 @@ let private probeTests =
                      |> HttpComputeConfig.withRequestTimeout (TimeSpan.FromSeconds 2.0))
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match!
                 (HttpComputeHealth.configValidator dispatcher (RotatingSecretStore() :> ISecretStore)).Validate()
@@ -2001,7 +1977,7 @@ let private probeTests =
                     { configFor stub with HealthUrl = None }
                     (RotatingSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             match!
                 (HttpComputeHealth.configValidator dispatcher (RotatingSecretStore() :> ISecretStore)).Validate()

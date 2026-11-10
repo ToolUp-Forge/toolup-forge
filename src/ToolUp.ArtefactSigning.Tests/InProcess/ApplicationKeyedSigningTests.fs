@@ -10,6 +10,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // ─── Keyed byte signing over the application signing seam ───────────────
 //
@@ -29,7 +30,7 @@ let private purpose = "audit.ledger.head"
 
 /// A fresh deployment: one secret store, one application signer over it.
 let private deployment (keyId: string) =
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = TestSecretStore() :> ISecretStore
     let audit = InMemoryAuditLog()
 
     let signer =

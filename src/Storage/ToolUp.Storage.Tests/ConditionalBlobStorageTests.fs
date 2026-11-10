@@ -7,6 +7,7 @@ open Expecto
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 600 — IConditionalBlobStorage contract ────────────────────
 //
@@ -21,20 +22,14 @@ open ToolUp.Platform.Infra
 // (`AwsS3Storage` / `AzureBlobStorage` / `GoogleCloudStorage`).
 
 let private localFactory () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-cas-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
+    let root = (TempDir.forRun "cas-tests").Path
     LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
 
 let private inMemoryFactory () =
     InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
 let private resilientOverLocalFactory () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-cas-resilient-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
+    let root = (TempDir.forRun "cas-resilient-tests").Path
     let inner = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
 
     ToolUp.Platform.Infra.ResilientBlobStorage.ResilientBlobStorage(

@@ -14,6 +14,7 @@ open ToolUp.Platform.Infra.SecondaryIndex
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
 
@@ -370,10 +371,7 @@ let private storeTests =
 /// share filesystem state.
 let tests =
     let factory () =
-        let tempDir =
-            Path.Combine(Path.GetTempPath(), "toolup-entity-test-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory tempDir |> ignore
+        let tempDir = (TempDir.forRun "entity-test").Path
         let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
@@ -386,10 +384,7 @@ let tests =
     /// Phase 806 — the same substrate, composed WITH the audit log the
     /// actor pack hands it.
     let auditedFactory (auditLog: IAuditLog) =
-        let tempDir =
-            Path.Combine(Path.GetTempPath(), "toolup-entity-audit-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory tempDir |> ignore
+        let tempDir = (TempDir.forRun "entity-audit").Path
         let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
@@ -400,10 +395,7 @@ let tests =
     /// removal of an index ref (`*.ref`) while the pack's switch says so: the
     /// state a refused `BlobIndex.Remove` leaves behind.
     let refusingFactory (refuseIndexRemoval: unit -> bool) =
-        let tempDir =
-            Path.Combine(Path.GetTempPath(), "toolup-entity-stale-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory tempDir |> ignore
+        let tempDir = (TempDir.forRun "entity-stale").Path
         let inner = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
 
         let blob =

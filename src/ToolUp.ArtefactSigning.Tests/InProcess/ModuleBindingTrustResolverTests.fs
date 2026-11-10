@@ -10,8 +10,8 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.ArtefactSigning
-open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 170 — trust-anchor config → verifier (resolver + validator) ──
 //
@@ -36,7 +36,7 @@ let tests =
     testList "Phase 170 — module-binding trust resolver" [
 
         test "symmetric anchor: secret resolves → verifier admits the matching MAC stamp" {
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = TestSecretStore() :> ISecretStore
             let key = RandomNumberGenerator.GetBytes 32
             seedSecret store "_platform" "mac-1" (Convert.ToBase64String key)
 
@@ -54,7 +54,7 @@ let tests =
         }
 
         test "symmetric anchor: missing secret → resolve fails closed (Error)" {
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = TestSecretStore() :> ISecretStore
 
             let config = {
                 Anchors = [ SymmetricAnchorRef("k1", "_platform", "absent") ]
@@ -67,7 +67,7 @@ let tests =
         }
 
         test "asymmetric anchor: public key → verifier admits the matching JWS stamp" {
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = TestSecretStore() :> ISecretStore
             use ec = ECDsa.Create(ECCurve.NamedCurves.nistP256)
             let spkiB64 = Convert.ToBase64String(ec.ExportSubjectPublicKeyInfo())
 
@@ -92,7 +92,7 @@ let tests =
         }
 
         test "AllowUnbound=false → an unstamped module is rejected" {
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = TestSecretStore() :> ISecretStore
             let key = RandomNumberGenerator.GetBytes 32
             seedSecret store "_platform" "mac-1" (Convert.ToBase64String key)
 
@@ -115,7 +115,7 @@ let tests =
         }
 
         test "validator: resolvable anchors → Ok; missing secret → Error; no anchors → Ok" {
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = TestSecretStore() :> ISecretStore
             seedSecret store "_platform" "mac-1" (Convert.ToBase64String(RandomNumberGenerator.GetBytes 32))
 
             let validate (config: ModuleBindingTrustConfig) =

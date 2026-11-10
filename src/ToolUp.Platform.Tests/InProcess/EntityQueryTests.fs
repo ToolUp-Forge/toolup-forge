@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.EntityQueryTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -13,6 +12,7 @@ open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 19a EntityQuery tests ────────────────────────────────────
 //
@@ -38,12 +38,8 @@ let private itemRegistration =
     |> EntityRegistration.withIndex "Status" _.Status
     |> EntityRegistration.withIndex "Priority" _.Priority
 
-let private mkStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-query-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private mkStore (dir: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<Item>(itemRegistration)
@@ -99,12 +95,8 @@ let private ftRegistration =
     |> EntityRegistration.withIndex "Category" _.Category
     |> EntityRegistration.withFullTextField "Notes" _.Notes
 
-let private mkFtStore () : IEntityStore =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-ft-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private mkFtStore (dir: TempDir) : IEntityStore =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<FtDoc>(ftRegistration)
@@ -156,12 +148,8 @@ type private StaleQueryRig = {
     Scope: string
 }
 
-let private mkStaleQueryRig () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-query-stale-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let inner = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private mkStaleQueryRig (dir: TempDir) =
+    let inner = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let refusing = ref false
 
     let blob =
@@ -221,7 +209,8 @@ let tests =
             ] do
             testCaseAsync name
             <| async {
-                let store, scope = mkStore ()
+                use dir = TempDir.create "query-test"
+                let store, scope = mkStore dir
                 do! seed store scope
                 let! ids = queryIds store scope predicate
                 Expect.equal ids expected $"Query(where {predicate}) answers exactly these ids"
@@ -229,7 +218,8 @@ let tests =
 
         testCaseAsync "OrderBy + Skip + Take produces deterministic paging"
         <| async {
-            let store, scope = mkStore ()
+            use dir = TempDir.create "query-test"
+            let store, scope = mkStore dir
             do! seed store scope
 
             let q =
@@ -251,7 +241,8 @@ let tests =
 
         testCaseAsync "Validation error on non-indexed predicate field"
         <| async {
-            let store, scope = mkStore ()
+            use dir = TempDir.create "query-test"
+            let store, scope = mkStore dir
 
             let q =
                 EntityQuery.forType<Item> ItemType
@@ -266,7 +257,8 @@ let tests =
 
         testCaseAsync "Empty store returns empty result for any predicate"
         <| async {
-            let store, scope = mkStore ()
+            use dir = TempDir.create "query-test"
+            let store, scope = mkStore dir
 
             let q =
                 EntityQuery.forType<Item> ItemType |> EntityQuery.where (Eq("Owner", "anyone"))
@@ -282,7 +274,8 @@ let tests =
 
         testCaseAsync "FullText single-term matches every doc holding the term"
         <| async {
-            let store = mkFtStore ()
+            use dir = TempDir.create "ft-test"
+            let store = mkFtStore dir
             let scope = mkFtScope ()
             do! seedFt store scope ftDocs
 
@@ -302,7 +295,8 @@ let tests =
 
         testCaseAsync "FullText multi-term is bag-of-words (union of terms)"
         <| async {
-            let store = mkFtStore ()
+            use dir = TempDir.create "ft-test"
+            let store = mkFtStore dir
             let scope = mkFtScope ()
             do! seedFt store scope ftDocs
 
@@ -322,7 +316,8 @@ let tests =
 
         testCaseAsync "FullText intersects with an Eq predicate"
         <| async {
-            let store = mkFtStore ()
+            use dir = TempDir.create "ft-test"
+            let store = mkFtStore dir
             let scope = mkFtScope ()
             do! seedFt store scope ftDocs
 
@@ -347,7 +342,8 @@ let tests =
             // per-scope synthetic full-text scope must keep scope-A's index
             // invisible to a scope-B query and vice versa (team isolation by
             // construction).
-            let store = mkFtStore ()
+            use dir = TempDir.create "ft-test"
+            let store = mkFtStore dir
             let scopeA = mkFtScope ()
             let scopeB = mkFtScope ()
 
@@ -370,7 +366,8 @@ let tests =
 
         testCaseAsync "FullText against an undeclared full-text field is InvalidIndex"
         <| async {
-            let store = mkFtStore ()
+            use dir = TempDir.create "ft-test"
+            let store = mkFtStore dir
             let scope = mkFtScope ()
 
             let q =
@@ -390,7 +387,8 @@ let tests =
 
         testCaseAsync "Phase 974 — Eq never returns an entity whose head no longer carries the value"
         <| async {
-            let rig = mkStaleQueryRig ()
+            use dir = TempDir.create "query-stale"
+            let rig = mkStaleQueryRig dir
             do! staleAliceNowBob rig "s-1"
 
             let! underAlice = queryIds rig.Store rig.Scope (Eq("Owner", "alice"))
@@ -402,7 +400,8 @@ let tests =
 
         testCaseAsync "Phase 974 — Ne never excludes an entity whose head no longer carries the value"
         <| async {
-            let rig = mkStaleQueryRig ()
+            use dir = TempDir.create "query-stale"
+            let rig = mkStaleQueryRig dir
             do! staleAliceNowBob rig "s-1"
             do! saveItem rig.Store rig.Scope (mkItem "s-2" "alice" "active" "01")
             do! saveItem rig.Store rig.Scope (mkItem "s-3" "carol" "active" "01")
@@ -420,7 +419,8 @@ let tests =
         testCaseAsync
             "Phase 974 — a range predicate never returns an entity whose head no longer carries a matching value"
         <| async {
-            let rig = mkStaleQueryRig ()
+            use dir = TempDir.create "query-stale"
+            let rig = mkStaleQueryRig dir
             do! staleAliceNowBob rig "s-1"
             do! saveItem rig.Store rig.Scope (mkItem "s-2" "alice" "active" "01")
 
@@ -433,7 +433,8 @@ let tests =
 
         testCaseAsync "Phase 974 — a range predicate matches an indexed value with a path-unsafe character"
         <| async {
-            let store, scope = mkStore ()
+            use dir = TempDir.create "query-test"
+            let store, scope = mkStore dir
             do! saveItem store scope (mkItem "p-1" "zed/one" "active" "01")
             do! saveItem store scope (mkItem "p-2" "dave smith" "active" "01")
             do! saveItem store scope (mkItem "p-3" "alice" "active" "01")
@@ -459,7 +460,8 @@ let tests =
 
         testCaseAsync "Phase 974 — a stale ref Query meets is counted in the drift snapshot and reclaimed"
         <| async {
-            let rig = mkStaleQueryRig ()
+            use dir = TempDir.create "query-stale"
+            let rig = mkStaleQueryRig dir
             do! staleAliceNowBob rig "s-1"
 
             let refsUnderAlice () = async {

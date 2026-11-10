@@ -2,7 +2,6 @@ module ToolUp.Platform.Tests.InProcess.ShareTokenSigningKeyGovernanceTests
 
 open System
 open System.Collections.Concurrent
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -11,6 +10,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── Phase 460 — share-token signing-key governance ──────────────────
 //
@@ -28,14 +28,6 @@ open ToolUp.Platform.Scope
 //     reads the peer's key. Asserting on the cached bytes would pass for
 //     an implementation that caches locally and diverges — which is the
 //     bug.
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 /// A base64url-encoded 32-byte value, shaped exactly as the store
 /// expects an operator-provisioned key to be.
@@ -158,12 +150,8 @@ type private PeerWinsSecretStore(peerKeyEncoded: string) =
                 |> List.ofSeq
         }
 
-let private freshStorage () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-sharetoken-gov-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory(root) |> ignore
-    LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private freshStorage (root: TempDir) =
+    LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
 
 let private issueRequest (scopeId: string) = {
     ScopeId = scopeId
@@ -310,10 +298,11 @@ let tests =
         testList "first-write race" [
 
             test "auto-generation marks the key's provenance" {
+                use root = TempDir.create "sharetoken-gov"
                 let secrets = SeedableSecretStore([]) :> ISecretStore
 
                 let store =
-                    ShareTokenStore.create (freshStorage ()) secrets (NoOpAuditLog()) silentLogger
+                    ShareTokenStore.create (freshStorage root) secrets (NoOpAuditLog()) Logger.silent
 
                 match store.Issue(issueRequest "team-a") |> Async.RunSynchronously with
                 | Result.Ok _ -> ()
@@ -328,11 +317,12 @@ let tests =
             test "a peer replica winning the write does not fork the key — the token still verifies" {
                 let peerKey = encodedKey 42uy
                 let secrets = PeerWinsSecretStore(peerKey)
-                let storage = freshStorage ()
+                use root = TempDir.create "sharetoken-gov"
+                let storage = freshStorage root
 
                 // Replica A: mints a key, but the peer's write lands over it.
                 let replicaA =
-                    ShareTokenStore.create storage (secrets :> ISecretStore) (NoOpAuditLog()) silentLogger
+                    ShareTokenStore.create storage (secrets :> ISecretStore) (NoOpAuditLog()) Logger.silent
 
                 let issued =
                     match replicaA.Issue(issueRequest "team-a") |> Async.RunSynchronously with
@@ -356,7 +346,7 @@ let tests =
                         storage
                         (SeedableSecretStore([ ShareTokenStore.signingKeySecretName, peerKey ]) :> ISecretStore)
                         (NoOpAuditLog())
-                        silentLogger
+                        Logger.silent
 
                 match replicaB.Validate issued.Token |> Async.RunSynchronously with
                 | Result.Ok claim -> Expect.equal claim.ScopeId "team-a" "the claim round-trips across replicas"
@@ -365,10 +355,11 @@ let tests =
 
             test "concurrent first uses within one process converge on a single key" {
                 let secrets = SeedableSecretStore([]) :> ISecretStore
-                let storage = freshStorage ()
+                use root = TempDir.create "sharetoken-gov"
+                let storage = freshStorage root
 
                 let stores = [
-                    for _ in 1..6 -> ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
+                    for _ in 1..6 -> ShareTokenStore.create storage secrets (NoOpAuditLog()) Logger.silent
                 ]
 
                 let issued =

@@ -14,6 +14,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 module TeamSecretKey = ToolUp.Platform.Scope.TeamScopedSecretStore.TeamSecretKey
 
@@ -38,36 +39,6 @@ module TeamSecretKey = ToolUp.Platform.Scope.TeamScopedSecretStore.TeamSecretKey
 //   3. **The shipped resolver conforms to its own contract pack.**
 
 // ─── Fixtures ────────────────────────────────────────────────────
-
-/// A conformant in-memory `ISecretStore`: keyed by `(scope, key)`, so
-/// a lookup in one scope cannot see another's.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys scopeId = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 /// A store that IGNORES the scope entirely — one flat key namespace
 /// shared by every tenant.
@@ -159,7 +130,7 @@ let private secretLayerTests =
 
         testCaseAsync "a key written through the team layer round-trips through it"
         <| async {
-            let inner = InMemorySecretStore() :> ISecretStore
+            let inner = Fakes.TestSecretStore() :> ISecretStore
             let teamA = TeamScopedSecretStore.forTeam "team-a" inner
             let scope = TeamSecretKey.container "team-a"
 
@@ -172,7 +143,7 @@ let private secretLayerTests =
 
         testCaseAsync "the layer refuses every scope but its own"
         <| async {
-            let inner = InMemorySecretStore() :> ISecretStore
+            let inner = Fakes.TestSecretStore() :> ISecretStore
             let teamA = TeamScopedSecretStore.forTeam "team-a" inner
 
             let! _ = teamA.SetSecret(TeamSecretKey.container "team-a", "openai", "sk-a")
@@ -276,7 +247,7 @@ let private secretLayerTests =
             // A wrapper that answered for itself would report an
             // unknown-posture store as safe, or launder a plaintext one.
             let wrapped =
-                TeamScopedSecretStore.forTeam "team-a" (InMemorySecretStore() :> ISecretStore)
+                TeamScopedSecretStore.forTeam "team-a" (Fakes.TestSecretStore() :> ISecretStore)
 
             match box wrapped with
             | :? ISecretStoreAtRestPosture as declared ->
@@ -293,7 +264,7 @@ let private secretLayerTests =
 /// so `ensureWriteAllowed` can resolve the caller's role.
 let private buildTeamScoped (userId: string) (teamId: string) (roles: (string * string * TeamRole) list) =
     let services = ServiceCollection()
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
     let store = BlobProviderProfile.create storage
 

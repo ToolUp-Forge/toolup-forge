@@ -2,7 +2,6 @@ module ToolUp.FeatureFlagProviders.Tests.FlagSourceTests
 
 open System
 open System.Collections.Generic
-open System.IO
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
@@ -14,6 +13,7 @@ open ToolUp.FeatureFlagProviders.OpenFeature
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 239 — IFlagSource seam + OpenFeature companion ────────────
 //
@@ -23,12 +23,8 @@ open ToolUp.Platform.Compose
 // override still wins; type-aware bool/variant; and the OpenFeature
 // adapter resolves through an OpenFeature provider, deferring on unknown.
 
-let private makeStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-flagsource-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private makeStore (dir: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     BlobFeatureFlagStore(storage) :> IFeatureFlagStore
 
 let private boolFlag key dflt = {
@@ -92,7 +88,8 @@ let tests =
     testList "FlagSource (Phase 239)" [
         testCaseAsync "source consulted when no in-process override"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flagsource-test"
+            let store = makeStore dir
             let decl = [ boolFlag "ext.f" false ] // declared default false
 
             let src =
@@ -105,7 +102,8 @@ let tests =
 
         testCaseAsync "store override wins over source"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flagsource-test"
+            let store = makeStore dir
 
             match! store.SetFlag(FlagScope.Platform, "ext.f", FlagValue.Bool false) with
             | Ok() -> ()
@@ -120,7 +118,8 @@ let tests =
 
         testCaseAsync "no sources → declared default (additive equivalence)"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flagsource-test"
+            let store = makeStore dir
 
             let eval =
                 FlagEvaluator.createWithFlagSources store [ boolFlag "ext.f" true ] [] None
@@ -131,7 +130,8 @@ let tests =
 
         testCaseAsync "source that defers (None) falls to declared default"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flagsource-test"
+            let store = makeStore dir
             let src = stubSource (fun _ -> None)
 
             let eval =
@@ -143,7 +143,8 @@ let tests =
 
         testCaseAsync "source resolves a variant flag"
         <| async {
-            let store = makeStore ()
+            use dir = TempDir.create "flagsource-test"
+            let store = makeStore dir
             let decl = [ variantFlag "ext.theme" [ "light"; "dark" ] "light" ]
             let src = stubSource (fun _ -> Some(FlagValue.Variant([ "light"; "dark" ], "dark")))
             let eval = FlagEvaluator.createWithFlagSources store decl [ src ] None

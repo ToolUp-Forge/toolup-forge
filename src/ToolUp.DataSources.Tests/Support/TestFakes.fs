@@ -18,20 +18,13 @@ open ToolUp.Platform.Compose
 // vendor round-trips are the business of the env-gated
 // `RemoteDataSourceContract` arms.
 
-/// An `ISecretStore` backed by a dictionary, so the credential-thunk
-/// behaviour (per-call re-read, rotation without reconstruction) is
-/// testable without a cloud secret manager.
-type InMemorySecretStore() =
+/// Counts `GetSecret` calls per scope+key over any `ISecretStore`, so
+/// the credential-thunk behaviour (per-call re-read, rotation without
+/// reconstruction) is observable. Storage is the inner store's — seed a
+/// `TestSecretStore` and wrap it; this type only adds the count.
+type ReadCountingSecretStore(inner: ISecretStore) =
 
-    let secrets = ConcurrentDictionary<string * string, string>()
     let reads = ConcurrentDictionary<string * string, int>()
-
-    /// Store (or replace) a secret.
-    member _.Put(scopeId: string, key: string, value: string) = secrets[(scopeId, key)] <- value
-
-    /// Forget a secret.
-    member _.Forget(scopeId: string, key: string) =
-        secrets.TryRemove((scopeId, key)) |> ignore
 
     /// How many times `GetSecret` has been called for this scope+key.
     /// The rotation contract is "read on every call", so the count is
@@ -42,31 +35,13 @@ type InMemorySecretStore() =
         | false, _ -> 0
 
     interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
+        member _.GetSecret(scopeId, key) =
             reads.AddOrUpdate((scopeId, key), 1, (fun _ current -> current + 1)) |> ignore
+            inner.GetSecret(scopeId, key)
 
-            match secrets.TryGetValue((scopeId, key)) with
-            | true, value -> return Some value
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            secrets[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            secrets.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                secrets.Keys
-                |> Seq.filter (fun (scope, _) -> scope = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
+        member _.SetSecret(scopeId, key, value) = inner.SetSecret(scopeId, key, value)
+        member _.DeleteSecret(scopeId, key) = inner.DeleteSecret(scopeId, key)
+        member _.ListKeys(scopeId) = inner.ListKeys(scopeId)
 
 /// Build a `DataSourceConfig` with the given kind and connection
 /// scope; everything else takes an inert default.

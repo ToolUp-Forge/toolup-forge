@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.DisclosureEgressTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -29,6 +28,7 @@ open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 525 — disclosure egress filtering, first choke points ─────
 //
@@ -43,14 +43,6 @@ open ToolUp.Platform.Compose
 // byte-identical behaviour).
 
 // ── Shared doubles ────────────────────────────────────────────────
-
-let private noopLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 let private noopNotifications =
     { new INotificationChannel with
@@ -292,17 +284,22 @@ type private FixedResolver(facts: ResolvedFact list) =
     interface IFactResolver with
         member _.Resolve(_, _) = async { return facts }
 
+/// The store and what releases it: the store first, then its directory.
 let private newVectorStore () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-disclosure-egress-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "disclosure-egress"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = noopLogger, flushIntervalMs = 60000)
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
-    store :> IVectorStore, store :> IDisposable
+    let release =
+        { new IDisposable with
+            member _.Dispose() =
+                (store :> IDisposable).Dispose()
+                (tempDir :> IDisposable).Dispose()
+        }
+
+    store :> IVectorStore, release
 
 let private resolvedFact (id: string) : ResolvedFact = {
     FactId = id
@@ -537,7 +534,7 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
     Notifications = noopNotifications
-    Logger = noopLogger
+    Logger = Logger.silent
     Scope = {
         ScopeId = container
         Container = container

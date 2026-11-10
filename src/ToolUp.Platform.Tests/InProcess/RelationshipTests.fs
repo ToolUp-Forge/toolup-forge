@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.RelationshipTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -11,6 +10,7 @@ open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 19c — declarative relationship edges ─────────────────────
 //
@@ -85,12 +85,8 @@ let private enrolledInCourses: Relationship = {
         }
 }
 
-let private mkStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-rel-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private mkStore (dir: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
 
@@ -235,7 +231,8 @@ let tests =
 
         testCaseAsync "relatedTo returns the correct many-to-one set through the existing executor"
         <| async {
-            let store, scope = mkStore ()
+            use dir = TempDir.create "rel-test"
+            let store, scope = mkStore dir
 
             for c in [ "c-1"; "c-2" ] do
                 let! _ =
@@ -283,7 +280,8 @@ let tests =
 
         testCaseAsync "ManyToMany resolves through the join entity in two indexed lookups"
         <| async {
-            let store, scope = mkStore ()
+            use dir = TempDir.create "rel-test"
+            let store, scope = mkStore dir
 
             let courses = [ "course-fs", "F#"; "course-ml", "ML"; "course-db", "Databases" ]
 

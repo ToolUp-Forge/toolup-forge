@@ -6,6 +6,7 @@ open ToolUp.Platform.Compose.Middleware
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // Phase 246 — two adjacent scope-resolution behaviours:
 //   1. `resolverDowngradeSignal` — the authorization-shaped resolver
@@ -20,17 +21,6 @@ let private cfg (surfaces: SurfaceProfile list) : ServerConfig = {
     ServerConfig.defaults with
         Surfaces = surfaces
 }
-
-/// Captures `Warn` lines so the once-per-kind diagnostic is assertable.
-type private CapturingLogger() =
-    let warns = System.Collections.Generic.List<string>()
-    member _.Warns = List.ofSeq warns
-
-    interface ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(m: string) = warns.Add m
-        member _.Error(_: string, _: exn option) = ()
 
 [<Tests>]
 let tests =
@@ -106,7 +96,7 @@ let tests =
         // ── one-time-per-kind diagnostic ──
 
         test "Undeclared kind emits at most one Warn across repeated derivations (no per-request spam)" {
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let config = cfg Surfaces.individual
             // Two derivations of the same undeclared kind.
             StorageScopeDerivation.fromSubject (Some(logger :> ILogger)) config (AnonymousSession "a")
@@ -116,7 +106,7 @@ let tests =
             |> ignore
 
             let anonWarns =
-                logger.Warns
+                logger.MessagesAt LogSeverity.Warn
                 |> List.filter (fun m -> m.Contains "Anonymous" && m.Contains "EPHEMERAL")
 
             Expect.isLessThanOrEqual

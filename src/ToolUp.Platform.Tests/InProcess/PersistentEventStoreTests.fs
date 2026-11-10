@@ -1,30 +1,23 @@
 module ToolUp.Platform.Tests.InProcess.PersistentEventStoreTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
-/// Per-test temp directory for the backing `LocalFileStorage`. Uses
-/// `Path.GetTempPath()` so each OS places it in the conventional
-/// location; the GUID suffix keeps parallel test runs isolated.
+/// Per-test temp directory for the backing `LocalFileStorage`.
 let private tempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-persistent-event-store-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
+    TempDir.forRun "persistent-event-store-tests"
 
 /// Build a fresh `PersistentEventStore` over a temp-backed
 /// `LocalFileStorage`. Each test gets its own isolated store — the
 /// contract test pack asserts scope isolation within a store, and a
 /// per-test factory avoids cross-test bleed regardless.
-let private makeStore (retention: EventRetentionPolicy) : IEventStore =
-    let dir = tempDir ()
-    let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private makeStore (dir: TempDir) (retention: EventRetentionPolicy) : IEventStore =
+    let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     PersistentEventStore.PersistentEventStore(blobStorage, retention) :> IEventStore
 
 let private uniqueScope () =
@@ -50,7 +43,7 @@ let private makeEvent
 /// under it.
 let contractTests =
     let factory () =
-        makeStore EventRetentionPolicy.unlimited
+        makeStore (tempDir ()) EventRetentionPolicy.unlimited
 
     testList "PersistentEventStore contract" [
         IEventStoreContract.tests "PersistentEventStore" factory
@@ -69,8 +62,8 @@ let retentionTests =
         testCaseAsync "Events survive recreating the store over the same blob storage"
         <| async {
             // Simulate a server restart: same backing folder, new store instance.
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let scope = uniqueScope ()
             let event = makeEvent scope "AuditEvent" "platform" 0.0
@@ -92,8 +85,8 @@ let retentionTests =
 
         testCaseAsync "PruneScope removes events older than MaxAge"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             // 1-hour retention.
             let store =
@@ -122,8 +115,8 @@ let retentionTests =
 
         testCaseAsync "PruneScope removes oldest events over MaxCountPerScope"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             // Keep only 2 events per scope.
             let store =
@@ -149,8 +142,8 @@ let retentionTests =
 
         testCaseAsync "PruneScope is a no-op when retention policy is unlimited"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(blobStorage, EventRetentionPolicy.unlimited)
@@ -168,8 +161,8 @@ let retentionTests =
 
         testCaseAsync "PruneScope does not touch other scopes"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(
@@ -194,8 +187,8 @@ let retentionTests =
 
         testCaseAsync "PruneScopes prunes many scopes in one call"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(
@@ -240,7 +233,8 @@ let replayTests =
 
         testCaseAsync "foldScope visits events in chronological order"
         <| async {
-            let store = makeStore EventRetentionPolicy.unlimited
+            use dir = tempDir ()
+            let store = makeStore dir EventRetentionPolicy.unlimited
             let scope = uniqueScope ()
 
             // Write out of order — ReadAll returns reverse-chronological,
@@ -258,7 +252,8 @@ let replayTests =
 
         testCaseAsync "foldScope aggregates state across a mixed event history"
         <| async {
-            let store = makeStore EventRetentionPolicy.unlimited
+            use dir = tempDir ()
+            let store = makeStore dir EventRetentionPolicy.unlimited
             let scope = uniqueScope ()
 
             do! EventStore.writeOrRaise store (makeEvent scope "Click" "m" -30.0)
@@ -274,7 +269,8 @@ let replayTests =
 
         testCaseAsync "foldScopeOfType filters at the store and folds chronologically"
         <| async {
-            let store = makeStore EventRetentionPolicy.unlimited
+            use dir = tempDir ()
+            let store = makeStore dir EventRetentionPolicy.unlimited
             let scope = uniqueScope ()
 
             do! EventStore.writeOrRaise store (makeEvent scope "Click" "m" -30.0)
@@ -298,8 +294,8 @@ let indexTests =
         testCaseAsync "ReadByType matches a small subset over a large scope"
         <| async {
             // 100 events of mixed types; only 5 of type "Match".
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(blobStorage, EventRetentionPolicy.unlimited)
@@ -319,8 +315,8 @@ let indexTests =
 
         testCaseAsync "Index drift: deleting an index ref hides the event from ReadByType"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(blobStorage, EventRetentionPolicy.unlimited)
@@ -348,8 +344,8 @@ let indexTests =
 
         testCaseAsync "Rebuild restores indexes from canonical state"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(blobStorage, EventRetentionPolicy.unlimited)
@@ -403,8 +399,8 @@ let indexTests =
             // idempotency is the *index state* — re-running Rebuild
             // doesn't duplicate or corrupt index entries for the
             // events that already existed.
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(blobStorage, EventRetentionPolicy.unlimited)
@@ -424,8 +420,8 @@ let indexTests =
 
         testCaseAsync "PruneScope removes index refs alongside canonical"
         <| async {
-            let dir = tempDir ()
-            let blobStorage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = tempDir ()
+            let blobStorage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
                 PersistentEventStore.PersistentEventStore(

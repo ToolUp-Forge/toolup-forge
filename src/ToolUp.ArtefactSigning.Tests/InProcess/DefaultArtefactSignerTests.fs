@@ -6,6 +6,7 @@ module ToolUp.ArtefactSigning.Tests.InProcess.DefaultArtefactSignerTests
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 open ToolUp.ArtefactSigning.ArtefactAuditEvents
 open ToolUp.ArtefactSigning
 open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
@@ -14,7 +15,7 @@ open ToolUp.ArtefactSigning.Tests.Contracts
 /// Build a contract fixture for the in-process default signer + verifier
 /// against a shared in-memory secret store, for the given algorithm.
 let private fixtureFor (algorithm: SigningAlgorithm) () : IArtefactSignerContract.ArtefactSignerFixture =
-    let secrets = InMemorySecretStore()
+    let secrets = TestSecretStore()
     let audit = InMemoryAuditLog()
     let keyId = $"signing-{SigningAlgorithm.name algorithm}-v1"
 
@@ -27,7 +28,7 @@ let private inProcessSpecificTests =
     testList "DefaultArtefactSigner — in-process specifics" [
         testCaseAsync "Sign emits an ArtefactSigned audit event with the artefact SHA-256"
         <| async {
-            let secrets = InMemorySecretStore()
+            let secrets = TestSecretStore()
             let audit = InMemoryAuditLog()
 
             let signer =
@@ -57,7 +58,7 @@ let private inProcessSpecificTests =
 
         testCaseAsync "Key rotation: signatures under a rotated-out key still verify"
         <| async {
-            let secrets = InMemorySecretStore()
+            let secrets = TestSecretStore()
             let audit = InMemoryAuditLog()
 
             // v1 signs an artefact.
@@ -117,7 +118,7 @@ let private inProcessSpecificTests =
 
         testCaseAsync "signedJsonEnvelope round-trips through verifyJsonEnvelope"
         <| async {
-            let secrets = InMemorySecretStore()
+            let secrets = TestSecretStore()
             let audit = InMemoryAuditLog()
 
             let signer =
@@ -141,7 +142,7 @@ let private inProcessSpecificTests =
 
         testCaseAsync "signAndEmbed leaves the artefact unchanged and yields a JWS sidecar"
         <| async {
-            let secrets = InMemorySecretStore()
+            let secrets = TestSecretStore()
             let audit = InMemoryAuditLog()
 
             let signer =

@@ -15,6 +15,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.Scope
 open ToolUp.PublicRendering
+open ToolUp.Platform.Testing
 
 let private bodyOf (text: string) (captures: Map<string, string>) =
     Html(text + (captures |> Map.toList |> List.map snd |> String.concat ","))
@@ -80,16 +81,11 @@ let private bodyText (found: PublicPage option) =
     | Some { Body = Html text } -> text
     | other -> failtestf "%A" other
 
-let private composed (configure: PublicRenderingOptions -> PublicRenderingOptions) =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-declared-" + Guid.NewGuid().ToString "N")
-
-    Directory.CreateDirectory root |> ignore
-
+let private composed (root: TempDir) (configure: PublicRenderingOptions -> PublicRenderingOptions) =
     ServerApp.empty
     |> ServerApp.withConfig {
         ServerConfig.defaults with
-            PublicRendering = EnabledPublicRendering(ContentRoot root)
+            PublicRendering = EnabledPublicRendering(ContentRoot root.Path)
     }
     |> PublicRenderingCompose.withPublicRendering (configure (PublicRenderingOptions.create ()))
     |> ServerApp.resolve
@@ -237,11 +233,13 @@ let tests =
                         }
             }
 
+            use root = TempDir.create "declared"
+
             let app =
-                composed (
-                    PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
-                    >> PublicRenderingCompose.withDeclaredPages [ served ]
-                )
+                composed
+                    root
+                    (PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
+                     >> PublicRenderingCompose.withDeclaredPages [ served ])
 
             let services = ServiceCollection()
 
@@ -318,40 +316,31 @@ let tests =
 
         testCaseAsync "a static export writes a declared public page and no gated or captured one"
         <| async {
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-declared-" + Guid.NewGuid().ToString "N")
+            use dir = TempDir.create "declared"
+            let root = dir.Sub "content"
+            // The export target is left uncreated: the export makes it.
+            let output = dir.File "export"
 
-            let output =
-                Path.Combine(Path.GetTempPath(), "toolup-declared-" + Guid.NewGuid().ToString "N")
+            let app =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering(ContentRoot root)
+                }
 
-            Directory.CreateDirectory root |> ignore
+            let options =
+                PublicRenderingOptions.create ()
+                |> PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
+                |> PublicRenderingCompose.withDeclaredPages [
+                    page "open" PageAudience.Public
+                    page "closed" publication
+                    page "dated/{date}" PageAudience.Public
+                ]
 
-            try
-                let app =
-                    ServerApp.empty
-                    |> ServerApp.withConfig {
-                        ServerConfig.defaults with
-                            PublicRendering = EnabledPublicRendering(ContentRoot root)
-                    }
-
-                let options =
-                    PublicRenderingOptions.create ()
-                    |> PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
-                    |> PublicRenderingCompose.withDeclaredPages [
-                        page "open" PageAudience.Public
-                        page "closed" publication
-                        page "dated/{date}" PageAudience.Public
-                    ]
-
-                let! count = PublicRenderingCompose.PublicRenderingExport.exportStatic output (app, options)
-                Expect.equal count 1 "the one public literal"
-                Expect.isTrue (File.Exists(Path.Combine(output, "open", "index.html"))) "written"
-                Expect.isFalse (Directory.Exists(Path.Combine(output, "closed"))) "a gated page is not"
-            finally
-                Directory.Delete(root, true)
-
-                if Directory.Exists output then
-                    Directory.Delete(output, true)
+            let! count = PublicRenderingCompose.PublicRenderingExport.exportStatic output (app, options)
+            Expect.equal count 1 "the one public literal"
+            Expect.isTrue (File.Exists(Path.Combine(output, "open", "index.html"))) "written"
+            Expect.isFalse (Directory.Exists(Path.Combine(output, "closed"))) "a gated page is not"
         }
 
         testCase "no declared pages leaves the API as it is"
@@ -361,13 +350,15 @@ let tests =
 
         testCase "compose refuses a page whose layout nobody registered, naming the route and the layout"
         <| fun _ ->
+            use root = TempDir.create "declared"
+
             let raised =
                 Expect.throwsC
                     (fun () ->
-                        composed (
-                            PublicRenderingOptions.withLayout (LayoutName "other") anyLayout
-                            >> PublicRenderingCompose.withDeclaredPages [ page "insights/latest" PageAudience.Public ]
-                        )
+                        composed
+                            root
+                            (PublicRenderingOptions.withLayout (LayoutName "other") anyLayout
+                             >> PublicRenderingCompose.withDeclaredPages [ page "insights/latest" PageAudience.Public ])
                         |> ignore)
                     (fun ex ->
                         Expect.isTrue (ex :? LayoutRefusedException) "the layout refusal"
@@ -385,11 +376,13 @@ let tests =
 
             Expect.equal (options.DeclaredPages |> List.map _.Route) [ "a"; "b" ] "both, in order"
 
+            use root = TempDir.create "declared"
+
             let app =
-                composed (
-                    PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
-                    >> PublicRenderingCompose.withDeclaredPages [ page "a" PageAudience.Public ]
-                )
+                composed
+                    root
+                    (PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
+                     >> PublicRenderingCompose.withDeclaredPages [ page "a" PageAudience.Public ])
 
             Expect.contains app.ComposedCompanions "ToolUp.PublicRendering" "composed"
 
@@ -407,12 +400,14 @@ let tests =
             Expect.stringContains refusals[0] "'a'" "the repeat"
             Expect.stringContains refusals[1] "'dat'" "the capture"
 
+            use root = TempDir.create "declared"
+
             Expect.throwsT<InvalidOperationException>
                 (fun () ->
-                    composed (
-                        PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
-                        >> PublicRenderingCompose.withDeclaredPages [ typo ]
-                    )
+                    composed
+                        root
+                        (PublicRenderingOptions.withLayout (LayoutName "report") anyLayout
+                         >> PublicRenderingCompose.withDeclaredPages [ typo ])
                     |> ignore)
                 "compose refuses it"
     ]

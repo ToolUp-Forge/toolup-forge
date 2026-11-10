@@ -4,13 +4,13 @@
 module ToolUp.Platform.Tests.InProcess.ProvenanceLabelTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // --- Phase 482 -- privacy-provenance labels -----------------------------
 //
@@ -22,12 +22,8 @@ open ToolUp.Platform.Jobs
 // the declassify lifecycle, the policy denials both ways, and the GP-13
 // "unlabelled data is unchanged" default.
 
-let private freshStore () : IDatasetStore =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-label-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private freshStore (dir: TempDir) : IDatasetStore =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     BlobDatasetStore.create dataObjects
 
@@ -60,23 +56,12 @@ let private rowsFor (v: float) = [
 let private labelledMeta (labels: DataProvenanceLabel list) =
     DataProvenanceLabels.writeInto labels Map.empty
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
-
 let tests =
     testList "ProvenanceLabels" [
         testCaseAsync "labels round-trip on a dataset version and are immutable metadata"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "label-test"
+            let store = freshStore dir
 
             let labels = [
                 DataProvenanceLabel.CleanRoomDerived("gate-1", 0.5)
@@ -90,7 +75,8 @@ let tests =
 
         testCaseAsync "unlabelled data is byte-for-byte unchanged (GP 13)"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "label-test"
+            let store = freshStore dir
             let! _ = store.Create("s", "plain", keyed "v", rowsFor 0.0, "u", Map.empty, Versioned)
             let! v = store.GetVersion("s", "plain", 1)
             Expect.isEmpty (okds v).Labels "an unlabelled version carries no labels"
@@ -102,7 +88,8 @@ let tests =
 
         testCaseAsync "assembly propagates the union of its inputs' labels automatically"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "label-test"
+            let store = freshStore dir
             let executor = DatasetAssemblyExecutor.create store
 
             // Two labelled inputs sharing the unit key.
@@ -182,8 +169,9 @@ let tests =
 
         testCaseAsync "declassify is an explicit audited act producing a new unlabelled version; the original is intact"
         <| async {
-            let store = freshStore ()
-            let audit = RecordingAuditLog()
+            use dir = TempDir.create "label-test"
+            let store = freshStore dir
+            let audit = TestAuditLog()
             let labels = [ DataProvenanceLabel.Classified "restricted" ]
             let! _ = store.Create("s", "d", keyed "v", rowsFor 0.0, "u", labelledMeta labels, Versioned)
 
@@ -199,7 +187,7 @@ let tests =
 
             let decls =
                 audit.Events
-                |> List.choose (fun (_, e) ->
+                |> List.choose (fun e ->
                     match e with
                     | DatasetDeclassified p -> Some p
                     | _ -> None)
@@ -247,8 +235,9 @@ let tests =
 
         testCaseAsync "an audited policy denial records a typed DatasetPolicyDenied row"
         <| async {
-            let store = freshStore ()
-            let audit = RecordingAuditLog()
+            use dir = TempDir.create "label-test"
+            let store = freshStore dir
+            let audit = TestAuditLog()
 
             let! _ =
                 store.Create(
@@ -269,7 +258,7 @@ let tests =
 
             let denials =
                 audit.Events
-                |> List.choose (fun (_, e) ->
+                |> List.choose (fun e ->
                     match e with
                     | DatasetPolicyDenied p -> Some p
                     | _ -> None)

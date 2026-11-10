@@ -31,16 +31,9 @@ open ToolUp.Platform
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 let private shellMarker = "SPA-SHELL-1137"
-
-let private quietLogger: ILogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 type private LifetimeCapture
     (
@@ -67,15 +60,9 @@ let private freePort () =
 /// client on its port; the host is stopped, and the process-wide culture
 /// `compose` sets is restored, whatever `body` does.
 let private withHost (enableDev: bool) (configure: ServerApp -> ServerApp) (body: Net.Http.HttpClient -> Async<unit>) = async {
-    let publicDir =
-        Path.Combine(Path.GetTempPath(), "toolup-build-identity-tests", Guid.NewGuid().ToString("N"))
+    use publicDir = TempDir.create "build-identity-tests"
 
-    Directory.CreateDirectory publicDir |> ignore
-
-    File.WriteAllText(
-        Path.Combine(publicDir, "index.html"),
-        "<!doctype html><html><body>" + shellMarker + "</body></html>"
-    )
+    File.WriteAllText(publicDir.File "index.html", "<!doctype html><html><body>" + shellMarker + "</body></html>")
 
     let port = freePort ()
 
@@ -102,7 +89,7 @@ let private withHost (enableDev: bool) (configure: ServerApp -> ServerApp) (body
     let config = {
         ServerConfig.defaults with
             Port = port
-            PublicPath = publicDir
+            PublicPath = publicDir.Path
             EnableDevEndpoints = enableDev
             SecurityPosture = {
                 ServerConfig.defaults.SecurityPosture with
@@ -119,8 +106,8 @@ let private withHost (enableDev: bool) (configure: ServerApp -> ServerApp) (body
         ServerApp.empty
         |> ServerApp.withConfig config
         |> ServerApp.withExtensions capture
-        |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
-        |> ServerApp.withLogger quietLogger
+        |> ServerApp.withStorage (Fakes.standardBlobStorage ())
+        |> ServerApp.withLogger Logger.silent
         |> configure
 
     let culture = Globalization.CultureInfo.DefaultThreadCurrentCulture
@@ -156,11 +143,6 @@ let private withHost (enableDev: bool) (configure: ServerApp -> ServerApp) (body
 
         Globalization.CultureInfo.DefaultThreadCurrentCulture <- culture
         Globalization.CultureInfo.DefaultThreadCurrentUICulture <- uiCulture
-
-        try
-            Directory.Delete(publicDir, true)
-        with _ ->
-            ()
 }
 
 /// GET a path as a browser navigation: (status, body, Cache-Control).

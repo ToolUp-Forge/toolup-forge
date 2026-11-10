@@ -15,6 +15,7 @@ open ToolUp.RAG.SparseAnalysis
 open ToolUp.SparseIndices.Postgres.PostgresFullTextIndex
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 893 — PostgreSQL full-text ISparseIndex companion ─────────
 //
@@ -43,14 +44,7 @@ let private liveConnectionString =
     | "" -> None
     | s -> Some s
 
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-
-let private silent = Some(SilentLogger() :> ILogger)
+let private silent = Some Logger.silent
 
 let private expectRefusalNaming (needle: string) (message: string) (f: unit -> unit) =
     let raised =

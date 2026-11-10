@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.RAG.MetadataFilterContract
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -14,6 +13,7 @@ open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.StaticCorpus
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 502 — metadata-filtered retrieval, parity pack ────────────
 //
@@ -60,13 +60,6 @@ type private BowEmbedder() =
         member _.Dimensions = dim
         member _.ProviderId = "test"
         member _.ModelId = "bow-v1"
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 // ── The shared corpus ──
 //
@@ -124,18 +117,11 @@ let private retrieve (bound: Bound) (filters: Map<string, string> option) (topK:
 /// The default pipeline: an `InMemoryVectorStore` seeded through
 /// `IRetrievalPipeline.Index`, which is the production ingestion path.
 let private bindDefaultPipeline () : Bound =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-metadata-filter-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.forRun "metadata-filter"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
-            storage,
-            logger = SilentLogger(),
-            flushIntervalMs = 60000
-        )
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
     let pipeline =
         new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(store :> IVectorStore, BowEmbedder()) :> IRetrievalPipeline
@@ -156,11 +142,7 @@ let private bindDefaultPipeline () : Bound =
         Dispose =
             fun () ->
                 (store :> IDisposable).Dispose()
-
-                try
-                    Directory.Delete(tempDir, true)
-                with _ ->
-                    ()
+                (tempDir :> IDisposable).Dispose()
     }
 
 /// The static-corpus pipeline: the same rows packed as a read-only
@@ -499,18 +481,11 @@ let private tagRows: (string * string list * string) list = [
 ]
 
 let private bindTagPipeline () : Bound =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-tag-filter-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.forRun "tag-filter"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
-            storage,
-            logger = SilentLogger(),
-            flushIntervalMs = 60000
-        )
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
     let pipeline =
         new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(store :> IVectorStore, BowEmbedder()) :> IRetrievalPipeline
@@ -532,11 +507,7 @@ let private bindTagPipeline () : Bound =
         Dispose =
             fun () ->
                 (store :> IDisposable).Dispose()
-
-                try
-                    Directory.Delete(tempDir, true)
-                with _ ->
-                    ()
+                (tempDir :> IDisposable).Dispose()
     }
 
 let private tagFilter (tags: string list) =

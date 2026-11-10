@@ -15,6 +15,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 // ─── Phase 112 — live-session host + endpoint tests ──────────────────
 //
@@ -218,19 +219,6 @@ type private FailingRateLimitStore() =
         member _.IncrementAndCheck(_, _, _) = async { return Error(StoreUnavailable "simulated outage") }
         member _.GetRecentDecisions(_, _) = async { return [] }
 
-/// An `IAuditLog` that keeps what it is handed.
-type private RecordingAuditLog() =
-    let rows = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
-    member _.Rows = rows |> Seq.toList
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            rows.Enqueue(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
 let private postureTests =
     let subscribeOnce (posture: StorePosture) =
         let host = LiveSessionHost.createInMemory None
@@ -241,7 +229,7 @@ let private postureTests =
                 SubscribeStorePosture = posture
         }
 
-        let audit = RecordingAuditLog()
+        let audit = TestAuditLog()
         let services = ServiceCollection()
         services.AddSingleton<IRateLimitStore>(FailingRateLimitStore()) |> ignore
         services.AddSingleton<IAuditLog>(audit) |> ignore
@@ -264,14 +252,14 @@ let private postureTests =
         <| fun _ ->
             let ctx, audit = subscribeOnce StorePosture.FailOpen
             Expect.equal ctx.Response.StatusCode 404 "the subscribe passes the budget gate (no such session)"
-            Expect.isEmpty audit.Rows "an admission is not audited"
+            Expect.isEmpty audit.Records "an admission is not audited"
 
         testCase "FailClosed: a failing store refuses the subscribe with 503 and audits it under the scope"
         <| fun _ ->
             let ctx, audit = subscribeOnce StorePosture.FailClosed
             Expect.equal ctx.Response.StatusCode 503 "the subscribe is refused"
 
-            match audit.Rows with
+            match audit.Records |> List.map (fun r -> r.StreamKey, r.Event) with
             | [ scopeId, AuditEvent.RateLimitRefused row ] ->
                 Expect.equal scopeId "anonymous" "written under the caller's scope"
                 Expect.equal row.Provider "live-sessions:subscribe" "names the budget that could not be counted"
@@ -309,7 +297,7 @@ let private resolverTests =
         testCase "a mismatching ?userId= on the live-session route is audited, and the principal's partition wins"
         <| fun _ ->
             let host = LiveSessionHost.createInMemory None
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let services = ServiceCollection()
             services.AddSingleton<IAuditLog>(audit) |> ignore
 
@@ -326,11 +314,11 @@ let private resolverTests =
 
             let deadline = DateTime.UtcNow.AddSeconds 5.0
 
-            while List.isEmpty audit.Rows && DateTime.UtcNow < deadline do
+            while List.isEmpty audit.Events && DateTime.UtcNow < deadline do
                 Thread.Sleep 5
 
-            match audit.Rows with
-            | [ _, AuditEvent.SurfaceDenied row ] ->
+            match audit.Events with
+            | [ AuditEvent.SurfaceDenied row ] ->
                 Expect.equal row.DenialCode SseScopeResolution.mismatchDenialCode "the mismatch denial code"
                 Expect.equal row.Hint (Some "asserted=mallory") "names the asserted id"
             | other -> failtestf "expected one SurfaceDenied row, got %A" other

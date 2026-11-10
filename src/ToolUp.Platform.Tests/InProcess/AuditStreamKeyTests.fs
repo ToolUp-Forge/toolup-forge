@@ -15,7 +15,6 @@ module ToolUp.Platform.Tests.InProcess.AuditStreamKeyTests
 // recording audit log; the assertion is the key it chose.
 
 open System
-open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Scope.PermissionStore
@@ -24,6 +23,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Scope.Teams
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 let private teamId = "acme"
 
@@ -34,38 +34,18 @@ let private teamId = "acme"
 let private bareKey =
     AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team(TeamId teamId)))
 
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
-    member _.Keys = recorded |> Seq.map fst |> Set.ofSeq
-    member _.Count = recorded.Count
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Enqueue(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
+/// The distinct stream keys the log was asked to record under.
+let private keys (audit: TestAuditLog) =
+    audit.Records |> List.map _.StreamKey |> Set.ofList
 
 /// Wait for a fire-and-forget emission (the grant guard's) to land.
-let private settle (audit: RecordingAuditLog) (expected: int) = async {
-    let waited = ref 0
-
-    while audit.Count < expected && waited.Value < 100 do
-        do! Async.Sleep 20
-        waited.Value <- waited.Value + 1
+let private settle (audit: TestAuditLog) (expected: int) = async {
+    audit.Recording.WaitUntil((fun rows -> List.length rows >= expected), TimeSpan.FromSeconds 2.0)
+    |> ignore
 }
 
 let private grantGuardKey () = async {
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
     let registry =
         GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations [ "Partner", GrantPolicy.RequiresAcknowledgement ]
@@ -81,14 +61,14 @@ let private grantGuardKey () = async {
 
     let! _ = store.SetMemberPermissions(TeamId teamId, UserId "alice", "Partner", [ ModulePermission.Read ])
     do! settle audit 1
-    return audit.Keys
+    return keys audit
 }
 
 let private expiryHookKey () = async {
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
     let hook =
-        ToolUp.Platform.Scope.Teams.PendingInviteExpiryHook.build silentLogger ((audit :> IAuditLog)) None
+        ToolUp.Platform.Scope.Teams.PendingInviteExpiryHook.build Logger.silent ((audit :> IAuditLog)) None
 
     do!
         hook [
@@ -102,11 +82,11 @@ let private expiryHookKey () = async {
             }
         ]
 
-    return audit.Keys
+    return keys audit
 }
 
 let private classificationGateKey () = async {
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
     let classifier =
         { new IFieldClassifier with
@@ -128,7 +108,7 @@ let private classificationGateKey () = async {
 
     let ctx = AccessContexts.forSubject (TeamMember("alice", teamId))
     let! _ = ClassificationGate.recordWrites classifier audit ctx "Employee" [ "salary" ]
-    return audit.Keys
+    return keys audit
 }
 
 let tests =

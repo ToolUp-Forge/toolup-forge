@@ -4,8 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.GroundingSigningConvergenceTests
 
 open System
-open System.Collections.Concurrent
-open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
@@ -20,6 +18,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // ─── Grounding-tier signing convergence ──────────────────────────────────
 //
@@ -39,38 +38,6 @@ open ToolUp.Platform.Audit
 // verifiable, and that a signature cannot be carried from one to another.
 // Those are properties of the composition, so they are asserted over a real
 // fact store, a real chained ledger, and one `IApplicationSigner`.
-
-/// Minimal in-memory `ISecretStore`. The signer auto-provisions its key
-/// into it and the verifier resolves the public half back out — the same
-/// store standing for the deployment's key material throughout, which is
-/// the point: one store, one key story.
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 let private scope = "team-convergence"
 
@@ -130,12 +97,8 @@ let private ledgerSettings: ChainedLedgerSettings = {
     PathPrefix = Some "convergence"
 }
 
-let private newLedgerStorage () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-signing-convergence", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private newLedgerStorage (dir: TempDir) =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 let private auditEvent (offset: float) : AuditEnvelope =
     AuditEnvelope.create
@@ -163,7 +126,7 @@ let tests =
         // kinds, one key id and one attestation level across all of them.
         testCaseAsync "one composed signer seals a deploy record, a certificate, and a ledger head"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = applicationSigner secrets "deployment-key-v1"
 
             // (1) A deploy record — an arbitrary application payload
@@ -208,7 +171,8 @@ let tests =
                 | verdict -> failtestf "certificate verification: %s" (AttestedCertificateVerdict.describe verdict)
 
             // (3) A ledger head.
-            let storage = newLedgerStorage ()
+            use dir = TempDir.create "signing-convergence"
+            let storage = newLedgerStorage dir
             let sink = createSigned "convergence" ledgerSettings storage (headSigner signer)
 
             match! sink.Deliver [ auditEvent 0.0; auditEvent 1.0 ] with
@@ -231,7 +195,7 @@ let tests =
 
         testCaseAsync "editing the certificate's key id or its claimed level fails verification"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = applicationSigner secrets "deployment-key-v1"
             let! graph, store, gate, events = factSubstrate ()
 
@@ -278,7 +242,7 @@ let tests =
 
         testCaseAsync "a certificate about another answer is reported as such, not as a forgery"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = applicationSigner secrets "deployment-key-v1"
             let! graph, store, gate, events = factSubstrate ()
 
@@ -313,7 +277,7 @@ let tests =
 
         testCaseAsync "a rotation leaves certificates and ledger heads signed under the retired key verifiable"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let oldSigner = applicationSigner secrets "deployment-key-v1"
 
             let! graph, store, gate, events = factSubstrate ()
@@ -329,7 +293,8 @@ let tests =
                 | Ok c -> c
                 | Error e -> failtestf "issue must succeed: %s" (CertificateError.describe e)
 
-            let storage = newLedgerStorage ()
+            use dir = TempDir.create "signing-convergence"
+            let storage = newLedgerStorage dir
 
             let oldSink =
                 createSigned "convergence" ledgerSettings storage (headSigner oldSigner)
@@ -386,7 +351,7 @@ let tests =
 
         testCaseAsync "a ledger-head signature offered as a certificate seal is a replay, not a forgery"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let signer = applicationSigner secrets "deployment-key-v1"
             let! graph, store, gate, events = factSubstrate ()
 
@@ -430,7 +395,7 @@ let tests =
 
         testCaseAsync "the direct certificate path is unchanged, and needs no application signer"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let audit = NoOpAuditLog() :> IAuditLog
 
             let byteSigner =
@@ -461,7 +426,7 @@ let tests =
             // The body builder is shared, so the two paths must not have
             // forked the interchange format. Same clock, same key id, same
             // subject: the canonical bytes must match exactly.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             let audit = NoOpAuditLog() :> IAuditLog
             let frozen = DateTime(2026, 8, 22, 10, 30, 0, DateTimeKind.Utc)
             let clock () = frozen
@@ -494,7 +459,8 @@ let tests =
 
         testCaseAsync "an unsigned ledger still reports an unsigned head"
         <| async {
-            let storage = newLedgerStorage ()
+            use dir = TempDir.create "signing-convergence"
+            let storage = newLedgerStorage dir
             let sink = create "convergence" ledgerSettings storage
 
             match! sink.Deliver [ auditEvent 0.0 ] with

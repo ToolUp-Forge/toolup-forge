@@ -44,7 +44,6 @@ module ToolUp.Platform.Tests.InProcess.GrantGovernanceTests
 // fails one half or the other rather than both passing.
 
 open System
-open System.IO
 open System.Threading
 open Expecto
 open Microsoft.AspNetCore.Http
@@ -58,6 +57,7 @@ open ToolUp.AI.AIToolRegistry
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 /// A log that records nothing and never refuses — the test's "no audit".
 let private noAudit =
@@ -76,34 +76,17 @@ let private acmeDpo = PartyRef.create "acme-dpo"
 
 /// A real blob-backed store, so the grant record survives an actual
 /// serialisation round trip rather than a stub that cannot lose a field.
-let private freshStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-grantgov-" + Guid.NewGuid().ToString("N"))
+let private freshStore (dir: TempDir) =
+    PermissionStore(LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage) :> IPermissionStore
 
-    Directory.CreateDirectory dir |> ignore
-    PermissionStore(LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage) :> IPermissionStore
-
-/// Accumulates every recorded event. Deliberately never fails a test on
-/// its own — an assertion on "exactly one row of this shape" is only a
-/// real assertion because this thing would happily record nothing.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-
-    member _.Recorded = List.ofSeq recorded
-
-    member this.GrantRecordedRows =
-        this.Recorded
-        |> List.choose (function
-            | _, GrantRecorded p -> Some p
-            | _ -> None)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+/// The `GrantRecorded` rows among recorded events. The audit log never
+/// fails a test on its own — an assertion on "exactly one row of this
+/// shape" is only a real assertion because it would happily record nothing.
+let private grantRecordedRows (events: AuditEvent list) =
+    events
+    |> List.choose (function
+        | GrantRecorded p -> Some p
+        | _ -> None)
 
 /// The decorator emits its success row through `Async.Start`, exactly as
 /// it emits its refusal row — best-effort per the `IAuditLog` contract,
@@ -111,18 +94,19 @@ type private RecordingAuditLog() =
 /// error. That means a test has to WAIT for the row rather than read it
 /// straight after the call.
 ///
-/// Polling with a deadline rather than a fixed sleep: a fixed sleep is
+/// Waiting on the write rather than a fixed sleep: a fixed sleep is
 /// either flaky or slow, and this returns the moment the row lands.
 /// Deliberately returns whatever it has at the deadline instead of
 /// throwing, so the failure a caller sees is "expected 1 row, got 0" —
 /// which names the defect — rather than a timeout that does not.
-let private awaitRows (log: RecordingAuditLog) (expected: int) =
-    let deadline = DateTime.UtcNow.AddSeconds 5.0
+let private awaitRows (log: TestAuditLog) (expected: int) =
+    log.Recording.WaitUntil(
+        (fun rows -> (rows |> List.map _.Event |> grantRecordedRows).Length >= expected),
+        TimeSpan.FromSeconds 5.0
+    )
+    |> ignore
 
-    while log.GrantRecordedRows.Length < expected && DateTime.UtcNow < deadline do
-        Thread.Sleep 10
-
-    log.GrantRecordedRows
+    grantRecordedRows log.Events
 
 let private registryOf declarations =
     GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations declarations
@@ -240,12 +224,13 @@ let tests =
 
             testCase "a grant admitted by policy emits exactly one row carrying state, permissions and justification"
             <| fun _ ->
-                let log = RecordingAuditLog()
+                use dir = TempDir.create "grantgov"
+                let log = TestAuditLog()
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresAcknowledgement ]
 
                 let store =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
-                        freshStore (),
+                        freshStore dir,
                         registry,
                         log :> IAuditLog,
                         (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
@@ -297,12 +282,13 @@ let tests =
                 // "authority now exists" and "authority is recorded and
                 // confers nothing yet" are the same row, and a reviewer
                 // reading the trail cannot tell which happened.
-                let log = RecordingAuditLog()
+                use dir = TempDir.create "grantgov"
+                let log = TestAuditLog()
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresSubjectConsent ]
 
                 let store =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
-                        freshStore (),
+                        freshStore dir,
                         registry,
                         log :> IAuditLog,
                         (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
@@ -333,12 +319,13 @@ let tests =
                 // to ordinary permission changes would bury the governed
                 // rows in the volume of routine ones — and those already
                 // have `PermissionChanged`.
-                let log = RecordingAuditLog()
+                use dir = TempDir.create "grantgov"
+                let log = TestAuditLog()
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresAcknowledgement ]
 
                 let store =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
-                        freshStore (),
+                        freshStore dir,
                         registry,
                         log :> IAuditLog,
                         (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
@@ -369,7 +356,7 @@ let tests =
             <| fun _ ->
                 // A row claiming a grant the store then refused is worse
                 // than no row: it asserts authority that does not exist.
-                let log = RecordingAuditLog()
+                let log = TestAuditLog()
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresAcknowledgement ]
 
                 let store =
@@ -636,7 +623,7 @@ let tests =
                 // the same event the Remoting seam emits for the same
                 // refusal; a second event type would put it on a different
                 // row under a different subject.
-                let log = RecordingAuditLog()
+                let log = TestAuditLog()
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresSubjectConsent ]
 
                 let services = ServiceCollection()
@@ -667,13 +654,13 @@ let tests =
 
                 let deadline = DateTime.UtcNow.AddSeconds 5.0
 
-                while List.isEmpty log.Recorded && DateTime.UtcNow < deadline do
+                while List.isEmpty log.Events && DateTime.UtcNow < deadline do
                     Thread.Sleep 10
 
                 let refusals =
-                    log.Recorded
+                    log.Events
                     |> List.choose (function
-                        | _, UnconsentedGrantRefused p -> Some p
+                        | UnconsentedGrantRefused p -> Some p
                         | _ -> None)
 
                 Expect.hasLength refusals 1 "and audited — a guard that refuses silently covers half the requirement"
@@ -682,7 +669,7 @@ let tests =
 
             testCase "the dispatch guard admits a live grant, and audits nothing"
             <| fun _ ->
-                let log = RecordingAuditLog()
+                let log = TestAuditLog()
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresSubjectConsent ]
 
                 let services = ServiceCollection()
@@ -704,7 +691,7 @@ let tests =
                     "a live grant dispatches"
 
                 Thread.Sleep 100
-                Expect.isEmpty log.Recorded "and produces no refusal row"
+                Expect.isEmpty log.Events "and produces no refusal row"
         ]
 
         // ── the shared decision ──────────────────────────────────────

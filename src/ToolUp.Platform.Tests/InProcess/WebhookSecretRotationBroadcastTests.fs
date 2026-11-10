@@ -1,8 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.WebhookSecretRotationBroadcastTests
 
 open System
-open System.Collections.Concurrent
-open System.IO
 open System.Text
 open System.Text.Json
 open Expecto
@@ -15,6 +13,7 @@ open ToolUp.Platform.Jobs.WebhookDispatcher
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 464 — cross-instance signing-secret rotation fanout ───────
 //
@@ -42,12 +41,7 @@ open ToolUp.Platform.Jobs
 // both arms agree for some unrelated reason, the control fails and says
 // which.
 
-let private newTempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-464-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
+let private newTempDir () = TempDir.create "464-test"
 
 /// A distinct `FileSecretStore` over a SHARED directory — two processes'
 /// worth of independent caches over one durable store.
@@ -62,23 +56,6 @@ let private scopeId = "_platform"
 let private body = Encoding.UTF8.GetBytes """{"event":"FlagChanged"}"""
 
 let private envelopeJson = PlatformJson.options
-
-/// Recording `ILogger` — the unwired-rotation warning is emitted once per
-/// process at security class, and "was it logged?" is a distinct question
-/// from "was it counted?" (the one-argument registry constructor has no
-/// logger, which is why the count exists as its own signal).
-type private RecordingLogger() =
-    let warns = ConcurrentQueue<string>()
-    let errors = ConcurrentQueue<string>()
-
-    member _.Warnings = warns |> List.ofSeq
-    member _.Errors = errors |> List.ofSeq
-
-    interface ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(message) = warns.Enqueue message
-        member _.Error(message, _) = errors.Enqueue message
 
 let private sampleSubscription (scope: string) : WebhookSubscription =
     let id = Guid.NewGuid()
@@ -111,8 +88,8 @@ let private resolveSecret (store: ISecretStore) (sub: WebhookSubscription) = asy
 let private seedFleet () = async {
     let secretsDir = newTempDir ()
     let blobs = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
-    let storeA = storeOver secretsDir
-    let storeB = storeOver secretsDir
+    let storeA = storeOver secretsDir.Path
+    let storeB = storeOver secretsDir.Path
 
     let sub = sampleSubscription scopeId
 
@@ -150,7 +127,7 @@ let private fanoutTests =
         testCaseAsync "CONTROL — an unwired sibling instance keeps resolving the STALE secret (the defect)"
         <| async {
             let! secretsDir, blobs, storeA, storeB, sub = seedFleet ()
-            ignore secretsDir
+            use _ = secretsDir
 
             // No channel on either side: pre-Phase-464 behaviour. It must
             // still be reproducible, or the wired case below proves
@@ -186,11 +163,11 @@ let private fanoutTests =
         testCaseAsync "RotateSecret on A invalidates B's cached secret — B resolves the ROTATED secret"
         <| async {
             let! secretsDir, blobs, storeA, storeB, sub = seedFleet ()
-            ignore secretsDir
+            use _ = secretsDir
 
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let registryA = WebhookRegistry.createRegistryInstance blobs (RecordingLogger())
-            let registryB = WebhookRegistry.createRegistryInstance blobs (RecordingLogger())
+            let registryA = WebhookRegistry.createRegistryInstance blobs (Logger.recording ())
+            let registryB = WebhookRegistry.createRegistryInstance blobs (Logger.recording ())
 
             do! registryA.WireToChannel(channel, "instance-a", WebhookRegistry.secretCacheInvalidator storeA)
             do! registryB.WireToChannel(channel, "instance-b", WebhookRegistry.secretCacheInvalidator storeB)
@@ -227,10 +204,10 @@ let private fanoutTests =
             // unwired arm is the more important half of this case.
             let assertReceiverVerdict (wired: bool) = async {
                 let! secretsDir, blobs, storeA, storeB, sub = seedFleet ()
-                ignore secretsDir
+                use _ = secretsDir
 
-                let registryA = WebhookRegistry.createRegistryInstance blobs (RecordingLogger())
-                let registryB = WebhookRegistry.createRegistryInstance blobs (RecordingLogger())
+                let registryA = WebhookRegistry.createRegistryInstance blobs (Logger.recording ())
+                let registryB = WebhookRegistry.createRegistryInstance blobs (Logger.recording ())
 
                 if wired then
                     let channel = InMemoryNotificationChannel(None) :> INotificationChannel
@@ -275,10 +252,10 @@ let private fanoutTests =
             // deployment would count its own rotation as a sibling signal,
             // and ObservedRotationCount would stop being fanout evidence.
             let! secretsDir, blobs, storeA, _, sub = seedFleet ()
-            ignore secretsDir
+            use _ = secretsDir
 
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let registryA = WebhookRegistry.createRegistryInstance blobs (RecordingLogger())
+            let registryA = WebhookRegistry.createRegistryInstance blobs (Logger.recording ())
 
             do! registryA.WireToChannel(channel, "instance-a", WebhookRegistry.secretCacheInvalidator storeA)
 
@@ -303,11 +280,11 @@ let private fanoutTests =
             // they just dropped: churn with no rotation. A rotation that
             // cannot persist must be silent on the bus.
             let! secretsDir, blobs, storeA, storeB, _ = seedFleet ()
-            ignore secretsDir
+            use _ = secretsDir
 
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let registryA = WebhookRegistry.createRegistryInstance blobs (RecordingLogger())
-            let registryB = WebhookRegistry.createRegistryInstance blobs (RecordingLogger())
+            let registryA = WebhookRegistry.createRegistryInstance blobs (Logger.recording ())
+            let registryB = WebhookRegistry.createRegistryInstance blobs (Logger.recording ())
 
             do! registryA.WireToChannel(channel, "instance-a", WebhookRegistry.secretCacheInvalidator storeA)
             do! registryB.WireToChannel(channel, "instance-b", WebhookRegistry.secretCacheInvalidator storeB)
@@ -345,9 +322,9 @@ let private unwiredTests =
         testCaseAsync "an unwired rotation is counted and warned once per process at security class"
         <| async {
             let! secretsDir, blobs, storeA, _, sub = seedFleet ()
-            ignore secretsDir
+            use _ = secretsDir
 
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             let registry = WebhookRegistry.createRegistryInstance blobs logger
 
             Expect.isFalse registry.IsWiredToChannel "not wired before WireToChannel"
@@ -361,7 +338,8 @@ let private unwiredTests =
             Expect.equal registry.UnwiredRotateSecretCount 1 "the unwired rotation is counted"
 
             let warning =
-                logger.Warnings |> List.tryFind (fun w -> w.Contains "secret_rotation_unwired")
+                (logger.MessagesAt LogSeverity.Warn)
+                |> List.tryFind (fun w -> w.Contains "secret_rotation_unwired")
 
             match warning with
             | None -> failtest "no unwired-rotation warning emitted"
@@ -388,7 +366,7 @@ let private unwiredTests =
             Expect.equal registry.UnwiredRotateSecretCount 2 "every unwired rotation is counted"
 
             let warningCount =
-                logger.Warnings
+                (logger.MessagesAt LogSeverity.Warn)
                 |> List.filter (fun w -> w.Contains "secret_rotation_unwired")
                 |> List.length
 
@@ -401,9 +379,9 @@ let private unwiredTests =
             // the UNWIRED path specifically, rather than about rotations
             // in general.
             let! secretsDir, blobs, storeA, _, sub = seedFleet ()
-            ignore secretsDir
+            use _ = secretsDir
 
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
             let registry = WebhookRegistry.createRegistryInstance blobs logger
 
@@ -419,10 +397,11 @@ let private unwiredTests =
             Expect.equal registry.UnwiredRotateSecretCount 0 "a wired rotation is not counted as unwired"
 
             Expect.isEmpty
-                (logger.Warnings |> List.filter (fun w -> w.Contains "secret_rotation_unwired"))
+                ((logger.MessagesAt LogSeverity.Warn)
+                 |> List.filter (fun w -> w.Contains "secret_rotation_unwired"))
                 "a wired rotation emits no unwired warning"
 
-            Expect.isEmpty logger.Errors "a successful wired rotation logs no error"
+            Expect.isEmpty (logger.MessagesAt LogSeverity.Error) "a successful wired rotation logs no error"
         }
     ]
 
@@ -496,9 +475,9 @@ let private envelopeTests =
 
         testCaseAsync "FileSecretStore implements the invalidation seam, and InvalidateScope forces a re-read"
         <| async {
-            let dir = newTempDir ()
-            let writer = storeOver dir
-            let reader = storeOver dir
+            use dir = newTempDir ()
+            let writer = storeOver dir.Path
+            let reader = storeOver dir.Path
 
             do! writer.SetSecret(scopeId, "some-key", oldSecret) |> Async.Ignore
 
@@ -608,9 +587,10 @@ let private preflightGateTests =
     let wiredRegistry (channel: INotificationChannel) = async {
         let blobs = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
         let registry = WebhookRegistry.BlobWebhookRegistry(blobs)
-        let secrets = storeOver (newTempDir ())
+        let dir = newTempDir ()
+        let secrets = storeOver dir.Path
         do! registry.WireToChannel(channel, secrets)
-        return registry
+        return dir, registry
     }
 
     testList "preflight — rotation fanout gate" [
@@ -635,7 +615,8 @@ let private preflightGateTests =
         testCaseAsync "a registry wired to an IN-PROCESS channel under declared multi-instance is refused"
         <| async {
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let! registry = wiredRegistry channel
+            let! dir, registry = wiredRegistry channel
+            use _ = dir
             let sc = services (Some channel) (Some(registry :> IWebhookRegistry))
 
             match! validate multiReplica sc with
@@ -649,7 +630,8 @@ let private preflightGateTests =
         testCaseAsync "the SAME in-process configuration on ONE replica is Ok — there is no sibling to reach"
         <| async {
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let! registry = wiredRegistry channel
+            let! dir, registry = wiredRegistry channel
+            use _ = dir
             let sc = services (Some channel) (Some(registry :> IWebhookRegistry))
 
             match! validate ServerConfig.defaults sc with

@@ -52,6 +52,7 @@ open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -222,34 +223,6 @@ let private everyDoor = [
     FactTeamPublication
 ]
 
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 /// A verifier that refuses everything — the tamper arm of the signed profile.
 type private RefusingVerifier() =
     interface IArtefactVerifier with
@@ -372,7 +345,7 @@ let private worldWith (options: WorldOptions) : World =
                 }
             }
 
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
 
     let signer, verifier =
         match options.Signing with
@@ -1799,14 +1772,6 @@ type private HeldScheduler() =
         member _.TriggerOnce(_, _, _) = async { return Ok() }
         member _.NotifyEventWritten(_, _, _) = async { return () }
 
-let private quietLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let startupTests =
     testList "composition does no I/O" [
 
@@ -1879,7 +1844,7 @@ let startupTests =
             let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
 
             services
-                .AddSingleton<ILogger>(quietLogger)
+                .AddSingleton<ILogger>(Logger.silent)
                 .AddSingleton<IEventStore>(events)
                 .AddSingleton<IFactStore>(BlobFactStore.create (InMemoryBlobStorage()) events)
                 .AddSingleton<INotificationChannel>(

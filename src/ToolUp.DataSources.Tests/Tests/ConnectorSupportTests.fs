@@ -14,6 +14,7 @@ open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── ToolUp.DataSources.Common — always-on ────────────────────────
 //
@@ -96,8 +97,9 @@ let private credentialTests =
     testList "Credentials" [
         testCaseAsync "a pre-resolved context credential short-circuits the store"
         <| async {
-            let store = InMemorySecretStore()
-            store.Put("scope-1", "sql-credential", "from-store")
+            let secrets = TestSecretStore()
+            secrets.Seed("scope-1", "sql-credential", "from-store")
+            let store = ReadCountingSecretStore(secrets)
             let ctx = config "s1" "Sql" [] |> context "scope-1" (Some "from-context")
 
             let! resolved = Credentials.resolve (Some(store :> _)) ctx
@@ -111,8 +113,9 @@ let private credentialTests =
 
         testCaseAsync "an absent context credential falls back to the store, per call"
         <| async {
-            let store = InMemorySecretStore()
-            store.Put("scope-1", "sql-credential", "v1")
+            let secrets = TestSecretStore()
+            secrets.Seed("scope-1", "sql-credential", "v1")
+            let store = ReadCountingSecretStore(secrets)
             let ctx = config "s1" "Sql" [] |> context "scope-1" None
 
             let! first = Credentials.resolve (Some(store :> _)) ctx
@@ -121,7 +124,7 @@ let private credentialTests =
             // Rotation WITHOUT reconstructing anything is the whole
             // point of the thunk pattern — the second call must see
             // the new value.
-            store.Put("scope-1", "sql-credential", "v2")
+            secrets.Seed("scope-1", "sql-credential", "v2")
             let! second = Credentials.resolve (Some(store :> _)) ctx
             Expect.equal second (Ok "v2") "the rotated value is picked up on the next call"
             Expect.equal (store.ReadCount("scope-1", "sql-credential")) 2 "the store is read on EVERY call"
@@ -129,8 +132,8 @@ let private credentialTests =
 
         testCaseAsync "a blank stored value is CredentialMissing, not an empty credential"
         <| async {
-            let store = InMemorySecretStore()
-            store.Put("scope-1", "sql-credential", "   ")
+            let store = TestSecretStore()
+            store.Seed("scope-1", "sql-credential", "   ")
             let ctx = config "s1" "Sql" [] |> context "scope-1" None
 
             let! resolved = Credentials.resolve (Some(store :> _)) ctx
@@ -153,8 +156,8 @@ let private credentialTests =
 
         testCaseAsync "the store is scoped — another scope's secret is not visible"
         <| async {
-            let store = InMemorySecretStore()
-            store.Put("team-a", "sql-credential", "a-secret")
+            let store = TestSecretStore()
+            store.Seed("team-a", "sql-credential", "a-secret")
             let ctx = config "s1" "Sql" [] |> context "team-b" None
 
             let! resolved = Credentials.resolve (Some(store :> _)) ctx

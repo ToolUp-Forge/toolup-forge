@@ -6,6 +6,7 @@ open ToolUp.Platform.Scope.PeerBearerAuthMiddleware
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 // ─── Phase 317 — peer-auth posture advisory ──────────────────────────
 //
@@ -33,17 +34,9 @@ open ToolUp.Platform.Scope
 //      asserted, not merely its existence. Counting warnings would pass
 //      against a classifier that always returned the same posture.
 
-/// Captures `Warn` lines so the advisory is asserted as an emitted log
-/// line, not merely as a classification.
-type private RecordingLogger() =
-    let warnings = ResizeArray<string>()
-    member _.Warnings = List.ofSeq warnings
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn message = warnings.Add message
-        member _.Error(_, _) = ()
+/// The `Warn` lines a recording logger captured, so the advisory is
+/// asserted as an emitted log line, not merely as a classification.
+let private warnings (logger: TestLogger) = logger.MessagesAt LogSeverity.Warn
 
 /// A config differing from the defaults in exactly the two fields the
 /// classification reads, so every case below is a one- or two-field
@@ -216,13 +209,13 @@ let advisoryTests =
         }
 
         test "advisePeerAuthPosture emits exactly one Warn on the shadowing composition" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             advisePeerAuthPosture logger (configFor FeatureMode.Enabled [ "/peer/" ])
 
-            Expect.equal logger.Warnings.Length 1 "one line per start, not per request"
+            Expect.equal (warnings logger).Length 1 "one line per start, not per request"
 
             Expect.stringContains
-                logger.Warnings[0]
+                (List.item 0 (warnings logger))
                 "peer-auth-posture"
                 "the advisory carries a stable grep handle, matching the peer-audience-binding / peer-transport-tls lines"
         }
@@ -231,18 +224,18 @@ let advisoryTests =
             // One field different. Without this pair, "a warning was
             // emitted" would pass against an advisory that fired on
             // every peer-enabled deployment.
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             advisePeerAuthPosture logger (configFor FeatureMode.Enabled [ "/api/peer/echo" ])
 
-            Expect.isEmpty logger.Warnings "the documented coexistence must stay quiet"
+            Expect.isEmpty (warnings logger) "the documented coexistence must stay quiet"
         }
 
         test "CONTROL — the same prefix with the peer substrate off logs nothing" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             advisePeerAuthPosture logger (configFor FeatureMode.Disabled [ "/peer/" ])
 
             Expect.isEmpty
-                logger.Warnings
+                (warnings logger)
                 "warning about a collision with a host this deployment does not run is a warning about someone else's composition"
         }
 
@@ -252,7 +245,7 @@ let advisoryTests =
             // own behaviour is untouched: the static-bearer gate still
             // matches exactly the prefixes it did before.
             let config = configFor FeatureMode.Enabled [ "/peer/" ]
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             advisePeerAuthPosture logger config
 

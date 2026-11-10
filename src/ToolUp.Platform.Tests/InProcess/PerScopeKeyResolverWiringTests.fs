@@ -1,8 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.PerScopeKeyResolverWiringTests
 
 open System
-open System.Collections.Concurrent
-open System.IO
 open Expecto
 open Microsoft.Extensions.Caching.Memory
 open Microsoft.Extensions.DependencyInjection
@@ -14,6 +12,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 458 — crypto-shred fanout wiring: optional on one replica, ──
 //     required on more, and enforced rather than assumed
@@ -42,36 +41,13 @@ open ToolUp.Platform.Compose
 //   3. The wired/unwired state is readable at `/dev/inspect` without
 //      reading compose source.
 
-let private newTempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-458-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
-
-let private newSecretStore () : ISecretStore =
-    FileSecretStore.FileSecretStore(baseDir = newTempDir ()) :> ISecretStore
+let private newSecretStore (dir: TempDir) : ISecretStore =
+    FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
 let private newCache () : IMemoryCache =
     new MemoryCache(MemoryCacheOptions()) :> IMemoryCache
 
 let private scopeId = "offboarded-tenant"
-
-/// Recording `ILogger`. Only `Warn` is asserted on; the others are
-/// captured too so a message routed to the wrong level fails loudly
-/// instead of reading as "nothing was logged".
-type private RecordingLogger() =
-    let warnings = ConcurrentQueue<string>()
-    let others = ConcurrentQueue<string>()
-
-    member _.Warnings = warnings |> List.ofSeq
-    member _.Others = others |> List.ofSeq
-
-    interface ILogger with
-        member _.Debug m = others.Enqueue m
-        member _.Info m = others.Enqueue m
-        member _.Warn m = warnings.Enqueue m
-        member _.Error(m, _) = others.Enqueue m
 
 /// A channel this SDK has never heard of — the stand-in for a real
 /// distributed companion (Redis, NATS). The validator treats an
@@ -136,11 +112,12 @@ let unwiredDestroyTests =
 
         testCaseAsync "an unwired destroy logs a security-class warning naming the staleness window"
         <| async {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             use cache = newCache ()
+            use dir = TempDir.create "458-test"
 
             let resolver =
-                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache (NoOpAuditLog()) (logger :> ILogger)
+                PerScopeKeyResolver.createWithLogger (newSecretStore dir) cache (NoOpAuditLog()) (logger :> ILogger)
 
             // Create the key first, so the destroy is a real shred rather
             // than a delete of nothing.
@@ -155,9 +132,9 @@ let unwiredDestroyTests =
 
             Expect.isOk result "the shred itself still succeeds — the warning is additive, not a failure"
 
-            Expect.hasLength logger.Warnings 1 "exactly one warning for the first unwired destroy"
+            Expect.hasLength (logger.MessagesAt LogSeverity.Warn) 1 "exactly one warning for the first unwired destroy"
 
-            let warning = logger.Warnings |> List.head
+            let warning = (logger.MessagesAt LogSeverity.Warn) |> List.head
 
             Expect.stringContains
                 warning
@@ -178,18 +155,19 @@ let unwiredDestroyTests =
 
         testCaseAsync "the warning fires once per process; every unwired destroy is still counted"
         <| async {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             use cache = newCache ()
+            use dir = TempDir.create "458-test"
 
             let resolver =
-                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache (NoOpAuditLog()) (logger :> ILogger)
+                PerScopeKeyResolver.createWithLogger (newSecretStore dir) cache (NoOpAuditLog()) (logger :> ILogger)
 
             let! _ = resolver.DestroyKey("tenant-a", "admin@example.com")
             let! _ = resolver.DestroyKey("tenant-b", "admin@example.com")
             let! _ = resolver.DestroyKey("tenant-c", "admin@example.com")
 
             Expect.hasLength
-                logger.Warnings
+                (logger.MessagesAt LogSeverity.Warn)
                 1
                 "logged once — a shred loop over 500 offboarded tenants must not emit 500 identical warnings"
 
@@ -203,24 +181,31 @@ let unwiredDestroyTests =
         <| async {
             // Without this case, the assertions above could be satisfied by
             // a warning emitted on every destroy regardless of wiring.
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             use cache = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
+            use dir = TempDir.create "458-test"
 
             let resolver =
-                PerScopeKeyResolver.createWithLogger (newSecretStore ()) cache (NoOpAuditLog()) (logger :> ILogger)
+                PerScopeKeyResolver.createWithLogger (newSecretStore dir) cache (NoOpAuditLog()) (logger :> ILogger)
 
             do! resolver.WireToChannel channel
             let! _ = resolver.DestroyKey(scopeId, "admin@example.com")
 
-            Expect.isEmpty logger.Warnings "a wired resolver publishes the broadcast, so there is nothing to warn about"
+            Expect.isEmpty
+                (logger.MessagesAt LogSeverity.Warn)
+                "a wired resolver publishes the broadcast, so there is nothing to warn about"
+
             Expect.equal resolver.UnwiredDestroyKeyCount 0 "nothing unwired happened"
         }
 
         testCaseAsync "a logger-less resolver still counts unwired destroys (GP 11 — the 3-arg ctor is unchanged)"
         <| async {
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
 
             let! _ = resolver.DestroyKey(scopeId, "admin@example.com")
 
@@ -245,7 +230,10 @@ let wiringValidatorTests =
             // multi-instance in code — skipped the one hard-Error guard
             // over the crypto-shred contract.
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
 
             let v =
                 validator
@@ -274,7 +262,10 @@ let wiringValidatorTests =
             // would be evidence of nothing more than "PerScopeKeyResolver
             // present".
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
 
             let v =
                 validator
@@ -290,7 +281,11 @@ let wiringValidatorTests =
         <| withoutReplicaCountEnv (fun () -> async {
             use cache = newCache ()
             let channel = InMemoryNotificationChannel(None) :> INotificationChannel
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
+
             do! resolver.WireToChannel channel
 
             let v =
@@ -310,7 +305,11 @@ let wiringValidatorTests =
         <| withoutReplicaCountEnv (fun () -> async {
             use cache = newCache ()
             let channel = NoOpNotificationChannel() :> INotificationChannel
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
+
             do! resolver.WireToChannel channel
 
             let v =
@@ -328,7 +327,11 @@ let wiringValidatorTests =
         <| withoutReplicaCountEnv (fun () -> async {
             use cache = newCache ()
             let channel = FakeDistributedChannel() :> INotificationChannel
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
+
             do! resolver.WireToChannel channel
 
             let v =
@@ -348,7 +351,10 @@ let wiringValidatorTests =
 
             try
                 use cache = newCache ()
-                let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+                use dir = TempDir.create "458-test"
+
+                let resolver =
+                    PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
 
                 // Config says one replica; only the env var says otherwise.
                 let v =
@@ -373,7 +379,8 @@ let wiringValidatorTests =
 
         testCaseAsync "a non-per-scope resolver → Ok (SingleKeyResolver has no DestroyKey path)"
         <| withoutReplicaCountEnv (fun () -> async {
-            let resolver = SingleKeyResolver.create (newSecretStore ())
+            use dir = TempDir.create "458-test"
+            let resolver = SingleKeyResolver.create (newSecretStore dir)
             let v = validator (configWithReplicas 3) (Some resolver) (servicesWithChannel None)
 
             let! result = validate v
@@ -402,7 +409,10 @@ let wiringDiagnosticsTests =
         testCaseAsync "the panel reports unwired before WireToChannel and wired after"
         <| async {
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
 
             let contributor =
                 PerScopeKeyResolver.CryptoShredFanoutContributor(resolver) :> IDevDiagnosticsContributor
@@ -433,7 +443,10 @@ let wiringDiagnosticsTests =
         testCaseAsync "the panel surfaces unwired destroys that already happened"
         <| async {
             use cache = newCache ()
-            let resolver = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let resolver =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
 
             let contributor =
                 PerScopeKeyResolver.CryptoShredFanoutContributor(resolver) :> IDevDiagnosticsContributor
@@ -455,7 +468,10 @@ let wiringDiagnosticsTests =
         testCaseAsync "compose registers the panel for a per-scope resolver and not for a single-key one"
         <| async {
             use cache = newCache ()
-            let perScope = PerScopeKeyResolver.create (newSecretStore ()) cache (NoOpAuditLog())
+            use dir = TempDir.create "458-test"
+
+            let perScope =
+                PerScopeKeyResolver.create (newSecretStore dir) cache (NoOpAuditLog())
 
             let withPerScope = ServiceCollection() :> IServiceCollection
 
@@ -469,7 +485,8 @@ let wiringDiagnosticsTests =
             Expect.equal (contributorCount withPerScope) 1 "the crypto-shred panel is registered by compose"
 
             let withSingleKey = ServiceCollection() :> IServiceCollection
-            let single = SingleKeyResolver.create (newSecretStore ())
+            use singleDir = TempDir.create "458-test"
+            let single = SingleKeyResolver.create (newSecretStore singleDir)
             ComposeEncryption.registerEncryptionResolver withSingleKey (Some single)
 
             Expect.equal
@@ -493,25 +510,14 @@ let wiringDiagnosticsTests =
 
 /// A resolver over a real secret store pre-seeded with `stored` as this
 /// scope's key material, and the audit rows it records.
-let private resolverOver (stored: string) = async {
-    let secrets = newSecretStore ()
+let private resolverOver (dir: TempDir) (stored: string) = async {
+    let secrets = newSecretStore dir
     let! seeded = secrets.SetSecret("_platform", "encryption/scopes/" + scopeId + ".key", stored)
     Expect.isOk seeded "seeded the stored key"
-    let rows = ConcurrentQueue<string * AuditEvent>()
-
-    let audit =
-        { new IAuditLog with
-            member _.Record(AuditScope.StreamKey scope, _actor, event) = async {
-                rows.Enqueue(scope, event)
-                return Result.Ok()
-            }
-
-            member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-        }
-
+    let audit = TestAuditLog()
     let resolver = PerScopeKeyResolver.PerScopeKeyResolver(secrets, newCache (), audit)
 
-    return secrets, resolver :> IBlobEncryptionKeyResolver, rows
+    return secrets, resolver :> IBlobEncryptionKeyResolver, audit
 }
 
 let private storedValue (secrets: ISecretStore) =
@@ -542,7 +548,8 @@ let keyMaterialTests =
             ] do
             testCaseAsync (sprintf "%s is refused, not replaced" name)
             <| async {
-                let! secrets, resolver, rows = resolverOver stored
+                use dir = TempDir.create "458-test"
+                let! secrets, resolver, audit = resolverOver dir stored
                 let! result = tryResolve resolver
 
                 Expect.isError result "a key of the wrong length must not be handed out"
@@ -553,8 +560,8 @@ let keyMaterialTests =
                     "the stored material is untouched — no new key over the old"
 
                 let unreadable =
-                    rows
-                    |> List.ofSeq
+                    audit.Records
+                    |> List.map (fun r -> r.StreamKey, r.Event)
                     |> List.filter (fun (_, e) -> AuditEvent.eventTypeName e = "EncryptionKeyUnreadable")
 
                 match unreadable, lengthSeen with
@@ -567,8 +574,8 @@ let keyMaterialTests =
                 | other, _ -> failtestf "expected exactly one EncryptionKeyUnreadable row, got %A" other
 
                 Expect.isFalse
-                    (rows
-                     |> Seq.exists (fun (_, e) -> AuditEvent.eventTypeName e = "EncryptionKeyCreated"))
+                    (audit.Events
+                     |> List.exists (fun e -> AuditEvent.eventTypeName e = "EncryptionKeyCreated"))
                     "no key was created"
             }
     ]

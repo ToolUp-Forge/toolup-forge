@@ -2,7 +2,6 @@ module ToolUp.Platform.Tests.InProcess.AuditReplicatorTests
 
 open System
 open System.Collections.Concurrent
-open System.IO
 open System.Threading
 open Expecto
 open ToolUp.Platform
@@ -12,6 +11,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 // ─── Phase 9g AuditReplicator tests ─────────────────────────────────
 //
@@ -26,16 +26,6 @@ open ToolUp.Platform.Audit
 //      tight-loop dependence on the wall clock; the test passes as
 //      long as the dispatcher delivers within a generous 5-second
 //      window.
-
-/// `ILogger` that swallows everything. Production-style emission would
-/// inject a real logger; tests don't need to inspect log lines.
-let private silentLogger =
-    { new ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
-    }
 
 /// Empty audit log — the replicator's self-emission target. Tests
 /// exercising the dispatcher's audit emission would inspect a
@@ -55,12 +45,7 @@ let private makeAuditEvent (scopeId: string) (eventType: string) (offsetSecs: fl
     Payload = """{"UserId":"u1","AuthProvider":"Header"}"""
 }
 
-let private uniqueDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-audit-replicator-tests", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
+let private uniqueDir () = TempDir.create "audit-replicator-tests"
 
 let tests =
     testList "AuditReplicator" [
@@ -226,11 +211,11 @@ let tests =
 
         testCaseAsync "BlobAuditReplicatorCursorStore.Load returns empty when blob missing"
         <| async {
-            let dir = uniqueDir ()
-            let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = uniqueDir ()
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
-                BlobAuditReplicatorCursorStore(storage, silentLogger) :> IAuditReplicatorCursorStore
+                BlobAuditReplicatorCursorStore(storage, Logger.silent) :> IAuditReplicatorCursorStore
 
             let! cursor = store.Load("sink-x", "team-a")
 
@@ -239,11 +224,11 @@ let tests =
 
         testCaseAsync "BlobAuditReplicatorCursorStore.Save then Load round-trips the cursor"
         <| async {
-            let dir = uniqueDir ()
-            let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = uniqueDir ()
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
-                BlobAuditReplicatorCursorStore(storage, silentLogger) :> IAuditReplicatorCursorStore
+                BlobAuditReplicatorCursorStore(storage, Logger.silent) :> IAuditReplicatorCursorStore
 
             let original = {
                 LastDeliveredAt = DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc)
@@ -259,11 +244,11 @@ let tests =
 
         testCaseAsync "BlobAuditReplicatorCursorStore isolates per-(sinkName, scopeId)"
         <| async {
-            let dir = uniqueDir ()
-            let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = uniqueDir ()
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
             let store =
-                BlobAuditReplicatorCursorStore(storage, silentLogger) :> IAuditReplicatorCursorStore
+                BlobAuditReplicatorCursorStore(storage, Logger.silent) :> IAuditReplicatorCursorStore
 
             let cursorA = {
                 LastDeliveredAt = DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc)
@@ -291,12 +276,12 @@ let tests =
 
         testCaseAsync "AuditReplicator delivers audit events to registered sink end-to-end"
         <| async {
-            let dir = uniqueDir ()
-            let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = uniqueDir ()
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
             let innerStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let cursorStore =
-                BlobAuditReplicatorCursorStore(storage, silentLogger) :> IAuditReplicatorCursorStore
+                BlobAuditReplicatorCursorStore(storage, Logger.silent) :> IAuditReplicatorCursorStore
 
             let auditLog = NoOpAuditLog() :> IAuditLog
             let sink = InMemoryAuditSink "smoke-test"
@@ -321,7 +306,7 @@ let tests =
                     auditLog,
                     options,
                     AuditSamplingPolicy.none,
-                    silentLogger
+                    Logger.silent
                 )
 
             // Wrap inner store with the replicator's hook decorator.
@@ -366,12 +351,12 @@ let tests =
 
         testCaseAsync "AuditReplicator filters out replicator-self events"
         <| async {
-            let dir = uniqueDir ()
-            let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+            use dir = uniqueDir ()
+            let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
             let innerStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let cursorStore =
-                BlobAuditReplicatorCursorStore(storage, silentLogger) :> IAuditReplicatorCursorStore
+                BlobAuditReplicatorCursorStore(storage, Logger.silent) :> IAuditReplicatorCursorStore
 
             let auditLog = NoOpAuditLog() :> IAuditLog
             let sink = InMemoryAuditSink "filter-test"
@@ -393,7 +378,7 @@ let tests =
                     auditLog,
                     options,
                     AuditSamplingPolicy.none,
-                    silentLogger
+                    Logger.silent
                 )
 
             let hookedStore =

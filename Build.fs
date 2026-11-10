@@ -121,6 +121,35 @@ let main args =
 
     init args
 
+    // A VerifyAll runs every pack and leg under a temp root of its own: the
+    // children inherit TEMP / TMP / TMPDIR, so a fixture directory a run
+    // leaves behind lands there, where the temp hygiene check below finds it
+    // by family, rather than accumulating in the machine's temp directory
+    // (and a sibling session's directories in that shared root are never
+    // mistaken for this run's). The root is deleted when the driver exits.
+    let runTempRoot =
+        if flags.Target = "VerifyAll" then
+            let root =
+                Path.Combine(
+                    Path.GetTempPath(),
+                    $"{ToolUp.Platform.Testing.TempDir.Prefix}gate-{System.Guid.NewGuid():N}"
+                )
+
+            Directory.CreateDirectory root |> ignore
+
+            for name in [ "TEMP"; "TMP"; "TMPDIR" ] do
+                System.Environment.SetEnvironmentVariable(name, root)
+
+            System.AppDomain.CurrentDomain.ProcessExit.Add(fun _ ->
+                try
+                    Directory.Delete(root, true)
+                with _ ->
+                    ())
+
+            Some root
+        else
+            None
+
     // Phase 762 — name the lane once, so a log cannot be mistaken for a
     // full run. Silent under `full`, so the shipping gate's output is
     // byte-for-byte what it was.
@@ -225,6 +254,80 @@ let main args =
             Some(count "testcase", count "failure" + count "error", count "skipped")
         else
             None
+
+    /// The fixture families a run is allowed to leave behind, each with the
+    /// reason; empty, and it only shrinks (a listed family a full run did NOT
+    /// leave behind is itself a finding). A fixture whose directory must
+    /// outlive its case (a contract factory, a scheduler fixture) takes
+    /// `TempDir.forRun`, which the test process deletes when it exits.
+    let tempLeakAllowance: Map<string, string> = Map.empty
+
+    /// A fixture that creates a directory owns its deletion. After the packs
+    /// have run, every `TempDir`-shaped directory left in this run's temp root
+    /// is a fixture that did not dispose its directory: it is named by family
+    /// and removed, and a family outside `tempLeakAllowance` fails the check.
+    /// Under the full lane a listed family that left nothing fails it too.
+    /// Outside a VerifyAll run (no run temp root) there is nothing to read.
+    let runTempHygiene () : Verdict =
+        match runTempRoot with
+        | None -> Verdict.Pass None
+        | Some root ->
+            Trace.tracefn "▶ VerifyAll: TempHygiene (fixture directories the packs left in %s)" root
+
+            let left =
+                Directory.EnumerateDirectories root
+                |> Seq.choose (fun dir ->
+                    ToolUp.Platform.Testing.TempDir.familyOf (Path.GetFileName dir)
+                    |> Option.map (fun family -> family, dir))
+                |> List.ofSeq
+
+            let byFamily = left |> List.countBy fst |> List.sortBy fst
+
+            for family, count in byFamily do
+                Trace.tracefn "  TempHygiene: %s left %d director%s" family count (if count = 1 then "y" else "ies")
+
+            for _, dir in left do
+                try
+                    Directory.Delete(dir, true)
+                with ex ->
+                    Trace.traceImportant (sprintf "TempHygiene: could not remove %s: %s" dir ex.Message)
+
+            let leaked =
+                byFamily
+                |> List.filter (fun (family, _) -> not (tempLeakAllowance.ContainsKey family))
+
+            let stale =
+                if verifyLane = TestLane.Lane.Full then
+                    tempLeakAllowance
+                    |> Map.toList
+                    |> List.filter (fun (family, _) -> not (byFamily |> List.exists (fst >> (=) family)))
+                    |> List.map fst
+                else
+                    []
+
+            for family, count in leaked do
+                Trace.traceError (
+                    sprintf
+                        "TempHygiene: family '%s' left %d fixture director%s behind. Dispose it (`use dir = TempDir.create \"%s\"`); see docs/testing/temp-directories.md."
+                        family
+                        count
+                        (if count = 1 then "y" else "ies")
+                        family
+                )
+
+            for family in stale do
+                Trace.traceError (
+                    sprintf
+                        "TempHygiene: family '%s' is allowed to leak but a full run left nothing behind: remove it from tempLeakAllowance."
+                        family
+                )
+
+            match leaked, stale with
+            | [], [] -> Verdict.Pass None
+            | _ ->
+                Verdict.Fail(
+                    sprintf "%d leaking famil(ies), %d stale allowance(s), named above." leaked.Length stale.Length
+                )
 
     /// Every test project runs or is excluded by name, and `gate-reads.json`
     /// is the render of the manifest's read declarations. Pure file reading
@@ -3899,7 +4002,16 @@ let main args =
     // `VerifyAll` folds the selected `Local` rows and names the rest in its
     // trailer. A new gate is a row in GateManifest.fs and one binding here.
     let bodies: GateManifest.Bodies = {
-        GateReconcile = runGateReconcile
+        // The temp hygiene check rides the GateReconcile leg: the first leg
+        // after the packs, in every lane, and the gate's other "the run
+        // reconciles with the tree" check.
+        GateReconcile =
+            fun () ->
+                match runGateReconcile (), runTempHygiene () with
+                | Verdict.Fail a, Verdict.Fail b -> Verdict.Fail(a + " " + b)
+                | Verdict.Fail a, _
+                | _, Verdict.Fail a -> Verdict.Fail a
+                | reconciled, _ -> reconciled
         Fable =
             fun () ->
                 Trace.tracefn "▶ VerifyAll: Fable (src/ToolUp.AI.Client.Tests, via the VerifyFable recipe)"

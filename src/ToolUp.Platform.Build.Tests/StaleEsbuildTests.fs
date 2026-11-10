@@ -8,6 +8,7 @@ open System.Diagnostics
 open System.IO
 open Expecto
 open ToolUp.Platform.Build
+open ToolUp.Platform.Testing
 
 // ─── Phase 1108 — a build stops only its own project's esbuild ───
 //
@@ -69,18 +70,8 @@ let private startEsbuildIn (dir: string) =
 let private waitGone (p: Process) = p.WaitForExit 10000
 
 let private withScratch (f: string -> unit) =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-1108-" + Guid.NewGuid().ToString "N")
-
-    Directory.CreateDirectory root |> ignore
-
-    try
-        f root
-    finally
-        try
-            Directory.Delete(root, true)
-        with _ ->
-            ()
+    use scratch = TempDir.create "stale-esbuild"
+    f scratch.Path
 
 /// Run `body` with a project's node_modules and a decoy directory, killing
 /// whatever the case left running afterwards.

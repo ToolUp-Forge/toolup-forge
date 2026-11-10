@@ -10,6 +10,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 441 — send-path filter + digest job ────────────────────────
 //
@@ -33,34 +34,12 @@ type private CapturingChannel() =
         member _.Subscribe(_, _) = async { return (Guid.NewGuid(): NotificationSubscriptionId) }
         member _.Unsubscribe _ = async { () }
 
-type private CapturingAuditLog() =
-    let events = ConcurrentQueue<string * AuditEvent>()
-
-    member _.Skips =
-        events
-        |> Seq.choose (fun (_, e) ->
-            match e with
-            | NotificationSilentlySkipped p -> Some p
-            | _ -> None)
-        |> Seq.toList
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            events.Enqueue((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
-
-type private CapturingLogger() =
-    let lines = ConcurrentQueue<string>()
-    member _.Lines = lines |> Seq.toList
-
-    interface ILogger with
-        member _.Debug m = lines.Enqueue("DEBUG " + m)
-        member _.Info m = lines.Enqueue("INFO " + m)
-        member _.Warn m = lines.Enqueue("WARN " + m)
-        member _.Error(m, _) = lines.Enqueue("ERROR " + m)
+/// The silently-skipped notifications an audit log recorded.
+let private skips (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (function
+        | NotificationSilentlySkipped p -> Some p
+        | _ -> None)
 
 /// A store whose `Enqueue` always fails — the fail-open probe.
 type private EnqueueFailingStore(inner: INotificationPreferenceStore) =
@@ -104,21 +83,21 @@ let private recipientsOf (n: Notification) =
 type private Harness = {
     Store: INotificationPreferenceStore
     Inner: CapturingChannel
-    Audit: CapturingAuditLog
-    Logger: CapturingLogger
+    Audit: TestAuditLog
+    Logger: TestLogger
     Filter: INotificationChannel
 }
 
 let private harnessAt (now: DateTime) (store: INotificationPreferenceStore option) : Harness =
     let blobs = InMemoryBlobStorage() :> IBlobStorage
-    let logger = CapturingLogger()
+    let logger = Logger.recording ()
 
     let store =
         store
         |> Option.defaultWith (fun () -> BlobNotificationPreferenceStore.create blobs (Some(logger :> ILogger)))
 
     let inner = CapturingChannel()
-    let audit = CapturingAuditLog()
+    let audit = TestAuditLog()
 
     let filter =
         NotificationPreferenceFilter(inner, store, categories, (audit :> IAuditLog), logger, (fun () -> now), utcOnly)
@@ -212,7 +191,7 @@ let tests =
                 savePrefs h "alice" (cell "reports.summary" PreferenceChannel.Email Muted)
                 h.Filter.Publish(scope, email [ "alice" ]) |> Async.RunSynchronously
                 Expect.equal h.Inner.Published [ scope, email [ "alice" ] ] "delivered as published"
-                Expect.isEmpty h.Audit.Skips "nothing audited"
+                Expect.isEmpty (skips h.Audit) "nothing audited"
             }
 
             test "an in-app notification passes through even inside a category scope" {
@@ -227,7 +206,7 @@ let tests =
                 savePrefs h "alice" (cell "reports.summary" PreferenceChannel.Email Muted)
                 publishAs h "reports.summary" (email [ "alice" ]) |> Async.RunSynchronously
                 Expect.isEmpty h.Inner.Published "nothing delivered"
-                let skip = Expect.wantSome (List.tryHead h.Audit.Skips) "one skip audit"
+                let skip = Expect.wantSome (List.tryHead (skips h.Audit)) "one skip audit"
                 Expect.equal skip.Reason NotificationPreferenceFilter.MutedReason "reason"
                 Expect.equal skip.NotificationKind "Email" "channel family"
                 Expect.equal skip.ScopeId scope "scope"
@@ -270,7 +249,7 @@ let tests =
                 Expect.equal item.QueuedAt t0 "queued at the filter's clock"
 
                 Expect.equal
-                    (h.Audit.Skips |> List.map _.Reason)
+                    (skips h.Audit |> List.map _.Reason)
                     [ NotificationPreferenceFilter.DigestQueuedReason ]
                     "audited"
             }
@@ -295,7 +274,7 @@ let tests =
                 Expect.isEmpty aliceHeld "alice dropped, not held"
 
                 Expect.equal
-                    (h.Audit.Skips |> List.map _.Reason |> List.sort)
+                    (skips h.Audit |> List.map _.Reason |> List.sort)
                     (List.sort [
                         NotificationPreferenceFilter.MutedReason
                         NotificationPreferenceFilter.DigestQueuedReason
@@ -318,7 +297,7 @@ let tests =
                     "released at 07:00 UTC next day"
 
                 Expect.equal
-                    (h.Audit.Skips |> List.map _.Reason)
+                    (skips h.Audit |> List.map _.Reason)
                     [ NotificationPreferenceFilter.QuietHoursDeferredReason ]
                     "audited"
             }
@@ -328,7 +307,7 @@ let tests =
                 savePrefs h "alice" (quiet 1320 420 "UTC")
                 publishAs h "reports.summary" (email [ "alice" ]) |> Async.RunSynchronously
                 Expect.equal (List.length h.Inner.Published) 1 "delivered"
-                Expect.isEmpty h.Audit.Skips "nothing audited"
+                Expect.isEmpty (skips h.Audit) "nothing audited"
             }
 
             test "an unresolvable time zone disables quiet hours rather than holding mail" {
@@ -355,7 +334,7 @@ let tests =
                 |> Async.RunSynchronously
 
                 Expect.equal h.Inner.Published [ scope, email [ "alice" ] ] "delivered untouched"
-                Expect.isEmpty h.Audit.Skips "nothing audited"
+                Expect.isEmpty (skips h.Audit) "nothing audited"
             }
 
             test "a category no module declared is still governed (treated as suppressible)" {
@@ -363,7 +342,7 @@ let tests =
                 savePrefs h "alice" (cell "undeclared.thing" PreferenceChannel.Email Muted)
                 publishAs h "undeclared.thing" (email [ "alice" ]) |> Async.RunSynchronously
                 Expect.isEmpty h.Inner.Published "muted"
-                Expect.isTrue (h.Logger.Lines |> List.exists (fun l -> l.Contains "not declared")) "logged"
+                Expect.isTrue (h.Logger.Contains "not declared") "logged"
             }
 
             test "a hold that cannot be written delivers now (fail open) with a warning" {
@@ -376,8 +355,8 @@ let tests =
                 savePrefs h "alice" (cell "reports.summary" PreferenceChannel.Email (Digest Daily))
                 publishAs h "reports.summary" (email [ "alice" ]) |> Async.RunSynchronously
                 Expect.equal (List.length h.Inner.Published) 1 "delivered rather than lost"
-                Expect.isEmpty h.Audit.Skips "not audited as held"
-                Expect.isTrue (h.Logger.Lines |> List.exists (fun l -> l.StartsWith "WARN")) "warned"
+                Expect.isEmpty (skips h.Audit) "not audited as held"
+                Expect.isTrue (not (List.isEmpty (h.Logger.MessagesAt LogSeverity.Warn))) "warned"
             }
 
             test "Subscribe and Unsubscribe delegate to the inner channel" {

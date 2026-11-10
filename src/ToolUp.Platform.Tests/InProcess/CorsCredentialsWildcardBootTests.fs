@@ -9,6 +9,7 @@ open ToolUp.Platform.Compose.ComposeRuntimeServices
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Compose.ConfigValidatorAggregator
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 // ─── Phase 462 — CORS credentials × wildcard: refuse at boot ─────────
 //
@@ -29,20 +30,6 @@ open ToolUp.Platform.Config
 //   C. a legal explicit-origins + credentials config is unaffected —
 //      it boots and the policy really does carry credentials (GP 11).
 
-/// Captures `Error` lines so the refusal's operator-facing message can be
-/// asserted on the log path as well as on the exception.
-type private RecordingLogger() =
-    let errors = ResizeArray<string>()
-    member _.Errors = List.ofSeq errors
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(message, _) = errors.Add message
-
-let private logger () = RecordingLogger()
-
 let private withCors (cors: CorsConfig) = {
     ServerConfig.defaults with
         SecurityPosture = {
@@ -58,7 +45,7 @@ let private isEmptyCollection (services: ServiceCollection) =
 /// way the CORS middleware resolves it at request time.
 let private registeredPolicy (config: ServerConfig) : CorsPolicy =
     let services = ServiceCollection()
-    registerCors services config (logger () :> ILogger)
+    registerCors services config Logger.silent
 
     use provider = services.BuildServiceProvider()
     let options = provider.GetRequiredService<IOptions<CorsOptions>>().Value
@@ -77,7 +64,7 @@ let tests =
                     AllowCredentials = true
                 }
 
-            let log = logger ()
+            let log = Logger.recording ()
             let services = ServiceCollection()
 
             let message =
@@ -98,7 +85,10 @@ let tests =
 
             Expect.stringContains message "AllowCredentials = false" "message shows the drop-credentials remedy"
 
-            Expect.equal log.Errors [ message ] "the refusal is logged at Error before it is raised"
+            Expect.equal
+                (log.MessagesAt LogSeverity.Error)
+                [ message ]
+                "the refusal is logged at Error before it is raised"
 
             // The refusal precedes registration in `compose`, so nothing
             // was registered by the time it fired.
@@ -130,7 +120,7 @@ let tests =
             let config = withCors CorsConfig.permissive
 
             // Legal shape — no refusal.
-            assertCorsCredentialsCompatible config (logger () :> ILogger)
+            assertCorsCredentialsCompatible config Logger.silent
 
             let policy = registeredPolicy config
 
@@ -159,7 +149,7 @@ let tests =
             let config =
                 withCors (CorsConfig.forOrigins [ "https://app.example.com"; "https://staging.example.com" ])
 
-            assertCorsCredentialsCompatible config (logger () :> ILogger)
+            assertCorsCredentialsCompatible config Logger.silent
 
             let policy = registeredPolicy config
 
@@ -175,10 +165,10 @@ let tests =
         <| fun _ ->
             let config = ServerConfig.defaults
 
-            assertCorsCredentialsCompatible config (logger () :> ILogger)
+            assertCorsCredentialsCompatible config Logger.silent
 
             let services = ServiceCollection()
-            registerCors services config (logger () :> ILogger)
+            registerCors services config Logger.silent
 
             Expect.isTrue (isEmptyCollection services) "a deployment without CORS pays nothing (GP 13)"
     ]

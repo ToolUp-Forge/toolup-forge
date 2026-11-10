@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.ConfigMigrationTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -9,6 +8,7 @@ open ToolUp.Platform.Config.ConfigMigrationRegistry
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 10b — configuration schema evolution ──────────────────
 //
@@ -36,25 +36,6 @@ open ToolUp.Platform.Compose
 // NOT yet shipped a migrator for).
 
 // ─── Fixtures ────────────────────────────────────────────────────
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(_) = ()
-        member _.Error(_, _) = ()
-
-/// Captures Warn lines so the failure-policy test can assert the
-/// operator actually gets told, not merely that an event was written.
-type private CapturingLogger() =
-    let warnings = ResizeArray<string>()
-    member _.Warnings = List.ofSeq warnings
-
-    interface ILogger with
-        member _.Debug(_) = ()
-        member _.Info(_) = ()
-        member _.Warn(msg) = warnings.Add msg
-        member _.Error(_, _) = ()
 
 /// A migrator built from a plain map function, so a test states only
 /// the version pair and the transformation.
@@ -122,12 +103,8 @@ type private InMemoryConfigStore() =
                 }
         }
 
-let private tempStorage () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-configmig-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private tempStorage (dir: TempDir) =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 let private scope: StorageScope = {
     ScopeId = "team-acme"
@@ -153,13 +130,19 @@ let private entry (moduleKey: string) (version: int) (fields: ConfigFieldSchema 
 }
 
 /// A decorated store over a real blob-backed inner store, plus the
-/// handles a test needs to see behind the decorator.
+/// handles a test needs to see behind the decorator. Disposing it deletes
+/// the scratch directory the harness made for its inner store, if any.
 type private Harness = {
     Store: IConfigStore
     Inner: IConfigStore
     Events: IEventStore
     Support: ConfigMigrationSupport
-}
+    Scratch: TempDir option
+} with
+
+    interface IDisposable with
+        member this.Dispose() =
+            this.Scratch |> Option.iter (fun dir -> (dir :> IDisposable).Dispose())
 
 let private harnessWith
     (inner: IConfigStore)
@@ -182,10 +165,16 @@ let private harnessWith
         Inner = inner
         Events = events
         Support = support
+        Scratch = None
     }
 
 let private harness (entries: ModuleConfigEntry list) (migrators: IConfigMigrator list) : Harness =
-    harnessWith (ConfigStore.create (tempStorage ())) (SilentLogger() :> ILogger) entries migrators
+    let dir = TempDir.create "configmig-test"
+
+    let h =
+        harnessWith (ConfigStore.create (tempStorage dir)) Logger.silent entries migrators
+
+    { h with Scratch = Some dir }
 
 /// Seed a document straight into the inner store, bypassing the
 /// decorator — the "written by an older release" starting state every
@@ -223,7 +212,7 @@ let private renameMigration =
                             | None -> values
                     )
 
-                let h = harness [ v2 ] [ renamer :> IConfigMigrator ]
+                use h = harness [ v2 ] [ renamer :> IConfigMigrator ]
 
                 // A V1 document: the old key, and no version stamp at
                 // all — which is what every document written before this
@@ -292,7 +281,7 @@ let private renameMigration =
                             |> Map.add "model" (v.TryFind "tmp" |> Option.defaultValue "\"?\"")
                     )
 
-                let h =
+                use h =
                     harness [ v3 ] [ oneToTwo :> IConfigMigrator; twoToThree :> IConfigMigrator ]
 
                 let v1Schema = ModuleConfigSchema.ofFields [ stringField "model_id" "\"default\"" ]
@@ -319,7 +308,7 @@ let private renameMigration =
                 let poison =
                     TestConfigMigrator("Assistant", 1, 2, fun v -> v |> Map.add "model" "\"CORRUPTED\"")
 
-                let h = harness [ v2 ] [ poison :> IConfigMigrator ]
+                use h = harness [ v2 ] [ poison :> IConfigMigrator ]
 
                 do!
                     seed
@@ -348,10 +337,11 @@ let private failurePolicy =
             async {
                 let v2 = entry "Assistant" 2 [ stringField "model" "\"default\"" ]
                 let thrower = ThrowingConfigMigrator("Assistant", 1, 2)
-                let logger = CapturingLogger()
+                let logger = Logger.recording ()
+                use dir = TempDir.create "configmig-test"
 
                 let h =
-                    harnessWith (ConfigStore.create (tempStorage ())) (logger :> ILogger) [ v2 ] [
+                    harnessWith (ConfigStore.create (tempStorage dir)) (logger :> ILogger) [ v2 ] [
                         thrower :> IConfigMigrator
                     ]
 
@@ -390,10 +380,13 @@ let private failurePolicy =
                     ConfigMigrationEvents.SourceModule
                     "the event is filed under the reserved _platform.config source"
 
-                Expect.isNonEmpty logger.Warnings "the operator gets a Warn line, not just an event"
+                Expect.isNonEmpty
+                    (logger.MessagesAt LogSeverity.Warn)
+                    "the operator gets a Warn line, not just an event"
 
                 Expect.isTrue
-                    (logger.Warnings |> List.exists (fun w -> w.Contains "Assistant"))
+                    (logger.MessagesAt LogSeverity.Warn
+                     |> List.exists (fun w -> w.Contains "Assistant"))
                     "the Warn line names the module whose migration failed"
             }
             |> Async.RunSynchronously
@@ -408,7 +401,7 @@ let private failurePolicy =
 
                 let twoToThree = ThrowingConfigMigrator("Assistant", 2, 3)
 
-                let h =
+                use h =
                     harness [ v3 ] [ oneToTwo :> IConfigMigrator; twoToThree :> IConfigMigrator ]
 
                 let v1Schema = ModuleConfigSchema.ofFields [ stringField "model" "\"default\"" ]
@@ -444,7 +437,7 @@ let private failurePolicy =
                 let bad =
                     TestConfigMigrator("Assistant", 1, 2, fun v -> v |> Map.add "not_in_schema" "\"x\"")
 
-                let h = harness [ v2 ] [ bad :> IConfigMigrator ]
+                use h = harness [ v2 ] [ bad :> IConfigMigrator ]
 
                 let v1Schema = ModuleConfigSchema.ofFields [ stringField "model" "\"default\"" ]
                 do! seed h "Assistant" v1Schema (Map.ofList [ "model", "\"claude\"" ])
@@ -467,7 +460,7 @@ let private failurePolicy =
                 // Declares V2 but registers nothing — the "released the
                 // schema, forgot the migrator" case.
                 let v2 = entry "Assistant" 2 [ stringField "model" "\"default\"" ]
-                let h = harness [ v2 ] []
+                use h = harness [ v2 ] []
 
                 let v1Schema = ModuleConfigSchema.ofFields [ stringField "model" "\"default\"" ]
                 do! seed h "Assistant" v1Schema (Map.ofList [ "model", "\"claude\"" ])
@@ -487,14 +480,15 @@ let private failurePolicy =
 /// the shape `IJobSchedulerContract` and its siblings established, and
 /// the only shape under which "honoured by ALL implementations" is a
 /// checked claim rather than a convention.
-let private reservedKeyContractFor (name: string) (makeInner: unit -> IConfigStore) =
+let private reservedKeyContractFor (name: string) (makeInner: TempDir -> IConfigStore) =
     testList name [
 
         testCase "a version-1 schema writes no stamp (adoption is free)"
         <| fun _ ->
             async {
                 let v1 = entry "Plain" 1 [ stringField "a" "\"\"" ]
-                let h = harnessWith (makeInner ()) (SilentLogger() :> ILogger) [ v1 ] []
+                use dir = TempDir.create "configmig-test"
+                let h = harnessWith (makeInner dir) Logger.silent [ v1 ] []
 
                 let! result = h.Store.SetRaw(scope, "Plain", Map.ofList [ "a", "\"x\"" ], v1.Schema)
                 Expect.isOk result "the write succeeds"
@@ -511,7 +505,8 @@ let private reservedKeyContractFor (name: string) (makeInner: unit -> IConfigSto
         <| fun _ ->
             async {
                 let v2 = entry "Versioned" 2 [ stringField "a" "\"\"" ]
-                let h = harnessWith (makeInner ()) (SilentLogger() :> ILogger) [ v2 ] []
+                use dir = TempDir.create "configmig-test"
+                let h = harnessWith (makeInner dir) Logger.silent [ v2 ] []
 
                 let! result = h.Store.SetRaw(scope, "Versioned", Map.ofList [ "a", "\"x\"" ], v2.Schema)
                 Expect.isOk result "the write succeeds despite the reserved key not being a schema field"
@@ -529,7 +524,8 @@ let private reservedKeyContractFor (name: string) (makeInner: unit -> IConfigSto
         <| fun _ ->
             async {
                 let v2 = entry "Versioned" 2 [ stringField "a" "\"\"" ]
-                let h = harnessWith (makeInner ()) (SilentLogger() :> ILogger) [ v2 ] []
+                use dir = TempDir.create "configmig-test"
+                let h = harnessWith (makeInner dir) Logger.silent [ v2 ] []
 
                 do!
                     seed
@@ -552,7 +548,8 @@ let private reservedKeyContractFor (name: string) (makeInner: unit -> IConfigSto
         <| fun _ ->
             async {
                 let v2 = entry "Versioned" 2 [ stringField "a" "\"\"" ]
-                let h = harnessWith (makeInner ()) (SilentLogger() :> ILogger) [ v2 ] []
+                use dir = TempDir.create "configmig-test"
+                let h = harnessWith (makeInner dir) Logger.silent [ v2 ] []
 
                 // Someone hands the store a document claiming version 99.
                 let! result =
@@ -577,8 +574,8 @@ let private reservedKeyContractFor (name: string) (makeInner: unit -> IConfigSto
 
 let private reservedKeyContract =
     testList "the _schema_version reserved key is honoured by every implementation" [
-        reservedKeyContractFor "blob-backed (the shipped default)" (fun () -> ConfigStore.create (tempStorage ()))
-        reservedKeyContractFor "in-memory (an implementation that knows nothing about the substrate)" (fun () ->
+        reservedKeyContractFor "blob-backed (the shipped default)" (fun dir -> ConfigStore.create (tempStorage dir))
+        reservedKeyContractFor "in-memory (an implementation that knows nothing about the substrate)" (fun _ ->
             InMemoryConfigStore() :> IConfigStore)
     ]
 
@@ -671,7 +668,7 @@ let private driftObservability =
                 // the version was not even bumped. This is precisely the
                 // silent case the gap audit names.
                 let v1 = entry "Assistant" 1 [ stringField "model" "\"default\"" ]
-                let h = harness [ v1 ] []
+                use h = harness [ v1 ] []
 
                 do!
                     seed
@@ -712,7 +709,7 @@ let private driftObservability =
                 // that is the normal case, not drift. Counting it would
                 // bury the real signal under one row per module per read.
                 let v1 = entry "Assistant" 1 [ stringField "model" "\"default\"" ]
-                let h = harness [ v1 ] []
+                use h = harness [ v1 ] []
 
                 let! _ = h.Store.GetRaw(scope, "Assistant")
 
@@ -724,7 +721,7 @@ let private driftObservability =
         <| fun _ ->
             async {
                 let v1 = entry "Assistant" 1 [ stringField "model" "\"default\"" ]
-                let h = harness [ v1 ] []
+                use h = harness [ v1 ] []
 
                 do! seed h "Assistant" v1.Schema (Map.ofList [ "model", "\"claude\"" ])
                 let! _ = h.Store.GetRaw(scope, "Assistant")
@@ -749,7 +746,7 @@ let private driftObservability =
                             | None -> v
                     )
 
-                let h = harness [ v2 ] [ renamer :> IConfigMigrator ]
+                use h = harness [ v2 ] [ renamer :> IConfigMigrator ]
 
                 do!
                     seed
@@ -771,7 +768,7 @@ let private driftObservability =
         <| fun _ ->
             async {
                 let v1 = entry "Assistant" 1 [ stringField "model" "\"default\"" ]
-                let h = harness [ v1 ] []
+                use h = harness [ v1 ] []
 
                 do!
                     seed
@@ -795,7 +792,7 @@ let private driftObservability =
             async {
                 let v2 = entry "Assistant" 2 [ stringField "model" "\"default\"" ]
 
-                let h =
+                use h =
                     harness [ v2 ] [ TestConfigMigrator("Assistant", 1, 2, id) :> IConfigMigrator ]
 
                 let contributor =

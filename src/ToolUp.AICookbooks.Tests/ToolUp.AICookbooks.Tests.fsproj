@@ -5,6 +5,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\ToolUp.Platform.Testing\Testing\Recording.fs" Link="Testing\Recording.fs" />
+    <Compile Include="..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
+    <Compile Include="..\ToolUp.Platform.Testing\Testing\Loggers.fs" Link="Testing\Loggers.fs" />
     <Compile Include="LicensingBoundaryTests.fs" />
     <Compile Include="PackageReferenceDeliveryTests.fs" />
     <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from

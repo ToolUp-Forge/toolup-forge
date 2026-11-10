@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.EntityOutboxTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -10,6 +9,7 @@ open ToolUp.Platform.Infra.EntityStore
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 599 — entity-write outbox ─────────────────────────────────
 //
@@ -20,14 +20,6 @@ open ToolUp.Platform.Infra
 // are simulated by staging state directly and running the relay over a
 // fresh `OutboxEntityStore` instance — the blob substrate is the only
 // state that survives a real process death.
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 type LedgerEntry = {
     Id: string
@@ -63,12 +55,8 @@ type private FaultingEventStore() =
 /// Shared substrate: LocalFileStorage root + entity store + registry.
 /// `mkOutbox` binds a (possibly different) event store + relay windows
 /// over the same substrate — the "restarted process" in crash tests.
-let private fixture () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-entity-outbox-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private fixture (root: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<LedgerEntry>(EntityRegistration.create<LedgerEntry> LedgerType)
@@ -81,7 +69,7 @@ let private fixture () =
             entityStore,
             eventStore,
             blob,
-            silentLogger,
+            Logger.silent,
             settleWindow = settle,
             abandonWindow = abandon
         )
@@ -100,7 +88,8 @@ let tests =
 
         testCaseAsync "happy path: entity saved, events published, no intent left behind"
         <| async {
-            let _, entityStore, mkOutbox = fixture ()
+            use root = TempDir.create "entity-outbox-tests"
+            let _, entityStore, mkOutbox = fixture root
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let outbox =
@@ -134,7 +123,8 @@ let tests =
 
         testCaseAsync "event-store outage at save time: entity commits, relay publishes on recovery"
         <| async {
-            let _, entityStore, mkOutbox = fixture ()
+            use root = TempDir.create "entity-outbox-tests"
+            let _, entityStore, mkOutbox = fixture root
             let scope = scopeFor ()
 
             // Save while the event store is down.
@@ -175,7 +165,8 @@ let tests =
 
         testCaseAsync "a failed save withdraws its intent and publishes nothing"
         <| async {
-            let _, _, mkOutbox = fixture ()
+            use root = TempDir.create "entity-outbox-tests"
+            let _, _, mkOutbox = fixture root
             let scope = scopeFor ()
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
@@ -210,7 +201,8 @@ let tests =
 
         testCaseAsync "relay discards an abandoned unwitnessed intent without publishing"
         <| async {
-            let blob, _, mkOutbox = fixture ()
+            use root = TempDir.create "entity-outbox-tests"
+            let blob, _, mkOutbox = fixture root
             let scope = scopeFor ()
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
@@ -251,7 +243,8 @@ let tests =
 
         testCaseAsync "relay publishes a crash-orphaned intent once the save is version-witnessed"
         <| async {
-            let blob, entityStore, mkOutbox = fixture ()
+            use root = TempDir.create "entity-outbox-tests"
+            let blob, entityStore, mkOutbox = fixture root
             let scope = scopeFor ()
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 

@@ -8,6 +8,7 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 700 — deployment configuration profiles ────────────────────
 //
@@ -117,18 +118,8 @@ let private parseRefusal (source: string) =
     | Ok _ -> failtest "expected the manifest to be refused, but it parsed"
 
 let private withTempRoot (body: string -> unit) =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-prof-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-
-    try
-        body dir
-    finally
-        try
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
+    use dir = TempDir.create "prof"
+    body dir.Path
 
 /// A minimal well-formed consumer profile, parameterised by whatever the
 /// case under test wants to break.

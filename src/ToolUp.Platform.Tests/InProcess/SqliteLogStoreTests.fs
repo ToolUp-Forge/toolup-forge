@@ -9,6 +9,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 828 — ILogStore conformance + the SQLite default's own laws ──
 //
@@ -53,8 +54,7 @@ type private InMemoryLogStore() =
 
 // ── temp-file plumbing for the SQLite binding ───────────────────────────
 
-let private root =
-    Path.Combine(Path.GetTempPath(), "toolup-logstore-828", Guid.NewGuid().ToString "N")
+let private root = TempDir.create "logstore-828"
 
 /// Every store the SQLite binding opened, so the last case in the list can
 /// close the connections and delete the directory. Expecto runs this pack
@@ -67,7 +67,7 @@ let private openStoreAt (path: string) : ILogStore =
     store
 
 let private sqliteFactory () : ILogStore =
-    openStoreAt (Path.Combine(root, Guid.NewGuid().ToString "N", "logs.db"))
+    openStoreAt (Path.Combine(root.Path, Guid.NewGuid().ToString "N", "logs.db"))
 
 let private closeAll () =
     lock opened (fun () ->
@@ -124,7 +124,7 @@ let tests =
 
         testCaseAsync "SqliteLogStore — entries survive closing and reopening the same file"
         <| async {
-            let path = Path.Combine(root, Guid.NewGuid().ToString "N", "durable.db")
+            let path = Path.Combine(root.Path, Guid.NewGuid().ToString "N", "durable.db")
             let first = openStoreAt path
             do! first.Append(line 10.0 "written before the restart")
             (first :?> IDisposable).Dispose()
@@ -185,9 +185,7 @@ let tests =
         testCase "the temp databases are closed and removed"
         <| fun () ->
             closeAll ()
+            (root :> IDisposable).Dispose()
 
-            if Directory.Exists root then
-                Directory.Delete(root, true)
-
-            Expect.isFalse (Directory.Exists root) "no temp database directory is left behind"
+            Expect.isFalse (Directory.Exists root.Path) "no temp database directory is left behind"
     ]

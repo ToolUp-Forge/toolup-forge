@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.KnowledgeUserScopeIsolationTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -11,6 +10,7 @@ open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // GAP-1 regression pack (Investigate-Gaps 2026-07-07): before the fix,
 // every non-team caller (Individual mode, AuthenticatedEphemeral,
@@ -22,13 +22,6 @@ open ToolUp.Platform.Compose
 // `AccessContext.UserId`. These tests pin that a `user-A` upload is NEVER
 // retrievable by a `user-B` caller — the vector-layer twin of the
 // per-container blob boundary (GP 4).
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 // A single axis-aligned unit vector. Both users' chunks are stored with it
 // and the embedder always returns it, so semantic similarity is ~1 for
@@ -54,21 +47,21 @@ let private chunk content : TextChunk = {
     Metadata = Map.empty
 }
 
+/// The store and one disposable that releases the store, then deletes
+/// its directory.
 let private newStore () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-user-scope-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "user-scope-test"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
-            storage,
-            logger = SilentLogger(),
-            flushIntervalMs = 60000
-        )
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
-    store :> IVectorStore, store :> IDisposable
+    store :> IVectorStore,
+    { new IDisposable with
+        member _.Dispose() =
+            (store :> IDisposable).Dispose()
+            (tempDir :> IDisposable).Dispose()
+    }
 
 let private newPipeline (store: IVectorStore) : IRetrievalPipeline =
     new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(store, ConstantEmbedder()) :> IRetrievalPipeline

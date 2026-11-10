@@ -8,6 +8,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 /// Bind `INotificationSinkContract` to the SendGrid sink. The factory
 /// configures the sink against a deliberately-unreachable endpoint; a
@@ -25,10 +26,7 @@ let tests =
         // Empty in-memory secret store — no SENDGRID_API_KEY → first
         // Send returns PermanentFailure with the configuration error.
         let secretStore =
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-tests-sg-" + System.Guid.NewGuid().ToString("N"))
-
-            Directory.CreateDirectory root |> ignore
+            let root = (TempDir.forRun "tests-sg").Path
             FileSecretStore.FileSecretStore(root) :> ISecretStore
 
         let settings: SendGridSettings = {

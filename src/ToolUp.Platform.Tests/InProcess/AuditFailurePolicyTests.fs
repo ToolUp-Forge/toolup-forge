@@ -8,6 +8,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Testing
 
 /// The row was refused: `Record` answered an `Error` (it never raises).
 let private expectRefused (record: unit -> Result<unit, AuditWriteError>) (message: string) =
@@ -23,14 +24,6 @@ let private expectRefused (record: unit -> Result<unit, AuditWriteError>) (messa
 // directory + replay on recovery). This pack drives all three against
 // a faulting store, plus the fallback store's capacity bound and
 // poison-file quarantine.
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 type private FaultingEventStore() =
     interface IEventStore with
@@ -81,12 +74,7 @@ let private defaultStoreFailing (shouldFail: string -> bool) =
 let private isIndexRef (blobName: string) =
     blobName.Contains "/_by-type/" || blobName.Contains "/_by-source/"
 
-let private freshFallbackRoot () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-audit-fallback-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
-    root
+let private freshFallbackRoot () = TempDir.create "audit-fallback-tests"
 
 let private sampleAudit userId =
     UserLoggedIn {
@@ -100,7 +88,7 @@ let tests =
 
         test "LogAndContinue (default) swallows the failure — prior behaviour" {
             let auditLog =
-                AuditLog.EventStoreAuditLog(FaultingEventStore(), silentLogger, failurePolicy = LogAndContinue)
+                AuditLog.EventStoreAuditLog(FaultingEventStore(), Logger.silent, failurePolicy = LogAndContinue)
                 :> IAuditLog
 
             // Must not throw.
@@ -110,7 +98,7 @@ let tests =
 
         test "RefuseAction raises AuditWriteRefusedException so the action fails visibly" {
             let auditLog =
-                AuditLog.EventStoreAuditLog(FaultingEventStore(), silentLogger, failurePolicy = RefuseAction)
+                AuditLog.EventStoreAuditLog(FaultingEventStore(), Logger.silent, failurePolicy = RefuseAction)
                 :> IAuditLog
 
             expectRefused
@@ -125,15 +113,16 @@ let tests =
         }
 
         test "DegradeToFile spills the record and the replay drains it into a recovered store" {
-            let root = freshFallbackRoot ()
+            use rootDir = freshFallbackRoot ()
+            let root = rootDir.Path
 
             let fallback =
-                AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, silentLogger)
+                AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, Logger.silent)
 
             let auditLog =
                 AuditLog.EventStoreAuditLog(
                     FaultingEventStore(),
-                    silentLogger,
+                    Logger.silent,
                     failurePolicy = DegradeToFile,
                     fallbackStore = fallback
                 )
@@ -159,15 +148,16 @@ let tests =
         }
 
         test "DegradeToFile at capacity drops the record without failing the action" {
-            let root = freshFallbackRoot ()
+            use rootDir = freshFallbackRoot ()
+            let root = rootDir.Path
 
             // 8 bytes — nothing fits.
-            let fallback = AuditFallbackStore.AuditFallbackStore(root, 8L, silentLogger)
+            let fallback = AuditFallbackStore.AuditFallbackStore(root, 8L, Logger.silent)
 
             let auditLog =
                 AuditLog.EventStoreAuditLog(
                     FaultingEventStore(),
-                    silentLogger,
+                    Logger.silent,
                     failurePolicy = DegradeToFile,
                     fallbackStore = fallback
                 )
@@ -181,16 +171,17 @@ let tests =
         }
 
         test "replay quarantines a poison file and still drains the valid spill" {
-            let root = freshFallbackRoot ()
+            use rootDir = freshFallbackRoot ()
+            let root = rootDir.Path
 
             let fallback =
-                AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, silentLogger)
+                AuditFallbackStore.AuditFallbackStore(root, AuditFallbackStore.DefaultMaxBytes, Logger.silent)
 
             // One valid spill via the audit log...
             let auditLog =
                 AuditLog.EventStoreAuditLog(
                     FaultingEventStore(),
-                    silentLogger,
+                    Logger.silent,
                     failurePolicy = DegradeToFile,
                     fallbackStore = fallback
                 )
@@ -229,7 +220,7 @@ let tests =
             let auditLog =
                 AuditLog.EventStoreAuditLog(
                     defaultStoreFailing (fun _ -> true),
-                    silentLogger,
+                    Logger.silent,
                     (fun () -> sink :> Metrics.IMetricsSink),
                     failurePolicy = RefuseAction
                 )
@@ -257,7 +248,7 @@ let tests =
             let auditLog =
                 AuditLog.EventStoreAuditLog(
                     defaultStoreFailing (fun _ -> true),
-                    silentLogger,
+                    Logger.silent,
                     (fun () -> sink :> Metrics.IMetricsSink),
                     failurePolicy = LogAndContinue
                 )

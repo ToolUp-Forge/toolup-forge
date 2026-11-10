@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
     <Compile Include="DispatchTests.fs" />
     <Compile Include="DockerEmitTests.fs" />
     <!-- Phase 194 — `k8s emit`: the emitted YAML parsed back and asserted

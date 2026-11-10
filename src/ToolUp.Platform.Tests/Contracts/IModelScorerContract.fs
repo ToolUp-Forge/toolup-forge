@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.Contracts.IModelScorerContract
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -13,6 +12,7 @@ open ToolUp.ModelProviders.Reference
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 454 — model-scoring seam conformance pack ────────────────────
 //
@@ -35,27 +35,6 @@ open ToolUp.Platform.Compose
 //     right `JobResult`.
 
 let private t0 = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(_: string) = ()
-        member _.Error(_: string, _: exn option) = ()
-    }
-
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// A minimal `IModelRegistry` double for the batch-handler tests: it resolves
 /// exactly the artifacts it was seeded with (by scope + composite-key hash)
@@ -88,14 +67,10 @@ type private StubModelRegistry(artifacts: (string * ModelArtifact) list) =
 
         member _.AttachmentLimits = ProvenanceAttachmentLimits.default'
 
-/// A fresh blob-backed dataset store (the full default stack), one temp dir
-/// per call so tests never share state.
-let private freshStore () : IDatasetStore =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-score-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+/// A fresh blob-backed dataset store (the full default stack) over `dir`;
+/// each test creates its own directory so tests never share state.
+let private freshStore (dir: TempDir) : IDatasetStore =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
     BlobDatasetStore.create dataObjects
 
@@ -242,16 +217,16 @@ let private seedInput (store: IDatasetStore) (scope: string) : Async<DatasetVers
 }
 
 /// The score refusals audited on `audit`, in order.
-let private refusedRows (audit: RecordingAuditLog) =
+let private refusedRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelScoreRefused p -> Some p
         | _ -> None)
 
-let private scoredRows (audit: RecordingAuditLog) =
+let private scoredRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelScored p -> Some p
         | _ -> None)
@@ -261,8 +236,9 @@ let tests =
 
         testCaseAsync "a fitted artifact scores a vintage; predictions land as a new dataset version with provenance"
         <| async {
-            let store = freshStore ()
-            let audit = RecordingAuditLog()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
+            let audit = TestAuditLog()
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
             let scorer = ModelScorer.create registry store audit ModelScorePolicy.permissive
@@ -322,12 +298,13 @@ let tests =
 
         testCaseAsync "re-scoring the same artifact + input reproduces byte-identical predictions (plan D4)"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
 
             let scorer =
-                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.permissive
+                ModelScorer.create registry store (TestAuditLog()) ModelScorePolicy.permissive
 
             let! input = seedInput store "team-1"
 
@@ -360,8 +337,9 @@ let tests =
 
         testCaseAsync "an input schema missing a provider-required column is a typed, audited refusal"
         <| async {
-            let store = freshStore ()
-            let audit = RecordingAuditLog()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
+            let audit = TestAuditLog()
 
             // A reference scorer that requires a column the input lacks.
             let registry =
@@ -399,12 +377,13 @@ let tests =
 
         testCaseAsync "the approved-only guard is off by default (a Fitted artifact scores)"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
 
             let scorer =
-                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.permissive
+                ModelScorer.create registry store (TestAuditLog()) ModelScorePolicy.permissive
 
             let! input = seedInput store "team-1"
 
@@ -426,8 +405,9 @@ let tests =
 
         testCaseAsync "the approved-only guard gates both ways when enabled"
         <| async {
-            let store = freshStore ()
-            let audit = RecordingAuditLog()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
+            let audit = TestAuditLog()
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
             let scorer = ModelScorer.create registry store audit ModelScorePolicy.approvedOnly
@@ -462,8 +442,9 @@ let tests =
 
         testCaseAsync "an artifact whose provider is not registered is a typed, audited refusal"
         <| async {
-            let store = freshStore ()
-            let audit = RecordingAuditLog()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
+            let audit = TestAuditLog()
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
             let scorer = ModelScorer.create registry store audit ModelScorePolicy.permissive
@@ -489,12 +470,13 @@ let tests =
 
         testCaseAsync "scores are structurally scope-isolated (GP 4)"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
 
             let scorer =
-                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.permissive
+                ModelScorer.create registry store (TestAuditLog()) ModelScorePolicy.permissive
 
             let! input = seedInput store "team-1"
 
@@ -527,12 +509,13 @@ let tests =
         testCaseAsync
             "the predict context carries the artifact's full identity, its input vintage, and no spec by default"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
             let capturing = CapturingScoreProvider()
             let registry = ModelScoreProviderRegistry [ capturing ]
 
             let scorer =
-                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.permissive
+                ModelScorer.create registry store (TestAuditLog()) ModelScorePolicy.permissive
 
             let! input = seedInput store "team-1"
 
@@ -587,7 +570,8 @@ let tests =
         testCaseAsync
             "the predict context NEVER widens the caller's scope: a foreign artifact record cannot reach across (GP 4)"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
             let capturing = CapturingScoreProvider()
             let registry = ModelScoreProviderRegistry [ capturing ]
 
@@ -600,7 +584,7 @@ let tests =
                 StubSpecStore [ "team-2", foreignSpec.SpecHash, foreignSpec ] :> IModelSpecStore
 
             let scorer =
-                ModelScorer.createWithSpecStore registry store (RecordingAuditLog()) ModelScorePolicy.permissive specs
+                ModelScorer.createWithSpecStore registry store (TestAuditLog()) ModelScorePolicy.permissive specs
 
             let! input = seedInput store "team-1"
 
@@ -640,7 +624,8 @@ let tests =
 
         testCaseAsync "a composed spec store fills the context's spec, scoped to the caller"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
             let capturing = CapturingScoreProvider()
             let registry = ModelScoreProviderRegistry [ capturing ]
 
@@ -656,7 +641,7 @@ let tests =
                 StubSpecStore [ "team-1", artifact.CompositeKey.SpecHash, spec ] :> IModelSpecStore
 
             let scorer =
-                ModelScorer.createWithSpecStore registry store (RecordingAuditLog()) ModelScorePolicy.permissive specs
+                ModelScorer.createWithSpecStore registry store (TestAuditLog()) ModelScorePolicy.permissive specs
 
             let! input = seedInput store "team-1"
 
@@ -690,12 +675,13 @@ let tests =
 
         testCaseAsync "the job handler maps a good payload to Success and a malformed payload to PermanentFailure"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
 
             let scorer =
-                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.permissive
+                ModelScorer.create registry store (TestAuditLog()) ModelScorePolicy.permissive
 
             let! input = seedInput store "team-1"
 
@@ -703,7 +689,7 @@ let tests =
                 artifactOf ReferenceModelScoreProvider.Kind ModelArtifactStatus.Fitted
 
             let registryStub = StubModelRegistry [ "team-1", artifact ]
-            let handler = ModelScoringJobHandler.create registryStub scorer silentLogger
+            let handler = ModelScoringJobHandler.create registryStub scorer Logger.silent
 
             let ctx (payload: string) : JobContext = {
                 JobId = Guid.NewGuid()
@@ -740,17 +726,18 @@ let tests =
 
         testCaseAsync "the job handler maps an unknown artifact to PermanentFailure"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
 
             let scorer =
-                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.permissive
+                ModelScorer.create registry store (TestAuditLog()) ModelScorePolicy.permissive
 
             let! input = seedInput store "team-1"
 
             let handler =
-                ModelScoringJobHandler.create (StubModelRegistry []) scorer silentLogger
+                ModelScoringJobHandler.create (StubModelRegistry []) scorer Logger.silent
 
             let ctx: JobContext = {
                 JobId = Guid.NewGuid()
@@ -782,12 +769,13 @@ let tests =
 
         testCaseAsync "the job handler maps a non-approved refusal to PermanentFailure under an approved-only policy"
         <| async {
-            let store = freshStore ()
+            use dir = TempDir.create "score-test"
+            let store = freshStore dir
 
             let registry = ModelScoreProviderRegistry [ ReferenceModelScoreProvider.create () ]
 
             let scorer =
-                ModelScorer.create registry store (RecordingAuditLog()) ModelScorePolicy.approvedOnly
+                ModelScorer.create registry store (TestAuditLog()) ModelScorePolicy.approvedOnly
 
             let! input = seedInput store "team-1"
 
@@ -795,7 +783,7 @@ let tests =
                 artifactOf ReferenceModelScoreProvider.Kind ModelArtifactStatus.Fitted
 
             let handler =
-                ModelScoringJobHandler.create (StubModelRegistry [ "team-1", artifact ]) scorer silentLogger
+                ModelScoringJobHandler.create (StubModelRegistry [ "team-1", artifact ]) scorer Logger.silent
 
             let ctx: JobContext = {
                 JobId = Guid.NewGuid()

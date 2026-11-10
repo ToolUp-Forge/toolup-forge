@@ -9,6 +9,7 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 /// Run `SSE.writeReadyResponse` once into a throwaway context to
 /// warm up JIT + assembly-load overhead (DefaultHttpContext drags
@@ -21,26 +22,13 @@ let private warmup () = task {
     do! SSE.writeReadyResponse ctx.Response
 }
 
-/// An `IAuditLog` that keeps what it is handed.
-type private RecordingAuditLog() =
-    let rows = System.Collections.Concurrent.ConcurrentQueue<AuditEvent>()
-    member _.Rows = rows |> Seq.toList
-
-    interface IAuditLog with
-        member _.Record(_scope, _actor, audit) = async {
-            rows.Enqueue audit
-            return Ok()
-        }
-
-        member _.GetAuditTrail(_, _, _) = async { return [] }
-
 /// A team member's live-session partition: its team, the shape the
 /// live-session endpoint names through `resolveWith`.
 let private teamPartition (access: AccessContext) =
     access.TeamId |> Option.defaultValue access.UserId
 
 let private connect (access: AccessContext option) (query: string) =
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let services = ServiceCollection()
     services.AddSingleton<IAuditLog>(audit) |> ignore
     let ctx = DefaultHttpContext()
@@ -51,13 +39,13 @@ let private connect (access: AccessContext option) (query: string) =
     access |> Option.iter (AccessContext.stamp ctx.Items)
     ctx, audit
 
-let private waitForRows (audit: RecordingAuditLog) =
+let private waitForRows (audit: TestAuditLog) =
     let deadline = System.DateTime.UtcNow.AddSeconds 5.0
 
-    while List.isEmpty audit.Rows && System.DateTime.UtcNow < deadline do
+    while List.isEmpty audit.Events && System.DateTime.UtcNow < deadline do
         System.Threading.Thread.Sleep 5
 
-    audit.Rows
+    audit.Events
 
 /// The one SSE scope resolver, driven the way the live-session endpoint
 /// drives it (`resolveWith` naming the team partition). The endpoint itself
@@ -115,7 +103,7 @@ let private resolverTests =
                 (SseScopeResolution.SseScope "tab-7")
                 "the documented dev / Anonymous path"
 
-            Expect.isEmpty audit.Rows "nothing to audit"
+            Expect.isEmpty audit.Events "nothing to audit"
         }
     ]
 
