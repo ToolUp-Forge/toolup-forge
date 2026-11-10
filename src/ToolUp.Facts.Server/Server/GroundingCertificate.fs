@@ -8,6 +8,7 @@ open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Facts.FactsAuditEvents
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Infra
@@ -715,14 +716,16 @@ module GroundingCertificate =
                 audit.Record(
                     AuditScope.shard scopeId,
                     AuditSubject.system "GroundingCertificate",
-                    AuditEvent.CertificateIssued {
-                        Digest = certificateDigest body
-                        Subject = body.Root
-                        KeyId = body.DeploymentKeyId
-                        Seal = seal
-                        Format = body.Format
-                        OccurredAt = body.IssuedAt
-                    }
+                    FactsAuditEvent.event (
+                        CertificateIssued {
+                            Digest = certificateDigest body
+                            Subject = body.Root
+                            KeyId = body.DeploymentKeyId
+                            Seal = seal
+                            Format = body.Format
+                            OccurredAt = body.IssuedAt
+                        }
+                    )
                 )
                 |> AuditRow.orRefuse
         }
@@ -1159,7 +1162,7 @@ module GroundingCertificate =
     let private issuancesOf (events: AuditEvent list) : CertificateIssuance list =
         events
         |> List.choose (function
-            | AuditEvent.CertificateIssued p ->
+            | FactsAudit(CertificateIssued p) ->
                 Some {
                     Digest = p.Digest
                     Subject = p.Subject

@@ -350,3 +350,6 @@ let register (app: ServerApp) : ServerApp =
     // id.
     baseWithTools
     |> ServerApp.addContribution (Contribution.service (ComponentId.forCompanionSlot "ToolUp.KnowledgeBase") register)
+    |> ServerApp.withAuditEvents (
+        AuditEventFamily.registration KnowledgeBase.ServerKnowledgeAuditEvents.KnowledgeAuditEvent.family
+    )

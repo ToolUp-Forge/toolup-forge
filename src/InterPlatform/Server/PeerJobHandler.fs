@@ -7,6 +7,7 @@ open System
 open System.Reflection
 open System.Text
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.BlobStorage
 open PeerReflection
 open ToolUp.Platform.Config
@@ -482,7 +483,11 @@ type PeerJobHandler
             }
 
             do!
-                auditLog.Record(AuditScope.platform, AuditSubject.system "PeerJob", PeerJobCompleted payload)
+                auditLog.Record(
+                    AuditScope.platform,
+                    AuditSubject.system "PeerJob",
+                    PeerAuditEvent.event (PeerJobCompleted payload)
+                )
                 |> AuditRow.orRefuse
         with _ ->
             ()

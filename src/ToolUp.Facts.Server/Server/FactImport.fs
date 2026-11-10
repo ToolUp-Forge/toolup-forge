@@ -5,6 +5,7 @@ namespace ToolUp.Facts
 
 open System
 open ToolUp.Platform
+open ToolUp.Facts.FactsAuditEvents
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
@@ -442,10 +443,12 @@ module FactImport =
                         audit.Record(
                             AuditScope.shard scopeId,
                             AuditSubject.system "FactImport",
-                            AuditEvent.FactImportRefused {
-                                payload with
-                                    Reason = FactImportRefusal.describe refusal
-                            }
+                            FactsAuditEvent.event (
+                                FactImportRefused {
+                                    payload with
+                                        Reason = FactImportRefusal.describe refusal
+                                }
+                            )
                         )
                         |> AuditRow.orRefuse
 
@@ -623,10 +626,12 @@ module FactImport =
                                                     audit.Record(
                                                         AuditScope.shard scopeId,
                                                         AuditSubject.system "FactImport",
-                                                        AuditEvent.FactImportAccepted {
-                                                            payload with
-                                                                ImportedFactId = fact.FactId
-                                                        }
+                                                        FactsAuditEvent.event (
+                                                            FactImportAccepted {
+                                                                payload with
+                                                                    ImportedFactId = fact.FactId
+                                                            }
+                                                        )
                                                     )
                                                     |> AuditRow.orRefuse
 

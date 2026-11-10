@@ -9,6 +9,7 @@ open System.Text.Json
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
@@ -324,7 +325,7 @@ let tests =
                 let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "ConversationsPurged")
 
                 match trail with
-                | [ ConversationsPurged p ] ->
+                | [ AIAudit(ConversationsPurged p) ] ->
                     Expect.equal p.ScopeId scopeId "scope"
                     Expect.equal p.ConversationIds [ string stale ] "the purged ids are the evidence"
                     Expect.equal p.PurgedCount 1 "count"

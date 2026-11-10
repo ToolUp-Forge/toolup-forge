@@ -8,6 +8,7 @@ open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.AI
@@ -604,7 +605,7 @@ let private emitBeaconRejected
                 auditLogOpt.Record(
                     AuditScope.shard scopeId,
                     AuditSubject.system "FastPathBeacon",
-                    BeaconRejected payload
+                    AIAuditEvent.event (BeaconRejected payload)
                 )
                 |> AuditRow.orRefuse
         with ex ->

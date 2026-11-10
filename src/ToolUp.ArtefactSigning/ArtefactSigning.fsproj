@@ -17,6 +17,7 @@
          signing types above; nothing here is reachable unless a deployment
          composes an application signer. -->
     <Compile Include="Shared\ApplicationSigningTypes.fs" />
+    <Compile Include="Server\ArtefactAuditEvents.fs" />
     <Compile Include="Server\IArtefactSigner.fs" />
     <Compile Include="Server\IArtefactVerifier.fs" />
     <Compile Include="Server\ISigningKeyLedger.fs" />

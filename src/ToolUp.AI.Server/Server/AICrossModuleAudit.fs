@@ -9,6 +9,7 @@ open System.Text
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.AI.AIToolRegistry
 open ToolUp.Platform.Compose
 
@@ -215,7 +216,7 @@ let private record (ctx: HttpContext) (payload: CrossModuleReadPayload) : Async<
             auditLog.Record(
                 AuditScope.shard (scopeIdOf ctx),
                 ToolUp.Platform.Config.Background.requestActor "AICrossModule" ctx,
-                CrossModuleRead payload
+                AIAuditEvent.event (CrossModuleRead payload)
             )
             |> AuditRow.bestEffort
     | _ -> return ()

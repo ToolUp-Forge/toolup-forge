@@ -6,6 +6,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Giraffe
 open ToolUp.Platform
+open ToolUp.RAG.RagAuditEvents
 open ToolUp.Platform.Providers
 open ToolUp.Platform.Compose.RemotingHelpers
 open ToolUp.Platform.Infra.TransientFault
@@ -277,13 +278,15 @@ let emitIngestionDrop
                 auditLog.Record(
                     AuditScope.shard KnowledgeSourceModule.value,
                     AuditSubject.system "IngestionQueue",
-                    KnowledgeIngestionDropped {
-                        ScopeKey = scopeKey
-                        DocId = docId
-                        ChunkCount = chunkCount
-                        QueueCapacity = queue.Capacity
-                        Reason = reason
-                    }
+                    RagAuditEvent.event (
+                        KnowledgeIngestionDropped {
+                            ScopeKey = scopeKey
+                            DocId = docId
+                            ChunkCount = chunkCount
+                            QueueCapacity = queue.Capacity
+                            Reason = reason
+                        }
+                    )
                 )
                 |> AuditRow.orRefuse
         with ex ->
@@ -2170,6 +2173,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
     }
     // RAG's registrations are a contribution under its own id.
     |> ServerApp.addContribution (Contribution.staged ragOwner ragStaged)
+    |> ServerApp.withAuditEvents (AuditEventFamily.registration RagAuditEvents.RagAuditEvent.family)
 
 module RagOptions =
     /// The RAG companion's options with the three required inputs: the AI

@@ -9,6 +9,7 @@ open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.DeploymentVerification

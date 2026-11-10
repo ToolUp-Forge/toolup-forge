@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.KbQuotaRetentionTests
 open System
 open Expecto
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
@@ -509,7 +510,7 @@ let tests =
             Expect.isNonEmpty freshBlobs "the retained document's raw blob survives"
 
             match audit.Events with
-            | [ (scopeId, KnowledgeDocumentsPurged payload) ] ->
+            | [ (scopeId, KnowledgeAudit(KnowledgeDocumentsPurged payload)) ] ->
                 Expect.equal scopeId "team-sweep" "the row is recorded under the swept scope (GP 4)"
                 Expect.equal payload.DocumentIds [ "stale" ] "the row carries the evidence, not just a count"
                 Expect.equal payload.PurgedCount 1 "count is denormalised for sinks"

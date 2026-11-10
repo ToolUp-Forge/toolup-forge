@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.BlobEncryption
@@ -1782,7 +1783,7 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
                                             auditLog.Record(
                                                 AuditScope.platform,
                                                 AuditSubject.system "PeerCleanRoom",
-                                                PeerCleanRoomDecision payload
+                                                PeerAuditEvent.event (PeerCleanRoomDecision payload)
                                             )
                                             |> AuditRow.orRefuse
 
@@ -1983,6 +1984,7 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
         app
         |> ServerApp.addContribution (Contribution.routes owner [ JsonRpcPeerHost.routes ])
         |> ServerApp.addContribution (Contribution.service owner peerServiceConfig)
+        |> ServerApp.withAuditEvents (AuditEventFamily.registration PeerAuditEvents.PeerAuditEvent.family)
 
 /// **Sets** the peer companion: the identity, hosted contracts and postures
 /// `options` describes are composed once, when the deployment resolves,

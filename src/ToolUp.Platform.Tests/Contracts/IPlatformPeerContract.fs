@@ -4,6 +4,7 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.InterPlatform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
@@ -253,7 +254,7 @@ type private RecordingAuditLog() =
         this.Recorded
         |> List.choose (fun (_, e) ->
             match e with
-            | PeerJobCompleted p -> Some p
+            | PeerAudit(PeerJobCompleted p) -> Some p
             | _ -> None)
 
     interface IAuditLog with

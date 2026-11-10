@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.PrivacyBudgetLedgerTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.InterPlatform
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage

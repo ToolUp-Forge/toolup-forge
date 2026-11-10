@@ -448,6 +448,7 @@ let private composeAssetStore (companion: AssetStoreCompanionOptions) (app: Serv
         app
         |> ServerApp.addContribution (Contribution.routes assetStoreCompanion [ uploadHandler; assetApiHandler ])
         |> ServerApp.addContribution (Contribution.service assetStoreCompanion assetStoreServiceConfig)
+        |> ServerApp.withAuditEvents (AuditEventFamily.registration AssetAuditEvents.AssetAuditEvent.family)
 
 /// **Sets** the asset-store companion: the store, renderer, derivative
 /// profiles and handlers `options` describes are composed once, when the

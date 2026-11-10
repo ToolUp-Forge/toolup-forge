@@ -172,13 +172,6 @@ type AuditEvent =
     /// `PlatformAdmin` role revoked. Emitted by
     /// `IPlatformAdminStore.RevokePlatformAdmin`. No bootstrap variant.
     | PlatformAdminRevoked of PlatformAdminRevokedPayload
-    /// Platform Knowledge Base document uploaded. Emitted
-    /// by `IPlatformKnowledgeApi.UploadPlatformDocument` on success.
-    | PlatformDocumentUploaded of PlatformDocumentUploadedPayload
-    /// Platform Knowledge Base document deleted. Emitted
-    /// by `IPlatformKnowledgeApi.DeletePlatformDocument` on successful
-    /// removal (idempotent deletes of unknown ids suppress the event).
-    | PlatformDocumentDeleted of PlatformDocumentDeletedPayload
     /// `IShareTokenStore.Issue` succeeded. Reserved
     /// `SourceModule = "_platform.share_tokens"`. `AttributedHandle`
     /// may carry PII when the issuer chose an email as the handle —
@@ -218,19 +211,6 @@ type AuditEvent =
     /// Phase 527 — a machine principal was disabled or re-enabled.
     /// Disabling refuses every one of its tokens wholesale.
     | ServiceAccountStatusChanged of ServiceAccountStatusChangedPayload
-    /// An AI conversation was exported from the chat side
-    /// panel. Metadata-only payload (no conversation content / tool
-    /// payloads) so the audit trail can record export activity without
-    /// itself leaking PII.
-    | ConversationExported of ConversationExportPayload
-    /// Phase 6j.D — the fast-path beacon or `SubmitMessage` was refused
-    /// by the conversation-ownership gate (caller's `UserId` did not
-    /// match the first persisted message's `CreatedBy`). Distinct from
-    /// the `_platform.ai.fastpath` / `FastPathRejected` event the
-    /// beacon handler already emits for malformed / oversized / scope-
-    /// resolution-missing inputs — this case is specifically for cross-
-    /// user history-forgery attempts in shared-container modes.
-    | BeaconRejected of BeaconRejectedPayload
     /// Phase 9q — resolved `ServerConfig` differs from the
     /// previous startup's persisted snapshot, or the active companion
     /// set hash changed. Pure observation — `ConfigDriftDetector` emits
@@ -291,18 +271,6 @@ type AuditEvent =
     /// row so per-store contributions are visible in conversation-store
     /// admin views without the broader run context.
     | ConversationErased of ConversationErasedPayload
-    /// Phase 53 — `ConversationReplay.replay` produced a new
-    /// `Conversation`. Links the original + replay ids; records the
-    /// operator's chosen override labels.
-    | ConversationReplayed of ConversationReplayedPayload
-    /// Phase 39 — `IAssetStore.Upload` succeeded. PII-free; alt-text
-    /// and caption are deliberately excluded (treated as user
-    /// content). Reserved `SourceModule = "_platform.assets"`.
-    | AssetUploaded of AssetUploadedPayload
-    /// Phase 39 — `IAssetStore.Delete` removed an existing record.
-    /// Idempotent deletes of unknown ids do not emit. Reserved
-    /// `SourceModule = "_platform.assets"`.
-    | AssetDeleted of AssetDeletedPayload
     /// Phase 5f — a `TeamApi.CreateTeam` request was refused because
     /// `TeamCreationPolicy = PlatformAdminOnly` and the caller does
     /// not hold `PlatformRole.PlatformAdmin`. Emitted by the
@@ -478,47 +446,6 @@ type AuditEvent =
     /// disagreement, wrong subject/party). Not emitted for ordinary
     /// lifecycle denials.
     | GrantConsentVerificationDenied of GrantConsentVerificationDeniedPayload
-    /// Phase 18 — a typed inter-platform peer contract call resolved on
-    /// the receiver. Emitted once per inbound call by the peer host's
-    /// contract handler after dispatch reaches a terminal outcome.
-    /// Reserved `SourceModule = "_platform.peer"`.
-    | PeerCallCompleted of PeerCallCompletedPayload
-    /// Phase 310 — a long-running peer call reached its terminal outcome.
-    /// Emitted by `PeerJobHandler.Execute` once the backing job has
-    /// resolved and its typed result is parked. Distinct from
-    /// `PeerCallCompleted`, which for a long-running method records only
-    /// that the call was *accepted and scheduled*. Reserved
-    /// `SourceModule = "_platform.peer"`.
-    | PeerJobCompleted of PeerJobCompletedPayload
-    /// Phase 311 — the receiver's composed clean-room gate decided over one
-    /// contract answer (released, possibly with cells suppressed, or
-    /// withheld whole). Emitted by `CleanRoomGate` once per gated dispatch.
-    /// Reserved `SourceModule = "_platform.peer"`.
-    | PeerCleanRoomDecision of PeerCleanRoomDecisionPayload
-    /// Phase 483 — one round of a multi-round federated run reached its
-    /// barrier and its responses were folded. Emitted by
-    /// `IRoundOrchestrator` once per completed round. Reserved
-    /// `SourceModule = "_platform.peer"`.
-    | FederationRoundCompleted of FederationRoundCompletedPayload
-    /// Phase 483 — a participant was classified as dropped for a round by
-    /// the run's `DropoutPolicy`. One row per dropped participant per
-    /// round. Reserved `SourceModule = "_platform.peer"`.
-    | FederationParticipantDropped of FederationParticipantDroppedPayload
-    /// Phase 483 — a multi-round run terminated without reaching its
-    /// completion condition. Reserved `SourceModule = "_platform.peer"`.
-    | FederationRunAborted of FederationRunAbortedPayload
-    /// Phase 40 — `IArtefactSigner.Sign` produced a detached-JWS
-    /// signature over an arbitrary artefact. Reserved `SourceModule =
-    /// "_platform.signing"`. Payload carries the key id + artefact
-    /// SHA-256, never the bytes. Distinct from the Phase 30a
-    /// module-distribution family, which Phase 625 renamed to
-    /// `ModuleArtefactSigned` precisely because a one-vowel difference
-    /// was not a safe way to tell two security events apart.
-    | ArtefactSigned of ArtefactSignedPayload
-    /// Phase 40 — a new artefact-signing key became active, rotating out
-    /// a predecessor whose public key remains discoverable for archival
-    /// verification. Reserved `SourceModule = "_platform.signing"`.
-    | SigningKeyRotated of SigningKeyRotatedPayload
     /// Phase 41 — a classified field was read by a caller (field's
     /// `AuditOnRead` set). Reserved `SourceModule =
     /// "_platform.classification"`. Value-free; carries entity +
@@ -562,25 +489,11 @@ type AuditEvent =
     /// Phase 54f — a pending grace-period offboard was cancelled before it
     /// fired. Reserved `SourceModule = "_platform.tenant"`.
     | TenantDeprovisionCancelled of TenantDeprovisionCancelledPayload
-    /// Phase 107 — an original ingested document was fetched from the
-    /// Knowledge Base via `GetOriginalDocument`. Sensitive-read audit,
-    /// distinct from the upload event (GP 6).
-    | KnowledgeOriginalRetrieved of KnowledgeOriginalRetrievedPayload
-    /// Phase 107 — a `GetOriginalDocument` fetch was refused
-    /// (out-of-scope id or no retrievable original). Denials on the
-    /// team boundary are audited (GP 4 + GP 6).
-    | KnowledgeOriginalRetrievalDenied of KnowledgeOriginalRetrievalDeniedPayload
     /// Phase 69h.tail — uniform dispatcher-emitted audit row for an
     /// `[<Audit>]`-annotated ToolUp.Remoting API method. Emitted by the
     /// default `IAuditEmitter` bridge `Api.make` composes over the
     /// registered `IAuditLog`. Reserved `SourceModule = "_platform.audit"`.
     | RemotingMethodAudited of RemotingMethodAuditedPayload
-    /// Phase 115 — a Knowledge Base scope was wiped via `ResetIndex`,
-    /// fanning the deletion across every retrieval index. Carries the
-    /// erasure outcome (document count + surviving-chunk count) so a
-    /// half-completed fan-out is loud in the audit trail (GP 6 + GP 9),
-    /// complementing the generic dispatcher action row.
-    | KnowledgeScopeErased of KnowledgeScopeErasedPayload
     /// Phase 120 — uniform structured authorization-denial row emitted by
     /// `IAuthAuditHook.RecordDenial` across every HTTP-surface denial class
     /// (surface / role / share-token / SSE-identity / module-permission /
@@ -607,26 +520,6 @@ type AuditEvent =
     /// a pod kill). Recorded under `KnowledgeSourceModule.value` scope;
     /// makes the formerly `Warn`-only silent-empty load loud (GP 6 + GP 9).
     | KnowledgeIndexLoadFailed of KnowledgeIndexLoadFailedPayload
-    /// Phase 303 — a document was dropped from ingestion because the
-    /// in-process queue was full and the bounded enqueue retry was
-    /// exhausted. Recorded under `KnowledgeSourceModule.value`; makes the
-    /// formerly telemetry-only queue-overflow loss queryable per-document
-    /// (GP 6 + GP 9).
-    | KnowledgeIngestionDropped of KnowledgeIngestionDroppedPayload
-    /// Phase 14x — a KB upload matched an existing document's content
-    /// hash in the caller's scope and was deduplicated onto it
-    /// (idempotent upload; ingestion skipped). Recorded under the
-    /// caller's scope.
-    | KnowledgeDocumentDeduplicated of KnowledgeDocumentDeduplicatedPayload
-    /// Phase 512 — the age-based KB retention sweep purged one or more
-    /// documents from a scope. Recorded under the swept scope; emitted
-    /// only by runs that actually removed something.
-    | KnowledgeDocumentsPurged of KnowledgeDocumentsPurgedPayload
-    /// Phase 515 — the composed `IContentScanner` returned a verdict for
-    /// an upload at the upload boundary. Emitted for every verdict
-    /// (clean included), under the uploader's scope; absent entirely on a
-    /// deployment that composed no scanner.
-    | ContentScanned of ContentScannedPayload
     /// Phase 7c — the data-object orphan sweep reclaimed one unreferenced
     /// content blob from a scope's dedup pool. One row per blob, under the
     /// swept scope.
@@ -634,12 +527,6 @@ type AuditEvent =
     /// Phase 7c — aggregate summary of one orphan-sweep run, emitted only
     /// by runs that reclaimed something.
     | OrphanSweepCompleted of OrphanSweepCompletedPayload
-    /// Phase 443 — a WebAuthn passkey credential was enrolled via the
-    /// passkey auth companion's registration ceremony. Recorded under
-    /// `_platform` scope; source-module `_platform.auth.passkey`.
-    | PasskeyCredentialRegistered of PasskeyCredentialRegisteredPayload
-    /// Phase 443 — a passkey credential was removed for a user.
-    | PasskeyCredentialRemoved of PasskeyCredentialRemovedPayload
     /// Phase 449 — a model-fit run began (provider resolved, composite
     /// identity computed). Reserved `SourceModule = "_platform.audit"`.
     | ModelFitStarted of ModelFitStartedPayload
@@ -724,24 +611,6 @@ type AuditEvent =
     /// Phase 657 — a composed component was refused a capability beyond
     /// its declared envelope by the mandatory capability gate.
     | CompositionCapabilityRefused of CompositionCapabilityRefusedPayload
-    /// Phase 680 — an answer was verified and every numeric figure it
-    /// carried matched a retrieved fact (or the turn had no facts to check
-    /// against). The affirmative row; it exists so that the absence of a
-    /// row stays a different fact from a clean one.
-    | AnswerVerificationPassed of AnswerVerificationPayload
-    /// Phase 680 — an answer carried at least one numeric figure that
-    /// matched no fact in the turn's retrieved set while facts WERE in
-    /// scope. The grounding refusal, on the same chained path as every
-    /// other audited refusal.
-    | AnswerVerificationFlagged of AnswerVerificationPayload
-    /// Phase 683 — a fact offered by a peer verified against that peer's
-    /// certificate, re-derived to the id the certificate names, and landed
-    /// under a stance no wider than the one the peer declared.
-    | FactImportAccepted of FactImportPayload
-    /// Phase 683 — an offered fact was refused at the import door and
-    /// nothing was asserted. The unverifiable / tampered / id-mismatched
-    /// signal, on the same audited path as every other refusal.
-    | FactImportRefused of FactImportPayload
     /// Phase 684 — a declared grounding-envelope facet moved through the
     /// audited choke point, carrying the before/after envelope digests
     /// that make the mutation chain walkable.
@@ -749,11 +618,6 @@ type AuditEvent =
     /// Phase 684 — a grounding-envelope mutation was refused under the
     /// verified composition profile and nothing moved.
     | GroundingMutationRefused of GroundingMutationRefusedPayload
-    /// Phase 685 — a grounding certificate was issued. Identifiers only:
-    /// the certificate digest, its subject, the sealing key id. This is
-    /// the row that makes issuance enumerable and a suppressed
-    /// certificate visible.
-    | CertificateIssued of CertificateIssuedPayload
     /// Phase 686 — the deployment verification report was run. An audited
     /// READ: nothing moved, and the row records who asked, what the
     /// verdict set was, and the digest that commits to it.
@@ -774,12 +638,6 @@ type AuditEvent =
     /// deployment is unwell, this says when it started, on which store,
     /// and doing what.
     | BlobStorageAuthFailed of BlobStorageAuthFailedPayload
-    /// Phase 36.E — one invocation of the built-in cross-module AI tool
-    /// family, allowed or refused. The read-side twin of Phase 36.D's
-    /// consent decisions: those record what the user ALLOWED, this
-    /// records what was actually reached, and only the two together
-    /// answer "what did the agent read out of modules nobody named".
-    | CrossModuleRead of CrossModuleReadPayload
     /// Phase 445 — a platform snapshot completed and its manifest landed
     /// on the backup target.
     | BackupCompleted of BackupCompletedPayload
@@ -811,11 +669,6 @@ type AuditEvent =
     /// Distinct from `NotificationSilentlySkipped`, which is a
     /// deployment choosing not to send.
     | NotificationDeliveryRefused of NotificationDeliveryRefusedPayload
-    /// Phase 504 — the AI conversation retention sweep purged one or
-    /// more conversations from a scope (age and/or count expiry). Every
-    /// sibling blob of each purged conversation is gone when this row
-    /// is written. Recorded under the swept scope.
-    | ConversationsPurged of ConversationsPurgedPayload
     /// Phase 1002 — a publication reader's sign-in, recorded under
     /// `_platform` (the reader holds no scope of its own).
     | PublicationReaderSignedIn of PublicationReaderSignedInPayload
@@ -891,8 +744,6 @@ module AuditEvent =
         | OAuthRefreshDeadLettered _ -> "OAuthRefreshDeadLettered"
         | PlatformAdminAssigned _ -> "PlatformAdminAssigned"
         | PlatformAdminRevoked _ -> "PlatformAdminRevoked"
-        | PlatformDocumentUploaded _ -> "PlatformDocumentUploaded"
-        | PlatformDocumentDeleted _ -> "PlatformDocumentDeleted"
         | ShareTokenIssued _ -> "ShareTokenIssued"
         | ShareTokenUsed _ -> "ShareTokenUsed"
         | ShareTokenRevoked _ -> "ShareTokenRevoked"
@@ -903,8 +754,6 @@ module AuditEvent =
         | ServiceAccountTokenMinted _ -> "ServiceAccountTokenMinted"
         | ServiceAccountTokenRevoked _ -> "ServiceAccountTokenRevoked"
         | ServiceAccountStatusChanged _ -> "ServiceAccountStatusChanged"
-        | ConversationExported _ -> "ConversationExported"
-        | BeaconRejected _ -> "BeaconRejected"
         | ConfigDrift _ -> "ConfigDrift"
         | DiagnosticBundleAccessed _ -> "DiagnosticBundleAccessed"
         | RateLimitWaited _ -> "RateLimitWaited"
@@ -916,9 +765,6 @@ module AuditEvent =
         | ConversationTurnAppended _ -> "ConversationTurnAppended"
         | ConversationCompleted _ -> "ConversationCompleted"
         | ConversationErased _ -> "ConversationErased"
-        | ConversationReplayed _ -> "ConversationReplayed"
-        | AssetUploaded _ -> "AssetUploaded"
-        | AssetDeleted _ -> "AssetDeleted"
         | TeamCreationDenied _ -> "TeamCreationDenied"
         | TeamArchived _ -> "TeamArchived"
         | TeamRestored _ -> "TeamRestored"
@@ -967,14 +813,6 @@ module AuditEvent =
         | GrantConsentApproved _ -> "GrantConsentApproved"
         | GrantConsentRevoked _ -> "GrantConsentRevoked"
         | GrantConsentVerificationDenied _ -> "GrantConsentVerificationDenied"
-        | PeerCallCompleted _ -> "PeerCallCompleted"
-        | PeerJobCompleted _ -> "PeerJobCompleted"
-        | PeerCleanRoomDecision _ -> "PeerCleanRoomDecision"
-        | FederationRoundCompleted _ -> "FederationRoundCompleted"
-        | FederationParticipantDropped _ -> "FederationParticipantDropped"
-        | FederationRunAborted _ -> "FederationRunAborted"
-        | ArtefactSigned _ -> "ArtefactSigned"
-        | SigningKeyRotated _ -> "SigningKeyRotated"
         | ClassifiedFieldRead _ -> "ClassifiedFieldRead"
         | ClassifiedFieldWritten _ -> "ClassifiedFieldWritten"
         | TenantProvisioned _ -> "TenantProvisioned"
@@ -986,23 +824,14 @@ module AuditEvent =
         | TenantOffboardConfirmationRefused _ -> "TenantOffboardConfirmationRefused"
         | TenantDeprovisionScheduled _ -> "TenantDeprovisionScheduled"
         | TenantDeprovisionCancelled _ -> "TenantDeprovisionCancelled"
-        | KnowledgeOriginalRetrieved _ -> "KnowledgeOriginalRetrieved"
-        | KnowledgeOriginalRetrievalDenied _ -> "KnowledgeOriginalRetrievalDenied"
         | RemotingMethodAudited _ -> "RemotingMethodAudited"
-        | KnowledgeScopeErased _ -> "KnowledgeScopeErased"
         | AuthorizationDenied _ -> "AuthorizationDenied"
         | HostActionDispatched _ -> "HostActionDispatched"
         | EgressBlocked _ -> "EgressBlocked"
         | EgressDenied _ -> "EgressDenied"
         | KnowledgeIndexLoadFailed _ -> "KnowledgeIndexLoadFailed"
-        | KnowledgeIngestionDropped _ -> "KnowledgeIngestionDropped"
-        | KnowledgeDocumentDeduplicated _ -> "KnowledgeDocumentDeduplicated"
-        | KnowledgeDocumentsPurged _ -> "KnowledgeDocumentsPurged"
-        | ContentScanned _ -> "ContentScanned"
         | OrphanedContentBlobReclaimed _ -> "OrphanedContentBlobReclaimed"
         | OrphanSweepCompleted _ -> "OrphanSweepCompleted"
-        | PasskeyCredentialRegistered _ -> "PasskeyCredentialRegistered"
-        | PasskeyCredentialRemoved _ -> "PasskeyCredentialRemoved"
         | ModelFitStarted _ -> "ModelFitStarted"
         | ModelFitCompleted _ -> "ModelFitCompleted"
         | ModelFitGateFailed _ -> "ModelFitGateFailed"
@@ -1031,18 +860,12 @@ module AuditEvent =
         | ExternalCallbackRejected _ -> "ExternalCallbackRejected"
         | CompositionVerificationRecorded _ -> "CompositionVerificationRecorded"
         | CompositionCapabilityRefused _ -> "CompositionCapabilityRefused"
-        | AnswerVerificationPassed _ -> "AnswerVerificationPassed"
-        | AnswerVerificationFlagged _ -> "AnswerVerificationFlagged"
-        | FactImportAccepted _ -> "FactImportAccepted"
-        | FactImportRefused _ -> "FactImportRefused"
         | GroundingEnvelopeMutated _ -> "GroundingEnvelopeMutated"
         | GroundingMutationRefused _ -> "GroundingMutationRefused"
-        | CertificateIssued _ -> "CertificateIssued"
         | DeploymentVerified _ -> "DeploymentVerified"
         | EvidenceChainWalked _ -> "EvidenceChainWalked"
         | MediaKeyDelivered _ -> "MediaKeyDelivered"
         | BlobStorageAuthFailed _ -> "BlobStorageAuthFailed"
-        | CrossModuleRead _ -> "CrossModuleRead"
         | BackupCompleted _ -> "BackupCompleted"
         | BackupFailed _ -> "BackupFailed"
         | RestoreDrillPassed _ -> "RestoreDrillPassed"
@@ -1053,7 +876,6 @@ module AuditEvent =
         | ContactOptInRecorded _ -> "ContactOptInRecorded"
         | ContactOptInWithdrawn _ -> "ContactOptInWithdrawn"
         | NotificationDeliveryRefused _ -> "NotificationDeliveryRefused"
-        | ConversationsPurged _ -> "ConversationsPurged"
         | PublicationReaderSignedIn _ -> "PublicationReaderSignedIn"
         | PublicationReaderGranted _ -> "PublicationReaderGranted"
         | PublicationReaderRevoked _ -> "PublicationReaderRevoked"

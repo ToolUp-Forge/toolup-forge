@@ -191,7 +191,17 @@ let private registrant (family: AuditEventFamily<'E>) : Registrant = {
 /// Every companion family in the tree. A companion that registers audit
 /// kinds is listed here, so the corpus proves its typed codec writes the
 /// bytes its kinds have always had.
-let private companionRegistrants: Registrant list = [ registrant ToolUp.Forms.FormsAuditEvents.FormsAuditEvent.family ]
+let private companionRegistrants: Registrant list = [
+    registrant ToolUp.Forms.FormsAuditEvents.FormsAuditEvent.family
+    registrant KnowledgeBase.ServerKnowledgeAuditEvents.KnowledgeAuditEvent.family
+    registrant ToolUp.AssetStore.AssetAuditEvents.AssetAuditEvent.family
+    registrant ToolUp.AuthProviders.Passkey.PasskeyAuditEvents.PasskeyAuditEvent.family
+    registrant ToolUp.Facts.FactsAuditEvents.FactsAuditEvent.family
+    registrant ToolUp.RAG.RagAuditEvents.RagAuditEvent.family
+    registrant ToolUp.ArtefactSigning.ArtefactAuditEvents.ArtefactAuditEvent.family
+    registrant ToolUp.AI.AIAuditEvents.AIAuditEvent.family
+    registrant ToolUp.InterPlatform.PeerAuditEvents.PeerAuditEvent.family
+]
 
 /// Phase 625 — the wire discriminators that deliberately differ from
 /// their F# case identifier, pinned so a future "tidy the strings to
@@ -887,9 +897,13 @@ let tests =
             // the three `ModuleArtefact*` rows, and the reference table
             // is where the mapping is stated.
             let known =
-                Set.union
-                    (allCaseSamples |> List.map fst |> Set.ofList)
-                    (FSharpType.GetUnionCases typeof<AuditEvent> |> Array.map _.Name |> Set.ofArray)
+                Set.unionMany [
+                    allCaseSamples |> List.map fst |> Set.ofList
+                    FSharpType.GetUnionCases typeof<AuditEvent> |> Array.map _.Name |> Set.ofArray
+                    companionRegistrants
+                    |> List.collect (fun r -> r.Registration.Kinds |> List.map _.Kind)
+                    |> Set.ofList
+                ]
 
             let cited =
                 backtickedIdentifierPattern.Matches region

@@ -7,6 +7,7 @@ open System.Text.Json
 open Microsoft.AspNetCore.Http
 open Giraffe
 open ToolUp.Platform
+open ToolUp.AuthProviders.Passkey.PasskeyAuditEvents
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
@@ -196,11 +197,13 @@ let private registerCompleteHandler: HttpHandler =
                         auditEmit
                             ctx
                             PasskeyConfig.PlatformContainer
-                            (PasskeyCredentialRegistered {
-                                UserId = record.UserId
-                                CredentialIdPrefix = credIdPrefix record.CredentialId
-                                Grant = pending.Grant |> Option.defaultValue "Unknown"
-                            })
+                            (PasskeyAuditEvent.event (
+                                PasskeyCredentialRegistered {
+                                    UserId = record.UserId
+                                    CredentialIdPrefix = credIdPrefix record.CredentialId
+                                    Grant = pending.Grant |> Option.defaultValue "Unknown"
+                                }
+                            ))
                         |> Async.StartAsTask
                         :> System.Threading.Tasks.Task
 

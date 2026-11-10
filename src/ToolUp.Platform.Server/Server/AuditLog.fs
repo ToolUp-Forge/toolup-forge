@@ -248,8 +248,6 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | OAuthRefreshDeadLettered p -> toAuditJson p
     | PlatformAdminAssigned p -> toAuditJson p
     | PlatformAdminRevoked p -> toAuditJson p
-    | PlatformDocumentUploaded p -> toAuditJson p
-    | PlatformDocumentDeleted p -> toAuditJson p
     | ShareTokenIssued p -> toAuditJson p
     | ShareTokenUsed p -> toAuditJson p
     | ShareTokenRevoked p -> toAuditJson p
@@ -260,8 +258,6 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | ServiceAccountStatusChanged p -> toAuditJson p
     | SessionRevoked p -> toAuditJson p
     | AllSessionsRevoked p -> toAuditJson p
-    | ConversationExported p -> toAuditJson p
-    | BeaconRejected p -> toAuditJson p
     | ConfigDrift p -> toAuditJson p
     | DiagnosticBundleAccessed p -> toAuditJson p
     | RateLimitWaited p -> toAuditJson p
@@ -273,9 +269,6 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | ConversationTurnAppended p -> toAuditJson p
     | ConversationCompleted p -> toAuditJson p
     | ConversationErased p -> toAuditJson p
-    | ConversationReplayed p -> toAuditJson p
-    | AssetUploaded p -> toAuditJson p
-    | AssetDeleted p -> toAuditJson p
     | TeamCreationDenied p -> toAuditJson p
     | TeamArchived p -> toAuditJson p
     | TeamRestored p -> toAuditJson p
@@ -343,14 +336,6 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | GrantConsentApproved p -> toAuditJson p
     | GrantConsentRevoked p -> toAuditJson p
     | GrantConsentVerificationDenied p -> toAuditJson p
-    | PeerCallCompleted p -> toAuditJson p
-    | PeerJobCompleted p -> toAuditJson p
-    | PeerCleanRoomDecision p -> toAuditJson p
-    | FederationRoundCompleted p -> toAuditJson p
-    | FederationParticipantDropped p -> toAuditJson p
-    | FederationRunAborted p -> toAuditJson p
-    | ArtefactSigned p -> toAuditJson p
-    | SigningKeyRotated p -> toAuditJson p
     | ClassifiedFieldRead p -> toAuditJson p
     | ClassifiedFieldWritten p -> toAuditJson p
     | TenantProvisioned p -> toAuditJson p
@@ -362,23 +347,14 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | TenantOffboardConfirmationRefused p -> toAuditJson p
     | TenantDeprovisionScheduled p -> toAuditJson p
     | TenantDeprovisionCancelled p -> toAuditJson p
-    | KnowledgeOriginalRetrieved p -> toAuditJson p
-    | KnowledgeOriginalRetrievalDenied p -> toAuditJson p
     | RemotingMethodAudited p -> toAuditJson p
-    | KnowledgeScopeErased p -> toAuditJson p
     | AuthorizationDenied p -> toAuditJson p
     | HostActionDispatched p -> toAuditJson p
     | EgressBlocked p -> toAuditJson p
     | EgressDenied p -> toAuditJson p
     | KnowledgeIndexLoadFailed p -> toAuditJson p
-    | KnowledgeIngestionDropped p -> toAuditJson p
-    | KnowledgeDocumentDeduplicated p -> toAuditJson p
-    | KnowledgeDocumentsPurged p -> toAuditJson p
-    | ContentScanned p -> toAuditJson p
     | OrphanedContentBlobReclaimed p -> toAuditJson p
     | OrphanSweepCompleted p -> toAuditJson p
-    | PasskeyCredentialRegistered p -> toAuditJson p
-    | PasskeyCredentialRemoved p -> toAuditJson p
     | ModelFitStarted p -> toAuditJson p
     | ModelFitCompleted p -> toAuditJson p
     | ModelFitGateFailed p -> toAuditJson p
@@ -407,18 +383,12 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | ExternalCallbackRejected p -> toAuditJson p
     | CompositionVerificationRecorded p -> toAuditJson p
     | CompositionCapabilityRefused p -> toAuditJson p
-    | AnswerVerificationPassed p -> toAuditJson p
-    | AnswerVerificationFlagged p -> toAuditJson p
-    | FactImportAccepted p -> toAuditJson p
-    | FactImportRefused p -> toAuditJson p
     | GroundingEnvelopeMutated p -> toAuditJson p
     | GroundingMutationRefused p -> toAuditJson p
-    | CertificateIssued p -> toAuditJson p
     | DeploymentVerified p -> toAuditJson p
     | EvidenceChainWalked p -> toAuditJson p
     | MediaKeyDelivered p -> toAuditJson p
     | BlobStorageAuthFailed p -> toAuditJson p
-    | CrossModuleRead p -> toAuditJson p
     | BackupCompleted p -> toAuditJson p
     | BackupFailed p -> toAuditJson p
     | RestoreDrillPassed p -> toAuditJson p
@@ -429,7 +399,6 @@ let internal serialiseAuditEvent (audit: AuditEvent) : string =
     | ContactOptInRecorded p -> toAuditJson p
     | ContactOptInWithdrawn p -> toAuditJson p
     | NotificationDeliveryRefused p -> toAuditJson p
-    | ConversationsPurged p -> toAuditJson p
     | PublicationReaderSignedIn p -> toAuditJson p
     | PublicationReaderGranted p -> toAuditJson p
     | PublicationReaderRevoked p -> toAuditJson p
@@ -489,9 +458,6 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         (fun j -> OAuthRefreshDeadLettered(fromAuditJson<OAuthRefreshDeadLetteredPayload> j))
         "PlatformAdminAssigned", (fun j -> PlatformAdminAssigned(fromAuditJson<PlatformAdminAssignedPayload> j))
         "PlatformAdminRevoked", (fun j -> PlatformAdminRevoked(fromAuditJson<PlatformAdminRevokedPayload> j))
-        "PlatformDocumentUploaded",
-        (fun j -> PlatformDocumentUploaded(fromAuditJson<PlatformDocumentUploadedPayload> j))
-        "PlatformDocumentDeleted", (fun j -> PlatformDocumentDeleted(fromAuditJson<PlatformDocumentDeletedPayload> j))
         "ShareTokenIssued", (fun j -> ShareTokenIssued(fromAuditJson<ShareTokenIssuedPayload> j))
         "ShareTokenUsed", (fun j -> ShareTokenUsed(fromAuditJson<ShareTokenUsedPayload> j))
         "ShareTokenRevoked", (fun j -> ShareTokenRevoked(fromAuditJson<ShareTokenRevokedPayload> j))
@@ -506,8 +472,6 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         (fun j -> ServiceAccountStatusChanged(fromAuditJson<ServiceAccountStatusChangedPayload> j))
         "SessionRevoked", (fun j -> SessionRevoked(fromAuditJson<SessionRevokedPayload> j))
         "AllSessionsRevoked", (fun j -> AllSessionsRevoked(fromAuditJson<AllSessionsRevokedPayload> j))
-        "ConversationExported", (fun j -> ConversationExported(fromAuditJson<ConversationExportPayload> j))
-        "BeaconRejected", (fun j -> BeaconRejected(fromAuditJson<BeaconRejectedPayload> j))
         "ConfigDrift", (fun j -> ConfigDrift(fromAuditJson<ConfigDriftPayload> j))
         "DiagnosticBundleAccessed",
         (fun j -> DiagnosticBundleAccessed(fromAuditJson<DiagnosticBundleAccessedPayload> j))
@@ -521,9 +485,6 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         (fun j -> ConversationTurnAppended(fromAuditJson<ConversationTurnAppendedPayload> j))
         "ConversationCompleted", (fun j -> ConversationCompleted(fromAuditJson<ConversationCompletedPayload> j))
         "ConversationErased", (fun j -> ConversationErased(fromAuditJson<ConversationErasedPayload> j))
-        "ConversationReplayed", (fun j -> ConversationReplayed(fromAuditJson<ConversationReplayedPayload> j))
-        "AssetUploaded", (fun j -> AssetUploaded(fromAuditJson<AssetUploadedPayload> j))
-        "AssetDeleted", (fun j -> AssetDeleted(fromAuditJson<AssetDeletedPayload> j))
         "TeamCreationDenied", (fun j -> TeamCreationDenied(fromAuditJson<TeamCreationDeniedPayload> j))
         "TeamArchived", (fun j -> TeamArchived(fromAuditJson<TeamArchivedPayload> j))
         "TeamRestored", (fun j -> TeamRestored(fromAuditJson<TeamRestoredPayload> j))
@@ -587,16 +548,6 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         "GrantConsentRevoked", (fun j -> GrantConsentRevoked(fromAuditJson<GrantConsentRevokedPayload> j))
         "GrantConsentVerificationDenied",
         (fun j -> GrantConsentVerificationDenied(fromAuditJson<GrantConsentVerificationDeniedPayload> j))
-        "PeerCallCompleted", (fun j -> PeerCallCompleted(fromAuditJson<PeerCallCompletedPayload> j))
-        "PeerJobCompleted", (fun j -> PeerJobCompleted(fromAuditJson<PeerJobCompletedPayload> j))
-        "PeerCleanRoomDecision", (fun j -> PeerCleanRoomDecision(fromAuditJson<PeerCleanRoomDecisionPayload> j))
-        "FederationRoundCompleted",
-        (fun j -> FederationRoundCompleted(fromAuditJson<FederationRoundCompletedPayload> j))
-        "FederationParticipantDropped",
-        (fun j -> FederationParticipantDropped(fromAuditJson<FederationParticipantDroppedPayload> j))
-        "FederationRunAborted", (fun j -> FederationRunAborted(fromAuditJson<FederationRunAbortedPayload> j))
-        "ArtefactSigned", (fun j -> ArtefactSigned(fromAuditJson<ArtefactSignedPayload> j))
-        "SigningKeyRotated", (fun j -> SigningKeyRotated(fromAuditJson<SigningKeyRotatedPayload> j))
         "ClassifiedFieldRead", (fun j -> ClassifiedFieldRead(fromAuditJson<ClassifiedFieldReadPayload> j))
         "ClassifiedFieldWritten", (fun j -> ClassifiedFieldWritten(fromAuditJson<ClassifiedFieldWrittenPayload> j))
         "TenantProvisioned", (fun j -> TenantProvisioned(fromAuditJson<TenantProvisionedPayload> j))
@@ -614,32 +565,16 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         (fun j -> TenantDeprovisionScheduled(fromAuditJson<TenantDeprovisionScheduledPayload> j))
         "TenantDeprovisionCancelled",
         (fun j -> TenantDeprovisionCancelled(fromAuditJson<TenantDeprovisionCancelledPayload> j))
-        "KnowledgeOriginalRetrieved",
-        (fun j -> KnowledgeOriginalRetrieved(fromAuditJson<KnowledgeOriginalRetrievedPayload> j))
-        "KnowledgeOriginalRetrievalDenied",
-        (fun j -> KnowledgeOriginalRetrievalDenied(fromAuditJson<KnowledgeOriginalRetrievalDeniedPayload> j))
         "RemotingMethodAudited", (fun j -> RemotingMethodAudited(fromAuditJson<RemotingMethodAuditedPayload> j))
-        "KnowledgeScopeErased", (fun j -> KnowledgeScopeErased(fromAuditJson<KnowledgeScopeErasedPayload> j))
         "AuthorizationDenied", (fun j -> AuthorizationDenied(fromAuditJson<AuthorizationDeniedPayload> j))
         "HostActionDispatched", (fun j -> HostActionDispatched(fromAuditJson<HostActionDispatchedPayload> j))
         "EgressBlocked", (fun j -> EgressBlocked(fromAuditJson<EgressBlockedPayload> j))
         "EgressDenied", (fun j -> EgressDenied(fromAuditJson<EgressDeniedPayload> j))
         "KnowledgeIndexLoadFailed",
         (fun j -> KnowledgeIndexLoadFailed(fromAuditJson<KnowledgeIndexLoadFailedPayload> j))
-        "KnowledgeIngestionDropped",
-        (fun j -> KnowledgeIngestionDropped(fromAuditJson<KnowledgeIngestionDroppedPayload> j))
-        "KnowledgeDocumentDeduplicated",
-        (fun j -> KnowledgeDocumentDeduplicated(fromAuditJson<KnowledgeDocumentDeduplicatedPayload> j))
-        "KnowledgeDocumentsPurged",
-        (fun j -> KnowledgeDocumentsPurged(fromAuditJson<KnowledgeDocumentsPurgedPayload> j))
-        "ContentScanned", (fun j -> ContentScanned(fromAuditJson<ContentScannedPayload> j))
         "OrphanedContentBlobReclaimed",
         (fun j -> OrphanedContentBlobReclaimed(fromAuditJson<OrphanedContentBlobReclaimedPayload> j))
         "OrphanSweepCompleted", (fun j -> OrphanSweepCompleted(fromAuditJson<OrphanSweepCompletedPayload> j))
-        "PasskeyCredentialRegistered",
-        (fun j -> PasskeyCredentialRegistered(fromAuditJson<PasskeyCredentialRegisteredPayload> j))
-        "PasskeyCredentialRemoved",
-        (fun j -> PasskeyCredentialRemoved(fromAuditJson<PasskeyCredentialRemovedPayload> j))
         "ModelFitStarted", (fun j -> ModelFitStarted(fromAuditJson<ModelFitStartedPayload> j))
         "ModelFitCompleted", (fun j -> ModelFitCompleted(fromAuditJson<ModelFitCompletedPayload> j))
         "ModelFitGateFailed", (fun j -> ModelFitGateFailed(fromAuditJson<ModelFitGateFailedPayload> j))
@@ -678,20 +613,14 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         (fun j -> CompositionVerificationRecorded(fromAuditJson<CompositionVerificationRecordedPayload> j))
         "CompositionCapabilityRefused",
         (fun j -> CompositionCapabilityRefused(fromAuditJson<CompositionCapabilityRefusedPayload> j))
-        "AnswerVerificationPassed", (fun j -> AnswerVerificationPassed(fromAuditJson<AnswerVerificationPayload> j))
-        "AnswerVerificationFlagged", (fun j -> AnswerVerificationFlagged(fromAuditJson<AnswerVerificationPayload> j))
-        "FactImportAccepted", (fun j -> FactImportAccepted(fromAuditJson<FactImportPayload> j))
-        "FactImportRefused", (fun j -> FactImportRefused(fromAuditJson<FactImportPayload> j))
         "GroundingEnvelopeMutated",
         (fun j -> GroundingEnvelopeMutated(fromAuditJson<GroundingEnvelopeMutatedPayload> j))
         "GroundingMutationRefused",
         (fun j -> GroundingMutationRefused(fromAuditJson<GroundingMutationRefusedPayload> j))
-        "CertificateIssued", (fun j -> CertificateIssued(fromAuditJson<CertificateIssuedPayload> j))
         "DeploymentVerified", (fun j -> DeploymentVerified(fromAuditJson<DeploymentVerifiedPayload> j))
         "EvidenceChainWalked", (fun j -> EvidenceChainWalked(fromAuditJson<EvidenceChainWalkedPayload> j))
         "MediaKeyDelivered", (fun j -> MediaKeyDelivered(fromAuditJson<MediaKeyDeliveredPayload> j))
         "BlobStorageAuthFailed", (fun j -> BlobStorageAuthFailed(fromAuditJson<BlobStorageAuthFailedPayload> j))
-        "CrossModuleRead", (fun j -> CrossModuleRead(fromAuditJson<CrossModuleReadPayload> j))
         "BackupCompleted", (fun j -> BackupCompleted(fromAuditJson<BackupCompletedPayload> j))
         "BackupFailed", (fun j -> BackupFailed(fromAuditJson<BackupFailedPayload> j))
         "RestoreDrillPassed", (fun j -> RestoreDrillPassed(fromAuditJson<RestoreDrillPassedPayload> j))
@@ -703,7 +632,6 @@ let internal auditDecoderByType: Map<string, string -> AuditEvent> =
         "ContactOptInWithdrawn", (fun j -> ContactOptInWithdrawn(fromAuditJson<ContactOptInWithdrawnPayload> j))
         "NotificationDeliveryRefused",
         (fun j -> NotificationDeliveryRefused(fromAuditJson<NotificationDeliveryRefusedPayload> j))
-        "ConversationsPurged", (fun j -> ConversationsPurged(fromAuditJson<ConversationsPurgedPayload> j))
         "PublicationReaderSignedIn",
         (fun j -> PublicationReaderSignedIn(fromAuditJson<PublicationReaderSignedInPayload> j))
         "PublicationReaderGranted",

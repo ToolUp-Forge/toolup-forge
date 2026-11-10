@@ -5,6 +5,7 @@ open System.Reflection
 open System.Text.Json
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.InterPlatform
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Infra

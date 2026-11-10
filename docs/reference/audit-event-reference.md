@@ -5,7 +5,7 @@
      sources of truth are the platform's `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs,
      its codec in src/ToolUp.Platform.Server/Server/AuditLog.fs, and each companion's `AuditEventFamily`. -->
 
-Every audit event the platform emits (202 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
+Every audit event the platform emits (171 cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2).
 
 **Read the first column when you are writing a SIEM rule or querying an archive.** The wire `EventType` is what is persisted and replicated; the F# case identifier is what you pattern-match on in SDK code. They are equal for almost every event, and the exceptions are listed below — they are pinned deliberately, because a wire string that has already left for a third-party sink cannot be migrated.
 
@@ -59,8 +59,6 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `OAuthRefreshDeadLettered` | — | `OAuthRefreshDeadLetteredPayload` |
 | `PlatformAdminAssigned` | — | `PlatformAdminAssignedPayload` |
 | `PlatformAdminRevoked` | — | `PlatformAdminRevokedPayload` |
-| `PlatformDocumentUploaded` | — | `PlatformDocumentUploadedPayload` |
-| `PlatformDocumentDeleted` | — | `PlatformDocumentDeletedPayload` |
 | `ShareTokenIssued` | — | `ShareTokenIssuedPayload` |
 | `ShareTokenUsed` | — | `ShareTokenUsedPayload` |
 | `ShareTokenRevoked` | — | `ShareTokenRevokedPayload` |
@@ -71,8 +69,6 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `ServiceAccountTokenMinted` | — | `ServiceAccountTokenMintedPayload` |
 | `ServiceAccountTokenRevoked` | — | `ServiceAccountTokenRevokedPayload` |
 | `ServiceAccountStatusChanged` | — | `ServiceAccountStatusChangedPayload` |
-| `ConversationExported` | — | `ConversationExportPayload` |
-| `BeaconRejected` | — | `BeaconRejectedPayload` |
 | `ConfigDrift` | — | `ConfigDriftPayload` |
 | `DiagnosticBundleAccessed` | — | `DiagnosticBundleAccessedPayload` |
 | `RateLimitWaited` | — | `RateLimitWaitedPayload` |
@@ -84,9 +80,6 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `ConversationTurnAppended` | — | `ConversationTurnAppendedPayload` |
 | `ConversationCompleted` | — | `ConversationCompletedPayload` |
 | `ConversationErased` | — | `ConversationErasedPayload` |
-| `ConversationReplayed` | — | `ConversationReplayedPayload` |
-| `AssetUploaded` | — | `AssetUploadedPayload` |
-| `AssetDeleted` | — | `AssetDeletedPayload` |
 | `TeamCreationDenied` | — | `TeamCreationDeniedPayload` |
 | `TeamArchived` | — | `TeamArchivedPayload` |
 | `TeamRestored` | — | `TeamRestoredPayload` |
@@ -127,14 +120,6 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `GrantConsentApproved` | — | `GrantConsentApprovedPayload` |
 | `GrantConsentRevoked` | — | `GrantConsentRevokedPayload` |
 | `GrantConsentVerificationDenied` | — | `GrantConsentVerificationDeniedPayload` |
-| `PeerCallCompleted` | — | `PeerCallCompletedPayload` |
-| `PeerJobCompleted` | — | `PeerJobCompletedPayload` |
-| `PeerCleanRoomDecision` | — | `PeerCleanRoomDecisionPayload` |
-| `FederationRoundCompleted` | — | `FederationRoundCompletedPayload` |
-| `FederationParticipantDropped` | — | `FederationParticipantDroppedPayload` |
-| `FederationRunAborted` | — | `FederationRunAbortedPayload` |
-| `ArtefactSigned` | — | `ArtefactSignedPayload` |
-| `SigningKeyRotated` | — | `SigningKeyRotatedPayload` |
 | `ClassifiedFieldRead` | — | `ClassifiedFieldReadPayload` |
 | `ClassifiedFieldWritten` | — | `ClassifiedFieldWrittenPayload` |
 | `TenantProvisioned` | — | `TenantProvisionedPayload` |
@@ -146,23 +131,14 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `TenantOffboardConfirmationRefused` | — | `TenantOffboardConfirmationRefusedPayload` |
 | `TenantDeprovisionScheduled` | — | `TenantDeprovisionScheduledPayload` |
 | `TenantDeprovisionCancelled` | — | `TenantDeprovisionCancelledPayload` |
-| `KnowledgeOriginalRetrieved` | — | `KnowledgeOriginalRetrievedPayload` |
-| `KnowledgeOriginalRetrievalDenied` | — | `KnowledgeOriginalRetrievalDeniedPayload` |
 | `RemotingMethodAudited` | — | `RemotingMethodAuditedPayload` |
-| `KnowledgeScopeErased` | — | `KnowledgeScopeErasedPayload` |
 | `AuthorizationDenied` | — | `AuthorizationDeniedPayload` |
 | `HostActionDispatched` | — | `HostActionDispatchedPayload` |
 | `EgressBlocked` | — | `EgressBlockedPayload` |
 | `EgressDenied` | — | `EgressDeniedPayload` |
 | `KnowledgeIndexLoadFailed` | — | `KnowledgeIndexLoadFailedPayload` |
-| `KnowledgeIngestionDropped` | — | `KnowledgeIngestionDroppedPayload` |
-| `KnowledgeDocumentDeduplicated` | — | `KnowledgeDocumentDeduplicatedPayload` |
-| `KnowledgeDocumentsPurged` | — | `KnowledgeDocumentsPurgedPayload` |
-| `ContentScanned` | — | `ContentScannedPayload` |
 | `OrphanedContentBlobReclaimed` | — | `OrphanedContentBlobReclaimedPayload` |
 | `OrphanSweepCompleted` | — | `OrphanSweepCompletedPayload` |
-| `PasskeyCredentialRegistered` | — | `PasskeyCredentialRegisteredPayload` |
-| `PasskeyCredentialRemoved` | — | `PasskeyCredentialRemovedPayload` |
 | `ModelFitStarted` | — | `ModelFitStartedPayload` |
 | `ModelFitCompleted` | — | `ModelFitCompletedPayload` |
 | `ModelFitGateFailed` | — | `ModelFitGateFailedPayload` |
@@ -191,18 +167,12 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `ExternalCallbackRejected` | — | `ExternalCallbackRejectedPayload` |
 | `CompositionVerificationRecorded` | — | `CompositionVerificationRecordedPayload` |
 | `CompositionCapabilityRefused` | — | `CompositionCapabilityRefusedPayload` |
-| `AnswerVerificationPassed` | — | `AnswerVerificationPayload` |
-| `AnswerVerificationFlagged` | — | `AnswerVerificationPayload` |
-| `FactImportAccepted` | — | `FactImportPayload` |
-| `FactImportRefused` | — | `FactImportPayload` |
 | `GroundingEnvelopeMutated` | — | `GroundingEnvelopeMutatedPayload` |
 | `GroundingMutationRefused` | — | `GroundingMutationRefusedPayload` |
-| `CertificateIssued` | — | `CertificateIssuedPayload` |
 | `DeploymentVerified` | — | `DeploymentVerifiedPayload` |
 | `EvidenceChainWalked` | — | `EvidenceChainWalkedPayload` |
 | `MediaKeyDelivered` | — | `MediaKeyDeliveredPayload` |
 | `BlobStorageAuthFailed` | — | `BlobStorageAuthFailedPayload` |
-| `CrossModuleRead` | — | `CrossModuleReadPayload` |
 | `BackupCompleted` | — | `BackupCompletedPayload` |
 | `BackupFailed` | — | `BackupFailedPayload` |
 | `RestoreDrillPassed` | — | `RestoreDrillPassedPayload` |
@@ -213,7 +183,6 @@ Cases whose wire discriminator differs from the F# identifier (3):
 | `ContactOptInRecorded` | — | `ContactOptInRecordedPayload` |
 | `ContactOptInWithdrawn` | — | `ContactOptInWithdrawnPayload` |
 | `NotificationDeliveryRefused` | — | `NotificationDeliveryRefusedPayload` |
-| `ConversationsPurged` | — | `ConversationsPurgedPayload` |
 | `PublicationReaderSignedIn` | — | `PublicationReaderSignedInPayload` |
 | `PublicationReaderGranted` | — | `PublicationReaderGrantChangedPayload` |
 | `PublicationReaderRevoked` | — | `PublicationReaderGrantChangedPayload` |
@@ -226,11 +195,42 @@ Payload record definitions live in the `src/ToolUp.Platform.Core/Shared/Audit/*A
 
 ## Companion kinds
 
-Kinds a companion declares through its own `AuditEventFamily` and registers from its compose step (4). Core carries them as `AuditEvent.Opaque`; the companion's assembly holds their event type and payload records.
+Kinds a companion declares through its own `AuditEventFamily` and registers from its compose step (35). Core carries them as `AuditEvent.Opaque`; the companion's assembly holds their event type and payload records.
 
 | Event type (wire) | Registrant |
 |---|---|
+| `AnswerVerificationFlagged` | `ToolUp.AI` |
+| `AnswerVerificationPassed` | `ToolUp.AI` |
+| `ArtefactSigned` | `ToolUp.ArtefactSigning` |
+| `AssetDeleted` | `ToolUp.AssetStore` |
+| `AssetUploaded` | `ToolUp.AssetStore` |
+| `BeaconRejected` | `ToolUp.AI` |
+| `CertificateIssued` | `ToolUp.Facts` |
+| `ContentScanned` | `ToolUp.KnowledgeBase` |
+| `ConversationExported` | `ToolUp.AI` |
+| `ConversationReplayed` | `ToolUp.AI` |
+| `ConversationsPurged` | `ToolUp.AI` |
+| `CrossModuleRead` | `ToolUp.AI` |
+| `FactImportAccepted` | `ToolUp.Facts` |
+| `FactImportRefused` | `ToolUp.Facts` |
+| `FederationParticipantDropped` | `ToolUp.InterPlatform` |
+| `FederationRoundCompleted` | `ToolUp.InterPlatform` |
+| `FederationRunAborted` | `ToolUp.InterPlatform` |
 | `FormSubmissionUpdated` | `ToolUp.Forms` |
 | `FormSubmitted` | `ToolUp.Forms` |
+| `KnowledgeDocumentDeduplicated` | `ToolUp.KnowledgeBase` |
+| `KnowledgeDocumentsPurged` | `ToolUp.KnowledgeBase` |
+| `KnowledgeIngestionDropped` | `ToolUp.RAG` |
+| `KnowledgeOriginalRetrievalDenied` | `ToolUp.KnowledgeBase` |
+| `KnowledgeOriginalRetrieved` | `ToolUp.KnowledgeBase` |
+| `KnowledgeScopeErased` | `ToolUp.KnowledgeBase` |
+| `PasskeyCredentialRegistered` | `ToolUp.AuthProviders.Passkey` |
+| `PasskeyCredentialRemoved` | `ToolUp.AuthProviders.Passkey` |
+| `PeerCallCompleted` | `ToolUp.InterPlatform` |
+| `PeerCleanRoomDecision` | `ToolUp.InterPlatform` |
+| `PeerJobCompleted` | `ToolUp.InterPlatform` |
+| `PlatformDocumentDeleted` | `ToolUp.KnowledgeBase` |
+| `PlatformDocumentUploaded` | `ToolUp.KnowledgeBase` |
+| `SigningKeyRotated` | `ToolUp.ArtefactSigning` |
 | `WorkflowActionExecuted` | `ToolUp.Forms` |
 | `WorkflowTransitioned` | `ToolUp.Forms` |

@@ -57,6 +57,7 @@ let private composePasskey (config: PasskeyConfig) (app: ServerApp) : ServerApp 
     |> ServerApp.withConfigValidator (PasskeyConfigValidator(config) :> ConfigValidation.IConfigValidator)
     |> ServerApp.addContribution (Contribution.routes passkeyCompanion [ PasskeyHost.routes ])
     |> ServerApp.addContribution (Contribution.service passkeyCompanion runtimeServiceConfig)
+    |> ServerApp.withAuditEvents (AuditEventFamily.registration PasskeyAuditEvents.PasskeyAuditEvent.family)
 
 /// **Sets** the passkey companion: the auth provider, preflight validator,
 /// ceremony routes and runtime DI singleton `config` describes are composed

@@ -5,6 +5,7 @@ open System.Text
 open System.Security.Cryptography
 open Expecto
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -142,7 +143,7 @@ let private dedupEvents (audit: CapturingAuditLog) =
     audit.Events
     |> List.choose (fun (_, e) ->
         match e with
-        | KnowledgeDocumentDeduplicated p -> Some p
+        | KnowledgeAudit(KnowledgeDocumentDeduplicated p) -> Some p
         | _ -> None)
 
 let tests =

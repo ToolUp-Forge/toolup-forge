@@ -9,6 +9,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open Giraffe
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.Compose
 
 // ─── Phase 36.E — `/dev/ai-cross-module` rolling-window rollup ───────
@@ -289,7 +290,7 @@ let reportFor (auditLogOpt: IAuditLog) (scopeId: string) : Async<CrossModuleRepo
     let rows =
         events
         |> List.choose (function
-            | CrossModuleRead payload -> Some payload
+            | AIAudit(CrossModuleRead payload) -> Some payload
             | _ -> None)
 
     return computeReport scopeId now window rows
