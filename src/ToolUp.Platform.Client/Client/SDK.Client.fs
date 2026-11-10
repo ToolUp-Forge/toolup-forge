@@ -3026,7 +3026,7 @@ module Client =
                                         // switcher above for why an empty
                                         // icon is an empty ROW at the narrow
                                         // width. The glyph is the one
-                                        // `AdminHome.create` already gives
+                                        // `AdminHome.builtIn` already gives
                                         // the Administration LANDING, so the
                                         // gear means administration on both
                                         // sides of the switch rather than the

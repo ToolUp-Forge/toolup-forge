@@ -40,7 +40,7 @@ let register () : ErasedModule =
     |> ClientModule.register
 ```
 
-`ClientHostView.withElementView` is `withFullWidthView` plus the bag: the view receives `Model`, `dispatch`, and a `ClientHostCapabilities<'Msg>` built from that same dispatch (`ClientHostCapabilities.create dispatch` — usable directly anywhere you already hold a dispatch).
+`ClientHostView.withElementView` is a full-width `withView` plus the bag: the view receives `Model`, `dispatch`, and a `ClientHostCapabilities<'Msg>` built from that same dispatch (`ClientHostCapabilities.create dispatch` — usable directly anywhere you already hold a dispatch).
 
 ## Semantics worth knowing
 

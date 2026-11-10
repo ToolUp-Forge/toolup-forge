@@ -9,7 +9,7 @@ open ToolUp.Elmish
 // ─── Phase 110 — host-neutral client tree-hosting seam ────────────────
 //
 // A `ClientModule` view body is already an arbitrary `ReactElement`
-// (`withFullWidthView` hosts any rendered tree), so an external typed
+// (a `PageContent.FullWidth` page hosts any rendered tree), so an external typed
 // Node-tree UI language renders into the SDK shell today. What was
 // missing is the RUNTIME seam: the named bag of host capabilities a
 // tree's typed actions route through so every hosting module doesn't
@@ -106,7 +106,7 @@ module ClientHostCapabilities =
                 |> List.iter (fun effect -> effect dispatch)
         }
 
-/// `ClientModule.withFullWidthView`-shaped builder step whose view also
+/// full-width `ClientModule.withView`-shaped builder step whose view also
 /// receives the host-capability bag, so a runtime-hosted tree gets the
 /// four hooks without the consumer re-deriving them. Lives in its own
 /// module (not `ClientModule`) because the builder module is sealed at
@@ -223,9 +223,7 @@ module ClientHostInvokeView =
     /// `ClientHostView.withElementView`-shaped builder whose view ALSO
     /// receives a `ClientHostInvoke` constructed from the composed registry,
     /// so a hosted tree gets the four built-in hooks PLUS the authorizer-gated
-    /// `Invoke` for capabilities beyond them. Existing `withView` /
-    /// `withFullWidthView` / `withPages` / `withElementView` callers are
-    /// untouched (GP 11):
+    /// `Invoke` for capabilities beyond them:
     ///
     /// ```
     /// ClientModule.create spec

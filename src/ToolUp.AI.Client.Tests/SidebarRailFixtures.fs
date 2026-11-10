@@ -176,8 +176,8 @@ let private pagedRow (id: string) (name: string) (group: string option) (pages: 
 
 /// The four SDK reserved rows, with the ids, names and declared slots the
 /// shell really builds them with — the two landings via
-/// `ClientModule.withPlacement` (`Home.create` names it "Home",
-/// `AdminHome.create` "Administration"), the two Phase 567 area switchers
+/// `ClientModule.withPlacement` (`Home.builtIn` names it "Home",
+/// `AdminHome.builtIn` "Administration"), the two Phase 567 area switchers
 /// at their literal construction site in `sidebarSections`. Restated here
 /// rather than driven through those factories, which reach `Icons` and the
 /// shell's `ClientConfig`; the cost is the same one `SidebarPlacementTests`

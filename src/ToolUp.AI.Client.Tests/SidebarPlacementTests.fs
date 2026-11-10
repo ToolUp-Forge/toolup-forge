@@ -56,7 +56,7 @@ let private undeclared (id: string) (group: string option) = railRow id group No
 
 /// The four SDK reserved rows, declared exactly as the shipped SDK
 /// declares them — the two landings via `ClientModule.withPlacement`
-/// (`Home.create` / `AdminHome.create`), the two switchers at their
+/// (`Home.builtIn` / `AdminHome.builtIn`), the two switchers at their
 /// literal construction site in the shell's `sidebarSections` binding.
 /// Restated here rather than driven through the built-ins' `create`
 /// because those reach `Icons` bindings and the shell's `ClientConfig`;

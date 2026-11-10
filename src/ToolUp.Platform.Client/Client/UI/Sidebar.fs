@@ -206,7 +206,7 @@ let TrailingKey = "_trailing"
 [<Literal>]
 let HiddenKey = "_hidden"
 
-/// The SDK Home module's reserved id (see `Home.create` →
+/// The SDK Home module's reserved id (see `Home.builtIn` →
 /// `ClientModule.withId "_sdk.home"`). The sidebar lifts it into a
 /// dedicated leading section that is always visible and never
 /// collapsed, rather than letting it fall into `_other` at the bottom.
@@ -214,7 +214,7 @@ let HiddenKey = "_hidden"
 let HomeId = "_sdk.home"
 
 /// Phase 573 — the Administration area's landing module id (see
-/// `AdminHome.create`). Lifted into the SAME leading section as `HomeId`
+/// `AdminHome.builtIn`). Lifted into the SAME leading section as `HomeId`
 /// below, which is what makes it first in the admin rail without anyone
 /// maintaining a sort order. At most one of the two is ever in the rail
 /// set at a time: under `ShellChrome.AdminArea = ChromeFill.On()` the shell renders
