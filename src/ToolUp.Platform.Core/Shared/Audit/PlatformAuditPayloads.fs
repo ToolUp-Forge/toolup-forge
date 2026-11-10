@@ -121,7 +121,7 @@ type TeamDeletedPayload = {
 /// caller who performed the transfer — always equal to `FromUserId` under
 /// the current gate (the outgoing Owner transfers their own team), carried
 /// as a distinct field so a future admin-driven reassignment path stays
-/// wire-compatible. Recorded under the team's audit stream, `AuditStreamKey.ofTeam` (GP 6).
+/// wire-compatible. Recorded under the team's audit stream, `AuditScope.team` (GP 6).
 type TeamOwnershipTransferredPayload = {
     TeamId: TeamId
     /// Outgoing Owner, demoted to `Admin` by the transfer.

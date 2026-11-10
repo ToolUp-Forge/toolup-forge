@@ -126,7 +126,7 @@ let private deps (config: ScimConfig) (ctx: HttpContext) : Result<ScimDeps, Scim
         Ok {
             Teams = teams
             Permissions = resolve<IPermissionStore> ctx
-            Audit = resolve<IAuditLog> ctx
+            Audit = ToolUp.Platform.Config.Background.auditLogOf ctx
             Config = config
         }
 

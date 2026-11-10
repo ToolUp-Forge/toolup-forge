@@ -1753,30 +1753,33 @@ module ModelExecutionPeerContract =
         /// durably parked — so this runs AFTER `SaveResult` and swallows
         /// its own failures, exactly as `PeerJobHandler` does.
         let recordTerminalOutcome (envelope: PeerJobPayload) (jobId: PeerJobId) (answer: ModelExecutionPeerAnswer) = async {
-            match fusion.AuditLog with
-            | None -> ()
-            | Some log ->
-                try
-                    let payload: PeerJobCompletedPayload = {
-                        ContractId = ModelExecutionProfile.ContractId
-                        MethodName = methodName
-                        CallerPeerId = envelope.OwnerPeerId
-                        RootRequestId = envelope.RootRequestId
-                        JobId = jobId
-                        Succeeded =
-                            match answer with
-                            | ModelExecutionPeerAnswer.Answered _ -> true
-                            | ModelExecutionPeerAnswer.Refused _ -> false
-                        Outcome =
-                            match answer with
-                            | ModelExecutionPeerAnswer.Answered _ -> "ok"
-                            | ModelExecutionPeerAnswer.Refused refusal -> ModelExecutionPeerRefusal.className refusal
-                        OccurredAt = DateTimeOffset.UtcNow
-                    }
+            try
+                let payload: PeerJobCompletedPayload = {
+                    ContractId = ModelExecutionProfile.ContractId
+                    MethodName = methodName
+                    CallerPeerId = envelope.OwnerPeerId
+                    RootRequestId = envelope.RootRequestId
+                    JobId = jobId
+                    Succeeded =
+                        match answer with
+                        | ModelExecutionPeerAnswer.Answered _ -> true
+                        | ModelExecutionPeerAnswer.Refused _ -> false
+                    Outcome =
+                        match answer with
+                        | ModelExecutionPeerAnswer.Answered _ -> "ok"
+                        | ModelExecutionPeerAnswer.Refused refusal -> ModelExecutionPeerRefusal.className refusal
+                    OccurredAt = DateTimeOffset.UtcNow
+                }
 
-                    do! log.Record(PeerJob.Scope, PeerJobCompleted payload)
-                with _ ->
-                    ()
+                do!
+                    fusion.AuditLog.Record(
+                        AuditScope.platform,
+                        AuditSubject.system "PeerHost",
+                        PeerJobCompleted payload
+                    )
+                    |> AuditRow.orRefuse
+            with _ ->
+                ()
         }
 
         interface IJobHandler with

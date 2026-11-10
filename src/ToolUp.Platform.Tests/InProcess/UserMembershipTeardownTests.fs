@@ -57,8 +57,12 @@ type private RecordingAuditLog() =
     member _.Events = events |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, event) = async { events.Add(scopeId, event) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, event) = async {
+            events.Add(scopeId, event)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Email-set-backed `IPendingInviteStore` stub — tracks which emails
 /// hold a pending entry without constructing `PendingInviteByEmail`
@@ -112,7 +116,7 @@ type private MapUserDirectory(emailsById: Map<string, string>) =
 /// Build an `IServiceProvider` for the hook from optional substrate.
 let private providerWith
     (teamStore: ITeamStore option)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (directory: IUserDirectory option)
     (invites: IPendingInviteStore option)
     : IServiceProvider =
@@ -121,7 +125,7 @@ let private providerWith
     teamStore
     |> Option.iter (fun s -> services.AddSingleton<ITeamStore>(s) |> ignore)
 
-    auditLog |> Option.iter (fun a -> services.AddSingleton<IAuditLog>(a) |> ignore)
+    services.AddSingleton<IAuditLog>(auditLog) |> ignore
 
     directory
     |> Option.iter (fun d -> services.AddSingleton<IUserDirectory>(d) |> ignore)
@@ -241,7 +245,7 @@ let tests =
         testCaseAsync "hook skips a team scope"
         <| async {
             let ts = freshTeamStore ()
-            let sp = providerWith (Some(ts :> ITeamStore)) None None None
+            let sp = providerWith (Some(ts :> ITeamStore)) (NoOpAuditLog()) None None
             let hook = UserMembershipTeardownLifecycle.create sp
 
             let! result = hook.OnDeprovisioned("team-abc", UserId "admin-1")
@@ -253,7 +257,7 @@ let tests =
 
         testCaseAsync "hook skips when no ITeamStore is resolvable"
         <| async {
-            let sp = providerWith None None None None
+            let sp = providerWith None (NoOpAuditLog()) None None
             let hook = UserMembershipTeardownLifecycle.create sp
 
             let! result = hook.OnDeprovisioned("user-u1", UserId "admin-1")
@@ -267,7 +271,7 @@ let tests =
         <| async {
             let ts = freshTeamStore ()
             let! teamId = seedTeam ts "Held" [ "victim", Owner ]
-            let sp = providerWith (Some(ts :> ITeamStore)) None None None
+            let sp = providerWith (Some(ts :> ITeamStore)) (NoOpAuditLog()) None None
             let hook = UserMembershipTeardownLifecycle.create sp
 
             let! result = hook.OnDeprovisioned("user-victim", UserId "admin-1")
@@ -290,7 +294,7 @@ let tests =
             let sp =
                 providerWith
                     (Some(ts :> ITeamStore))
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     (Some(directory :> IUserDirectory))
                     (Some(invites :> IPendingInviteStore))
 
@@ -328,7 +332,7 @@ let tests =
             let invites = EmailSetInviteStore [ "victim@example.com" ]
 
             let sp =
-                providerWith (Some(ts :> ITeamStore)) None None (Some(invites :> IPendingInviteStore))
+                providerWith (Some(ts :> ITeamStore)) (NoOpAuditLog()) None (Some(invites :> IPendingInviteStore))
 
             let hook = UserMembershipTeardownLifecycle.create sp
             let! result = hook.OnDeprovisioned("user-victim", UserId "admin-1")

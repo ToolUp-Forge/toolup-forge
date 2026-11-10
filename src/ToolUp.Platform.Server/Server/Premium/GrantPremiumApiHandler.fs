@@ -25,17 +25,12 @@ open ToolUp.Platform.Config
 
 let private jsonOptions = PlatformJson.options
 
-let private PlatformScope = ScopeKey.PlatformContainer
-
 let private resolveUserClaims (ctx: HttpContext) : IUserClaims =
     match ctx.RequestServices.GetService(typeof<IUserClaims>) with
     | :? IUserClaims as svc -> svc
     | _ -> NoOpUserClaims() :> _
 
-let private resolveAuditLog (ctx: HttpContext) : IAuditLog option =
-    match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-    | :? IAuditLog as svc -> Some svc
-    | _ -> None
+let private resolveAuditLog (ctx: HttpContext) : IAuditLog = Background.auditLogOf ctx
 
 /// Phase 1026 — the warning a failed grant / revoke audit write is logged
 /// as, built while the request is live.
@@ -107,18 +102,18 @@ let private grantHandler (userId: string) : HttpHandler =
                     | Premium(grantedAt, _, _) -> grantedAt
                     | NotPremium -> DateTimeOffset.UtcNow
 
-                resolveAuditLog ctx
-                |> Option.iter (fun auditLog ->
-                    let warn = auditWarner ctx
+                let auditLog = resolveAuditLog ctx
+                let warn = auditWarner ctx
 
-                    try
-                        auditLog.Record(
-                            PlatformScope,
-                            AuditEvent.PremiumGranted(UserId userId, grantor, reason, occurredAt)
-                        )
-                        |> Background.startAudit warn "PremiumGranted audit"
-                    with ex ->
-                        warn "PremiumGranted audit" ex)
+                try
+                    auditLog.Record(
+                        AuditScope.platform,
+                        Background.requestActor "GrantPremiumApi" ctx,
+                        AuditEvent.PremiumGranted(UserId userId, grantor, reason, occurredAt)
+                    )
+                    |> Background.startAuditRow warn "PremiumGranted audit"
+                with ex ->
+                    warn "PremiumGranted audit" ex
 
                 ctx.Response.StatusCode <- 204
                 return! next ctx
@@ -141,18 +136,18 @@ let private revokeHandler (userId: string) : HttpHandler =
                 ctx.Response.StatusCode <- 502
                 return! ctx.WriteTextAsync msg
             | Ok() ->
-                resolveAuditLog ctx
-                |> Option.iter (fun auditLog ->
-                    let warn = auditWarner ctx
+                let auditLog = resolveAuditLog ctx
+                let warn = auditWarner ctx
 
-                    try
-                        auditLog.Record(
-                            PlatformScope,
-                            AuditEvent.PremiumRevoked(UserId userId, grantor, reason, DateTimeOffset.UtcNow)
-                        )
-                        |> Background.startAudit warn "PremiumRevoked audit"
-                    with ex ->
-                        warn "PremiumRevoked audit" ex)
+                try
+                    auditLog.Record(
+                        AuditScope.platform,
+                        Background.requestActor "GrantPremiumApi" ctx,
+                        AuditEvent.PremiumRevoked(UserId userId, grantor, reason, DateTimeOffset.UtcNow)
+                    )
+                    |> Background.startAuditRow warn "PremiumRevoked audit"
+                with ex ->
+                    warn "PremiumRevoked audit" ex
 
                 ctx.Response.StatusCode <- 204
                 return! next ctx

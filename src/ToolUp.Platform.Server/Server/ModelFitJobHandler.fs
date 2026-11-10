@@ -49,7 +49,8 @@ module ModelFitEnvelope =
 
                 do!
                     audit.Record(
-                        request.ScopeId,
+                        AuditScope.shard request.ScopeId,
+                        AuditSubject.system "ModelFitJob",
                         ModelFitStarted {
                             CompositeKeyHash = key.Hash
                             SpecHash = key.SpecHash
@@ -60,6 +61,7 @@ module ModelFitEnvelope =
                             ScopeId = request.ScopeId
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 let! raw = async {
                     try
@@ -93,7 +95,8 @@ module ModelFitEnvelope =
 
                         do!
                             audit.Record(
-                                request.ScopeId,
+                                AuditScope.shard request.ScopeId,
+                                AuditSubject.system "ModelFitJob",
                                 ModelFitCompleted {
                                     CompositeKeyHash = key.Hash
                                     ProviderId = key.ProviderId
@@ -105,11 +108,13 @@ module ModelFitEnvelope =
                                     ScopeId = request.ScopeId
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         if not (List.isEmpty failed) then
                             do!
                                 audit.Record(
-                                    request.ScopeId,
+                                    AuditScope.shard request.ScopeId,
+                                    AuditSubject.system "ModelFitJob",
                                     ModelFitGateFailed {
                                         CompositeKeyHash = key.Hash
                                         ProviderId = key.ProviderId
@@ -117,6 +122,7 @@ module ModelFitEnvelope =
                                         ScopeId = request.ScopeId
                                     }
                                 )
+                                |> AuditRow.orRefuse
 
                         return Ok outcome
         }
@@ -300,7 +306,8 @@ module ModelFitBatch =
                 | Ok reservations ->
                     do!
                         audit.Record(
-                            batch.ScopeId,
+                            AuditScope.shard batch.ScopeId,
+                            AuditSubject.system "ModelFitJob",
                             ModelFitBatchSubmitted {
                                 BatchId = batch.BatchId
                                 ItemCount = List.length batch.Requests
@@ -308,6 +315,7 @@ module ModelFitBatch =
                                 ScopeId = batch.ScopeId
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     let scheduled = ResizeArray<int * JobId>()
                     let failures = ResizeArray<int * FitEnqueueRefusal>()

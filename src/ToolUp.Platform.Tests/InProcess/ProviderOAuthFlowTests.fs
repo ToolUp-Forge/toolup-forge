@@ -164,7 +164,7 @@ let tests =
                 ProviderOAuthConnect.completeConnect
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     "user-1"
                     flow
@@ -182,7 +182,7 @@ let tests =
                 ProviderOAuthConnect.refreshEntry
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     flow
                     entry
@@ -225,7 +225,7 @@ let tests =
                 ProviderOAuthConnect.completeConnect
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     "user-1"
                     flow
@@ -243,7 +243,7 @@ let tests =
                 ProviderOAuthConnect.refreshEntry
                     profiles
                     secrets
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     scope
                     flow
                     entry
@@ -293,7 +293,7 @@ let tests =
                 ProviderOAuthConnect.completeConnect
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     "user-1"
                     flow
@@ -308,7 +308,7 @@ let tests =
                 ProviderOAuthConnect.refreshEntry
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     flow
                     entry
@@ -367,7 +367,7 @@ let tests =
                 ProviderOAuthConnect.completeConnect
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     "user-1"
                     flow
@@ -388,7 +388,7 @@ let tests =
                 ProviderOAuthConnect.refreshEntry
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     flow
                     entry
@@ -441,7 +441,7 @@ let tests =
                 ProviderOAuthConnect.completeConnect
                     profiles
                     secrets
-                    None
+                    (NoOpAuditLog())
                     scope
                     "user-1"
                     flow

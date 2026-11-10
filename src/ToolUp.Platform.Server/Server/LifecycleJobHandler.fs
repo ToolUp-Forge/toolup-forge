@@ -55,10 +55,7 @@ type LifecycleJobHandler(services: IServiceProvider) =
                     | :? seq<ITenantLifecycle> as hs -> List.ofSeq hs
                     | _ -> []
 
-                let auditLog =
-                    match services.GetService(typeof<IAuditLog>) with
-                    | :? IAuditLog as a -> Some a
-                    | _ -> None
+                let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog services
 
                 let snapshot =
                     match services.GetService(typeof<TenantLifecycleSnapshot>) with
@@ -76,9 +73,8 @@ type LifecycleJobHandler(services: IServiceProvider) =
                 // Best-effort by contract — a sink failure cannot fail
                 // an offboard (mirrors the inline handler's seam).
                 let emitAudit (scope: string) (event: AuditEvent) =
-                    match auditLog with
-                    | Some a -> a.Record(scope, event)
-                    | None -> async { return () }
+                    AuditRow.emit auditLog (AuditScope.shard scope) (AuditSubject.system "LifecycleJob") event
+                    |> AuditRow.bestEffort
 
                 // Persist the terminal summary durably (best-effort) +
                 // refresh the process-local cache — mirrors

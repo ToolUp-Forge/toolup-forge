@@ -449,6 +449,7 @@ let private subjectFields (envelope: AuditEnvelope) =
     | TeamAudit(userId, teamId) -> userId.Value, Some teamId
     | ClaimAudit(tokenId, attributedHandle, _, _) -> attributedHandle |> Option.defaultValue tokenId, None
     | ReaderAudit userId -> userId.Value, None
+    | SystemAudit emitter -> emitter, None
 
 /// The ordered extension pairs for one envelope, before escaping and
 /// before the byte budget is applied. Order is load-bearing: the cheap,

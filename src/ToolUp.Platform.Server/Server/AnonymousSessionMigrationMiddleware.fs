@@ -231,7 +231,8 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
 
                                         try
                                             auditLog.Record(
-                                                scopeId,
+                                                AuditScope.shard scopeId,
+                                                Background.requestActor "AnonymousSessionMigration" ctx,
                                                 AnonymousSessionMigrated {
                                                     AnonymousSessionId = sid
                                                     TargetUserId = UserId uid
@@ -244,7 +245,7 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
                                                     OccurredAt = DateTimeOffset.UtcNow
                                                 }
                                             )
-                                            |> Background.startAudit warn "AnonymousSessionMigrated audit"
+                                            |> Background.startAuditRow warn "AnonymousSessionMigrated audit"
                                         with ex ->
                                             warn "AnonymousSessionMigrated audit" ex
                                     | _ -> ()

@@ -58,8 +58,12 @@ type private CapturingAuditLog() =
     member _.Events = lock gate (fun () -> events |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add(scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock gate (fun () -> events.Add(scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private mkDoc (docId: string) : KnowledgeDocument = {
     Id = docId
@@ -84,7 +88,7 @@ let private chunk content : TextChunk = {
 
 let private mkDeps
     (storage: IBlobStorage)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (lifecycle: ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle option)
     (container: string)
     : KnowledgeApiDeps =
@@ -158,7 +162,7 @@ let tests =
             do! sparse.Upsert Deployment "doc-2:chunk:0" (chunk "beta")
 
             let audit = CapturingAuditLog()
-            let deps = mkDeps storage (Some(audit :> IAuditLog)) (Some lifecycle) "team-a"
+            let deps = mkDeps storage ((audit :> IAuditLog)) (Some lifecycle) "team-a"
 
             let! result = resetIndex deps
             Expect.isOk result "reset must succeed"
@@ -188,7 +192,7 @@ let tests =
                 :> ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle
 
             do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
-            let deps = mkDeps storage None (Some lifecycle) "team-a"
+            let deps = mkDeps storage (NoOpAuditLog()) (Some lifecycle) "team-a"
 
             let! result = resetIndex deps
             Expect.isOk result "absent IAuditLog never fails the reset"
@@ -218,7 +222,7 @@ let tests =
             do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
 
             let deps = {
-                mkDeps storage None None "team-a" with
+                mkDeps storage (NoOpAuditLog()) None "team-a" with
                     VectorScope = Team "team-a"
                     EmbeddingProvider = Some(family :> IEmbeddingProvider)
             }
@@ -246,7 +250,7 @@ let tests =
             do! saveIndex storage "team-a" [ mkDoc "doc-1" ]
 
             let deps = {
-                mkDeps storage None None "team-a" with
+                mkDeps storage (NoOpAuditLog()) None "team-a" with
                     VectorScope = Team "team-a"
                     EmbeddingProvider = Some shared
             }

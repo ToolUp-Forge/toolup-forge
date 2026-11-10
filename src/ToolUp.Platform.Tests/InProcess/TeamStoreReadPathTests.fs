@@ -56,8 +56,8 @@ type private FailOnceBlobStorage(inner: IBlobStorage, shouldFail: string -> bool
 
 type private SilentAuditLog() =
     interface IAuditLog with
-        member _.Record(_, _) = async { return () }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private teamStoreOver (storage: IBlobStorage) =
     TeamStore(storage, InMemoryNotificationChannel(None) :> INotificationChannel) :> ITeamStore

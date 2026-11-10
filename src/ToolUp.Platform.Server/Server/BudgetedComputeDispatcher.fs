@@ -183,6 +183,8 @@ type ComputeBudgetGuard
         ?clock: unit -> DateTime
     ) =
 
+    let audit = defaultArg audit (NoOpAuditLog() :> IAuditLog)
+
     let costModel = defaultArg costModel ComputeCostModel.perRun
     let now = defaultArg clock (fun () -> DateTime.UtcNow)
 
@@ -194,11 +196,11 @@ type ComputeBudgetGuard
     let warnThreshold = defaultArg warnThreshold BudgetPolicy.defaultWarnThreshold
 
     let record (scopeId: string) (event: AuditEvent) = async {
-        match audit with
-        | Some log ->
-            do! log.Record(scopeId, event)
-            return ()
-        | None -> return ()
+        do!
+            audit.Record(AuditScope.shard scopeId, AuditSubject.system "ComputeDispatcher", event)
+            |> AuditRow.orRefuse
+
+        return ()
     }
 
     /// Scopes already warned in a given period, so the crossing is

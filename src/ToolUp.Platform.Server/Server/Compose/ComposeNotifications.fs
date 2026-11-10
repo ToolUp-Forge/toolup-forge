@@ -204,14 +204,15 @@ let buildNotificationStack
 
     let auditLog: IAuditLog =
         match config.AuditLog with
-        | FeatureMode.Disabled -> AuditLog.NoOpAuditLog() :> _
+        | FeatureMode.Disabled -> NoOpAuditLog() :> _
         | FeatureMode.Enabled ->
             AuditLog.EventStoreAuditLog(
                 eventStore,
                 resolvedLogger,
                 metricsSinkLookup,
                 config.AuditFailurePolicy,
-                ?fallbackStore = auditFallbackStore
+                ?fallbackStore = auditFallbackStore,
+                chainHeadStorage = resolvedBlobStorage
             )
             :> _
 
@@ -272,7 +273,7 @@ let buildNotificationStack
             // guard.
             Some(
                 StoreIdSanitising.SanitisingShareTokenStore(
-                    ShareTokenStore.create resolvedBlobStorage secretStore (Some auditLog) resolvedLogger
+                    ShareTokenStore.create resolvedBlobStorage secretStore (auditLog) resolvedLogger
                 )
                 :> IShareTokenStore
             )
@@ -330,7 +331,7 @@ let buildNotificationStack
                 substrate.Beneath,
                 substrate.Store,
                 config.NotificationCategories,
-                Some auditLog,
+                auditLog,
                 resolvedLogger
             )
             :> INotificationChannel

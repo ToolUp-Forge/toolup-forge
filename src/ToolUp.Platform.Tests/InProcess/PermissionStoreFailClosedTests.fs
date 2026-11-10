@@ -49,49 +49,47 @@ let private store (b: IBlobStorage) = PermissionStore(b) :> IPermissionStore
 let tests =
     testList "PermissionStore fail-open / fail-closed" [
 
-        test "Absent document (Download error + Exists false) → empty (bootstrap fail-open)" {
+        test "Absent document (Download error + Exists false) → Ok empty (bootstrap fail-open)" {
             let s = store (FakeBlob(Result.Error "Blob not found", Ok false))
             let perms = s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously
-            Expect.equal perms TeamPermissions.empty "no document = pre-Phase-4 unrestricted bootstrap"
+            Expect.equal perms (Ok TeamPermissions.empty) "no document = pre-Phase-4 unrestricted bootstrap"
         }
 
-        test "Present but unreadable (Download error + Exists true) → raises (fail closed)" {
+        test "Present but unreadable (Download error + Exists true) → Unreadable (fail closed)" {
             let s = store (FakeBlob(Result.Error "transient storage error", Ok true))
 
-            Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () -> s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously |> ignore)
-                "a readable-but-failed document must not degrade to unrestricted"
+            match s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously with
+            | Error(PermissionStoreError.Unreadable _) -> ()
+            | other -> failtestf "a readable-but-failed document must not degrade to unrestricted; got %A" other
         }
 
-        test "Existence unconfirmable (Download error + Exists throws) → raises (fail closed)" {
+        test "Existence unconfirmable (Download error + Exists throws) → Error (fail closed)" {
             let s =
                 store (FakeBlob(Result.Error "storage down", Result.Error(exn "exists probe failed")))
 
-            Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () -> s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously |> ignore)
+            Expect.isError
+                (s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously)
                 "cannot prove absence → must not assume unrestricted"
         }
 
-        test "Present but corrupt JSON (Download ok, unparseable) → raises (fail closed)" {
+        test "Present but corrupt JSON (Download ok, unparseable) → Quarantined (fail closed)" {
             let garbage = System.Text.Encoding.UTF8.GetBytes "not json {{{"
             let s = store (FakeBlob(Ok garbage, Ok true))
 
-            Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () -> s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously |> ignore)
-                "a corrupt RBAC document must not be treated as unrestricted"
+            match s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously with
+            | Error(PermissionStoreError.Quarantined _) -> ()
+            | other -> failtestf "a corrupt RBAC document must not be treated as unrestricted; got %A" other
         }
 
-        // Phase 1059 — the raise reaches the caller of the read the request
-        // path actually makes (`GetEffectivePermissions`), so the
-        // middleware sees it and can refuse.
-        test "GetEffectivePermissions over an unreadable document raises (the caller observes the fault)" {
+        // Phase 1059 — the fault reaches the caller of the read the request
+        // path actually makes (`GetEffectivePermissions`), so the middleware
+        // sees it and can refuse.
+        test "GetEffectivePermissions over an unreadable document is Error (the caller observes the fault)" {
             let s = store (FakeBlob(Result.Error "transient storage error", Ok true))
 
-            Expect.throwsT<PermissionStoreUnavailableException>
-                (fun () ->
-                    s.GetEffectivePermissions(UserId "u-1", TeamId "team-x")
-                    |> Async.RunSynchronously
-                    |> ignore)
+            Expect.isError
+                (s.GetEffectivePermissions(UserId "u-1", TeamId "team-x")
+                 |> Async.RunSynchronously)
                 "the effective-permission read must surface the fault, not an empty (unrestricted) map"
         }
 
@@ -100,6 +98,6 @@ let tests =
 
             let s = store (FakeBlob(Ok valid, Ok true))
             let perms = s.GetTeamPermissions(TeamId "team-x") |> Async.RunSynchronously
-            Expect.equal perms TeamPermissions.empty "well-formed empty document parses cleanly"
+            Expect.equal perms (Ok TeamPermissions.empty) "well-formed empty document parses cleanly"
         }
     ]

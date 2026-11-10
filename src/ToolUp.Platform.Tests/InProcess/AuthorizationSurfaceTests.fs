@@ -894,8 +894,9 @@ let private grantAuthorityDerivation =
                 [
                     "GrantConsentStore.grantWithCounterpartyApproval"
                     "IPermissionStore.SetTeamPermissions"
+                    "IPermissionStore.UpdateTeamPermissions"
                 ]
-                "and those are the only two paths still open against it"
+                "and those are the only paths still open against it (both store writes validate the same document)"
 
             Expect.equal
                 (GrantAuthoritySurface.counterpartyModules authority)

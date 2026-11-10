@@ -245,7 +245,8 @@ type VirtualDatasetReader
                 | Ok dobj ->
                     do!
                         audit.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.system "VirtualDataset",
                             DatasetSpillCreated {
                                 Actor = actor
                                 ScopeId = scopeId
@@ -255,6 +256,7 @@ type VirtualDatasetReader
                                 RowCount = rowCount
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     return
                         Ok {
@@ -285,7 +287,8 @@ type VirtualDatasetReader
             | Ok() ->
                 do!
                     audit.Record(
-                        scopeId,
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "VirtualDataset",
                         DatasetSpillDeleted {
                             Actor = actor
                             ScopeId = scopeId
@@ -293,6 +296,7 @@ type VirtualDatasetReader
                             Reason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 return Ok()
         }

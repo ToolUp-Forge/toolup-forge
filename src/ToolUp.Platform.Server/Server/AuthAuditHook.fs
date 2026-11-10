@@ -90,7 +90,8 @@ type AuthAuditHook(auditLog: IAuditLog, logger: ILogger, ?dedupWindow: TimeSpan,
 
             do!
                 auditLog.Record(
-                    scopeId,
+                    AuditScope.shard scopeId,
+                    AuditSubject.fromSubject denial.Subject,
                     AuthorizationDenied {
                         Route = denial.Route
                         Requirement = AuthDenialRequirement.toString denial.Requirement
@@ -104,6 +105,7 @@ type AuthAuditHook(auditLog: IAuditLog, logger: ILogger, ?dedupWindow: TimeSpan,
                         OccurredAt = clock ()
                     }
                 )
+                |> AuditRow.orRefuse
         with ex ->
             // Best-effort — a denial-audit failure must not affect the
             // response the emission site is about to write.

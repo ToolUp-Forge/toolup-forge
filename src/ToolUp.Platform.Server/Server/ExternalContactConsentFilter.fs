@@ -71,7 +71,7 @@ type ExternalContactConsentFilter
     (
         inner: INotificationChannel,
         contacts: IExternalContactStore option,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         logger: ILogger,
         clock: unit -> DateTime
     ) =
@@ -137,13 +137,13 @@ type ExternalContactConsentFilter
         (correlationId: string option)
         : Async<unit> =
         async {
-            match auditLog, refused with
-            | _, [] -> return ()
-            | None, _ -> return ()
-            | Some log, contactIds ->
+            match refused with
+            | [] -> return ()
+            | contactIds ->
                 do!
-                    log.Record(
-                        scopeId,
+                    auditLog.Record(
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "ExternalContactConsentFilter",
                         NotificationDeliveryRefused {
                             NotificationKind = kindLabel notification
                             ScopeId = scopeId
@@ -158,16 +158,11 @@ type ExternalContactConsentFilter
                             CorrelationId = correlationId
                         }
                     )
+                    |> AuditRow.orRefuse
         }
 
     /// Production shape: the system clock.
-    new
-        (
-            inner: INotificationChannel,
-            contacts: IExternalContactStore option,
-            auditLog: IAuditLog option,
-            logger: ILogger
-        ) =
+    new(inner: INotificationChannel, contacts: IExternalContactStore option, auditLog: IAuditLog, logger: ILogger) =
         ExternalContactConsentFilter(inner, contacts, auditLog, logger, fun () -> DateTime.UtcNow)
 
     interface INotificationChannel with

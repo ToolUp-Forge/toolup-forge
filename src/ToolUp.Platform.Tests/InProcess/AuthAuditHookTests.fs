@@ -34,13 +34,15 @@ type private CapturingAuditLog() =
     member _.Rows = rows |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async {
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
             match audit with
             | AuthorizationDenied p -> rows.Enqueue(scopeId, p)
             | _ -> ()
+
+            return Ok()
         }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Mutable clock the tests advance to drive window rollovers deterministically.
 type private FakeClock(start: DateTimeOffset) =

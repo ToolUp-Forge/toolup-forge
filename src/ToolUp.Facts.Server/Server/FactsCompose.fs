@@ -659,9 +659,13 @@ module FactsCompose =
                     let store = sp.GetRequiredService<IFactStore>()
                     let gate = sp.GetRequiredService<IFactDisclosureGate>()
 
-                    match tryService<IAuditLog> sp with
-                    | Some audit -> GroundingCertificate.createIssuerAudited graph store gate events signer audit
-                    | None -> GroundingCertificate.createIssuer graph store gate events signer)
+                    GroundingCertificate.createIssuerAudited
+                        graph
+                        store
+                        gate
+                        events
+                        signer
+                        (ToolUp.Platform.Config.Background.resolveAuditLog sp))
             )
             // Phase 985 — the narrative grounding gate rides the store knob
             // too: a grounded narrative run composed anywhere finds a gate

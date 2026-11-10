@@ -8,6 +8,14 @@ open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Scope
 
+/// A permission read the case expects to succeed; an `Error` fails it by name.
+let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> = async {
+    match! read with
+    | Ok value -> return value
+    | Error e -> return failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
+}
+
+
 // ─── Phase 245 — tri-state ModuleExposure persistence migration ──────
 //
 // The exposure axis became a tri-state (`Available | Hidden |
@@ -35,7 +43,7 @@ let tests =
             let! _ = blob.Upload(platformContainer, blobName team, Encoding.UTF8.GetBytes legacy)
 
             let store = PermissionStore(blob) :> IPermissionStore
-            let! exposure = store.GetModuleExposure(TeamId team)
+            let! exposure = readOk (store.GetModuleExposure(TeamId team))
 
             Expect.equal
                 exposure
@@ -52,7 +60,7 @@ let tests =
             let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Hidden)
             let! _ = store.SetModuleExposure(TeamId team, "Finance", ModuleExposure.Unavailable)
 
-            let! exposure = store.GetModuleExposure(TeamId team)
+            let! exposure = readOk (store.GetModuleExposure(TeamId team))
 
             Expect.equal
                 exposure
@@ -80,7 +88,7 @@ let tests =
 
             let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Unavailable)
             let! _ = store.SetModuleExposure(TeamId team, "Marketing", ModuleExposure.Available)
-            let! exposure = store.GetModuleExposure(TeamId team)
+            let! exposure = readOk (store.GetModuleExposure(TeamId team))
 
             Expect.isEmpty exposure "setting Available removes the entry (back to default)"
         }

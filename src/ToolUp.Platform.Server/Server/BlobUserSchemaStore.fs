@@ -138,16 +138,12 @@ let private applyMigrationsToInstance (migrations: SchemaMigration list) (json: 
 /// Default `IUserSchemaStore`. `auditLog` is optional so a deployment
 /// without an audit log pays nothing (though the SDK always registers at
 /// least `NoOpAuditLog`).
-type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog option) =
+type BlobUserSchemaStore(dataObjectStore: IDataObjectStore, auditLog: IAuditLog) =
 
     let emit (scopeId: string) (evt: AuditEvent) : Async<unit> = async {
-        match auditLog with
-        | Some log ->
-            try
-                do! log.Record(scopeId, evt)
-            with _ ->
-                ()
-        | None -> ()
+        do!
+            auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "UserSchemaStore", evt)
+            |> AuditRow.bestEffort
     }
 
     interface IUserSchemaStore with

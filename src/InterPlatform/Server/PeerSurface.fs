@@ -271,7 +271,7 @@ module PeerSurface =
             }
         // Describing a surface materialises handlers; it never runs one,
         // so there is no terminal outcome to record.
-        AuditLog = None
+        AuditLog = NoOpAuditLog()
     }
 
     /// Materialise one `withContract` registration into its served

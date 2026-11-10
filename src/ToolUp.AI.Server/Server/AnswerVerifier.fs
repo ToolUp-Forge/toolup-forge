@@ -668,7 +668,7 @@ type AnswerAuditJoin = {
     /// Where the typed `AnswerVerification*` row is recorded. `None`
     /// records nothing, which is what a deployment with no audit log
     /// composed has to mean.
-    AuditLog: IAuditLog option
+    AuditLog: IAuditLog
     /// The deployment-side anchors the row may name. `None` leaves every
     /// join field `None` — an honest absence, not a placeholder.
     Anchors: IAnswerProvenanceAnchors option
@@ -677,15 +677,15 @@ type AnswerAuditJoin = {
 [<RequireQualifiedAccess>]
 module AnswerAuditJoin =
     /// No audit row, no anchors — the pre-Phase-680 behaviour exactly.
-    let none: AnswerAuditJoin = { AuditLog = None; Anchors = None }
+    let none: AnswerAuditJoin = {
+        AuditLog = NoOpAuditLog()
+        Anchors = None
+    }
 
     /// Record the row through `auditLog`, naming no deployment anchors.
     /// The shape a deployment that has an audit log but neither
     /// certificates nor a sealed composition composes.
-    let auditOnly (auditLog: IAuditLog) : AnswerAuditJoin = {
-        AuditLog = Some auditLog
-        Anchors = None
-    }
+    let auditOnly (auditLog: IAuditLog) : AnswerAuditJoin = { AuditLog = auditLog; Anchors = None }
 
 [<RequireQualifiedAccess>]
 module AnswerProvenanceAnchors =
@@ -871,73 +871,75 @@ let runVerificationStageWithScope
             // on. Recorded on the affirmative verdict too (Phase 657's
             // discipline) — absence of a row must stay a different fact
             // from a clean one.
-            match join.AuditLog with
-            | Some auditLog ->
-                let citedFactIds =
+            let citedFactIds =
+                verification.Numbers
+                |> List.collect (fun n ->
+                    match n.Verdict, n.MatchedFactId with
+                    | NumberVerified, Some id when id <> "" -> [ id ]
+                    | NumberVerified, _ -> n.DerivedFrom |> Option.defaultValue []
+                    | _ -> [])
+                |> List.distinct
+                |> List.sort
+
+            let! certificateRef =
+                match join.Anchors with
+                | Some anchors -> anchors.TryCertificateRef(scopeId, conversationId, citedFactIds)
+                | None -> async { return None }
+
+            let payload: AnswerVerificationPayload = {
+                TaskId = taskId
+                ConversationId = conversationId
+                Mode = modeStr
+                Verified = verification.Verified
+                Unmatched = verification.Unmatched
+                Unverifiable = verification.Unverifiable
+                FactsInScope = List.length facts
+                Tokens =
                     verification.Numbers
-                    |> List.collect (fun n ->
-                        match n.Verdict, n.MatchedFactId with
-                        | NumberVerified, Some id when id <> "" -> [ id ]
-                        | NumberVerified, _ -> n.DerivedFrom |> Option.defaultValue []
-                        | _ -> [])
-                    |> List.distinct
-                    |> List.sort
+                    |> List.map (fun n -> {
+                        Token = n.Token
+                        Canonical = n.Canonical |> Option.defaultValue ""
+                        Verdict = verdictLabel n.Verdict
+                        MatchedFactId = n.MatchedFactId
+                    })
+                CitedFactIds = citedFactIds
+                ProvenanceChainHead = provenanceChainHead citedFactIds
+                CertificateRef = certificateRef
+                CompositionSealId = join.Anchors |> Option.bind _.CompositionSealId
+                ProviderName = providerName
+                ProviderModel = providerModel
+                OccurredAt = DateTimeOffset.UtcNow
+            }
 
-                let! certificateRef =
-                    match join.Anchors with
-                    | Some anchors -> anchors.TryCertificateRef(scopeId, conversationId, citedFactIds)
-                    | None -> async { return None }
+            let event =
+                if verification.Unmatched > 0 then
+                    AuditEvent.AnswerVerificationFlagged payload
+                else
+                    AuditEvent.AnswerVerificationPassed payload
 
-                let payload: AnswerVerificationPayload = {
-                    TaskId = taskId
-                    ConversationId = conversationId
-                    Mode = modeStr
-                    Verified = verification.Verified
-                    Unmatched = verification.Unmatched
-                    Unverifiable = verification.Unverifiable
-                    FactsInScope = List.length facts
-                    Tokens =
-                        verification.Numbers
-                        |> List.map (fun n -> {
-                            Token = n.Token
-                            Canonical = n.Canonical |> Option.defaultValue ""
-                            Verdict = verdictLabel n.Verdict
-                            MatchedFactId = n.MatchedFactId
-                        })
-                    CitedFactIds = citedFactIds
-                    ProvenanceChainHead = provenanceChainHead citedFactIds
-                    CertificateRef = certificateRef
-                    CompositionSealId = join.Anchors |> Option.bind _.CompositionSealId
-                    ProviderName = providerName
-                    ProviderModel = providerModel
-                    OccurredAt = DateTimeOffset.UtcNow
-                }
+            // Best-effort, exactly as the event-store write above: a
+            // wedged audit backend must never crash or block the
+            // conversation. `IAuditLog.Record` already swallows its own
+            // store failures; this guard covers a composed sink that
+            // throws or hangs on the way in.
+            try
+                let recordTask =
+                    join.AuditLog.Record(AuditScope.shard scopeId, AuditSubject.system "AnswerVerifier", event)
+                    |> Async.StartAsTask
 
-                let event =
-                    if verification.Unmatched > 0 then
-                        AuditEvent.AnswerVerificationFlagged payload
-                    else
-                        AuditEvent.AnswerVerificationPassed payload
+                let timeoutTask = Task.Delay 5_000
+                let! winner = Task.WhenAny(recordTask :> Task, timeoutTask) |> Async.AwaitTask
 
-                // Best-effort, exactly as the event-store write above: a
-                // wedged audit backend must never crash or block the
-                // conversation. `IAuditLog.Record` already swallows its own
-                // store failures; this guard covers a composed sink that
-                // throws or hangs on the way in.
-                try
-                    let recordTask = auditLog.Record(scopeId, event) |> Async.StartAsTask
-                    let timeoutTask = Task.Delay 5_000
-                    let! winner = Task.WhenAny(recordTask :> Task, timeoutTask) |> Async.AwaitTask
-
-                    if winner = (recordTask :> Task) then
-                        do! recordTask |> Async.AwaitTask
-                    else
-                        logger.Warn
-                            $"AI answer-verification audit row timed out (taskId={taskId}); record dropped, conversation unaffected."
-                with ex ->
+                if winner = (recordTask :> Task) then
+                    // Best-effort: the conversation is unaffected by the row.
+                    let! _ = recordTask |> Async.AwaitTask
+                    ()
+                else
                     logger.Warn
-                        $"AI answer-verification audit row failed (taskId={taskId}): {ex.Message}. Record dropped; conversation unaffected."
-            | None -> ()
+                        $"AI answer-verification audit row timed out (taskId={taskId}); record dropped, conversation unaffected."
+            with ex ->
+                logger.Warn
+                    $"AI answer-verification audit row failed (taskId={taskId}): {ex.Message}. Record dropped; conversation unaffected."
 
             // Text rewrite by mode (Phase 523.C).
             let finalAnswer =
@@ -1097,7 +1099,7 @@ let deploymentVerificationSource
     fun () -> async {
         let! rowSets =
             answerVerificationEventTypes
-            |> List.map (fun eventType -> auditLog.GetAuditTrail(scopeId, None, Some eventType))
+            |> List.map (fun eventType -> auditLog.GetAuditTrail(AuditScope.shard scopeId, None, Some eventType))
             |> Async.Parallel
 
         let payloads =

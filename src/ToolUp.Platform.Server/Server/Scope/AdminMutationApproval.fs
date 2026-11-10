@@ -11,6 +11,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Config
 open ToolUp.Platform.Scope.PermissionStore
 
 // ─── Dual control for sensitive admin mutations (Phase 555) ──────────
@@ -432,24 +433,15 @@ let isGated
 
 // ─── The ceremony (555.B / 555.C / 555.D) ────────────────────────────
 
-/// Best-effort audit emission. Swallowed on failure, deliberately and
-/// for the Phase 551 reason: the control is the refusal, not the row, and
-/// a downed audit pipeline must never turn a denial into an admission.
-/// `schedule` is `Async.Start` in production and a synchronous runner in
-/// tests, so a test observes decision and row from one call and the two
-/// cannot drift apart with only one of them covered.
-let private emit (auditLog: IAuditLog option) (schedule: Async<unit> -> unit) (teamId: string) (event: AuditEvent) =
-    match auditLog with
-    | None -> ()
-    | Some log ->
-        schedule (
-            async {
-                try
-                    do! log.Record(AuditStreamKey.ofTeam teamId, event)
-                with _ ->
-                    ()
-            }
-        )
+/// Emit one row, detached and best-effort: deliberately, for the Phase 551
+/// reason — the control is the refusal, not the row, and a downed audit
+/// pipeline must never turn a denial into an admission or delay it. The row
+/// starts on the caller's thread, so a synchronous log has recorded it
+/// before the decision returns and a test observes decision and row from
+/// one call.
+let private emit (auditLog: IAuditLog) (teamId: string) (event: AuditEvent) =
+    AuditRow.emit auditLog (AuditScope.team (TeamId teamId)) (AuditSubject.system "DualControl") event
+    |> Background.startAuditRowImmediate
 
 /// Capture a gated mutation as a pending record. **Nothing is applied.**
 ///
@@ -458,8 +450,7 @@ let private emit (auditLog: IAuditLog option) (schedule: Async<unit> -> unit) (t
 let propose
     (store: IAdminMutationApprovalStore)
     (settings: DualControlSettings)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (now: DateTimeOffset)
     (teamId: string)
     (proposerId: string)
@@ -487,7 +478,6 @@ let propose
             | Ok() ->
                 emit
                     auditLog
-                    schedule
                     teamId
                     (AdminMutationProposed {
                         RequestId = pending.RequestId
@@ -512,8 +502,7 @@ let propose
 /// so the two cannot disagree about what a decidable record is.
 let private loadDecidable
     (store: IAdminMutationApprovalStore)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (now: DateTimeOffset)
     (teamId: string)
     (requestId: string)
@@ -524,7 +513,6 @@ let private loadDecidable
         let refuse (pending: PendingAdminMutation option) (refusal: AdminMutationRefusal) =
             emit
                 auditLog
-                schedule
                 teamId
                 (AdminMutationApprovalRefused {
                     RequestId = requestId
@@ -567,7 +555,6 @@ let private loadDecidable
                 | Ok() ->
                     emit
                         auditLog
-                        schedule
                         teamId
                         (AdminMutationExpired {
                             RequestId = requestId
@@ -601,8 +588,7 @@ let private loadDecidable
 let approve
     (store: IAdminMutationApprovalStore)
     (apply: AdminMutation -> Async<Result<unit, string>>)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (now: DateTimeOffset)
     (teamId: string)
     (requestId: string)
@@ -612,7 +598,7 @@ let approve
         if String.IsNullOrWhiteSpace approverId then
             return Error AdminMutationRefusal.UnattributedProposer
         else
-            match! loadDecidable store auditLog schedule now teamId requestId approverId true with
+            match! loadDecidable store auditLog now teamId requestId approverId true with
             | Error refusal -> return Error refusal
             | Ok pending ->
                 // Phase 1059 — the removal is what makes a double approval
@@ -624,7 +610,6 @@ let approve
 
                     emit
                         auditLog
-                        schedule
                         teamId
                         (AdminMutationApprovalRefused {
                             RequestId = requestId
@@ -641,7 +626,6 @@ let approve
 
                     emit
                         auditLog
-                        schedule
                         teamId
                         (AdminMutationApproved {
                             RequestId = requestId
@@ -669,8 +653,7 @@ let approve
 /// proposer has already disowned.
 let reject
     (store: IAdminMutationApprovalStore)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (now: DateTimeOffset)
     (teamId: string)
     (requestId: string)
@@ -678,7 +661,7 @@ let reject
     (reason: string)
     : Async<Result<AdminMutationDecision, AdminMutationRefusal>> =
     async {
-        match! loadDecidable store auditLog schedule now teamId requestId actorId false with
+        match! loadDecidable store auditLog now teamId requestId actorId false with
         | Error refusal -> return Error refusal
         | Ok pending ->
             // Phase 1059 — a rejection IS the removal: a record still in the
@@ -689,7 +672,6 @@ let reject
             | Ok() ->
                 emit
                     auditLog
-                    schedule
                     teamId
                     (AdminMutationRejected {
                         RequestId = requestId
@@ -710,8 +692,7 @@ let reject
 /// note in `loadDecidable`.
 let listPending
     (store: IAdminMutationApprovalStore)
-    (auditLog: IAuditLog option)
-    (schedule: Async<unit> -> unit)
+    (auditLog: IAuditLog)
     (now: DateTimeOffset)
     (teamId: string)
     : Async<Result<PendingAdminMutation list, string>> =
@@ -729,7 +710,6 @@ let listPending
                 | Ok() ->
                     emit
                         auditLog
-                        schedule
                         teamId
                         (AdminMutationExpired {
                             RequestId = pending.RequestId
@@ -742,6 +722,16 @@ let listPending
 
             return Ok live
     }
+
+/// The document a mutation produces from the one it replaces — the same
+/// edits the store's own write paths apply.
+let private applyMutation (mutation: AdminMutation) (current: TeamPermissions) : TeamPermissions =
+    match mutation with
+    | AdminMutation.SetTeamPermissions p -> p
+    | AdminMutation.SetMemberPermissions(userId, moduleName, permissions) ->
+        TeamPermissionsEdit.setMember userId moduleName permissions current
+    | AdminMutation.SetTeamDefaults defaults -> TeamPermissionsEdit.setDefaults defaults current
+    | AdminMutation.SetModuleExposure(moduleName, state) -> TeamPermissionsEdit.setExposure moduleName state current
 
 // ─── The `IPermissionStore` decorator ────────────────────────────────
 
@@ -768,14 +758,8 @@ type DualControlPermissionStore
         isPolicyBearing: string -> bool,
         resolveProposer: unit -> string option,
         now: unit -> DateTimeOffset,
-        ?auditLog: IAuditLog
+        auditLog: IAuditLog
     ) =
-
-    // Production scheduling for the best-effort audit emissions. A test
-    // constructs the ceremony functions directly with a synchronous
-    // scheduler; the decorator is the production path and never blocks a
-    // refusal on a log write.
-    let schedule (work: Async<unit>) = Async.Start work
 
     /// Apply a captured mutation to the WRAPPED store. The approval path
     /// re-enters here rather than through this decorator, so an approved
@@ -803,24 +787,46 @@ type DualControlPermissionStore
     let queuedMessage (queued: AdminMutationQueued) =
         DualControlSignal.message queued.RequestId queued.ExpiresAtUtc
 
-    /// The whole write path: gate, then either apply verbatim or park.
+    /// The whole write path: gate, then either apply or park — decided
+    /// inside ONE guarded read-modify-write of the wrapped store, so the
+    /// document the gate judged is the document the write replaces.
     ///
     /// An UNGATED write returns the inner store's result **verbatim**,
     /// error string included. That is not laziness — a deployment that
     /// enables dual control and then sees different error text on writes
     /// the gate does not touch has had its behaviour changed where the
     /// phase promised it would not be.
-    let gate (teamId: string) (mutation: AdminMutation) : Async<Result<unit, string>> = async {
-        let! previous = inner.GetTeamPermissions(TeamId teamId)
+    let decide (teamId: string) (mutationOf: TeamPermissions -> Result<AdminMutation, string>) = async {
+        // The mutation the LAST run of the transform found gated; the store
+        // may replay it on a lost precondition, so each run resets it.
+        let parked = ref None
 
-        if not (isGated settings.Scope isPolicyBearing previous mutation) then
-            return! applyToInner teamId mutation
-        else
+        let! applied =
+            inner.UpdateTeamPermissions(
+                TeamId teamId,
+                fun current ->
+                    parked.Value <- None
+
+                    match mutationOf current with
+                    | Error e -> Error e
+                    | Ok mutation when isGated settings.Scope isPolicyBearing current mutation ->
+                        parked.Value <- Some mutation
+                        Error "DUAL-CONTROL-GATED"
+                    | Ok mutation -> Ok(applyMutation mutation current)
+            )
+
+        return parked.Value, applied
+    }
+
+    let gate (teamId: string) (mutationOf: TeamPermissions -> Result<AdminMutation, string>) = async {
+        match! decide teamId mutationOf with
+        | None, applied -> return applied
+        | Some mutation, _ ->
             match resolveProposer () with
             | None
             | Some "" -> return Error(AdminMutationRefusal.describe AdminMutationRefusal.UnattributedProposer)
             | Some proposerId ->
-                match! propose approvals settings auditLog schedule (now ()) teamId proposerId mutation with
+                match! propose approvals settings auditLog (now ()) teamId proposerId mutation with
                 | Error refusal -> return Error(AdminMutationRefusal.describe refusal)
                 | Ok queued -> return Error(queuedMessage queued)
     }
@@ -841,14 +847,11 @@ type DualControlPermissionStore
     /// policy-aware admin surface calls, so it can render "queued for
     /// approval, request X" instead of parsing prose.
     member _.Write(teamId: string, proposerId: string, mutation: AdminMutation) = async {
-        let! previous = inner.GetTeamPermissions(TeamId teamId)
-
-        if not (isGated settings.Scope isPolicyBearing previous mutation) then
-            match! applyToInner teamId mutation with
-            | Ok() -> return Ok AdminMutationWriteOutcome.AppliedImmediately
-            | Error e -> return Error(AdminMutationRefusal.ApprovalStoreUnavailable e)
-        else
-            match! propose approvals settings auditLog schedule (now ()) teamId proposerId mutation with
+        match! decide teamId (fun _ -> Ok mutation) with
+        | None, Ok() -> return Ok AdminMutationWriteOutcome.AppliedImmediately
+        | None, Error e -> return Error(AdminMutationRefusal.ApprovalStoreUnavailable e)
+        | Some parked, _ ->
+            match! propose approvals settings auditLog (now ()) teamId proposerId parked with
             | Error refusal -> return Error refusal
             | Ok queued -> return Ok(AdminMutationWriteOutcome.QueuedForApproval queued)
     }
@@ -857,16 +860,16 @@ type DualControlPermissionStore
     /// approval is refused structurally — `approverId` equal to the
     /// recorded proposer never reaches the apply path.
     member _.Approve(teamId: string, requestId: string, approverId: string) =
-        approve approvals (applyToInner teamId) auditLog schedule (now ()) teamId requestId approverId
+        approve approvals (applyToInner teamId) auditLog (now ()) teamId requestId approverId
 
     /// Turn a pending mutation down. Nothing is applied.
     member _.Reject(teamId: string, requestId: string, actorId: string, reason: string) =
-        reject approvals auditLog schedule (now ()) teamId requestId actorId reason
+        reject approvals auditLog (now ()) teamId requestId actorId reason
 
     /// The still-open proposals for a team, lapsed records swept as they
     /// are read. The approval queue an admin surface renders.
     member _.ListPending(teamId: string) =
-        listPending approvals auditLog schedule (now ()) teamId
+        listPending approvals auditLog (now ()) teamId
 
     interface IPermissionStore with
         // Reads are untouched: dual control governs the creation of
@@ -878,14 +881,18 @@ type DualControlPermissionStore
 
         member _.GetModuleExposure teamId = inner.GetModuleExposure teamId
 
+        // A generic change is judged as the whole document it produces.
+        member _.UpdateTeamPermissions(teamId, change) =
+            gate teamId.Value (fun current -> change current |> Result.map AdminMutation.SetTeamPermissions)
+
         member _.SetTeamPermissions(teamId, permissions) =
-            gate teamId.Value (AdminMutation.SetTeamPermissions permissions)
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetTeamPermissions permissions))
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            gate teamId.Value (AdminMutation.SetMemberPermissions(userId, moduleName, permissions))
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetMemberPermissions(userId, moduleName, permissions)))
 
         member _.SetTeamDefaults(teamId, defaults) =
-            gate teamId.Value (AdminMutation.SetTeamDefaults defaults)
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetTeamDefaults defaults))
 
         member _.SetModuleExposure(teamId, moduleName, state) =
-            gate teamId.Value (AdminMutation.SetModuleExposure(moduleName, state))
+            gate teamId.Value (fun _ -> Ok(AdminMutation.SetModuleExposure(moduleName, state)))

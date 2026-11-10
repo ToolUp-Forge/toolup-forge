@@ -61,13 +61,17 @@ type private RecordingAuditLog() =
     member _.Events = events |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, event) = async { events.Add(scopeId, event) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, event) = async {
+            events.Add(scopeId, event)
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private diagnoseNow (storage: IBlobStorage) =
     diagnose (MembershipDoctorStorage.reads storage) |> Async.RunSynchronously
 
-let private repairWith (storage: IBlobStorage) (audit: IAuditLog option) (channel: INotificationChannel option) =
+let private repairWith (storage: IBlobStorage) (audit: IAuditLog) (channel: INotificationChannel option) =
     repair (MembershipDoctorStorage.reads storage) (MembershipDoctorStorage.writes storage audit channel "doctor-actor")
     |> Async.RunSynchronously
 
@@ -152,7 +156,7 @@ let tests =
             seedMemberships storage "user-1" [ "team-a"; "team-purged" ]
             seedPointer storage "user-1" "team-purged"
 
-            let outcome = repairWith storage None None
+            let outcome = repairWith storage (NoOpAuditLog()) None
 
             Expect.equal outcome.Repaired.Length 2 "row strip + pointer clear"
             Expect.isEmpty outcome.ReportOnly "nothing left for the operator"
@@ -175,7 +179,7 @@ let tests =
             seedMemberships storage "auth0|abc123" [ "team-a" ]
             let emailBlobBefore = downloadText storage "memberships/ghost@example.com.json"
 
-            let outcome = repairWith storage None None
+            let outcome = repairWith storage (NoOpAuditLog()) None
 
             Expect.isEmpty outcome.Repaired "nothing provably safe to fix"
             Expect.equal outcome.ReportOnly.Length 2 "both bad-key blobs reported"
@@ -197,7 +201,7 @@ let tests =
             seedMemberships storage "user-2" [ "purged-x" ]
             let audit = RecordingAuditLog()
 
-            let _ = repairWith storage (Some(audit :> IAuditLog)) None
+            let _ = repairWith storage ((audit :> IAuditLog)) None
 
             let removed =
                 audit.Events
@@ -235,7 +239,7 @@ let tests =
             |> Async.RunSynchronously
             |> ignore
 
-            let _ = repairWith storage None (Some channel)
+            let _ = repairWith storage (NoOpAuditLog()) (Some channel)
 
             Expect.equal
                 (published |> Set.ofSeq)

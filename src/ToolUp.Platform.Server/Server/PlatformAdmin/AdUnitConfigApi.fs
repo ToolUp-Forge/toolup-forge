@@ -104,10 +104,7 @@ let private resolveRegistry (ctx: HttpContext) : EntityRegistry option =
     | :? EntityRegistry as r -> Some r
     | _ -> None
 
-let private resolveAuditLog (ctx: HttpContext) : IAuditLog option =
-    match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-    | :? IAuditLog as log -> Some log
-    | _ -> None
+let private resolveAuditLog (ctx: HttpContext) : IAuditLog = Background.auditLogOf ctx
 
 /// Idempotent entity-type registration. Calling on every request is
 /// cheap because `EntityRegistry.Register` is a `ConcurrentDictionary`
@@ -186,14 +183,14 @@ let private recordAudit (ctx: HttpContext) (event: AuditEvent) : unit =
     let warn =
         Background.writeFailureWarner "AdUnitConfigApi" (Background.requestLogger ctx) ctx
 
-    resolveAuditLog ctx
-    |> Option.iter (fun log ->
-        let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+    let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
 
-        try
-            log.Record(PlatformAdsConfigScope, event) |> Background.startAudit warn what
-        with ex ->
-            warn what ex)
+    try
+        (resolveAuditLog ctx)
+            .Record(AuditScope.shard PlatformAdsConfigScope, Background.requestActor "AdUnitConfigApi" ctx, event)
+        |> Background.startAuditRow warn what
+    with ex ->
+        warn what ex
 
 let private withSubstrate
     (ctx: HttpContext)

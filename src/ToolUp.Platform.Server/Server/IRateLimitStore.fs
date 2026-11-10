@@ -111,21 +111,17 @@ module RateLimitVerdict =
     /// route prefix, a budget name); the row carries no caller key, so no
     /// address or user id reaches the trail. Best-effort like every audit
     /// write: a failing log never changes the response.
-    let auditRefusal (log: IAuditLog option) (scopeId: string) (limiter: string) (reason: string) : Async<unit> = async {
-        match log with
-        | Some log ->
-            try
-                do!
-                    log.Record(
-                        scopeId,
-                        AuditEvent.RateLimitRefused {
-                            ScopeId = scopeId
-                            Provider = limiter
-                            SubKey = None
-                            Reason = sprintf "rate-limit store failed under StorePosture.FailClosed: %s" reason
-                        }
-                    )
-            with _ ->
-                ()
-        | None -> ()
+    let auditRefusal (log: IAuditLog) (scopeId: string) (limiter: string) (reason: string) : Async<unit> = async {
+        do!
+            log.Record(
+                AuditScope.shard scopeId,
+                AuditSubject.system "RateLimiter",
+                AuditEvent.RateLimitRefused {
+                    ScopeId = scopeId
+                    Provider = limiter
+                    SubKey = None
+                    Reason = sprintf "rate-limit store failed under StorePosture.FailClosed: %s" reason
+                }
+            )
+            |> AuditRow.bestEffort
     }

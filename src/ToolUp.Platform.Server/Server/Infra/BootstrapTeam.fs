@@ -136,13 +136,15 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                 | Ok team ->
                     do!
                         auditLog.Record(
-                            teamId,
+                            AuditScope.team (TeamId teamId),
+                            AuditSubject.system "BootstrapTeam",
                             TeamCreated {
                                 UserId = UserId bootstrapActor
                                 TeamId = TeamId teamId
                                 TeamName = teamName
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     let! addResult = teamStore.AddMember(TeamId teamId, UserId adminUserId, Owner)
 
@@ -169,7 +171,8 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                     | Ok() ->
                         do!
                             auditLog.Record(
-                                teamId,
+                                AuditScope.team (TeamId teamId),
+                                AuditSubject.system "BootstrapTeam",
                                 MemberAdded {
                                     UserId = UserId bootstrapActor
                                     TeamId = TeamId teamId
@@ -177,6 +180,7 @@ let bootstrap (logger: ILogger) (auditLog: IAuditLog) (teamStore: ITeamStore) : 
                                     Role = TeamRoles.displayName Owner
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         let! activeResult = teamStore.SetActiveTeam(UserId adminUserId, TeamId teamId)
 

@@ -618,12 +618,9 @@ type BlobPageDocumentStore
         }
 
     let grantsOf (teamId: string) (userId: string) : Async<Result<PageGrant list, PageStoreError>> = async {
-        try
-            let! doc = permissions.GetTeamPermissions(TeamId teamId)
-            return Ok(TeamPermissions.pageGrantsFor userId doc)
-        with
-        | PermissionStoreUnavailableException reason -> return Error(PageStoreError.PermissionsUnavailable reason)
-        | ex -> return Error(PageStoreError.PermissionsUnavailable ex.Message)
+        match! permissions.GetTeamPermissions(TeamId teamId) with
+        | Ok doc -> return Ok(TeamPermissions.pageGrantsFor userId doc)
+        | Error e -> return Error(PageStoreError.PermissionsUnavailable(PermissionStoreError.describe e))
     }
 
     let roleOf (teamId: string) (userId: string) : Async<Result<TeamRole option, PageStoreError>> = async {
@@ -732,16 +729,20 @@ type BlobPageDocumentStore
                 Detached = platform.Detached
             })
 
-    let auditScope (key: PageLayerKey) (scope: ResolvedScope) =
+    let auditScope (key: PageLayerKey) (scope: ResolvedScope) : AuditScope =
         match key.Layer with
-        | PageLayer.Platform -> AuditScope.streamKey AuditScope.PlatformScope
-        | _ -> scope.ScopeId
+        | PageLayer.Platform -> AuditScope.platform
+        | _ -> ResolvedScope.auditScope scope
 
-    let callerTrail (scope: ResolvedScope) =
+    let callerTrail (scope: ResolvedScope) : AuditScope =
         if scope.IsAnonymous then
-            AuditScope.streamKey AuditScope.PlatformScope
+            AuditScope.platform
         else
-            scope.ScopeId
+            ResolvedScope.auditScope scope
+
+    /// The store's rows carry the store as their actor; the writer is the
+    /// caller's resolved scope, named by the trail the row lands in.
+    let storeActor = AuditSubject.system "PageDocumentStore"
 
     /// Run a write; on refusal, record it under the caller's trail.
     let audited
@@ -767,6 +768,7 @@ type BlobPageDocumentStore
                 do!
                     audit.Record(
                         callerTrail scope,
+                        storeActor,
                         PageWriteRefused {
                             PageWriteRefusedPayload.Module = page.Module
                             Page = page.Page
@@ -779,6 +781,7 @@ type BlobPageDocumentStore
                             OccurredAt = DateTimeOffset.UtcNow
                         }
                     )
+                    |> AuditRow.orRefuse
 
             return result
         }
@@ -790,9 +793,11 @@ type BlobPageDocumentStore
         (act: string)
         (opCount: int)
         =
-        audit.Record(
-            auditScope receipt.Key scope,
-            PageSaved {
+        AuditRow.emit
+            audit
+            (auditScope receipt.Key scope)
+            storeActor
+            (PageSaved {
                 PageSavedPayload.Module = receipt.Key.Page.Module
                 Page = receipt.Key.Page.Page
                 Layer = PageLayer.toToken receipt.Key.Layer
@@ -805,8 +810,8 @@ type BlobPageDocumentStore
                 ChainHead = receipt.ChainHead
                 Version = receipt.Version
                 OccurredAt = DateTimeOffset.UtcNow
-            }
-        )
+            })
+        |> AuditRow.orRefuse
 
     let decodeSeed (seed: PageSeed) : Result<string, PageStoreError> =
         try
@@ -859,7 +864,8 @@ type BlobPageDocumentStore
                            |> bind (fun (version, _) -> async {
                                do!
                                    audit.Record(
-                                       AuditScope.streamKey AuditScope.PlatformScope,
+                                       AuditScope.platform,
+                                       storeActor,
                                        PageReseeded {
                                            PageReseededPayload.Module = page.Module
                                            Page = page.Page
@@ -871,6 +877,7 @@ type BlobPageDocumentStore
                                            OccurredAt = DateTimeOffset.UtcNow
                                        }
                                    )
+                                   |> AuditRow.orRefuse
 
                                return Ok(SeedOutcome.Seeded(version, seedHash))
                            }))
@@ -1066,7 +1073,8 @@ type BlobPageDocumentStore
                                | Ok page -> async {
                                    do!
                                        audit.Record(
-                                           AuditScope.streamKey AuditScope.PlatformScope,
+                                           AuditScope.platform,
+                                           storeActor,
                                            PageReseeded {
                                                PageReseededPayload.Module = page.Page.Module
                                                Page = page.Page.Page
@@ -1078,6 +1086,7 @@ type BlobPageDocumentStore
                                                OccurredAt = DateTimeOffset.UtcNow
                                            }
                                        )
+                                       |> AuditRow.orRefuse
 
                                    return
                                        Ok {
@@ -1113,7 +1122,8 @@ type BlobPageDocumentStore
 
                         do!
                             audit.Record(
-                                AuditScope.streamKey AuditScope.PlatformScope,
+                                AuditScope.platform,
+                                storeActor,
                                 PageDetached {
                                     PageDetachedPayload.Module = key.Page.Module
                                     Page = key.Page.Page
@@ -1123,6 +1133,7 @@ type BlobPageDocumentStore
                                     OccurredAt = DateTimeOffset.UtcNow
                                 }
                             )
+                            |> AuditRow.orRefuse
 
                         return
                             Ok {

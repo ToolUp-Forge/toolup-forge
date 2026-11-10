@@ -96,9 +96,11 @@ let private currentUser (ctx: HttpContext) : Async<AuthenticatedUser> = async {
 }
 
 let private auditEmit (ctx: HttpContext) (scopeId: string) (event: AuditEvent) : Async<unit> = async {
-    match tryGetService<IAuditLog> ctx with
-    | Some auditLog -> return! auditLog.Record(scopeId, event)
-    | None -> return ()
+    let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
+
+    return!
+        auditLog.Record(AuditScope.shard scopeId, ToolUp.Platform.Config.Background.requestActor "Passkey" ctx, event)
+        |> AuditRow.orRefuse
 }
 
 let private credIdPrefix (credentialIdB64Url: string) : string =

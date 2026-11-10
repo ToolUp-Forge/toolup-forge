@@ -21,9 +21,10 @@ open ToolUp.Platform.Audit
 ///
 /// Phase 66 Stream B.7 — batches are `AuditEnvelope list` (not bare
 /// `AuditEvent list`). The contract pack synthesises envelopes via
-/// `AuditEnvelope.fromScopeId` for a stable `team-contract` scope so
-/// every sink sees a fully-populated envelope with `Subject =
-/// TeamAudit(_dispatcher, contract)`, `OccurredAt` ticking by offset,
+/// `AuditEnvelope.create` for a stable `team-contract` scope so
+/// every sink sees a fully-populated envelope with the actor the row
+/// carried (`Subject = TeamAudit(contract-user, contract)`), `OccurredAt`
+/// ticking by offset,
 /// and `ScopeId = "team-contract"`. Sinks also declare
 /// `SchemaVersion` against `LatestAuditSchemaVersion`; the pack
 /// verifies the declaration.
@@ -40,8 +41,10 @@ let tests
             AuthProvider = "Header"
         }
 
+    let contractActor = TeamAudit(UserId "contract-user", TeamId "contract")
+
     let makeEnvelope (offset: float) : AuditEnvelope =
-        AuditEnvelope.fromScopeId "team-contract" (baseTime.AddSeconds offset) (makeAuditEvent offset)
+        AuditEnvelope.create contractActor "team-contract" (baseTime.AddSeconds offset) (makeAuditEvent offset)
 
     testList $"{name} — IAuditSink contract" [
         testCaseAsync "Name is non-empty"
@@ -150,7 +153,8 @@ let tests
                         }
                 }
 
-            let batch = [ AuditEnvelope.fromScopeId "team-contract" baseTime replayed ]
+            let batch = [ AuditEnvelope.create contractActor "team-contract" baseTime replayed ]
+
             let! result = sink.Deliver batch
 
             match result with

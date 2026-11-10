@@ -50,7 +50,7 @@ let ofServices (config: ServerConfig) (services: IServiceCollection) : Substrate
             |> orDefault (fun () -> InMemoryEventStore.InMemoryEventStore() :> IEventStore)
         AuditLog =
             lastInstance<IAuditLog> services
-            |> orDefault (fun () -> AuditLog.NoOpAuditLog() :> IAuditLog)
+            |> orDefault (fun () -> NoOpAuditLog() :> IAuditLog)
         Notifications =
             lastInstance<INotificationChannel> services
             |> orDefault (fun () -> NotificationChannel.NoOpNotificationChannel() :> INotificationChannel)

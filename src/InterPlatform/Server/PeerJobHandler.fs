@@ -356,7 +356,7 @@ type PeerJobFusion = {
     /// no service provider, so a per-invocation DI resolve is not available
     /// the way it is on the request path. Consumers receive this record from
     /// `withContract` and pass it through — they do not construct it.
-    AuditLog: IAuditLog option
+    AuditLog: IAuditLog
 }
 
 /// Conventions shared by the dispatch side (which schedules the job) and
@@ -427,7 +427,7 @@ type PeerJobHandler
         argTypes: Type list,
         innerType: Type,
         resultStore: IPeerJobResultStore,
-        auditLog: IAuditLog option,
+        auditLog: IAuditLog,
         contractId: string,
         methodName: string
     ) =
@@ -455,38 +455,37 @@ type PeerJobHandler
     /// response started and no per-request resource to read after disposal
     /// — but the ordering keeps the primary write first regardless.
     let recordTerminalOutcome (envelope: PeerJobPayload) (jobId: PeerJobId) (status: PeerJobStatus<string>) = async {
-        match auditLog with
-        | None -> ()
-        | Some log ->
-            try
-                let succeeded =
+        try
+            let succeeded =
+                match status with
+                | PeerJobStatus.Completed _ -> true
+                | _ -> false
+
+            let payload: PeerJobCompletedPayload = {
+                ContractId = contractId
+                MethodName = methodName
+                CallerPeerId = envelope.OwnerPeerId
+                RootRequestId = envelope.RootRequestId
+                JobId = jobId
+                Succeeded = succeeded
+                Outcome =
                     match status with
-                    | PeerJobStatus.Completed _ -> true
-                    | _ -> false
+                    | PeerJobStatus.Completed _ -> "ok"
+                    | PeerJobStatus.Failed e -> JsonRpc.errorCaseName e
+                    // Unreachable: `ResolveSerialize` resolves the
+                    // handle before returning, so the handler never
+                    // sees `Pending`. Labelled rather than ignored so
+                    // a future non-terminal status is visible in the
+                    // trail instead of silently reading as success.
+                    | PeerJobStatus.Pending -> "pending"
+                OccurredAt = DateTimeOffset.UtcNow
+            }
 
-                let payload: PeerJobCompletedPayload = {
-                    ContractId = contractId
-                    MethodName = methodName
-                    CallerPeerId = envelope.OwnerPeerId
-                    RootRequestId = envelope.RootRequestId
-                    JobId = jobId
-                    Succeeded = succeeded
-                    Outcome =
-                        match status with
-                        | PeerJobStatus.Completed _ -> "ok"
-                        | PeerJobStatus.Failed e -> JsonRpc.errorCaseName e
-                        // Unreachable: `ResolveSerialize` resolves the
-                        // handle before returning, so the handler never
-                        // sees `Pending`. Labelled rather than ignored so
-                        // a future non-terminal status is visible in the
-                        // trail instead of silently reading as success.
-                        | PeerJobStatus.Pending -> "pending"
-                    OccurredAt = DateTimeOffset.UtcNow
-                }
-
-                do! log.Record(PeerJob.Scope, PeerJobCompleted payload)
-            with _ ->
-                ()
+            do!
+                auditLog.Record(AuditScope.platform, AuditSubject.system "PeerJob", PeerJobCompleted payload)
+                |> AuditRow.orRefuse
+        with _ ->
+            ()
     }
 
     /// The pre-310 call shape, unchanged: no audit emission and no contract
@@ -496,7 +495,7 @@ type PeerJobHandler
     /// surface diff is purely additive — the same reasoning
     /// `BlobPeerJobResultStore` records for its Phase 316 overloads.
     new(funcValue: obj, argTypes: Type list, innerType: Type, resultStore: IPeerJobResultStore) =
-        PeerJobHandler(funcValue, argTypes, innerType, resultStore, None, "", "")
+        PeerJobHandler(funcValue, argTypes, innerType, resultStore, NoOpAuditLog(), "", "")
 
     interface IJobHandler with
         member _.Execute(ctx: JobContext) = async {

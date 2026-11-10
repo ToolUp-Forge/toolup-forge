@@ -202,7 +202,7 @@ let private buildDrift (ctx: HttpContext) (mode: FeatureMode) : Async<DriftSumma
             let now = DateTime.UtcNow
             let lookback = now.AddHours -24.0
 
-            let! drifts = auditLog.GetAuditTrail(ScopeKey.PlatformContainer, Some(lookback, now), Some "ConfigDrift")
+            let! drifts = auditLog.GetAuditTrail(AuditScope.platform, Some(lookback, now), Some "ConfigDrift")
 
             if drifts.IsEmpty then
                 return {
@@ -243,8 +243,7 @@ let private buildRateLimit (ctx: HttpContext) (mode: FeatureMode) : Async<RateLi
             let now = DateTime.UtcNow
             let lookback = now.AddHours -24.0
 
-            let! rows =
-                auditLog.GetAuditTrail(ScopeKey.PlatformContainer, Some(lookback, now), Some "RemotingMethodAudited")
+            let! rows = auditLog.GetAuditTrail(AuditScope.platform, Some(lookback, now), Some "RemotingMethodAudited")
 
             let denials =
                 rows

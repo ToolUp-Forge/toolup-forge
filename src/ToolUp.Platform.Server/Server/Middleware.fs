@@ -15,6 +15,12 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 
+/// The scope-resolution middleware's own name for a team's permission state
+/// that the store answered as unreadable: raised into the one refusal path,
+/// so the failure row names what failed rather than a generic exception.
+type internal PermissionReadRefused(message: string) =
+    inherit Exception(message)
+
 // ─── Phase 66 Stream A.6 — pipeline cut-over ─────────────────────────
 //
 // `ScopeResolutionMiddleware` now calls `ISubjectResolver` (the new
@@ -300,7 +306,8 @@ let private observeResolverErrorDowngrade
                 let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 
                 auditLog.Record(
-                    AuditScope.streamKey AuditScope.PlatformScope,
+                    AuditScope.platform,
+                    Background.requestActor "ScopeResolution" ctx,
                     AuthScopeResolutionFailed {
                         Method = methodName
                         Path = pathStr
@@ -310,7 +317,7 @@ let private observeResolverErrorDowngrade
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Background.startAudit warn "scope-downgrade audit"
+                |> Background.startAuditRow warn "scope-downgrade audit"
             | _ -> ()
         with ex ->
             warn "scope-downgrade audit" ex
@@ -347,7 +354,8 @@ let internal recordPublicationReaderSignIn
                 cache.Set(cacheKey, true, entryOpts) |> ignore
 
                 auditLog.Record(
-                    AuditScope.streamKey AuditScope.PlatformScope,
+                    AuditScope.platform,
+                    AuditSubject.ReaderAudit(UserId readerId),
                     PublicationReaderSignedIn {
                         SubjectKind = AuditSubject.kindString ReaderAuditKind
                         ReaderId = readerId
@@ -357,7 +365,7 @@ let internal recordPublicationReaderSignIn
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Background.startAudit warn "reader sign-in audit"
+                |> Background.startAuditRow warn "reader sign-in audit"
         | _ -> ()
     with ex ->
         warn "reader sign-in audit" ex
@@ -500,7 +508,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                 let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 
                 auditLog.Record(
-                    AuditScope.streamKey AuditScope.PlatformScope,
+                    AuditScope.platform,
+                    Background.requestActor "ScopeResolution" ctx,
                     AuthScopeResolutionFailed {
                         Method = methodName
                         Path = pathStr
@@ -510,7 +519,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Background.startAudit warn "scope-resolution-failure audit"
+                |> Background.startAuditRow warn "scope-resolution-failure audit"
             | _ -> ()
         with writeEx ->
             warn "scope-resolution-failure audit" writeEx
@@ -737,13 +746,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     // through to the anonymous fallback.
                                     try
                                         auditLog.Record(
-                                            scope.ScopeId,
+                                            StorageScope.auditScope scope,
+                                            AuditSubject.fromSubject subject,
                                             UserLoggedIn {
                                                 UserId = user.UserId
                                                 AuthProvider = authProv.GetType().Name
                                             }
                                         )
-                                        |> Background.startAudit warn "login audit"
+                                        |> Background.startAuditRow warn "login audit"
                                     with ex ->
                                         warn "login audit" ex
                             | _ -> ()
@@ -768,9 +778,19 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                 // the catch-all it was swallowed, the permission map was never
                                 // stamped, and the empty map the access-context factory then
                                 // reads admits every module.
+                                // The store answers an unreadable document as data; it is
+                                // raised HERE, into the catch below, so every way this read
+                                // can fail reaches the one refusal.
+                                let refusedOn (read: Result<'T, PermissionStoreError>) : 'T =
+                                    match read with
+                                    | Ok value -> value
+                                    | Error e -> raise (PermissionReadRefused(PermissionStoreError.describe e))
+
                                 try
                                     let! perms =
                                         runAsync (permStore.GetEffectivePermissions(user.UserId, TeamId scope.ScopeId))
+
+                                    let perms = refusedOn perms
 
                                     ctx.Items["ToolUp.ModulePermissions"] <- box perms
 
@@ -779,6 +799,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     // map, so the AccessContext factory sees a
                                     // populated `ModuleExposure`.
                                     let! exposure = runAsync (permStore.GetModuleExposure(TeamId scope.ScopeId))
+                                    let exposure = refusedOn exposure
 
                                     ctx.Items["ToolUp.ModuleExposure"] <- box exposure
 
@@ -807,6 +828,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                         not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
                                         ->
                                         let! doc = runAsync (permStore.GetTeamPermissions(TeamId scope.ScopeId))
+                                        let doc = refusedOn doc
 
                                         let subjectGrants = TeamPermissions.grantsFor user.UserId.Value doc
 
@@ -868,10 +890,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                 // the record".
                                                 | _ -> GrantConsentStore.denyingVerifier
 
-                                            let auditLog =
-                                                match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-                                                | :? IAuditLog as log -> Some log
-                                                | _ -> None
+                                            let auditLog = Background.auditLogOf ctx
 
                                             let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
 
@@ -885,9 +904,6 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                             consentStore
                                                             verifier
                                                             auditLog
-                                                            (Background.startAudit
-                                                                warn
-                                                                "grant-consent trust-denial audit")
                                                             DateTimeOffset.UtcNow
                                                             subject
                                                             party

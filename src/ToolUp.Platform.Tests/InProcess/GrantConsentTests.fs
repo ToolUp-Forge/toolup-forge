@@ -56,6 +56,22 @@ open ToolUp.Platform.Scope.GrantConsentStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 
+/// A log that records nothing and never refuses — the test's "no audit".
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+    }
+
+
+/// A permission read the case expects to succeed; an `Error` fails it by name.
+let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> = async {
+    match! read with
+    | Ok value -> return value
+    | Error e -> return failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
+}
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -96,11 +112,13 @@ type private RecordingAuditLog() =
         recorded |> Seq.map (snd >> AuditEvent.eventTypeName) |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Add(scopeId, audit)
+            return Ok()
+        }
 
-/// Synchronous scheduler — decision and emission observed from one call.
-let private runNow (work: Async<unit>) = Async.RunSynchronously work
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+
 
 let private registry =
     GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations [ moduleName, counterparty ]
@@ -152,11 +170,11 @@ let private freshPermissionStore () =
 /// real blob-backed store, with the Phase 552 oracle wired in. Composed
 /// here exactly as `ComposeTeamRuntime` composes it, so a write in these
 /// cases travels the same path a request does.
-let private guardedStore (consentStore: IGrantConsentStore option) (auditLog: IAuditLog option) =
+let private guardedStore (consentStore: IGrantConsentStore option) (auditLog: IAuditLog) =
     let inner = freshPermissionStore ()
 
     let oracle =
-        StoreCounterpartyConsentOracle(consentStore, verifier, (fun () -> now), ?auditLog = auditLog)
+        StoreCounterpartyConsentOracle(consentStore, verifier, (fun () -> now), auditLog)
         :> GrantPolicyGuard.CounterpartyConsentOracle
 
     inner, GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, oracle, auditLog, None) :> IPermissionStore
@@ -533,13 +551,13 @@ let tests =
                 (async {
                     let store = freshConsentStore ()
                     let audit = RecordingAuditLog()
-                    let auditLog = Some(audit :> IAuditLog)
+                    let auditLog = audit :> IAuditLog
 
-                    let! proposed = GrantConsents.propose store verifier auditLog runNow (proposedRecord "c-proposed")
+                    let! proposed = GrantConsents.propose store verifier auditLog (proposedRecord "c-proposed")
 
                     Expect.isOk proposed "a signed proposal is accepted"
 
-                    let! stillPending = resolveLive (Some store) verifier auditLog runNow now subject party
+                    let! stillPending = resolveLive (Some store) verifier auditLog now subject party
 
                     Expect.equal
                         stillPending
@@ -547,32 +565,22 @@ let tests =
                         "a proposal confers nothing at resolution"
 
                     let! approved =
-                        GrantConsents.approve
-                            store
-                            verifier
-                            auditLog
-                            runNow
-                            (approvedRecord "c-approved" (Some "c-proposed"))
+                        GrantConsents.approve store verifier auditLog (approvedRecord "c-approved" (Some "c-proposed"))
 
                     Expect.isOk approved "a signed approval supersedes the proposal"
 
-                    let! live = resolveLive (Some store) verifier auditLog runNow now subject party
+                    let! live = resolveLive (Some store) verifier auditLog now subject party
 
                     match live with
                     | Ok r -> Expect.equal r.ConsentId "c-approved" "the approval is what speaks"
                     | Error e -> failtestf "expected live consent, got %A" e
 
                     let! revoked =
-                        GrantConsents.revoke
-                            store
-                            verifier
-                            auditLog
-                            runNow
-                            (revokedRecord "c-revoked" (Some "c-approved"))
+                        GrantConsents.revoke store verifier auditLog (revokedRecord "c-revoked" (Some "c-approved"))
 
                     Expect.isOk revoked "the withdrawal is accepted"
 
-                    let! afterRevocation = resolveLive (Some store) verifier auditLog runNow now subject party
+                    let! afterRevocation = resolveLive (Some store) verifier auditLog now subject party
 
                     Expect.equal
                         afterRevocation
@@ -610,7 +618,7 @@ let tests =
                             }
                     }
 
-                    let! result = GrantConsents.approve store verifier (Some(audit :> IAuditLog)) runNow forged
+                    let! result = GrantConsents.approve store verifier (audit :> IAuditLog) forged
 
                     Expect.equal result (Error ConsentDenial.SignatureInvalid) "refused"
 
@@ -630,7 +638,7 @@ let tests =
                 "lodging a record under the wrong status is refused"
                 (async {
                     let store = freshConsentStore ()
-                    let! result = GrantConsents.approve store verifier None runNow (proposedRecord "c1")
+                    let! result = GrantConsents.approve store verifier noAudit (proposedRecord "c1")
 
                     Expect.isError result "approve lodges approvals; it does not promote a proposal by relabelling it"
                 })
@@ -638,7 +646,7 @@ let tests =
             testCaseAsync
                 "no store composed denies with NoConsentStore"
                 (async {
-                    let! resolved = resolveLive None verifier None runNow now subject party
+                    let! resolved = resolveLive None verifier noAudit now subject party
                     Expect.equal resolved (Error ConsentDenial.NoConsentStore) "the Phase 551 floor, named"
                 })
 
@@ -661,7 +669,7 @@ let tests =
 
                     do! store.Put foreign |> Async.Ignore
 
-                    let! resolved = resolveLive (Some store) verifier None runNow now subject party
+                    let! resolved = resolveLive (Some store) verifier noAudit now subject party
 
                     Expect.equal
                         resolved
@@ -676,7 +684,7 @@ let tests =
                 "a counterparty grant is refused with no consent"
                 (async {
                     let audit = RecordingAuditLog()
-                    let auditLog = Some(audit :> IAuditLog)
+                    let auditLog = audit :> IAuditLog
                     let store = freshConsentStore ()
                     let inner, guarded = guardedStore (Some store) auditLog
 
@@ -696,7 +704,7 @@ let tests =
 
                     Expect.equal result (Error ConsentDenial.NoConsentRecord) "no consent, no grant"
 
-                    let! doc = inner.GetTeamPermissions(TeamId teamId)
+                    let! doc = readOk (inner.GetTeamPermissions(TeamId teamId))
                     Expect.isEmpty (Map.toList doc.Members) "and nothing was persisted"
                 })
 
@@ -704,10 +712,10 @@ let tests =
                 "a counterparty grant lands once consent is live"
                 (async {
                     let audit = RecordingAuditLog()
-                    let auditLog = Some(audit :> IAuditLog)
+                    let auditLog = audit :> IAuditLog
                     let store = freshConsentStore ()
 
-                    let! _ = GrantConsents.approve store verifier auditLog runNow (approvedRecord "c-approved" None)
+                    let! _ = GrantConsents.approve store verifier auditLog (approvedRecord "c-approved" None)
 
                     let inner, guarded = guardedStore (Some store) auditLog
 
@@ -727,7 +735,7 @@ let tests =
 
                     Expect.equal result (Ok GrantWriteOutcome.Granted) "the arm Phase 551 could not reach now completes"
 
-                    let! doc = inner.GetTeamPermissions(TeamId teamId)
+                    let! doc = readOk (inner.GetTeamPermissions(TeamId teamId))
 
                     let record =
                         doc.Grants |> Map.tryFind subjectId |> Option.bind (Map.tryFind moduleName)
@@ -756,7 +764,7 @@ let tests =
                     // unshipped; it stays refusable AFTER 552, because the
                     // registry is the other half and nothing was lodged in it.
                     let audit = RecordingAuditLog()
-                    let auditLog = Some(audit :> IAuditLog)
+                    let auditLog = audit :> IAuditLog
                     let store = freshConsentStore ()
                     let _, guarded = guardedStore (Some store) auditLog
 
@@ -789,7 +797,7 @@ let tests =
                 "with no consent registry composed, the arm behaves exactly as Phase 551 shipped"
                 (async {
                     let audit = RecordingAuditLog()
-                    let auditLog = Some(audit :> IAuditLog)
+                    let auditLog = audit :> IAuditLog
                     let _, guarded = guardedStore None auditLog
 
                     let! written =
@@ -816,18 +824,22 @@ let tests =
         testList "dispatch" [
             test "an empty registry short-circuits before anything is read" {
                 // GP 11 / GP 13: a deployment declaring no policy pays
-                // nothing here. Passing a `None` audit log and a scheduler
-                // that would fail the test proves it is never reached.
-                let explode _ =
-                    failtest "an all-default deployment must not schedule anything"
+                // nothing here. A log that fails the test if it is written
+                // proves it is never reached.
+                let exploding =
+                    { new IAuditLog with
+                        member _.Record(AuditScope.StreamKey _, _actor, _) =
+                            failtest "an all-default deployment must not audit anything"
+
+                        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+                    }
 
                 let result =
                     guardDispatchWithConsent
                         GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
                         Map.empty
                         Map.empty
-                        None
-                        explode
+                        exploding
                         "team-a"
                         subjectId
                         moduleName
@@ -843,8 +855,7 @@ let tests =
                         registry
                         (Map.ofList [ moduleName, liveGrantRecord ])
                         (Map.ofList [ moduleName, Ok() ])
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -861,8 +872,7 @@ let tests =
                         registry
                         (Map.ofList [ moduleName, liveGrantRecord ])
                         (Map.ofList [ moduleName, Error ConsentDenial.Revoked ])
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -890,8 +900,7 @@ let tests =
                         registry
                         (Map.ofList [ moduleName, liveGrantRecord ])
                         (Map.ofList [ moduleName, Error ConsentDenial.NoConsentRecord ])
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -913,8 +922,7 @@ let tests =
                         registry
                         Map.empty
                         (Map.ofList [ moduleName, Ok() ])
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -938,8 +946,7 @@ let tests =
                         registry
                         (Map.ofList [ moduleName, forOtherParty ])
                         (Map.ofList [ moduleName, Ok() ])
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -958,8 +965,7 @@ let tests =
                         registry
                         (Map.ofList [ moduleName, liveGrantRecord ])
                         Map.empty
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -992,8 +998,7 @@ let tests =
                         ackRegistry
                         (Map.ofList [ moduleName, ackRecord ])
                         Map.empty
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -1005,8 +1010,7 @@ let tests =
                         ackRegistry
                         Map.empty
                         Map.empty
-                        (Some(audit :> IAuditLog))
-                        runNow
+                        (audit :> IAuditLog)
                         "team-a"
                         subjectId
                         moduleName
@@ -1027,12 +1031,12 @@ let tests =
                     // routine operations and nobody would read it.
                     let store = freshConsentStore ()
                     let audit = RecordingAuditLog()
-                    let auditLog = Some(audit :> IAuditLog)
+                    let auditLog = audit :> IAuditLog
 
-                    let! _ = GrantConsents.approve store verifier None runNow (approvedRecord "c1" None)
-                    let! _ = GrantConsents.revoke store verifier None runNow (revokedRecord "c2" (Some "c1"))
+                    let! _ = GrantConsents.approve store verifier noAudit (approvedRecord "c1" None)
+                    let! _ = GrantConsents.revoke store verifier noAudit (revokedRecord "c2" (Some "c1"))
 
-                    let! resolved = resolveLive (Some store) verifier auditLog runNow now subject party
+                    let! resolved = resolveLive (Some store) verifier auditLog now subject party
 
                     Expect.equal resolved (Error ConsentDenial.Revoked) "denied"
 
@@ -1046,7 +1050,7 @@ let tests =
                 (async {
                     let store = freshConsentStore ()
                     let audit = RecordingAuditLog()
-                    let auditLog = Some(audit :> IAuditLog)
+                    let auditLog = audit :> IAuditLog
 
                     // Land a valid approval, then swap its signature under it —
                     // the shape of an operator (or a compromised credential)
@@ -1062,7 +1066,7 @@ let tests =
 
                     do! store.Put forged |> Async.Ignore
 
-                    let! resolved = resolveLive (Some store) verifier auditLog runNow now subject party
+                    let! resolved = resolveLive (Some store) verifier auditLog now subject party
 
                     Expect.equal resolved (Error ConsentDenial.SignatureInvalid) "denied"
 

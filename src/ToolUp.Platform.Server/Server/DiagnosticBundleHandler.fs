@@ -555,24 +555,20 @@ let private bundleHandler (config: ServerConfig) (capture: DevDiagnosticsHandler
         // Audit emission is best-effort; a write failure must not
         // poison the response. The `IAuditLog` default already
         // swallows + logs exceptions internally.
-        let auditLogOpt =
-            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as log -> Some log
-            | _ -> None
+        let auditLogOpt = Background.auditLogOf ctx
 
-        match auditLogOpt with
-        | Some log ->
-            do!
-                log.Record(
-                    platformScopeId,
-                    DiagnosticBundleAccessed {
-                        UserId = UserId callerUserId
-                        ScopeId = callerScopeId
-                        BundleSizeBytes = int64 tarBytes.Length
-                        Truncated = auditTruncated
-                    }
-                )
-        | None -> ()
+        do!
+            auditLogOpt.Record(
+                AuditScope.platform,
+                Background.requestActor "DiagnosticBundle" ctx,
+                DiagnosticBundleAccessed {
+                    UserId = UserId callerUserId
+                    ScopeId = callerScopeId
+                    BundleSizeBytes = int64 tarBytes.Length
+                    Truncated = auditTruncated
+                }
+            )
+            |> AuditRow.orRefuse
 
         let stampUtc = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")
         let filename = sprintf "toolup-diagnostic-bundle-%s.tar" stampUtc

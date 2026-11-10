@@ -48,18 +48,10 @@ type AuditSubject =
     /// `Subject.AnonymousSession sid` value (the `X-User-Id` cookie or
     /// a freshly-minted GUID when the request did not carry one).
     | AnonymousAudit of sessionId: string
-    /// Authenticated user without an active team scope. Covers both the
-    /// `Subject.AuthenticatedUser` shape and the dispatcher-derived
-    /// "scope is `_platform` so attribute to a system-pseudo-user" path
-    /// — the `userId` field carries the sentinel in the latter case.
+    /// Authenticated user without an active team scope
+    /// (`Subject.AuthenticatedUser`).
     | UserAudit of userId: UserId
-    /// Authenticated user acting within a team scope. Both fields
-    /// populated when the originating `Subject` was `TeamMember`. When
-    /// the dispatcher derives the envelope from `ScopeId` alone (e.g.
-    /// because the originating `AccessContext.Subject` was not persisted
-    /// alongside the `ModuleEvent`), `userId` is the literal
-    /// `"_dispatcher"` sentinel — sinks read this as "team event with
-    /// unknown actor" rather than "team event by user named '_dispatcher'".
+    /// Authenticated user acting within a team scope (`Subject.TeamMember`).
     | TeamAudit of userId: UserId * teamId: TeamId
     /// Anonymous reach into a persistent scope gated by a validated
     /// `ShareTokenClaim`. The flattened shape (vs the nested
@@ -70,6 +62,11 @@ type AuditSubject =
     /// signed in, not an app user. Its own case so a sink never files a
     /// reader's row under `user`.
     | ReaderAudit of userId: UserId
+    /// A row a platform component emitted with no principal in reach — a
+    /// job, a store, a sweep, the replicator. `emitter` names the component.
+    /// It says who wrote the row, never that no person caused it; a site
+    /// that holds the request's principal attributes the row to it.
+    | SystemAudit of emitter: string
 
 // `AuditSubjectKind` is defined in `Shared/Types/AuditSampling.fs`
 // (compiled before SDK.Shared.fs so `ServerConfig` can carry an
@@ -88,6 +85,7 @@ module AuditSubject =
         | TeamAudit _ -> TeamAuditKind
         | ClaimAudit _ -> ClaimAuditKind
         | ReaderAudit _ -> ReaderAuditKind
+        | SystemAudit _ -> SystemAuditKind
 
     /// String form of `kind` — what sinks actually emit as a tag value.
     /// Stable across the audit-schema-version envelope bump; do not
@@ -99,6 +97,7 @@ module AuditSubject =
         | TeamAuditKind -> "team"
         | ClaimAuditKind -> "claim"
         | ReaderAuditKind -> "publication-reader"
+        | SystemAuditKind -> "system"
 
     /// Construct an `AuditSubject` from the request-side `Subject`. The
     /// canonical bridge — every audit emission site that has a resolved
@@ -134,56 +133,13 @@ module AuditSubject =
         | ClaimBearer claim -> "claim", Some claim.TokenId
         | PublicationReader uid -> "publication-reader", Some uid
 
-    /// Sentinel `userId` for `TeamAudit` cases derived from `ScopeId`
-    /// alone — see `fromScopeId`. Sinks treat this value as "team event
-    /// with unknown actor".
-    [<Literal>]
-    let DispatcherSentinelUserId = "_dispatcher"
+    /// The actor of a row a platform component emitted with no principal in
+    /// reach (`SystemAudit`).
+    let system (emitter: string) : AuditSubject = SystemAudit emitter
 
-    /// Sentinel `userId` for `UserAudit` cases derived from the
-    /// reserved `_platform` scope id — system-level events with no
-    /// per-user attribution at the dispatcher layer.
-    [<Literal>]
-    let PlatformSentinelUserId = ScopeKey.PlatformContainer
-
-    /// Phase 66 Stream B.7 — derive a best-effort `AuditSubject` from
-    /// the `IEventStore` `ScopeId` alone. Used by the audit-replicator
-    /// dispatch path, which decodes the persisted `ModuleEvent` back
-    /// into an `AuditEvent` without access to the originating
-    /// `AccessContext.Subject` (today's `ModuleEvent` envelope does not
-    /// persist the subject — Phase 66 follow-on substrate could extend
-    /// the wire format; until then, the dispatcher carries this
-    /// approximation).
-    ///
-    /// Mapping:
-    /// - `_platform` → `UserAudit "_platform"` (system-level event).
-    /// - `session-{sid}` → `AnonymousAudit sid`.
-    /// - `user-{uid}` → `UserAudit uid`.
-    /// - `team-{tid}` → `TeamAudit ("_dispatcher", tid)`.
-    /// - Anything else → `UserAudit scopeId` as a last-resort
-    ///   fallback so the envelope always has a subject (downstream
-    ///   sinks can tag-route on the unprefixed scope id).
-    ///
-    /// **A known misreading (Phase 1059).** A team's audit stream key is
-    /// its BARE id (`AuditStreamKey.ofTeam`), and a bare team id cannot be
-    /// told from a bare user id by the key alone — so a team's rows fall
-    /// into the last-resort arm and are filed as `UserAudit teamId`. The
-    /// `team-` arm now matches only rows written before that phase. The
-    /// fix is not a better guess here: Phase 1062 makes the envelope carry
-    /// the actor and deletes this function.
-    let fromScopeId (scopeId: string) : AuditSubject =
-        if System.String.IsNullOrWhiteSpace scopeId then
-            UserAudit(UserId PlatformSentinelUserId)
-        else
-            // Phase 1060 — the one legacy parser; a padded or empty id after
-            // a prefix is no scope, and falls to the last-resort arm.
-            match ScopeKey.tryParseContainer scopeId with
-            | Some(ScopeKey.Platform _) -> UserAudit(UserId PlatformSentinelUserId)
-            | Some(ScopeKey.Session sessionId) -> AnonymousAudit sessionId
-            | Some(ScopeKey.User userId) -> UserAudit(userId)
-            | Some(ScopeKey.Team teamId) -> TeamAudit(UserId DispatcherSentinelUserId, teamId)
-            | Some(ScopeKey.Claim _)
-            | None -> UserAudit(UserId scopeId)
+    /// The actor a row persisted before rows carried one decodes with: the
+    /// emitter is unknown, and nothing is guessed from the stream key.
+    let unattributed: AuditSubject = SystemAudit "_dispatcher"
 
 // `AuditSamplingPolicy` (Phase 66 Stream C.2) is defined in
 // `Shared/Types/AuditSampling.fs`, compiled before SDK.Shared.fs so

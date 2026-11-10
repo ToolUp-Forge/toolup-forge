@@ -484,7 +484,7 @@ let private mkPublisher (svc: IIndexNowService option) : INarrativePagePublisher
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<PublicPageEntity>(PublicPageEntity.registration)
-    let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
     let publisher =
         PublicRenderingNarrativePagePublisher.create

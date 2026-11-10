@@ -82,6 +82,10 @@ type CodemodMigration =
     /// `Enable` and `IWebhookDispatcher.Dispatch` answer a `Result`, and a
     /// live-session handler is asynchronous.
     | FailureAsData
+    /// Audit failure is data at the seam: `IAuditLog.Record` answers
+    /// `Result<unit, AuditWriteError>`, `IAuditLog option` and the `schedule`
+    /// parameters are gone, and `IPermissionStore`'s reads answer a `Result`.
+    | AuditFailureAsData
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -113,6 +117,8 @@ module CodemodMigration =
         | CodemodMigration.RemoteAndMemo -> "docs/migrations/1070-redesign-e-remote-and-memo-primitives.md"
         | CodemodMigration.ConnectorKernel -> "docs/migrations/1079-redesign-f-the-connector-kernel.md"
         | CodemodMigration.FailureAsData -> "docs/migrations/873-portable-infrastructure-interfaces.md"
+        | CodemodMigration.AuditFailureAsData ->
+            "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -138,6 +144,7 @@ module CodemodMigration =
         | CodemodMigration.RemoteAndMemo -> "Phase 1070"
         | CodemodMigration.ConnectorKernel -> "Phase 1079"
         | CodemodMigration.FailureAsData -> "Phase 873"
+        | CodemodMigration.AuditFailureAsData -> "Phase 1062"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -995,6 +1002,56 @@ module Codemod =
             @"\bdo!\s+(\w*[jJ]obStore)\.(Save|Update|RecordRun)\b"
             "do! JobStoreWrite.orRaise <| $1.$2"
             "`do! jobStore.Save job` (and `Update` / `RecordRun`) → `do! JobStoreWrite.orRaise <| jobStore.Save job` (a refused write still raises, now carrying `JobStoreError`)"
+        // A custom IAuditLog whose Record answered unit now answers Ok.
+        rewrite
+            "1062-record-unit"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"(\bmember\s+\w+\.Record\s*\(\s*\w+\s*,\s*\w+\s*\)\s*=\s*)(?:async\s*\{\s*return\s*\(\)\s*\}|async\.Return\s*\(\s*\))"
+            "${1}async { return Ok() }"
+            "`member _.Record(scope, event) = async { return () }` (or `async.Return()`) → `async { return Ok() }`"
+        // The option-wrapped log passed with its scheduler: the log alone.
+        rewrite
+            "1062-audit-log-argument"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\(?\bSome\s*\(?\s*(\w*[aA]udit\w*|\w*[lL]og)\s*\)?\)?\s+(?:Async\.Start|Async\.StartImmediate)\b"
+            "$1"
+            "`(Some auditLog) Async.Start` (an `IAuditLog option` and its `schedule`) → `auditLog`"
+        // A custom IAuditLog takes the typed scope and the row's actor; an
+        // implementation keyed on the event store's string matches the scope
+        // by its stream key.
+        rewrite
+            "1062-record-implementer-scope"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"(\bmember\s+\w+\.Record\s*\(\s*)(\w+)(\s*,\s*)(_?audit\w*|_?event\w*|_)(\s*\))"
+            "${1}AuditScope.StreamKey ${2}, _actor, ${4}${5}"
+            "`member _.Record(scopeId, audit)` → `member _.Record(AuditScope.StreamKey scopeId, _actor, audit)` (`Record` takes `AuditScope * actor: AuditSubject * AuditEvent`; a decorator forwards both unchanged)"
+        rewrite
+            "1062-get-audit-trail-implementer-scope"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"(\bmember\s+\w+\.GetAuditTrail\s*\(\s*)(\w+)(\s*,)"
+            "${1}AuditScope.StreamKey ${2}${3}"
+            "`member _.GetAuditTrail(scopeId, …)` → `member _.GetAuditTrail(AuditScope.StreamKey scopeId, …)`"
+        // The envelope carries the actor the row persisted, never one guessed
+        // from the stream key.
+        rewrite
+            "1062-envelope-from-scope-id"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\bAuditEnvelope\.fromScopeId\b"
+            "AuditEnvelope.create AuditSubject.unattributed"
+            "`AuditEnvelope.fromScopeId scopeId at event` → `AuditEnvelope.create AuditSubject.unattributed scopeId at event` (or the actor the row carried)"
+        // An IAuditLog option is an IAuditLog; NoOpAuditLog is the absent value.
+        rewrite
+            "1062-audit-log-option"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\b((?:ToolUp\.Platform\.)?IAuditLog)\s+option\b"
+            "$1"
+            "`IAuditLog option` → `IAuditLog` (pass `NoOpAuditLog()` where `None` was passed)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1549,6 +1606,37 @@ module Codemod =
             CodemodFileClass.Source
             @"\bmember\s+\w+\.(?:Cancel|Disable|Enable)\s*\(\s*\w+\s*,\s*\w+\s*\)"
             "if this implements `IJobScheduler`, `Cancel` / `Disable` / `Enable` answer `Result<unit, JobTransitionError>`: a scheduler over `SchedulerPolicy.setStatus` maps its `JobStoreError` with `JobTransitionError.StoreFailed`, and a lease it could not take is `Busy`"
+        // Audit failure is data at the seam.
+        review
+            "1062-record-call"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b)(?!.*\bAuditRow\.).*\bdo!\s+[\w.]*[aA]udit\w*\.Record\s*\("
+            "if this is `IAuditLog.Record`, it answers `Result<unit, AuditWriteError>` (an `Error` only under `RefuseAction`): propagate it (`AuditRow.emit`), `|> AuditRow.orRefuse` where the site has no error channel, or `|> AuditRow.bestEffort` where the row records a decision already taken"
+        review
+            "1062-audit-implementer"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\binterface\s+(?:[\w.]+\.)?IAuditLog\b"
+            "an `IAuditLog` implementer: `Record` answers `Async<Result<unit, AuditWriteError>>` and never raises — `Ok` once the row lands, `Error StoreUnavailable` for a lost row when the deployment's policy refuses, `Ok` when it continues"
+        review
+            "1062-permission-store-implementer"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\binterface\s+(?:[\w.]+\.)?IPermissionStore\b"
+            "an `IPermissionStore` implementer: the reads answer `Result<_, PermissionStoreError>` (wrap a document in `Ok`; an absent one is `Ok TeamPermissions.empty`; an unreadable one is `Error`, never empty), and `UpdateTeamPermissions(teamId, change)` is one guarded read-modify-write"
+        review
+            "1062-record-arguments"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"^(?!.*\bmember\b).*(?:\.(?:Record|GetAuditTrail)\s*\(\s*|\bAuditRow\.emit\s+\w+\s+)(?!\(?(?:AuditScope|StorageScope|ResolvedScope)\.)[\w""(]"
+            "if this is `IAuditLog.Record` / `GetAuditTrail` / `AuditRow.emit`, the scope is an `AuditScope` by its shape (`AuditScope.team teamId`, `AuditScope.platform`, `StorageScope.auditScope scope`, `ResolvedScope.auditScope scope`, or `AuditScope.shard key` for a string-keyed store's shard) and `Record` takes the row's actor next: `AuditSubject.fromSubject` of the request's principal where the site holds one, else `AuditSubject.system \"<component>\"` — never an invented user"
+        review
+            "1062-audit-log-match"
+            CodemodMigration.AuditFailureAsData
+            CodemodFileClass.Source
+            @"\bmatch\s+\w*[aA]udit\w*\s+with\b"
+            "if this matches an audit log's `Some` / `None`, the log is no longer optional: keep the `Some` arm over the value (over `NoOpAuditLog` it does what the `None` arm did)"
     ]
 
 
@@ -2551,6 +2639,7 @@ module Codemod =
             CodemodMigration.RemoteAndMemo
             CodemodMigration.ConnectorKernel
             CodemodMigration.FailureAsData
+            CodemodMigration.AuditFailureAsData
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

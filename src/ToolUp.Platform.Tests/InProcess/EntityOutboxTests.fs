@@ -72,7 +72,9 @@ let private fixture () =
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let registry = EntityRegistry()
     registry.Register<LedgerEntry>(EntityRegistration.create<LedgerEntry> LedgerType)
-    let entityStore = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+
+    let entityStore =
+        BlobEntityStore(dos, blob, registry, NoOpAuditLog()) :> IEntityStore
 
     let mkOutbox (eventStore: IEventStore) (settle: TimeSpan) (abandon: TimeSpan) =
         EntityOutbox.OutboxEntityStore(

@@ -112,7 +112,8 @@ let private buildRollup (ctx: HttpContext) : Async<AuthDenialsRollup> = async {
     let rows =
         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
         | :? IAuditLog as auditLog -> async {
-            let! events = auditLog.GetAuditTrail(scopeId, Some(windowStart, now), Some "AuthorizationDenied")
+            let! events =
+                auditLog.GetAuditTrail(AuditScope.shard scopeId, Some(windowStart, now), Some "AuthorizationDenied")
 
             return
                 events

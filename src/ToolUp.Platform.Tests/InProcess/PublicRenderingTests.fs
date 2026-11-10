@@ -2755,7 +2755,7 @@ let private layoutResolution1039Tests =
             registry.Register<PublicPageEntity>(PublicPageEntity.registration)
 
             let store =
-                ToolUp.Platform.Infra.EntityStore.BlobEntityStore(dos, blob, registry, None)
+                ToolUp.Platform.Infra.EntityStore.BlobEntityStore(dos, blob, registry, (NoOpAuditLog()))
                 :> ToolUp.Platform.Infra.IEntityStore.IEntityStore
 
             let publisher =

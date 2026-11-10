@@ -175,7 +175,7 @@ let private verifiedBoot () =
         Record = Some sealedRecord
         Binding = Some sealedBinding
         Transcript = None
-        AuditLog = None
+        AuditLog = (NoOpAuditLog())
         ScopeId = BootVerificationPreflight.PlatformScopeId
         MinimumLevel = None
         Attestor = RuntimeAttestor.unattested
@@ -219,7 +219,9 @@ let private runStage (join: AnswerAuditJoin) (sources: RetrievedSource list) (an
 /// The single answer-verification row on the trail, or a failure naming
 /// what was there instead.
 let private soleRow (auditLog: IAuditLog) =
-    let trail = auditLog.GetAuditTrail(scopeId, None, None) |> Async.RunSynchronously
+    let trail =
+        auditLog.GetAuditTrail(AuditScope.shard scopeId, None, None)
+        |> Async.RunSynchronously
 
     match
         trail
@@ -295,7 +297,7 @@ let tests =
             let answer, verdict =
                 runStage
                     {
-                        AuditLog = Some auditLog
+                        AuditLog = auditLog
                         Anchors = Some anchors
                     }
                     sources
@@ -367,7 +369,8 @@ let tests =
             //    hash-chained ledger, the ledger verifies.
             let storage, sink = newLedger ()
 
-            let envelope = AuditEnvelope.fromScopeId scopeId DateTime.UtcNow row
+            let envelope =
+                AuditEnvelope.create AuditSubject.unattributed scopeId DateTime.UtcNow row
 
             match sink.Deliver [ envelope ] |> Async.RunSynchronously with
             | Ok() -> ()
@@ -535,7 +538,10 @@ let tests =
             Expect.equal answer "Widgets took £21,800 over the quarter." "the answer path is untouched"
             Expect.equal (verdict |> Option.map _.Verified) (Some 1) "the verdict is still produced"
 
-            let trail = auditLog.GetAuditTrail(scopeId, None, None) |> Async.RunSynchronously
+            let trail =
+                auditLog.GetAuditTrail(AuditScope.shard scopeId, None, None)
+                |> Async.RunSynchronously
+
             Expect.isEmpty trail "no audit log in the join ⇒ nothing recorded"
 
             let persisted = auditEvents.ReadAll scopeId |> Async.RunSynchronously
@@ -567,7 +573,8 @@ let tests =
             Expect.equal answer "Widgets took £21,800 over the quarter." "unchanged"
 
             Expect.isEmpty
-                (auditLog.GetAuditTrail(scopeId, None, None) |> Async.RunSynchronously)
+                (auditLog.GetAuditTrail(AuditScope.shard scopeId, None, None)
+                 |> Async.RunSynchronously)
                 "the pre-680 signature has no join to record through"
         }
 

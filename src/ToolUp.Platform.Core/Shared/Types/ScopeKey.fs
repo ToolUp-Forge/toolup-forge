@@ -211,6 +211,11 @@ type AuditScope =
     | PlatformScope
     /// A principal's scope.
     | Scoped of ScopeKey
+    /// A store's shard key, written by a store or job keyed on the bare
+    /// string id its callers pass — the string-keyed storage boundary — which
+    /// does not hold the kind of principal the shard belongs to. Rendered
+    /// verbatim; never parsed into a team or a user.
+    | Shard of shardKey: string
 
 /// The rendering of an audit stream key.
 [<RequireQualifiedAccess>]
@@ -224,3 +229,24 @@ module AuditScope =
         match scope with
         | AuditScope.PlatformScope -> ScopeKey.PlatformContainer
         | AuditScope.Scoped key -> ScopeKey.scopeId key
+        | AuditScope.Shard shardKey -> shardKey
+
+    /// Match a scope by its stream key — for an `IAuditLog` implementation
+    /// keyed on the string the event store uses:
+    /// `member _.Record(AuditScope.StreamKey scopeId, actor, event)`.
+    let (|StreamKey|) (scope: AuditScope) : string = streamKey scope
+
+    /// The platform's own trail.
+    let platform: AuditScope = AuditScope.PlatformScope
+
+    /// A scope key's trail.
+    let ofKey (key: ScopeKey) : AuditScope = AuditScope.Scoped key
+
+    /// A team's trail.
+    let team (teamId: TeamId) : AuditScope = AuditScope.Scoped(ScopeKey.Team teamId)
+
+    /// A user's own trail.
+    let user (userId: UserId) : AuditScope = AuditScope.Scoped(ScopeKey.User userId)
+
+    /// A string-keyed store's shard (`Shard`).
+    let shard (shardKey: string) : AuditScope = AuditScope.Shard shardKey

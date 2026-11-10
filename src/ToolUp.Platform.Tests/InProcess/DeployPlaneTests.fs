@@ -395,7 +395,9 @@ let tenantFleetTests =
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
         registry.Register<Tenant>(Tenant.registration)
-        let entityStore = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+
+        let entityStore =
+            BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
 
         let containerScheduler = InMemoryContainerScheduler() :> IContainerScheduler
 

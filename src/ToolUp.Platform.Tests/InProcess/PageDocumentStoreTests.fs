@@ -519,7 +519,7 @@ let private expectOk (label: string) (r: Result<'T, PageStoreError>) : 'T =
     | Error e -> failtestf "%s: %A" label e
 
 let private trail (rig: Rig) (stream: string) (kind: string) =
-    rig.Audit.GetAuditTrail(stream, None, Some kind) |> run
+    rig.Audit.GetAuditTrail(AuditScope.shard stream, None, Some kind) |> run
 
 let private seeded (options: PageStoreOptions) =
     let rig = rig options
@@ -1051,7 +1051,11 @@ let private documentTests =
             |> run
             |> ignore
 
-            let doc = store.GetTeamPermissions(TeamId "t1") |> run
+            let doc =
+                (store.GetTeamPermissions(TeamId "t1")
+                 |> run
+                 |> Result.defaultWith (PermissionStoreError.describe >> failtest))
+
             store.SetTeamPermissions(TeamId "t1", doc) |> run |> ignore
 
             match blobs.Download(ScopeKey.PlatformContainer, blobName) |> run with
@@ -1077,7 +1081,14 @@ let private documentTests =
             }
 
             store.SetTeamPermissions(TeamId "t1", doc) |> run |> ignore
-            Expect.equal (store.GetTeamPermissions(TeamId "t1") |> run).Pages doc.Pages "round trip"
+
+            Expect.equal
+                ((store.GetTeamPermissions(TeamId "t1")
+                  |> run
+                  |> Result.defaultWith (PermissionStoreError.describe >> failtest)))
+                    .Pages
+                doc.Pages
+                "round trip"
 
             let foreign, _ =
                 roundTrip

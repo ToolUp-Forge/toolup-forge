@@ -66,9 +66,9 @@ type GoogleCloudStorageConfig = {
     /// call. Supplying `CredentialsJson` alongside an override keeps the
     /// credential, for an authenticating GCS-compatible endpoint.
     EndpointUrl: string option
-    /// Phase 2c — optional audit sink for credential rejections. `None`
+    /// The audit sink for credential rejections. `NoOpAuditLog`
     /// (default) emits nothing and costs nothing (GP 11 + GP 13);
-    /// `Some log` records one `BlobStorageAuthFailed` row per GCS call
+    /// a composed log records one `BlobStorageAuthFailed` row per GCS call
     /// rejected `401` / `403`, under the `_platform` scope.
     ///
     /// Complements `CredentialsJsonProvider` rather than duplicating it:
@@ -76,7 +76,7 @@ type GoogleCloudStorageConfig = {
     /// this is how an operator learns that the one currently held has
     /// stopped being accepted. Worth composing even on an ADC deployment,
     /// which is rotation-transparent but can still lose an IAM binding.
-    AuditLog: ToolUp.Platform.IAuditLog option
+    AuditLog: ToolUp.Platform.IAuditLog
 }
 
 module GoogleCloudStorageConfig =
@@ -85,7 +85,7 @@ module GoogleCloudStorageConfig =
         CredentialsJson = None
         CredentialsJsonProvider = None
         EndpointUrl = None
-        AuditLog = None
+        AuditLog = ToolUp.Platform.NoOpAuditLog()
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -772,6 +772,6 @@ let fromEnv () : IBlobStorage option =
                 // Env-built instances compose no audit sink, there being
                 // no env var that could name one. A deployment wanting
                 // the credential-rejection trail builds the config itself.
-                AuditLog = None
+                AuditLog = ToolUp.Platform.NoOpAuditLog()
             }
         )

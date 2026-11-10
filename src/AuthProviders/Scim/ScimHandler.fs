@@ -105,7 +105,7 @@ type ScimDeps = {
     /// platform's own defaults — the conservative posture, and the
     /// default.
     Permissions: IPermissionStore option
-    Audit: IAuditLog option
+    Audit: IAuditLog
     Config: ScimConfig
 }
 
@@ -117,9 +117,9 @@ type ScimDeps = {
 /// there — a slow audit sink must not add latency to a provisioning
 /// round-trip an IdP will time out.
 let private audit (deps: ScimDeps) (event: AuditEvent) =
-    match deps.Audit with
-    | Some log -> log.Record(deps.Config.TeamId.Value, event) |> Async.Start
-    | None -> ()
+    deps.Audit.Record(AuditScope.team deps.Config.TeamId, AuditSubject.system "Scim", event)
+    |> AuditRow.orRefuse
+    |> Async.Start
 
 // ─── Projection: platform membership → SCIM User ─────────────────────
 

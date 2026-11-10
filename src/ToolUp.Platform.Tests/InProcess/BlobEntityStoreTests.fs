@@ -60,7 +60,7 @@ let private staleRig () =
     registry.Register<IEntityStoreContract.TestEntity>(IEntityStoreContract.testEntityRegistration)
 
     {
-        Store = BlobEntityStore(DataObjectStore(blob), blob, registry, None)
+        Store = BlobEntityStore(DataObjectStore(blob), blob, registry, (NoOpAuditLog()))
         Inner = inner
         Refusing = refusing
         Scope = "team-973-" + Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -379,7 +379,7 @@ let tests =
         let registry = EntityRegistry()
         // Audit log stays None — tests focus on storage behaviour;
         // audit emission is exercised separately when wired up.
-        let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+        let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
         store, registry, "team-a-" + suffix, "team-b-" + suffix
 
@@ -393,7 +393,7 @@ let tests =
         let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
-        let store = BlobEntityStore(dos, blob, registry, Some auditLog) :> IEntityStore
+        let store = BlobEntityStore(dos, blob, registry, auditLog) :> IEntityStore
         store, registry, "team-audit-" + Guid.NewGuid().ToString("N").Substring(0, 8)
 
     /// Phase 973 — the same substrate behind a double that refuses the
@@ -415,7 +415,7 @@ let tests =
 
         let dos = DataObjectStore(blob) :> IDataObjectStore
         let registry = EntityRegistry()
-        let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+        let store = BlobEntityStore(dos, blob, registry, (NoOpAuditLog())) :> IEntityStore
         store, registry, "team-stale-" + Guid.NewGuid().ToString("N").Substring(0, 8)
 
     testList "BlobEntityStore" [

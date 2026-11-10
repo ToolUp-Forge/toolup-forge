@@ -63,8 +63,12 @@ type private CapturingAuditLog() =
     member _.Events = lock gate (fun () -> events |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add(scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock gate (fun () -> events.Add(scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Thread-safe capturing INotificationChannel double.
 type private CapturingNotifications() =
@@ -114,7 +118,7 @@ let private dropEmission =
 
             run (
                 ToolUp.RAG.RAGCompose.emitIngestionDrop
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     None
                     q
                     noopLogger
@@ -143,7 +147,7 @@ let private dropEmission =
 
             run (
                 ToolUp.RAG.RAGCompose.emitIngestionDrop
-                    None
+                    (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q
                     noopLogger
@@ -167,7 +171,7 @@ let private dropEmission =
 
             run (
                 ToolUp.RAG.RAGCompose.emitIngestionDrop
-                    None
+                    (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q
                     noopLogger

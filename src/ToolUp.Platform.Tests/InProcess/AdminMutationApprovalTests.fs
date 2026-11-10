@@ -46,6 +46,14 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 
+/// A log that records nothing and never refuses — the test's "no audit".
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+    }
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -82,12 +90,33 @@ type private RecordingAuditLog() =
     member this.EventNames = this.Recorded |> List.map (snd >> AuditEvent.eventTypeName)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Add(scopeId, audit)
+            return Ok()
+        }
 
-/// The synchronous scheduler the ceremony cases pass, so decision and
-/// emission are observed together.
-let private runNow (work: Async<unit>) = Async.RunSynchronously work
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+
+/// An inner store whose document cannot be read: every read answers
+/// `Unreadable` and every write refuses. Before Phase 1062 the read RAISED
+/// and the raise travelled out of `grantModuleAccess` past the
+/// classification of its `Result`.
+type private UnreadablePermissionStore() =
+    let unreadable () = async {
+        return Error(PermissionStoreError.Unreadable "pinned: the permission document is unreadable")
+    }
+
+    let refused () = async { return Error "pinned: the permission document is unreadable" }
+
+    interface IPermissionStore with
+        member _.GetTeamPermissions _ = unreadable ()
+        member _.UpdateTeamPermissions(_, _) = refused ()
+        member _.SetTeamPermissions(_, _) = refused ()
+        member _.GetEffectivePermissions(_, _) = unreadable ()
+        member _.SetMemberPermissions(_, _, _, _) = refused ()
+        member _.SetTeamDefaults(_, _) = refused ()
+        member _.GetModuleExposure _ = unreadable ()
+        member _.SetModuleExposure(_, _, _) = refused ()
 
 let private t0 = DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero)
 
@@ -115,7 +144,9 @@ let private documentBytes (storage: IBlobStorage) (teamId: string) =
     |> Async.RunSynchronously
 
 let private effectiveFor (store: IPermissionStore) userId teamId =
-    store.GetEffectivePermissions(userId, teamId) |> Async.RunSynchronously
+    match store.GetEffectivePermissions(userId, teamId) |> Async.RunSynchronously with
+    | Ok perms -> perms
+    | Error e -> failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
 
 let private run x = Async.RunSynchronously x
 
@@ -127,6 +158,41 @@ let tests =
 
         // ── 1. The ceremony ──────────────────────────────────────────
         testList "the two-person ceremony" [
+            test "Phase 1062 — dual control over an unreadable document refuses with a typed error, never a throw" {
+                let gate =
+                    DualControlPermissionStore(
+                        UnreadablePermissionStore(),
+                        settingsAll,
+                        BlobAdminMutationApprovalStore(storageAt (tempDir ())),
+                        nothingIsPolicyBearing,
+                        (fun () -> Some "admin-a"),
+                        (fun () -> t0),
+                        noAudit
+                    )
+                    :> IPermissionStore
+
+                let request: GrantPolicyGuard.ModuleGrantRequest = {
+                    TeamId = TeamId "acme"
+                    ActorId = "admin-a"
+                    SubjectId = "bob"
+                    ModuleName = "reports"
+                    Permissions = [ Read ]
+                    Evidence = GrantPolicyGuard.GrantEvidence.none
+                }
+
+                match
+                    GrantPolicyGuard.PermissionGrants.grantModuleAccess
+                        gate
+                        GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
+                        request
+                    |> Async.Catch
+                    |> run
+                with
+                | Choice1Of2(Error(GrantRefusal.StoreUnavailable("reports", _))) -> ()
+                | Choice1Of2 other -> failtestf "expected StoreUnavailable, got %A" other
+                | Choice2Of2 ex -> failtestf "grantModuleAccess threw past its Result: %s" ex.Message
+            }
+
 
             test "a gated grant is inert until a second administrator approves it" {
                 let _, _, permissions, approvals = freshFixture ()
@@ -138,7 +204,8 @@ let tests =
                         approvals,
                         nothingIsPolicyBearing,
                         (fun () -> Some "admin-a"),
-                        (fun () -> t0)
+                        (fun () -> t0),
+                        noAudit
                     )
 
                 let store = gate :> IPermissionStore
@@ -162,7 +229,7 @@ let tests =
 
                 // Exactly one proposal is queued.
                 let pending =
-                    match listPending approvals None runNow t0 "acme" |> run with
+                    match listPending approvals noAudit t0 "acme" |> run with
                     | Ok ps -> ps
                     | Error e -> failtestf "listing the queue failed: %s" e
 
@@ -179,7 +246,7 @@ let tests =
                     (Some [ Read; Write ])
                     "the approved grant is live"
 
-                match listPending approvals None runNow t0 "acme" |> run with
+                match listPending approvals noAudit t0 "acme" |> run with
                 | Ok [] -> ()
                 | Ok remaining -> failtestf "the decided proposal must leave the queue; %d remain" remaining.Length
                 | Error e -> failtestf "listing the queue failed: %s" e
@@ -193,7 +260,7 @@ let tests =
 
                 let queued =
                     match
-                        propose approvals settingsAll (Some(audit :> IAuditLog)) runNow t0 "acme" "admin-a" mutation
+                        propose approvals settingsAll (audit :> IAuditLog) t0 "acme" "admin-a" mutation
                         |> run
                     with
                     | Ok q -> q
@@ -217,7 +284,7 @@ let tests =
                 let mutation = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ])
 
                 let queued =
-                    match propose approvals settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
+                    match propose approvals settingsAll noAudit t0 "acme" "admin-a" mutation |> run with
                     | Ok q -> q
                     | Error r -> failtestf "propose refused: %s" (AdminMutationRefusal.describe r)
 
@@ -225,15 +292,7 @@ let tests =
                 // does NOT require a second person — see the asymmetry
                 // note in AdminMutationApproval.fs.
                 match
-                    reject
-                        approvals
-                        (Some(audit :> IAuditLog))
-                        runNow
-                        t0
-                        "acme"
-                        queued.RequestId
-                        "admin-a"
-                        "mistyped the user id"
+                    reject approvals (audit :> IAuditLog) t0 "acme" queued.RequestId "admin-a" "mistyped the user id"
                     |> run
                 with
                 | Ok(AdminMutationDecision.Rejected _) -> ()
@@ -260,14 +319,14 @@ let tests =
                     AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
 
                 let queued =
-                    match propose approvals settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
+                    match propose approvals settingsAll noAudit t0 "acme" "admin-a" mutation |> run with
                     | Ok q -> q
                     | Error r -> failtestf "propose refused: %s" (AdminMutationRefusal.describe r)
 
                 let apply _ = async { return Ok() }
 
                 match
-                    approve approvals apply (Some(audit :> IAuditLog)) runNow t0 "acme" queued.RequestId "admin-a"
+                    approve approvals apply (audit :> IAuditLog) t0 "acme" queued.RequestId "admin-a"
                     |> run
                 with
                 | Error(AdminMutationRefusal.SelfApprovalRefused(id, actor)) ->
@@ -308,8 +367,7 @@ let tests =
                             propose
                                 approvals
                                 settingsAll
-                                None
-                                runNow
+                                noAudit
                                 t0
                                 "acme"
                                 "admin-a"
@@ -321,7 +379,7 @@ let tests =
 
                     let apply _ = async { return Ok() }
 
-                    match approve approvals apply None runNow t0 "acme" queued.RequestId variant |> run with
+                    match approve approvals apply noAudit t0 "acme" queued.RequestId variant |> run with
                     | Error(AdminMutationRefusal.SelfApprovalRefused _) -> ()
                     | other -> failtestf "'%s' must not be able to approve admin-a's proposal; got %A" variant other
 
@@ -343,7 +401,8 @@ let tests =
                         nothingIsPolicyBearing,
                         // No resolvable acting administrator.
                         (fun () -> None),
-                        (fun () -> t0)
+                        (fun () -> t0),
+                        noAudit
                     )
 
                 match
@@ -354,7 +413,7 @@ let tests =
                     Expect.stringContains message "DUAL-CONTROL-UNATTRIBUTED" "the refusal names the missing actor"
                 | Ok() -> failtest "an unattributable gated write must not apply"
 
-                match listPending approvals None runNow t0 "acme" |> run with
+                match listPending approvals noAudit t0 "acme" |> run with
                 | Ok [] -> ()
                 | Ok queued -> failtestf "nothing may be queued for an unknown proposer; %d were" queued.Length
                 | Error e -> failtestf "listing the queue failed: %s" e
@@ -375,8 +434,7 @@ let tests =
                         propose
                             approvals
                             settingsAll
-                            None
-                            runNow
+                            noAudit
                             t0
                             "acme"
                             "admin-a"
@@ -390,7 +448,7 @@ let tests =
                 let apply _ = async { return Ok() }
 
                 match
-                    approve approvals apply (Some(audit :> IAuditLog)) runNow tooLate "acme" queued.RequestId "admin-b"
+                    approve approvals apply (audit :> IAuditLog) tooLate "acme" queued.RequestId "admin-b"
                     |> run
                 with
                 | Error(AdminMutationRefusal.Expired(id, at)) ->
@@ -423,8 +481,7 @@ let tests =
                     propose
                         approvals
                         settingsAll
-                        None
-                        runNow
+                        noAudit
                         t0
                         "acme"
                         "admin-a"
@@ -438,8 +495,7 @@ let tests =
                 propose
                     approvals
                     settingsAll
-                    None
-                    runNow
+                    noAudit
                     live
                     "acme"
                     "admin-a"
@@ -447,10 +503,7 @@ let tests =
                 |> run
                 |> ignore
 
-                match
-                    listPending approvals (Some(audit :> IAuditLog)) runNow (t0.AddMinutes 61.0) "acme"
-                    |> run
-                with
+                match listPending approvals (audit :> IAuditLog) (t0.AddMinutes 61.0) "acme" |> run with
                 | Ok remaining ->
                     Expect.hasLength remaining 1 "only the later proposal is still live"
 
@@ -517,7 +570,8 @@ let tests =
                         approvals,
                         nothingIsPolicyBearing,
                         (fun () -> Some "admin-a"),
-                        (fun () -> t0)
+                        (fun () -> t0),
+                        noAudit
                     )
 
                 match
@@ -529,7 +583,7 @@ let tests =
 
                 Expect.isEmpty (effectiveFor permissions (UserId "bob") (TeamId "acme")) "the revocation landed"
 
-                match listPending approvals None runNow t0 "acme" |> run with
+                match listPending approvals noAudit t0 "acme" |> run with
                 | Ok [] -> ()
                 | Ok queued -> failtestf "a revocation must not be queued; %d were" queued.Length
                 | Error e -> failtestf "listing the queue failed: %s" e
@@ -552,7 +606,8 @@ let tests =
                         approvals,
                         nothingIsPolicyBearing,
                         (fun () -> Some "admin-a"),
-                        (fun () -> t0)
+                        (fun () -> t0),
+                        noAudit
                     )
 
                 let apply (store: IPermissionStore) =
@@ -587,7 +642,8 @@ let tests =
                         approvals,
                         (fun name -> name = "payroll"),
                         (fun () -> Some "admin-a"),
-                        (fun () -> t0)
+                        (fun () -> t0),
+                        noAudit
                     )
 
                 let store = gate :> IPermissionStore
@@ -684,7 +740,8 @@ let tests =
                         approvals,
                         (fun name -> name = "payroll"),
                         (fun () -> Some "admin-a"),
-                        (fun () -> t0)
+                        (fun () -> t0),
+                        noAudit
                     )
 
                 let registry =
@@ -693,7 +750,8 @@ let tests =
                     ]
 
                 let composed =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry) :> IPermissionStore
+                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry, noAudit)
+                    :> IPermissionStore
 
                 match
                     composed.SetMemberPermissions(TeamId "acme", UserId "bob", "payroll", [ Read ])
@@ -708,7 +766,7 @@ let tests =
                     Expect.isFalse (message.Contains "DUAL-CONTROL") "the write never reached the dual-control gate"
                 | Ok() -> failtest "an unbacked policy-bearing grant must be refused"
 
-                match listPending approvals None runNow t0 "acme" |> run with
+                match listPending approvals noAudit t0 "acme" |> run with
                 | Ok [] -> ()
                 | Ok queued ->
                     failtestf
@@ -730,7 +788,8 @@ let tests =
                         approvals,
                         (fun name -> name = "payroll"),
                         (fun () -> Some "admin-a"),
-                        (fun () -> t0)
+                        (fun () -> t0),
+                        noAudit
                     )
 
                 let registry =
@@ -739,7 +798,8 @@ let tests =
                     ]
 
                 let composed =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry) :> IPermissionStore
+                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry, noAudit)
+                    :> IPermissionStore
 
                 let outcome =
                     GrantPolicyGuard.PermissionGrants.grantModuleAccess composed registry {
@@ -779,7 +839,7 @@ let tests =
                     "the grantee's access is unchanged while the proposal is pending"
 
                 let pending =
-                    match listPending approvals None runNow t0 "acme" |> run with
+                    match listPending approvals noAudit t0 "acme" |> run with
                     | Ok ps -> ps
                     | Error e -> failtestf "listing the queue failed: %s" e
 
@@ -829,8 +889,7 @@ let tests =
                         propose
                             approvals
                             settingsAll
-                            None
-                            runNow
+                            noAudit
                             t0
                             "acme"
                             "admin-a"
@@ -855,7 +914,7 @@ let tests =
 
                 let apply _ = async { return Ok() }
 
-                match approve approvals apply None runNow t0 "acme" queued.RequestId "admin-b" |> run with
+                match approve approvals apply noAudit t0 "acme" queued.RequestId "admin-b" |> run with
                 | Error(AdminMutationRefusal.FingerprintMismatch id) ->
                     Expect.equal id queued.RequestId "the refusal names the request"
                 | other -> failtestf "a tampered record must not be approved; got %A" other
@@ -898,7 +957,7 @@ let tests =
 
                 for mutation in mutations do
                     let queued =
-                        match propose approvals settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
+                        match propose approvals settingsAll noAudit t0 "acme" "admin-a" mutation |> run with
                         | Ok q -> q
                         | Error r -> failtestf "propose refused: %s" (AdminMutationRefusal.describe r)
 
@@ -929,7 +988,7 @@ let tests =
                 return Ok()
             }
 
-            match approve failing apply None runNow t0 "acme" "req-1" "admin-b" |> run with
+            match approve failing apply noAudit t0 "acme" "req-1" "admin-b" |> run with
             | Error(AdminMutationRefusal.ApprovalStoreUnavailable _) -> ()
             | other -> failtestf "an unreadable store must refuse; got %A" other
 
@@ -955,7 +1014,7 @@ let tests =
                 AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
 
             let queued =
-                match propose stuck settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
+                match propose stuck settingsAll noAudit t0 "acme" "admin-a" mutation |> run with
                 | Ok q -> q
                 | Error r -> failtestf "propose refused: %s" (AdminMutationRefusal.describe r)
 
@@ -967,7 +1026,7 @@ let tests =
             }
 
             for approver in [ "admin-b"; "admin-c" ] do
-                match approve stuck apply None runNow t0 "acme" queued.RequestId approver |> run with
+                match approve stuck apply noAudit t0 "acme" queued.RequestId approver |> run with
                 | Error _ -> ()
                 | other ->
                     failtestf "%s's approval must be refused while the record cannot be removed; got %A" approver other
@@ -986,7 +1045,7 @@ let tests =
             }
 
             match
-                approve approvals apply (Some(audit :> IAuditLog)) runNow t0 "acme" "no-such-request" "admin-b"
+                approve approvals apply (audit :> IAuditLog) t0 "acme" "no-such-request" "admin-b"
                 |> run
             with
             | Error(AdminMutationRefusal.UnknownRequest id) ->

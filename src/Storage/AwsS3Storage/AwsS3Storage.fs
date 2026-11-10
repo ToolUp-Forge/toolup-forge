@@ -35,9 +35,9 @@ type AwsS3StorageConfig = {
     /// Optional S3-compatible endpoint override (MinIO, R2, B2).
     /// `None` = use the default AWS endpoint for the region.
     EndpointUrl: string option
-    /// Phase 2c — optional audit sink for credential rejections. `None`
+    /// The audit sink for credential rejections. `NoOpAuditLog`
     /// (default) emits nothing and costs nothing (GP 11 + GP 13);
-    /// `Some log` records one `BlobStorageAuthFailed` row per S3 call
+    /// a composed log records one `BlobStorageAuthFailed` row per S3 call
     /// rejected `401` / `403`, under the `_platform` scope.
     ///
     /// It is a sink on the config rather than a widened `create`, because
@@ -50,7 +50,7 @@ type AwsS3StorageConfig = {
     /// — but a revoked role, a policy edit that drops one permission, or
     /// an expired static key still rejects, and that is what this
     /// records.
-    AuditLog: ToolUp.Platform.IAuditLog option
+    AuditLog: ToolUp.Platform.IAuditLog
 }
 
 module AwsS3StorageConfig =
@@ -58,7 +58,7 @@ module AwsS3StorageConfig =
         BucketName = ""
         Region = "us-east-1"
         EndpointUrl = None
-        AuditLog = None
+        AuditLog = ToolUp.Platform.NoOpAuditLog()
     }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -612,6 +612,6 @@ let fromEnv () : IBlobStorage option =
                 // Env-built instances compose no audit sink — there is no
                 // env var that could name one. A deployment wanting the
                 // credential-rejection trail builds the config itself.
-                AuditLog = None
+                AuditLog = ToolUp.Platform.NoOpAuditLog()
             }
         )

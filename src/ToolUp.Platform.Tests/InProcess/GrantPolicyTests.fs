@@ -47,6 +47,22 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
 
+/// A log that records nothing and never refuses — the test's "no audit".
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+    }
+
+
+/// A permission read the case expects to succeed; an `Error` fails it by name.
+let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> = async {
+    match! read with
+    | Ok value -> return value
+    | Error e -> return failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
+}
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -68,13 +84,33 @@ type private RecordingAuditLog() =
     member _.Recorded = List.ofSeq recorded
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Add(scopeId, audit) }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Add(scopeId, audit)
+            return Ok()
+        }
 
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
-/// The synchronous scheduler the dispatch cases pass to
-/// `guardDispatch`, so decision and emission are observed together.
-let private runNow (work: Async<unit>) = Async.RunSynchronously work
+/// An inner store whose document cannot be read: every read answers
+/// `Unreadable` and every write refuses. Before Phase 1062 the read RAISED
+/// and the raise travelled out of `grantModuleAccess` past the
+/// classification of its `Result`.
+type private UnreadablePermissionStore() =
+    let unreadable () = async {
+        return Error(PermissionStoreError.Unreadable "pinned: the permission document is unreadable")
+    }
+
+    let refused () = async { return Error "pinned: the permission document is unreadable" }
+
+    interface IPermissionStore with
+        member _.GetTeamPermissions _ = unreadable ()
+        member _.UpdateTeamPermissions(_, _) = refused ()
+        member _.SetTeamPermissions(_, _) = refused ()
+        member _.GetEffectivePermissions(_, _) = unreadable ()
+        member _.SetMemberPermissions(_, _, _, _) = refused ()
+        member _.SetTeamDefaults(_, _) = refused ()
+        member _.GetModuleExposure _ = unreadable ()
+        member _.SetModuleExposure(_, _, _) = refused ()
 
 let private registryOf declarations =
     GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations declarations
@@ -273,6 +309,35 @@ let tests =
 
         // ── 2. The write guard, per arm ──────────────────────────────
         testList "grant-write guard (551.C)" [
+            testCaseAsync "Phase 1062 — an unreadable permission document is a typed refusal, never a throw"
+            <| async {
+                let store =
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        UnreadablePermissionStore(),
+                        registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ],
+                        noAudit
+                    )
+                    :> IPermissionStore
+
+                let request: GrantPolicyGuard.ModuleGrantRequest = {
+                    TeamId = TeamId "t1"
+                    ActorId = "admin"
+                    SubjectId = "alice"
+                    ModuleName = "Partner"
+                    Permissions = [ Read ]
+                    Evidence = GrantPolicyGuard.GrantEvidence.acknowledged "quarterly review"
+                }
+
+                let! outcome =
+                    GrantPolicyGuard.PermissionGrants.grantModuleAccess store (registryOf []) request
+                    |> Async.Catch
+
+                match outcome with
+                | Choice1Of2(Error(GrantRefusal.StoreUnavailable("Partner", _))) -> ()
+                | Choice1Of2 other -> failtestf "expected StoreUnavailable, got %A" other
+                | Choice2Of2 ex -> failtestf "grantModuleAccess threw past its Result: %s" ex.Message
+            }
+
             testCaseAsync "RequiresAcknowledgement refuses a grant with no confirmation, then no justification"
             <| async {
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
@@ -305,7 +370,7 @@ let tests =
                 | other -> failtestf "expected JustificationRequired, got %A" other
 
                 // Nothing was persisted by either refusal.
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 Expect.isEmpty doc.Members "a refused grant writes nothing"
                 Expect.isEmpty doc.Grants "a refused grant records nothing"
             }
@@ -327,7 +392,7 @@ let tests =
 
                 Expect.equal outcome (Ok GrantWriteOutcome.Granted) "granted outright — no third party is involved"
 
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 let record = TeamPermissions.grantsFor "alice" doc |> Map.tryFind "Partner"
 
                 match record with
@@ -362,7 +427,7 @@ let tests =
                     (Ok(GrantWriteOutcome.RecordedPendingConsent "alice"))
                     "the admin cannot consent on the subject's behalf"
 
-                let! pending = store.GetTeamPermissions(TeamId "t1")
+                let! pending = readOk (store.GetTeamPermissions(TeamId "t1"))
 
                 let pendingRecord =
                     TeamPermissions.grantsFor "alice" pending |> Map.tryFind "Partner"
@@ -374,14 +439,14 @@ let tests =
                 // The permission entry EXISTS meanwhile — which is
                 // exactly why liveness has to be a separate question from
                 // `canAccessModule`.
-                let! effective = store.GetEffectivePermissions(UserId "alice", TeamId "t1")
+                let! effective = readOk (store.GetEffectivePermissions(UserId "alice", TeamId "t1"))
                 Expect.isTrue (effective.ContainsKey "Partner") "the permission entry is written; it is just inert"
 
                 match! GrantPolicyGuard.PermissionGrants.acceptGrant store "t1" "alice" "Partner" with
                 | Error e -> failtestf "acceptGrant failed: %s" e
                 | Ok() -> ()
 
-                let! accepted = store.GetTeamPermissions(TeamId "t1")
+                let! accepted = readOk (store.GetTeamPermissions(TeamId "t1"))
 
                 let acceptedRecord =
                     TeamPermissions.grantsFor "alice" accepted |> Map.tryFind "Partner"
@@ -430,7 +495,7 @@ let tests =
                     Expect.equal named party "the refusal names the party whose approval is missing"
                 | other -> failtestf "expected CounterpartyApprovalUnavailable, got %A" other
 
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 Expect.isEmpty doc.Members "nothing persisted — an emailed approval is not an artifact"
             }
 
@@ -493,7 +558,7 @@ let tests =
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresSubjectConsent ]
 
                 let store =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry) :> IPermissionStore
+                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, noAudit) :> IPermissionStore
 
                 match! store.SetTeamDefaults(TeamId "t1", Map.ofList [ "Partner", [ Read ] ]) with
                 | Error msg -> Expect.stringContains msg "GRANT-POLICY-UNBACKED-GRANT" "refused, naming the module"
@@ -554,7 +619,7 @@ let tests =
                 let audit = RecordingAuditLog()
 
                 let outcome =
-                    GrantPolicyGuard.guardDispatch registry Map.empty (Some audit) runNow "team-t1" "mallory" "Partner"
+                    GrantPolicyGuard.guardDispatch registry Map.empty audit "team-t1" "mallory" "Partner"
 
                 match outcome with
                 | Error payload ->
@@ -584,7 +649,7 @@ let tests =
                 let registry = registryOf [ "Partner", policy ]
                 let grants = Map.ofList [ "Partner", activeRecord policy "forged" ]
 
-                match GrantPolicyGuard.guardDispatch registry grants None runNow "team-t1" "mallory" "Partner" with
+                match GrantPolicyGuard.guardDispatch registry grants noAudit "team-t1" "mallory" "Partner" with
                 | Error payload ->
                     Expect.equal
                         payload.InertReason
@@ -607,7 +672,7 @@ let tests =
                         }
                     ]
 
-                match GrantPolicyGuard.guardDispatch registry pending None runNow "team-t1" "alice" "Partner" with
+                match GrantPolicyGuard.guardDispatch registry pending noAudit "team-t1" "alice" "Partner" with
                 | Error payload ->
                     // The reason is what lets an operator separate an
                     // ordinary pending grant from a suspected injection.
@@ -618,7 +683,7 @@ let tests =
                     Map.ofList [ "Partner", activeRecord GrantPolicy.RequiresSubjectConsent "requested" ]
 
                 Expect.equal
-                    (GrantPolicyGuard.guardDispatch registry consented None runNow "team-t1" "alice" "Partner")
+                    (GrantPolicyGuard.guardDispatch registry consented noAudit "team-t1" "alice" "Partner")
                     (Ok())
                     "a consented grant is live"
             }
@@ -626,7 +691,7 @@ let tests =
             test "no-grant-record is reported distinctly from awaiting-consent" {
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresSubjectConsent ]
 
-                match GrantPolicyGuard.guardDispatch registry Map.empty None runNow "team-t1" "mallory" "Partner" with
+                match GrantPolicyGuard.guardDispatch registry Map.empty noAudit "team-t1" "mallory" "Partner" with
                 | Error payload -> Expect.equal payload.InertReason "no-grant-record" "the injected-row signature"
                 | Ok() -> failtest "an unbacked entry must be refused"
             }
@@ -641,7 +706,7 @@ let tests =
                 let stale =
                     Map.ofList [ "Partner", activeRecord GrantPolicy.RequiresAcknowledgement "old" ]
 
-                match GrantPolicyGuard.guardDispatch registry stale None runNow "team-t1" "alice" "Partner" with
+                match GrantPolicyGuard.guardDispatch registry stale noAudit "team-t1" "alice" "Partner" with
                 | Error payload ->
                     Expect.equal payload.InertReason "evidence-below-declared-policy" "named as stale evidence"
                 | Ok() -> failtest "evidence below the declared policy must not satisfy it"
@@ -654,7 +719,7 @@ let tests =
                     Map.ofList [ "Partner", activeRecord GrantPolicy.RequiresSubjectConsent "new" ]
 
                 Expect.equal
-                    (GrantPolicyGuard.guardDispatch strongerRegistry stronger None runNow "team-t1" "alice" "Partner")
+                    (GrantPolicyGuard.guardDispatch strongerRegistry stronger noAudit "team-t1" "alice" "Partner")
                     (Ok())
                     "stronger evidence satisfies a weaker demand"
             }
@@ -663,7 +728,7 @@ let tests =
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresSubjectConsent ]
 
                 Expect.equal
-                    (GrantPolicyGuard.guardDispatch registry Map.empty None runNow "team-t1" "alice" "Ordinary")
+                    (GrantPolicyGuard.guardDispatch registry Map.empty noAudit "team-t1" "alice" "Ordinary")
                     (Ok())
                     "an undeclared module is unaffected by a sibling's policy"
             }
@@ -691,8 +756,7 @@ let tests =
                     GrantPolicyGuard.guardDispatch
                         GrantPolicyGuard.ModuleGrantPolicyRegistry.empty
                         Map.empty
-                        (Some audit)
-                        (fun _ -> failtest "an all-default deployment must never schedule an audit emission")
+                        audit
                         "team-t1"
                         "alice"
                         "Anything"
@@ -709,10 +773,10 @@ let tests =
                 | Error e -> failtestf "SetMemberPermissions failed: %s" e
                 | Ok() -> ()
 
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
                 Expect.isEmpty doc.Grants "no records are minted for an AdminDiscretion module"
 
-                let! effective = store.GetEffectivePermissions(UserId "alice", TeamId "t1")
+                let! effective = readOk (store.GetEffectivePermissions(UserId "alice", TeamId "t1"))
                 Expect.equal effective (Map.ofList [ "Ordinary", [ Read; Write ] ]) "and the merge is unchanged"
             }
 
@@ -738,7 +802,7 @@ let tests =
                 | Ok _ -> ()
 
                 let store = PermissionStore(storage) :> IPermissionStore
-                let! doc = store.GetTeamPermissions(TeamId "t1")
+                let! doc = readOk (store.GetTeamPermissions(TeamId "t1"))
 
                 Expect.isEmpty doc.Grants "absent ⇒ empty ⇒ every module behaves as AdminDiscretion"
                 Expect.equal (Map.count doc.Members) 1 "and the rest of the document is unaffected"

@@ -38,6 +38,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditWriteFailureMetricTests.fs" Link="InProcess\AuditWriteFailureMetricTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditFailurePolicyTests.fs" Link="InProcess\AuditFailurePolicyTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\PermissionAuditChainTests.fs" Link="InProcess\PermissionAuditChainTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuditEmitTests.fs" Link="InProcess\AuditEmitTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AuthAuditHookTests.fs" Link="InProcess\AuthAuditHookTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostActionAuditTests.fs" Link="InProcess\HostActionAuditTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\NotificationSilentlySkippedTests.fs" Link="InProcess\NotificationSilentlySkippedTests.fs" />

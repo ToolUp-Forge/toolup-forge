@@ -109,7 +109,7 @@ let private budgetedTransport (server: StubServer) : IHttpTransport =
         InProcessRateLimiter(
             [ window ],
             NoOpMetricsSink() :> IMetricsSink,
-            AuditLog.NoOpAuditLog() :> IAuditLog,
+            NoOpAuditLog() :> IAuditLog,
             TimeSpan.FromSeconds 5.0,
             noopLogger
         )

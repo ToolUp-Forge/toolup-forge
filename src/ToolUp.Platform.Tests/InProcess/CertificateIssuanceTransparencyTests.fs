@@ -86,9 +86,12 @@ type private RecordingAuditLog() =
     member _.All = recorded |> Seq.map snd |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue((scopeId, audit)) }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Enqueue((scopeId, audit))
+            return Ok()
+        }
 
-        member _.GetAuditTrail(scopeId, _dateRange, eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, eventType) = async {
             return
                 recorded
                 |> Seq.filter (fun (s, _) -> s = scopeId)
@@ -157,7 +160,7 @@ let private seed (store: IFactStore) (scopeId: string) metric inputHash value = 
 }
 
 let private signerOver (secrets: ISecretStore) =
-    DefaultArtefactSigner.createSystem secrets (AuditLog.NoOpAuditLog() :> IAuditLog) keyId Ed25519
+    DefaultArtefactSigner.createSystem secrets (NoOpAuditLog() :> IAuditLog) keyId Ed25519
 
 let private issued =
     function
@@ -217,9 +220,9 @@ let private perturb (storage: IBlobStorage) (transform: string list -> string li
 /// perturbation, not by an in-memory list the tamper never touched.
 type private LedgerBackedAuditLog(storage: IBlobStorage) =
     interface IAuditLog with
-        member _.Record(_scopeId, _audit) = async { return () }
+        member _.Record(AuditScope.StreamKey _scopeId, _actor, _audit) = async { return Ok() }
 
-        member _.GetAuditTrail(scopeId, _dateRange, eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, eventType) = async {
             let! name = segmentName storage
             let! lines = readLines storage name
 
@@ -245,7 +248,8 @@ let private writeToLedger (storage: IBlobStorage) (events: (string * AuditEvent)
     let batch =
         events
         |> List.mapi (fun i (scopeId, event) ->
-            AuditEnvelope.fromScopeId
+            AuditEnvelope.create
+                AuditSubject.unattributed
                 scopeId
                 (DateTime(2026, 8, 23, 10, 30, 0, DateTimeKind.Utc).AddSeconds(float i))
                 event)
@@ -361,14 +365,11 @@ let tests =
 
             // Two issuers over two identically-seeded stores, one logging
             // and one not, on the same frozen clock.
-            let issueWith (audit: IAuditLog option) = async {
+            let issueWith (audit: IAuditLog) = async {
                 let graph, store, gate, events = substrate ()
 
                 let issuer =
-                    match audit with
-                    | Some a ->
-                        GroundingCertificate.createIssuerWithClockAudited graph store gate events (Some signer) a frozen
-                    | None -> GroundingCertificate.createIssuerWithClock graph store gate events (Some signer) frozen
+                    GroundingCertificate.createIssuerWithClockAudited graph store gate events (Some signer) audit frozen
 
                 let! factId = seed store scopeA "revenue" "h1" 100m
                 let! result = issuer.Issue(TestScope.resolved scopeA, "auditor", FactCertificate factId, 5)
@@ -376,8 +377,8 @@ let tests =
             }
 
             let audit = RecordingAuditLog()
-            let! logged = issueWith (Some(audit :> IAuditLog))
-            let! plain = issueWith None
+            let! logged = issueWith ((audit :> IAuditLog))
+            let! plain = issueWith (NoOpAuditLog())
 
             Expect.equal
                 (GroundingCertificate.canonicalBytes logged.Body)
@@ -516,7 +517,7 @@ let tests =
             // finding, but a different one, and it would let this probe
             // claim the drop class without ever exercising it.
             let storage = newLedgerStorage ()
-            let! trail = (audit :> IAuditLog).GetAuditTrail(scopeA, None, Some "CertificateIssued")
+            let! trail = (audit :> IAuditLog).GetAuditTrail(AuditScope.shard scopeA, None, Some "CertificateIssued")
             do! writeToLedger storage (trail |> List.rev |> List.map (fun e -> scopeA, e))
 
             let ledgerLog =
@@ -594,7 +595,7 @@ let tests =
             let secrets = InMemorySecretStore() :> ISecretStore
 
             let signer =
-                ApplicationSigning.inProcess secrets (AuditLog.NoOpAuditLog() :> IAuditLog) keyId EcdsaP256 "system"
+                ApplicationSigning.inProcess secrets (NoOpAuditLog() :> IAuditLog) keyId EcdsaP256 "system"
                 |> ApplicationSigning.create
 
             let audit = RecordingAuditLog()

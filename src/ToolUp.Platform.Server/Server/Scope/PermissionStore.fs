@@ -7,42 +7,123 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
 
-/// Raised when a team's permission document is present but cannot be
-/// read or parsed. Resolving permissions to `TeamPermissions.empty`
-/// (= unrestricted) on a storage blip or a corrupt blob is fail-OPEN
-/// on an authorization primitive — a single transient error would
-/// silently grant every member full access. The store raises this
-/// instead so the request fails (access denied) rather than escalating.
-/// "No document at all" is NOT this case — that stays fail-open by
-/// design (bootstrap: a brand-new team behaves as pre-Phase-4
-/// unrestricted until an admin writes its first grants).
-exception PermissionStoreUnavailableException of string
+/// Why the permission store could not answer for a team's document. An
+/// ABSENT document is not one of these: it is `Ok TeamPermissions.empty`,
+/// decided in the store and nowhere else (a brand-new team behaves as it did
+/// before module RBAC until an admin writes its first grants). A document
+/// that exists and cannot be read, or does not decode, is never read as that
+/// empty (= unrestricted) map: the store answers one of these and the caller
+/// refuses, so a storage blip or a corrupt blob fails closed.
+[<RequireQualifiedAccess>]
+type PermissionStoreError =
+    /// The document is present and could not be read.
+    | Unreadable of reason: string
+    /// The document is present and did not decode; it has been moved aside
+    /// (quarantined) and is never overwritten in place.
+    | Quarantined of reason: string
+    /// The store could not be reached, or refused the operation.
+    | Unavailable of reason: string
+
+module PermissionStoreError =
+    /// The failure as one sentence, for a log line or a refusal message.
+    let describe (error: PermissionStoreError) : string =
+        match error with
+        | PermissionStoreError.Unreadable reason -> $"the permission document is unreadable: {reason}"
+        | PermissionStoreError.Quarantined reason -> $"the permission document was quarantined: {reason}"
+        | PermissionStoreError.Unavailable reason -> $"the permission store is unavailable: {reason}"
+
+/// The pure edits every write path applies to a team's document. One copy:
+/// the store's own writes and the decorators that apply a captured mutation
+/// read the same function, so they cannot disagree about what a write means.
+module TeamPermissionsEdit =
+    /// Set one member's permissions for one module; an empty list removes
+    /// the entry, and a member left with none is removed.
+    let setMember
+        (userId: UserId)
+        (moduleName: string)
+        (permissions: ModulePermission list)
+        (existing: TeamPermissions)
+        : TeamPermissions =
+        let userEntries =
+            existing.Members |> Map.tryFind userId.Value |> Option.defaultValue Map.empty
+
+        let updatedUserEntries =
+            if List.isEmpty permissions then
+                userEntries |> Map.remove moduleName
+            else
+                userEntries |> Map.add moduleName permissions
+
+        {
+            existing with
+                Members =
+                    if Map.isEmpty updatedUserEntries then
+                        existing.Members |> Map.remove userId.Value
+                    else
+                        existing.Members |> Map.add userId.Value updatedUserEntries
+        }
+
+    /// Replace the team's defaults.
+    let setDefaults (defaults: Map<string, ModulePermission list>) (existing: TeamPermissions) : TeamPermissions = {
+        existing with
+            Defaults = defaults
+    }
+
+    /// Set one module's exposure; `Available` clears the entry.
+    let setExposure (moduleName: string) (state: ModuleExposure) (existing: TeamPermissions) : TeamPermissions = {
+        existing with
+            Exposure =
+                match state with
+                | ModuleExposure.Available -> existing.Exposure |> Map.remove moduleName
+                | s -> existing.Exposure |> Map.add moduleName s
+    }
+
+/// Merge a user's explicit entries with the team defaults. Per-module,
+/// the user's explicit grant wins if present; otherwise the default
+/// applies. Modules with neither entry are absent from the result
+/// (= no access).
+let effectivePermissions (perms: TeamPermissions) (userId: UserId) : Map<string, ModulePermission list> =
+    let userEntries =
+        perms.Members |> Map.tryFind userId.Value |> Option.defaultValue Map.empty
+
+    (perms.Defaults, userEntries)
+    ||> Map.fold (fun acc moduleName modulePerms -> Map.add moduleName modulePerms acc)
 
 // ─── Interface ───────────────────────────────────────────────────────
 
 /// Team-scoped permission store. Persists per-team permission documents
 /// and resolves effective permissions for individual users by merging
 /// their explicit overrides with team-wide defaults.
+///
+/// **No member raises.** A read answers `Ok` (an absent document is
+/// `Ok TeamPermissions.empty`) or a `PermissionStoreError`; a write answers
+/// `Ok` or an `Error` carrying the refusal or the store's own account.
 type IPermissionStore =
-    /// Fetch the raw per-team document. Returns `TeamPermissions.empty`
-    /// ONLY when no document exists — `canAccessModule` treats an empty
-    /// map as unrestricted, so teams without explicit config behave as
-    /// they did before module RBAC. A document that exists but cannot be read
-    /// or parsed raises `PermissionStoreUnavailableException` rather
-    /// than degrading to the unrestricted empty map (fail closed on a
-    /// storage blip / corrupt blob — never silently grant access).
-    abstract GetTeamPermissions: teamId: TeamId -> Async<TeamPermissions>
+    /// Fetch the raw per-team document. `Ok TeamPermissions.empty` ONLY when
+    /// no document exists — `canAccessModule` treats an empty map as
+    /// unrestricted. A document that exists but cannot be read or parsed is
+    /// `Error`, never the unrestricted empty map.
+    abstract GetTeamPermissions: teamId: TeamId -> Async<Result<TeamPermissions, PermissionStoreError>>
 
     /// Replace the entire per-team document. Used for bulk admin
     /// operations — bootstrapping a new team, importing config from
     /// another team, or rolling back a bad set of grants.
     abstract SetTeamPermissions: teamId: TeamId * permissions: TeamPermissions -> Async<Result<unit, string>>
 
+    /// One guarded read-modify-write of the team's document: `change` is
+    /// handed the CURRENT document (empty when absent) and answers the
+    /// document to write, or an `Error` that writes nothing and is returned
+    /// verbatim. `change` may be replayed when a concurrent writer wins the
+    /// precondition, so it must be pure. A decorator validates what a write
+    /// PRODUCES here, against the document it replaces, with no second read.
+    abstract UpdateTeamPermissions:
+        teamId: TeamId * change: (TeamPermissions -> Result<TeamPermissions, string>) -> Async<Result<unit, string>>
+
     /// Compute a user's effective per-module permissions for a team:
     /// their explicit `Members[userId]` entries merged with team
     /// `Defaults` on any module the user has no explicit entry for.
     /// Returned shape matches `AccessContext.ModulePermissions`.
-    abstract GetEffectivePermissions: userId: UserId * teamId: TeamId -> Async<Map<string, ModulePermission list>>
+    abstract GetEffectivePermissions:
+        userId: UserId * teamId: TeamId -> Async<Result<Map<string, ModulePermission list>, PermissionStoreError>>
 
     /// Set one member's permissions for one module. Pass an empty
     /// list to revoke all access for that user on that module; to
@@ -63,7 +144,7 @@ type IPermissionStore =
     /// document exists or every module is Available. Read per-request by
     /// the scope-resolution middleware to populate
     /// `AccessContext.ModuleExposure`.
-    abstract GetModuleExposure: teamId: TeamId -> Async<Map<string, ModuleExposure>>
+    abstract GetModuleExposure: teamId: TeamId -> Async<Result<Map<string, ModuleExposure>, PermissionStoreError>>
 
     /// Set one module's exposure state for the team. `Available` clears
     /// the entry (back to the default); `Hidden` / `Unavailable` record
@@ -351,25 +432,6 @@ module private Json =
         with _ ->
             None
 
-// ─── Effective-permission merge ──────────────────────────────────────
-
-/// Merge a user's explicit entries with the team defaults. Per-module,
-/// the user's explicit grant wins if present; otherwise the default
-/// applies. Modules with neither entry are absent from the result
-/// (= no access).
-let private mergeEffective
-    (defaults: Map<string, ModulePermission list>)
-    (userOverrides: Map<string, Map<string, ModulePermission list>>)
-    (userId: string)
-    : Map<string, ModulePermission list> =
-
-    let userEntries =
-        userOverrides |> Map.tryFind userId |> Option.defaultValue Map.empty
-
-    // Start from defaults, overlay the user's explicit entries.
-    (defaults, userEntries)
-    ||> Map.fold (fun acc moduleName perms -> Map.add moduleName perms acc)
-
 // ─── Blob-backed implementation ──────────────────────────────────────
 
 let private platformContainer = ScopeKey.PlatformContainer
@@ -378,10 +440,10 @@ let private teamBlobName teamId = $"permissions/{teamId}.json"
 /// Blob-backed `IPermissionStore`: one JSON document per team under
 /// `_platform/permissions/{teamId}.json`, a codec and a path over the
 /// platform's durable document store (`BlobDocumentStore`). An absent
-/// document is the bootstrap default (no restrictions); a document that
-/// exists but cannot be read, or does not decode (it is quarantined beside
-/// itself and never overwritten), raises `PermissionStoreUnavailableException`
-/// so the request fails closed rather than reading a corrupt RBAC document as
+/// document is the bootstrap default (`Ok TeamPermissions.empty`); a document
+/// that exists but cannot be read, or does not decode (it is quarantined
+/// beside itself and never overwritten), is a `PermissionStoreError`, so the
+/// request fails closed rather than reading a corrupt RBAC document as
 /// unrestricted. Every write is one guarded read-modify-write, conditional
 /// where the backend has the ETag seam, so two concurrent permission edits on
 /// different nodes do not lose one another. No internal caching.
@@ -410,87 +472,65 @@ type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
 
     let teamPath (teamId: string) = DocPath.ofString (teamBlobName teamId)
 
-    let unavailable (teamId: string) (error: BlobMapStoreError) =
+    let failed (teamId: string) (error: BlobMapStoreError) : PermissionStoreError =
         logError
             $"PermissionStore: team '{teamId}': {BlobMapStoreError.describe error}. Failing closed (request denied) rather than treating it as unrestricted access."
 
-        PermissionStoreUnavailableException
-            $"Permission document for team '{teamId}' is unavailable: {BlobMapStoreError.describe error}"
+        match error with
+        | BlobMapStoreError.Unreadable _ -> PermissionStoreError.Unreadable(BlobMapStoreError.describe error)
+        | BlobMapStoreError.Quarantined _ -> PermissionStoreError.Quarantined(BlobMapStoreError.describe error)
+        | BlobMapStoreError.WriteFailed _
+        | BlobMapStoreError.Contended _ -> PermissionStoreError.Unavailable(BlobMapStoreError.describe error)
 
-    let load (teamId: string) = async {
-        match! docs.Read(ScopeKey.platform, teamPath teamId) with
-        | Ok(Some perms) -> return perms
-        | Ok None -> return TeamPermissions.empty
-        | Error e -> return raise (unavailable teamId e)
+    /// The one place absence is decided: no document is the empty document.
+    let load (teamId: TeamId) = async {
+        match! docs.Read(ScopeKey.platform, teamPath teamId.Value) with
+        | Ok(Some perms) -> return Ok perms
+        | Ok None -> return Ok TeamPermissions.empty
+        | Error e -> return Error(failed teamId.Value e)
     }
 
     /// One guarded read-modify-write of the team's document. A document that
-    /// cannot be established refuses the write (`PermissionStoreUnavailableException`,
-    /// as a read does); a write the storage refuses is `Error`.
-    let change (teamId: string) (transform: TeamPermissions -> TeamPermissions) = async {
+    /// cannot be established refuses the write; `change`'s own `Error` writes
+    /// nothing and is returned verbatim.
+    let update (teamId: TeamId) (change: TeamPermissions -> Result<TeamPermissions, string>) = async {
         let! outcome =
             docs.Update(
                 ScopeKey.platform,
-                teamPath teamId,
-                fun current -> BlobUpdate.Write(current |> Option.defaultValue TeamPermissions.empty |> transform, ())
+                teamPath teamId.Value,
+                fun current ->
+                    match change (current |> Option.defaultValue TeamPermissions.empty) with
+                    | Ok next -> BlobUpdate.Write(next, Ok())
+                    | Error refusal -> BlobUpdate.Keep(Error refusal)
             )
 
         match outcome with
-        | Ok() -> return Ok()
-        | Error(BlobMapStoreError.WriteFailed(_, reason)) -> return Error reason
-        | Error(BlobMapStoreError.Contended _ as e) -> return Error(BlobMapStoreError.describe e)
-        | Error e -> return raise (unavailable teamId e)
+        | Ok answer -> return answer
+        | Error e -> return Error(PermissionStoreError.describe (failed teamId.Value e))
     }
 
     interface IPermissionStore with
-        member _.GetTeamPermissions teamId = load teamId.Value
+        member _.GetTeamPermissions teamId = load teamId
 
-        member _.SetTeamPermissions(teamId, permissions) =
-            change teamId.Value (fun _ -> permissions)
+        member _.UpdateTeamPermissions(teamId, change) = update teamId change
+
+        member _.SetTeamPermissions(teamId, permissions) = update teamId (fun _ -> Ok permissions)
 
         member _.GetEffectivePermissions(userId, teamId) = async {
-            let! perms = load teamId.Value
-            return mergeEffective perms.Defaults perms.Members userId.Value
+            let! perms = load teamId
+            return perms |> Result.map (fun p -> effectivePermissions p userId)
         }
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =
-            change teamId.Value (fun existing ->
-                let userEntries =
-                    existing.Members |> Map.tryFind userId.Value |> Option.defaultValue Map.empty
-
-                let updatedUserEntries =
-                    if List.isEmpty permissions then
-                        userEntries |> Map.remove moduleName
-                    else
-                        userEntries |> Map.add moduleName permissions
-
-                let updatedMembers =
-                    if Map.isEmpty updatedUserEntries then
-                        existing.Members |> Map.remove userId.Value
-                    else
-                        existing.Members |> Map.add userId.Value updatedUserEntries
-
-                {
-                    existing with
-                        Members = updatedMembers
-                })
+            update teamId (TeamPermissionsEdit.setMember userId moduleName permissions >> Ok)
 
         member _.SetTeamDefaults(teamId, defaults) =
-            change teamId.Value (fun existing -> { existing with Defaults = defaults })
+            update teamId (TeamPermissionsEdit.setDefaults defaults >> Ok)
 
         member _.GetModuleExposure teamId = async {
-            let! perms = load teamId.Value
-            return perms.Exposure
+            let! perms = load teamId
+            return perms |> Result.map _.Exposure
         }
 
         member _.SetModuleExposure(teamId, moduleName, state) =
-            change teamId.Value (fun existing ->
-                let updatedExposure =
-                    match state with
-                    | ModuleExposure.Available -> existing.Exposure |> Map.remove moduleName
-                    | s -> existing.Exposure |> Map.add moduleName s
-
-                {
-                    existing with
-                        Exposure = updatedExposure
-                })
+            update teamId (TeamPermissionsEdit.setExposure moduleName state >> Ok)

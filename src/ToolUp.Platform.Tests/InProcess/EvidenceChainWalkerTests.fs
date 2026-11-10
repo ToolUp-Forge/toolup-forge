@@ -63,8 +63,12 @@ type private RecordingAuditLog() =
     member _.All = recorded |> Seq.map snd |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { recorded.Enqueue((scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            recorded.Enqueue((scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// A service provider over an explicit type→instance table. Small on
 /// purpose: the walk resolves exactly one service and a full container
@@ -77,15 +81,8 @@ type private StubServices(entries: (Type * obj) list) =
             |> Option.map snd
             |> Option.defaultValue null
 
-let private servicesWith (auditLog: IAuditLog option) =
-    StubServices(
-        [
-            match auditLog with
-            | Some a -> typeof<IAuditLog>, box a
-            | None -> ()
-        ]
-    )
-    :> IServiceProvider
+let private servicesWith (auditLog: IAuditLog) =
+    StubServices([ typeof<IAuditLog>, box auditLog ]) :> IServiceProvider
 
 /// A source system double with a fixed record table and a configurable
 /// coverage answer, counting its reads so an arm can prove a walk asked
@@ -432,7 +429,7 @@ let honestAbsenceTests =
 
             let outcome =
                 EvidenceChainWalker.run
-                    (servicesWith (Some(auditLog :> IAuditLog)))
+                    (servicesWith ((auditLog :> IAuditLog)))
                     NoEvidenceChainWalker
                     (EvidenceChainRequest.forActor "probe")
                 |> Async.RunSynchronously
@@ -907,7 +904,7 @@ let auditedReadTests =
             let chain =
                 match
                     EvidenceChainWalker.run
-                        (servicesWith (Some(auditLog :> IAuditLog)))
+                        (servicesWith ((auditLog :> IAuditLog)))
                         (ComposedEvidenceChainWalker walker)
                         (EvidenceChainRequest.forActor "auditor")
                     |> Async.RunSynchronously
@@ -935,7 +932,7 @@ let auditedReadTests =
         test "a second walk records a second row and no more" {
             let auditLog = RecordingAuditLog()
             let walker = EvidenceChainWalker.create (fullSources (workSource ()))
-            let services = servicesWith (Some(auditLog :> IAuditLog))
+            let services = servicesWith ((auditLog :> IAuditLog))
 
             for _ in 1..2 do
                 EvidenceChainWalker.run
@@ -952,7 +949,7 @@ let auditedReadTests =
             let auditLog = RecordingAuditLog()
             let walker = EvidenceChainWalker.create (fullSources (workSource ()))
 
-            EvidenceChainWalker.run (servicesWith (Some(auditLog :> IAuditLog))) (ComposedEvidenceChainWalker walker) {
+            EvidenceChainWalker.run (servicesWith ((auditLog :> IAuditLog))) (ComposedEvidenceChainWalker walker) {
                 Actor = "auditor"
                 WorkDepth = 0
             }
@@ -967,7 +964,7 @@ let auditedReadTests =
 
             match
                 EvidenceChainWalker.run
-                    (servicesWith None)
+                    (servicesWith (NoOpAuditLog()))
                     (ComposedEvidenceChainWalker walker)
                     (EvidenceChainRequest.forActor "auditor")
                 |> Async.RunSynchronously

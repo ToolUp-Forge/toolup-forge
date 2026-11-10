@@ -317,28 +317,27 @@ module ModelTransition =
         (outcome: Result<ModelTransitionRecord, ModelTransitionRefusal>)
         : Async<unit> =
         async {
-            try
-                do!
-                    deps.Audit.Record(
-                        scopeId,
-                        ModelArtifactTransitionAttributed {
-                            CompositeKeyHash = request.ArtifactKey
-                            FromStatus = from
-                            ToStatus = ModelArtifactStatus.name request.Target
-                            Channel = ModelTransitionChannel.label (ModelTransitionAuthor.channel request.Author)
-                            AuthorKind = ModelTransitionAuthor.kind request.Author
-                            AuthorId = ModelTransitionAuthor.id request.Author
-                            Rationale = request.Rationale |> Option.defaultValue ""
-                            Admitted = Result.isOk outcome
-                            Refusal =
-                                match outcome with
-                                | Ok _ -> ""
-                                | Error refusal -> ModelTransitionRefusal.describe refusal
-                            ScopeId = scopeId
-                        }
-                    )
-            with _ ->
-                ()
+            do!
+                deps.Audit.Record(
+                    AuditScope.shard scopeId,
+                    AuditSubject.system "ModelRegistry",
+                    ModelArtifactTransitionAttributed {
+                        CompositeKeyHash = request.ArtifactKey
+                        FromStatus = from
+                        ToStatus = ModelArtifactStatus.name request.Target
+                        Channel = ModelTransitionChannel.label (ModelTransitionAuthor.channel request.Author)
+                        AuthorKind = ModelTransitionAuthor.kind request.Author
+                        AuthorId = ModelTransitionAuthor.id request.Author
+                        Rationale = request.Rationale |> Option.defaultValue ""
+                        Admitted = Result.isOk outcome
+                        Refusal =
+                            match outcome with
+                            | Ok _ -> ""
+                            | Error refusal -> ModelTransitionRefusal.describe refusal
+                        ScopeId = scopeId
+                    }
+                )
+                |> AuditRow.bestEffort
         }
 
     /// Judge one invocation against the artifact's current status and the

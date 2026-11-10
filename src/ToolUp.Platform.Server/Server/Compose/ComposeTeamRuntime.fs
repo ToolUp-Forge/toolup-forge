@@ -141,7 +141,7 @@ let registerTeamPermissionStores
                     ToolUp.Platform.Scope.Teams.BlobPendingInviteStore.TryCreate(
                         resolvedBlobStorage,
                         resolvedLogger,
-                        Some auditLog,
+                        auditLog,
                         inviteExpiryNotifier
                     )
                 else
@@ -160,7 +160,7 @@ let registerTeamPermissionStores
                 ToolUp.Platform.Scope.Teams.InMemoryPendingInviteStore(
                     resolvedBlobStorage,
                     resolvedLogger,
-                    Some auditLog,
+                    auditLog,
                     inviteExpiryNotifier
                 )
                 :> IPendingInviteStore)
@@ -342,7 +342,7 @@ let registerTeamPermissionStores
                 :> GrantPolicyGuard.CounterpartyConsentOracle
 
             let guarded =
-                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, consentOracle, Some auditLog, None)
+                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, consentOracle, auditLog, None)
                 :> IPermissionStore
 
             // Phase 556 — the grant-event notice loop, OUTSIDE the write
@@ -371,8 +371,7 @@ let registerTeamPermissionStores
                     settings,
                     resolvedLogger,
                     resolveProposer sp,
-                    (fun () -> System.DateTimeOffset.UtcNow),
-                    Async.Start
+                    (fun () -> System.DateTimeOffset.UtcNow)
                 )
                 :> IPermissionStore
             | _ -> guarded)

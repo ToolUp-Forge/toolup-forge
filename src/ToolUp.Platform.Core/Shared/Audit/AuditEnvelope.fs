@@ -28,14 +28,12 @@ open System
 /// `Subject` too. The DU stays append-only at the case level; envelope
 /// shape evolves under the `LatestAuditSchemaVersion` contract.
 ///
-/// **Construction.** Three call sites construct envelopes:
-///   * `IAuditLog.Record` emission sites with an `AccessContext` in
-///     scope — use `AuditSubject.fromSubject ctx.Subject`.
-///   * `AuditReplicator` dispatch path — decodes `ModuleEvent` into
-///     `AuditEvent` and derives `AuditSubject` from `ModuleEvent.ScopeId`
-///     via `AuditSubject.fromScopeId` (best-effort; the persisted
-///     `ModuleEvent` does not carry the originating subject today).
-///   * Tests and contract packs — synthesise envelopes directly.
+/// **Construction.** The `AuditReplicator` decodes each persisted row into
+/// its event and the actor the row carries (`IAuditLog.Record`'s `actor`;
+/// a row written before rows carried one decodes as
+/// `AuditSubject.unattributed`), and builds the envelope with
+/// `AuditEnvelope.create`. Tests and contract packs synthesise envelopes
+/// the same way.
 type AuditEnvelope = {
     /// Resolved per-request subject of the audited operation. Sinks
     /// read this to populate `subject_kind` / `subject.user_id` /
@@ -72,16 +70,20 @@ module AuditEnvelope =
             ScopeId = scopeId
         }
 
-    /// Construct an envelope without a resolved `Subject`. Used by the
-    /// audit-replicator dispatch path, which only has `ScopeId`
-    /// available post-`ModuleEvent` decode. Defers to
-    /// `AuditSubject.fromScopeId`.
-    let fromScopeId (scopeId: string) (occurredAt: System.DateTime) (event: AuditEvent) : AuditEnvelope = {
-        Subject = AuditSubject.fromScopeId scopeId
-        Event = event
-        OccurredAt = occurredAt
-        ScopeId = scopeId
-    }
+    /// Construct an envelope from the actor a row carries — what the
+    /// audit-replicator dispatch path decodes from each persisted row.
+    let create
+        (actor: AuditSubject)
+        (scopeId: string)
+        (occurredAt: System.DateTime)
+        (event: AuditEvent)
+        : AuditEnvelope =
+        {
+            Subject = actor
+            Event = event
+            OccurredAt = occurredAt
+            ScopeId = scopeId
+        }
 
     /// Project the envelope to its underlying event. Convenience for
     /// sinks that batch-serialise events and need only the inner
@@ -121,27 +123,73 @@ module AuditSchemaVersion =
     [<Literal>]
     let current = 2
 
+/// Why an audit row was not recorded, as `IAuditLog.Record` answers it.
+[<RequireQualifiedAccess>]
+type AuditWriteError =
+    /// The store did not persist the row (a write or serialisation failure);
+    /// `reason` is the store's own account.
+    | StoreUnavailable of reason: string
+    /// The log declined the row by a policy of its own (named), without a
+    /// store failure — a decorator that will not accept it, for instance.
+    | Refused of policy: string
+    /// A permission row could not be chained onto its stream's head: the
+    /// head could not be read, or another writer advanced it on every
+    /// attempt of the bounded retry.
+    | ChainHeadConflict of streamKey: string
+
+module AuditWriteError =
+    /// The failure as one sentence, for a log line or an exception message.
+    let describe (error: AuditWriteError) : string =
+        match error with
+        | AuditWriteError.StoreUnavailable reason -> $"the audit store did not persist the row: {reason}"
+        | AuditWriteError.Refused policy -> $"the audit log refused the row by policy '{policy}'"
+        | AuditWriteError.ChainHeadConflict streamKey ->
+            $"the permission chain head of stream '{streamKey}' could not be read or advanced"
+
 /// Query interface for the audit log. SDK-wide DI service registered in
 /// `SDK.Server.compose`. The default implementation wraps `IEventStore`
 /// (writes through the configured store; reads filter to `SourceModule =
 /// AuditSourceModule.value`).
 ///
-/// **Scoping.** `Record` writes the event under the supplied `scopeId`;
-/// `GetAuditTrail` reads from that scope only. Cross-scope reads are
+/// **Scoping.** `Record` writes the event under the supplied `AuditScope`'s
+/// stream (`AuditScope.streamKey`); `GetAuditTrail` reads from that scope
+/// only. Cross-scope reads are
 /// structurally impossible — the underlying `IEventStore` enforces
 /// team isolation via the blob path prefix.
 ///
-/// **Best-effort, never blocking.** `Record` is fire-and-forget from the
-/// caller's perspective: implementation failures are logged via
-/// `ILogger` and swallowed. Audit emission must never roll back a
-/// primary operation — the underlying state is durable in its own store.
+/// **Failure is data, decided at the seam.** `Record` answers
+/// `Async<Result<unit, AuditWriteError>>` and never raises. The composed
+/// `AuditFailurePolicy` decides inside the implementation what a row that
+/// could not be written means, so every caller reads the same answer:
+///
+///   * `LogAndContinue` — the failure is counted and logged at `Warn`;
+///     `Record` answers `Ok ()` and the caller's action completes.
+///   * `DegradeToFile` — the row spills to the local fallback (or, with no
+///     fallback, is counted and logged as lost); `Record` answers `Ok ()`.
+///   * `RefuseAction` — `Record` answers the `Error`: `StoreUnavailable`
+///     when the row did not persist, `ChainHeadConflict` when a permission
+///     row could not be chained onto its stream's head. The caller refuses
+///     its action rather than completing it un-audited.
+///
+/// A log composed with no audit substrate (`NoOpAuditLog`) answers `Ok ()`.
+/// Call sites say what they do with the answer: propagate it
+/// (`AuditRow.emit`), refuse by exception where the site has no error channel
+/// (`|> AuditRow.orRefuse`), or discard it where the row is not the control
+/// (`|> AuditRow.bestEffort`).
+///
+/// **The actor rides the row.** `actor` is who the row is attributed to:
+/// `AuditSubject.fromSubject` of the request's principal where the emitting
+/// site holds one, and `AuditSubject.system "<component>"` for a row a
+/// platform component emits with no principal in reach. It is persisted
+/// with the row and decoded by the replicator; it is never derived from the
+/// stream key.
 type IAuditLog =
-    /// Record an audit event under the given scope. Best-effort
-    /// durability via the configured `IEventStore`. Failures are logged
-    /// at `Warn` and swallowed.
-    abstract Record: scopeId: string * audit: AuditEvent -> Async<unit>
+    /// Record an audit event under the given scope, attributed to `actor`.
+    /// Answers per the composed `AuditFailurePolicy` — see the type's
+    /// documentation.
+    abstract Record: scope: AuditScope * actor: AuditSubject * audit: AuditEvent -> Async<Result<unit, AuditWriteError>>
 
-    /// Query audit events for `scopeId`. Optional filters:
+    /// Query audit events for `scope`. Optional filters:
     /// - `dateRange`: inclusive `(from, to)` filter on `OccurredAt`.
     ///   `None` = no date constraint.
     /// - `eventType`: case-name filter (e.g. `"UserLoggedIn"`).
@@ -149,35 +197,63 @@ type IAuditLog =
     /// Returned list is reverse-chronological by `OccurredAt`,
     /// matching `IEventStore.ReadAll`.
     abstract GetAuditTrail:
-        scopeId: string * dateRange: (DateTime * DateTime) option * eventType: string option -> Async<AuditEvent list>
+        scope: AuditScope * dateRange: (DateTime * DateTime) option * eventType: string option -> Async<AuditEvent list>
 
-/// Phase 1059 — the ONE rendering of an audit stream key: the `scopeId` an
-/// `IAuditLog.Record` / `GetAuditTrail` call passes for a team or a storage
-/// scope. The event store keys a stream on that string verbatim, so a team
-/// whose writers spelled its key four ways (`teamId`, `team-{teamId}`,
-/// `scope.ScopeId`, `scope.Container`) had its trail split across several
-/// streams, and a reader of one spelling never saw rows written under
-/// another.
-///
-/// The key is the BARE id — what every event already at rest under the
-/// request middleware, the platform admin API and file management carries
-/// (GP 11). Rows written under a `team-{id}` key before this phase are
-/// history: readable under their own key, not migrated.
-///
-/// Phase 1060 — the rendering itself is `AuditScope.streamKey`, over the
-/// closed `AuditScope`; these two are its spellings for a call site that
-/// holds a bare team id or a `StorageScope` rather than a key.
-/// `IAuditLog.Record` keeps its string parameter until it takes an
-/// `AuditScope` directly.
-module AuditStreamKey =
-    /// The audit stream key for a team: its bare id.
-    let ofTeam (teamId: string) : string =
-        AuditScope.streamKey (AuditScope.Scoped(ScopeKey.Team(TeamId teamId)))
+/// The `IAuditLog` of a deployment with audit off
+/// (`ServerConfig.AuditLog = FeatureMode.Disabled`), and the value a component
+/// takes when it is composed with no audit substrate: `Record` answers `Ok ()`
+/// without serialising or writing anything, and `GetAuditTrail` answers an
+/// empty trail. It costs what an absent log cost (GP 13), so a component
+/// takes an `IAuditLog`, never an optional one.
+type NoOpAuditLog() =
+    interface IAuditLog with
+        member _.Record(_scope, _actor, _audit) = async { return Ok() }
 
-    /// The audit stream key for a storage scope: its `ScopeId` (the bare
-    /// user, team or session id), never its `Container` — what
-    /// `AuditScope.streamKey` renders for the key the scope projects.
-    let ofScope (scope: StorageScope) : string = scope.ScopeId
+        member _.GetAuditTrail(_scope, _dateRange, _eventType) = async { return [] }
+
+/// Raised by `AuditRow.orRefuse` when the log refused a row at a call site that
+/// has no error channel of its own: the action fails visibly (a 500, "audit
+/// unavailable") rather than completing un-audited. The decision to refuse
+/// was the seam's; the exception is only how such a site carries it.
+type AuditWriteRefusedException(error: AuditWriteError) =
+    inherit
+        Exception(
+            $"audit unavailable — refusing the action rather than completing it un-audited: {AuditWriteError.describe error}"
+        )
+
+    member _.Error = error
+
+/// The call-site shapes over `IAuditLog.Record`. Each says what the site does
+/// with the seam's answer, so the choice is read at the call, not inferred
+/// from a `try … with` around it.
+[<RequireQualifiedAccess>]
+module AuditRow =
+    /// Emit one row and answer the seam's decision for the caller to
+    /// propagate. The shape for a site whose own result can carry it.
+    let emit
+        (log: IAuditLog)
+        (scope: AuditScope)
+        (actor: AuditSubject)
+        (event: AuditEvent)
+        : Async<Result<unit, AuditWriteError>> =
+        log.Record(scope, actor, event)
+
+    /// For a site with no error channel: a refused row aborts the operation
+    /// with `AuditWriteRefusedException`.
+    let orRefuse (row: Async<Result<unit, AuditWriteError>>) : Async<unit> = async {
+        match! row with
+        | Ok() -> ()
+        | Error e -> return raise (AuditWriteRefusedException e)
+    }
+
+    /// For a row whose refusal must not change the caller's outcome — the
+    /// row records a decision already taken (a refusal that refuses whether
+    /// or not its row lands). The seam has already counted and logged the
+    /// failure.
+    let bestEffort (row: Async<Result<unit, AuditWriteError>>) : Async<unit> = async {
+        let! _ = row
+        return ()
+    }
 
 // ─── Phase 120 — IAuthAuditHook (structured authz-denial trail) ──────
 //
@@ -313,8 +389,7 @@ module BlobStorageAuthAudit =
     /// across every tenant and leave no single place to ask "when did
     /// this start". The container the call was made against is carried in
     /// the payload instead, so nothing is lost by centralising.
-    [<Literal>]
-    let scopeId = ScopeKey.PlatformContainer
+    let scope: AuditScope = AuditScope.PlatformScope
 
     /// Longest sanitised SDK message kept on a row. An SDK message is a
     /// diagnostic aid here, not a queryable axis — the four fields above
@@ -393,18 +468,19 @@ module BlobStorageAuthAudit =
             At = DateTime.UtcNow
         }
 
-    /// Record one credential-rejection row, if the companion was composed
-    /// with an audit log.
+    /// Record one credential-rejection row, attributed to the companion that
+    /// saw the rejection (`AuditSubject.system`): the call that discovered it
+    /// carries no principal down to the storage tier.
     ///
-    /// **Never throws, and never delays the caller's own error.** A
-    /// deployment that composed no `IAuditLog` (`None`) does nothing at
-    /// all; a sink that raises is swallowed here, matching
-    /// `IAuditLog.Record`'s own best-effort contract. The one thing this
+    /// **Never delays or changes the caller's own error.** A deployment with
+    /// audit off composes `NoOpAuditLog`, which answers `Ok` at once; a
+    /// refused row, or a log that raises, is discarded because the storage
+    /// failure is the caller's answer either way. The one thing this
     /// function must not do is turn a storage failure into a different
     /// storage failure — the caller returns the error it always returned,
     /// immediately after this returns.
     let record
-        (audit: IAuditLog option)
+        (audit: IAuditLog)
         (companion: string)
         (container: string)
         (operation: string)
@@ -412,14 +488,15 @@ module BlobStorageAuthAudit =
         (message: string)
         : Async<unit> =
         async {
-            match audit with
-            | None -> ()
-            | Some log ->
-                try
-                    let event =
-                        BlobStorageAuthFailed(payload companion container operation statusCode message)
+            // A log that raises despite `Record`'s contract is swallowed too:
+            // the caller's storage error is its answer either way.
+            let! _ =
+                AuditRow.emit
+                    audit
+                    scope
+                    (AuditSubject.system companion)
+                    (BlobStorageAuthFailed(payload companion container operation statusCode message))
+                |> Async.Catch
 
-                    do! log.Record(scopeId, event)
-                with _ ->
-                    ()
+            return ()
         }

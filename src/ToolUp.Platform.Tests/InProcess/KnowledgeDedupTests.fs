@@ -53,8 +53,12 @@ type private CapturingAuditLog() =
     member _.Events = lock gate (fun () -> events |> List.ofSeq)
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock gate (fun () -> events.Add(scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock gate (fun () -> events.Add(scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Capturing INotificationChannel double for the Info-toast assertion.
 type private CapturingNotifications() =
@@ -99,7 +103,7 @@ let private mkDeps
         NarrativeStore = None
         AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
         OriginalResolver = createDefault ()
-        AuditLog = Some(auditLog :> IAuditLog)
+        AuditLog = (auditLog :> IAuditLog)
         RecordEnqueue = ignore
         PublishInventory = fun () -> async.Return()
         MarkIngestionFailed = fun _ _ _ -> async.Return()

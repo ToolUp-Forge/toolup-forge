@@ -92,10 +92,7 @@ let private resolvePermissionStore (ctx: HttpContext) =
     | :? IPermissionStore as p -> Some p
     | _ -> None
 
-let private resolveAuditLog (ctx: HttpContext) =
-    match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-    | :? IAuditLog as a -> Some a
-    | _ -> None
+let private resolveAuditLog (ctx: HttpContext) = Background.auditLogOf ctx
 
 /// Phase 5f — resolves `IPlatformAdminStore` for the `CreateTeam`
 /// admin-gate. The store is registered unconditionally by
@@ -114,20 +111,18 @@ let private resolvePlatformAdminStore (ctx: HttpContext) =
 /// through `Background.startAudit` (Phase 1026), so a failing sink is a
 /// Warning naming the write and never fails a primary state change or
 /// the host. The warning is built from `ctx` while the request is live.
-let private recordAudit (ctx: HttpContext) (auditLog: IAuditLog option) : string -> AuditEvent -> unit =
+let private recordAudit (ctx: HttpContext) (auditLog: IAuditLog) : string -> AuditEvent -> unit =
     let warn =
         Background.writeFailureWarner "PlatformApiHandler" (Background.requestLogger ctx) ctx
 
     fun scopeId audit ->
-        match auditLog with
-        | Some a ->
-            let what = sprintf "%s audit" (AuditEvent.eventTypeName audit)
+        let what = sprintf "%s audit" (AuditEvent.eventTypeName audit)
 
-            try
-                a.Record(scopeId, audit) |> Background.startAudit warn what
-            with ex ->
-                warn what ex
-        | None -> ()
+        try
+            auditLog.Record(AuditScope.shard scopeId, AuditSubject.system "PlatformApi", audit)
+            |> Background.startAuditRow warn what
+        with ex ->
+            warn what ex
 
 // ─── PlatformInfoApi — mode + auth posture (1 method) ───────────────
 
@@ -898,7 +893,7 @@ let permissionApiHandler (_config: ServerConfig) =
                         match callerRole with
                         | Some r when TeamRoles.canManageMembers r ->
                             let! perms = ps.GetTeamPermissions(TeamId teamId)
-                            return Ok perms
+                            return perms |> Result.mapError PermissionStoreError.describe
                         | _ -> return Error "Insufficient permissions"
                     | _ -> return Error "Team management not available in this mode"
                 }

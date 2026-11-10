@@ -34,9 +34,12 @@ type private CapturingAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { events.Enqueue((scopeId, audit)) }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            events.Enqueue((scopeId, audit))
+            return Ok()
+        }
 
-        member _.GetAuditTrail(scopeId, _dateRange, eventType) = async {
+        member _.GetAuditTrail(AuditScope.StreamKey scopeId, _dateRange, eventType) = async {
             return
                 events
                 |> Seq.filter (fun (s, _) -> s = scopeId)
@@ -63,7 +66,7 @@ let private mkStore () : IUserSchemaStore * IDataObjectStore * CapturingAuditLog
     let audit = CapturingAuditLog()
 
     let store =
-        BlobUserSchemaStore.BlobUserSchemaStore(dos, Some(audit :> IAuditLog)) :> IUserSchemaStore
+        BlobUserSchemaStore.BlobUserSchemaStore(dos, (audit :> IAuditLog)) :> IUserSchemaStore
 
     store, dos, audit
 

@@ -366,7 +366,8 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
 
                                 try
                                     auditLog.Record(
-                                        scopeId,
+                                        AuditScope.shard scopeId,
+                                        Background.requestActor "DataIngestionApi" ctx,
                                         OAuthDisconnected {
                                             UserId = UserId accessContext.UserId
                                             ScopeId = scopeId
@@ -375,7 +376,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                                             UpstreamRevoked = upstreamRevoked
                                         }
                                     )
-                                    |> Background.startAudit warn "OAuthDisconnected audit"
+                                    |> Background.startAuditRow warn "OAuthDisconnected audit"
                                 with ex ->
                                     warn "OAuthDisconnected audit" ex
                             | _ -> ()

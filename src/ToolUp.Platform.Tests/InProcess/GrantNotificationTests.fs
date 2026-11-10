@@ -46,6 +46,22 @@ open ToolUp.Platform.Jobs.GrantNotification
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 
+/// A log that records nothing and never refuses — the test's "no audit".
+let private noAudit =
+    { new IAuditLog with
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+    }
+
+
+/// A permission read the case expects to succeed; an `Error` fails it by name.
+let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> = async {
+    match! read with
+    | Ok value -> return value
+    | Error e -> return failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
+}
+
+
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private Read = ModulePermission.Read
@@ -98,10 +114,6 @@ type private RecordingLogger() =
         member _.Warn message = warnings.Add message
         member _.Error(_, _) = ()
 
-/// The synchronous scheduler, so decision and delivery are observed
-/// together from a single call.
-let private runNow (work: Async<unit>) = Async.RunSynchronously work
-
 let private registryOf declarations =
     GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations declarations
 
@@ -119,8 +131,7 @@ let private observerOver
         settings,
         logger,
         (fun () -> Some "admin-1"),
-        (fun () -> DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero)),
-        runNow
+        (fun () -> DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero))
     )
     :> IPermissionStore
 
@@ -473,7 +484,7 @@ let tests =
 
                 Expect.isOk result "the caller sees success — a notification outage is not a grant failure"
 
-                let! persisted = store.GetTeamPermissions(TeamId "t1")
+                let! persisted = readOk (store.GetTeamPermissions(TeamId "t1"))
 
                 Expect.equal
                     (TeamPermissions.grantsFor "alice" persisted
@@ -503,7 +514,8 @@ let tests =
                 let guarded =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
                         freshStore (),
-                        registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ]
+                        registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ],
+                        noAudit
                     )
                     :> IPermissionStore
 

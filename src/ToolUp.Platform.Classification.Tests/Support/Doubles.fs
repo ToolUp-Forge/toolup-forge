@@ -14,9 +14,12 @@ type InMemoryAuditLog() =
     member _.AllEvents: (string * AuditEvent) list = events |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { events.Add(scopeId, audit) }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            events.Add(scopeId, audit)
+            return Ok()
+        }
 
-        member this.GetAuditTrail(scopeId, _, eventTypeFilter) = async {
+        member this.GetAuditTrail(AuditScope.StreamKey scopeId, _, eventTypeFilter) = async {
             return
                 this.AllEvents
                 |> List.choose (fun (s, e) -> if s = scopeId then Some e else None)

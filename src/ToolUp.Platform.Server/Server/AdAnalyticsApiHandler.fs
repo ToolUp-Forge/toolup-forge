@@ -48,8 +48,6 @@ open ToolUp.Platform.Config
 
 let private jsonOptions = PlatformJson.options
 
-let private PlatformScope = ScopeKey.PlatformContainer
-
 /// Body cap. `AdImpression` / `AdClick` are small flat records — a
 /// generous 8 KB admits any legitimate payload (long SPA paths
 /// included) while refusing bulk junk before it is deserialised or
@@ -391,8 +389,12 @@ let private impressionHandler: HttpHandler =
                             let warn = auditWarner ctx
 
                             try
-                                auditLog.Record(PlatformScope, AuditEvent.AdImpressionRecorded ev)
-                                |> Background.startAudit warn "AdImpressionRecorded audit"
+                                auditLog.Record(
+                                    AuditScope.platform,
+                                    Background.requestActor "AdAnalyticsApi" ctx,
+                                    AuditEvent.AdImpressionRecorded ev
+                                )
+                                |> Background.startAuditRow warn "AdImpressionRecorded audit"
                             with ex ->
                                 warn "AdImpressionRecorded audit" ex
                         | _ -> ()
@@ -439,8 +441,12 @@ let private clickHandler: HttpHandler =
                             let warn = auditWarner ctx
 
                             try
-                                auditLog.Record(PlatformScope, AuditEvent.AdClickRecorded ev)
-                                |> Background.startAudit warn "AdClickRecorded audit"
+                                auditLog.Record(
+                                    AuditScope.platform,
+                                    Background.requestActor "AdAnalyticsApi" ctx,
+                                    AuditEvent.AdClickRecorded ev
+                                )
+                                |> Background.startAuditRow warn "AdClickRecorded audit"
                             with ex ->
                                 warn "AdClickRecorded audit" ex
                         | _ -> ()

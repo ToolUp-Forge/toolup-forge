@@ -29,6 +29,7 @@ let private registeredTests =
         AuditWriteFailureMetricTests.tests
         AuditFailurePolicyTests.tests
         PermissionAuditChainTests.tests
+        AuditEmitTests.tests
         AuthAuditHookTests.tests
         HostActionAuditTests.tests
         NotificationSilentlySkippedTests.tests

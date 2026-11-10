@@ -207,7 +207,7 @@ module OrphanSweepReport =
 /// deferred ones (if still young) deferred again.
 let sweepScope
     (blobStorage: IBlobStorage)
-    (auditLog: IAuditLog option)
+    (auditLog: IAuditLog)
     (logger: ILogger)
     (now: DateTime)
     (policy: DataObjectOrphanSweepPolicy)
@@ -248,19 +248,18 @@ let sweepScope
 
                         match mapped with
                         | Ok(reclaimed: DataObjectStore.OrphanedContentBlob) ->
-                            match auditLog with
-                            | Some audit ->
-                                do!
-                                    audit.Record(
-                                        scopeId,
-                                        OrphanedContentBlobReclaimed {
-                                            ScopeId = scopeId
-                                            ContentHash = reclaimed.ContentHash
-                                            Bytes = reclaimed.SizeBytes
-                                            AgeHours = int64 (now - reclaimed.LastModified).TotalHours
-                                        }
-                                    )
-                            | None -> ()
+                            do!
+                                auditLog.Record(
+                                    AuditScope.shard scopeId,
+                                    AuditSubject.system "OrphanSweepJob",
+                                    OrphanedContentBlobReclaimed {
+                                        ScopeId = scopeId
+                                        ContentHash = reclaimed.ContentHash
+                                        Bytes = reclaimed.SizeBytes
+                                        AgeHours = int64 (now - reclaimed.LastModified).TotalHours
+                                    }
+                                )
+                                |> AuditRow.orRefuse
                         | Error _ -> ()
 
                         return! reclaimEach rest (mapped :: acc)
@@ -279,22 +278,21 @@ let sweepScope
             let reclaimedBytes = reclaimedBlobs |> List.sumBy _.SizeBytes
 
             if not reclaimedHashes.IsEmpty then
-                match auditLog with
-                | Some audit ->
-                    do!
-                        audit.Record(
-                            scopeId,
-                            OrphanSweepCompleted {
-                                ScopeId = scopeId
-                                OrphansFound = orphans.Length
-                                ReclaimedCount = reclaimedHashes.Length
-                                ReclaimedBytes = reclaimedBytes
-                                DeferredCount = deferred.Length
-                                GracePeriodHours = graceHours
-                                FailureCount = failures.Length
-                            }
-                        )
-                | None -> ()
+                do!
+                    auditLog.Record(
+                        AuditScope.shard scopeId,
+                        AuditSubject.system "OrphanSweepJob",
+                        OrphanSweepCompleted {
+                            ScopeId = scopeId
+                            OrphansFound = orphans.Length
+                            ReclaimedCount = reclaimedHashes.Length
+                            ReclaimedBytes = reclaimedBytes
+                            DeferredCount = deferred.Length
+                            GracePeriodHours = graceHours
+                            FailureCount = failures.Length
+                        }
+                    )
+                    |> AuditRow.orRefuse
 
                 logger.Info(
                     sprintf
@@ -353,10 +351,7 @@ type DataObjectOrphanSweepJobHandler(services: IServiceProvider, policy: DataObj
 
             match services.GetService typeof<IBlobStorage> with
             | :? IBlobStorage as storage ->
-                let auditLog =
-                    match services.GetService typeof<IAuditLog> with
-                    | :? IAuditLog as a -> Some a
-                    | _ -> None
+                let auditLog = Background.resolveAuditLog services
 
                 try
                     let! report = sweepScope storage auditLog logger DateTime.UtcNow policy ctx.ScopeId

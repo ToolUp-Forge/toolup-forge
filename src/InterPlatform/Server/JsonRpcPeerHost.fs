@@ -452,23 +452,25 @@ module JsonRpcPeerHost =
         (result: Result<string, PeerError>)
         : System.Threading.Tasks.Task =
         task {
-            match tryGetService<IAuditLog> ctx with
-            | None -> ()
-            | Some auditLog ->
-                let payload: PeerCallCompletedPayload = {
-                    ContractId = contractId
-                    MethodName = methodName
-                    CallerPeerId = callerPeerId
-                    RootRequestId = rootRequestId
-                    Succeeded = Result.isOk result
-                    Outcome =
-                        match result with
-                        | Ok _ -> "ok"
-                        | Error e -> JsonRpc.errorCaseName e
-                    OccurredAt = DateTimeOffset.UtcNow
-                }
+            let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
 
-                do! auditLog.Record(PeerJob.Scope, PeerCallCompleted payload) |> Async.StartAsTask
+            let payload: PeerCallCompletedPayload = {
+                ContractId = contractId
+                MethodName = methodName
+                CallerPeerId = callerPeerId
+                RootRequestId = rootRequestId
+                Succeeded = Result.isOk result
+                Outcome =
+                    match result with
+                    | Ok _ -> "ok"
+                    | Error e -> JsonRpc.errorCaseName e
+                OccurredAt = DateTimeOffset.UtcNow
+            }
+
+            do!
+                auditLog.Record(AuditScope.platform, AuditSubject.system "PeerHost", PeerCallCompleted payload)
+                |> AuditRow.orRefuse
+                |> Async.StartAsTask
         }
 
     /// Phase 630 — the group edge's terminal-outcome row.
@@ -506,13 +508,13 @@ module JsonRpcPeerHost =
         : System.Threading.Tasks.Task =
         task {
             try
-                match status, tryGetService<IAuditLog> ctx with
+                match status with
                 // Still running: nothing has concluded, so there is nothing
                 // to record — and recording it would burn the one-shot
                 // claim on a non-outcome.
-                | PeerJobStatus.Pending, _
-                | _, None -> ()
-                | terminal, Some auditLog ->
+                | PeerJobStatus.Pending -> ()
+                | terminal ->
+                    let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
                     let! first = map.MarkTerminalObserved(PeerJob.Scope, groupJobId) |> Async.StartAsTask
 
                     if first then
@@ -534,7 +536,14 @@ module JsonRpcPeerHost =
                             OccurredAt = DateTimeOffset.UtcNow
                         }
 
-                        do! auditLog.Record(PeerJob.Scope, PeerJobCompleted payload) |> Async.StartAsTask
+                        do!
+                            auditLog.Record(
+                                AuditScope.platform,
+                                AuditSubject.system "PeerHost",
+                                PeerJobCompleted payload
+                            )
+                            |> AuditRow.orRefuse
+                            |> Async.StartAsTask
             with _ ->
                 ()
         }

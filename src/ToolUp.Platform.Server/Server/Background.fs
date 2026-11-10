@@ -155,6 +155,25 @@ let internal requestLogger (ctx: HttpContext) : ILogger option =
 /// either way, and a logger that itself throws is ignored. The formatting
 /// is `writeFailureLogger`'s, shared with the
 /// stores that have no request in hand.
+/// The composed `IAuditLog`, or `NoOpAuditLog` where none is registered (a
+/// harness that composed no audit). `compose` registers `NoOpAuditLog` when
+/// audit is off, so a component holds a log, never an optional one.
+let resolveAuditLog (services: IServiceProvider) : IAuditLog =
+    match services.GetService(typeof<IAuditLog>) with
+    | :? IAuditLog as log -> log
+    | _ -> NoOpAuditLog() :> IAuditLog
+
+/// The actor of an audit row a request handler emits: the subject the scope
+/// resolution stamped on the request, or `emitter` as a system actor when
+/// it resolved none.
+let requestActor (emitter: string) (ctx: HttpContext) : AuditSubject =
+    match ctx.Items.TryGetValue "ToolUp.Subject" with
+    | true, (:? Subject as subject) -> AuditSubject.fromSubject subject
+    | _ -> AuditSubject.system emitter
+
+/// The request's composed `IAuditLog` (`resolveAuditLog` over its services).
+let auditLogOf (ctx: HttpContext) : IAuditLog = resolveAuditLog ctx.RequestServices
+
 let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
     let route = sprintf " on %s %s" ctx.Request.Method (string ctx.Request.Path)
     writeFailureLogger source logger route "the response"
@@ -184,3 +203,34 @@ let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Asyn
         | Choice2Of2 ex -> warn what ex
     }
     |> Async.Start
+
+/// `startAudit` for an audit row: the fire-and-forget shape over
+/// `IAuditLog.Record`, for a site that chose not to await its row (the
+/// response never waits on it and never changes because of it). A row the
+/// log refused reaches `warn` exactly as a write that raised does.
+let internal startAuditRow
+    (warn: string -> exn -> unit)
+    (what: string)
+    (row: Async<Result<unit, AuditWriteError>>)
+    : unit =
+    startAudit
+        warn
+        what
+        (async {
+            match! row with
+            | Ok() -> ()
+            | Error e -> warn what (Exception(AuditWriteError.describe e))
+        })
+
+/// The detached shape for a row its site must never wait on — a refusal
+/// whose row must not delay or alter it. The row starts IMMEDIATELY on the
+/// caller's thread and continues detached at its first asynchronous step, so
+/// a log that completes synchronously has recorded the row before this
+/// returns. Never raises; the log has already counted and logged a failure.
+let internal startAuditRowImmediate (row: Async<Result<unit, AuditWriteError>>) : unit =
+    Async.StartImmediate(
+        async {
+            let! _ = Async.Catch row
+            return ()
+        }
+    )

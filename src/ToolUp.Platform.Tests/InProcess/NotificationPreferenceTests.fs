@@ -45,8 +45,12 @@ type private CapturingAuditLog() =
         |> Seq.toList
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { events.Enqueue((scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            events.Enqueue((scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 type private CapturingLogger() =
     let lines = ConcurrentQueue<string>()
@@ -117,15 +121,7 @@ let private harnessAt (now: DateTime) (store: INotificationPreferenceStore optio
     let audit = CapturingAuditLog()
 
     let filter =
-        NotificationPreferenceFilter(
-            inner,
-            store,
-            categories,
-            Some(audit :> IAuditLog),
-            logger,
-            (fun () -> now),
-            utcOnly
-        )
+        NotificationPreferenceFilter(inner, store, categories, (audit :> IAuditLog), logger, (fun () -> now), utcOnly)
 
     {
         Store = store

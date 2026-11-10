@@ -43,8 +43,8 @@ let private silentLogger =
 /// reach the sink.
 type private NoOpAuditLog() =
     interface IAuditLog with
-        member _.Record(_scopeId, _audit) = async { return () }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _scopeId, _actor, _audit) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 let private makeAuditEvent (scopeId: string) (eventType: string) (offsetSecs: float) : ModuleEvent = {
     Id = Guid.NewGuid()

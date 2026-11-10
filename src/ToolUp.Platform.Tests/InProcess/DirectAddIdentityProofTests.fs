@@ -38,8 +38,8 @@ open ToolUp.Platform.Compose
 
 type private SilentAuditLog() =
     interface IAuditLog with
-        member _.Record(_, _) = async { return () }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey _, _actor, _) = async { return Ok() }
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// Directory over a fixed roster. `ResolveUsers` honours the substrate
 /// contract: ids it does not recognise are omitted, never raised.

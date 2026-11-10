@@ -54,7 +54,8 @@ let private renderRecord (record: LedgerRecord) : string =
 let private baseTime = DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc)
 
 let private makeEnvelope (offset: float) : AuditEnvelope =
-    AuditEnvelope.fromScopeId
+    AuditEnvelope.create
+        AuditSubject.unattributed
         "team-ledger"
         (baseTime.AddSeconds offset)
         (UserLoggedIn {
@@ -495,7 +496,8 @@ let private ledgerTests =
             match!
                 sinkB.Deliver [
                     for i in 0..3 ->
-                        AuditEnvelope.fromScopeId
+                        AuditEnvelope.create
+                            AuditSubject.unattributed
                             "team-other"
                             (baseTime.AddSeconds(float i))
                             (UserLoggedIn {
@@ -750,7 +752,8 @@ let private facetTagger: LedgerScopeTagger =
     fun envelope -> [ sprintf "scope:%s" envelope.ScopeId ]
 
 let private partyEnvelope (scopeId: string) (offset: float) : AuditEnvelope =
-    AuditEnvelope.fromScopeId
+    AuditEnvelope.create
+        AuditSubject.unattributed
         scopeId
         (baseTime.AddSeconds offset)
         (UserLoggedIn {

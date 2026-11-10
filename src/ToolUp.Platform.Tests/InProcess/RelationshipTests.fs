@@ -112,7 +112,7 @@ let private mkStore () =
 
     registry.Register<Course>(EntityRegistration.create<Course> "Course")
 
-    let store = BlobEntityStore(dos, blob, registry, None) :> IEntityStore
+    let store = BlobEntityStore(dos, blob, registry, NoOpAuditLog()) :> IEntityStore
     let scope = "team-rel-" + Guid.NewGuid().ToString("N").Substring(0, 6)
     store, scope
 

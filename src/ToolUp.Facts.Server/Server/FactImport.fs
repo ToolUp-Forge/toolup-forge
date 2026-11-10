@@ -440,12 +440,14 @@ module FactImport =
                 let refuse (payload: FactImportPayload) (refusal: FactImportRefusal) = async {
                     do!
                         audit.Record(
-                            scopeId,
+                            AuditScope.shard scopeId,
+                            AuditSubject.system "FactImport",
                             AuditEvent.FactImportRefused {
                                 payload with
                                     Reason = FactImportRefusal.describe refusal
                             }
                         )
+                        |> AuditRow.orRefuse
 
                     return Error refusal
                 }
@@ -619,12 +621,14 @@ module FactImport =
                                             | Ok fact ->
                                                 do!
                                                     audit.Record(
-                                                        scopeId,
+                                                        AuditScope.shard scopeId,
+                                                        AuditSubject.system "FactImport",
                                                         AuditEvent.FactImportAccepted {
                                                             payload with
                                                                 ImportedFactId = fact.FactId
                                                         }
                                                     )
+                                                    |> AuditRow.orRefuse
 
                                                 return Ok fact
             }

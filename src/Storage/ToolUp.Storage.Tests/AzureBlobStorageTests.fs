@@ -35,7 +35,7 @@ let tests =
                 ConnectionString = connectionString
                 RootContainer = "test-" + suffix
                 ConnectionStringProvider = None
-                AuditLog = None
+                AuditLog = ToolUp.Platform.NoOpAuditLog()
             }
 
         IBlobStorageContract.tests "AzureBlobStorage" factory

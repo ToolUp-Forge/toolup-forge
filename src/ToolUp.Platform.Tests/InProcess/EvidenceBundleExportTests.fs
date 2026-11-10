@@ -765,7 +765,7 @@ let signedRoundTripTests =
                     let secrets = InMemorySecretStore() :> ISecretStore
                     let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId algorithm
 
-                    let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+                    let audit = NoOpAuditLog() :> IAuditLog
 
                     let artefactSigner =
                         DefaultArtefactSigner.createSystem secrets audit keyId algorithm
@@ -798,7 +798,7 @@ let signedRoundTripTests =
                 let secrets = InMemorySecretStore() :> ISecretStore
                 let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId Ed25519
 
-                let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+                let audit = NoOpAuditLog() :> IAuditLog
                 let artefactSigner = DefaultArtefactSigner.createSystem secrets audit keyId Ed25519
                 let! publicKey = artefactSigner.VerifyKey()
 
@@ -902,7 +902,7 @@ let fixtureEmissionTests =
                 let secrets = InMemorySecretStore() :> ISecretStore
                 let signer = DsseEnvelopeSigning.fromSecretStore secrets keyId EcdsaP256
 
-                let audit = AuditLog.NoOpAuditLog() :> IAuditLog
+                let audit = NoOpAuditLog() :> IAuditLog
 
                 let artefactSigner =
                     DefaultArtefactSigner.createSystem secrets audit keyId EcdsaP256

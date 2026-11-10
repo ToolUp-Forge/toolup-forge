@@ -278,7 +278,9 @@ let private audit
                     Payload = Map(("outcome", outcome) :: detail)
                 }
 
-            do! log.Record(DeploymentVerificationReport.PlatformScopeId, event)
+            do!
+                log.Record(AuditScope.platform, AuditSubject.system "ReflectionTools", event)
+                |> AuditRow.orRefuse
         | _ -> ()
     }
 

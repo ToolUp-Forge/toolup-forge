@@ -153,7 +153,7 @@ let private optionsFor (record: SealedDeployRecord) (binding: SealedCompositionB
     Record = Some record
     Binding = Some binding
     Transcript = None
-    AuditLog = None
+    AuditLog = (NoOpAuditLog())
     ScopeId = BootVerificationPreflight.PlatformScopeId
     MinimumLevel = None
     Attestor = RuntimeAttestor.unattested

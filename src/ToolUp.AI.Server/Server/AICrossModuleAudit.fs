@@ -211,13 +211,13 @@ let payloadOf
 let private record (ctx: HttpContext) (payload: CrossModuleReadPayload) : Async<unit> = async {
     match ctx.RequestServices.GetService(typeof<IAuditLog>) with
     | :? IAuditLog as auditLog ->
-        try
-            do! auditLog.Record(scopeIdOf ctx, CrossModuleRead payload)
-        with _ ->
-            // `IAuditLog.Record` already logs and swallows its own
-            // failures; this catches a substrate that throws OUT of it.
-            // A dropped row must never cost the turn.
-            ()
+        do!
+            auditLog.Record(
+                AuditScope.shard (scopeIdOf ctx),
+                ToolUp.Platform.Config.Background.requestActor "AICrossModule" ctx,
+                CrossModuleRead payload
+            )
+            |> AuditRow.bestEffort
     | _ -> return ()
 }
 

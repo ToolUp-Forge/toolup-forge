@@ -73,7 +73,7 @@ let private enqueueFor (scope: StorageScope) (createdBy: string) : Async<Documen
             (InMemoryEventStore.InMemoryEventStore())
             (IngestionStatusStore.createInMemory ())
             DropWrite
-            (AuditLog.NoOpAuditLog())
+            (NoOpAuditLog())
             (NotificationChannel.NoOpNotificationChannel())
             (SilentLogger())
 

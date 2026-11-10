@@ -1131,31 +1131,30 @@ let uploadDocumentCore
                             (ScanVerdict.reason verdict |> Option.defaultValue "no reason given")
                     )
 
-                match deps.AuditLog with
-                | Some audit ->
-                    // Best-effort by contract (`IAuditLog.Record` swallows its
-                    // own failures), awaited on the request path (GP 7) — an
-                    // audit gap never fails the upload. Emitted for EVERY
-                    // verdict, clean included: a trail that records only
-                    // rejections cannot distinguish a payload the scanner
-                    // passed from one it was never shown.
-                    do!
-                        audit.Record(
-                            deps.Scope.ScopeId,
-                            ContentScanned {
-                                UserId = deps.UserId
-                                ScopeId = deps.Scope.ScopeId
-                                ScannerName = scanner.Name
-                                FileName = safeName
-                                ContentHash = contentHashOf bytes
-                                SizeBytes = int64 bytes.Length
-                                Verdict = ScanVerdict.label verdict
-                                Reason = ScanVerdict.reason verdict
-                                Refused = Option.isSome refusal
-                                OccurredAt = DateTimeOffset.UtcNow
-                            }
-                        )
-                | None -> ()
+                // Best-effort by contract (`IAuditLog.Record` swallows its
+                // own failures), awaited on the request path (GP 7) — an
+                // deps.AuditLog gap never fails the upload. Emitted for EVERY
+                // verdict, clean included: a trail that records only
+                // rejections cannot distinguish a payload the scanner
+                // passed from one it was never shown.
+                do!
+                    deps.AuditLog.Record(
+                        StorageScope.auditScope deps.Scope,
+                        AuditSubject.fromSubject deps.AccessContext.Subject,
+                        ContentScanned {
+                            UserId = deps.UserId
+                            ScopeId = deps.Scope.ScopeId
+                            ScannerName = scanner.Name
+                            FileName = safeName
+                            ContentHash = contentHashOf bytes
+                            SizeBytes = int64 bytes.Length
+                            Verdict = ScanVerdict.label verdict
+                            Reason = ScanVerdict.reason verdict
+                            Refused = Option.isSome refusal
+                            OccurredAt = DateTimeOffset.UtcNow
+                        }
+                    )
+                    |> AuditRow.orRefuse
 
                 return refusal
         }
@@ -1193,23 +1192,22 @@ let uploadDocumentCore
                             contentHash
                     )
 
-                    match deps.AuditLog with
-                    | Some audit ->
-                        // Best-effort by contract (`IAuditLog.Record` swallows
-                        // its own failures), awaited on the request path (GP 7)
-                        // — an audit gap never fails the upload.
-                        do!
-                            audit.Record(
-                                deps.Scope.ScopeId,
-                                KnowledgeDocumentDeduplicated {
-                                    UserId = deps.UserId
-                                    ScopeId = deps.Scope.ScopeId
-                                    ExistingDocumentId = existing.Id
-                                    FileName = safeName
-                                    ContentHash = contentHash
-                                }
-                            )
-                    | None -> ()
+                    // Best-effort by contract (`IAuditLog.Record` swallows
+                    // its own failures), awaited on the request path (GP 7)
+                    // — an deps.AuditLog gap never fails the upload.
+                    do!
+                        deps.AuditLog.Record(
+                            StorageScope.auditScope deps.Scope,
+                            AuditSubject.fromSubject deps.AccessContext.Subject,
+                            KnowledgeDocumentDeduplicated {
+                                UserId = deps.UserId
+                                ScopeId = deps.Scope.ScopeId
+                                ExistingDocumentId = existing.Id
+                                FileName = safeName
+                                ContentHash = contentHash
+                            }
+                        )
+                        |> AuditRow.orRefuse
 
                     // Suppressed under bulk import; the batch's
                     // one completion summary replaces N per-file toasts.
@@ -1903,9 +1901,8 @@ let private sourceKindName (source: KnowledgeSource) =
 /// is contractually best-effort and swallows its own failures, so audit
 /// gaps never fail the fetch.
 let private recordOriginalAccessAudit (deps: KnowledgeApiDeps) (event: AuditEvent) : Async<unit> =
-    match deps.AuditLog with
-    | Some a -> a.Record(deps.Scope.ScopeId, event)
-    | None -> async.Return()
+    deps.AuditLog.Record(StorageScope.auditScope deps.Scope, AuditSubject.fromSubject deps.AccessContext.Subject, event)
+    |> AuditRow.orRefuse
 
 /// Fetch the *original* ingested document for a `docId`,
 /// optionally through a Phase 201 classification redactor.

@@ -114,8 +114,12 @@ type private CapturingAuditLog() =
         |> List.ofSeq
 
     interface IAuditLog with
-        member _.Record(scopeId, audit) = async { lock rows (fun () -> rows.Add(scopeId, audit)) }
-        member _.GetAuditTrail(_, _, _) = async { return [] }
+        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
+            lock rows (fun () -> rows.Add(scopeId, audit))
+            return Ok()
+        }
+
+        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 // ─── Harness ─────────────────────────────────────────────────────────
 
@@ -141,7 +145,7 @@ let private mkDeps
     (storage: IBlobStorage)
     (scanner: IContentScanner option)
     (policy: ContentScanPolicy)
-    (audit: IAuditLog option)
+    (audit: IAuditLog)
     (container: string)
     : KnowledgeApiDeps =
     {
@@ -261,7 +265,7 @@ let tests =
                     storage
                     (Some(scanner :> IContentScanner))
                     ContentScanPolicy.failClosed
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     "team-scan"
 
             let! doc = uploadDocument deps (eicarBytes ()) "sample.txt"
@@ -308,7 +312,7 @@ let tests =
                     storage
                     (Some(scanner :> IContentScanner))
                     ContentScanPolicy.failClosed
-                    (Some(audit :> IAuditLog))
+                    ((audit :> IAuditLog))
                     "team-clean"
 
             let! doc = uploadDocument deps benignCsv "ok.csv"
@@ -339,7 +343,7 @@ let tests =
                     closedStorage
                     (Some(FakeScanner(ScanUnavailable "connection refused") :> IContentScanner))
                     ContentScanPolicy.failClosed
-                    (Some(closedAudit :> IAuditLog))
+                    ((closedAudit :> IAuditLog))
                     "team-closed"
 
             let! closedDoc = uploadDocument closedDeps benignCsv "ok.csv"
@@ -363,7 +367,7 @@ let tests =
                     openStorage
                     (Some(FakeScanner(ScanUnavailable "connection refused") :> IContentScanner))
                     ContentScanPolicy.failOpen
-                    (Some(openAudit :> IAuditLog))
+                    ((openAudit :> IAuditLog))
                     "team-open"
 
             let! openDoc = uploadDocument openDeps benignCsv "ok.csv"
@@ -385,7 +389,7 @@ let tests =
             let audit = CapturingAuditLog()
 
             let deps =
-                mkDeps storage None ContentScanPolicy.defaults (Some(audit :> IAuditLog)) "team-none"
+                mkDeps storage None ContentScanPolicy.defaults ((audit :> IAuditLog)) "team-none"
 
             // The same payload a composed scanner would have rejected.
             let! doc = uploadDocument deps (eicarBytes ()) "sample.txt"
@@ -408,7 +412,12 @@ let tests =
             // A 1-byte cap makes the pure Phase 119 size check refuse
             // first; the scanner must not be consulted at all.
             let deps = {
-                mkDeps storage (Some(scanner :> IContentScanner)) ContentScanPolicy.failClosed None "team-order" with
+                mkDeps
+                    storage
+                    (Some(scanner :> IContentScanner))
+                    ContentScanPolicy.failClosed
+                    (NoOpAuditLog())
+                    "team-order" with
                     UploadPolicy = {
                         KnowledgeUploadPolicy.permissive with
                             MaxUploadBytes = Some 1L

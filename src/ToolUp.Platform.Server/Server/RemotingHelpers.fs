@@ -107,10 +107,7 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
     /// `GrantPolicyGuard.guardDispatch`, so the pack exercises the same
     /// path a request takes rather than a re-implementation of it.
     let assertGrantLive (ctx: HttpContext) (accessCtx: AccessContext) =
-        let auditLog =
-            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as log -> Some log
-            | _ -> None
+        let auditLog = Background.auditLogOf ctx
 
         let scopeId =
             accessCtx.TeamId
@@ -132,7 +129,6 @@ let internal permissionGuardedApiCore<'T> (moduleName: string) (apiBuilder: Http
                 (GrantPolicyGuard.grantsFromItems ctx.Items)
                 (GrantConsentStore.consentVerdictsFromItems ctx.Items)
                 auditLog
-                Async.Start
                 scopeId
                 accessCtx.UserId
                 moduleName

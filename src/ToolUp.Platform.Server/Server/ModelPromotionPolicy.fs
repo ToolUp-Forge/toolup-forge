@@ -860,7 +860,8 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
         | Ok() ->
             do!
                 deps.Audit.Record(
-                    decision.ScopeId,
+                    AuditScope.shard decision.ScopeId,
+                    AuditSubject.system "ModelPromotion",
                     ModelPromotionPolicyEvaluated {
                         CompositeKeyHash = decision.ArtifactKeyHash
                         PolicyId = decision.PolicyId
@@ -874,12 +875,14 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
                         ScopeId = decision.ScopeId
                     }
                 )
+                |> AuditRow.orRefuse
 
             match decision.SupersededKeyHash with
             | Some superseded when decision.TransitionApplied ->
                 do!
                     deps.Audit.Record(
-                        decision.ScopeId,
+                        AuditScope.shard decision.ScopeId,
+                        AuditSubject.system "ModelPromotion",
                         ModelArtifactSuperseded {
                             SupersedingKeyHash = decision.ArtifactKeyHash
                             SupersededKeyHash = superseded
@@ -889,6 +892,7 @@ type ModelPromotionPolicyEvaluator(policies: PromotionPolicy list, deps: Promoti
                             ScopeId = decision.ScopeId
                         }
                     )
+                    |> AuditRow.orRefuse
             | _ -> ()
 
             return Ok decision

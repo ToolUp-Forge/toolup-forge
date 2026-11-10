@@ -68,31 +68,28 @@ module ClassificationGate =
         policy classification.Level ctx
 
     /// Scope under which classification audit is recorded — the caller's
-    /// config scope's audit stream (`AuditStreamKey.ofScope` — its bare id, never
-    /// its container) when resolvable, else the reserved `_platform` scope.
-    let private auditScope (ctx: AccessContext) : string =
+    /// config scope's audit stream (`StorageScope.auditScope` — its bare id,
+    /// never its container) when resolvable, else the platform's trail.
+    let private auditScope (ctx: AccessContext) : AuditScope =
         AccessContext.configScope ctx
-        |> Option.map AuditStreamKey.ofScope
-        |> Option.defaultValue ScopeKey.PlatformContainer
+        |> Option.map StorageScope.auditScope
+        |> Option.defaultValue AuditScope.platform
 
-    let private recordRead (audit: IAuditLog) (ctx: AccessContext) (c: FieldClassification) (redacted: bool) = async {
+    let private recordRead (audit: IAuditLog) (ctx: AccessContext) (c: FieldClassification) (redacted: bool) =
         if c.AuditOnRead then
-            try
-                do!
-                    audit.Record(
-                        auditScope ctx,
-                        AuditEvent.ClassifiedFieldRead {
-                            UserId = UserId ctx.UserId
-                            EntityName = c.EntityName
-                            FieldPath = c.FieldPath
-                            Level = ClassificationLevel.name c.Level
-                            Redacted = redacted
-                        }
-                    )
-            with _ ->
-                // IAuditLog.Record is best-effort; swallow per contract.
-                ()
-    }
+            AuditRow.emit
+                audit
+                (auditScope ctx)
+                (AuditSubject.fromSubject ctx.Subject)
+                (AuditEvent.ClassifiedFieldRead {
+                    UserId = UserId ctx.UserId
+                    EntityName = c.EntityName
+                    FieldPath = c.FieldPath
+                    Level = ClassificationLevel.name c.Level
+                    Redacted = redacted
+                })
+        else
+            async { return Ok() }
 
     /// Apply the gate to a flat `fieldPath -> value` view of an entity:
     /// redact the values of classified fields the caller may not read,
@@ -106,23 +103,36 @@ module ClassificationGate =
         (ctx: AccessContext)
         (entityName: string)
         (fields: Map<string, string>)
-        : Async<Map<string, string>> =
+        : Async<Result<Map<string, string>, AuditWriteError>> =
         async {
             let! classifications = classifier.Classify entityName
             let byPath = classifications |> List.map (fun c -> c.FieldPath, c) |> Map.ofList
-            let mutable result = fields
 
-            for KeyValue(path, value) in fields do
-                match Map.tryFind path byPath with
-                | None -> () // unclassified — passes through
-                | Some c ->
-                    match decide policy c ctx with
-                    | Allow -> do! recordRead audit ctx c false
-                    | Redact ->
-                        result <- Map.add path RedactedPlaceholder result
-                        do! recordRead audit ctx c true
+            // The read is served only once every row it owes has landed (or
+            // the policy said a lost row does not refuse): the first refused
+            // row refuses the read.
+            let rec walk (pending: (string * string) list) (result: Map<string, string>) = async {
+                match pending with
+                | [] -> return Ok result
+                | (path, _) :: rest ->
+                    match Map.tryFind path byPath with
+                    | None -> return! walk rest result // unclassified — passes through
+                    | Some c ->
+                        let redacted = decide policy c ctx = Redact
 
-            return result
+                        match! recordRead audit ctx c redacted with
+                        | Error e -> return Error e
+                        | Ok() ->
+                            let next =
+                                if redacted then
+                                    Map.add path RedactedPlaceholder result
+                                else
+                                    result
+
+                            return! walk rest next
+            }
+
+            return! walk (Map.toList fields) fields
         }
 
     /// Record `ClassifiedFieldWritten` for each classified field among
@@ -134,46 +144,38 @@ module ClassificationGate =
         (ctx: AccessContext)
         (entityName: string)
         (writtenFieldPaths: string list)
-        : Async<unit> =
+        : Async<Result<unit, AuditWriteError>> =
         async {
             let! classifications = classifier.Classify entityName
             let byPath = classifications |> List.map (fun c -> c.FieldPath, c) |> Map.ofList
 
-            for path in writtenFieldPaths do
-                match Map.tryFind path byPath with
-                | None -> ()
-                | Some c ->
-                    try
-                        do!
-                            audit.Record(
-                                auditScope ctx,
-                                AuditEvent.ClassifiedFieldWritten {
+            let rec walk (pending: string list) = async {
+                match pending with
+                | [] -> return Ok()
+                | path :: rest ->
+                    match Map.tryFind path byPath with
+                    | None -> return! walk rest
+                    | Some c ->
+                        match!
+                            AuditRow.emit
+                                audit
+                                (auditScope ctx)
+                                (AuditSubject.fromSubject ctx.Subject)
+                                (AuditEvent.ClassifiedFieldWritten {
                                     UserId = UserId ctx.UserId
                                     EntityName = c.EntityName
                                     FieldPath = c.FieldPath
                                     Level = ClassificationLevel.name c.Level
-                                }
-                            )
-                    with _ ->
-                        ()
+                                })
+                        with
+                        | Error e -> return Error e
+                        | Ok() -> return! walk rest
+            }
+
+            return! walk writtenFieldPaths
         }
 
-// ─── Field-classification egress / DLP gate ────────────────
-//
-// `ClassificationGate` redacts on *read*. This extends the
-// same policy shape to a *terminal egress* boundary — export payload, RPC
-// response, audit / log sink — so a classified field cannot leave the
-// process unredacted by a path that bypassed the read gate (the DLP half
-// the classification work implied but never landed). The default policy
-// is **permissive** (`Allow` for every level): a deployment that ships no
-// deny rules behaves byte-for-byte as before (GP 13). Every non-`Allow`
-// decision emits one `EgressBlocked` audit row (GP 12 — a deny is
-// observable, never silent).
 
-/// The output boundary a classified field is leaving.
-/// Recorded on the `EgressBlocked` audit row so a reviewer can tell an
-/// export leak from an RPC-response leak. `CustomBoundary` names a bespoke
-/// sink without extending the DU.
 [<RequireQualifiedAccess>]
 type EgressBoundary =
     | ExportPayload
@@ -357,28 +359,25 @@ module EgressGate =
     /// `_platform` cross-tenant audit scope. Egress happens outside a
     /// per-request config scope; the `Actor` + `Destination` on the
     /// payload carry attribution.
-    [<Literal>]
-    let private auditScope = ScopeKey.PlatformContainer
+    let private auditScope = AuditScope.platform
 
-    let private recordEgress (audit: IAuditLog) (ctx: EgressContext) (c: FieldClassification) (decisionLabel: string) = async {
-        try
-            do!
-                audit.Record(
-                    auditScope,
-                    AuditEvent.EgressBlocked {
-                        Actor = ctx.Actor
-                        EntityName = c.EntityName
-                        FieldPath = c.FieldPath
-                        Level = ClassificationLevel.name c.Level
-                        Decision = decisionLabel
-                        Boundary = EgressBoundary.name ctx.Boundary
-                        Destination = ctx.Destination
-                    }
-                )
-        with _ ->
-            // IAuditLog.Record is best-effort; swallow per contract.
-            ()
-    }
+    /// The row records a decision already taken — the field is blocked or
+    /// redacted whether or not the row lands — so it is best-effort.
+    let private recordEgress (audit: IAuditLog) (ctx: EgressContext) (c: FieldClassification) (decisionLabel: string) =
+        AuditRow.emit
+            audit
+            auditScope
+            (AuditSubject.system "EgressGate")
+            (AuditEvent.EgressBlocked {
+                Actor = ctx.Actor
+                EntityName = c.EntityName
+                FieldPath = c.FieldPath
+                Level = ClassificationLevel.name c.Level
+                Decision = decisionLabel
+                Boundary = EgressBoundary.name ctx.Boundary
+                Destination = ctx.Destination
+            })
+        |> AuditRow.bestEffort
 
     /// Core filter — apply `policy` to every classified field in `fields`
     /// at `ctx`, emitting audit for non-`Allow` decisions. A pure

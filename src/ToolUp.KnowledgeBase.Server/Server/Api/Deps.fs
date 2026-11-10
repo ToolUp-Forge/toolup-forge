@@ -84,7 +84,7 @@ type KnowledgeApiDeps = {
     /// `FeatureMode.Disabled` deployment) — emission is best-effort and silent
     /// when the substrate is absent, same posture as the Platform KB
     /// admin surface.
-    AuditLog: IAuditLog option
+    AuditLog: IAuditLog
     /// Records ingestion-queue enqueue outcomes against the
     /// per-deployment `IRagTelemetry` snapshot. No-op when no queue
     /// or no telemetry sink is registered.
@@ -371,10 +371,7 @@ module KnowledgeApiDeps =
             | :? KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver as r -> r
             | _ -> KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
 
-        let auditLog =
-            match services.GetService(typeof<IAuditLog>) with
-            | :? IAuditLog as a -> Some a
-            | _ -> None
+        let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog services
 
         // Upload policy registered by `withUploadPolicy`;
         // the permissive default when absent (no caps, pre-119 behaviour).

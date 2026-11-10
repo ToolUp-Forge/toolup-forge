@@ -3152,7 +3152,7 @@ module ServerApp =
                             RouteEffectObserver(
                                 VerifiedCompositionProfile.auditingObserver
                                     auditLog
-                                    EgressEnforcement.AuditScope
+                                    EgressEnforcement.Scope
                                     CompositionProfile.Standard
                             )
                         | _ -> RouteEffectObserver ignore

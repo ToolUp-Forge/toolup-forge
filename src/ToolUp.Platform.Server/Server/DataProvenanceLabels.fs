@@ -132,7 +132,8 @@ module DataProvenancePolicy =
             | Error reason ->
                 do!
                     audit.Record(
-                        version.ScopeId,
+                        AuditScope.shard version.ScopeId,
+                        AuditSubject.system "DatasetProvenance",
                         DatasetPolicyDenied {
                             ScopeId = version.ScopeId
                             DatasetId = version.DatasetId
@@ -141,6 +142,7 @@ module DataProvenancePolicy =
                             Reason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 return Error reason
         }
@@ -157,7 +159,8 @@ module DataProvenancePolicy =
             | Error reason ->
                 do!
                     audit.Record(
-                        version.ScopeId,
+                        AuditScope.shard version.ScopeId,
+                        AuditSubject.system "DatasetProvenance",
                         DatasetPolicyDenied {
                             ScopeId = version.ScopeId
                             DatasetId = version.DatasetId
@@ -166,6 +169,7 @@ module DataProvenancePolicy =
                             Reason = reason
                         }
                     )
+                    |> AuditRow.orRefuse
 
                 return Error reason
         }

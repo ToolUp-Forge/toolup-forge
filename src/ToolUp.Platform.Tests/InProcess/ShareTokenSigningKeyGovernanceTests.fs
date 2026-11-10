@@ -311,7 +311,9 @@ let tests =
 
             test "auto-generation marks the key's provenance" {
                 let secrets = SeedableSecretStore([]) :> ISecretStore
-                let store = ShareTokenStore.create (freshStorage ()) secrets None silentLogger
+
+                let store =
+                    ShareTokenStore.create (freshStorage ()) secrets (NoOpAuditLog()) silentLogger
 
                 match store.Issue(issueRequest "team-a") |> Async.RunSynchronously with
                 | Result.Ok _ -> ()
@@ -330,7 +332,7 @@ let tests =
 
                 // Replica A: mints a key, but the peer's write lands over it.
                 let replicaA =
-                    ShareTokenStore.create storage (secrets :> ISecretStore) None silentLogger
+                    ShareTokenStore.create storage (secrets :> ISecretStore) (NoOpAuditLog()) silentLogger
 
                 let issued =
                     match replicaA.Issue(issueRequest "team-a") |> Async.RunSynchronously with
@@ -353,7 +355,7 @@ let tests =
                     ShareTokenStore.create
                         storage
                         (SeedableSecretStore([ ShareTokenStore.signingKeySecretName, peerKey ]) :> ISecretStore)
-                        None
+                        (NoOpAuditLog())
                         silentLogger
 
                 match replicaB.Validate issued.Token |> Async.RunSynchronously with
@@ -365,7 +367,9 @@ let tests =
                 let secrets = SeedableSecretStore([]) :> ISecretStore
                 let storage = freshStorage ()
 
-                let stores = [ for _ in 1..6 -> ShareTokenStore.create storage secrets None silentLogger ]
+                let stores = [
+                    for _ in 1..6 -> ShareTokenStore.create storage secrets (NoOpAuditLog()) silentLogger
+                ]
 
                 let issued =
                     stores

@@ -57,9 +57,9 @@ type AuditFailurePolicy =
     /// Default — the pre-9t behaviour byte-for-byte: count + `Warn`,
     /// action completes, audit record lost.
     | LogAndContinue
-    /// Compliance-grade: the failure propagates as
-    /// `AuditWriteRefusedException`, so the action surfaces a 500
-    /// ("audit unavailable") rather than committing un-audited work.
+    /// Compliance-grade: `IAuditLog.Record` answers the `Error`, so the
+    /// action refuses ("audit unavailable") rather than committing
+    /// un-audited work.
     | RefuseAction
     /// Availability-grade: the failed record spills to a bounded
     /// local fallback directory; `AuditFallbackReplayService`

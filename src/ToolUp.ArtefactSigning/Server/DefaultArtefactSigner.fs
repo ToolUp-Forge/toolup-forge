@@ -22,12 +22,9 @@ type DefaultArtefactSigner
     (secrets: ISecretStore, audit: IAuditLog, keyId: string, algorithm: SigningAlgorithm, actor: string) =
 
     let recordAudit event = async {
-        try
-            do! audit.Record(SigningKeyMaterial.SecretScope, event)
-        with _ ->
-            // IAuditLog.Record is best-effort; swallow per its contract
-            // (audit emission must never fail the primary operation).
-            ()
+        do!
+            audit.Record(AuditScope.shard SigningKeyMaterial.SecretScope, AuditSubject.system "ArtefactSigner", event)
+            |> AuditRow.bestEffort
     }
 
     let sha256Hex (bytes: byte[]) : string =

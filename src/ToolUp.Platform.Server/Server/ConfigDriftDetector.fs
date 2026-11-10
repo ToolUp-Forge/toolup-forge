@@ -347,7 +347,8 @@ let run
 
                             do!
                                 auditLog.Record(
-                                    ScopeKey.PlatformContainer,
+                                    AuditScope.platform,
+                                    AuditSubject.system "ConfigDriftDetector",
                                     ConfigDrift {
                                         Changes = changes
                                         CompanionSetFrom = prevHash
@@ -355,6 +356,7 @@ let run
                                         SnapshotTakenAt = now
                                     }
                                 )
+                                |> AuditRow.orRefuse
 
                         return true
                     with ex ->

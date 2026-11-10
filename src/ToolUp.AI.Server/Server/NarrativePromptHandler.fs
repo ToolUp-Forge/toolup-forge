@@ -377,20 +377,21 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
     /// write under the default policy and raises under a compliance-grade one
     /// on purpose, so the call then fails rather than completing un-audited.
     let audit (caller: Caller) (kind: string) (methodName: string) (runKey: string) (payload: (string * string) list) = async {
-        match serviceOf<IAuditLog> ctx with
-        | Some log ->
-            do!
-                log.Record(
-                    AuditStreamKey.ofTeam caller.TeamId.Value,
-                    RemotingMethodAudited {
-                        Kind = kind
-                        MethodName = methodName
-                        SubjectId = caller.UserId.Value
-                        CorrelationId = None
-                        Payload = Map.ofList ([ "teamId", caller.TeamId.Value; "runKey", runKey ] @ payload)
-                    }
-                )
-        | None -> ()
+        let log = ToolUp.Platform.Config.Background.auditLogOf ctx
+
+        do!
+            log.Record(
+                AuditScope.team (TeamId caller.TeamId.Value),
+                ToolUp.Platform.Config.Background.requestActor "NarrativePrompt" ctx,
+                RemotingMethodAudited {
+                    Kind = kind
+                    MethodName = methodName
+                    SubjectId = caller.UserId.Value
+                    CorrelationId = None
+                    Payload = Map.ofList ([ "teamId", caller.TeamId.Value; "runKey", runKey ] @ payload)
+                }
+            )
+            |> AuditRow.orRefuse
     }
 
     let auditFor caller kind methodName runKey (version: NarrativePromptVersion) =

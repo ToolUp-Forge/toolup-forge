@@ -125,7 +125,7 @@ let private kbDeps (storage: IBlobStorage) : KnowledgeApiDeps = {
     NarrativeStore = None
     AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
     OriginalResolver = KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
-    AuditLog = None
+    AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore
     PublishInventory = fun () -> async.Return()
     MarkIngestionFailed = fun _ _ _ -> async.Return()
@@ -300,7 +300,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        (Some audit)
+                        (audit)
                         silentLogger
                         now
                         (agePolicy 30)
@@ -321,7 +321,7 @@ let tests =
                 let! freshPresent = siblingsPresent storage fresh
                 Expect.equal freshPresent [ true; true; true; true ] "the fresh conversation is untouched"
 
-                let! trail = audit.GetAuditTrail(scopeId, None, Some "ConversationsPurged")
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "ConversationsPurged")
 
                 match trail with
                 | [ ConversationsPurged p ] ->
@@ -348,7 +348,14 @@ let tests =
                 }
 
                 let! report =
-                    ConversationRetention.sweepContainer storage None silentLogger now policy scopeId container
+                    ConversationRetention.sweepContainer
+                        storage
+                        (NoOpAuditLog())
+                        silentLogger
+                        now
+                        policy
+                        scopeId
+                        container
 
                 Expect.equal (Set.ofList report.Purged) (Set.ofList (List.skip 2 ids)) "the two least-recent purged"
 
@@ -366,7 +373,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        (Some audit)
+                        (audit)
                         silentLogger
                         now
                         ConversationRetentionPolicy.retainForever
@@ -379,7 +386,7 @@ let tests =
                 let! present = siblingsPresent storage ancient
                 Expect.equal present [ true; true; true; true ] "every blob still there"
 
-                let! trail = audit.GetAuditTrail(scopeId, None, None)
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, None)
                 Expect.isEmpty trail "no audit row for a run that removed nothing"
             }
 
@@ -392,7 +399,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        (Some audit)
+                        (audit)
                         silentLogger
                         now
                         (agePolicy 30)
@@ -401,7 +408,7 @@ let tests =
 
                 Expect.equal report.Examined 1 "enumerated"
                 Expect.isEmpty report.Purged "nothing expired"
-                let! trail = audit.GetAuditTrail(scopeId, None, None)
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, None)
                 Expect.isEmpty trail "no row"
             }
 
@@ -421,7 +428,7 @@ let tests =
                 let! report =
                     ConversationRetention.sweepContainer
                         storage
-                        None
+                        (NoOpAuditLog())
                         silentLogger
                         DateTime.UtcNow
                         (agePolicy 30)
@@ -468,7 +475,7 @@ let tests =
                 let! present = siblingsPresent storage stale
                 Expect.equal present [ false; false; false; false ] "purged through the handler"
 
-                let! trail = audit.GetAuditTrail(scopeId, None, Some "ConversationsPurged")
+                let! trail = audit.GetAuditTrail(AuditScope.shard scopeId, None, Some "ConversationsPurged")
                 Expect.equal trail.Length 1 "audited"
 
                 // No storage composed ⇒ permanent, not transient.
@@ -578,7 +585,14 @@ let tests =
                 }
 
                 let! report =
-                    KnowledgeBase.ServerRetentionSweep.sweepScope storage None None silentLogger sweepNow policy scopeId
+                    KnowledgeBase.ServerRetentionSweep.sweepScope
+                        storage
+                        None
+                        (NoOpAuditLog())
+                        silentLogger
+                        sweepNow
+                        policy
+                        scopeId
 
                 Expect.equal report.Purged [ docId ] "the note was selected and purged"
 

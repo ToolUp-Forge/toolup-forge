@@ -136,6 +136,9 @@ type SanitisingPermissionStore(inner: IPermissionStore) =
         member _.SetModuleExposure(teamId, moduleName, state) =
             guard (validate "teamId" teamId.Value) (fun () -> inner.SetModuleExposure(teamId, moduleName, state))
 
+        member _.UpdateTeamPermissions(teamId, change) =
+            guard (validate "teamId" teamId.Value) (fun () -> inner.UpdateTeamPermissions(teamId, change))
+
         // Reads delegate unchanged.
         member _.GetTeamPermissions(teamId) = inner.GetTeamPermissions(teamId)
 

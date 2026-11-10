@@ -993,7 +993,8 @@ module DatasetRevintage =
                             | Ok produced ->
                                 do!
                                     audit.Record(
-                                        spec.Scope,
+                                        AuditScope.shard spec.Scope,
+                                        AuditSubject.system "DatasetAssembly",
                                         DatasetRevintaged {
                                             SpecHash = AssemblyProvenance.specHash rebound
                                             SourceVersion = DatasetVersionRef.key specRef
@@ -1003,6 +1004,7 @@ module DatasetRevintage =
                                             ScopeId = spec.Scope
                                         }
                                     )
+                                    |> AuditRow.orRefuse
 
                                 return Ok produced
         }
