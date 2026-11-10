@@ -121,6 +121,35 @@ let main args =
 
     init args
 
+    // A VerifyAll runs every pack and leg under a temp root of its own: the
+    // children inherit TEMP / TMP / TMPDIR, so a fixture directory a run
+    // leaves behind lands there, where the temp hygiene check below finds it
+    // by family, rather than accumulating in the machine's temp directory
+    // (and a sibling session's directories in that shared root are never
+    // mistaken for this run's). The root is deleted when the driver exits.
+    let runTempRoot =
+        if flags.Target = "VerifyAll" then
+            let root =
+                Path.Combine(
+                    Path.GetTempPath(),
+                    $"{ToolUp.Platform.Testing.TempDir.Prefix}gate-{System.Guid.NewGuid():N}"
+                )
+
+            Directory.CreateDirectory root |> ignore
+
+            for name in [ "TEMP"; "TMP"; "TMPDIR" ] do
+                System.Environment.SetEnvironmentVariable(name, root)
+
+            System.AppDomain.CurrentDomain.ProcessExit.Add(fun _ ->
+                try
+                    Directory.Delete(root, true)
+                with _ ->
+                    ())
+
+            Some root
+        else
+            None
+
     // Phase 762 — name the lane once, so a log cannot be mistaken for a
     // full run. Silent under `full`, so the shipping gate's output is
     // byte-for-byte what it was.
@@ -225,6 +254,139 @@ let main args =
             Some(count "testcase", count "failure" + count "error", count "skipped")
         else
             None
+
+    /// The fixture families whose directories a full run is known to leave
+    /// behind, each with the reason. A contract pack whose factory hands back
+    /// a store with no disposal hook cannot dispose the directory the store
+    /// lives in, so the directory outlives its case; the remedy is the
+    /// contract's factory answering an `IDisposable`, after which the family
+    /// leaves this list (a listed family a full run did NOT leave behind is
+    /// itself a finding, so the list only shrinks).
+    let tempLeakAllowance: Map<string, string> =
+        let factory =
+            "a contract factory with no disposal hook: the store it returns outlives the case"
+
+        let background =
+            "a scheduler fixture: background jobs still write into the directory when the case ends"
+
+        let unswept =
+            "a pack that does not reference the Testing package keeps its own temp root for an empty secret store"
+
+        [
+            "cas-resilient-tests", factory
+            "cas-tests", factory
+            "compute-budget-fit", background
+            "consent-test", factory
+            "cs-test", factory
+            "do-test", factory
+            "ds-test", factory
+            "entity-audit", factory
+            "entity-stale", factory
+            "entity-test", factory
+            "eval-resolve", factory
+            "eval-test", factory
+            "flags-test", factory
+            "fleet-test", factory
+            "grantconsent", factory
+            "idem", factory
+            "ingstatus", factory
+            "jobsched-handoff", background
+            "jobsched-restart", background
+            "jobsched-tests", background
+            "jobstore-restart", factory
+            "jobstore-tests", factory
+            "metadata-filter", factory
+            "modelexec-tests", factory
+            "multisite-tests", factory
+            "oauth-refresher-tests", factory
+            "parquet-test", factory
+            "persistent-event-store-tests", factory
+            "providerprofile-tests", factory
+            "publicrendering-tests", factory
+            "rs-test", factory
+            "secret-test", factory
+            "serviceaccount-tests", factory
+            "sharetoken-tests", factory
+            "storeseam", factory
+            "tag-filter", factory
+            "test", factory
+            "tests-addrbook", factory
+            "tests-meta-whatsapp", unswept
+            "tests-sg", unswept
+            "tests-twilio", unswept
+            "tests-twilio-wa", unswept
+            "tests-webpush", unswept
+            "transfer-test", factory
+            "usage-log-tests", factory
+        ]
+        |> Map.ofList
+
+    /// A fixture that creates a directory owns its deletion. After the packs
+    /// have run, every `TempDir`-shaped directory left in this run's temp root
+    /// is a fixture that did not dispose its directory: it is named by family
+    /// and removed, and a family outside `tempLeakAllowance` fails the check.
+    /// Under the full lane a listed family that left nothing fails it too.
+    /// Outside a VerifyAll run (no run temp root) there is nothing to read.
+    let runTempHygiene () : Verdict =
+        match runTempRoot with
+        | None -> Verdict.Pass None
+        | Some root ->
+            Trace.tracefn "▶ VerifyAll: TempHygiene (fixture directories the packs left in %s)" root
+
+            let left =
+                Directory.EnumerateDirectories root
+                |> Seq.choose (fun dir ->
+                    ToolUp.Platform.Testing.TempDir.familyOf (Path.GetFileName dir)
+                    |> Option.map (fun family -> family, dir))
+                |> List.ofSeq
+
+            let byFamily = left |> List.countBy fst |> List.sortBy fst
+
+            for family, count in byFamily do
+                Trace.tracefn "  TempHygiene: %s left %d director%s" family count (if count = 1 then "y" else "ies")
+
+            for _, dir in left do
+                try
+                    Directory.Delete(dir, true)
+                with ex ->
+                    Trace.traceImportant (sprintf "TempHygiene: could not remove %s: %s" dir ex.Message)
+
+            let leaked =
+                byFamily
+                |> List.filter (fun (family, _) -> not (tempLeakAllowance.ContainsKey family))
+
+            let stale =
+                if verifyLane = TestLane.Lane.Full then
+                    tempLeakAllowance
+                    |> Map.toList
+                    |> List.filter (fun (family, _) -> not (byFamily |> List.exists (fst >> (=) family)))
+                    |> List.map fst
+                else
+                    []
+
+            for family, count in leaked do
+                Trace.traceError (
+                    sprintf
+                        "TempHygiene: family '%s' left %d fixture director%s behind. Dispose it (`use dir = TempDir.create \"%s\"`); see docs/testing/temp-directories.md."
+                        family
+                        count
+                        (if count = 1 then "y" else "ies")
+                        family
+                )
+
+            for family in stale do
+                Trace.traceError (
+                    sprintf
+                        "TempHygiene: family '%s' is allowed to leak but a full run left nothing behind: remove it from tempLeakAllowance."
+                        family
+                )
+
+            match leaked, stale with
+            | [], [] -> Verdict.Pass None
+            | _ ->
+                Verdict.Fail(
+                    sprintf "%d leaking famil(ies), %d stale allowance(s), named above." leaked.Length stale.Length
+                )
 
     /// Every test project runs or is excluded by name, and `gate-reads.json`
     /// is the render of the manifest's read declarations. Pure file reading
@@ -3899,7 +4061,16 @@ let main args =
     // `VerifyAll` folds the selected `Local` rows and names the rest in its
     // trailer. A new gate is a row in GateManifest.fs and one binding here.
     let bodies: GateManifest.Bodies = {
-        GateReconcile = runGateReconcile
+        // The temp hygiene check rides the GateReconcile leg: the first leg
+        // after the packs, in every lane, and the gate's other "the run
+        // reconciles with the tree" check.
+        GateReconcile =
+            fun () ->
+                match runGateReconcile (), runTempHygiene () with
+                | Verdict.Fail a, Verdict.Fail b -> Verdict.Fail(a + " " + b)
+                | Verdict.Fail a, _
+                | _, Verdict.Fail a -> Verdict.Fail a
+                | reconciled, _ -> reconciled
         Fable =
             fun () ->
                 Trace.tracefn "▶ VerifyAll: Fable (src/ToolUp.AI.Client.Tests, via the VerifyFable recipe)"

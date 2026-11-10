@@ -80,6 +80,49 @@ Two ways to handle this:
 - **Prefer cache-bypass verification.** If the substrate exposes a path that reads via `loadFromStore` (cache-bypass) rather than `cachedRead`, use that path for assertions. The restored `sweepExpired` test in [`TeamInvitationTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/TeamInvitationTests.fs) verifies via `sweepExpired` return values — `sweepExpired` reads through `loadFromStore`, so its return value reflects MY storage's blob regardless of what's in the shared cache.
 - **Escalate to Strategy B.** When the assertion genuinely requires a cache-going read (`listAll` is the canonical case for `PendingInviteStore`), wrap the test or testList in `testSequencedGroup` to remove the concurrency window entirely.
 
+## The doubles the suite uses are the ones the Testing package ships
+
+`ToolUp.Platform.Testing` ships the test doubles and helpers a consumer's tests need, and the SDK's own
+packs use the same ones: **a double the Testing package ships is not re-declared in a test file.** A
+pack that writes its own `InMemorySecretStore`, `RecordingAuditLog`, `SilentLogger`, `CapturingLogger`,
+`RecordingLogger` or `RecordingMetricsSink` has forked the convention a consumer reads; the Build pack's
+`TestDoubleCensusTests` holds the Platform pack to it.
+
+| Need | Shipped | Where |
+|---|---|---|
+| a secret store | `Fakes.TestSecretStore()` (`.Seed`) | `Testing/Fakes.fs` |
+| an audit log that records | `TestAuditLog()` (`.Records`, `.Events`, `.Recording`) | `Testing/Recording.fs` |
+| a metrics sink that records | `Fakes.TestMetricsSink()` (`.Increments`, `.Observations`, `.Gauges`) | `Testing/Fakes.fs` |
+| a logger | `Logger.silent`, `Logger.recording ()` (`.Lines`, `.MessagesAt`, `.Contains`) | `Testing/Loggers.fs` |
+| any other double that records | `Recording<'T>` | `Testing/Recording.fs` |
+| a fixture directory | `TempDir.create "<family>"`, `TempDir.withDir` | `Testing/TempDir.fs` |
+| the time, or a wait | `Clock.system`, `Clock.fixedAt`, `Clock.waitUntil` | `Testing/Clock.fs` |
+| the four server fakes together | `ServerHarness.createDefaultFakes ()` | `Testing/ServerHarness.fs` |
+
+A test whose assertion reads a double differently adapts the snapshot at the call site; the shipped
+double is not widened for one pack. A double that does something the shipped one does not (a store
+that fails writes, a log that refuses) stays local under a name that says so (`FailingSecretStore`),
+never under the shipped double's name. A part pack (`ToolUp.Platform.Tests.Infra` and the rest of the
+family) may not reference the Testing package, which reaches the umbrella; it compiles the Core-only
+helper files by source link (`Recording.fs`, `Clock.fs`, `TempDir.fs`, `Loggers.fs`, and `Fakes.fs` in a
+part pack that reaches the Scope part), never by copy; a companion pack links the ones it uses the same way.
+
+**A double the code under test writes from another thread records into a `Recording<'T>`.** A bare
+`ResizeArray` read while a background job, a timer or a callback appends to it throws "Collection was
+modified" or answers a torn count, so every read takes a snapshot under the lock the writes take; a list
+written and read only on the test's own thread may stay a plain list.
+
+**A fixture that creates a directory owns its deletion: use `TempDir`.** `use dir = TempDir.create
+"<family>"` makes `%TEMP%/toolup-<family>-<guid>` and deletes it on dispose; nothing in a test pack calls
+`Path.GetTempPath()` itself. The rule, the families and the census are in
+[`docs/testing/temp-directories.md`](../testing/temp-directories.md).
+
+**A wait waits on the event, not on the wall clock.** A test that needs the code under test to have done
+something waits on the double it writes (`Recording.WaitUntil`, which wakes on the write); a condition
+no write signals is polled through a `Clock` (`Clock.waitUntil`). A timeout is a hang backstop, sized so
+a loaded machine never reaches it, never the mechanism the assertion relies on: a longer deadline only
+widens a race, it does not remove it.
+
 ## Audit checklist
 
 Every `let mutable` at module scope in `toolup-forge/src/` MUST fall into one of two classes:
