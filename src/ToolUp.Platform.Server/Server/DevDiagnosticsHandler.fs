@@ -410,27 +410,31 @@ let private buildCallerSummary (ctx: HttpContext) (config: ServerConfig) = async
     let authProv =
         ctx.RequestServices.GetService(typeof<IAuthProvider>) :?> IAuthProvider
 
-    let resolver =
-        ctx.RequestServices.GetService(typeof<IStorageScopeResolver>) :?> IStorageScopeResolver
+    let subjects =
+        ctx.RequestServices.GetService(typeof<ISubjectResolver>) :?> ISubjectResolver
 
     let! request = async {
         try
-            return! ScopeRequestExtractor.fromHttpContext ctx authProv
+            return! Middleware.SubjectRequestExtractor.fromHttpContext ctx authProv
         with _ ->
             return
                 ({
                     User = Some AuthenticatedUser.anonymous
                     SessionId = None
+                    SessionIdVerified = false
+                    Claim = None
                     Headers = Map.empty
                 }
-                : ScopeResolutionRequest)
+                : SubjectResolutionRequest)
     }
 
     let user = request.User |> Option.defaultValue AuthenticatedUser.anonymous
 
     let! scopeResult = async {
         try
-            let! r = resolver.Resolve request
+            let! r =
+                SubjectScope.resolve subjects (Middleware.StorageScopeDerivation.tryFromSubject None config) request
+
             return Some r
         with _ ->
             return None

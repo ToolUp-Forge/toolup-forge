@@ -177,7 +177,9 @@ let private guardedStore (consentStore: IGrantConsentStore option) (auditLog: IA
         StoreCounterpartyConsentOracle(consentStore, verifier, (fun () -> now), auditLog)
         :> GrantPolicyGuard.CounterpartyConsentOracle
 
-    inner, GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, oracle, auditLog, None) :> IPermissionStore
+    inner,
+    GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, oracle, auditLog, AccessContext.system "test")
+    :> IPermissionStore
 
 let private liveGrantRecord = {
     State = GrantState.Active

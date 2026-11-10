@@ -237,7 +237,7 @@ type ITeamStore =
 /// `notifications` is required, not optional: every successful
 /// membership write publishes a `MembershipChanged` envelope on
 /// `PlatformReservedScope` so caches that depend on membership
-/// (`TeamScopeResolver` first, future `ConfigHandler` /
+/// (the subject resolver's active-team cache first, future `ConfigHandler` /
 /// `FeatureFlagHandler` caches as they appear) invalidate
 /// structurally rather than via 5-minute TTL. Phase 5d's whole
 /// point is that publication can't be skipped — making the channel

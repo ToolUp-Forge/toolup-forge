@@ -96,16 +96,6 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 let private teamScopeId (teamId: string) : string =
     ScopeKey.container (ScopeKey.Team(TeamId teamId))
 
-let private ensureManageMembers (ts: ITeamStore) (callerUserId: string) (teamId: string) : Async<Result<unit, string>> = async {
-    let! role = ts.GetMemberRole(TeamId teamId, UserId callerUserId)
-
-    match role with
-    | Some r when TeamRoles.canManageMembers r -> return Ok()
-    | Some r ->
-        return Error $"Only team owners and admins can manage invitations. Your role: {TeamRoles.displayName r}."
-    | None -> return Error "You are not a member of this team."
-}
-
 let private buildInviteUrl (publicBaseUrl: string option) (token: string) : Result<string, string> =
     match publicBaseUrl with
     | Some baseUrl -> Ok(sprintf "%s/invite/%s" (baseUrl.TrimEnd('/')) token)
@@ -278,9 +268,17 @@ let teamInvitationApi
                             "Owner role cannot be granted via an invitation. \
                              Use the team ownership-transfer flow instead."
                 else
-                    match! ensureManageMembers teamStore access.UserId req.TeamId with
-                    | Error msg -> return Error msg
-                    | Ok() ->
+                    match!
+                        TeamAuthority.require
+                            teamStore
+                            TeamAuthority.AdminBypass.MembershipOnly
+                            access
+                            (TeamId req.TeamId)
+                            TeamRoles.canManageMembers
+                    with
+                    | Error refusal ->
+                        return Error(TeamAuthority.describe "owners and admins" "manage invitations" refusal)
+                    | Ok _ ->
                         let expiresIn = req.ExpiresIn |> Option.defaultValue TeamInviteTypes.DefaultExpiry
                         let expiresAt = DateTimeOffset.UtcNow.Add expiresIn
 
@@ -494,9 +492,17 @@ let teamInvitationApi
                 match resolved with
                 | None -> return Error "Invitation not found."
                 | Some(teamId, claim) ->
-                    match! ensureManageMembers teamStore access.UserId teamId with
-                    | Error msg -> return Error msg
-                    | Ok() ->
+                    match!
+                        TeamAuthority.require
+                            teamStore
+                            TeamAuthority.AdminBypass.MembershipOnly
+                            access
+                            (TeamId teamId)
+                            TeamRoles.canManageMembers
+                    with
+                    | Error refusal ->
+                        return Error(TeamAuthority.describe "owners and admins" "manage invitations" refusal)
+                    | Ok _ ->
                         match! shareTokenStore.Revoke(teamScopeId teamId, claim.TokenId, UserId access.UserId) with
                         | Error err -> return Error(sprintf "Revoke failed: %A" err)
                         | Ok() ->
@@ -517,9 +523,16 @@ let teamInvitationApi
 
         ListPendingInvites =
             fun teamId -> async {
-                match! ensureManageMembers teamStore access.UserId teamId with
-                | Error msg -> return Error msg
-                | Ok() ->
+                match!
+                    TeamAuthority.require
+                        teamStore
+                        TeamAuthority.AdminBypass.MembershipOnly
+                        access
+                        (TeamId teamId)
+                        TeamRoles.canManageMembers
+                with
+                | Error refusal -> return Error(TeamAuthority.describe "owners and admins" "manage invitations" refusal)
+                | Ok _ ->
                     let! claims =
                         shareTokenStore.ListByResource(teamScopeId teamId, TeamInviteTypes.ResourceKind, teamId)
 
@@ -536,9 +549,17 @@ let teamInvitationApi
                 elif System.String.IsNullOrWhiteSpace req.Email then
                     return Error "Email is required for a pending-by-email invitation."
                 else
-                    match! ensureManageMembers teamStore access.UserId req.TeamId with
-                    | Error msg -> return Error msg
-                    | Ok() ->
+                    match!
+                        TeamAuthority.require
+                            teamStore
+                            TeamAuthority.AdminBypass.MembershipOnly
+                            access
+                            (TeamId req.TeamId)
+                            TeamRoles.canManageMembers
+                    with
+                    | Error refusal ->
+                        return Error(TeamAuthority.describe "owners and admins" "manage invitations" refusal)
+                    | Ok _ ->
                         let expiresIn = req.ExpiresIn |> Option.defaultValue TeamInviteTypes.DefaultExpiry
                         let expiresAt = DateTime.UtcNow.Add expiresIn
 
@@ -761,9 +782,16 @@ let teamInvitationApi
 
         ListPendingInvitesByEmail =
             fun teamId -> async {
-                match! ensureManageMembers teamStore access.UserId teamId with
-                | Error msg -> return Error msg
-                | Ok() ->
+                match!
+                    TeamAuthority.require
+                        teamStore
+                        TeamAuthority.AdminBypass.MembershipOnly
+                        access
+                        (TeamId teamId)
+                        TeamRoles.canManageMembers
+                with
+                | Error refusal -> return Error(TeamAuthority.describe "owners and admins" "manage invitations" refusal)
+                | Ok _ ->
                     let pendingStore =
                         ctx.RequestServices.GetService(typeof<IPendingInviteStore>) :?> IPendingInviteStore
 
@@ -790,9 +818,17 @@ let teamInvitationApi
                             // Idempotent — removing an absent entry succeeds.
                             return Ok()
                         | Some(_, entry) ->
-                            match! ensureManageMembers teamStore access.UserId entry.TeamId with
-                            | Error msg -> return Error msg
-                            | Ok() ->
+                            match!
+                                TeamAuthority.require
+                                    teamStore
+                                    TeamAuthority.AdminBypass.MembershipOnly
+                                    access
+                                    (TeamId entry.TeamId)
+                                    TeamRoles.canManageMembers
+                            with
+                            | Error refusal ->
+                                return Error(TeamAuthority.describe "owners and admins" "manage invitations" refusal)
+                            | Ok _ ->
                                 // `NotFound` here is benign — racing
                                 // revokes can drain the entry between
                                 // the ListAll above and the Remove call;
@@ -829,9 +865,16 @@ let teamInvitationApi
         // in-window `OccurredAt`.
         ListRecentlyExpiredInvites =
             fun teamId -> async {
-                match! ensureManageMembers teamStore access.UserId teamId with
-                | Error msg -> return Error msg
-                | Ok() ->
+                match!
+                    TeamAuthority.require
+                        teamStore
+                        TeamAuthority.AdminBypass.MembershipOnly
+                        access
+                        (TeamId teamId)
+                        TeamRoles.canManageMembers
+                with
+                | Error refusal -> return Error(TeamAuthority.describe "owners and admins" "manage invitations" refusal)
+                | Ok _ ->
                     let now = DateTime.UtcNow
                     let windowStart = now - TeamInviteTypes.ExpiredInviteWindow
 

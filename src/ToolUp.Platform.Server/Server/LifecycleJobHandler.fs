@@ -116,22 +116,27 @@ type LifecycleJobHandler(services: IServiceProvider) =
 
                             ledger.Record(scopeId, phase, outcome.HookName, disposition)
 
-                        let! summary =
-                            TenantLifecycleAggregator.runResumable
-                                emitAudit
-                                (fun () -> ledger.GetCompleted(scopeId, phase))
-                                recordToLedger
-                                (fun partial -> async { snapshot.Set(scopeId, partial) })
-                                LifecycleRetryPolicy.defaults
-                                (TenantLifecycleAggregator.defaultTimeout phase)
-                                hooks
-                                phase
-                                scopeId
-                                actorUserId
+                        let cursor: TenantLifecycleAggregator.LifecycleCursor = {
+                            ReadCompleted = fun () -> ledger.GetCompleted(scopeId, phase)
+                            RecordCompleted = recordToLedger
+                            OnProgress = fun partial -> async { snapshot.Set(scopeId, partial) }
+                            RetryPolicy = LifecycleRetryPolicy.defaults
+                        }
 
-                        do! persistFinal summary
-                        do! ledger.Clear(scopeId, phase)
-                        return Success
+                        // The job is keyed per (phase, scope), so the sweep
+                        // takes no lock of its own; with no guard it always runs.
+                        match!
+                            TenantLifecycleAggregator.runResumable cursor {
+                                TenantLifecycleAggregator.LifecycleRun.create emitAudit hooks phase scopeId actorUserId with
+                                    Guard = None
+                            }
+                        with
+                        | TenantLifecycleAggregator.GuardedRun.Ran summary ->
+                            do! persistFinal summary
+                            do! ledger.Clear(scopeId, phase)
+                            return Success
+                        | TenantLifecycleAggregator.GuardedRun.AlreadyInProgress ->
+                            return TransientFailure "a lifecycle run is already in progress for this scope"
                     with ex ->
                         // Transient — the job re-dispatches; the ledger
                         // lets the retry resume from the last completed hook.
@@ -143,10 +148,17 @@ type LifecycleJobHandler(services: IServiceProvider) =
                     // re-dispatch, but re-runs every hook on restart). The
                     // first-party hooks are idempotent, so a full re-run is
                     // safe.
-                    let! summary = TenantLifecycleAggregator.runWithDefaults emitAudit hooks phase scopeId actorUserId
-
-                    do! persistFinal summary
-                    return Success
+                    match!
+                        TenantLifecycleAggregator.run {
+                            TenantLifecycleAggregator.LifecycleRun.create emitAudit hooks phase scopeId actorUserId with
+                                Guard = None
+                        }
+                    with
+                    | TenantLifecycleAggregator.GuardedRun.Ran summary ->
+                        do! persistFinal summary
+                        return Success
+                    | TenantLifecycleAggregator.GuardedRun.AlreadyInProgress ->
+                        return TransientFailure "a lifecycle run is already in progress for this scope"
         }
 
 /// Construct the background offboard job handler. Resolves its substrate

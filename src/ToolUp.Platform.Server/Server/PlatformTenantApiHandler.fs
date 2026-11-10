@@ -308,13 +308,10 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
     // always `Ran` (Phase 54 behaviour). Persists only on a run.
     let runConfirmedOffboard (scopeId: string) : Async<Result<LifecycleSummary, string>> = async {
         match!
-            TenantLifecycleAggregator.runGuardedWith
-                lifecycleLock
-                emitAudit
-                (resolveHooks ())
-                Deprovisioning
-                scopeId
-                actor
+            TenantLifecycleAggregator.run {
+                TenantLifecycleAggregator.LifecycleRun.create emitAudit (resolveHooks ()) Deprovisioning scopeId actor with
+                    Guard = Some lifecycleLock
+            }
         with
         | TenantLifecycleAggregator.GuardedRun.AlreadyInProgress -> return Error offboardAlreadyInProgress
         | TenantLifecycleAggregator.GuardedRun.Ran summary ->
@@ -337,23 +334,28 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                     match! clearOffboardLedger scopeId with
                     | Error message -> return Error message
                     | Ok() ->
-                        // Phase 305 — thread the deploy-plane ProvisioningRequest
+                        // Thread the deploy-plane ProvisioningRequest
                         // through to the hooks so request-aware hooks
                         // (ConfigSeed / OwnerTeamBootstrap) seed per-deployment
                         // values + the explicit owner rather than schema defaults
                         // / the acting admin. Hooks that don't opt into
                         // ITenantLifecycleProvisionContext are unaffected.
-                        let! summary =
-                            TenantLifecycleAggregator.runGuardedRequest
-                                emitAudit
-                                (Some request)
-                                (resolveHooks ())
-                                Provisioning
-                                scopeId
-                                actor
-
-                        do! persist scopeId summary
-                        return Ok summary
+                        match!
+                            TenantLifecycleAggregator.run {
+                                TenantLifecycleAggregator.LifecycleRun.create
+                                    emitAudit
+                                    (resolveHooks ())
+                                    Provisioning
+                                    scopeId
+                                    actor with
+                                    Request = Some request
+                            }
+                        with
+                        | TenantLifecycleAggregator.GuardedRun.AlreadyInProgress ->
+                            return Error "a lifecycle run is already in progress for this scope"
+                        | TenantLifecycleAggregator.GuardedRun.Ran summary ->
+                            do! persist scopeId summary
+                            return Ok summary
             }
 
         DeprovisionTenant =
@@ -375,8 +377,8 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                     return Ok summary
             }
 
-        // Phase 54a — explicit inline offboard. Same path as
-        // `DeprovisionTenant` above (runGuarded inline + persist); named so
+        // Explicit inline offboard. Same path as `DeprovisionTenant`
+        // above (a guarded `run` + persist); named so
         // callers/tests can request the inline path unambiguously.
         DeprovisionTenantSync =
             fun (scopeId, _wireActor, _reason) -> async {
@@ -443,13 +445,15 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                         // serialises and so never refuses. Persists only on a
                         // completed run.
                         match!
-                            TenantLifecycleAggregator.exportThenDeprovisionWith
-                                lifecycleLock
-                                emitAudit
-                                runExport
-                                (resolveHooks ())
-                                scopeId
-                                actor
+                            TenantLifecycleAggregator.exportThenDeprovision runExport {
+                                TenantLifecycleAggregator.LifecycleRun.create
+                                    emitAudit
+                                    (resolveHooks ())
+                                    Deprovisioning
+                                    scopeId
+                                    actor with
+                                    Guard = Some lifecycleLock
+                            }
                         with
                         | TenantLifecycleAggregator.GuardedExportThenDeprovision.AlreadyInProgress ->
                             return Error offboardAlreadyInProgress

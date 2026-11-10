@@ -1,34 +1,29 @@
 module ToolUp.Platform.Scope.DefaultSubjectResolver
 
 open System
+open System.Threading.Tasks
 open Microsoft.Extensions.Caching.Memory
+open Microsoft.Extensions.Hosting
 open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Config.TeamManagement
 
-// ─── DefaultSubjectResolver — Phase 66 Stream A.3 ────────────────────
+// ─── DefaultSubjectResolver ──────────────────────────────────────────
 //
-// Single implementation of `ISubjectResolver` covering the four-step
-// resolution algorithm (design §3.1). Composes the per-mode behaviour
-// of the retiring `AnonymousScopeResolver` / `AuthenticatedScopeResolver`
-// / `TeamScopeResolver` into one stateless resolver whose decisions are
-// driven by the deployment's `Surfaces: SurfaceProfile list`.
+// The deployment's one resolver: the four-step algorithm (design §3.1),
+// driven by the deployment's `Surfaces: SurfaceProfile list`. Every path
+// that needs a caller's scope — the request middleware, declared work, the
+// diagnostic handlers — resolves a `Subject` here and projects its storage
+// scope with `StorageScopeDerivation`.
 //
-// Active-team caching preserved from `TeamScopeResolver`: 5-minute
-// sliding-TTL `IMemoryCache` entry per `userId`, invalidated event-
-// driven by subscribing to `NotificationKind.PlatformReservedScope`
-// for `MembershipChanged.Removed` / `.ActiveTeamSet` (the two kinds
-// that move the active-team pointer).
+// Active-team caching: a 5-minute sliding-TTL `IMemoryCache` entry per
+// `userId`, invalidated event-driven by subscribing to
+// `NotificationKind.PlatformReservedScope` for `MembershipChanged.Removed`
+// / `.ActiveTeamSet` (the two kinds that move the active-team pointer).
 //
-// `IDisposable` unsubscribes on shutdown — DI registers the resolver
-// as a singleton, so disposal runs once on app teardown.
-//
-// **Additive deployment (Phase 66 Stream A.3 only):** this resolver
-// is authored alongside the existing `IStorageScopeResolver` dispatch
-// in `StorageScopeResolver.fs`. Stream A.6 rewires
-// `ScopeResolutionMiddleware` to call `ISubjectResolver` instead;
-// until then this type compiles and is unit-testable but is not yet
-// wired into the request pipeline.
+// The subscription is taken in `IHostedService.StartAsync` and released in
+// `StopAsync`: a constructor awaits nothing. The composition registers the
+// resolver as a hosted unit; a test that constructs one starts it.
 
 /// Default in-process resolver implementing the four-step algorithm
 /// from design §3.1. Stateless except for the active-team
@@ -77,18 +72,13 @@ type DefaultSubjectResolver
             | MembershipChangeKind.RoleChanged -> ()
         | _ -> ()
 
-    // Composition-time only: constructor runs once at DI singleton
-    // activation before HTTP binds, no ambient sync context to
-    // deadlock against. Mirrors `TeamScopeResolver`'s pattern.
-    let subscriptionId =
-        notifications.Subscribe(NotificationKind.PlatformReservedScope, handle)
-        |> Async.RunSynchronously
+    // Instance state of the hosted service: the subscription StartAsync took.
+    let mutable subscription: NotificationSubscriptionId option = None
 
     /// Step 2a — read the cached active-team pointer or fault in via
     /// `ITeamStore.GetActiveTeam`. A storage failure surfaces as
-    /// `SubjectResolutionFailed` (matching `TeamScopeResolver`'s
-    /// posture — never collapse "storage outage" into "user has no
-    /// active team").
+    /// `SubjectResolutionFailed` — never collapse "storage outage" into
+    /// "user has no active team".
     // `teamStore.Value` is safe inside this body: callers guard
     // entry on `supportsTeam`, which is `true` only when at least
     // one `SurfaceProfile.Team _` is in `surfaces`; the composition
@@ -121,12 +111,30 @@ type DefaultSubjectResolver
                     return Result.Error ex
     }
 
-    interface IDisposable with
-        // Shutdown only: DI registers the resolver as a singleton,
-        // so Dispose runs once on app teardown — not from a
-        // request thread.
-        member _.Dispose() =
-            notifications.Unsubscribe subscriptionId |> Async.RunSynchronously
+    interface IHostedService with
+        member _.StartAsync(cancellationToken) =
+            Async.StartAsTask(
+                async {
+                    if subscription.IsNone then
+                        let! id = notifications.Subscribe(NotificationKind.PlatformReservedScope, handle)
+                        subscription <- Some id
+                },
+                cancellationToken = cancellationToken
+            )
+            :> Task
+
+        member _.StopAsync(cancellationToken) =
+            Async.StartAsTask(
+                async {
+                    match subscription with
+                    | Some id ->
+                        subscription <- None
+                        do! notifications.Unsubscribe id
+                    | None -> ()
+                },
+                cancellationToken = cancellationToken
+            )
+            :> Task
 
     interface ISubjectResolver with
         member _.Resolve(request) = async {

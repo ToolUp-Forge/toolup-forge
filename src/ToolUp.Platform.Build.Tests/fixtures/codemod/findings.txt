@@ -1,4 +1,4 @@
-Codemod: 131 site(s) in 23 file(s) need human review (not rewritten):
+Codemod: 137 site(s) in 24 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] Auth.DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -214,6 +214,19 @@ Codemod: 131 site(s) in 23 file(s) need human review (not rewritten):
       -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
     L23 [878-typed-seam-call] | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
       -> Phase 878: if this is a platform store or service seam, its user and team id parameters are `UserId` / `TeamId` now: wrap a string at the call (`UserId userId`, or `UserId.tryCreate raw` for an id from a request), and read `.Value` where a string is needed; `ITeamStore.GetActiveTeam` answers `TeamId option`
+  src/Server/Lifecycle.fs
+    L8 [1063-lifecycle-wrappers] let summary = TenantLifecycleAggregator.runGuarded audit hooks Provisioning scopeId actor
+      -> Phase 1063: build a `LifecycleRun` (`LifecycleRun.create audit hooks phase scope actor`, then `with Request = Some r` / `Timeout = t` / `Guard = None` for a caller that already holds the scope) and call `run`, `runResumable cursor` or `exportThenDeprovision export`; all three answer whether the guard admitted the run (`GuardedRun.Ran summary` / `AlreadyInProgress`), and `runResumable` takes its ledger, progress and retry policy as one `LifecycleCursor`
+    L9 [1063-export-then-deprovision] let exported = TenantLifecycleAggregator.exportThenDeprovision audit runExport hooks scopeId actor
+      -> Phase 1063: `exportThenDeprovision audit export hooks scope actor` → `exportThenDeprovision export (LifecycleRun.create audit hooks Deprovisioning scope actor)`; it answers `GuardedExportThenDeprovision` (`Ran` / `ExportFailed` / `AlreadyInProgress`), not a `Result`
+    L10 [1063-retired-resolvers] let legacy = new TeamScopeResolver(teams, cache, channel)
+      -> Phase 1063: the per-mode scope resolvers are gone: resolve the subject with the registered `ISubjectResolver` and derive the scope with `StorageScopeDerivation.tryFromSubject` (or `SubjectScope.resolve subjects derive request`); a request's resolved scope is `ScopeResolution.forRequest ctx`; evict a member's cached active team by publishing `MembershipChanged` (`ActiveTeamSet`) on the reserved topic; a test fake is `Fakes.TestSubjectResolver subject`. `X-User-Id` names no caller any more
+    L11 [1063-file-management-registry] let caller = FileManagement.getUserId ctx
+      -> Phase 1063: the session file stores are a registered service: resolve `ISessionFileStores` and `Resolve(dataTypes, dataObjectStore, runtime, scope)` (it awaits the scope's one hydration); the caller id is `AccessContext.callerIdOf ctx.Items`, never the `X-User-Id` header; the eviction TTL is the `SessionFileStores` constructor's
+    L12 [1063-file-contents-async] let contents = m.GetFileContents "data.csv"
+      -> Phase 1063: `GetFileContents` / `getFileContents` answer `Async<string>` now (the scope's store is awaited): bind it with `let!` inside the endpoint's `async`, or use `FromFile`
+    L13 [1063-permission-decorators] let guard = GrantPolicyPermissionStore(inner, registry, audit, "admin")
+      -> Phase 1063: the decorators take the caller's `AccessContext` in place of an actor id or a `unit -> string option` closure; a handler wraps its writes once with `PermissionWrites.asPrincipal principal writes` (the registered `PermissionWrites`), which builds grant policy outside dual control
   src/Server/Models.fs
     L58 [1094-isolated-backend] interface IIsolatedComputeBackend with
       -> Phase 1094: `IIsolatedComputeBackend` is removed: move the posture into the backend's `Capabilities` (`{ BackendCapabilities.none with Isolated = Some <posture> }`) and delete this interface block; the codemod declared `BackendCapabilities.none`, which reads as standard-only until you do
@@ -288,6 +301,7 @@ Codemod: 131 site(s) in 23 file(s) need human review (not rewritten):
     Phase 1053 — docs/migrations/1053-redesign-b-defects-remoting.md
     Phase 1056 — docs/migrations/1056-redesign-b-request-pipeline-as-stages-with-streaming-inside.md
     Phase 1062 — docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md
+    Phase 1063 — docs/migrations/1063-redesign-c-one-resolver-teamauthority-lifecyclerun-sessionfilestores.md
     Phase 1066 — docs/migrations/1066-redesign-d-schedulerpolicy-coalesced-and-joblifecycle-transition.md
     Phase 1067 — docs/migrations/1067-redesign-d-hosting-register-placement-and-options-records.md
     Phase 1068 — docs/migrations/1068-redesign-d-rate-limit-unification.md

@@ -21,7 +21,7 @@ let private assemblies =
         typeof<UserId>.Assembly // ToolUp.Platform.Core
         typeof<ToolUp.Platform.Infra.BlobMapStoreError>.Assembly
         typeof<ToolUp.Platform.Config.TeamManagement.ITeamStore>.Assembly
-        typeof<ToolUp.Platform.Scope.StorageScopeResolver.IStorageScopeResolver>.Assembly
+        typeof<ToolUp.Platform.Scope.DefaultSubjectResolver.DefaultSubjectResolver>.Assembly
         typeof<ToolUp.Platform.Jobs.IPresenceTracker>.Assembly
         typeof<ToolUp.Platform.Audit.IDataExporter.IDataExporter>.Assembly
         typeof<ToolUp.Platform.Compose.ServerApp>.Assembly

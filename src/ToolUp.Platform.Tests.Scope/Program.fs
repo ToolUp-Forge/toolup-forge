@@ -20,7 +20,6 @@ let private registeredTests =
         ShareTokenSigningKeyGovernanceTests.tests
         PermissionStoreTests.tests
         PermissionStoreTests.documentTests
-        StorageScopeResolverTests.tests
         AuthorizationTests.tests
         GoogleIdentityCompanionTests.tests
         ShareTokenStoreTests.tests
@@ -59,6 +58,7 @@ let private registeredTests =
         ModuleVisibilityContractTests.routeRegistryTests
         AnonymousSessionMigratorTests.tests
         DefaultSubjectResolverTests.tests
+        TeamAuthorityTests.tests
         CsrfCarveOutDerivationTests.tests
         SurfaceEnforcementMiddlewareTests.tests
         AnonymousSessionMigrationMiddlewareTests.tests

@@ -123,7 +123,7 @@ let private fileRig (fileName: string) =
     store, dos, scope, refusing
 
 let private reopen (dos: IDataObjectStore) (scope: StorageScope) =
-    SessionFileStore([ dataType ], Some dos, scope, FileManagementRuntime.empty)
+    SessionFileStore.Open([ dataType ], Some dos, scope, FileManagementRuntime.empty)
 
 let tests =
     testList "Phase 971 - PlatformStores" [
@@ -185,7 +185,7 @@ let tests =
 
             Expect.contains (store.GetFiles() |> List.map _.FileName) "data.csv" "still listed in memory"
 
-            let restarted = reopen dos scope
+            let! restarted = reopen dos scope
 
             Expect.contains
                 (restarted.GetFiles() |> List.map _.FileName)
@@ -195,7 +195,8 @@ let tests =
             refusing.Value <- false
             let! retried = store.DeleteFile "data.csv"
             Expect.isOk retried "the retry finishes"
-            Expect.isEmpty ((reopen dos scope).GetFiles()) "gone once the delete goes through"
+            let! reopened = reopen dos scope
+            Expect.isEmpty (reopened.GetFiles()) "gone once the delete goes through"
         }
 
         testCaseAsync "SessionFileStore.ResetDataStore raises on a refused delete"
@@ -207,8 +208,10 @@ let tests =
 
             do! raises (store.ResetDataStore())
 
+            let! reopened = reopen dos scope
+
             Expect.contains
-                ((reopen dos scope).GetFiles() |> List.map _.FileName)
+                (reopened.GetFiles() |> List.map _.FileName)
                 "data.csv"
                 "the refused file is still persisted"
         }

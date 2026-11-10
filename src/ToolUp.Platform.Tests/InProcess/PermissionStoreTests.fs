@@ -35,7 +35,8 @@ let tests =
                 GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations [
                     "Governed", GrantPolicy.RequiresAcknowledgement
                 ],
-                noAudit
+                noAudit,
+                (AccessContext.system "test")
             )
             :> IPermissionStore)
 
@@ -48,7 +49,7 @@ let tests =
                 },
                 BlobAdminMutationApprovalStore(backing),
                 (fun _ -> false),
-                (fun () -> Some "admin"),
+                (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin")),
                 (fun () -> DateTimeOffset.UtcNow),
                 noAudit
             )

@@ -7,7 +7,7 @@ open ToolUp.Platform.Config
 
 // ─── Multi-instance + in-memory notification channel ────────────────
 //
-// `TeamScopeResolver` caches the active-team pointer for 5 minutes and
+// `DefaultSubjectResolver` caches the active-team pointer for 5 minutes and
 // evicts it event-driven on `MembershipChanged` notifications. With the
 // default in-memory `INotificationChannel`, a `RemoveMember` /
 // `SetActiveTeam` on instance A never reaches instance B — so on every
@@ -50,7 +50,7 @@ type NotificationChannelInstanceValidator(config: ServerConfig, ?timeout: TimeSp
                 return
                     Warning(
                         sprintf
-                            "ServerConfig.Surfaces = %s + ReplicaCount = %d + Notifications = %A. TeamScopeResolver evicts its 5-minute active-team / membership cache on MembershipChanged notifications, but the in-memory notification channel does not cross instance boundaries — a RemoveMember or SetActiveTeam handled on one replica never invalidates the others, so a removed user keeps team-scoped data access for up to 5 minutes on every other instance. Set ServerConfig.Notifications = RedisNotifications \"<connection-string>\" (the src/NotificationChannels/Redis companion) so eviction propagates across replicas, or run a single instance."
+                            "ServerConfig.Surfaces = %s + ReplicaCount = %d + Notifications = %A. The subject resolver evicts its 5-minute active-team / membership cache on MembershipChanged notifications, but the in-memory notification channel does not cross instance boundaries — a RemoveMember or SetActiveTeam handled on one replica never invalidates the others, so a removed user keeps team-scoped data access for up to 5 minutes on every other instance. Set ServerConfig.Notifications = RedisNotifications \"<connection-string>\" (the src/NotificationChannels/Redis companion) so eviction propagates across replicas, or run a single instance."
                             (DeploymentConfig.surfacesLabel config)
                             config.MultiInstance.ReplicaCount
                             config.Notifications

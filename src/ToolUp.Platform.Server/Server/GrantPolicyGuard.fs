@@ -441,27 +441,22 @@ let private validateDefaults
 /// `auditLog` is `NoOpAuditLog` in a composition with no audit substrate;
 /// a refusal whose row does not land still refuses (the control is the
 /// refusal, not the row).
-/// **Phase 552 note on the constructors.** The primary takes a
-/// `CounterpartyConsentOracle`, and the secondary keeps the pre-552
-/// argument shape — `(inner, registry, auditLog, ?actorId)` —
-/// delegating with `CounterpartyConsentOracle.denyAll`. That is a
-/// deliberate two-constructor shape rather than a fifth optional
-/// argument: an optional parameter folds into ONE widened constructor,
-/// so adding it would DELETE the existing `..ctor` token from the
-/// public-API baseline (a genuine break, per the documented Phase 175
-/// rule), while an explicit secondary keeps that token and adds one.
-/// Every existing call site, in the SDK and in a consumer, compiles and
-/// behaves identically — and gets the pre-552 refusal by name.
+/// `principal` is the caller whose write this is: its id is the actor every
+/// refusal row records. A request's writes are wrapped once at the handler by
+/// `PermissionWrites.asPrincipal`, which builds this decorator outside the
+/// dual-control one; work with no caller names itself with
+/// `AccessContext.system`. The secondary constructor is the composition with
+/// no consent registry, under which the counterparty arm refuses every grant.
 type GrantPolicyPermissionStore
     (
         inner: IPermissionStore,
         registry: ModuleGrantPolicyRegistry,
         consent: CounterpartyConsentOracle,
         auditLog: IAuditLog,
-        actorId: string option
+        principal: AccessContext
     ) =
 
-    let actor = defaultArg actorId "unknown"
+    let actor = principal.UserId
 
     let record (subjectId: string) (moduleName: string) (refusal: GrantRefusal) (teamId: string) =
         let payload: GrantPolicyRefusedPayload = {
@@ -679,12 +674,9 @@ type GrantPolicyPermissionStore
 
         attempt 0
 
-    /// The pre-552 shape: no consent registry, so the counterparty arm
-    /// refuses every grant exactly as Phase 551 shipped it. Preserved as
-    /// an explicit secondary constructor, not folded into an optional
-    /// parameter — see the type's doc comment for why.
-    new(inner: IPermissionStore, registry: ModuleGrantPolicyRegistry, auditLog: IAuditLog, ?actorId: string) =
-        GrantPolicyPermissionStore(inner, registry, CounterpartyConsentOracle.denyAll, auditLog, actorId)
+    /// No consent registry: the counterparty arm refuses every grant.
+    new(inner: IPermissionStore, registry: ModuleGrantPolicyRegistry, auditLog: IAuditLog, principal: AccessContext) =
+        GrantPolicyPermissionStore(inner, registry, CounterpartyConsentOracle.denyAll, auditLog, principal)
 
     interface IPermissionStore with
         member _.GetTeamPermissions teamId = inner.GetTeamPermissions teamId

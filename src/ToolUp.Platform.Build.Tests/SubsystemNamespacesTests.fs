@@ -873,7 +873,7 @@ let tests =
                     "and its bare name derives nothing"
 
                 Expect.isTrue
-                    (has "ToolUp.Platform.Scope.StorageScopeResolver" "IStorageScopeResolver")
+                    (has "ToolUp.Platform.Scope.StorageScopeResolver" "ScopeResolution")
                     "a moved module's member"
 
             testCase "round-trips through its text form and is the table the Codemod reads"

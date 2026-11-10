@@ -123,9 +123,8 @@ let private mkRig (dataTypes: DataType list) : TestRig =
 
 /// Reconstruct a `SessionFileStore` over the same backing
 /// `IDataObjectStore` + scope as `rig` — simulates a process restart.
-let private reopen (rig: TestRig) (dataTypes: DataType list) : SessionFileStore =
-    let runtime = FileManagementRuntime.empty
-    SessionFileStore(dataTypes, Some rig.DataObjects, rig.Scope, runtime)
+let private reopen (rig: TestRig) (dataTypes: DataType list) : Async<SessionFileStore> =
+    SessionFileStore.Open(dataTypes, Some rig.DataObjects, rig.Scope, FileManagementRuntime.empty)
 
 let private csv = "header_x,header_y\n1,2\n3,4\n"
 
@@ -134,6 +133,37 @@ let private upload fileName contents : DataFileUpload = {
     contents = contents
     dataType = "UnrecognisedData"
 }
+
+/// A blob store whose listing waits on `gate` — a hydration that has not
+/// finished — counting how many listings were asked for.
+type private GatedListing(inner: IBlobStorage, gate: Threading.Tasks.Task) =
+    let mutable listings = 0
+    member _.Listings = listings
+
+    interface IBlobStorage with
+        member _.Upload(c, b, x) = inner.Upload(c, b, x)
+        member _.Download(c, b) = inner.Download(c, b)
+        member _.Delete(c, b) = inner.Delete(c, b)
+
+        member _.List(c, p) = async {
+            Threading.Interlocked.Increment(&listings) |> ignore
+            do! Async.AwaitTask gate
+            return! inner.List(c, p)
+        }
+
+        member _.Exists(c, b) = inner.Exists(c, b)
+        member _.GetMetadata(c, b) = inner.GetMetadata(c, b)
+        member _.DownloadRange(c, b, o, l) = inner.DownloadRange(c, b, o, l)
+        member _.CanComposeFrom = inner.CanComposeFrom
+        member _.ComposeFrom(c, t, s) = inner.ComposeFrom(c, t, s)
+        member _.Erase(c, p, policy, dryRun) = inner.Erase(c, p, policy, dryRun)
+
+let private tempDir () =
+    let dir =
+        Path.Combine(Path.GetTempPath(), "toolup-fm-test-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory dir |> ignore
+    dir
 
 let tests =
     testList "FileManagement" [
@@ -152,7 +182,7 @@ let tests =
             // the entry (it still fires once to populate the in-memory
             // parsed payload, but the entry itself comes from disk).
             let count2 = ref 0
-            let store2 = reopen rig [ mkDataType count2 ]
+            let! store2 = reopen rig [ mkDataType count2 ]
 
             let entries = store2.GetProcessedData()
             Expect.hasLength entries 1 "one entry restored"
@@ -171,7 +201,7 @@ let tests =
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
 
-            let store2 = reopen rig [ mkTypedDataType TestTypeId ]
+            let! store2 = reopen rig [ mkTypedDataType TestTypeId ]
             let entry = store2.GetProcessedData() |> List.exactlyOne
 
             match entry.Summary with
@@ -303,7 +333,7 @@ let tests =
 
             // Reopen with NO registered DataTypes — the persisted entry's
             // DataType is now stale.
-            let store2 = reopen rig []
+            let! store2 = reopen rig []
 
             let entries = store2.GetProcessedData()
             Expect.hasLength entries 1 "stale entry still listed"
@@ -324,7 +354,7 @@ let tests =
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
 
-            let store2 = reopen rig [ mkDataType (ref 0) ]
+            let! store2 = reopen rig [ mkDataType (ref 0) ]
             let files = store2.GetFiles()
 
             Expect.hasLength files 1 "exactly one file listed"
@@ -464,5 +494,82 @@ let tests =
                 |> List.tryFind (fun n -> n = "a.csv" || n.StartsWith "_processed_entry__")
 
             Expect.isNone phantom "no file or sidecar lingers"
+        }
+
+        testCaseAsync "a request carrying only X-User-Id is anonymous to the file API"
+        <| async {
+            let stores = new SessionFileStores.SessionFileStores(60.0) :> ISessionFileStores
+            let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<DataType list>(
+                services,
+                []
+            )
+            |> ignore
+
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<ISessionFileStores>(
+                services,
+                stores
+            )
+            |> ignore
+
+            let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+
+            ctx.RequestServices <-
+                Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+                    services
+
+            ctx.Request.Headers["X-User-Id"] <- Microsoft.Extensions.Primitives.StringValues "alice"
+
+            let! info = (fileManagementApi ctx).GetSessionInfo()
+
+            let! anonymous =
+                stores.Resolve(
+                    [],
+                    None,
+                    FileManagementRuntime.empty,
+                    StorageScope.ofKey true (ScopeKey.User(UserId "anonymous"))
+                )
+
+            let! alice =
+                stores.Resolve(
+                    [],
+                    None,
+                    FileManagementRuntime.empty,
+                    StorageScope.ofKey true (ScopeKey.User(UserId "alice"))
+                )
+
+            Expect.equal info.Epoch anonymous.Epoch "the header names no caller: the request is the anonymous caller's"
+            Expect.notEqual info.Epoch alice.Epoch "and never the user the header claims"
+        }
+
+        testCaseAsync "two requests during hydration both wait on the one hydration and neither holds a thread"
+        <| async {
+            let gate = Threading.Tasks.TaskCompletionSource()
+            let blobs = GatedListing(LocalFileStorage.LocalFileStorage(tempDir ()), gate.Task)
+            let dos = DataObjectStore(blobs) :> IDataObjectStore
+            let stores = new SessionFileStores.SessionFileStores(60.0) :> ISessionFileStores
+
+            let scope =
+                StorageScope.ofKey true (ScopeKey.User(UserId("hydration-" + Guid.NewGuid().ToString "N")))
+
+            let resolve () =
+                stores.Resolve([], Some dos, FileManagementRuntime.empty, scope)
+                |> Async.StartAsTask
+
+            // Both resolutions return a task at once: nothing runs the
+            // hydration synchronously, so no caller's thread is held.
+            let first = resolve ()
+            let second = resolve ()
+            do! Async.Sleep 100
+
+            Expect.isFalse first.IsCompleted "the first request waits for the hydration"
+            Expect.isFalse second.IsCompleted "the second request waits for the same hydration"
+            Expect.equal blobs.Listings 1 "one hydration for the scope, not one per request"
+
+            gate.SetResult()
+            let! a = Async.AwaitTask first
+            let! b = Async.AwaitTask second
+            Expect.isTrue (obj.ReferenceEquals(a, b)) "both requests get the one store"
         }
     ]

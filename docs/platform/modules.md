@@ -93,8 +93,8 @@ let helloApiFactory (ctx: HttpContext) : HelloApi = {
     DoThing =
         fun input -> async {
             // `ctx` is what makes per-request substrate reachable —
-            // e.g. `ScopeRequestExtractor.resolveForContext ctx` for
-            // the caller's `StorageScope`.
+            // e.g. `ScopeResolution.forRequest ctx` for the scope
+            // the platform resolved for the caller.
             return HelloWorld.Server.echoRoutine input
         }
 }

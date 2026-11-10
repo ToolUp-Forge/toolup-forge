@@ -9,7 +9,6 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Auth
-open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
@@ -174,22 +173,13 @@ type TestAuthProvider(user: AuthenticatedUser, ?isCryptographicallyVerified: boo
         member _.ValidateRequest(_) = async { return Ok user }
         member _.IsCryptographicallyVerified = verified
 
-/// `IStorageScopeResolver` that returns a fixed `StorageScope`. The
-/// real resolvers branch on platform mode + request headers; tests
-/// usually want the resolved scope as an arrange input rather than
-/// to exercise the resolver itself.
-type TestStorageScopeResolver(scope: StorageScope) =
-    new(scopeId: string) =
-        TestStorageScopeResolver(
-            {
-                ScopeId = scopeId
-                Container = $"test-{scopeId}"
-                Persist = false
-            }
-        )
-
-    interface IStorageScopeResolver with
-        member _.Resolve(_) = async { return Ok scope }
+/// `ISubjectResolver` that resolves every request to a fixed `Subject`.
+/// The real resolver branches on the deployment's surfaces and the
+/// request; tests usually want the resolved subject as an arrange input
+/// rather than to exercise the resolver itself.
+type TestSubjectResolver(subject: Subject) =
+    interface ISubjectResolver with
+        member _.Resolve(_) = async { return Ok subject }
 
 /// Convenience constructors so tests can compose substrate with one
 /// expression: `let fakes = Fakes.standard ()` returns a record of
@@ -204,4 +194,4 @@ let anonymousAuthProvider () : IAuthProvider =
 
 let authedAuthProvider (user: AuthenticatedUser) : IAuthProvider = TestAuthProvider(user) :> _
 
-let fixedScopeResolver (scopeId: string) : IStorageScopeResolver = TestStorageScopeResolver(scopeId) :> _
+let fixedSubjectResolver (subject: Subject) : ISubjectResolver = TestSubjectResolver(subject) :> _

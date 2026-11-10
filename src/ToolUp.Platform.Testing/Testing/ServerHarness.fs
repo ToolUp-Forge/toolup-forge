@@ -7,7 +7,6 @@ open ToolUp.Platform
 open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Testing.Fakes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
@@ -36,7 +35,7 @@ type ServerFakes = {
     EventStore: IEventStore
     SecretStore: ISecretStore
     AuthProvider: IAuthProvider
-    ScopeResolver: IStorageScopeResolver
+    SubjectResolver: ISubjectResolver
     Scope: StorageScope
 }
 
@@ -60,7 +59,7 @@ let createDefaultFakes () : ServerFakes =
         EventStore = TestEventStore() :> IEventStore
         SecretStore = TestSecretStore() :> ISecretStore
         AuthProvider = TestAuthProvider(AuthenticatedUser.anonymous) :> IAuthProvider
-        ScopeResolver = TestStorageScopeResolver(scope) :> IStorageScopeResolver
+        SubjectResolver = TestSubjectResolver(AnonymousSession scope.ScopeId) :> ISubjectResolver
         Scope = scope
     }
 

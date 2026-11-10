@@ -215,23 +215,6 @@ let private mintTests =
                     Persist = true
                 })
                 "fields naming two principals name neither"
-
-        testCaseAsync "the storage-scope resolvers"
-        <| async {
-            let request: ScopeResolutionRequest = {
-                User = Some alice
-                SessionId = Some "s-1"
-                Headers = Map.empty
-            }
-
-            let! anonymous = (AnonymousScopeResolver() :> IStorageScopeResolver).Resolve request
-            let! ephemeral = (AuthenticatedEphemeralScopeResolver() :> IStorageScopeResolver).Resolve request
-            let! individual = (AuthenticatedScopeResolver() :> IStorageScopeResolver).Resolve request
-
-            Expect.equal anonymous (Ok(StorageScope.ofKey false (ScopeKey.Session "s-1"))) "anonymous"
-            Expect.equal ephemeral (Ok(StorageScope.ofKey false (ScopeKey.User(UserId "alice")))) "ephemeral"
-            Expect.equal individual (Ok(StorageScope.ofKey true (ScopeKey.User(UserId "alice")))) "individual"
-        }
     ]
 
 let private persistenceTests =

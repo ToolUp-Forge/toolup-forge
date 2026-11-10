@@ -168,7 +168,7 @@ let tests =
                         settingsAll,
                         BlobAdminMutationApprovalStore(storageAt (tempDir ())),
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -206,7 +206,7 @@ let tests =
                         settingsAll,
                         approvals,
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -403,7 +403,7 @@ let tests =
                         approvals,
                         nothingIsPolicyBearing,
                         // No resolvable acting administrator.
-                        (fun () -> None),
+                        (AccessContext.system "test"),
                         (fun () -> t0),
                         noAudit
                     )
@@ -572,7 +572,7 @@ let tests =
                         settingsAll,
                         approvals,
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -608,7 +608,7 @@ let tests =
                         settingsPolicyOnly,
                         approvals,
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -644,7 +644,7 @@ let tests =
                         settingsPolicyOnly,
                         approvals,
                         (fun name -> name = "payroll"),
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -742,7 +742,7 @@ let tests =
                         settingsAll,
                         approvals,
                         (fun name -> name = "payroll"),
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -753,7 +753,12 @@ let tests =
                     ]
 
                 let composed =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry, noAudit)
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        gate :> IPermissionStore,
+                        registry,
+                        noAudit,
+                        AccessContext.system "test"
+                    )
                     :> IPermissionStore
 
                 match
@@ -790,7 +795,7 @@ let tests =
                         settingsAll,
                         approvals,
                         (fun name -> name = "payroll"),
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -801,7 +806,12 @@ let tests =
                     ]
 
                 let composed =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry, noAudit)
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        gate :> IPermissionStore,
+                        registry,
+                        noAudit,
+                        AccessContext.system "test"
+                    )
                     :> IPermissionStore
 
                 let outcome =

@@ -5,6 +5,7 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Files.FileManagement
+open ToolUp.Platform.Files.SessionFileStores
 open DataManagementTypes
 open ProcessedDataTypes
 open ToolUp.Platform.Config
@@ -40,11 +41,9 @@ open ToolUp.Platform.Compose
 // server-side, so a pack that did not assert it could not tell a correct
 // implementation from one that had quietly started guessing.
 //
-// These tests mutate module-level state (`storeEvictionMinutes`, the
-// store dictionary) that the whole pack shares, which is safe because
-// every pack runs `Sequenced` by default — see
-// docs/platform/testing-conventions.md. Each case restores the TTL it
-// changed.
+// Each case builds its own `SessionFileStores` (the registry is a service,
+// not module state), so no case shares a store, a marker or a TTL with
+// another; a process restart is a fresh instance.
 
 /// Records every `Record` call so a test can assert audit shape + count.
 type private RecordingAuditLog() =
@@ -114,6 +113,7 @@ let private freshScope () =
     }
 
 type private Rig = {
+    Stores: SessionFileStores ref
     Scope: StorageScope
     Runtime: FileManagementRuntime
     Audit: RecordingAuditLog
@@ -131,27 +131,23 @@ let private mkRig () =
     }
 
     {
+        Stores = ref (new SessionFileStores(60.0))
         Scope = freshScope ()
         Runtime = runtime
         Audit = audit
         Channel = channel
     }
 
-let private resolve (rig: Rig) = getStore [] None rig.Runtime rig.Scope
+/// Resolve a scope's store through `stores`, as a request does.
+let private resolveIn (stores: SessionFileStores) runtime scope =
+    (stores :> ISessionFileStores).Resolve([], None, runtime, scope)
+    |> Async.RunSynchronously
 
-/// Run the eviction sweep with a zero TTL so every ephemeral store is
-/// past its cutoff, then restore whatever the deployment default was.
-/// `configureEvictionMinutes` deliberately refuses a non-positive value,
-/// so the mutable is set directly — the same escape the phase shard
-/// names.
-let private evictEverything () =
-    let previous = storeEvictionMinutes
+let private resolve (rig: Rig) =
+    resolveIn rig.Stores.Value rig.Runtime rig.Scope
 
-    try
-        storeEvictionMinutes <- 0.0
-        __internal_evictNowForTests ()
-    finally
-        storeEvictionMinutes <- previous
+/// Run the eviction sweep with every ephemeral store past its cutoff.
+let private evictEverything (stores: SessionFileStores) = stores.EvictIdleSince DateTime.MaxValue
 
 let private resetNotifications (rig: Rig) =
     rig.Channel.Published
@@ -208,7 +204,7 @@ let tests =
             let before = resolve rig
             let! _ = before.AddFile(upload "SalesData.csv", "tester")
 
-            evictEverything ()
+            evictEverything rig.Stores.Value
 
             let after = resolve rig
 
@@ -226,7 +222,7 @@ let tests =
             let before = resolve rig
             let! _ = before.AddFile(upload "SalesData.csv", "tester")
 
-            evictEverything ()
+            evictEverything rig.Stores.Value
             let after = resolve rig
 
             do! waitFor 2000 (fun () -> not (List.isEmpty (resetNotifications rig)))
@@ -257,7 +253,7 @@ let tests =
             let before = resolve rig
             let! _ = before.AddFile(upload "SalesData.csv", "tester")
 
-            evictEverything ()
+            evictEverything rig.Stores.Value
             resolve rig |> ignore
             // A second resolution after the marker was consumed must not
             // produce a second row — the marker is one-shot, and an
@@ -318,7 +314,7 @@ let tests =
 
             // A restart takes the dictionary AND the eviction markers
             // with it, so the server cannot know a store was ever there.
-            __internal_simulateProcessRestartForTests ()
+            rig.Stores.Value <- new SessionFileStores(60.0)
 
             let after = resolve rig
             do! Async.Sleep 200
@@ -350,11 +346,12 @@ let tests =
             }
 
             let scope = freshScope ()
-            let before = getStore [] None runtime scope
+            let stores = new SessionFileStores(60.0)
+            let before = resolveIn stores runtime scope
             let! _ = before.AddFile(upload "SalesData.csv", "tester")
 
-            evictEverything ()
-            getStore [] None runtime scope |> ignore
+            evictEverything stores
+            resolveIn stores runtime scope |> ignore
 
             do! waitFor 2000 (fun () -> not (List.isEmpty audit.Events))
 
@@ -377,11 +374,12 @@ let tests =
             // request happened to re-create the store.
             let runtime = FileManagementRuntime.empty
             let scope = freshScope ()
-            let before = getStore [] None runtime scope
+            let stores = new SessionFileStores(60.0)
+            let before = resolveIn stores runtime scope
             let! _ = before.AddFile(upload "SalesData.csv", "tester")
 
-            evictEverything ()
-            let after = getStore [] None runtime scope
+            evictEverything stores
+            let after = resolveIn stores runtime scope
 
             Expect.notEqual after.Epoch before.Epoch "the epoch moves whether or not anyone is listening"
         }
