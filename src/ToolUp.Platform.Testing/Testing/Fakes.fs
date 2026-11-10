@@ -11,6 +11,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Auth
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Compose
 
 // ─── Fakes for SDK interfaces ─────────────────────────────────────────
@@ -20,6 +21,14 @@ open ToolUp.Platform.Compose
 // disk, no network, no clock dependency beyond `DateTime.UtcNow` for
 // metadata stamps. Pass each fake through the matching contract pack
 // in `ToolUp.Platform.Tests.Contracts.*Contract` to verify portability.
+//
+// These are the doubles the SDK's own test packs use: a pack does not
+// re-declare a secret store, an audit log (`Recording.fs`), a metrics
+// sink or a logger (`Loggers.fs`) that this package ships. A recording double records
+// into a `Recording<'T>`, so the code under test may write it from any
+// thread while the test reads a snapshot. A test that needs a different
+// assertion shape adapts the snapshot at the call site rather than
+// widening the double.
 
 /// In-memory `IBlobStorage`. Per-(container,blob) byte buffer in a
 /// concurrent dictionary; `List` is a prefix scan within a container.
@@ -153,6 +162,27 @@ type TestSecretStore() =
                 |> Seq.map snd
                 |> List.ofSeq
         }
+
+/// Recording `IMetricsSink`: every observation, increment and gauge set,
+/// in order, as `(name, value, tags)` / `(name, tags)` tuples.
+type TestMetricsSink() =
+    let observations = Recording<string * float * Map<string, string>>()
+    let increments = Recording<string * Map<string, string>>()
+    let gauges = Recording<string * float * Map<string, string>>()
+
+    /// Every `Record` so far, oldest first.
+    member _.Observations = observations.Snapshot()
+
+    /// Every `Increment` so far, oldest first.
+    member _.Increments = increments.Snapshot()
+
+    /// Every `SetGauge` so far, oldest first.
+    member _.Gauges = gauges.Snapshot()
+
+    interface IMetricsSink with
+        member _.Record(name, value, tags) = observations.Add((name, value, tags))
+        member _.Increment(name, tags) = increments.Add((name, tags))
+        member _.SetGauge(name, value, tags) = gauges.Add((name, value, tags))
 
 /// Configurable `IAuthProvider`. Constructed with a fixed authenticated
 /// user; `GetUser` returns it unconditionally, `ValidateRequest`

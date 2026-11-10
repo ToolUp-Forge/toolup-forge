@@ -21,6 +21,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 451 — compute-budget governance ───────────────────────────────
 //
@@ -88,26 +89,16 @@ let private silentChannel =
         member _.Unsubscribe(_) = async { return () }
     }
 
-type private RecordingAuditLog() =
-    // The fit-enqueue path records from a background job while a test reads
-    // the counts, so every read snapshots under the same lock the writes take.
-    let recorded = ResizeArray<string * AuditEvent>()
-    let gate = obj ()
-    member _.Events = lock gate (fun () -> List.ofSeq recorded)
-    member this.Kinds = this.Events |> List.map (snd >> AuditEvent.eventTypeName)
+let private kinds (audit: TestAuditLog) =
+    audit.Events |> List.map AuditEvent.eventTypeName
 
-    member this.CountOf(name: string) =
-        this.Kinds |> List.filter ((=) name) |> List.length
+let private countOf (name: string) (audit: TestAuditLog) =
+    kinds audit |> List.filter ((=) name) |> List.length
 
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            lock gate (fun () -> recorded.Add((scopeId, audit)))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
-            return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq)
-        }
+/// The audit rows as `(stream key, event)` pairs, the shape these
+/// assertions read.
+let private rowsOf (audit: TestAuditLog) =
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
 
 /// A dispatcher that records every spec it was handed and mints a handle.
 /// The submission COUNT is the load-bearing observation in most of these
@@ -190,7 +181,7 @@ let private storeWith (budget: ComputeBudget) (clock: TestClock) =
     store.SetBudget(scope, budget) |> Async.RunSynchronously |> ignore
     store
 
-let private guardWith (store: IComputeBudgetStore) (audit: RecordingAuditLog) (clock: TestClock) =
+let private guardWith (store: IComputeBudgetStore) (audit: TestAuditLog) (clock: TestClock) =
     ComputeBudgetGuard(store, audit = (audit :> IAuditLog), clock = clock.Fn)
 
 // ── the pure policy, exhausted without infrastructure ────────────────────
@@ -351,7 +342,7 @@ let private dispatcherTests =
             "a concurrency cap refuses the (N+1)th run, and the backend never sees it"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith
@@ -386,7 +377,7 @@ let private dispatcherTests =
                 // Without this, the test above is equally consistent with
                 // "the third submission always fails".
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith
@@ -409,7 +400,7 @@ let private dispatcherTests =
             "settling a terminal outcome frees the concurrency slot"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith
@@ -459,7 +450,7 @@ let private dispatcherTests =
             "an allowance is exhausted, and RESETS at the period boundary"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith (ComputeBudget.create ComputeBudgetPeriod.Daily (ComputeBudgetLimits.allowance 2M)) clock
@@ -503,7 +494,7 @@ let private dispatcherTests =
                 // submission shape; the ONLY difference between the two
                 // calls is the declared class.
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let budget =
                     ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 10)
@@ -536,7 +527,7 @@ let private dispatcherTests =
             "transparency — an under-budget deployment gets the inner dispatcher unchanged"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith
@@ -566,7 +557,7 @@ let private dispatcherTests =
                 Expect.equal seenSpec.Kind "render" "the spec is passed through"
                 Expect.equal seenSpec.Payload submitted.Payload "the payload is untouched"
 
-                Expect.isEmpty audit.Kinds "an under-budget submission emits no audit row"
+                Expect.isEmpty (kinds audit) "an under-budget submission emits no audit row"
             })
 
         testCaseAsync
@@ -577,7 +568,7 @@ let private dispatcherTests =
                 // unconstrained class would be paying for accounting it
                 // never uses.
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
                 let store = storeWith ComputeBudget.unrestricted clock
                 let backend = RecordingDispatcher()
 
@@ -598,7 +589,7 @@ let private dispatcherTests =
             "the run-duration cap CLAMPS the spec the backend is handed"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let budget =
                     ComputeBudget.create
@@ -637,7 +628,7 @@ let private dispatcherTests =
             "a backend refusal releases the reservation rather than stranding it"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith
@@ -682,7 +673,7 @@ let private dispatcherTests =
             "Cancel passes through and does NOT settle — teardown is not a terminal state"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith
@@ -723,7 +714,7 @@ let private auditTests =
             "a denial records ComputeBudgetDenied carrying the typed denial verbatim"
             (async {
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith
@@ -741,10 +732,10 @@ let private auditTests =
                 let! refused = budgeted.Submit(scope, spec "fit" SubmitterClass.AgentInitiated)
                 Expect.isError refused "refused"
 
-                Expect.equal (audit.CountOf "ComputeBudgetDenied") 1 "exactly one denial row"
+                Expect.equal ((countOf "ComputeBudgetDenied" audit)) 1 "exactly one denial row"
 
                 match
-                    audit.Events
+                    (rowsOf audit)
                     |> List.tryPick (fun (s, e) ->
                         match e with
                         | ComputeBudgetDenied p -> Some(s, p)
@@ -782,7 +773,7 @@ let private auditTests =
                 // a log flood operators mute, which is the same as not
                 // having the signal.
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
-                let audit = RecordingAuditLog()
+                let audit = TestAuditLog()
 
                 let store =
                     storeWith (ComputeBudget.create ComputeBudgetPeriod.Daily (ComputeBudgetLimits.allowance 10M)) clock
@@ -798,10 +789,10 @@ let private auditTests =
                     let! _ = budgeted.Submit(scope, spec "fit" SubmitterClass.Human)
                     ()
 
-                Expect.equal (audit.CountOf "ComputeBudgetWarning") 1 "exactly one crossing was reported"
+                Expect.equal ((countOf "ComputeBudgetWarning" audit)) 1 "exactly one crossing was reported"
 
                 match
-                    audit.Events
+                    (rowsOf audit)
                     |> List.tryPick (fun (_, e) ->
                         match e with
                         | ComputeBudgetWarning p -> Some p
@@ -820,7 +811,7 @@ let private auditTests =
                     let! _ = budgeted.Submit(scope, spec "fit" SubmitterClass.Human)
                     ()
 
-                Expect.equal (audit.CountOf "ComputeBudgetWarning") 2 "the next period crosses its own threshold"
+                Expect.equal ((countOf "ComputeBudgetWarning" audit)) 2 "the next period crosses its own threshold"
             })
 
         test "both audit cases round-trip through the AuditLog registry" {
@@ -1104,7 +1095,7 @@ type private FitFixture = {
     Scheduler: IJobScheduler
     Registry: IModelRegistry
     Datasets: IDatasetStore
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
     Providers: ModelFitProviderRegistry
     Budget: IComputeBudgetStore
     Guard: ComputeBudgetGuard
@@ -1119,7 +1110,7 @@ let private newFitFixture (budget: ComputeBudget) (clock: TestClock) =
 
     let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
     let schedRoot = Path.Combine(root, "sched")
     Directory.CreateDirectory schedRoot |> ignore
@@ -1258,7 +1249,7 @@ let private fitEnqueueTests =
                     // And the refusal was audited under the fit-enqueue
                     // surface, not the external-compute one.
                     match
-                        fixture.Audit.Events
+                        (rowsOf fixture.Audit)
                         |> List.tryPick (fun (_, e) ->
                             match e with
                             | ComputeBudgetDenied p -> Some p
@@ -1335,7 +1326,7 @@ let private fitEnqueueTests =
                     // Nothing was enqueued and nothing was audited as
                     // submitted — a refused batch leaves no residue.
                     Expect.equal
-                        (fixture.Audit.CountOf "ModelFitBatchSubmitted")
+                        ((countOf "ModelFitBatchSubmitted" fixture.Audit))
                         0
                         "no submission row for work that never happened"
                 finally
@@ -1392,7 +1383,7 @@ let private fitEnqueueTests =
 
                     let! usage = fixture.Budget.ReadUsage(scope, "2026-08")
                     Expect.equal usage.Spent 0M "the budget store was never touched"
-                    Expect.equal (fixture.Audit.CountOf "ComputeBudgetDenied") 0 "and nothing was refused"
+                    Expect.equal ((countOf "ComputeBudgetDenied" fixture.Audit)) 0 "and nothing was refused"
                 finally
                     // The temp root is deliberately NOT deleted: the job
                     // scheduler is still running the item jobs this batch
@@ -1404,6 +1395,60 @@ let private fitEnqueueTests =
             })
     ]
 
+// ── recording doubles are written from threads the test does not own ─────
+//
+// The fit-enqueue path records audit rows from a background job while a
+// test reads the counts. Many writers race one reader here; every read must
+// answer a consistent snapshot and nothing may be lost.
+
+let private recordingStressTests =
+    testList "recording doubles are safe to write from many threads" [
+        testCase "many writers and a concurrent reader neither throw nor lose a row"
+        <| fun () ->
+            let audit = TestAuditLog()
+            let log = audit :> IAuditLog
+            let writers = 8
+            let perWriter = 500
+            let actor = AuditSubject.system "stress"
+
+            let row i =
+                ComputeBudgetWarning {
+                    ScopeId = scope
+                    SubmitterClass = "stress"
+                    PeriodKey = "p"
+                    Quota = 10M
+                    Spent = decimal i
+                    Threshold = 0.8M
+                    Surface = "stress"
+                    ObservedAt = DateTime.UnixEpoch
+                }
+
+            let writing =
+                [
+                    for w in 1..writers ->
+                        async {
+                            for i in 1..perWriter do
+                                let! _ = log.Record(AuditScope.Shard scope, actor, row (w * perWriter + i))
+                                ()
+                        }
+                ]
+                |> Async.Parallel
+                |> Async.StartAsTask
+
+            let mutable reads = 0
+            let mutable last = 0
+
+            while not writing.IsCompleted do
+                let n = (kinds audit).Length
+                Expect.isGreaterThanOrEqual n last "a later snapshot never holds fewer rows"
+                last <- n
+                reads <- reads + 1
+
+            writing.Wait()
+            Expect.equal (countOf "ComputeBudgetWarning" audit) (writers * perWriter) "every row was kept"
+            Expect.isGreaterThan reads 0 "the reader raced the writers"
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 451 — compute-budget governance" [
@@ -1413,4 +1458,5 @@ let tests =
         meteringTests
         storeTests
         fitEnqueueTests
+        recordingStressTests
     ]
