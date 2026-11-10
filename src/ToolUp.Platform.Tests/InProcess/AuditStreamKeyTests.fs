@@ -121,7 +121,7 @@ let private classificationGateKey () = async {
             member _.IsClassified(_, _) = async { return true }
         }
 
-    let ctx = AccessContext.unrestricted (TeamMember("alice", teamId))
+    let ctx = AccessContexts.forSubject (TeamMember("alice", teamId))
     let! _ = ClassificationGate.recordWrites classifier audit ctx "Employee" [ "salary" ]
     return audit.Keys
 }

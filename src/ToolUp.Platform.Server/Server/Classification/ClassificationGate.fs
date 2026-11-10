@@ -47,7 +47,7 @@ module ClassificationGate =
     let private hasReaderCapability (level: ClassificationLevel) (ctx: AccessContext) : bool =
         AccessContext.canModifyPlatformConfig ctx
         || (ctx.ModulePermissions
-            |> Map.tryFind (readerModule level)
+            |> ModulePermissions.tryFind (readerModule level)
             |> Option.map (List.exists (fun granted -> ModulePermission.implies granted ModulePermission.Read))
             |> Option.defaultValue false)
 

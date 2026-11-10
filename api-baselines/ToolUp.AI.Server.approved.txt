@@ -1698,7 +1698,7 @@ ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.isElevatedRead(Tool
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.isOpen(ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState) : System.Boolean
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.levels(ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState, System.DateTime) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.TeamVisibilityLevel, ToolUp.Platform.TeamVisibilityLevel]]
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.resolveState(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.TeamConversationPolicyStore+TeamVisibilityState]]
-ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.resolveViewer(Microsoft.AspNetCore.Http.HttpContext, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer]
+ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.resolveViewer(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Scope.TeamPolicyStore+TeamPolicyViewer]
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibility.teamOf(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext], System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit (class)
 ToolUp.AI.TeamConversationPolicyStore+ConversationVisibilityAudit.ElevatedReadKind : System.String (literal)

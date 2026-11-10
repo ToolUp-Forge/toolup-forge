@@ -60,11 +60,14 @@ module PermissionStoreActionAuthorizer =
                     AuthorizationDecision.Deny
                         $"permissions unavailable, fail-closed: {PermissionStoreError.describe e}"
             | Ok effective ->
+                // An action's permission requirement is default-deny:
+                // only an explicit grant admits it. `Unrestricted` (a team that
+                // never configured module RBAC) holds no grant to cite, so it
+                // denies here exactly as the empty map did.
                 let granted =
-                    effective
-                    |> Map.tryFind moduleName
-                    |> Option.map (List.exists (fun g -> ModulePermission.implies g required))
-                    |> Option.defaultValue false
+                    match effective with
+                    | ModulePermissions.Restricted _ -> ModulePermissions.grants moduleName required effective
+                    | ModulePermissions.Unrestricted -> false
 
                 if granted then
                     return AuthorizationDecision.Allow

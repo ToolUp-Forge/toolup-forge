@@ -63,7 +63,7 @@ type ContentAdminError =
 ///
 /// **And it is a live gate, not a Phase 132 dead one.** `"PlatformAdmin"`
 /// is the *only* role string the default `ForgeAuthContext` resolver can
-/// emit — it bridges to the server-resolved `ToolUp.PlatformRole` from
+/// emit — it bridges to the server-resolved the principal's `PlatformRole` from
 /// `IPlatformAdminStore`, rather than to the `AuthenticatedUser.Roles`
 /// list the first-party providers leave empty. `[<RequiresRole "Owner">]`
 /// / `"Admin"` — the strings the pre-627 comment gestured at — would have

@@ -89,20 +89,8 @@ let private redirectUriFor (ctx: HttpContext) (flowName: string) : string =
 /// for tests bypassing the standard middleware. Mirrors the pattern
 /// in `DataIngestionApiHandler.fs`.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        let teamId =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
-            | _ -> None
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "OAuthFlowHandler")
 
 /// Resolve a service from DI; `None` when the service isn't
 /// registered.

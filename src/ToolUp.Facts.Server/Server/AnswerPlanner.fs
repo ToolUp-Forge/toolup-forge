@@ -1052,9 +1052,9 @@ module AnswerPlanner =
     /// the subject; module permissions play no part in it.
     let compilerAccessContext (scope: StorageScope option) (principal: string) : AccessContext =
         match scope |> Option.bind StorageScope.tryKey with
-        | Some(ScopeKey.Team teamId) -> AccessContext.unrestricted (TeamMember(principal, teamId.Value))
-        | Some(ScopeKey.User _) -> AccessContext.unrestricted (AuthenticatedUser principal)
-        | _ -> AccessContext.unrestricted (AnonymousSession principal)
+        | Some(ScopeKey.Team teamId) -> AccessContext.carrying "answer planner" (TeamMember(principal, teamId.Value))
+        | Some(ScopeKey.User _) -> AccessContext.carrying "answer planner" (AuthenticatedUser principal)
+        | _ -> AccessContext.carrying "answer planner" (AnonymousSession principal)
 
     /// The Phase 706 structured-output compiler over a provider the
     /// platform's `IAIProviderFactory` resolves for `context`. Resolution

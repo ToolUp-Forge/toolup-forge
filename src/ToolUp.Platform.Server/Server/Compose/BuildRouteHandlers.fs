@@ -215,9 +215,8 @@ let buildRouteHandlers
                 ctx.RequestServices.GetService(typeof<IModuleQueryBus>) :?> IModuleQueryBus
 
             let accessContext =
-                match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                | :? AccessContext as ac -> ac
-                | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+                AccessContext.tryResolve ctx.RequestServices
+                |> Option.defaultWith (fun () -> AccessContext.unresolved "BuildRouteHandlers")
 
             {
                 Ask = fun request -> bus.Ask(accessContext, request)
@@ -680,9 +679,8 @@ let buildRouteHandlers
                     |> List.ofSeq
 
                 let accessContext =
-                    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                    | :? AccessContext as ac -> ac
-                    | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+                    AccessContext.tryResolve ctx.RequestServices
+                    |> Option.defaultWith (fun () -> AccessContext.unresolved "BuildRouteHandlers")
 
                 let scopeId =
                     accessContext

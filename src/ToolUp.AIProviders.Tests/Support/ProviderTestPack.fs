@@ -276,7 +276,7 @@ let private runCapabilityGatingConformance (spec: ProviderSpec) (apiKey: string)
 
 // ─── Factory round-trip plumbing ───────────────────────────────────
 
-/// Standard test-user scope. `AccessContext.unrestricted
+/// Standard test-user scope. `AccessContexts.forSubject
 /// (AuthenticatedUser ...)`'s `configScope` resolves to
 /// `{ Container = "user-test-aiproviders"; ... }` — the same string
 /// becomes the `ISecretStore` scope id below.
@@ -519,7 +519,7 @@ let tests (spec: ProviderSpec) : Test =
 
                 let factory = buildFactory spec profile secrets
 
-                let ctx = AccessContext.unrestricted (AuthenticatedUser testUserId)
+                let ctx = AccessContexts.forSubject (AuthenticatedUser testUserId)
 
                 match! factory.Resolve ctx with
                 | Error err ->

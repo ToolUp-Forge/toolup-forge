@@ -300,8 +300,8 @@ let private holdFor
                 let access = AIToolRegistry.reconstructAccessContext ctx
 
                 let scopeId =
-                    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                    | true, (:? StorageScope as s) -> s.ScopeId
+                    match AccessContext.scopeOf ctx.Items with
+                    | Some s -> s.ScopeId
                     | _ -> access.UserId
 
                 let approvalId = Guid.NewGuid()

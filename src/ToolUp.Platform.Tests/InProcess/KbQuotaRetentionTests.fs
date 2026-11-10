@@ -89,7 +89,7 @@ let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (contai
     EventStore = None
     EmbeddingProvider = None
     NarrativeStore = None
-    AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
+    AccessContext = AccessContexts.forSubject (AnonymousSession "user-1")
     OriginalResolver = createDefault ()
     AuditLog = (NoOpAuditLog())
     RecordEnqueue = ignore

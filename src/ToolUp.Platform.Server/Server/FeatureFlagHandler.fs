@@ -70,22 +70,8 @@ let featureFlagApi (declared: FeatureFlag list) (ctx: HttpContext) : IFeatureFla
             }
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests that bypass ScopeResolutionMiddleware
-            // — same pattern as ConfigHandler / AISettingsHandler.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            let teamId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
-                | _ -> None
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "FeatureFlagHandler")
 
     let findDeclared (key: string) =
         declared |> List.tryFind (fun f -> f.Key = key)

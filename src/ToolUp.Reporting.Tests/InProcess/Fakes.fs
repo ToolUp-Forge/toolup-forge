@@ -278,7 +278,7 @@ let jobContext (scopeId: string) (attempt: int) (payload: string) : JobContext =
     // The shape the real scheduler synthesises: scope identity on the
     // subject, unrestricted permissions — a cron run has no caller whose
     // authority it could inherit.
-    AccessContext = AccessContext.unrestricted (TeamMember("_system", scopeId))
+    AccessContext = AccessContexts.forSubject (TeamMember("_system", scopeId))
     Attempt = attempt
     Trigger = CronTrigger "0 6 * * 1"
     Scope = ToolUp.Platform.ResolvedScope.anonymous

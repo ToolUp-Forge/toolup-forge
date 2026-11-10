@@ -71,7 +71,7 @@ let private migrationGateTests =
 
         let ctx = ctxWith sp
         ctx.Request.Path <- PathString "/api/data"
-        ctx.Items["ToolUp.Subject"] <- box (AuthenticatedUser targetUid)
+        AccessContexts.stampSubject ctx.Items ((AuthenticatedUser targetUid))
         ctx.Request.Headers["X-User-Id"] <- StringValues sessionId
 
         match cookie with

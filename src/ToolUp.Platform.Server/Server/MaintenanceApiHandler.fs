@@ -26,22 +26,8 @@ let maintenanceApi
     : MaintenanceApi =
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Same fallback shape as JobApiHandler — the middleware
-            // is the canonical resolver but tests bypass it.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            let teamId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
-                | _ -> None
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "MaintenanceApiHandler")
 
     let scopeOpt = AccessContext.configScope accessContext
 

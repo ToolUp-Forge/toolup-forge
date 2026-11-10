@@ -51,7 +51,7 @@ type private FakeEnvelopeSigner() =
         }
 
 let private admin: AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser "admin-user") with
+    AccessContexts.forSubject (AuthenticatedUser "admin-user") with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 

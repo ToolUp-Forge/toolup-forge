@@ -85,7 +85,7 @@ let private apiOver (secrets: ISecretStore) =
 
     let services = ServiceCollection()
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "user-1"))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "user-1"))
     |> ignore
 
     services.AddSingleton<ISecretStore>(secrets) |> ignore

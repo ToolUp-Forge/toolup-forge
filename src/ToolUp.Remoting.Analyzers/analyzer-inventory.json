@@ -232,6 +232,13 @@
     },
     {
       "rule": "TUA001",
+      "reason": "AccessContext.tryResolve: the one typed read of the request's scoped access context, over the request's own provider (a handler passes ctx.RequestServices). It resolves the context the scope-resolution middleware stamped, which every handler needs as a value and none can receive from a registration factory, and answers None where no principal was resolved.",
+      "sites": {
+        "src/ToolUp.Platform.Core/Shared/Types/AccessContext.fs": 1
+      }
+    },
+    {
+      "rule": "TUA001",
       "reason": "The layout tools' answering executor: an answering tool is composed before any container exists and receives only the request's HttpContext, so it reads ONE value, the LayoutToolsRuntime record its own registration factory built (the page store and the page request resolvers are resolved there, never here). Every other dependency is read from the request's items, as the render tools read theirs.",
       "sites": {
         "src/ToolUp.Facts.Presentation.Server/Server/LayoutTools.fs": 1

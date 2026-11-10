@@ -1009,9 +1009,9 @@ let private demoContext (d: DemoApp) : HttpContext =
         Persist = true
     }
 
-    ctx.Items["ToolUp.StorageScope"] <- box scope
+    AccessContexts.stampScope ctx.Items (scope)
     ScopeResolution.remember ctx scope |> ignore
-    ctx.Items["ToolUp.UserId"] <- box "demo-user"
+    AccessContexts.stampUserId ctx.Items ("demo-user")
     ctx :> HttpContext
 
 /// Open, stage and commit ONE run over the whole population.

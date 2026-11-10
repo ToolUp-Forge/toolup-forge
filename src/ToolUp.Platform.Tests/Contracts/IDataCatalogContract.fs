@@ -534,10 +534,13 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 UserId = "partner-x"
                 TeamId = Some "team-x"
                 Subject = TeamMember("partner-x", "team-x")
-                ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly ] ]
+                ModulePermissions =
+                    ModulePermissions.Restricted(Map.ofList [ "Sales", [ ModulePermission.SchemaOnly ] ])
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 PublicationGrants = []
+                User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+                StorageScope = None
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -551,10 +554,15 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 UserId = "u"
                 TeamId = Some "t"
                 Subject = TeamMember("u", "t")
-                ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly; ModulePermission.Read ] ]
+                ModulePermissions =
+                    ModulePermissions.Restricted(
+                        Map.ofList [ "Sales", [ ModulePermission.SchemaOnly; ModulePermission.Read ] ]
+                    )
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 PublicationGrants = []
+                User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+                StorageScope = None
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -568,10 +576,12 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 UserId = "u"
                 TeamId = Some "t"
                 Subject = TeamMember("u", "t")
-                ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.Read ] ]
+                ModulePermissions = ModulePermissions.Restricted(Map.ofList [ "Sales", [ ModulePermission.Read ] ])
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 PublicationGrants = []
+                User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+                StorageScope = None
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -581,7 +591,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
 
         testCaseAsync "SchemaOnlyGuard: unrestricted (empty map) caller is NOT gated"
         <| async {
-            let ctx = AccessContext.unrestricted (TeamMember("u", "t"))
+            let ctx = AccessContexts.forSubject (TeamMember("u", "t"))
             Expect.isFalse (SchemaOnlyGuard.isSchemaOnlyCaller ctx "Sales") "unrestricted is fail-open"
         }
 

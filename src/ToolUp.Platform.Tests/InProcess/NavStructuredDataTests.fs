@@ -15,8 +15,8 @@ open ToolUp.PublicRendering
 // tree) JSON-LD, absolutised against the base URL. Coverage: shape,
 // audience consistency (gated items omitted), absolute URLs, empty input.
 
-let private anonCtx = AccessContext.unrestricted (AnonymousSession "s")
-let private userCtx = AccessContext.unrestricted (AuthenticatedUser "u")
+let private anonCtx = AccessContexts.forSubject (AnonymousSession "s")
+let private userCtx = AccessContexts.forSubject (AuthenticatedUser "u")
 
 let private nav = [
     NavTree.leaf "Home" "home"

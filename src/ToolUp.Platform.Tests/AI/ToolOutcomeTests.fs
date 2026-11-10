@@ -114,6 +114,7 @@ let private runLoop
         services.AddSingleton<IEventStore>(eventStore) |> ignore
         let ctx = DefaultHttpContext()
         ctx.RequestServices <- services.BuildServiceProvider()
+        ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.anonymous "anonymous")
 
         let registry = AIToolRegistry.AIToolRegistry()
         registry.RegisterAll tools

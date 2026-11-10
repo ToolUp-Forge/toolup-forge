@@ -11,7 +11,7 @@ open ToolUp.Platform.Infra
 
 // ─── Phase 99 — faceted multi-tag browse ────────────────────────────
 
-let private anonCtx = AccessContext.unrestricted (AnonymousSession "s")
+let private anonCtx = AccessContexts.forSubject (AnonymousSession "s")
 
 let private mkPage (slug: string) (tags: string) (status: PublishStatus) : PublicPage = {
     Slug = Slug slug

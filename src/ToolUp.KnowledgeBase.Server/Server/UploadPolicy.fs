@@ -215,16 +215,16 @@ let private usageJsonOptions =
     o
 
 /// Resolve the caller's KB container the same way `KnowledgeApiDeps`
-/// does — a middleware-resolved `ToolUp.StorageScope` first, then a
+/// does — a middleware-resolved the principal's `StorageScope` first, then a
 /// per-user fallback (GP 4: the container comes from the resolver, never
 /// from the caller, so this endpoint cannot report another tenant's
 /// usage no matter what is asked for).
 let private devUsageContainer (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> s.Container
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> s.Container
     | _ ->
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> ScopeKey.container (ScopeKey.User(UserId id))
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> ScopeKey.container (ScopeKey.User(UserId id))
         | _ -> ScopeKey.container (ScopeKey.User(UserId "anonymous"))
 
 let private devUsageHandler: HttpHandler =

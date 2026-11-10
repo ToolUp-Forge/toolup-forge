@@ -102,7 +102,7 @@ let private ctxFor
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx
 
 let private freshTeamStore () =
@@ -258,8 +258,7 @@ let tests =
             let sp = services.BuildServiceProvider() :> IServiceProvider
             let ctx = DefaultHttpContext() :> HttpContext
             ctx.RequestServices <- sp
-            ctx.Items["ToolUp.UserId"] <- box "alice"
-
+            AccessContexts.stampUserId ctx.Items ("alice")
             let api = PlatformApiHandler.teamApi teamConfig ctx
             let! result = api.TransferOwnership("t1", "bob")
 

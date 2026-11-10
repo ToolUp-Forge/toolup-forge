@@ -103,7 +103,7 @@ type private InMemoryJobScheduler() =
 // ─── Handler builder ─────────────────────────────────────────────────
 
 let private adminCtx (userId: string) : AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser userId) with
+    AccessContexts.forSubject (AuthenticatedUser userId) with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 
@@ -138,7 +138,7 @@ let private servicesWith (scheduler: InMemoryJobScheduler) : IServiceProvider =
 let private jobContext (scopeId: string) (jobId: JobId) (runningAt: DateTime) (payload: string) : JobContext = {
     JobId = jobId
     ScopeId = scopeId
-    AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
+    AccessContext = AccessContexts.forSubject (AuthenticatedUser "system")
     Attempt = 1
     Trigger = CronTrigger TenantLifecycleAggregator.ScheduledDeprovisionCron
     Scope = ToolUp.Platform.ResolvedScope.anonymous
@@ -236,7 +236,7 @@ let tests =
             let nonAdmin =
                 let services = ServiceCollection()
 
-                services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "u"))
+                services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "u"))
                 |> ignore
 
                 services.AddSingleton<ServerConfig>(

@@ -108,7 +108,7 @@ type private Bound = {
 }
 
 let private access =
-    AccessContext.unrestricted (Subject.AnonymousSession "metadata-filter")
+    AccessContexts.forSubject (Subject.AnonymousSession "metadata-filter")
 
 let private retrieve (bound: Bound) (filters: Map<string, string> option) (topK: int) : Set<string> =
     let request = {

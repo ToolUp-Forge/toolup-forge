@@ -73,7 +73,7 @@ let private runSurface
     ctx.Response.Body <- body
 
     match stashSubject with
-    | Some s -> ctx.Items[SubjectItemsKey] <- box s
+    | Some s -> AccessContexts.stampSubject ctx.Items (s)
     | None -> ()
 
     let mutable nextInvoked = false
@@ -112,7 +112,7 @@ let private runAdmin (role: PlatformRole option) (method: string) (path: string)
     ctx.Response.Body <- body
 
     match role with
-    | Some r -> ctx.Items["ToolUp.PlatformRole"] <- box r
+    | Some r -> AccessContexts.stampPlatformRole ctx.Items (r)
     | None -> ()
 
     let mutable nextInvoked = false

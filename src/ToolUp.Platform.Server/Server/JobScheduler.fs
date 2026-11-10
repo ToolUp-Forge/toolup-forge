@@ -405,7 +405,7 @@ type InProcessJobScheduler internal (deps: SchedulerDeps, options: SchedulerOpti
             else
                 AnonymousSession SystemUserId
 
-        AccessContext.unrestricted subject
+        AccessContext.carrying "scheduled job" subject
 
     // ─── Lifecycle event emission ────────────────────────────────
 

@@ -32,15 +32,8 @@ open ToolUp.Platform.Infra
 /// — production paths always populate the scoped DI service via the
 /// middleware.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "PlatformAdminApiHandler")
 
 /// Resolve `IPlatformAdminStore` from DI. Returns `Error` when the
 /// service is unavailable — should never happen in production because

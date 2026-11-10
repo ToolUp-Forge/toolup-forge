@@ -29,19 +29,13 @@ open ToolUp.Platform
 // two different scope ids over ONE shared substrate.
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.Items.TryGetValue "ToolUp.AccessContext" with
-    | true, (:? AccessContext as ac) -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    match AccessContext.ofItems ctx.Items with
+    | Some ac -> ac
+    | _ -> AccessContext.unresolved "PresenceApiHandler"
 
 let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as scope) -> scope.ScopeId
+    match AccessContext.scopeOf ctx.Items with
+    | Some scope -> scope.ScopeId
     | _ -> accessContext.UserId
 
 /// Build the whole API over an explicitly-supplied scope + principal.

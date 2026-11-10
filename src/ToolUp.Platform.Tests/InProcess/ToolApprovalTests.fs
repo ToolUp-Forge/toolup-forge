@@ -182,6 +182,7 @@ let private buildHttpContext
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.anonymous "anonymous")
     ctx :> HttpContext
 
 /// Run one turn, capturing every SSE event. `onApproval` is invoked with
@@ -653,8 +654,8 @@ let tests =
             let post (perms: (string * ModulePermission list) list) (approvalId: Guid) (token: string) =
                 let ctx = DefaultHttpContext()
                 ctx.RequestServices <- provider
-                ctx.Items["ToolUp.UserId"] <- box "alice"
-                ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+                AccessContexts.stampUserId ctx.Items ("alice")
+                AccessContexts.stampPermissions ctx.Items (perms)
 
                 let body =
                     JsonSerializer.Serialize(

@@ -24,48 +24,32 @@ type RequestViewer = {
     IsPlatformAdmin: bool
 }
 
-/// Reads a `RequestViewer` off a request's items.
+/// A projection of the request's principal.
 module RequestViewer =
-    /// The viewer the platform's scope resolution stamped on a request's
-    /// items (`ToolUp.Subject`, `ToolUp.UserId`, `ToolUp.PlatformRole`), or
-    /// `None` when it resolved no subject. A background context that copies
-    /// those items forward reads back the same viewer.
-    let ofItems (items: System.Collections.Generic.IDictionary<obj, obj>) : RequestViewer option =
-        let item (key: string) =
-            match items.TryGetValue(box key) with
-            | true, value when not (isNull value) -> Some value
-            | _ -> None
-
-        match item "ToolUp.Subject" with
-        // Phase 1002 — a publication reader is no viewer of an app scope:
-        // no team role, ownership or platform-admin standing is looked up
-        // for it, so every requester-audience check is decided for the
-        // least-privileged viewer and every owner check refuses.
-        | Some(:? Subject as subject) when Subject.kind subject = PublicationReaderKind -> None
-        | Some(:? Subject as subject) ->
-            let fromSubject =
-                match subject with
-                | AnonymousSession sessionId -> sessionId
-                | AuthenticatedUser userId
-                | TeamMember(userId, _)
-                | PublicationReader userId -> userId
-                | ClaimBearer claim -> claim.AttributedHandle |> Option.defaultValue claim.IssuedBy
-
+    /// The viewer an access context stands for, or `None` for a publication
+    /// reader: it is no viewer of an app scope, so no team role, ownership or
+    /// platform-admin standing is looked up for it, every requester-audience
+    /// check is decided for the least-privileged viewer and every owner check
+    /// refuses. The user id is `AccessContext.callerId`: a machine principal
+    /// is named by its account, never "anonymous".
+    let ofAccess (access: AccessContext) : RequestViewer option =
+        match access.Subject with
+        | PublicationReader _ -> None
+        | subject ->
             Some {
-                UserId =
-                    match item "ToolUp.UserId" with
-                    | Some(:? string as userId) when not (System.String.IsNullOrWhiteSpace userId) -> UserId userId
-                    | _ -> UserId fromSubject
+                UserId = UserId(AccessContext.callerId access)
                 ActiveTeamId =
                     match subject with
                     | TeamMember(_, teamId) -> Some(TeamId teamId)
                     | _ -> None
-                IsPlatformAdmin =
-                    match item "ToolUp.PlatformRole" with
-                    | Some(:? PlatformRole as role) -> role = PlatformRole.PlatformAdmin
-                    | _ -> false
+                IsPlatformAdmin = access.PlatformRole = Some PlatformRole.PlatformAdmin
             }
-        | _ -> None
+
+    /// The viewer of the principal stamped on a request's items, or `None`
+    /// when none was stamped. A background context that copies the principal
+    /// forward reads back the same viewer.
+    let ofItems (items: System.Collections.Generic.IDictionary<obj, obj>) : RequestViewer option =
+        AccessContext.ofItems items |> Option.bind ofAccess
 
 /// The ambient request viewer (Phase 896) — the same `AsyncLocal` carrier
 /// shape the platform's other request-scoped context takes (GP 7). The

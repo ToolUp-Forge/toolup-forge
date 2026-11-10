@@ -28,8 +28,8 @@ open ToolUp.PublicRendering
 // "scope by AccessContext" behaviour is impl-specific and exercised in
 // the impl-specific tests, not the conformance bar.
 
-let private anon = AccessContext.unrestricted (AnonymousSession "contract-anon")
-let private user = AccessContext.unrestricted (AuthenticatedUser "contract-user")
+let private anon = AccessContexts.forSubject (AnonymousSession "contract-anon")
+let private user = AccessContexts.forSubject (AuthenticatedUser "contract-user")
 
 let tests (name: string) (factory: unit -> IContentSource) =
 

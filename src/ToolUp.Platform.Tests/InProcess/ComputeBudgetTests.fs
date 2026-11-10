@@ -1176,7 +1176,7 @@ let private apiFor (fixture: FitFixture) (userId: string) : ModelExecutionApi =
     services.AddSingleton<ModelFitProviderRegistry> fixture.Providers |> ignore
     services.AddSingleton<ComputeBudgetGuard> fixture.Guard |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userId))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser userId))
     |> ignore
 
     let ctx = DefaultHttpContext() :> HttpContext

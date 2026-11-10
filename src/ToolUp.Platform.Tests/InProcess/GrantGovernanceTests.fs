@@ -133,7 +133,7 @@ let private registryOf declarations =
 type private FailingStore(message: string) =
     interface IPermissionStore with
         member _.GetTeamPermissions _ = async { return Ok TeamPermissions.empty }
-        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
+        member _.GetEffectivePermissions(_, _) = async { return Ok ModulePermissions.Unrestricted }
         member _.GetModuleExposure _ = async { return Ok Map.empty }
         member _.UpdateTeamPermissions(_, _) = async { return Error message }
         member _.SetModuleExposure(_, _, _) = async { return Error message }
@@ -197,17 +197,15 @@ let private buildContext
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampUserId ctx.Items ("alice")
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = "t1"
-            Container = "team-t1"
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = "t1"
+        Container = "team-t1"
+        Persist = true
+    }
 
-    if not (List.isEmpty perms) then
-        ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+    AccessContexts.stampPermissions ctx.Items perms
 
     if not (List.isEmpty grants) then
         ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box (Map.ofList grants)
@@ -221,10 +219,12 @@ let private accessFor (perms: (string * ModulePermission list) list) = {
     UserId = "alice"
     TeamId = Some "t1"
     Subject = TeamMember("alice", "t1")
-    ModulePermissions = Map.ofList perms
+    ModulePermissions = AccessContexts.permissionsOf perms
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     PublicationGrants = []
+    User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+    StorageScope = None
     ModuleExposure = Map.empty
     PlatformRole = None
 }
@@ -633,14 +633,13 @@ let tests =
 
                 let ctx = DefaultHttpContext()
                 ctx.RequestServices <- services.BuildServiceProvider()
-                ctx.Items["ToolUp.UserId"] <- box "alice"
+                AccessContexts.stampUserId ctx.Items ("alice")
 
-                ctx.Items["ToolUp.StorageScope"] <-
-                    box {
-                        ScopeId = "t1"
-                        Container = "team-t1"
-                        Persist = true
-                    }
+                AccessContexts.stampScope ctx.Items {
+                    ScopeId = "t1"
+                    Container = "team-t1"
+                    Persist = true
+                }
 
                 ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <-
                     box (Map.ofList [ "Payroll", pendingRecord GrantPolicy.RequiresSubjectConsent "onboarding" ])
@@ -680,7 +679,7 @@ let tests =
 
                 let ctx = DefaultHttpContext()
                 ctx.RequestServices <- services.BuildServiceProvider()
-                ctx.Items["ToolUp.UserId"] <- box "alice"
+                AccessContexts.stampUserId ctx.Items ("alice")
 
                 ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <-
                     box (Map.ofList [ "Payroll", activeRecord GrantPolicy.RequiresSubjectConsent "onboarding" ])

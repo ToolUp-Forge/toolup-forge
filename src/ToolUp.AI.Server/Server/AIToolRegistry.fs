@@ -141,7 +141,7 @@ let isSdkReservedToolSource (sourceModule: string) : bool =
 let isToolSourcePermittedFor (access: AccessContext) (sourceModule: string) : bool =
     if
         isSdkReservedToolSource sourceModule
-        && not (access.ModulePermissions.ContainsKey sourceModule)
+        && (ModulePermissions.tryFind sourceModule access.ModulePermissions).IsNone
     then
         // A reserved source the deployment has not named: not a module,
         // so there is nothing to check here. Its own internal per-target
@@ -378,93 +378,31 @@ module ToolGate =
 
             $"tool '{toolName}' declares effects outside this deployment's tool policy ceiling: {named}"
 
-/// Phase 36.A — reconstruct the caller's `AccessContext` from the
-/// per-request items.
+/// Phase 36.A — the caller's `AccessContext`, read from the per-request
+/// items.
 ///
 /// **Why items rather than DI, and why this is load-bearing.** Tool
 /// dispatch runs inside the agent loop's *background* `HttpContext`
 /// (`AIAssistantHandler.createBackgroundContext`), which carries its own
-/// DI scope. The DI `AccessContext` factory reads the live request via
-/// `IHttpContextAccessor`, which is null/unreliable on that background
-/// flow — resolving it there would silently yield an *unrestricted*
-/// anonymous context and this whole gate would pass everything. The
-/// background context copies `ToolUp.StorageScope` / `ToolUp.UserId` /
-/// `ToolUp.ModulePermissions` forward, so reading them back is the
-/// RBAC-correct path (GP 4), and it works unchanged on a real request
-/// context because the same middleware populates the same items.
-///
-/// `ModulePermissions` is the field the gates read; the rest are
-/// populated for the audit trail's subject attribution. The one
-/// reconstruction: the built-in `_platform.ai.*` tools call it too.
+/// DI scope; the DI factory reads the live request via
+/// `IHttpContextAccessor`, which is null/unreliable on that flow. The
+/// background context copies the principal `ScopeResolutionMiddleware`
+/// stamped (ONE record under `AccessContext.ItemsKey`, never
+/// reassembled from separate permission / subject / role stamps) forward,
+/// so reading it back is the RBAC-correct path (GP 4), and it works
+/// unchanged on a real request context. A context with no stamped
+/// principal is served under `AccessContext.unresolved`, which grants
+/// nothing. The built-in `_platform.ai.*` tools call it too.
 let reconstructAccessContext (ctx: HttpContext) : AccessContext =
-    let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
-    let scopeOpt =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> Some s
-        | _ -> None
-
-    let teamId =
-        scopeOpt |> Option.bind StorageScope.tryTeamId |> Option.map TeamId.value
-
-    let modulePermissions =
-        match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
-        | true, (:? Map<string, ModulePermission list> as perms) -> perms
-        | _ -> Map.empty
-
-    let moduleExposure =
-        match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
-        | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
-        | _ -> Map.empty
-
-    let platformRole =
-        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-        | true, (:? PlatformRole as role) -> Some role
-        | _ -> None
-
-    let subject =
-        match ctx.Items.TryGetValue "ToolUp.Subject" with
-        | true, (:? Subject as s) -> s
-        | _ ->
-            match teamId with
-            | Some tid -> TeamMember(userId, tid)
-            | None when userId <> "anonymous" -> AuthenticatedUser userId
-            | None -> AnonymousSession userId
-
-    {
-        UserId = userId
-        TeamId = teamId
-        Subject = subject
-        ModulePermissions = modulePermissions
-        // Phase 987 — the same provider-asserted roles the request's
-        // scoped `AccessContext` carries (Phase 993: API roles plus
-        // directory roles — `AuthenticatedUser.pageRoles`).
-        TokenRoles =
-            match ctx.Items.TryGetValue "ToolUp.User" with
-            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                AccessContext.tokenRolesFor subject (ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user)
-            | _ -> []
-        // Phase 996 — the provider's admission, under the same rule.
-        Admission =
-            match ctx.Items.TryGetValue "ToolUp.User" with
-            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                AccessContext.admissionFor subject user.Admission
-            | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
-        ModuleExposure = moduleExposure
-        PlatformRole = platformRole
-        // Phase 1107 — grants are read only by the `Publication` page
-        // audience, which this path never evaluates.
-        PublicationGrants = []
-    }
+    match ctx.Items.TryGetValue AccessContext.ItemsKey with
+    | true, (:? AccessContext as access) -> access
+    | _ -> AccessContext.unresolved "AIToolRegistry"
 
 // ─── Phase 730 — the grant / consent gate on the AI path ─────────────
 //
 // Phases 551 and 552 each closed their own dispatch seam and each
 // recorded, in its Outcome, that this one was still open:
-// `ListAccessible` and `PlatformAITools` read `ToolUp.ModulePermissions`
+// `ListAccessible` and `PlatformAITools` read the principal's `ModulePermissions`
 // and nothing else, so a grant that was PENDING the subject's acceptance,
 // or whose counterparty consent had been REVOKED, was inert at the
 // Remoting seam while its module stayed listed to the model and callable
@@ -582,8 +520,8 @@ let gateToolResult (ctx: HttpContext) (toolName: string) (entityNames: string li
     with
     | (:? IEgressGate as gate), (:? IFieldClassifier as classifier) ->
         let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
+            match AccessContext.callerIdOf ctx.Items with
+            | Some id -> id
             | _ -> "anonymous"
 
         let crossing =
@@ -672,8 +610,8 @@ let guardToolGrant (ctx: HttpContext) (access: AccessContext) (moduleName: strin
         let auditLog = ToolUp.Platform.Config.Background.auditLogOf ctx
 
         let scopeId =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> s.ScopeId
+            match AccessContext.scopeOf ctx.Items with
+            | Some s -> s.ScopeId
             | _ -> access.UserId
 
         let verdict =
@@ -731,8 +669,8 @@ let recordUnauthorizedToolDenial
                 Reason =
                     $"AI tool '{toolName}' requires Read on module '{sourceModule}', which this caller does not hold."
                 ScopeId =
-                    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                    | true, (:? StorageScope as s) -> Some s.ScopeId
+                    match AccessContext.scopeOf ctx.Items with
+                    | Some s -> Some s.ScopeId
                     | _ -> None
                 CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
             }

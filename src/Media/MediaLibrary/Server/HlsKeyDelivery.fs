@@ -315,13 +315,13 @@ let private service<'T> (ctx: HttpContext) : 'T option =
         | resolved -> Some(resolved :?> 'T)
 
 let private scopeContainerOf (ctx: HttpContext) : string option =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> Some s.Container
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> Some s.Container
     | _ -> None
 
 let private subjectOf (ctx: HttpContext) : Subject =
-    match ctx.Items.TryGetValue "ToolUp.Subject" with
-    | true, (:? Subject as s) -> s
+    match AccessContext.subjectOf ctx.Items with
+    | Some s -> s
     | _ -> AnonymousSession ""
 
 /// Emit a denial through the uniform Phase 120 authz-denial seam, so a

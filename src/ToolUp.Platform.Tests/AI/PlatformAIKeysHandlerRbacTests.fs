@@ -181,12 +181,12 @@ let private stubTeamStore (teams: TeamInfo list) : ITeamStore =
 // ─── AccessContext + HttpContext helpers ─────────────────────────
 
 let private adminContext: AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser "admin-user") with
+    AccessContexts.forSubject (AuthenticatedUser "admin-user") with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 
 let private nonAdminContext: AccessContext =
-    AccessContext.unrestricted (AuthenticatedUser "regular-user")
+    AccessContexts.forSubject (AuthenticatedUser "regular-user")
 
 /// Build an HttpContext with `AccessContext` + `IPlatformAIKeyStore`
 /// (+ optionally `ITeamStore`) registered in DI, mirroring the

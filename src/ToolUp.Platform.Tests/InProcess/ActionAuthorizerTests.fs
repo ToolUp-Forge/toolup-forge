@@ -28,10 +28,12 @@ let private teamCtx (userId: string) (teamId: string) : AccessContext = {
     UserId = userId
     TeamId = Some teamId
     Subject = TeamMember(userId, teamId)
-    ModulePermissions = Map.empty
+    ModulePermissions = ModulePermissions.Unrestricted
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     PublicationGrants = []
+    User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+    StorageScope = None
     ModuleExposure = Map.empty
     PlatformRole = None
 }
@@ -40,10 +42,12 @@ let private userCtx (userId: string) (perms: Map<string, ModulePermission list>)
     UserId = userId
     TeamId = None
     Subject = AuthenticatedUser userId
-    ModulePermissions = perms
+    ModulePermissions = ModulePermissions.Restricted(perms)
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     PublicationGrants = []
+    User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+    StorageScope = None
     ModuleExposure = Map.empty
     PlatformRole = None
 }

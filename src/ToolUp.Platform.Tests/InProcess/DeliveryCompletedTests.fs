@@ -137,7 +137,7 @@ type private RecordingScheduler() =
                 let ctx: JobContext = {
                     JobId = jobId
                     ScopeId = registration.ScopeId
-                    AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId.Value)
+                    AccessContext = AccessContexts.forSubject (AuthenticatedUser byUserId.Value)
                     Attempt = 1
                     Trigger = registration.Trigger
                     Scope = scope |> Option.defaultValue ResolvedScope.anonymous
@@ -635,7 +635,7 @@ let private jobTests =
             let requestServices = ServiceCollection()
             requestServices.AddSingleton<IJobScheduler>(r.Scheduler) |> ignore
 
-            requestServices.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userScope))
+            requestServices.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser userScope))
             |> ignore
 
             let ctx = DefaultHttpContext()
@@ -662,7 +662,7 @@ let private jobTests =
             let requestServices = ServiceCollection()
             requestServices.AddSingleton<IJobScheduler>(r.Scheduler) |> ignore
 
-            requestServices.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "user-1042b"))
+            requestServices.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "user-1042b"))
             |> ignore
 
             let ctx = DefaultHttpContext()

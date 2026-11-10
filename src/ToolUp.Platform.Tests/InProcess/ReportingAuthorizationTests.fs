@@ -114,8 +114,8 @@ let private authenticatedContext () = async {
         Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
-    ctx.Items["ToolUp.User"] <- box user
-    ctx.Items["ToolUp.Subject"] <- box (Subject.AuthenticatedUser "u-619")
+    AccessContexts.stampUser ctx.Items (user)
+    AccessContexts.stampSubject ctx.Items ((Subject.AuthenticatedUser "u-619"))
     let! forge = ApiSeams.defaultForgeAuthContextResolver ctx
     return bridge forge
 }

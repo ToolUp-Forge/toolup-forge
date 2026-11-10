@@ -129,8 +129,8 @@ module ConversationVisibility =
         match ctx.RequestServices.GetService(typeof<AccessContext>) with
         | :? AccessContext as ac -> Some ac
         | _ ->
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, _ -> Some(AIToolRegistry.reconstructAccessContext ctx)
+            match AccessContext.scopeOf ctx.Items with
+            | Some _ -> Some(AIToolRegistry.reconstructAccessContext ctx)
             | _ -> None
 
     /// Load the request's team state; `None` outside a team scope.
@@ -161,8 +161,8 @@ module ConversationVisibility =
     /// The viewer, with their role in `teamId` read from `ITeamStore`
     /// (`None` when no team store is composed — fail closed) and their
     /// platform role from the request's `AccessContext`.
-    let resolveViewer (ctx: HttpContext) (userId: string) (teamId: string) : Async<ConversationViewer> =
-        TeamPolicyViewer.resolve ctx.RequestServices (accessOf ctx) userId teamId
+    let resolveViewer (ctx: HttpContext) (teamId: string) : Async<ConversationViewer> =
+        TeamPolicyViewer.resolve ctx.RequestServices (accessOf ctx) teamId
 
 // ─── Audit rows ──────────────────────────────────────────────────
 //
@@ -352,7 +352,7 @@ let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilit
             fun () -> async {
                 match team, storage with
                 | Some(userId, teamId, container), Some storage ->
-                    let! viewer = ConversationVisibility.resolveViewer ctx userId teamId
+                    let! viewer = ConversationVisibility.resolveViewer ctx teamId
 
                     match! TeamPolicyStore(storage).Read container with
                     | Ok record -> return viewOf record viewer
@@ -374,7 +374,7 @@ let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilit
             fun requested -> async {
                 match team, storage with
                 | Some(userId, teamId, container), Some storage ->
-                    let! viewer = ConversationVisibility.resolveViewer ctx userId teamId
+                    let! viewer = ConversationVisibility.resolveViewer ctx teamId
 
                     let decide (record: TeamConversationPolicyRecord) =
                         let current = TeamConversationPolicyRecord.current settings.Default record

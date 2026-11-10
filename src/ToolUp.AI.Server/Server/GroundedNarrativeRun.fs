@@ -1405,7 +1405,8 @@ type GroundedNarrativeRunner
         | Some access -> access
         | None ->
             AccessContext.forConfigScope definition.Principal scope
-            |> Option.defaultWith (fun () -> AccessContext.unrestricted (AuthenticatedUser definition.Principal))
+            |> Option.defaultWith (fun () ->
+                AccessContext.carrying "narrative run" (AuthenticatedUser definition.Principal))
 
     /// The request context the agent loop and the fact tools read: the run's
     /// resolved scope (carried, never minted) and principal, over a fresh DI
@@ -1414,9 +1415,18 @@ type GroundedNarrativeRunner
         let diScope = services.GetRequiredService<IServiceScopeFactory>().CreateScope()
         let ctx = DefaultHttpContext()
         ctx.RequestServices <- diScope.ServiceProvider
-        ctx.Items["ToolUp.StorageScope"] <- box storage
         StorageScopeResolver.ScopeResolution.carry ctx resolved
-        ctx.Items["ToolUp.UserId"] <- box principal
+
+        let subject =
+            match StorageScope.tryTeamId storage with
+            | Some teamId -> TeamMember(principal, teamId.Value)
+            | None -> AuthenticatedUser principal
+
+        AccessContext.stamp ctx.Items {
+            AccessContext.carrying "narrative run" subject with
+                StorageScope = Some storage
+        }
+
         ctx :> HttpContext, diScope
 
     /// Phase 1136 — run `project` under the run's projection context: the

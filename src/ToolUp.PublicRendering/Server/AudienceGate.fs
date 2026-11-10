@@ -54,8 +54,8 @@ module AudienceGate =
     /// configured no RBAC must keep working for its users. It is wrong for
     /// a page that names the roles allowed to read it: there the author has
     /// restricted the page, and a principal with no configured permissions
-    /// has been granted none of those roles. An empty map therefore holds
-    /// no role.
+    /// has been granted none of those roles. `Unrestricted` therefore
+    /// holds no role: it names no module, so it names no role key.
     ///
     /// Phase 987 — OR the identity provider asserted the role:
     /// `AccessContext.TokenRoles` (the token's role and group claims, as
@@ -65,7 +65,7 @@ module AudienceGate =
     /// comparison is exact (ordinal, case-sensitive), as the IdP issues it.
     let private holdsRole (ctx: AccessContext) (role: string) : bool =
         (ctx.ModulePermissions
-         |> Map.tryFind role
+         |> ModulePermissions.tryFind role
          |> Option.exists (fun perms -> not (List.isEmpty perms)))
         || List.contains role ctx.TokenRoles
 

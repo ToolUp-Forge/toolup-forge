@@ -16,6 +16,56 @@ type PublicationReaderGrant = {
     Role: string
 }
 
+/// A principal's module permissions, as a closed type. The empty
+/// map used to mean two things — "this team never configured permissions"
+/// and "nothing was resolved" — and both read as every module. Now the
+/// first is stated (`Unrestricted`) and the second cannot be: `Restricted
+/// Map.empty` grants NOTHING.
+[<RequireQualifiedAccess>]
+type ModulePermissions =
+    /// No module RBAC applies: the team never configured permissions (the
+    /// pre-RBAC default, decided by the permission store), the subject is
+    /// in no team, or the work is a named system context. Every module is
+    /// accessible.
+    | Unrestricted
+    /// Module RBAC applies: keys are module names, values the permissions
+    /// held on each (`[Read]`, `[Read; Write]`, `[Admin]`). A module absent
+    /// from the map, or mapped to an empty list, is not accessible.
+    | Restricted of Map<string, ModulePermission list>
+
+module ModulePermissions =
+    /// The value that grants nothing.
+    let none = ModulePermissions.Restricted Map.empty
+
+    /// The permissions held on `moduleName`: `None` under `Unrestricted`
+    /// (no list applies — every permission is held) and for a module the
+    /// restricted map does not name.
+    let tryFind (moduleName: string) (permissions: ModulePermissions) : ModulePermission list option =
+        match permissions with
+        | ModulePermissions.Unrestricted -> None
+        | ModulePermissions.Restricted map -> Map.tryFind moduleName map
+
+    /// Whether `moduleName` is accessible at all.
+    let grantsAccess (moduleName: string) (permissions: ModulePermissions) : bool =
+        match permissions with
+        | ModulePermissions.Unrestricted -> true
+        | ModulePermissions.Restricted map ->
+            map
+            |> Map.tryFind moduleName
+            |> Option.map (fun perms -> not (List.isEmpty perms))
+            |> Option.defaultValue false
+
+    /// Whether `required` is held on `moduleName`, honouring the Read / Write /
+    /// Admin hierarchy (`ModulePermission.implies`).
+    let grants (moduleName: string) (required: ModulePermission) (permissions: ModulePermissions) : bool =
+        match permissions with
+        | ModulePermissions.Unrestricted -> true
+        | ModulePermissions.Restricted map ->
+            map
+            |> Map.tryFind moduleName
+            |> Option.map (List.exists (fun granted -> ModulePermission.implies granted required))
+            |> Option.defaultValue false
+
 /// Per-request access context, resolved from the authenticated user (or
 /// share-token claim, for `ClaimBearer` subjects) and the platform's
 /// permission configuration. Permissions are SDK-owned, not derived
@@ -41,13 +91,12 @@ type AccessContext = {
     /// on `Subject` directly or call `AccessContext.kindLabel` /
     /// `inTeamScope` / `isAnonymous` / `claim` per design §2.7.
     Subject: Subject
-    /// Module-level permissions. **Empty map = unrestricted** — the
-    /// RBAC feature is opt-in per deployment / team; teams that
-    /// haven't configured permissions let every member access every
-    /// module (the default, pre-RBAC behaviour). When populated, keys are
-    /// module names and values are permission lists (e.g. `[Read]`,
-    /// `[Read; Write]`, `[Admin]`).
-    ModulePermissions: Map<string, ModulePermission list>
+    /// Module-level permissions. a closed type: `Unrestricted`
+    /// is stated where module RBAC does not apply (a team that never
+    /// configured permissions — GP 11 — or a subject in no team), and
+    /// `Restricted` carries the map, where an absent module is not
+    /// accessible and `Restricted Map.empty` grants nothing.
+    ModulePermissions: ModulePermissions
     /// Per-module exposure state for the active team (the per-team
     /// **exposure** axis — see `ModuleExposure`). Loaded for `TeamMember`
     /// subjects from the team's `TeamPermissions.Exposure`; empty for
@@ -95,10 +144,24 @@ type AccessContext = {
     /// (`publicationGrantsFor`); empty for every other subject, and empty
     /// wherever no grant store is composed.
     PublicationGrants: PublicationReaderGrant list
+    /// The user the identity provider asserted for the request
+    /// (`AuthenticatedUser.anonymous` where it asserted none — an anonymous
+    /// session, a share-link or machine bearer it does not recognise, work
+    /// outside a request). Read for what only the provider knows (its roles,
+    /// e-mail, tenant); the caller's identity is `UserId` / `callerId`.
+    User: ToolUp.Platform.Auth.AuthenticatedUser
+    /// The storage scope scope resolution derived for the subject, or `None`
+    /// where it derived none (a publication reader, a refused scope, work
+    /// that holds no scope).
+    StorageScope: StorageScope option
 }
 
 module AccessContext =
-    let private deriveUserId (subject: Subject) =
+    /// The stable identity string of a subject, by the rule the
+    /// `UserId` field documents: a session id, a user id, a claim's
+    /// attributed handle (else its issuer). The one derivation: every
+    /// context builder and every attribution reads it.
+    let principalId (subject: Subject) : string =
         match subject with
         | AnonymousSession sessionId -> sessionId
         | AuthenticatedUser userId -> userId
@@ -106,36 +169,92 @@ module AccessContext =
         | PublicationReader userId -> userId
         | ClaimBearer claim ->
             // §3.0 OQ2 — AttributedHandle when set, else IssuedBy.
-            // Synthetic "claim:<tokenId>" form is reserved for later
-            // hardening if leaking IssuedBy proves problematic.
             match claim.AttributedHandle with
             | Some handle -> handle
             | None -> claim.IssuedBy
 
-    let private deriveTeamId (subject: Subject) =
+    let private teamOf (subject: Subject) =
         match subject with
         | TeamMember(_, teamId) -> Some teamId
         | _ -> None
 
-    /// Construct an unrestricted access context (all modules accessible)
-    /// from a resolved `Subject`. Used as the fallback when no team-scoped
-    /// permission config is present, and in tests. `PlatformRole` defaults
-    /// to `None` — callers that need an admin context construct it directly
-    /// or via a test helper.
-    ///
-    /// `UserId` and `TeamId` are derived from the Subject per the field
-    /// doc-comments on `AccessContext`.
-    let unrestricted (subject: Subject) : AccessContext = {
-        UserId = deriveUserId subject
-        TeamId = deriveTeamId subject
+    /// A context for `subject` holding `permissions`, and no
+    /// exposure override, platform role, provider roles or grants. The one
+    /// constructor: `UserId` and `TeamId` are derived from the subject.
+    let ofSubject (permissions: ModulePermissions) (subject: Subject) : AccessContext = {
+        UserId = principalId subject
+        TeamId = teamOf subject
         Subject = subject
-        ModulePermissions = Map.empty
+        ModulePermissions = permissions
         ModuleExposure = Map.empty
         PlatformRole = None
         TokenRoles = []
         Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
         PublicationGrants = []
+        User = ToolUp.Platform.Auth.AuthenticatedUser.anonymous
+        StorageScope = None
     }
+
+    /// The context of work that runs outside any request and
+    /// carries the scope it was started with (a scheduled job, a narrative
+    /// run, a background planner): `subject` is that scope's principal, and
+    /// module RBAC does not apply to it — it carries the scope's identity,
+    /// never a user's module authority. `reason` names the work at the call
+    /// site; the subject is what the audit trail attributes.
+    let carrying (reason: string) (subject: Subject) : AccessContext =
+        ignore reason
+        ofSubject ModulePermissions.Unrestricted subject
+
+    /// The context of platform work that serves no principal at
+    /// all (a static export, a document enumeration, an evaluation harness).
+    /// The subject is an anonymous session named `system:<reason>`, so every
+    /// audit row the work writes attributes it to that reason. No scope, no
+    /// role: `configScope` of an anonymous subject is `None`.
+    let system (reason: string) : AccessContext =
+        ofSubject ModulePermissions.Unrestricted (AnonymousSession("system:" + reason))
+
+    /// The context a request whose principal was NOT resolved is served
+    /// under: the anonymous caller (`AnonymousSession "anonymous"`, so every
+    /// check that reads the caller as anonymous refuses it) holding nothing —
+    /// no module (`ModulePermissions.none`), no role, no scope. It replaces
+    /// the unrestricted fallback the handlers carried for tests that bypassed
+    /// `ScopeResolutionMiddleware`. `site` names the handler at the call site,
+    /// so a reader sees where the refusal is served; it is not stored, because
+    /// a principal id other than "anonymous" would read as a signed-in caller
+    /// to every check keyed on the user id.
+    let unresolved (site: string) : AccessContext =
+        ignore site
+        ofSubject ModulePermissions.none (AnonymousSession "anonymous")
+
+    /// The `HttpContext.Items` key `ScopeResolutionMiddleware`
+    /// stamps the request's principal under, ONCE, after every per-request
+    /// grant was read. A request without it has no resolved principal.
+    [<Literal>]
+    let ItemsKey = "ToolUp.AccessContext"
+
+#if !FABLE_COMPILER
+    /// The request's context, or `None` when no principal was
+    /// resolved: the scoped `AccessContext` factory yields no value for such
+    /// a request, so this is the one typed read of it.
+    let tryResolve (services: System.IServiceProvider) : AccessContext option =
+        match services.GetService(typeof<AccessContext>) with
+        | :? AccessContext as access -> Some access
+        | _ -> None
+
+    /// The principal stamped on a request's items (`ItemsKey`), or `None`.
+    /// The one read of the request's identity, scope, user and grants from
+    /// `HttpContext.Items`: no other key carries them. A background context
+    /// that copies `ItemsKey` forward reads back the same principal.
+    let ofItems (items: System.Collections.Generic.IDictionary<obj, obj>) : AccessContext option =
+        match items.TryGetValue(box ItemsKey) with
+        | true, (:? AccessContext as access) -> Some access
+        | _ -> None
+
+    /// Stamp `access` as the request's principal (`ItemsKey`), replacing
+    /// any principal already there.
+    let stamp (items: System.Collections.Generic.IDictionary<obj, obj>) (access: AccessContext) : unit =
+        items[box ItemsKey] <- box access
+#endif
 
     /// Phase 987 — the `TokenRoles` a context for `subject` carries, given
     /// the roles its identity provider asserted (`AuthenticatedUser.pageRoles`
@@ -264,34 +383,26 @@ module AccessContext =
     let isModuleAvailable (moduleName: string) (ctx: AccessContext) =
         exposureOf moduleName ctx |> ModuleExposure.isMappable
 
-    /// Check whether the context grants any access to a given module.
-    /// Empty `ModulePermissions` means unrestricted — every module is
-    /// accessible. When populated, the module must be a key in the
-    /// map with at least one permission. This is the **permission**
-    /// axis; sidebar visibility additionally requires `isModuleExposed`.
+    /// Check whether the context grants any access to a given module:
+    /// every module under `Unrestricted`; under `Restricted`, a module the
+    /// map names with at least one permission (`Restricted
+    /// Map.empty` grants nothing). This is the **permission** axis; sidebar
+    /// visibility additionally requires `isModuleExposed`.
     ///
     /// Phase 1002 — a publication reader is never an app user, so it can
-    /// access no module, whatever its (empty) permission map would say.
+    /// access no module, whatever its permission value would say.
     let canAccessModule (moduleName: string) (ctx: AccessContext) =
         not (isPublicationReader ctx)
-        && (ctx.ModulePermissions.IsEmpty
-            || (ctx.ModulePermissions
-                |> Map.tryFind moduleName
-                |> Option.map (fun perms -> not (List.isEmpty perms))
-                |> Option.defaultValue false))
+        && ModulePermissions.grantsAccess moduleName ctx.ModulePermissions
 
     /// Check whether the context grants a specific permission on a
     /// module, honouring the Read / Write / Admin hierarchy: `Admin`
     /// satisfies any requirement; `Write` satisfies `Read` or `Write`;
-    /// `Read` satisfies only `Read`. Empty map is unrestricted.
+    /// `Read` satisfies only `Read`. `Unrestricted` holds every permission.
     /// Phase 1002 — a publication reader holds no module permission.
     let hasPermission (moduleName: string) (required: ModulePermission) (ctx: AccessContext) =
         not (isPublicationReader ctx)
-        && (ctx.ModulePermissions.IsEmpty
-            || (ctx.ModulePermissions
-                |> Map.tryFind moduleName
-                |> Option.map (List.exists (fun granted -> ModulePermission.implies granted required))
-                |> Option.defaultValue false))
+        && ModulePermissions.grants moduleName required ctx.ModulePermissions
 
     /// Resolve the `StorageScope` for persistent per-scope configuration
     /// (AI settings, team profiles, notification preferences, and other
@@ -327,17 +438,17 @@ module AccessContext =
     /// alone). Any other container — a share-token claim's scope, whose
     /// subject carries a whole claim a `StorageScope` cannot reconstruct,
     /// or a session — is `None`: guessing a subject would read a DIFFERENT
-    /// scope's configuration and secrets. The context is unrestricted:
-    /// it carries the scope's identity, not any user's module authority.
+    /// scope's configuration and secrets. The context is `carrying`: it
+    /// carries the scope's identity, not any user's module authority.
     let forConfigScope (memberId: string) (scope: StorageScope) : AccessContext option =
         // Phase 1060 — read through the one parser, and only where the
         // container and the id agree: a scope whose two fields name
         // different principals is no team's and no user's.
         match ScopeKey.tryParseContainer scope.Container with
         | Some(ScopeKey.Team teamId) when teamId = TeamId scope.ScopeId ->
-            Some(unrestricted (TeamMember(memberId, teamId.Value)))
+            Some(carrying "config scope" (TeamMember(memberId, teamId.Value)))
         | Some(ScopeKey.User userId) when userId = UserId scope.ScopeId ->
-            Some(unrestricted (AuthenticatedUser userId.Value))
+            Some(carrying "config scope" (AuthenticatedUser userId.Value))
         | _ -> None
 
     /// Resolve the `FlagScope` the caller writes feature-flag overrides
@@ -377,3 +488,44 @@ module AccessContext =
     /// NEW handler that accepts a target-scope parameter MUST gate on this.
     let canModifyPlatformConfig (ctx: AccessContext) : bool =
         ctx.PlatformRole = Some PlatformRole.PlatformAdmin
+
+    /// The caller's id as every per-user read keys it: `"anonymous"` for an
+    /// anonymous session (whatever its session id), the principal id for
+    /// everyone else. A machine or share-link bearer — whom no identity
+    /// provider recognises, so the provider's user is anonymous — is named by
+    /// its claim's attributed handle, never `"anonymous"`.
+    let callerId (ctx: AccessContext) : string =
+        match ctx.Subject with
+        | AnonymousSession _ -> "anonymous"
+        | _ -> ctx.UserId
+
+    /// The actor an entity-store write by this principal records: the
+    /// principal itself, acting for itself, live. A projection of the
+    /// principal; a delegated or replayed write extends it
+    /// (`EntityPrincipal.onBehalfOf` / `replaying`).
+    let entityPrincipal (ctx: AccessContext) : EntityTypes.EntityPrincipal =
+        EntityTypes.EntityPrincipal.ofPrincipal ctx.UserId
+
+#if !FABLE_COMPILER
+    /// `callerId` of the principal stamped on `items`, or `None` without one.
+    let callerIdOf (items: System.Collections.Generic.IDictionary<obj, obj>) : string option =
+        ofItems items |> Option.map callerId
+
+    /// The subject of the principal stamped on `items`.
+    let subjectOf (items: System.Collections.Generic.IDictionary<obj, obj>) : Subject option =
+        ofItems items |> Option.map _.Subject
+
+    /// The storage scope of the principal stamped on `items`.
+    let scopeOf (items: System.Collections.Generic.IDictionary<obj, obj>) : StorageScope option =
+        ofItems items |> Option.bind _.StorageScope
+
+    /// The provider's user of the principal stamped on `items`.
+    let userOf
+        (items: System.Collections.Generic.IDictionary<obj, obj>)
+        : ToolUp.Platform.Auth.AuthenticatedUser option =
+        ofItems items |> Option.map _.User
+
+    /// The platform role of the principal stamped on `items`.
+    let platformRoleOf (items: System.Collections.Generic.IDictionary<obj, obj>) : PlatformRole option =
+        ofItems items |> Option.bind _.PlatformRole
+#endif

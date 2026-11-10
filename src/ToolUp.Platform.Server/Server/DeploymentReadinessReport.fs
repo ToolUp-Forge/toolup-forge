@@ -48,15 +48,8 @@ open ToolUp.Platform.Config
 // deployment-wide and carries no per-tenant data (GP 4).
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "DeploymentReadinessReport")
 
 let private ensureReadAllowed (accessContext: AccessContext) : Async<Result<unit, string>> = async {
     if AccessContext.canModifyPlatformConfig accessContext then

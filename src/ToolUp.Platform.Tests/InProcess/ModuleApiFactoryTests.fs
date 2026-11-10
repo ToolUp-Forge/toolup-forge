@@ -52,7 +52,7 @@ let private buildCtx (scope: StorageScope) (narrativeStore: INarrativeStore opti
 
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- services.BuildServiceProvider()
-    ctx.Items["ToolUp.StorageScope"] <- box scope
+    AccessContexts.stampScope ctx.Items (scope)
     ctx
 
 /// Seed a file into the scope's session store — the same store

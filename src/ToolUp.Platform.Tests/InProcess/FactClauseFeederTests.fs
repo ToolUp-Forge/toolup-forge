@@ -209,7 +209,7 @@ let private factMatch (factId: string) (rendering: string) : VectorMatch = {
 }
 
 let private contextFor (question: string) : PromptContext = {
-    Access = AccessContext.unrestricted (AuthenticatedUser "u")
+    Access = AccessContexts.forSubject (AuthenticatedUser "u")
     ActiveModule = None
     ActivePage = None
     ActivePageNarrative = None
@@ -388,7 +388,7 @@ let promptPathTests =
             let! _ =
                 builderA {
                     contextFor "what was acme revenue?" with
-                        Access = AccessContext.unrestricted (AuthenticatedUser seeded)
+                        Access = AccessContexts.forSubject (AuthenticatedUser seeded)
                         Scope = ResolvedScope.anonymous
                 }
 
@@ -401,7 +401,7 @@ let promptPathTests =
             let! _ =
                 builderB {
                     contextFor "what was acme revenue?" with
-                        Access = AccessContext.unrestricted (AuthenticatedUser(newScope ()))
+                        Access = AccessContexts.forSubject (AuthenticatedUser(newScope ()))
                         Scope = TestScope.resolved seeded
                 }
 
@@ -455,7 +455,7 @@ let promptPathTests =
 
             let ctx = {
                 contextFor "what was acme revenue?" with
-                    Access = AccessContext.unrestricted (AuthenticatedUser scope)
+                    Access = AccessContexts.forSubject (AuthenticatedUser scope)
             }
 
             let builder =

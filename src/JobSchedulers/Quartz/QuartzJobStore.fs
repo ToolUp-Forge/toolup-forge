@@ -220,7 +220,7 @@ let internal systemContext (config: ServerConfig) (scopeId: string) : AccessCont
         else
             AnonymousSession SystemUserId
 
-    AccessContext.unrestricted subject
+    AccessContext.carrying "scheduled job" subject
 
 /// The Quartz `IJob` every forge job fires through: a thin, stateless
 /// adapter that re-reads the definition from the store on every

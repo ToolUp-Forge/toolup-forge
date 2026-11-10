@@ -161,7 +161,7 @@ let private contextForWith
     |> Option.iter (fun s -> services.AddSingleton<TeamConversationVisibilitySettings>(s) |> ignore)
 
     let access = {
-        AccessContext.unrestricted (TeamMember(userId, teamId)) with
+        AccessContexts.forSubject (TeamMember(userId, teamId)) with
             PlatformRole =
                 if platformAdmins.Contains userId then
                     Some PlatformRole.PlatformAdmin
@@ -175,14 +175,13 @@ let private contextForWith
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = teamId
-            Container = containerOf teamId
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = teamId
+        Container = containerOf teamId
+        Persist = true
+    }
 
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx :> HttpContext
 
 /// A request by `userId` in `teamId`'s scope.
@@ -477,20 +476,19 @@ let private readPathTests =
             let! world = newWorld None
             let services = chatServices world.Storage
 
-            services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "alice"))
+            services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "alice"))
             |> ignore
 
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
 
-            ctx.Items["ToolUp.StorageScope"] <-
-                box {
-                    ScopeId = "alice"
-                    Container = "user-alice"
-                    Persist = true
-                }
+            AccessContexts.stampScope ctx.Items {
+                ScopeId = "alice"
+                Container = "user-alice"
+                Persist = true
+            }
 
-            ctx.Items["ToolUp.UserId"] <- box "alice"
+            AccessContexts.stampUserId ctx.Items ("alice")
             let id = Guid.NewGuid()
 
             let! _ =
@@ -582,14 +580,13 @@ let private perTeamTests =
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
 
-            ctx.Items["ToolUp.StorageScope"] <-
-                box {
-                    ScopeId = "alpha"
-                    Container = "team-alpha"
-                    Persist = true
-                }
+            AccessContexts.stampScope ctx.Items {
+                ScopeId = "alpha"
+                Container = "team-alpha"
+                Persist = true
+            }
 
-            ctx.Items["ToolUp.UserId"] <- box "bob"
+            AccessContexts.stampUserId ctx.Items ("bob")
             let id = Guid.NewGuid()
 
             let! _ =
@@ -892,20 +889,19 @@ let private contextWithStore (world: World) (teamId: string) (userId: string) (s
     services.AddSingleton<IAuditLog>(world.Audit) |> ignore
     services.AddSingleton<IConversationStore>(store) |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (TeamMember(userId, teamId)))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (TeamMember(userId, teamId)))
     |> ignore
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
 
-    ctx.Items["ToolUp.StorageScope"] <-
-        box {
-            ScopeId = teamId
-            Container = containerOf teamId
-            Persist = true
-        }
+    AccessContexts.stampScope ctx.Items {
+        ScopeId = teamId
+        Container = containerOf teamId
+        Persist = true
+    }
 
-    ctx.Items["ToolUp.UserId"] <- box userId
+    AccessContexts.stampUserId ctx.Items (userId)
     ctx :> HttpContext
 
 /// The history the prompt builder is handed when `userId` submits a turn

@@ -70,8 +70,8 @@ let private inspectDefs (app: ServerApp) =
     |> List.filter (fun d -> d.Name = InspectActiveModuleToolName)
 
 let private accessWith (perms: (string * ModulePermission list) list) : AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser "alice") with
-        ModulePermissions = Map.ofList perms
+    AccessContexts.forSubject (AuthenticatedUser "alice") with
+        ModulePermissions = AccessContexts.permissionsOf perms
 }
 
 let private def = InspectActiveModuleTool.toolDefinition

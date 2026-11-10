@@ -280,7 +280,7 @@ let private boot (storage: IBlobStorage) (cache: IEmbeddingCache) : Harness = bo
 /// `User "u1"` via `UserId`. Anything narrower would leave part of the
 /// corpus unreachable through the hybrid path and weaken the sweep to a
 /// vacuous pass on those scopes.
-let private hybridContext = AccessContext.unrestricted (TeamMember("u1", "t1"))
+let private hybridContext = AccessContexts.forSubject (TeamMember("u1", "t1"))
 
 /// Enough for any corpus this pack can build (3 scopes × 3 docs × 3
 /// indices = 27), so no assertion can be weakened by truncation.
@@ -548,7 +548,7 @@ let private ledgerKindsWith
         let events = ResizeArray<DataSubjectRequestApiHandler.DsrAuditEvent>()
 
         let admin: AccessContext = {
-            AccessContext.unrestricted (AuthenticatedUser "admin-actor") with
+            AccessContexts.forSubject (AuthenticatedUser "admin-actor") with
                 PlatformRole = Some PlatformRole.PlatformAdmin
         }
 

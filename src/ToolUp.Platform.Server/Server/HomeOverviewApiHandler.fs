@@ -32,15 +32,8 @@ open ToolUp.Platform.Config
 // branches below are defensive, not the anonymous path.
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "HomeOverviewApiHandler")
 
 /// Effective scope — same idiom as `UsageQueryApiHandler.resolveScopeId`.
 let private resolveScopeId (accessContext: AccessContext) : string =

@@ -58,15 +58,8 @@ open ToolUp.Platform.Config.TeamManagement
 /// `ModuleVisibilityApiHandler` and `UsageQueryApiHandler` take, and it
 /// fails CLOSED here because anonymous is the denied case.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "AuditViewApiHandler")
 
 /// Scope to read the trail from: the caller's own container id, else
 /// `_platform` for a caller with no persistent scope. Mirrors

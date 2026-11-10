@@ -30,20 +30,8 @@ open ToolUp.Platform.Infra.Usage
 // enumerates outside the requested scope.
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        let teamId =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
-            | _ -> None
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "UsageQueryApi")
 
 let private ensureReadAllowed (ctx: HttpContext) (accessContext: AccessContext) : Async<Result<unit, string>> = async {
     match accessContext.Subject with

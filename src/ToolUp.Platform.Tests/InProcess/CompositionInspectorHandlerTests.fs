@@ -140,7 +140,7 @@ let private teamContextWith (teamId: string) (userId: string) (role: TeamRole) =
     let store = freshTeamStore ()
     let! _ = store.CreateTeam(TeamId teamId, "Test Team")
     let! _ = (store :> ITeamStore).AddMember(TeamId teamId, UserId userId, role)
-    return AccessContext.unrestricted (TeamMember(userId, teamId)), (store :> ITeamStore)
+    return AccessContexts.forSubject (TeamMember(userId, teamId)), (store :> ITeamStore)
 }
 
 let private expectOk (label: string) (result: Result<'T, string>) : 'T =
@@ -165,7 +165,7 @@ let roleGateTests =
 
         testCaseAsync "an Anonymous caller is refused on every method"
         <| async {
-            let ctx = AccessContext.unrestricted (AnonymousSession "sess-1")
+            let ctx = AccessContexts.forSubject (AnonymousSession "sess-1")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
 
             let! composition = api.GetComposition()
@@ -224,7 +224,7 @@ let roleGateTests =
         <| async {
             // No team store is registered — the single-scope modes have
             // no role concept and the caller owns the scope they read.
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
             let! composition = api.GetComposition()
             expectOk "GetComposition" composition |> ignore
@@ -236,7 +236,7 @@ let roleGateTests =
             // would still refuse, but a refactor that returned the JSON
             // alongside the error would leak. Asserted by refusing an
             // anonymous caller on a deployment that HAS a snapshot.
-            let ctx = AccessContext.unrestricted (AnonymousSession "sess-2")
+            let ctx = AccessContexts.forSubject (AnonymousSession "sess-2")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
             let! exported = api.ExportPanel DisclosurePanel
             let msg = expectError "ExportPanel" exported
@@ -251,7 +251,7 @@ let panelTests =
 
         testCaseAsync "the composition panel carries every component kind the manifest enumerates"
         <| async {
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
             let! result = api.GetComposition()
             let view = expectOk "GetComposition" result
@@ -286,7 +286,7 @@ let panelTests =
 
         testCaseAsync "the rules panel lists the rule manifest beside this composition's verdict"
         <| async {
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
             let! result = api.GetRules()
             let view = expectOk "GetRules" result
@@ -323,7 +323,7 @@ let panelTests =
                     []
                     [] [] []
 
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf colliding))
             let! result = api.GetRules()
             let view = expectOk "GetRules" result
@@ -336,7 +336,7 @@ let panelTests =
 
         testCaseAsync "the disclosure panel carries the envelope's declarations and its digest"
         <| async {
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
             let! result = api.GetDisclosure()
             let view = expectOk "GetDisclosure" result
@@ -358,7 +358,7 @@ let panelTests =
 
         testCaseAsync "the provenance panel reports what the deployment composed"
         <| async {
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
 
             let! bare = (buildApi ctx None (Some(snapshotOf referenceManifest))).GetProvenance()
             let bareView = expectOk "GetProvenance (bare)" bare
@@ -390,7 +390,7 @@ let emptyStateTests =
 
         testCaseAsync "a grounding-free composition declares no grounding, and that is a complete answer"
         <| async {
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf bareManifest))
 
             let! disclosure = api.GetDisclosure()
@@ -410,7 +410,7 @@ let emptyStateTests =
 
         testCaseAsync "the surfaces panel carries its structural note rather than a bare empty list"
         <| async {
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
             let! result = api.GetSurfaces()
             let view = expectOk "GetSurfaces" result
@@ -431,7 +431,7 @@ let emptyStateTests =
             // a hand-wired host. It still must not render as "this
             // deployment composes nothing", which is a false statement
             // about the deployment rather than an honest absence.
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None None
 
             let! composition = api.GetComposition()
@@ -458,7 +458,7 @@ let exportTests =
 
         testCaseAsync "every snapshot-backed panel's JSON deserialises back into the value its getter returned"
         <| async {
-            let ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "carol")
+            let ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "carol")
             let api = buildApi ctx None (Some(snapshotOf referenceManifest))
 
             let! composition = api.GetComposition()
@@ -516,7 +516,7 @@ let exportTests =
         <| fun () ->
             let api =
                 buildApi
-                    (AccessContext.unrestricted (Subject.AuthenticatedUser "carol"))
+                    (AccessContexts.forSubject (Subject.AuthenticatedUser "carol"))
                     None
                     (Some(snapshotOf referenceManifest))
 

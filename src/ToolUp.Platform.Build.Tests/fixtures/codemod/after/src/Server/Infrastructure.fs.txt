@@ -62,3 +62,16 @@ let readArchiveLine (line: string) =
 let refusedHnsw (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
 
 let refusedVector (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
+
+let fallback = AccessContext.ofSubject ModulePermissions.Unrestricted (AnonymousSession "anonymous")
+let jobContext subject = AccessContext.ofSubject ModulePermissions.Unrestricted subject
+
+let isOpen (ctx: AccessContext) = ctx.ModulePermissions.IsEmpty
+
+let stamp (ctx: HttpContext) perms = ctx.Items["ToolUp.ModulePermissions"] <- box perms
+
+let actor (access: AccessContext) = AccessContext.entityPrincipal access
+
+let viewer services access = TeamPolicyViewer.resolve services access "u" "t"
+
+let subjectKey = SurfaceEnforcement.SubjectItemsKey

@@ -139,7 +139,7 @@ let private servicePrincipal: ServiceAccountPrincipal = {
 }
 
 let private accessFor (perms: (string * ModulePermission list) list) : AccessContext = {
-    AccessContext.unrestricted (
+    AccessContexts.forSubject (
         ClaimBearer {
             TokenId = tokenId
             ScopeId = scope
@@ -155,7 +155,7 @@ let private accessFor (perms: (string * ModulePermission list) list) : AccessCon
             RateLimit = None
         }
     ) with
-        ModulePermissions = Map.ofList perms
+        ModulePermissions = AccessContexts.permissionsOf perms
 }
 
 /// One MCP client fixture: a service provider, a grant store, and the

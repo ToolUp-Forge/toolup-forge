@@ -283,8 +283,8 @@ let private postBeacon (storage: ToolUp.Platform.BlobStorage.IBlobStorage) (b: F
         Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
             services
 
-    ctx.Items["ToolUp.UserId"] <- box "alice"
-    ctx.Items["ToolUp.StorageScope"] <- box historyScope
+    AccessContexts.stampUserId ctx.Items ("alice")
+    AccessContexts.stampScope ctx.Items (historyScope)
     ctx.Request.Body <- new System.IO.MemoryStream(encode b)
     ctx.Response.Body <- new System.IO.MemoryStream()
 

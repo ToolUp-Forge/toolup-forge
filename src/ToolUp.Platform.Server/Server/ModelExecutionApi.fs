@@ -224,14 +224,7 @@ let modelExecutionApi (ctx: HttpContext) : ModelExecutionApi =
     let accessContext =
         match service<AccessContext> ctx with
         | Some ac -> ac
-        | None ->
-            // Test fallback mirroring `JobApiHandler.jobApi`.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        | None -> AccessContext.unresolved "ModelExecutionApi"
 
     let scopeOpt = AccessContext.configScope accessContext
 

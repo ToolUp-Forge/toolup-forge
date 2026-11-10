@@ -44,12 +44,12 @@ let private fableSerialize (value: obj) : string =
 // ─── Scope / storage resolution ──────────────────────────────────
 
 let private resolveScope (ctx: HttpContext) : StorageScope =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> s
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> s
     | _ ->
         let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
+            match AccessContext.callerIdOf ctx.Items with
+            | Some id -> id
             | _ -> "anonymous"
 
         {

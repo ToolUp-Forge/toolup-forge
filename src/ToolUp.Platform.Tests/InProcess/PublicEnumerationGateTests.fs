@@ -79,7 +79,7 @@ let private fakeApi (pages: PublicPage list) : IPublicContentApi =
         }
     }
 
-let private anonCtx = AccessContext.unrestricted (AnonymousSession "anon")
+let private anonCtx = AccessContexts.forSubject (AnonymousSession "anon")
 
 // ─── Part 1 — the RAG-ingestion audit ─────────────────────────────────
 //

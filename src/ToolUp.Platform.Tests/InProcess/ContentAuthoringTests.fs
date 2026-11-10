@@ -150,21 +150,21 @@ let private previewBaseUrl = "https://cms.example.test"
 /// An editor holding the editorial approval role — the caller the mint
 /// surface exists for.
 let private approver = {
-    AccessContext.unrestricted (TeamMember("editor-1", previewScope)) with
-        ModulePermissions = Map[ContentLifecycle.approveGuard, [ ModulePermission.Admin ]]
+    AccessContexts.forSubject (TeamMember("editor-1", previewScope)) with
+        ModulePermissions = ModulePermissions.Restricted(Map[ContentLifecycle.approveGuard, [ ModulePermission.Admin ]])
 }
 
 /// An authenticated team member whose deployment HAS configured RBAC but
 /// who does not hold the approval role.
 let private nonApprover = {
-    AccessContext.unrestricted (TeamMember("viewer-1", previewScope)) with
-        ModulePermissions = Map["viewer", [ ModulePermission.Read ]]
+    AccessContexts.forSubject (TeamMember("viewer-1", previewScope)) with
+        ModulePermissions = ModulePermissions.Restricted(Map["viewer", [ ModulePermission.Read ]])
 }
 
 /// A share-token bearer — a resolved, non-anonymous subject that must
 /// still never be able to mint a further preview link.
 let private claimBearer =
-    AccessContext.unrestricted (
+    AccessContexts.forSubject (
         ClaimBearer {
             TokenId = "tok-1"
             ScopeId = previewScope
@@ -676,7 +676,7 @@ let tests =
             for label, caller in
                 [
                     "an authenticated non-approver", nonApprover
-                    "an anonymous visitor", AccessContext.unrestricted (AnonymousSession "s1")
+                    "an anonymous visitor", AccessContexts.forSubject (AnonymousSession "s1")
                     "a share-token bearer", claimBearer
                 ] do
                 match! ContentPreview.mintPreviewLink (Some store) previewBaseUrl caller request with
@@ -693,7 +693,7 @@ let tests =
             Expect.isTrue (ContentPreview.canMintPreviewLink approver) "an approver may mint"
 
             Expect.isFalse
-                (ContentPreview.canMintPreviewLink (AccessContext.unrestricted (AnonymousSession "s1")))
+                (ContentPreview.canMintPreviewLink (AccessContexts.forSubject (AnonymousSession "s1")))
                 "an anonymous caller may never mint"
 
             Expect.isFalse
@@ -705,7 +705,7 @@ let tests =
             // GP 11 — a deployment that never configured RBAC is not
             // silently locked out of its own authoring surface.
             Expect.isTrue
-                (ContentPreview.canMintPreviewLink (AccessContext.unrestricted (TeamMember("editor-1", previewScope))))
+                (ContentPreview.canMintPreviewLink (AccessContexts.forSubject (TeamMember("editor-1", previewScope))))
                 "an authenticated editor in an unconfigured-RBAC deployment may mint"
         }
 

@@ -129,7 +129,7 @@ let private batchOf (scope: string) (batchId: string) (seeds: int64 list) : FitR
 let private itemCtx (payload: string) : JobContext = {
     JobId = Guid.NewGuid()
     ScopeId = "team-1"
-    AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
+    AccessContext = AccessContexts.forSubject (AuthenticatedUser "system")
     Attempt = 1
     Trigger = Manual
     Scope = ToolUp.Platform.ResolvedScope.anonymous

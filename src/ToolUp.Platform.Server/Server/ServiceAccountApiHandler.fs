@@ -71,14 +71,8 @@ let serviceAccountApi (ctx: HttpContext) : IServiceAccountApi =
         | _ -> None
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests that bypass ScopeResolutionMiddleware —
-            // same pattern as WebhookApiHandler / ConfigHandler. An
-            // anonymous floor, so the gates below refuse rather than
-            // admit.
-            AccessContext.unrestricted (AnonymousSession "anonymous")
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "ServiceAccountApiHandler")
 
     /// Gates 1 + 3, and the scope resolution of gate 2. Every method
     /// body runs through this, so there is exactly one place the policy

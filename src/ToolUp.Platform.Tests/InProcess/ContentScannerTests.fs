@@ -168,7 +168,7 @@ let private mkDeps
         EventStore = None
         EmbeddingProvider = None
         NarrativeStore = None
-        AccessContext = AccessContext.unrestricted (AnonymousSession "user-1")
+        AccessContext = AccessContexts.forSubject (AnonymousSession "user-1")
         OriginalResolver = createDefault ()
         AuditLog = audit
         RecordEnqueue = ignore

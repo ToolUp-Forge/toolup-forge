@@ -139,9 +139,10 @@ type AccessContext = {
     UserId: string
     TeamId: string option
     Subject: Subject
-    ModulePermissions: Map<string, ModulePermission list>
+    ModulePermissions: ModulePermissions // Unrestricted | Restricted of Map<string, ModulePermission list>
     ModuleExposure: Map<string, ModuleExposure>
     PlatformRole: PlatformRole option
+    StorageScope: StorageScope option
 }
 ```
 
@@ -150,12 +151,12 @@ type AccessContext = {
 `ModulePermission` has hierarchy `Admin ⊇ Write ⊇ Read` encoded in `ModulePermission.implies`. `[<RequireQualifiedAccess>]` is mandatory because `Admin` collides with `TeamRole.Admin` (different concept — module perm vs team role).
 
 Helpers:
-- `canAccessModule moduleName ctx` — true when `ModulePermissions` is empty (unrestricted default) OR the module is a key in the map with at least one permission.
+- `canAccessModule moduleName ctx` — true under `ModulePermissions.Unrestricted` (a team that never configured permissions) OR when the restricted map names the module with at least one permission; `Restricted Map.empty` grants nothing.
 - `hasPermission moduleName required ctx` — honours the hierarchy: `Admin` satisfies anything, `Write` satisfies `Read` or `Write`, `Read` satisfies only `Read`.
 
 **Enforcement (Phase 4):**
 - `ServerModule.withGuardedApi api` wraps a module's ToolUp.Remoting handler with a `canAccessModule` check on the module's `Name`. Denials raise `UnauthorizedAccessException`, translated to HTTP 403 by the error handler.
-- `ScopeResolutionMiddleware` loads the user's effective permissions from `IPermissionStore` on every team-scoped request and stashes them in `HttpContext.Items["ToolUp.ModulePermissions"]`. The `AccessContext` DI factory reads from Items synchronously — the async resolution has already run.
+- `ScopeResolutionMiddleware` loads the user's effective permissions from `IPermissionStore` on every team-scoped request and stamps the whole principal ONCE under `AccessContext.ItemsKey`. The `AccessContext` DI factory reads it synchronously (`AccessContext.ofItems`) and yields no context where none was stamped.
 
 #### Async ↔ Task adaptation
 

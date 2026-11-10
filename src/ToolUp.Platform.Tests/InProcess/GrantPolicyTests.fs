@@ -440,7 +440,10 @@ let tests =
                 // exactly why liveness has to be a separate question from
                 // `canAccessModule`.
                 let! effective = readOk (store.GetEffectivePermissions(UserId "alice", TeamId "t1"))
-                Expect.isTrue (effective.ContainsKey "Partner") "the permission entry is written; it is just inert"
+
+                Expect.isTrue
+                    (ModulePermissions.tryFind "Partner" effective).IsSome
+                    "the permission entry is written; it is just inert"
 
                 match! GrantPolicyGuard.PermissionGrants.acceptGrant store "t1" "alice" "Partner" with
                 | Error e -> failtestf "acceptGrant failed: %s" e
@@ -777,7 +780,11 @@ let tests =
                 Expect.isEmpty doc.Grants "no records are minted for an AdminDiscretion module"
 
                 let! effective = readOk (store.GetEffectivePermissions(UserId "alice", TeamId "t1"))
-                Expect.equal effective (Map.ofList [ "Ordinary", [ Read; Write ] ]) "and the merge is unchanged"
+
+                Expect.equal
+                    effective
+                    (ModulePermissions.Restricted(Map.ofList [ "Ordinary", [ Read; Write ] ]))
+                    "and the merge is unchanged"
             }
 
             testCaseAsync "a pre-551 document with no 'grants' property reads back with an empty grant map"

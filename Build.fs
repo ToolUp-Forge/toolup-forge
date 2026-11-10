@@ -1128,6 +1128,129 @@ let main args =
 
                 1
 
+    // ── VerifyAccessFallbacks — no site states `Unrestricted` from an absence ──
+    //
+    // An access context's module permissions are a closed type, and "every
+    // module" is a stated case (`ModulePermissions.Unrestricted`) decided in
+    // exactly three files: the type's own module (the named system and
+    // scope-carrying contexts), the permission store (a team that never
+    // configured permissions) and the scope-resolution middleware (a subject
+    // in no team). A fourth production site constructing it — or the retired
+    // `AccessContext.unrestricted` fallback a handler used for a request it
+    // could not resolve — is red. A match arm reading the case (`|
+    // ModulePermissions.Unrestricted ->`) is not a construction. Tests build
+    // their contexts through the fixture and are not scanned (`*.Tests`
+    // directories).
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyAccessFallbacks`
+    //        `… -- VerifyAccessFallbacks --root <dir>` scans `<dir>`'s
+    //        `src`, `samples` and `templates`. Also run by the `ScopeLiterals`
+    //        leg of `VerifyAll`, in the fast and full lanes.
+    let unrestrictedHomes = [
+        "src/ToolUp.Platform.Core/Shared/Types/AccessContext.fs"
+        "src/ToolUp.Platform.Server/Server/Scope/PermissionStore.fs"
+        "src/ToolUp.Platform.Server/Server/Middleware.fs"
+    ]
+
+    /// Files that spell the old and new forms as TEXT, never as code: the
+    /// codemod's rules match and rewrite them.
+    let accessFallbackSpellers = [ "src/ToolUp.Platform.Build/Build/SDK.Codemod.fs" ]
+
+    let runVerifyAccessFallbacks (root: string) : int =
+        let rec walk (dir: string) = seq {
+            for d in Directory.EnumerateDirectories dir do
+                let name = Path.GetFileName d
+
+                if
+                    name <> "bin"
+                    && name <> "obj"
+                    && name <> "output"
+                    && name <> "node_modules"
+                    && not (name.EndsWith ".Tests")
+                then
+                    yield! walk d
+
+            yield! Directory.EnumerateFiles(dir, "*.fs")
+        }
+
+        let roots =
+            [ "src"; "samples"; "templates" ]
+            |> List.map (fun d -> Path.Combine(root, d))
+            |> List.filter Directory.Exists
+
+        if roots.IsEmpty then
+            Trace.traceError (
+                sprintf
+                    "VerifyAccessFallbacks: no src, samples or templates under %s — nothing scanned is not a pass."
+                    root
+            )
+
+            1
+        else
+            let retired =
+                System.Text.RegularExpressions.Regex @"\bAccessContext\.unrestricted\b"
+
+            let stated =
+                System.Text.RegularExpressions.Regex @"\bModulePermissions\.Unrestricted\b(?!\s*->)"
+
+            // The request's principal is ONE item; these keys carried its
+            // pieces separately and are retired. The principal's own key is
+            // spelled only by its constant.
+            let retiredKey =
+                System.Text.RegularExpressions.Regex
+                    "\"ToolUp\\.(User|UserId|Subject|StorageScope|ScopeResult|ModulePermissions|ModuleExposure|PlatformRole|PublicationGrants|ServiceAccountPermissions|AccessContext)\""
+
+            let isComment (line: string) =
+                let t = line.TrimStart()
+                t.StartsWith "//" || t.StartsWith "(*"
+
+            let files = roots |> Seq.collect walk |> Seq.toList
+
+            let sites = [
+                for file in files do
+                    let rel = Paths.toSlash (Path.GetRelativePath(root, file))
+                    let home = unrestrictedHomes |> List.contains rel
+
+                    if not (accessFallbackSpellers |> List.contains rel) then
+                        for i, line in File.ReadAllLines file |> Array.indexed do
+                            if not (isComment line) then
+                                if retired.IsMatch line then
+                                    yield rel, i + 1, "the retired fallback", line.Trim()
+                                elif not home && stated.IsMatch line then
+                                    yield rel, i + 1, "Unrestricted stated outside its homes", line.Trim()
+                                elif retiredKey.IsMatch line && not (rel.EndsWith "Shared/Types/AccessContext.fs") then
+                                    yield rel, i + 1, "a retired request item key", line.Trim()
+            ]
+
+            Trace.tracefn ""
+            Trace.tracefn "VerifyAccessFallbacks summary:"
+            Trace.tracefn "  files scanned : %d" files.Length
+            Trace.tracefn "  sites         : %d" sites.Length
+
+            if sites.IsEmpty then
+                Trace.tracefn
+                    "VerifyAccessFallbacks: OK — no access fallback, and Unrestricted is stated only in its homes."
+
+                0
+            else
+                for rel, line, what, text in sites do
+                    Trace.traceError (sprintf "  %s:%d: %s: %s" rel line what text)
+
+                Trace.traceError
+                    "VerifyAccessFallbacks: a request with no resolved principal is served under `AccessContext.unresolved` (which grants nothing); work outside a request names `AccessContext.system` or `AccessContext.carrying`; `ModulePermissions.Unrestricted` is decided only where `unrestrictedHomes` says; and a request's identity, scope, user and grants are read from its ONE stamped principal (`AccessContext.ofItems` and its accessors), never from a key of their own. See docs/migrations/882-access-context-refuses.md."
+
+                1
+
+    Target.create "VerifyAccessFallbacks" (fun _ ->
+        let root =
+            match Flags.value "--root" flags with
+            | Some r -> Path.GetFullPath r
+            | None -> __SOURCE_DIRECTORY__
+
+        match runVerifyAccessFallbacks root with
+        | 0 -> ()
+        | code -> failwithf "VerifyAccessFallbacks: exited %d; the sites are printed above." code)
+
     Target.create "VerifyScopeLiterals" (fun _ ->
         let root =
             match Flags.value "--root" flags with
@@ -3792,11 +3915,12 @@ let main args =
         ScopeLiterals =
             fun () ->
                 Trace.tracefn
-                    "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals; the document store's, via VerifyBlobDownloads)"
+                    "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals; the document store's, via VerifyBlobDownloads; the access context's, via VerifyAccessFallbacks)"
 
                 let scopeLiterals = runVerifyScopeLiterals __SOURCE_DIRECTORY__
                 let blobDownloads = runVerifyBlobDownloads __SOURCE_DIRECTORY__
-                Gate.verdictOfExit (max scopeLiterals blobDownloads)
+                let accessFallbacks = runVerifyAccessFallbacks __SOURCE_DIRECTORY__
+                Gate.verdictOfExit (List.max [ scopeLiterals; blobDownloads; accessFallbacks ])
         ServiceConfigFold =
             fun () ->
                 Trace.tracefn

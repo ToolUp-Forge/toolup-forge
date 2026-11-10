@@ -46,14 +46,14 @@ let private ctxWith (accessContext: AccessContext) (configure: IServiceCollectio
 
 let private platformAdminContext (configure: IServiceCollection -> unit) =
     let ac = {
-        AccessContext.unrestricted (Subject.AnonymousSession "admin-user") with
+        AccessContexts.forSubject (Subject.AnonymousSession "admin-user") with
             PlatformRole = Some PlatformRole.PlatformAdmin
     }
 
     ctxWith ac configure
 
 let private nonAdminContext (configure: IServiceCollection -> unit) =
-    let ac = AccessContext.unrestricted (Subject.AnonymousSession "regular-user")
+    let ac = AccessContexts.forSubject (Subject.AnonymousSession "regular-user")
     ctxWith ac configure
 
 let private allDisabledConfig = {

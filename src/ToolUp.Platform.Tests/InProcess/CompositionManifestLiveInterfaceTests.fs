@@ -165,7 +165,7 @@ let private platformAdminContext (configure: IServiceCollection -> unit) : HttpC
 
     services.AddSingleton<AccessContext>(
         {
-            AccessContext.unrestricted (Subject.AnonymousSession "admin-user") with
+            AccessContexts.forSubject (Subject.AnonymousSession "admin-user") with
                 PlatformRole = Some PlatformRole.PlatformAdmin
         }
     )

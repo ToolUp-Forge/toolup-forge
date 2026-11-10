@@ -69,13 +69,8 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
         | _ -> None
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests that bypass ScopeResolutionMiddleware —
-            // the same shape ServiceAccountApiHandler uses. An anonymous
-            // floor, so the gates below refuse rather than admit.
-            AccessContext.unrestricted (AnonymousSession "anonymous")
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "ExternalContactApiHandler")
 
     let describe = ExternalContactError.describe
 

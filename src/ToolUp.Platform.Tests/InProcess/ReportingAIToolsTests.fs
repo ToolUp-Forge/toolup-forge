@@ -221,7 +221,7 @@ let private servicesWith (extra: IServiceCollection -> unit) : Services =
 let private signedIn (services: Services) (activeModule: string option) : HttpContext =
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.Provider
-    ctx.Items["ToolUp.UserId"] <- box "user-1"
+    AccessContexts.stampUserId ctx.Items ("user-1")
 
     let storage: StorageScope = {
         ScopeId = "team-a"
@@ -232,22 +232,24 @@ let private signedIn (services: Services) (activeModule: string option) : HttpCo
     // As the scope-resolution middleware records it: the storage scope, and
     // the resolved scope the fact and reporting doors read through
     // `ScopeResolution.forRequest`.
-    ctx.Items["ToolUp.StorageScope"] <- box storage
+    AccessContexts.stampScope ctx.Items (storage)
     StorageScopeResolver.ScopeResolution.remember ctx storage |> ignore
 
-    ctx.Items["ToolUp.Subject"] <- box (TeamMember("user-1", "team-a"))
+    AccessContexts.stampSubject ctx.Items ((TeamMember("user-1", "team-a")))
     ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId
 
     activeModule
     |> Option.iter (fun m -> ctx.Items[AICrossModuleAudit.ItemsKeys.ActiveModule] <- box m)
 
+    AccessContexts.stampPermissions ctx.Items []
     ctx :> HttpContext
 
 let private anonymous (services: Services) : HttpContext =
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.Provider
-    ctx.Items["ToolUp.UserId"] <- box "sess-9"
-    ctx.Items["ToolUp.Subject"] <- box (AnonymousSession "sess-9")
+    AccessContexts.stampUserId ctx.Items ("sess-9")
+    AccessContexts.stampSubject ctx.Items ((AnonymousSession "sess-9"))
+    AccessContexts.stampPermissions ctx.Items []
     ctx :> HttpContext
 
 let private executorOf (deps: ReportingAIToolDeps) (name: string) =
@@ -364,8 +366,7 @@ let rbacTests =
             let services = servicesWith ignore
             let ctx = signedIn services None
 
-            ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList [ SourceModule, [ ModulePermission.SchemaOnly ] ])
-
+            AccessContexts.stampPermissions ctx.Items ([ SourceModule, [ ModulePermission.SchemaOnly ] ])
             let listed = call h.Deps ListTemplatesToolName ctx "{}"
             Expect.equal (str listed "error") "NotAuthorised" "a deliberate deny is honoured"
         }
@@ -375,8 +376,7 @@ let rbacTests =
             let services = servicesWith ignore
             let ctx = signedIn services None
 
-            ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList [ "Pricing", [ ModulePermission.Read ] ])
-
+            AccessContexts.stampPermissions ctx.Items ([ "Pricing", [ ModulePermission.Read ] ])
             let listed = call h.Deps ListTemplatesToolName ctx "{}"
             Expect.equal (listed.GetProperty("templates").GetArrayLength()) 2 "RBAC on other modules does not hide it"
         }
@@ -755,7 +755,7 @@ let longRenderTests =
             let jobCtx: JobContext = {
                 JobId = scheduler.JobId
                 ScopeId = "team-a"
-                AccessContext = AccessContext.unrestricted (TeamMember("user-1", "team-a"))
+                AccessContext = AccessContexts.forSubject (TeamMember("user-1", "team-a"))
                 Attempt = 1
                 Trigger = Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous
@@ -831,7 +831,7 @@ let longRenderTests =
             let jobCtx: JobContext = {
                 JobId = Guid.NewGuid()
                 ScopeId = "team-a"
-                AccessContext = AccessContext.unrestricted (TeamMember("user-1", "team-a"))
+                AccessContext = AccessContexts.forSubject (TeamMember("user-1", "team-a"))
                 Attempt = 1
                 Trigger = Manual
                 Scope = ToolUp.Platform.ResolvedScope.anonymous

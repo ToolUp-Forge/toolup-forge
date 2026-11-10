@@ -656,9 +656,9 @@ let private requestFor (sp: IServiceProvider) (scopeId: string) : HttpContext =
         Persist = true
     }
 
-    ctx.Items["ToolUp.StorageScope"] <- box storage
+    AccessContexts.stampScope ctx.Items (storage)
     ScopeResolution.remember ctx storage |> ignore
-    ctx.Items["ToolUp.UserId"] <- box "alice"
+    AccessContexts.stampUserId ctx.Items ("alice")
     ctx :> HttpContext
 
 /// Submit one chat turn and return the assistant's reply as persisted.

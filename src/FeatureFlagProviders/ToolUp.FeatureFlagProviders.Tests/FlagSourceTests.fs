@@ -50,7 +50,7 @@ let private stubSource (resolve: FeatureFlag -> FlagValue option) =
         member _.Resolve(flag, _ctx) = async { return resolve flag }
     }
 
-let private ctx = AccessContext.unrestricted (Subject.AuthenticatedUser "alice")
+let private ctx = AccessContexts.forSubject (Subject.AuthenticatedUser "alice")
 
 // A minimal OpenFeature provider that reports the built-in No-op
 // provider's metadata name ("No-op Provider") and resolves every flag to

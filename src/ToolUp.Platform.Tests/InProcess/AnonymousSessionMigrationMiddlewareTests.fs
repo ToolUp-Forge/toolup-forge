@@ -118,11 +118,11 @@ let private invoke
     | None -> ()
 
     match subject with
-    | Some s -> ctx.Items["ToolUp.Subject"] <- box s
+    | Some s -> AccessContexts.stampSubject ctx.Items (s)
     | None -> ()
 
     match storageScope with
-    | Some sc -> ctx.Items["ToolUp.StorageScope"] <- box sc
+    | Some sc -> AccessContexts.stampScope ctx.Items (sc)
     | None -> ()
 
     let mutable nextInvoked = false

@@ -77,7 +77,7 @@ let private principalFor (userId: string) (principals: PrincipalSummary list) =
 // ─── Handler builder (mirrors OffboardConfirmationTests) ─────────────
 
 let private adminCtx (userId: string) : AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser userId) with
+    AccessContexts.forSubject (AuthenticatedUser userId) with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 
@@ -229,7 +229,7 @@ let tests =
             let storage, events = newStores ()
 
             let api =
-                handlerFor (Some(AccessContext.unrestricted (AuthenticatedUser "user-1"))) (Some storage) (Some events)
+                handlerFor (Some(AccessContexts.forSubject (AuthenticatedUser "user-1"))) (Some storage) (Some events)
 
             let! result = api.ListPrincipals()
             Expect.equal result (Error PlatformTenantApiHandler.adminError) "non-admin refused"

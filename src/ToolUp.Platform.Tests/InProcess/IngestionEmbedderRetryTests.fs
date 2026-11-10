@@ -243,7 +243,7 @@ let private credentialRejection =
             let ctx: JobContext = {
                 JobId = Guid.NewGuid()
                 ScopeId = "team-867"
-                AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
+                AccessContext = AccessContexts.forSubject (AuthenticatedUser "system")
                 // Scheduler attempt 1 = ingestion attempt 2: retries remain,
                 // so a Transient verdict would re-dispatch rather than stop.
                 Attempt = 1

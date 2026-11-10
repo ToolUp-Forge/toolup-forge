@@ -233,33 +233,28 @@ type private Caller = {
     /// tier's disclosure door judges in.
     Scope: ResolvedScope
     Anonymous: bool
-    Permissions: Map<string, ModulePermission list>
+    Permissions: ModulePermissions
     ConversationId: Guid option
 }
 
 let private callerOf (ctx: HttpContext) : Caller =
     let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) when not (String.IsNullOrWhiteSpace id) -> Some id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id when not (String.IsNullOrWhiteSpace id) -> Some id
         | _ -> None
 
     let scopeId =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as s) -> Some s.ScopeId
+        match AccessContext.scopeOf ctx.Items with
+        | Some s -> Some s.ScopeId
         | _ -> None
 
-    let anonymousSubject =
-        match ctx.Items.TryGetValue "ToolUp.Subject" with
-        | true, (:? Subject as s) ->
-            match s with
-            | AnonymousSession _ -> true
-            | _ -> false
-        | _ -> false
-
-    let permissions =
-        match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
-        | true, (:? Map<string, ModulePermission list> as perms) -> perms
-        | _ -> Map.empty
+    // The principal the middleware stamped once; a context
+    // without one is served under `AccessContext.unresolved` (anonymous,
+    // granting nothing).
+    let access =
+        match ctx.Items.TryGetValue AccessContext.ItemsKey with
+        | true, (:? AccessContext as access) -> access
+        | _ -> AccessContext.unresolved "ReportingAITools"
 
     let conversationId =
         match ctx.Items.TryGetValue ItemsKeys.ConversationId with
@@ -272,8 +267,8 @@ let private callerOf (ctx: HttpContext) : Caller =
         UserId = UserId resolvedUser
         ScopeId = scopeId |> Option.defaultValue resolvedUser
         Scope = StorageScopeResolver.ScopeResolution.forRequest ctx
-        Anonymous = anonymousSubject || resolvedUser = "anonymous"
-        Permissions = permissions
+        Anonymous = AccessContext.isAnonymous access || resolvedUser = "anonymous"
+        Permissions = access.ModulePermissions
         ConversationId = conversationId
     }
 
@@ -285,7 +280,7 @@ let private authorise (caller: Caller) : Result<unit, string> =
         Error
             "Report templates and rendering are available to signed-in users only. Ask the user to sign in, then try again."
     else
-        match caller.Permissions |> Map.tryFind SourceModule with
+        match caller.Permissions |> ModulePermissions.tryFind SourceModule with
         | Some grants when
             not (
                 grants

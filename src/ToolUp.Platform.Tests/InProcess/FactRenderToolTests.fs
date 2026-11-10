@@ -747,10 +747,9 @@ let private composedContext () : HttpContext =
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- built
-    ctx.Items["ToolUp.StorageScope"] <- box scope
+    AccessContexts.stampScope ctx.Items (scope)
     let resolved = ScopeResolution.remember ctx scope
-    ctx.Items["ToolUp.UserId"] <- box "u"
-
+    AccessContexts.stampUserId ctx.Items ("u")
     seed (built.GetRequiredService<IFactTableWriter>()) resolved trade "revenue"
     ctx :> HttpContext
 

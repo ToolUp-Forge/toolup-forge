@@ -147,7 +147,7 @@ let private buildHandler
 
     services.AddSingleton<IWebhookDispatcher>(StubDispatcher()) |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (Subject.AuthenticatedUser scopeId))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (Subject.AuthenticatedUser scopeId))
     |> ignore
 
     let ctx = DefaultHttpContext() :> HttpContext

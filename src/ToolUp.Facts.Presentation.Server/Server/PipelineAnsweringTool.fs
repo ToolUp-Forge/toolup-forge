@@ -158,8 +158,8 @@ module PipelineAnsweringTool =
         }
 
     let private userIdOf (ctx: HttpContext) : string =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
+        match AccessContext.callerIdOf ctx.Items with
+        | Some id -> id
         | _ -> "anonymous"
 
     let private notComposed =

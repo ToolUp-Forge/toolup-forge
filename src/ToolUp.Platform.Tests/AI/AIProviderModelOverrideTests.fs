@@ -210,7 +210,7 @@ let private alice = "alice"
 
 let private resolveThrough (factory: IAIProviderFactory) =
     async {
-        let ctx = AccessContext.unrestricted (TeamMember(alice, scopeId))
+        let ctx = AccessContexts.forSubject (TeamMember(alice, scopeId))
         let! resolved = factory.Resolve ctx
 
         match resolved with

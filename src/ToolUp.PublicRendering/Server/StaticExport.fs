@@ -284,7 +284,7 @@ module StaticExport =
             // Phase 95 — render content-source-enumerated dynamic routes
             // with an anonymous build-time context (a source that gates
             // some pages doesn't enumerate them, so nothing private leaks).
-            let anonCtx = AccessContext.unrestricted (AnonymousSession "static-export")
+            let anonCtx = AccessContext.system "static-export"
 
             // Phase 38 — a content source synthesises its own pages, so an
             // enumerated route can still resolve to a `Draft` / `Archived`

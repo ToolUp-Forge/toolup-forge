@@ -24,7 +24,7 @@ open ToolUp.Platform
 // in-handler checks remain (defence in depth) — this is additive (GP 11):
 // it only ever *adds* a denial the handler would (correctly) also make.
 //
-// `ToolUp.PlatformRole` is stamped on `HttpContext.Items` by
+// the principal's `PlatformRole` is stamped on `HttpContext.Items` by
 // `ScopeResolutionMiddleware` (Phase 4b — resolved from
 // `IPlatformAdminStore`), so this middleware MUST be registered AFTER it
 // in the pipeline. It reads the same item the `ForgeAuthContext.HasRole`
@@ -111,11 +111,11 @@ let internal requiresPlatformAdmin (httpMethod: string) (path: PathString) : boo
         false
 
 /// Read the server-resolved platform role stamped by
-/// `ScopeResolutionMiddleware`. Mirrors the `ToolUp.PlatformRole` item
+/// `ScopeResolutionMiddleware`. Mirrors the the principal's `PlatformRole` item
 /// contract the `ForgeAuthContext.HasRole` bridge reads (Phase 132 core).
 let internal isPlatformAdmin (ctx: HttpContext) : bool =
-    match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-    | true, (:? PlatformRole as role) -> role = PlatformRole.PlatformAdmin
+    match AccessContext.platformRoleOf ctx.Items with
+    | Some role -> role = PlatformRole.PlatformAdmin
     | _ -> false
 
 /// Path-prefix authorisation backstop for the raw `_platform` admin

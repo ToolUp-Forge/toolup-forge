@@ -21,8 +21,8 @@ open ToolUp.Platform.Config
 /// back to a user-derived container for tests / harnesses where the
 /// middleware did not run — identical fallback shape to `FileManagement`.
 let private resolveScopeId (ctx: HttpContext) : string =
-    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-    | true, (:? StorageScope as s) -> s.Container
+    match AccessContext.scopeOf ctx.Items with
+    | Some s -> s.Container
     | _ -> ScopeKey.container (ScopeKey.User(UserId(FileManagement.getUserId ctx)))
 
 let columnMappingApi (ctx: HttpContext) : IConversionApi =

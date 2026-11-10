@@ -121,7 +121,7 @@ let tests =
 
             Expect.equal (bodyText (run (api.GetPage "insights/2026-11-06"))) "insights/{date}2026-11-06" "it holds"
 
-            let reader = AccessContext.unrestricted (AnonymousSession "session")
+            let reader = AccessContexts.forSubject (AnonymousSession "session")
 
             Expect.equal
                 (bodyText (run (api.GetPage "insights/2026")))
@@ -201,7 +201,7 @@ let tests =
                         }
             }
 
-            let reader = AccessContext.unrestricted (AnonymousSession "session")
+            let reader = AccessContexts.forSubject (AnonymousSession "session")
 
             let reading =
                 DeclaredPages.over
@@ -256,13 +256,13 @@ let tests =
             let! listed = api.ListPagesPublic(DateTimeOffset.UtcNow, "")
             Expect.equal (slugs listed) [ "insights/latest" ] "the literal route is listed through the composed API"
 
-            let member' = AccessContext.unrestricted (TeamMember("u1", "team-1"))
+            let member' = AccessContexts.forSubject (TeamMember("u1", "team-1"))
 
             match! api.GetPageInContext("insights/latest", member') with
             | Some { Body = Narrative document } -> Expect.equal document.Title "Daily" "the run's latest narrative"
             | other -> failtestf "%A" other
 
-            let stranger = AccessContext.unrestricted (TeamMember("u2", "team-2"))
+            let stranger = AccessContexts.forSubject (TeamMember("u2", "team-2"))
 
             match! api.GetPageInContext("insights/latest", stranger) with
             | Some { Body = Html _ } -> ()
@@ -294,7 +294,7 @@ let tests =
             let reader = Subject.PublicationReader "rhea"
 
             let admitted = {
-                AccessContext.unrestricted reader with
+                AccessContexts.forSubject reader with
                     TokenRoles = AccessContext.tokenRolesFor reader [ "readers" ]
                     Admission = AccessContext.admissionFor reader PrincipalAdmission.PublicationReader
             }
@@ -302,7 +302,7 @@ let tests =
             let! document = read served publication "reports/latest" admitted
             Expect.equal (document |> Option.map _.Title) (Some "Board") "the publishing scope's narrative"
 
-            let refused = AccessContext.unrestricted (TeamMember("u2", "team-2"))
+            let refused = AccessContexts.forSubject (TeamMember("u2", "team-2"))
             let! none = read served publication "reports/latest" refused
             Expect.isNone none "a principal the audience does not admit reads nothing"
 

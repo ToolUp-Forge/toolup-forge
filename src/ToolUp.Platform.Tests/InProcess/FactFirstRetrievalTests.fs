@@ -121,7 +121,7 @@ let private isFact (m: VectorMatch) =
     m.Metadata.TryFind ChunkMetadata.OriginKey = Some "Fact"
 
 let private uctx (userId: string) =
-    AccessContext.unrestricted (AuthenticatedUser userId)
+    AccessContexts.forSubject (AuthenticatedUser userId)
 
 let private withClause (req: RetrievalRequest) = {
     req with
@@ -334,7 +334,7 @@ let tests =
             let sources = ref []
 
             let ctx: PromptContext = {
-                Access = AccessContext.unrestricted (AuthenticatedUser "u")
+                Access = AccessContexts.forSubject (AuthenticatedUser "u")
                 ActiveModule = None
                 ActivePage = None
                 ActivePageNarrative = None
@@ -400,7 +400,7 @@ let tests =
             let sources = ref []
 
             let ctx: PromptContext = {
-                Access = AccessContext.unrestricted (AuthenticatedUser "u")
+                Access = AccessContexts.forSubject (AuthenticatedUser "u")
                 ActiveModule = None
                 ActivePage = None
                 ActivePageNarrative = None

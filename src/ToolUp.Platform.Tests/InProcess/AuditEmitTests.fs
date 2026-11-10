@@ -47,7 +47,7 @@ let private classifier =
         |> FieldClassification.withAuditOnRead
     ]
 
-let private ctx = AccessContext.unrestricted (AuthenticatedUser "u1")
+let private ctx = AccessContexts.forSubject (AuthenticatedUser "u1")
 
 let private logUnder policy =
     AuditLog.EventStoreAuditLog(RefusingEventStore(), silentLogger, failurePolicy = policy) :> IAuditLog

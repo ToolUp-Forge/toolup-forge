@@ -292,15 +292,13 @@ let private postUpload
 
         ctx.Request.Form <- FormCollection(fields, files)
 
-        ctx.Items[box "ToolUp.StorageScope"] <-
-            box {
-                ScopeId = "user-test"
-                Container = "user-test"
-                Persist = true
-            }
+        AccessContexts.stampScope ctx.Items {
+            ScopeId = "user-test"
+            Container = "user-test"
+            Persist = true
+        }
 
-        ctx.Items[box "ToolUp.UserId"] <- box "tester"
-
+        AccessContexts.stampUserId ctx.Items ("tester")
         use body = new MemoryStream()
         ctx.Response.Body <- body
 

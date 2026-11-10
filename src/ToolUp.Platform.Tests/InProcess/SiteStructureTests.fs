@@ -19,9 +19,9 @@ open ToolUp.Platform.Compose
 // parsing, tag-index content-source resolution, related-by-tag ranking,
 // faceted tag counts, and the frontmatter-derived tag helpers.
 
-let private anonCtx = AccessContext.unrestricted (AnonymousSession "s1")
-let private teamCtx = AccessContext.unrestricted (TeamMember("u1", "t1"))
-let private userCtx = AccessContext.unrestricted (AuthenticatedUser "u1")
+let private anonCtx = AccessContexts.forSubject (AnonymousSession "s1")
+let private teamCtx = AccessContexts.forSubject (TeamMember("u1", "t1"))
+let private userCtx = AccessContexts.forSubject (AuthenticatedUser "u1")
 
 let private mkPage (slug: string) (title: string) (tagCsv: string) : PublicPage = {
     Slug = Slug slug

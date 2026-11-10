@@ -43,9 +43,6 @@ let internal sseConnectPolicy: RateLimitPolicy = {
     QueueLimit = 0
 }
 
-[<Literal>]
-let private subjectItemsKey = "ToolUp.Subject"
-
 /// Remote IP for a request, or `"unknown"` when the connection has no
 /// resolved peer address (in-process test hosts, some proxy shapes).
 let private remoteIp (ctx: HttpContext) =
@@ -57,8 +54,8 @@ let private remoteIp (ctx: HttpContext) =
 /// scope-resolution middleware (which runs before `UseRateLimiter`).
 /// `None` only for requests that bypassed scope resolution entirely.
 let private resolveSubject (ctx: HttpContext) : Subject option =
-    match ctx.Items.TryGetValue subjectItemsKey with
-    | true, (:? Subject as subject) -> Some subject
+    match AccessContext.subjectOf ctx.Items with
+    | Some subject -> Some subject
     | _ -> None
 
 /// Phase 66 Stream C.3 — resolve the fixed-window policy + partition

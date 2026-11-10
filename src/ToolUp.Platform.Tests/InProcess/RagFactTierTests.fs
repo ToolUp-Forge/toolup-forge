@@ -225,7 +225,7 @@ let private teamScope (teamId: string) : ResolvedScope =
     }
 
 let private contextFor (scope: ResolvedScope) (question: string) : PromptContext = {
-    Access = AccessContext.unrestricted (AuthenticatedUser "ann")
+    Access = AccessContexts.forSubject (AuthenticatedUser "ann")
     ActiveModule = None
     ActivePage = None
     ActivePageNarrative = None
