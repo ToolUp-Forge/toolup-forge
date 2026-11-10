@@ -1,0 +1,15 @@
+{
+  "kind": "CertificateIssued",
+  "samples": [
+    {
+      "row": "{\"Digest\":\"\",\"Subject\":\"\",\"KeyId\":\"\",\"Seal\":\"\",\"Format\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Digest\":\"\",\"Subject\":\"\",\"KeyId\":\"\",\"Seal\":\"\",\"Format\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CertificateIssued\":{\"Digest\":\"\",\"Subject\":\"\",\"KeyId\":\"\",\"Seal\":\"\",\"Format\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"Digest\":\"s\",\"Subject\":\"s\",\"KeyId\":\"s\",\"Seal\":\"s\",\"Format\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"Digest\":\"s\",\"Subject\":\"s\",\"KeyId\":\"s\",\"Seal\":\"s\",\"Format\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CertificateIssued\":{\"Digest\":\"s\",\"Subject\":\"s\",\"KeyId\":\"s\",\"Seal\":\"s\",\"Format\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

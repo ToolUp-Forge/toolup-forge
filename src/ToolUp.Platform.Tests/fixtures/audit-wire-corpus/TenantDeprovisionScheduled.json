@@ -1,0 +1,15 @@
+{
+  "kind": "TenantDeprovisionScheduled",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"Reason\":\"\",\"DueAt\":\"2020-01-01T00:00:00+00:00\",\"JobId\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"Reason\":\"\",\"DueAt\":\"2020-01-01T00:00:00+00:00\",\"JobId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantDeprovisionScheduled\":{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"Reason\":\"\",\"DueAt\":\"2020-01-01T00:00:00+00:00\",\"JobId\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"Reason\":\"s\",\"DueAt\":\"2021-02-03T04:05:06+00:00\",\"JobId\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"Reason\":\"s\",\"DueAt\":\"2021-02-03T04:05:06+00:00\",\"JobId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantDeprovisionScheduled\":{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"Reason\":\"s\",\"DueAt\":\"2021-02-03T04:05:06+00:00\",\"JobId\":\"s\"}}"
+    }
+  ]
+}

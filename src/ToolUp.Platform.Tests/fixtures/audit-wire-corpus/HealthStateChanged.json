@@ -1,0 +1,15 @@
+{
+  "kind": "HealthStateChanged",
+  "samples": [
+    {
+      "row": "{\"ProbeName\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"Message\":\"\",\"ObservedAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"ProbeName\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"Message\":\"\",\"ObservedAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"HealthStateChanged\":{\"ProbeName\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"Message\":\"\",\"ObservedAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"ProbeName\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"Message\":\"s\",\"ObservedAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"ProbeName\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"Message\":\"s\",\"ObservedAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"HealthStateChanged\":{\"ProbeName\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"Message\":\"s\",\"ObservedAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

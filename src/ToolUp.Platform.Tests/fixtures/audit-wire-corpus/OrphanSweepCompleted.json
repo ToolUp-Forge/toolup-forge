@@ -1,0 +1,15 @@
+{
+  "kind": "OrphanSweepCompleted",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"OrphansFound\":0,\"ReclaimedCount\":0,\"ReclaimedBytes\":\"+0\",\"DeferredCount\":0,\"GracePeriodHours\":\"+0\",\"FailureCount\":0}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"OrphansFound\":0,\"ReclaimedCount\":0,\"ReclaimedBytes\":\"+0\",\"DeferredCount\":0,\"GracePeriodHours\":\"+0\",\"FailureCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OrphanSweepCompleted\":{\"ScopeId\":\"\",\"OrphansFound\":0,\"ReclaimedCount\":0,\"ReclaimedBytes\":\"+0\",\"DeferredCount\":0,\"GracePeriodHours\":\"+0\",\"FailureCount\":0}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"OrphansFound\":7,\"ReclaimedCount\":7,\"ReclaimedBytes\":\"+7\",\"DeferredCount\":7,\"GracePeriodHours\":\"+7\",\"FailureCount\":7}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"OrphansFound\":7,\"ReclaimedCount\":7,\"ReclaimedBytes\":\"+7\",\"DeferredCount\":7,\"GracePeriodHours\":\"+7\",\"FailureCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OrphanSweepCompleted\":{\"ScopeId\":\"s\",\"OrphansFound\":7,\"ReclaimedCount\":7,\"ReclaimedBytes\":\"+7\",\"DeferredCount\":7,\"GracePeriodHours\":\"+7\",\"FailureCount\":7}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "BeaconRejected",
+  "samples": [
+    {
+      "row": "{\"ConversationId\":\"00000000-0000-0000-0000-000000000000\",\"Caller\":\"\",\"Owner\":\"\",\"Surface\":\"\"}",
+      "rowWithActor": "{\"ConversationId\":\"00000000-0000-0000-0000-000000000000\",\"Caller\":\"\",\"Owner\":\"\",\"Surface\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"BeaconRejected\":{\"ConversationId\":\"00000000-0000-0000-0000-000000000000\",\"Caller\":\"\",\"Owner\":\"\",\"Surface\":\"\"}}"
+    },
+    {
+      "row": "{\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"Caller\":\"s\",\"Owner\":\"s\",\"Surface\":\"s\"}",
+      "rowWithActor": "{\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"Caller\":\"s\",\"Owner\":\"s\",\"Surface\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"BeaconRejected\":{\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"Caller\":\"s\",\"Owner\":\"s\",\"Surface\":\"s\"}}"
+    }
+  ]
+}

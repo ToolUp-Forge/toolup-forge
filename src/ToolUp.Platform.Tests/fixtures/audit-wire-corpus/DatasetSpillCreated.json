@@ -1,0 +1,15 @@
+{
+  "kind": "DatasetSpillCreated",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"ScopeId\":\"\",\"SpillDatasetId\":\"\",\"Watermark\":\"\",\"ExpiresAt\":\"2020-01-01T00:00:00.0000000Z\",\"RowCount\":\"+0\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"ScopeId\":\"\",\"SpillDatasetId\":\"\",\"Watermark\":\"\",\"ExpiresAt\":\"2020-01-01T00:00:00.0000000Z\",\"RowCount\":\"+0\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetSpillCreated\":{\"Actor\":\"\",\"ScopeId\":\"\",\"SpillDatasetId\":\"\",\"Watermark\":\"\",\"ExpiresAt\":\"2020-01-01T00:00:00.0000000Z\",\"RowCount\":\"+0\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"ScopeId\":\"s\",\"SpillDatasetId\":\"s\",\"Watermark\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\",\"RowCount\":\"+7\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"ScopeId\":\"s\",\"SpillDatasetId\":\"s\",\"Watermark\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\",\"RowCount\":\"+7\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetSpillCreated\":{\"Actor\":\"s\",\"ScopeId\":\"s\",\"SpillDatasetId\":\"s\",\"Watermark\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06.0000000Z\",\"RowCount\":\"+7\"}}"
+    }
+  ]
+}

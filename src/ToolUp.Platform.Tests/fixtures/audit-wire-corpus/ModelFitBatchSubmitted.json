@@ -1,0 +1,15 @@
+{
+  "kind": "ModelFitBatchSubmitted",
+  "samples": [
+    {
+      "row": "{\"BatchId\":\"\",\"ItemCount\":0,\"SubmittedBy\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"BatchId\":\"\",\"ItemCount\":0,\"SubmittedBy\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitBatchSubmitted\":{\"BatchId\":\"\",\"ItemCount\":0,\"SubmittedBy\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"BatchId\":\"s\",\"ItemCount\":7,\"SubmittedBy\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"BatchId\":\"s\",\"ItemCount\":7,\"SubmittedBy\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitBatchSubmitted\":{\"BatchId\":\"s\",\"ItemCount\":7,\"SubmittedBy\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

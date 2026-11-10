@@ -1,0 +1,15 @@
+{
+  "kind": "ContactCreated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Owner\":\"\",\"Tags\":[]}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Owner\":\"\",\"Tags\":[],\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactCreated\":{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"Owner\":\"\",\"Tags\":[]}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Owner\":\"s\",\"Tags\":[\"s\"]}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Owner\":\"s\",\"Tags\":[\"s\"],\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactCreated\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"Owner\":\"s\",\"Tags\":[\"s\"]}}"
+    }
+  ]
+}

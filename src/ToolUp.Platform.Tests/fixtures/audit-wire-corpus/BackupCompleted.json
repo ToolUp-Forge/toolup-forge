@@ -1,0 +1,15 @@
+{
+  "kind": "BackupCompleted",
+  "samples": [
+    {
+      "row": "{\"SnapshotId\":\"\",\"Containers\":[],\"BlobCount\":0,\"TotalBytes\":\"+0\",\"Consistency\":\"\",\"KeyIds\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"CompletedAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"SnapshotId\":\"\",\"Containers\":[],\"BlobCount\":0,\"TotalBytes\":\"+0\",\"Consistency\":\"\",\"KeyIds\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"CompletedAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"BackupCompleted\":{\"SnapshotId\":\"\",\"Containers\":[],\"BlobCount\":0,\"TotalBytes\":\"+0\",\"Consistency\":\"\",\"KeyIds\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"CompletedAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"SnapshotId\":\"s\",\"Containers\":[\"s\"],\"BlobCount\":7,\"TotalBytes\":\"+7\",\"Consistency\":\"s\",\"KeyIds\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"CompletedAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"SnapshotId\":\"s\",\"Containers\":[\"s\"],\"BlobCount\":7,\"TotalBytes\":\"+7\",\"Consistency\":\"s\",\"KeyIds\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"CompletedAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"BackupCompleted\":{\"SnapshotId\":\"s\",\"Containers\":[\"s\"],\"BlobCount\":7,\"TotalBytes\":\"+7\",\"Consistency\":\"s\",\"KeyIds\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"CompletedAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

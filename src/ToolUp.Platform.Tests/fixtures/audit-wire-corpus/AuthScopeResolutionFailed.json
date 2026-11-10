@@ -1,0 +1,15 @@
+{
+  "kind": "AuthScopeResolutionFailed",
+  "samples": [
+    {
+      "row": "{\"Method\":\"\",\"Path\":\"\",\"ExceptionKind\":\"\",\"Message\":\"\",\"CorrelationId\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Method\":\"\",\"Path\":\"\",\"ExceptionKind\":\"\",\"Message\":\"\",\"CorrelationId\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AuthScopeResolutionFailed\":{\"Method\":\"\",\"Path\":\"\",\"ExceptionKind\":\"\",\"Message\":\"\",\"CorrelationId\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"Method\":\"s\",\"Path\":\"s\",\"ExceptionKind\":\"s\",\"Message\":\"s\",\"CorrelationId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"Method\":\"s\",\"Path\":\"s\",\"ExceptionKind\":\"s\",\"Message\":\"s\",\"CorrelationId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AuthScopeResolutionFailed\":{\"Method\":\"s\",\"Path\":\"s\",\"ExceptionKind\":\"s\",\"Message\":\"s\",\"CorrelationId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

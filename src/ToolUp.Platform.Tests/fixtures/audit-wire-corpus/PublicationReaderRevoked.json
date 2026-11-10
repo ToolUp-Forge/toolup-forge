@@ -1,0 +1,15 @@
+{
+  "kind": "PublicationReaderRevoked",
+  "samples": [
+    {
+      "row": "{\"ActorId\":\"\",\"PublishingScope\":\"\",\"ReaderId\":\"\",\"Role\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"ActorId\":\"\",\"PublishingScope\":\"\",\"ReaderId\":\"\",\"Role\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PublicationReaderRevoked\":{\"ActorId\":\"\",\"PublishingScope\":\"\",\"ReaderId\":\"\",\"Role\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"ActorId\":\"s\",\"PublishingScope\":\"s\",\"ReaderId\":\"s\",\"Role\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"ActorId\":\"s\",\"PublishingScope\":\"s\",\"ReaderId\":\"s\",\"Role\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PublicationReaderRevoked\":{\"ActorId\":\"s\",\"PublishingScope\":\"s\",\"ReaderId\":\"s\",\"Role\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

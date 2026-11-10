@@ -1,0 +1,15 @@
+{
+  "kind": "ArtifactRejected",
+  "samples": [
+    {
+      "row": "{\"PublisherKeyId\":null,\"ModuleId\":\"\",\"ArtifactVersion\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"PublisherKeyId\":null,\"ModuleId\":\"\",\"ArtifactVersion\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModuleArtefactRejected\":{\"PublisherKeyId\":null,\"ModuleId\":\"\",\"ArtifactVersion\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"PublisherKeyId\":\"s\",\"ModuleId\":\"s\",\"ArtifactVersion\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"PublisherKeyId\":\"s\",\"ModuleId\":\"s\",\"ArtifactVersion\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModuleArtefactRejected\":{\"PublisherKeyId\":\"s\",\"ModuleId\":\"s\",\"ArtifactVersion\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

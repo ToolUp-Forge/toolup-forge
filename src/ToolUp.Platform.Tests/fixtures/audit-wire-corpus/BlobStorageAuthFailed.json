@@ -1,0 +1,15 @@
+{
+  "kind": "BlobStorageAuthFailed",
+  "samples": [
+    {
+      "row": "{\"Companion\":\"\",\"Container\":\"\",\"Operation\":\"\",\"StatusCode\":0,\"Reason\":\"\",\"At\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"Companion\":\"\",\"Container\":\"\",\"Operation\":\"\",\"StatusCode\":0,\"Reason\":\"\",\"At\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"BlobStorageAuthFailed\":{\"Companion\":\"\",\"Container\":\"\",\"Operation\":\"\",\"StatusCode\":0,\"Reason\":\"\",\"At\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"Companion\":\"s\",\"Container\":\"s\",\"Operation\":\"s\",\"StatusCode\":7,\"Reason\":\"s\",\"At\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"Companion\":\"s\",\"Container\":\"s\",\"Operation\":\"s\",\"StatusCode\":7,\"Reason\":\"s\",\"At\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"BlobStorageAuthFailed\":{\"Companion\":\"s\",\"Container\":\"s\",\"Operation\":\"s\",\"StatusCode\":7,\"Reason\":\"s\",\"At\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

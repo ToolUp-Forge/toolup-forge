@@ -1,0 +1,15 @@
+{
+  "kind": "KnowledgeDocumentDeduplicated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ExistingDocumentId\":\"\",\"FileName\":\"\",\"ContentHash\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ExistingDocumentId\":\"\",\"FileName\":\"\",\"ContentHash\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeDocumentDeduplicated\":{\"UserId\":\"\",\"ScopeId\":\"\",\"ExistingDocumentId\":\"\",\"FileName\":\"\",\"ContentHash\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ExistingDocumentId\":\"s\",\"FileName\":\"s\",\"ContentHash\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ExistingDocumentId\":\"s\",\"FileName\":\"s\",\"ContentHash\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeDocumentDeduplicated\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ExistingDocumentId\":\"s\",\"FileName\":\"s\",\"ContentHash\":\"s\"}}"
+    }
+  ]
+}

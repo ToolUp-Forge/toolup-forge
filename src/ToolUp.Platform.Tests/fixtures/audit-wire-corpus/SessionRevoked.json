@@ -1,0 +1,15 @@
+{
+  "kind": "SessionRevoked",
+  "samples": [
+    {
+      "row": "{\"ActorUserId\":\"\",\"SubjectUserId\":\"\",\"SessionId\":\"\",\"DeviceDescriptor\":\"\",\"ByAdministrator\":false}",
+      "rowWithActor": "{\"ActorUserId\":\"\",\"SubjectUserId\":\"\",\"SessionId\":\"\",\"DeviceDescriptor\":\"\",\"ByAdministrator\":false,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SessionRevoked\":{\"ActorUserId\":\"\",\"SubjectUserId\":\"\",\"SessionId\":\"\",\"DeviceDescriptor\":\"\",\"ByAdministrator\":false}}"
+    },
+    {
+      "row": "{\"ActorUserId\":\"s\",\"SubjectUserId\":\"s\",\"SessionId\":\"s\",\"DeviceDescriptor\":\"s\",\"ByAdministrator\":true}",
+      "rowWithActor": "{\"ActorUserId\":\"s\",\"SubjectUserId\":\"s\",\"SessionId\":\"s\",\"DeviceDescriptor\":\"s\",\"ByAdministrator\":true,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SessionRevoked\":{\"ActorUserId\":\"s\",\"SubjectUserId\":\"s\",\"SessionId\":\"s\",\"DeviceDescriptor\":\"s\",\"ByAdministrator\":true}}"
+    }
+  ]
+}

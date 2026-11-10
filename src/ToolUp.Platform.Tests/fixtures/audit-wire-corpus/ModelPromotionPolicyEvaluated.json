@@ -1,0 +1,15 @@
+{
+  "kind": "ModelPromotionPolicyEvaluated",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"PolicyId\":\"\",\"PolicyVersion\":0,\"MetricSource\":\"\",\"Verdict\":\"\",\"Reason\":\"\",\"IncumbentKeyHash\":\"\",\"ToleranceCount\":0,\"TransitionApplied\":false,\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"PolicyId\":\"\",\"PolicyVersion\":0,\"MetricSource\":\"\",\"Verdict\":\"\",\"Reason\":\"\",\"IncumbentKeyHash\":\"\",\"ToleranceCount\":0,\"TransitionApplied\":false,\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelPromotionPolicyEvaluated\":{\"CompositeKeyHash\":\"\",\"PolicyId\":\"\",\"PolicyVersion\":0,\"MetricSource\":\"\",\"Verdict\":\"\",\"Reason\":\"\",\"IncumbentKeyHash\":\"\",\"ToleranceCount\":0,\"TransitionApplied\":false,\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"PolicyId\":\"s\",\"PolicyVersion\":7,\"MetricSource\":\"s\",\"Verdict\":\"s\",\"Reason\":\"s\",\"IncumbentKeyHash\":\"s\",\"ToleranceCount\":7,\"TransitionApplied\":true,\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"PolicyId\":\"s\",\"PolicyVersion\":7,\"MetricSource\":\"s\",\"Verdict\":\"s\",\"Reason\":\"s\",\"IncumbentKeyHash\":\"s\",\"ToleranceCount\":7,\"TransitionApplied\":true,\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelPromotionPolicyEvaluated\":{\"CompositeKeyHash\":\"s\",\"PolicyId\":\"s\",\"PolicyVersion\":7,\"MetricSource\":\"s\",\"Verdict\":\"s\",\"Reason\":\"s\",\"IncumbentKeyHash\":\"s\",\"ToleranceCount\":7,\"TransitionApplied\":true,\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "FileUploaded",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"FileName\":\"\",\"DataType\":\"\",\"SizeBytes\":\"+0\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"FileName\":\"\",\"DataType\":\"\",\"SizeBytes\":\"+0\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FileUploaded\":{\"UserId\":\"\",\"FileName\":\"\",\"DataType\":\"\",\"SizeBytes\":\"+0\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"FileName\":\"s\",\"DataType\":\"s\",\"SizeBytes\":\"+7\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"FileName\":\"s\",\"DataType\":\"s\",\"SizeBytes\":\"+7\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FileUploaded\":{\"UserId\":\"s\",\"FileName\":\"s\",\"DataType\":\"s\",\"SizeBytes\":\"+7\"}}"
+    }
+  ]
+}

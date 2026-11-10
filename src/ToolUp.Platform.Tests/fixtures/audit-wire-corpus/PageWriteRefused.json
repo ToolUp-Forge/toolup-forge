@@ -1,0 +1,15 @@
+{
+  "kind": "PageWriteRefused",
+  "samples": [
+    {
+      "row": "{\"Module\":\"\",\"Page\":\"\",\"Layer\":\"\",\"ActorId\":\"\",\"Act\":\"\",\"Reason\":\"\",\"MissingGrant\":null,\"OpsHash\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Module\":\"\",\"Page\":\"\",\"Layer\":\"\",\"ActorId\":\"\",\"Act\":\"\",\"Reason\":\"\",\"MissingGrant\":null,\"OpsHash\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PageWriteRefused\":{\"Module\":\"\",\"Page\":\"\",\"Layer\":\"\",\"ActorId\":\"\",\"Act\":\"\",\"Reason\":\"\",\"MissingGrant\":null,\"OpsHash\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"Module\":\"s\",\"Page\":\"s\",\"Layer\":\"s\",\"ActorId\":\"s\",\"Act\":\"s\",\"Reason\":\"s\",\"MissingGrant\":\"s\",\"OpsHash\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"Module\":\"s\",\"Page\":\"s\",\"Layer\":\"s\",\"ActorId\":\"s\",\"Act\":\"s\",\"Reason\":\"s\",\"MissingGrant\":\"s\",\"OpsHash\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PageWriteRefused\":{\"Module\":\"s\",\"Page\":\"s\",\"Layer\":\"s\",\"ActorId\":\"s\",\"Act\":\"s\",\"Reason\":\"s\",\"MissingGrant\":\"s\",\"OpsHash\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

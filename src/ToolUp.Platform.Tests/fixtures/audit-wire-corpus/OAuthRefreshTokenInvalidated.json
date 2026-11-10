@@ -1,0 +1,15 @@
+{
+  "kind": "OAuthRefreshTokenInvalidated",
+  "samples": [
+    {
+      "row": "{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthRefreshTokenInvalidated\":{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthRefreshTokenInvalidated\":{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

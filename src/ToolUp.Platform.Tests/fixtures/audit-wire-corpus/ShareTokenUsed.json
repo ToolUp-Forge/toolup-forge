@@ -1,0 +1,15 @@
+{
+  "kind": "ShareTokenUsed",
+  "samples": [
+    {
+      "row": "{\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\",\"AttributedHandle\":null}",
+      "rowWithActor": "{\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\",\"AttributedHandle\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ShareTokenUsed\":{\"TokenId\":\"\",\"ResourceKind\":\"\",\"ResourceId\":\"\",\"AttributedHandle\":null}}"
+    },
+    {
+      "row": "{\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\",\"AttributedHandle\":\"s\"}",
+      "rowWithActor": "{\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\",\"AttributedHandle\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ShareTokenUsed\":{\"TokenId\":\"s\",\"ResourceKind\":\"s\",\"ResourceId\":\"s\",\"AttributedHandle\":\"s\"}}"
+    }
+  ]
+}

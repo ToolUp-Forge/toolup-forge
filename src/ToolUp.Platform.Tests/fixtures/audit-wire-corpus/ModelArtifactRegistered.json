@@ -1,0 +1,15 @@
+{
+  "kind": "ModelArtifactRegistered",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"SpecHash\":\"\",\"DatasetVersion\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"Status\":\"\",\"RegisteredBy\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"SpecHash\":\"\",\"DatasetVersion\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"Status\":\"\",\"RegisteredBy\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactRegistered\":{\"CompositeKeyHash\":\"\",\"SpecHash\":\"\",\"DatasetVersion\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"Status\":\"\",\"RegisteredBy\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"SpecHash\":\"s\",\"DatasetVersion\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"Status\":\"s\",\"RegisteredBy\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"SpecHash\":\"s\",\"DatasetVersion\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"Status\":\"s\",\"RegisteredBy\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactRegistered\":{\"CompositeKeyHash\":\"s\",\"SpecHash\":\"s\",\"DatasetVersion\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"Status\":\"s\",\"RegisteredBy\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

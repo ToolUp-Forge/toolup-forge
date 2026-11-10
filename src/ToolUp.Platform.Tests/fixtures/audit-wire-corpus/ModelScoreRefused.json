@@ -1,0 +1,15 @@
+{
+  "kind": "ModelScoreRefused",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"InputVersion\":\"\",\"Reason\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"InputVersion\":\"\",\"Reason\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelScoreRefused\":{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"InputVersion\":\"\",\"Reason\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"InputVersion\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"InputVersion\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelScoreRefused\":{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"InputVersion\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

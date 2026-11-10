@@ -1,0 +1,15 @@
+{
+  "kind": "AdSlotConfigUpdated",
+  "samples": [
+    {
+      "row": "{\"SlotId\":\"\",\"Actor\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"SlotId\":\"\",\"Actor\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdSlotConfigUpdated\":[\"\",\"\",\"2020-01-01T00:00:00+00:00\"]}"
+    },
+    {
+      "row": "{\"SlotId\":\"s\",\"Actor\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"SlotId\":\"s\",\"Actor\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdSlotConfigUpdated\":[\"s\",\"s\",\"2021-02-03T04:05:06+00:00\"]}"
+    }
+  ]
+}

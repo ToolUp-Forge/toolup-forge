@@ -1,0 +1,15 @@
+{
+  "kind": "RemotingMethodAudited",
+  "samples": [
+    {
+      "row": "{\"Kind\":\"\",\"MethodName\":\"\",\"SubjectId\":\"\",\"CorrelationId\":null,\"Payload\":{}}",
+      "rowWithActor": "{\"Kind\":\"\",\"MethodName\":\"\",\"SubjectId\":\"\",\"CorrelationId\":null,\"Payload\":{},\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RemotingMethodAudited\":{\"Kind\":\"\",\"MethodName\":\"\",\"SubjectId\":\"\",\"CorrelationId\":null,\"Payload\":{}}}"
+    },
+    {
+      "row": "{\"Kind\":\"s\",\"MethodName\":\"s\",\"SubjectId\":\"s\",\"CorrelationId\":\"s\",\"Payload\":{}}",
+      "rowWithActor": "{\"Kind\":\"s\",\"MethodName\":\"s\",\"SubjectId\":\"s\",\"CorrelationId\":\"s\",\"Payload\":{},\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RemotingMethodAudited\":{\"Kind\":\"s\",\"MethodName\":\"s\",\"SubjectId\":\"s\",\"CorrelationId\":\"s\",\"Payload\":{}}}"
+    }
+  ]
+}

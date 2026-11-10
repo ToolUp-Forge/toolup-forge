@@ -1,0 +1,15 @@
+{
+  "kind": "ModelArtifactTransitioned",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"ActorUserId\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"ActorUserId\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactTransitioned\":{\"CompositeKeyHash\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"ActorUserId\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"ActorUserId\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"ActorUserId\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactTransitioned\":{\"CompositeKeyHash\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"ActorUserId\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

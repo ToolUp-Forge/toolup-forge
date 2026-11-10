@@ -1,0 +1,15 @@
+{
+  "kind": "ContactUpdated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"ChangedFields\":[]}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"ChangedFields\":[],\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactUpdated\":{\"UserId\":\"\",\"ScopeId\":\"\",\"ContactId\":\"\",\"ChangedFields\":[]}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"ChangedFields\":[\"s\"]}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"ChangedFields\":[\"s\"],\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ContactUpdated\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"ContactId\":\"s\",\"ChangedFields\":[\"s\"]}}"
+    }
+  ]
+}

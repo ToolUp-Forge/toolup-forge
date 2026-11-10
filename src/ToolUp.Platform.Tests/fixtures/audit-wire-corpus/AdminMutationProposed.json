@@ -1,0 +1,15 @@
+{
+  "kind": "AdminMutationProposed",
+  "samples": [
+    {
+      "row": "{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"MutationKind\":\"\",\"Fingerprint\":\"\",\"Summary\":\"\",\"ExpiresAtUtc\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"MutationKind\":\"\",\"Fingerprint\":\"\",\"Summary\":\"\",\"ExpiresAtUtc\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdminMutationProposed\":{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"MutationKind\":\"\",\"Fingerprint\":\"\",\"Summary\":\"\",\"ExpiresAtUtc\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"MutationKind\":\"s\",\"Fingerprint\":\"s\",\"Summary\":\"s\",\"ExpiresAtUtc\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"MutationKind\":\"s\",\"Fingerprint\":\"s\",\"Summary\":\"s\",\"ExpiresAtUtc\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdminMutationProposed\":{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"MutationKind\":\"s\",\"Fingerprint\":\"s\",\"Summary\":\"s\",\"ExpiresAtUtc\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

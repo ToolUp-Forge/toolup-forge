@@ -1,0 +1,15 @@
+{
+  "kind": "CompositionVerificationRecorded",
+  "samples": [
+    {
+      "row": "{\"Verdict\":\"\",\"Profile\":\"\",\"Policy\":\"\",\"RefusedStart\":false,\"Findings\":[],\"Summary\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Verdict\":\"\",\"Profile\":\"\",\"Policy\":\"\",\"RefusedStart\":false,\"Findings\":[],\"Summary\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CompositionVerificationRecorded\":{\"Verdict\":\"\",\"Profile\":\"\",\"Policy\":\"\",\"RefusedStart\":false,\"Findings\":[],\"Summary\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"Verdict\":\"s\",\"Profile\":\"s\",\"Policy\":\"s\",\"RefusedStart\":true,\"Findings\":[\"s\"],\"Summary\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"Verdict\":\"s\",\"Profile\":\"s\",\"Policy\":\"s\",\"RefusedStart\":true,\"Findings\":[\"s\"],\"Summary\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CompositionVerificationRecorded\":{\"Verdict\":\"s\",\"Profile\":\"s\",\"Policy\":\"s\",\"RefusedStart\":true,\"Findings\":[\"s\"],\"Summary\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "EncryptionKeyCreated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyCreated\":{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyCreated\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\"}}"
+    }
+  ]
+}

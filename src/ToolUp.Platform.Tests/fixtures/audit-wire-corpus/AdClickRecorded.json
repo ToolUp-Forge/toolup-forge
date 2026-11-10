@@ -1,0 +1,15 @@
+{
+  "kind": "AdClickRecorded",
+  "samples": [
+    {
+      "row": "{\"SlotId\":\"\",\"AdClientId\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"PathAtClick\":\"\",\"ClickToken\":\"\"}",
+      "rowWithActor": "{\"SlotId\":\"\",\"AdClientId\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"PathAtClick\":\"\",\"ClickToken\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdClickRecorded\":{\"SlotId\":\"\",\"AdClientId\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"PathAtClick\":\"\",\"ClickToken\":\"\"}}"
+    },
+    {
+      "row": "{\"SlotId\":\"s\",\"AdClientId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"PathAtClick\":\"s\",\"ClickToken\":\"s\"}",
+      "rowWithActor": "{\"SlotId\":\"s\",\"AdClientId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"PathAtClick\":\"s\",\"ClickToken\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdClickRecorded\":{\"SlotId\":\"s\",\"AdClientId\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"PathAtClick\":\"s\",\"ClickToken\":\"s\"}}"
+    }
+  ]
+}

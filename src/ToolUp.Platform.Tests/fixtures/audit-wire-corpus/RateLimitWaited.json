@@ -1,0 +1,15 @@
+{
+  "kind": "RateLimitWaited",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"Provider\":\"\",\"SubKey\":null,\"WaitedMs\":\"+0\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"Provider\":\"\",\"SubKey\":null,\"WaitedMs\":\"+0\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RateLimitWaited\":{\"ScopeId\":\"\",\"Provider\":\"\",\"SubKey\":null,\"WaitedMs\":\"+0\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"Provider\":\"s\",\"SubKey\":\"s\",\"WaitedMs\":\"+7\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"Provider\":\"s\",\"SubKey\":\"s\",\"WaitedMs\":\"+7\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RateLimitWaited\":{\"ScopeId\":\"s\",\"Provider\":\"s\",\"SubKey\":\"s\",\"WaitedMs\":\"+7\"}}"
+    }
+  ]
+}

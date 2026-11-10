@@ -1,0 +1,15 @@
+{
+  "kind": "SchemaApproved",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"SchemaId\":\"\",\"Version\":0,\"VersionLabel\":\"\",\"ProposedBy\":\"\",\"ConversationId\":null}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"SchemaId\":\"\",\"Version\":0,\"VersionLabel\":\"\",\"ProposedBy\":\"\",\"ConversationId\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SchemaApproved\":{\"UserId\":\"\",\"ScopeId\":\"\",\"SchemaId\":\"\",\"Version\":0,\"VersionLabel\":\"\",\"ProposedBy\":\"\",\"ConversationId\":null}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"SchemaId\":\"s\",\"Version\":7,\"VersionLabel\":\"s\",\"ProposedBy\":\"s\",\"ConversationId\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"SchemaId\":\"s\",\"Version\":7,\"VersionLabel\":\"s\",\"ProposedBy\":\"s\",\"ConversationId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SchemaApproved\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"SchemaId\":\"s\",\"Version\":7,\"VersionLabel\":\"s\",\"ProposedBy\":\"s\",\"ConversationId\":\"s\"}}"
+    }
+  ]
+}

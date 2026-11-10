@@ -1,0 +1,15 @@
+{
+  "kind": "PlatformDocumentDeleted",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"DocumentId\":\"\",\"FileName\":\"\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"DocumentId\":\"\",\"FileName\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformDocumentDeleted\":{\"Actor\":\"\",\"DocumentId\":\"\",\"FileName\":\"\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"DocumentId\":\"s\",\"FileName\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"DocumentId\":\"s\",\"FileName\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformDocumentDeleted\":{\"Actor\":\"s\",\"DocumentId\":\"s\",\"FileName\":\"s\"}}"
+    }
+  ]
+}

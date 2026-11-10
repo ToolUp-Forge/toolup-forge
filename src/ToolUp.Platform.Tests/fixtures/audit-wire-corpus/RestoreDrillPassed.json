@@ -1,0 +1,15 @@
+{
+  "kind": "RestoreDrillPassed",
+  "samples": [
+    {
+      "row": "{\"SnapshotId\":\"\",\"RestoreId\":\"\",\"HashesVerified\":0,\"Invariants\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"CompletedAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"SnapshotId\":\"\",\"RestoreId\":\"\",\"HashesVerified\":0,\"Invariants\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"CompletedAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RestoreDrillPassed\":{\"SnapshotId\":\"\",\"RestoreId\":\"\",\"HashesVerified\":0,\"Invariants\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"CompletedAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"SnapshotId\":\"s\",\"RestoreId\":\"s\",\"HashesVerified\":7,\"Invariants\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"CompletedAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"SnapshotId\":\"s\",\"RestoreId\":\"s\",\"HashesVerified\":7,\"Invariants\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"CompletedAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RestoreDrillPassed\":{\"SnapshotId\":\"s\",\"RestoreId\":\"s\",\"HashesVerified\":7,\"Invariants\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"CompletedAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "NotificationDeliveryRefused",
+  "samples": [
+    {
+      "row": "{\"NotificationKind\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"RecipientHashes\":[],\"ContactIds\":[],\"CorrelationId\":null}",
+      "rowWithActor": "{\"NotificationKind\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"RecipientHashes\":[],\"ContactIds\":[],\"CorrelationId\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationDeliveryRefused\":{\"NotificationKind\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"RecipientHashes\":[],\"ContactIds\":[],\"CorrelationId\":null}}"
+    },
+    {
+      "row": "{\"NotificationKind\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"RecipientHashes\":[\"s\"],\"ContactIds\":[\"s\"],\"CorrelationId\":\"s\"}",
+      "rowWithActor": "{\"NotificationKind\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"RecipientHashes\":[\"s\"],\"ContactIds\":[\"s\"],\"CorrelationId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationDeliveryRefused\":{\"NotificationKind\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"RecipientHashes\":[\"s\"],\"ContactIds\":[\"s\"],\"CorrelationId\":\"s\"}}"
+    }
+  ]
+}

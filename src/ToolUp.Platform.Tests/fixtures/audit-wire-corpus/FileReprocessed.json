@@ -1,0 +1,15 @@
+{
+  "kind": "FileReprocessed",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"FileName\":\"\",\"DataType\":\"\",\"HadError\":false}",
+      "rowWithActor": "{\"UserId\":\"\",\"FileName\":\"\",\"DataType\":\"\",\"HadError\":false,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FileReprocessed\":{\"UserId\":\"\",\"FileName\":\"\",\"DataType\":\"\",\"HadError\":false}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"FileName\":\"s\",\"DataType\":\"s\",\"HadError\":true}",
+      "rowWithActor": "{\"UserId\":\"s\",\"FileName\":\"s\",\"DataType\":\"s\",\"HadError\":true,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FileReprocessed\":{\"UserId\":\"s\",\"FileName\":\"s\",\"DataType\":\"s\",\"HadError\":true}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "ConsentRecorded",
+  "samples": [
+    {
+      "row": "{\"AnonymousUserId\":\"\",\"Category\":\"Necessary\",\"Decision\":\"Granted\",\"Timestamp\":\"2020-01-01T00:00:00+00:00\",\"CmpProvider\":\"\"}",
+      "rowWithActor": "{\"AnonymousUserId\":\"\",\"Category\":\"Necessary\",\"Decision\":\"Granted\",\"Timestamp\":\"2020-01-01T00:00:00+00:00\",\"CmpProvider\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConsentRecorded\":{\"AnonymousUserId\":\"\",\"Category\":\"Necessary\",\"Decision\":\"Granted\",\"Timestamp\":\"2020-01-01T00:00:00+00:00\",\"CmpProvider\":\"\"}}"
+    },
+    {
+      "row": "{\"AnonymousUserId\":\"s\",\"Category\":\"ThirdPartyEmbeds\",\"Decision\":\"NotYetDecided\",\"Timestamp\":\"2021-02-03T04:05:06+00:00\",\"CmpProvider\":\"s\"}",
+      "rowWithActor": "{\"AnonymousUserId\":\"s\",\"Category\":\"ThirdPartyEmbeds\",\"Decision\":\"NotYetDecided\",\"Timestamp\":\"2021-02-03T04:05:06+00:00\",\"CmpProvider\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConsentRecorded\":{\"AnonymousUserId\":\"s\",\"Category\":\"ThirdPartyEmbeds\",\"Decision\":\"NotYetDecided\",\"Timestamp\":\"2021-02-03T04:05:06+00:00\",\"CmpProvider\":\"s\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "EgressDenied",
+  "samples": [
+    {
+      "row": "{\"Component\":\"\",\"Origin\":\"\",\"Surface\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"Component\":\"\",\"Origin\":\"\",\"Surface\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EgressDenied\":{\"Component\":\"\",\"Origin\":\"\",\"Surface\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"Component\":\"s\",\"Origin\":\"s\",\"Surface\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"Component\":\"s\",\"Origin\":\"s\",\"Surface\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EgressDenied\":{\"Component\":\"s\",\"Origin\":\"s\",\"Surface\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

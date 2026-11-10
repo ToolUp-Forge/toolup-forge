@@ -1,0 +1,15 @@
+{
+  "kind": "RestoreDrillFailed",
+  "samples": [
+    {
+      "row": "{\"SnapshotId\":null,\"RestoreId\":null,\"Stage\":\"\",\"Reason\":\"\",\"FailedInvariants\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"FailedAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"SnapshotId\":null,\"RestoreId\":null,\"Stage\":\"\",\"Reason\":\"\",\"FailedInvariants\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"FailedAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RestoreDrillFailed\":{\"SnapshotId\":null,\"RestoreId\":null,\"Stage\":\"\",\"Reason\":\"\",\"FailedInvariants\":[],\"StartedAt\":\"2020-01-01T00:00:00.0000000Z\",\"FailedAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"SnapshotId\":\"s\",\"RestoreId\":\"s\",\"Stage\":\"s\",\"Reason\":\"s\",\"FailedInvariants\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"FailedAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"SnapshotId\":\"s\",\"RestoreId\":\"s\",\"Stage\":\"s\",\"Reason\":\"s\",\"FailedInvariants\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"FailedAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RestoreDrillFailed\":{\"SnapshotId\":\"s\",\"RestoreId\":\"s\",\"Stage\":\"s\",\"Reason\":\"s\",\"FailedInvariants\":[\"s\"],\"StartedAt\":\"2021-02-03T04:05:06.0000000Z\",\"FailedAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

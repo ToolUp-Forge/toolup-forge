@@ -1,0 +1,15 @@
+{
+  "kind": "GrantConsentApproved",
+  "samples": [
+    {
+      "row": "{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"RecordedBy\":\"\",\"Supersedes\":\"\",\"ExpiresAtUtc\":null}",
+      "rowWithActor": "{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"RecordedBy\":\"\",\"Supersedes\":\"\",\"ExpiresAtUtc\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantConsentApproved\":{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"RecordedBy\":\"\",\"Supersedes\":\"\",\"ExpiresAtUtc\":null}}"
+    },
+    {
+      "row": "{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"RecordedBy\":\"s\",\"Supersedes\":\"s\",\"ExpiresAtUtc\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"RecordedBy\":\"s\",\"Supersedes\":\"s\",\"ExpiresAtUtc\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantConsentApproved\":{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"RecordedBy\":\"s\",\"Supersedes\":\"s\",\"ExpiresAtUtc\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

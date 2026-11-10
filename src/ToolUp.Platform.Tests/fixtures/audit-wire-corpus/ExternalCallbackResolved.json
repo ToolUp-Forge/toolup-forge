@@ -1,0 +1,15 @@
+{
+  "kind": "ExternalCallbackResolved",
+  "samples": [
+    {
+      "row": "{\"HandleId\":\"\",\"Backend\":\"\",\"ScopeId\":\"\",\"JobRunId\":\"\",\"Outcome\":\"\",\"Resolution\":\"\",\"RunStatus\":null,\"WorkerId\":null,\"WorkerKeyId\":null,\"SignatureAlgorithm\":null,\"ArtifactHash\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"HandleId\":\"\",\"Backend\":\"\",\"ScopeId\":\"\",\"JobRunId\":\"\",\"Outcome\":\"\",\"Resolution\":\"\",\"RunStatus\":null,\"WorkerId\":null,\"WorkerKeyId\":null,\"SignatureAlgorithm\":null,\"ArtifactHash\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ExternalCallbackResolved\":{\"HandleId\":\"\",\"Backend\":\"\",\"ScopeId\":\"\",\"JobRunId\":\"\",\"Outcome\":\"\",\"Resolution\":\"\",\"RunStatus\":null,\"WorkerId\":null,\"WorkerKeyId\":null,\"SignatureAlgorithm\":null,\"ArtifactHash\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"HandleId\":\"s\",\"Backend\":\"s\",\"ScopeId\":\"s\",\"JobRunId\":\"s\",\"Outcome\":\"s\",\"Resolution\":\"s\",\"RunStatus\":\"s\",\"WorkerId\":\"s\",\"WorkerKeyId\":\"s\",\"SignatureAlgorithm\":\"s\",\"ArtifactHash\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"HandleId\":\"s\",\"Backend\":\"s\",\"ScopeId\":\"s\",\"JobRunId\":\"s\",\"Outcome\":\"s\",\"Resolution\":\"s\",\"RunStatus\":\"s\",\"WorkerId\":\"s\",\"WorkerKeyId\":\"s\",\"SignatureAlgorithm\":\"s\",\"ArtifactHash\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ExternalCallbackResolved\":{\"HandleId\":\"s\",\"Backend\":\"s\",\"ScopeId\":\"s\",\"JobRunId\":\"s\",\"Outcome\":\"s\",\"Resolution\":\"s\",\"RunStatus\":\"s\",\"WorkerId\":\"s\",\"WorkerKeyId\":\"s\",\"SignatureAlgorithm\":\"s\",\"ArtifactHash\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

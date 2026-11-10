@@ -1,0 +1,15 @@
+{
+  "kind": "TeamInviteRedeemed",
+  "samples": [
+    {
+      "row": "{\"TeamId\":\"\",\"TokenId\":\"\",\"RemainingUses\":0}",
+      "rowWithActor": "{\"TeamId\":\"\",\"TokenId\":\"\",\"RemainingUses\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteRedeemed\":{\"TeamId\":\"\",\"TokenId\":\"\",\"RemainingUses\":0}}"
+    },
+    {
+      "row": "{\"TeamId\":\"s\",\"TokenId\":\"s\",\"RemainingUses\":7}",
+      "rowWithActor": "{\"TeamId\":\"s\",\"TokenId\":\"s\",\"RemainingUses\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamInviteRedeemed\":{\"TeamId\":\"s\",\"TokenId\":\"s\",\"RemainingUses\":7}}"
+    }
+  ]
+}

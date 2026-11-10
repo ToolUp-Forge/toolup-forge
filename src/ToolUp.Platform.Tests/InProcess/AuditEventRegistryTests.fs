@@ -92,6 +92,68 @@ let rec private defaultValue (t: Type) : obj =
     else
         failwithf "AuditEventRegistryTests: no default-value rule for type %s" t.FullName
 
+/// A second, POPULATED representative: every string non-empty, every
+/// number non-zero, every option `Some`, every list one element long. The
+/// default sample alone would pin only the empty shapes (`null`, `[]`,
+/// `0`), so the wire corpus carries both. Depth-bounded so a recursive
+/// type falls back to its default rather than looping.
+let rec private populatedValue (depth: int) (t: Type) : obj =
+    if depth > 4 then
+        defaultValue t
+    elif t = typeof<string> then
+        box "s"
+    elif t = typeof<bool> then
+        box true
+    elif t = typeof<int> then
+        box 7
+    elif t = typeof<int64> then
+        box 7L
+    elif t = typeof<float> then
+        box 0.5
+    elif t = typeof<decimal> then
+        box 1.25M
+    elif t = typeof<Guid> then
+        box (Guid "00000000-0000-0000-0000-000000000874")
+    elif t = typeof<DateTime> then
+        box (DateTime(2021, 2, 3, 4, 5, 6, DateTimeKind.Utc))
+    elif t = typeof<DateTimeOffset> then
+        box (DateTimeOffset(2021, 2, 3, 4, 5, 6, TimeSpan.Zero))
+    elif t.IsEnum then
+        Enum.GetValues t |> Seq.cast<obj> |> Seq.last
+    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Map<_, _>> then
+        defaultValue t
+    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
+        let inner = populatedValue (depth + 1) (t.GetGenericArguments()[0])
+        let some = FSharpType.GetUnionCases t |> Array.find (fun c -> c.Name = "Some")
+        FSharpValue.MakeUnion(some, [| inner |])
+    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
+        let inner = populatedValue (depth + 1) (t.GetGenericArguments()[0])
+        let cases = FSharpType.GetUnionCases t
+
+        let empty =
+            FSharpValue.MakeUnion(cases |> Array.find (fun c -> c.Name = "Empty"), [||])
+
+        FSharpValue.MakeUnion(cases |> Array.find (fun c -> c.Name = "Cons"), [| inner; empty |])
+    elif FSharpType.IsUnion t then
+        // The LAST case, so the populated sample exercises a different
+        // case from the default sample wherever the union has several.
+        let cases = FSharpType.GetUnionCases t
+        let chosen = cases[cases.Length - 1]
+
+        let fieldVals =
+            chosen.GetFields()
+            |> Array.map (fun f -> populatedValue (depth + 1) f.PropertyType)
+
+        FSharpValue.MakeUnion(chosen, fieldVals)
+    elif FSharpType.IsRecord t then
+        let fields = FSharpType.GetRecordFields t
+        FSharpValue.MakeRecord(t, fields |> Array.map (fun f -> populatedValue (depth + 1) f.PropertyType))
+    elif FSharpType.IsTuple t then
+        let elems = FSharpType.GetTupleElements t
+        FSharpValue.MakeTuple(elems |> Array.map (populatedValue (depth + 1)), t)
+    else
+        defaultValue t
+
 /// One synthesised representative of every `AuditEvent` union case,
 /// keyed by its WIRE discriminator (`AuditEvent.eventTypeName`) rather
 /// than by its F# case identifier.
@@ -112,6 +174,83 @@ let private allCaseSamples: (string * AuditEvent) list =
     FSharpType.GetUnionCases typeof<AuditEvent>
     |> Array.map (fun case ->
         let fieldVals = case.GetFields() |> Array.map (fun f -> defaultValue f.PropertyType)
+        let evt = FSharpValue.MakeUnion(case, fieldVals) :?> AuditEvent
+        AuditEvent.eventTypeName evt, evt)
+    |> List.ofArray
+
+// ─── The wire corpus: one fixture per event kind ──────────────────────
+//
+// Captured from the encoder BEFORE the registry replaced the closed
+// union, and held byte-for-byte after it. Each fixture carries, for a
+// default and a populated sample: the stored row (the codec's bytes), the
+// same row with an `_actor` appended, and the archive shape a sink writes
+// (`JsonSerializer.Serialize(event, options)`). A kind's bytes are what
+// operator archives, SIEM rules and the permission chain already hold;
+// none of them can be migrated, so none of them may move.
+
+let private wireCorpusDir () =
+    let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+
+    Path.GetFullPath(
+        Path.Combine(
+            assemblyDir,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "ToolUp.Platform.Tests",
+            "fixtures",
+            "audit-wire-corpus"
+        )
+    )
+
+let private regenWireCorpus () =
+    match Environment.GetEnvironmentVariable "TOOLUP_REGEN_AUDIT_WIRE_CORPUS" with
+    | null
+    | "" -> false
+    | v -> v = "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+
+let private corpusActor =
+    AuditSubject.TeamAudit(UserId "corpus-user", TeamId "corpus-team")
+
+/// The fixture document for one event: a JSON object whose values are the
+/// exact strings, so a reader sees the bytes rather than a re-rendering.
+let private corpusFixture (kind: string) (samples: AuditEvent list) : string =
+    let o = Text.Json.Nodes.JsonObject()
+    o["kind"] <- Text.Json.Nodes.JsonValue.Create kind
+    let arr = Text.Json.Nodes.JsonArray()
+
+    for evt in samples do
+        let row = AuditLog.serialiseAuditEvent evt
+        let s = Text.Json.Nodes.JsonObject()
+        s["row"] <- Text.Json.Nodes.JsonValue.Create row
+        s["rowWithActor"] <- Text.Json.Nodes.JsonValue.Create(AuditLog.withActor corpusActor row)
+
+        s["archive"] <-
+            Text.Json.Nodes.JsonValue.Create(
+                Text.Json.JsonSerializer.Serialize(evt, ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options)
+            )
+
+        arr.Add s
+
+    o["samples"] <- arr
+
+    let options =
+        Text.Json.JsonSerializerOptions(
+            WriteIndented = true,
+            Encoder = Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        )
+
+    o.ToJsonString(options).Replace("\r\n", "\n") + "\n"
+
+let private populatedCaseSamples: (string * AuditEvent) list =
+    FSharpType.GetUnionCases typeof<AuditEvent>
+    |> Array.map (fun case ->
+        let fieldVals =
+            case.GetFields() |> Array.map (fun f -> populatedValue 0 f.PropertyType)
+
         let evt = FSharpValue.MakeUnion(case, fieldVals) :?> AuditEvent
         AuditEvent.eventTypeName evt, evt)
     |> List.ofArray
@@ -325,6 +464,26 @@ module private AuditEventReference =
 [<Tests>]
 let tests =
     testList "Phase 114 — audit-event registry exhaustiveness" [
+
+        test "the wire corpus holds every event's bytes (one fixture per kind)" {
+            let dir = wireCorpusDir ()
+            let byKind = populatedCaseSamples |> Map.ofList
+
+            for kind, evt in allCaseSamples do
+                let expected = corpusFixture kind [ evt; byKind[kind] ]
+                let path = Path.Combine(dir, kind + ".json")
+
+                if regenWireCorpus () then
+                    Directory.CreateDirectory dir |> ignore
+                    File.WriteAllText(path, expected)
+                else
+                    Expect.isTrue (File.Exists path) (sprintf "no wire-corpus fixture for %s" kind)
+
+                    Expect.equal
+                        (File.ReadAllText path |> normaliseEol)
+                        expected
+                        (sprintf "wire bytes of %s moved" kind)
+        }
 
         test "every AuditEvent union case has a decode registry entry" {
             let decoderKeys =

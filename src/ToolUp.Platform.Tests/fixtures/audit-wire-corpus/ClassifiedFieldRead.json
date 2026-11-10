@@ -1,0 +1,15 @@
+{
+  "kind": "ClassifiedFieldRead",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\",\"Redacted\":false}",
+      "rowWithActor": "{\"UserId\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\",\"Redacted\":false,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ClassifiedFieldRead\":{\"UserId\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\",\"Redacted\":false}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\",\"Redacted\":true}",
+      "rowWithActor": "{\"UserId\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\",\"Redacted\":true,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ClassifiedFieldRead\":{\"UserId\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\",\"Redacted\":true}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "EgressBlocked",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\",\"Decision\":\"\",\"Boundary\":\"\",\"Destination\":null}",
+      "rowWithActor": "{\"Actor\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\",\"Decision\":\"\",\"Boundary\":\"\",\"Destination\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EgressBlocked\":{\"Actor\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\",\"Decision\":\"\",\"Boundary\":\"\",\"Destination\":null}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\",\"Decision\":\"s\",\"Boundary\":\"s\",\"Destination\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\",\"Decision\":\"s\",\"Boundary\":\"s\",\"Destination\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EgressBlocked\":{\"Actor\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\",\"Decision\":\"s\",\"Boundary\":\"s\",\"Destination\":\"s\"}}"
+    }
+  ]
+}

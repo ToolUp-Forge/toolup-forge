@@ -1,0 +1,15 @@
+{
+  "kind": "SessionStoreReset",
+  "samples": [
+    {
+      "row": "{\"Container\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"Container\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SessionStoreReset\":{\"Container\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"Container\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"Container\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SessionStoreReset\":{\"Container\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

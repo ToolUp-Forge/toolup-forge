@@ -1,0 +1,15 @@
+{
+  "kind": "TenantDataExported",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"Actor\":\"\",\"ArchiveContainer\":\"\",\"ArchivePath\":\"\",\"ContentHash\":\"\",\"SegmentCount\":0}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"Actor\":\"\",\"ArchiveContainer\":\"\",\"ArchivePath\":\"\",\"ContentHash\":\"\",\"SegmentCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantDataExported\":{\"ScopeId\":\"\",\"Actor\":\"\",\"ArchiveContainer\":\"\",\"ArchivePath\":\"\",\"ContentHash\":\"\",\"SegmentCount\":0}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"ArchiveContainer\":\"s\",\"ArchivePath\":\"s\",\"ContentHash\":\"s\",\"SegmentCount\":7}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"ArchiveContainer\":\"s\",\"ArchivePath\":\"s\",\"ContentHash\":\"s\",\"SegmentCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantDataExported\":{\"ScopeId\":\"s\",\"Actor\":\"s\",\"ArchiveContainer\":\"s\",\"ArchivePath\":\"s\",\"ContentHash\":\"s\",\"SegmentCount\":7}}"
+    }
+  ]
+}

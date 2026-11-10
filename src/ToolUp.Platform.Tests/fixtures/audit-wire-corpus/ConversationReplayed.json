@@ -1,0 +1,15 @@
+{
+  "kind": "ConversationReplayed",
+  "samples": [
+    {
+      "row": "{\"OriginalConversationId\":\"\",\"ReplayConversationId\":\"\",\"NewSystemPromptDigest\":null,\"NewProvider\":null,\"SdkAnnotation\":null,\"Delta\":\"\"}",
+      "rowWithActor": "{\"OriginalConversationId\":\"\",\"ReplayConversationId\":\"\",\"NewSystemPromptDigest\":null,\"NewProvider\":null,\"SdkAnnotation\":null,\"Delta\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationReplayed\":{\"OriginalConversationId\":\"\",\"ReplayConversationId\":\"\",\"NewSystemPromptDigest\":null,\"NewProvider\":null,\"SdkAnnotation\":null,\"Delta\":\"\"}}"
+    },
+    {
+      "row": "{\"OriginalConversationId\":\"s\",\"ReplayConversationId\":\"s\",\"NewSystemPromptDigest\":\"s\",\"NewProvider\":\"s\",\"SdkAnnotation\":\"s\",\"Delta\":\"s\"}",
+      "rowWithActor": "{\"OriginalConversationId\":\"s\",\"ReplayConversationId\":\"s\",\"NewSystemPromptDigest\":\"s\",\"NewProvider\":\"s\",\"SdkAnnotation\":\"s\",\"Delta\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationReplayed\":{\"OriginalConversationId\":\"s\",\"ReplayConversationId\":\"s\",\"NewSystemPromptDigest\":\"s\",\"NewProvider\":\"s\",\"SdkAnnotation\":\"s\",\"Delta\":\"s\"}}"
+    }
+  ]
+}

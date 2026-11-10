@@ -1,0 +1,15 @@
+{
+  "kind": "MemberRoleChanged",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"OldRole\":\"\",\"NewRole\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"OldRole\":\"\",\"NewRole\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MemberRoleChanged\":{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"OldRole\":\"\",\"NewRole\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"OldRole\":\"s\",\"NewRole\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"OldRole\":\"s\",\"NewRole\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MemberRoleChanged\":{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"OldRole\":\"s\",\"NewRole\":\"s\"}}"
+    }
+  ]
+}
