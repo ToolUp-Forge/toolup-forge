@@ -46,6 +46,7 @@ let allTests =
         // Phase 1106 - background-jobs admin MVU: standing, ordering,
         // re-run offer and the TriggerOnce round-trip (Platform.Client).
         JobsAdminUITests.tests
+        AdminSubModelTests.tests
         // Sidebar admin-group role gate — platform-scoped vs team-scoped
         // group split behind the 4f.2 filter (Platform.Client tier).
         SidebarAdminGroupGateTests.tests
