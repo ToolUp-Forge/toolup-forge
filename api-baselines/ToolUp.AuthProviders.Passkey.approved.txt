@@ -3,6 +3,33 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents.|PasskeyAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent]
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent.IsPasskeyCredentialRegistered : System.Boolean { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent.IsPasskeyCredentialRemoved : System.Boolean { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent.Tag : System.Int32 { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent+PasskeyCredentialRegistered (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent+PasskeyCredentialRegistered.Item : ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRegisteredPayload { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent+PasskeyCredentialRemoved (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent+PasskeyCredentialRemoved.Item : ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRemovedPayload { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent+Tags (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent+Tags.PasskeyCredentialRegistered : System.Int32 (literal)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent+Tags.PasskeyCredentialRemoved : System.Int32 (literal)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEventModule (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEventModule.Registrant : System.String (literal)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEventModule.event(ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent] { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyAuditEvent]
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRegisteredPayload (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRegisteredPayload..ctor(ToolUp.Platform.UserId, System.String, System.String)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRegisteredPayload.CredentialIdPrefix : System.String { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRegisteredPayload.Grant : System.String { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRegisteredPayload.UserId : ToolUp.Platform.UserId { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRemovedPayload (class)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRemovedPayload..ctor(ToolUp.Platform.UserId, System.String)
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRemovedPayload.CredentialIdPrefix : System.String { get }
+ToolUp.AuthProviders.Passkey.PasskeyAuditEvents+PasskeyCredentialRemovedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.AuthProviders.Passkey.PasskeyCeremony (class)
 ToolUp.AuthProviders.Passkey.PasskeyCeremony.beginAssertion(Fido2NetLib.IFido2, ToolUp.AuthProviders.Passkey.PasskeyStores+PasskeyCredentialStore, ToolUp.AuthProviders.Passkey.PasskeyStores+IPasskeyChallengeStore, ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AuthProviders.Passkey.PasskeyTypes+CeremonyOptionsResponse, System.String]]
 ToolUp.AuthProviders.Passkey.PasskeyCeremony.beginRegistration(Fido2NetLib.IFido2, ToolUp.AuthProviders.Passkey.PasskeyStores+PasskeyCredentialStore, ToolUp.AuthProviders.Passkey.PasskeyStores+IPasskeyChallengeStore, ToolUp.AuthProviders.Passkey.PasskeyTypes+PasskeyConfig, ToolUp.AuthProviders.Passkey.PasskeyRegistrationPolicy+RegistrationGrant, ToolUp.AuthProviders.Passkey.PasskeyRegistrationPolicy+RegistrationIdentity) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AuthProviders.Passkey.PasskeyTypes+CeremonyOptionsResponse, System.String]]

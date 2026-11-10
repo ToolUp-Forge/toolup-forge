@@ -204,6 +204,105 @@ KnowledgeBase.ServerInventory.invalidateInventoryCache(System.String) : System.V
 KnowledgeBase.ServerInventory.kbInventoryBuilder(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.AI.SystemPromptBuilder+PromptContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 KnowledgeBase.ServerInventory.knowledgeBasePromptBuilders(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]
 KnowledgeBase.ServerInventory.publishInventoryUpdate(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+KnowledgeBase.ServerKnowledgeAuditEvents (class)
+KnowledgeBase.ServerKnowledgeAuditEvents.|KnowledgeAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent]
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.Int64, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.DateTimeOffset)
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.ContentHash : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.FileName : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.OccurredAt : System.DateTimeOffset { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.Refused : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.ScannerName : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.ScopeId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.SizeBytes : System.Int64 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.UserId : ToolUp.Platform.UserId { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload.Verdict : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsContentScanned : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsKnowledgeDocumentDeduplicated : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsKnowledgeDocumentsPurged : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsKnowledgeOriginalRetrievalDenied : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsKnowledgeOriginalRetrieved : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsKnowledgeScopeErased : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsPlatformDocumentDeleted : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.IsPlatformDocumentUploaded : System.Boolean { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent.Tag : System.Int32 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+ContentScanned (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+ContentScanned.Item : KnowledgeBase.ServerKnowledgeAuditEvents+ContentScannedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeDocumentDeduplicated (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeDocumentDeduplicated.Item : KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeDocumentsPurged (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeDocumentsPurged.Item : KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeOriginalRetrievalDenied (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeOriginalRetrievalDenied.Item : KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievalDeniedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeOriginalRetrieved (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeOriginalRetrieved.Item : KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeScopeErased (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+KnowledgeScopeErased.Item : KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeScopeErasedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+PlatformDocumentDeleted (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+PlatformDocumentDeleted.Item : KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentDeletedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+PlatformDocumentUploaded (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+PlatformDocumentUploaded.Item : KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentUploadedPayload { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.ContentScanned : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.KnowledgeDocumentDeduplicated : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.KnowledgeDocumentsPurged : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.KnowledgeOriginalRetrievalDenied : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.KnowledgeOriginalRetrieved : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.KnowledgeScopeErased : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.PlatformDocumentDeleted : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent+Tags.PlatformDocumentUploaded : System.Int32 (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEventModule (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEventModule.Registrant : System.String (literal)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEventModule.event(KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent) : ToolUp.Platform.AuditEvent
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent] { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeAuditEvent]
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload.ContentHash : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload.ExistingDocumentId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload.FileName : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload.ScopeId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentDeduplicatedPayload.UserId : ToolUp.Platform.UserId { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, System.Int64, System.Int64, System.Int32)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload.DocumentIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload.MaxAgeSeconds : System.Int64 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload.OrphanChunkCount : System.Int32 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload.PurgedCount : System.Int32 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload.ReclaimedBytes : System.Int64 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeDocumentsPurgedPayload.ScopeId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievalDeniedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievalDeniedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievalDeniedPayload.DocumentId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievalDeniedPayload.Reason : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievalDeniedPayload.ScopeId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievalDeniedPayload.UserId : ToolUp.Platform.UserId { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload.DocumentId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload.FileName : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload.ScopeId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload.SourceKind : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeOriginalRetrievedPayload.UserId : ToolUp.Platform.UserId { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeScopeErasedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeScopeErasedPayload..ctor(ToolUp.Platform.UserId, System.String, System.Int32, System.Int32)
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeScopeErasedPayload.DocumentCount : System.Int32 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeScopeErasedPayload.OrphanChunkCount : System.Int32 { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeScopeErasedPayload.ScopeId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+KnowledgeScopeErasedPayload.UserId : ToolUp.Platform.UserId { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentDeletedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentDeletedPayload..ctor(System.String, System.String, System.String)
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentDeletedPayload.Actor : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentDeletedPayload.DocumentId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentDeletedPayload.FileName : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentUploadedPayload (class)
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentUploadedPayload..ctor(System.String, System.String, System.String, System.Int64)
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentUploadedPayload.Actor : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentUploadedPayload.DocumentId : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentUploadedPayload.FileName : System.String { get }
+KnowledgeBase.ServerKnowledgeAuditEvents+PlatformDocumentUploadedPayload.SizeBytes : System.Int64 { get }
 KnowledgeBase.ServerNotes (class)
 KnowledgeBase.ServerNotes.buildNoteChunk(System.String, System.String, System.String, System.Int32, System.Int32, System.String) : System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+TextChunk, SharedTypes+SourceReference]
 KnowledgeBase.ServerNotes.chunkNoteBody(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
