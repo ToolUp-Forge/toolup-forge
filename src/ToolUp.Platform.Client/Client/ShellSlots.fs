@@ -264,7 +264,7 @@ module ShellSlots =
         authenticatedAdmin _.TeamConfig TeamConfigUI.moduleId TeamConfigUI.create None "TeamConfig"
 
     let private webhookAdmin =
-        authenticatedAdmin _.WebhookAdmin WebhookAdminUI.moduleId builtIn WebhookAdminUI.builtIn None "WebhookAdmin"
+        authenticatedAdmin _.WebhookAdmin WebhookAdminUI.moduleId (builtIn WebhookAdminUI.builtIn) None "WebhookAdmin"
 
     let private serviceAccountAdmin =
         authenticatedAdmin
@@ -318,7 +318,7 @@ module ShellSlots =
             "UsageDashboard"
 
     let private auditViewer =
-        authenticatedAdmin _.AuditViewer AuditLogUI.moduleId builtIn AuditLogUI.builtIn None "AuditViewer"
+        authenticatedAdmin _.AuditViewer AuditLogUI.moduleId (builtIn AuditLogUI.builtIn) None "AuditViewer"
 
     let private dataIngestionAdmin =
         authenticatedAdmin

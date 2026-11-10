@@ -873,6 +873,9 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// This built-in's module id, reserved under the `_sdk.` namespace.
+let moduleId = "_sdk.PlatformUsers"
+
 /// The built-in platform-users admin (`ShellSlots.builtIn` builds its module).
 /// Registered under the `_sdk.` namespace in the "Platform Management"
 /// sidebar group; the shell's role filter hides the group from non-admin
