@@ -164,6 +164,55 @@ ToolUp.Platform.Infra.AssemblyTransform+Window.column : System.String { get }
 ToolUp.Platform.Infra.AssemblyTransform+Window.partitionBy : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Infra.AssemblyTransform+Window.periodColumn : System.String { get }
 ToolUp.Platform.Infra.AssemblyTransform+Window.size : System.Int32 { get }
+ToolUp.Platform.Infra.AttemptAnnouncement (class)
+ToolUp.Platform.Infra.AttemptAnnouncement..ctor(System.String, System.String, System.String)
+ToolUp.Platform.Infra.AttemptAnnouncement.Key : System.String { get }
+ToolUp.Platform.Infra.AttemptAnnouncement.Payload : System.String { get }
+ToolUp.Platform.Infra.AttemptAnnouncement.Recipient : System.String { get }
+ToolUp.Platform.Infra.AttemptAnnouncementModule (class)
+ToolUp.Platform.Infra.AttemptAnnouncementModule.publish(ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.Infra.AttemptAnnouncement) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.AttemptRecord`1 (class)
+ToolUp.Platform.Infra.AttemptRecord`1..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Status)
+ToolUp.Platform.Infra.AttemptRecord`1.AttemptId : System.String { get }
+ToolUp.Platform.Infra.AttemptRecord`1.Counted : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Infra.AttemptRecord`1.EnqueuedChunks : System.Int32 { get }
+ToolUp.Platform.Infra.AttemptRecord`1.Status : Status { get }
+ToolUp.Platform.Infra.AttemptRecords`1 (class)
+ToolUp.Platform.Infra.AttemptRecords`1..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
+ToolUp.Platform.Infra.AttemptRecords`1.Advance(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Infra.ChunkReport, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Status, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Infra.ChunkReport, Microsoft.FSharp.Core.FSharpOption`1[Status]]]]]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.AttemptStep`1[Status]]
+ToolUp.Platform.Infra.AttemptRecords`1.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.AttemptRecords`1.Read(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.AttemptRecord`1[Status]]]
+ToolUp.Platform.Infra.AttemptRecords`1.Replace(System.String, System.String, ToolUp.Platform.Infra.AttemptRecord`1[Status]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.AttemptReport (class)
+ToolUp.Platform.Infra.AttemptReport..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Infra.ChunkReport)
+ToolUp.Platform.Infra.AttemptReport.AttemptId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Infra.AttemptReport.DocumentId : System.String { get }
+ToolUp.Platform.Infra.AttemptReport.OriginatingUser : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Infra.AttemptReport.Report : ToolUp.Platform.Infra.ChunkReport { get }
+ToolUp.Platform.Infra.AttemptReport.Scope : System.String { get }
+ToolUp.Platform.Infra.AttemptStep`1 (class)
+ToolUp.Platform.Infra.AttemptStep`1.IsMoved : System.Boolean { get }
+ToolUp.Platform.Infra.AttemptStep`1.IsUnmoved : System.Boolean { get }
+ToolUp.Platform.Infra.AttemptStep`1.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.AttemptStep`1.Unmoved : ToolUp.Platform.Infra.AttemptStep`1[Status] { get }
+ToolUp.Platform.Infra.AttemptStep`1+Moved (class)
+ToolUp.Platform.Infra.AttemptStep`1+Moved.Item : ToolUp.Platform.Infra.AttemptRecord`1[Status] { get }
+ToolUp.Platform.Infra.AttemptStep`1+Tags (class)
+ToolUp.Platform.Infra.AttemptStep`1+Tags.Moved : System.Int32 (literal)
+ToolUp.Platform.Infra.AttemptStep`1+Tags.Unmoved : System.Int32 (literal)
+ToolUp.Platform.Infra.AttemptTransition (class)
+ToolUp.Platform.Infra.AttemptTransition.Dropped : ToolUp.Platform.Infra.AttemptTransition { get }
+ToolUp.Platform.Infra.AttemptTransition.IsDropped : System.Boolean { get }
+ToolUp.Platform.Infra.AttemptTransition.IsStepped : System.Boolean { get }
+ToolUp.Platform.Infra.AttemptTransition.IsTerminal : System.Boolean { get }
+ToolUp.Platform.Infra.AttemptTransition.Stepped : ToolUp.Platform.Infra.AttemptTransition { get }
+ToolUp.Platform.Infra.AttemptTransition.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.AttemptTransition+Tags (class)
+ToolUp.Platform.Infra.AttemptTransition+Tags.Dropped : System.Int32 (literal)
+ToolUp.Platform.Infra.AttemptTransition+Tags.Stepped : System.Int32 (literal)
+ToolUp.Platform.Infra.AttemptTransition+Tags.Terminal : System.Int32 (literal)
+ToolUp.Platform.Infra.AttemptTransition+Terminal (class)
+ToolUp.Platform.Infra.AttemptTransition+Terminal.Item : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.AttemptAnnouncement] { get }
 ToolUp.Platform.Infra.BackendCapabilities (class)
 ToolUp.Platform.Infra.BackendCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IsolationPosture], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IExternalCallbackCapableBackend])
 ToolUp.Platform.Infra.BackendCapabilities.Callback : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IExternalCallbackCapableBackend] { get }
@@ -339,6 +388,18 @@ ToolUp.Platform.Infra.ChampionChallengerPolicy.Margin : System.Double { get }
 ToolUp.Platform.Infra.ChampionChallengerPolicyModule (class)
 ToolUp.Platform.Infra.ChampionChallengerPolicyModule.strictImprovement : ToolUp.Platform.Infra.ChampionChallengerPolicy { get }
 ToolUp.Platform.Infra.ChampionChallengerPolicyModule.withMargin(System.Double) : ToolUp.Platform.Infra.ChampionChallengerPolicy
+ToolUp.Platform.Infra.ChunkReport (class)
+ToolUp.Platform.Infra.ChunkReport.IsFailed : System.Boolean { get }
+ToolUp.Platform.Infra.ChunkReport.IsIndexed : System.Boolean { get }
+ToolUp.Platform.Infra.ChunkReport.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.ChunkReport+Failed (class)
+ToolUp.Platform.Infra.ChunkReport+Failed.chunkId : System.String { get }
+ToolUp.Platform.Infra.ChunkReport+Failed.reason : System.String { get }
+ToolUp.Platform.Infra.ChunkReport+Indexed (class)
+ToolUp.Platform.Infra.ChunkReport+Indexed.chunkId : System.String { get }
+ToolUp.Platform.Infra.ChunkReport+Tags (class)
+ToolUp.Platform.Infra.ChunkReport+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.Infra.ChunkReport+Tags.Indexed : System.Int32 (literal)
 ToolUp.Platform.Infra.ColumnMappingStore (class)
 ToolUp.Platform.Infra.ColumnMappingStore.RecipeDataType : System.String (literal)
 ToolUp.Platform.Infra.ColumnMappingStore.RecordDataType : System.String (literal)
@@ -1678,6 +1739,10 @@ ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReportModule (class)
 ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReportModule.empty : ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport { get }
 ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReportModule.isClean(ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport) : System.Boolean
 ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReportModule.summarise(ToolUp.Platform.Infra.IIndexLifecycle+IndexLifecycleReport) : System.String
+ToolUp.Platform.Infra.IIngestionAttemptStore (interface)
+ToolUp.Platform.Infra.IIngestionAttemptStore.Advance(ToolUp.Platform.Infra.AttemptReport) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.AttemptTransition]
+ToolUp.Platform.Infra.IIngestionAttemptStore.Begin(System.String, System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.IIngestionAttemptStore.Forget(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IIngestionStatusStore (interface)
 ToolUp.Platform.Infra.IIngestionStatusStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+FileIngestionStatus]]
 ToolUp.Platform.Infra.IIngestionStatusStore.GetTotal(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
@@ -2083,6 +2148,9 @@ ToolUp.Platform.Infra.IngestedPayload.schemaObjectId(System.String, System.Strin
 ToolUp.Platform.Infra.IngestedPayload.schemaRef(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Infra.IngestedPayload.serializeSchema(ToolUp.Platform.TableSchema) : System.Byte[]
 ToolUp.Platform.Infra.IngestedPayload.tryParseSchema(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema]
+ToolUp.Platform.Infra.IngestionAttemptStore (class)
+ToolUp.Platform.Infra.IngestionAttemptStore.dataManager(ToolUp.Platform.Infra.IIngestionStatusStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : ToolUp.Platform.Infra.IIngestionAttemptStore
+ToolUp.Platform.Infra.IngestionAttemptStore.dataManagerRecordName(System.String) : System.String
 ToolUp.Platform.Infra.IngestionLabel (class)
 ToolUp.Platform.Infra.IngestionLabel.Value : System.String { get }
 ToolUp.Platform.Infra.IngestionLabelError (class)

@@ -102,6 +102,10 @@ type CodemodMigration =
     /// HNSW store's own unreadable-snapshot exception is the one
     /// `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`.
     | SnapshotIndex
+    /// Ingestion is an attempt advanced through one `IIngestionAttemptStore`:
+    /// the Data Manager observer and the knowledge base's status helpers and
+    /// `MarkIngestionFailed` closure are gone.
+    | IngestionAttempt
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -140,6 +144,7 @@ module CodemodMigration =
         | CodemodMigration.AdminPageKit -> "docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md"
         | CodemodMigration.SnapshotIndex ->
             "docs/migrations/1084-redesign-g-scopedsnapshotindex-under-the-three-stores.md"
+        | CodemodMigration.IngestionAttempt -> "docs/migrations/1085-redesign-g-ingestion-attempt-and-its-lattice.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -170,6 +175,7 @@ module CodemodMigration =
         | CodemodMigration.OpenAuditRegistry -> "Phase 874"
         | CodemodMigration.AdminPageKit -> "Phase 1073"
         | CodemodMigration.SnapshotIndex -> "Phase 1084"
+        | CodemodMigration.IngestionAttempt -> "Phase 1085"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1110,6 +1116,22 @@ module Codemod =
             @"\b(?:ToolUp\.RAG\.)?InMemoryVectorStore\.RagScopeSnapshotUnreadableException\b"
             "ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException"
             "`InMemoryVectorStore.RagScopeSnapshotUnreadableException` → `ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException`"
+        // The knowledge base's terminal set is the lattice's.
+        rewrite
+            "1085-is-terminal-status"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bKnowledgeBase\.ServerIngestionStatusStream\.isTerminalStatus\b"
+            "IngestionStatus.isTerminal"
+            "`KnowledgeBase.ServerIngestionStatusStream.isTerminalStatus` → `IngestionStatus.isTerminal` (KnowledgeBase.Core, beside the type; a bare `isTerminalStatus` is reported, since a consumer may have its own)"
+        // A test double's no-op failure closure has no field to fill.
+        rewrite
+            "1085-mark-ingestion-failed-stub"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"^[ \t]*MarkIngestionFailed\s*=\s*fun\s+_\s+_\s+_\s*->\s*async\.Return\s*\(\s*\)[ \t]*$"
+            ""
+            "`MarkIngestionFailed = fun _ _ _ -> async.Return()` in a full `KnowledgeApiDeps` literal → an empty line (the field is gone; delete the line)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1737,6 +1759,35 @@ module Codemod =
             CodemodFileClass.Source
             @"\bData\.table\s*(?:\[\s*""|\(?\s*\w*[hH]eaders?\b)"
             "`Data.table` takes `Column<'row>` values and the rows themselves: write each header as `{ Header = \"…\"; Align = Data.Left; Cell = fun row -> … }` (the first column `Left`, figures `Right`) and pass the row values, not pre-rendered element lists"
+        // The Data Manager observer is the one observer over the Data
+        // Manager's attempt store.
+        review
+            "1085-data-manager-observer"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bDataManagerIngestionObserver\.create\b"
+            "`DataManagerIngestionObserver.create store channel logger` → `IngestionObserver.create (IngestionAttemptStore.dataManager store blobStorage logger) channel logger`; the post-save hook begins each file's attempt before it enqueues"
+        // The failure closure is a settle on the attempt store.
+        review
+            "1085-mark-ingestion-failed"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bMarkIngestionFailed\b"
+            "`KnowledgeApiDeps.MarkIngestionFailed` is gone: settle a document with `KnowledgeIngest.settle deps docId (Failed reason)` (it forgets the attempt, writes the index and announces), and drop the field from a full `KnowledgeApiDeps` literal"
+        // The knowledge base's status cache and its helpers are gone.
+        review
+            "1085-status-helpers"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\b(?:statusCache|beginIngestionAttempt|publishTerminalStatus|updateIndexChunkCount|isTerminalStatus)\b|\bServerIndexStorage\.(?:setStatus|updateStatus)\b"
+            "a document's status is read from storage (`persistedStatus storage container docId`, or `GetStatus`); begin an ingestion with `KnowledgeIngest.enqueue deps doc chunkPairs`, settle one with `KnowledgeIngest.settle`, and announce a terminal with `terminalAnnouncement` + `AttemptAnnouncement.publish`; the knowledge base's `isTerminalStatus` is `IngestionStatus.isTerminal`"
+        // The status stream seeds from storage.
+        review
+            "1085-status-stream"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bingestionStatusStream\s+\w+\s*$|\bingestionStatusStream\s*$"
+            "`ingestionStatusStream docId` → `ingestionStatusStream storage container docId`: the first element is read from storage, not a process-local cache"
     ]
 
 
@@ -2744,6 +2795,7 @@ module Codemod =
             CodemodMigration.OpenAuditRegistry
             CodemodMigration.AdminPageKit
             CodemodMigration.SnapshotIndex
+            CodemodMigration.IngestionAttempt
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 
