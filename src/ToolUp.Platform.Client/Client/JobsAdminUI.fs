@@ -722,14 +722,8 @@ let private rerunConfirm (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg
             false
     | None -> Html.none
 
-/// The module body as a React COMPONENT, for the reason
-/// `MigrationStatusUI`'s is one: a module's `view` is invoked inline by
-/// the shell's own render, so a hook there would join the shell's hook
-/// order.
-[<ReactComponent>]
-let private JobsAdminBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).JobsAdmin
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let loading = Remote.isLoading model.Jobs
 
     Html.div [
@@ -761,39 +755,36 @@ let private JobsAdminBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    Html.div [
-        prop.className "flex flex-col h-full"
-        prop.children [ JobsAdminBody model dispatch ]
-    ]
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(
+        Html.div [
+            prop.className "flex flex-col h-full"
+            prop.children [ body ctx.Messages.JobsAdmin model ctx.Dispatch ]
+        ]
+    )
 
 // ─── Module creation ────────────────────────────────────────────────
 
 /// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.Jobs"
 
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Background Jobs"
-
-    let icon =
-        config
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.settings
-
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Background Jobs"
+        Icon = ToolUp.Platform.Icons.settings
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}
 
 /// The "Background jobs" administration tile. Like every slot tile it is
 /// built for whichever module fills the `JobsAdmin` slot (`owner`), so a

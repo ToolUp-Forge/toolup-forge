@@ -334,7 +334,12 @@ module ShellSlots =
             "DataIngestionAdmin"
 
     let private jobsAdmin =
-        authenticatedAdmin _.JobsAdmin JobsAdminUI.moduleId JobsAdminUI.create (Some JobsAdminUI.adminTile) "JobsAdmin"
+        authenticatedAdmin
+            _.JobsAdmin
+            JobsAdminUI.moduleId
+            (builtIn JobsAdminUI.builtIn)
+            (Some JobsAdminUI.adminTile)
+            "JobsAdmin"
 
     let private platformAdmin =
         everywhereAdmin
