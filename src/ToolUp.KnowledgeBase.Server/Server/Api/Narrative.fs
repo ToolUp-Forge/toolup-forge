@@ -100,15 +100,7 @@ let ingestNarrative
                         | None -> Guid.NewGuid().ToString()
 
                     let fileName =
-                        let safeTitle =
-                            request.Document.Title
-                            |> String.map (fun c ->
-                                if Char.IsLetterOrDigit c || c = '-' || c = ' ' then
-                                    c
-                                else
-                                    '-')
-
-                        sprintf "%s.narrative.md" safeTitle
+                        sprintf "%s.narrative.md" (KnowledgeBase.ServerNotes.sanitiseTitle request.Document.Title)
 
                     // One chunk per section so retrieval can cite the section
                     // that contributed — matches the per-page chunking we use
