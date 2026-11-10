@@ -477,15 +477,8 @@ let private statusFilterControl (msgs: FileManagerMessages) (model: Model) dispa
         ]
     ]
 
-/// Phase 751 — the input (upload) panel as a React COMPONENT, for the
-/// same hook-site reason `HealthMonitorUI.HealthMonitorBody` documents:
-/// `view` is invoked inline by the shell's own render and returns a
-/// *pair* of elements mounted at two separate points, so neither half
-/// can call a hook directly — each half needs its own stable component
-/// identity to read the catalog from.
-[<ReactComponent>]
-let private FileManagerInputPanel (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).FileManager
+/// The input (upload) pane, over the catalog section the view hands it.
+let private FileManagerInputPanel (msgs: FileManagerMessages) (dispatch: Msg -> unit) : ReactElement =
 
     Layout.Panel.panel msgs.UploadPanelTitle [
         Layout.Panel.panelSection msgs.UploadSectionTitle [
@@ -523,11 +516,13 @@ let private FileManagerInputPanel (dispatch: Msg -> unit) =
         ]
     ]
 
-/// Phase 751 — the output (uploaded-files) panel as a React COMPONENT.
-/// Same reasoning as `FileManagerInputPanel` above.
-[<ReactComponent>]
-let private FileManagerOutputPanel (displays: DataTypeDisplay list) (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).FileManager
+/// The output (uploaded-files) pane.
+let private FileManagerOutputPanel
+    (msgs: FileManagerMessages)
+    (displays: DataTypeDisplay list)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    : ReactElement =
 
     let allFiles =
         model.UploadedFiles
@@ -718,14 +713,19 @@ let private FileManagerOutputPanel (displays: DataTypeDisplay list) (model: Mode
         | None -> ()
     ]
 
-let private view (displays: DataTypeDisplay list) model dispatch =
-    FileManagerInputPanel dispatch, FileManagerOutputPanel displays model dispatch
+let private view (displays: DataTypeDisplay list) (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let msgs = ctx.Messages.FileManager
+
+    PageContent.SplitPanel(
+        FileManagerInputPanel msgs ctx.Dispatch,
+        FileManagerOutputPanel msgs displays model ctx.Dispatch
+    )
 
 // ─── Module creation ──────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataManager"
 
 /// Create the built-in file manager as an ErasedModule.
@@ -737,31 +737,20 @@ let moduleId = "_sdk.DataManager"
 /// keep file ingestion separate from any RAG / knowledge-base
 /// companion that might also be wired in (those declare their own
 /// "Knowledge" group).
-let create (displays: DataTypeDisplay list) (config: DataManagerConfig) : ErasedModule =
-    let name = config.Label |> Option.map _.Name |> Option.defaultValue "File Upload"
-
-    let icon =
+let builtIn (displays: DataTypeDisplay list) (config: DataManagerConfig) : BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults =
         config.Label
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.upload
-
-    let group = config.Group |> Option.defaultValue "Data Management"
-
-    let route = "/" + name.ToLower().Replace(" ", "-")
-
-    // SDK-built-in module — `Id` is reserved under the `_sdk.` namespace so
-    // it can never collide with an app's RBAC-managed `ServerConfig.ModuleNames`
-    // key. A deployment's own module in the data slot carries its own Id.
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
-    }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view displays model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
-    |> ToolUp.Platform.ClientModule.withGroup group
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+        |> Option.defaultValue {
+            Name = "File Upload"
+            Icon = ToolUp.Platform.Icons.upload
+        }
+    Group = Some(config.Group |> Option.defaultValue "Data Management")
+    NavRole = None
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page(view displays)
+    Extend = ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
+}

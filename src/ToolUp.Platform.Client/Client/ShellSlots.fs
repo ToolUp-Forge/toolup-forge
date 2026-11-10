@@ -232,9 +232,10 @@ module ShellSlots =
             | None -> FileManagerUI.moduleId)
             (fun ctx choice ->
                 match choice with
-                | None -> FileManagerUI.create ctx.DataTypes DataManagerConfig.unlabelled
-                | Some(DataManagerChoice.FileUpload cfg) -> FileManagerUI.create ctx.DataTypes cfg
-                | Some(DataManagerChoice.ColumnMapping cfg) -> MappingDataManagerUI.create ctx.DataTypes cfg)
+                | None -> builtIn (FileManagerUI.builtIn ctx.DataTypes DataManagerConfig.unlabelled) None
+                | Some(DataManagerChoice.FileUpload cfg) -> builtIn (FileManagerUI.builtIn ctx.DataTypes cfg) None
+                | Some(DataManagerChoice.ColumnMapping cfg) ->
+                    builtIn (MappingDataManagerUI.builtIn ctx.DataTypes cfg) None)
             None
 
     let private teamManager =
