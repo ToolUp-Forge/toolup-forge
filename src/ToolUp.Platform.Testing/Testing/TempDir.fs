@@ -105,8 +105,11 @@ module TempDir =
                 for dir in runOwned do
                     // Best effort: a directory still held here is left for
                     // the gate's temp census to name, never raised at exit.
+                    // Delete by path, not by `Dispose`: a fixture that also
+                    // disposed the directory early (and had it recreated by a
+                    // late background write) must not make this a no-op.
                     try
-                        (dir :> IDisposable).Dispose()
+                        TempDir.Delete dir.Path
                     with _ ->
                         ())
 

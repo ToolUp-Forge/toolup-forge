@@ -643,6 +643,18 @@ let private runStatusIs (fixture: HandoffFixture) scope jobId (status: JobRunSta
     | Some r -> r.Status = status
     | None -> false
 
+/// The newest run is awaiting AND listed by `AwaitingExternalRuns`, the
+/// index `ReconcileAwaitingExternal` reads. The awaiting row is written
+/// before the index, so a reconcile synchronised only on the row can find
+/// nothing to poll and dispatch nothing: wait on what the reconcile reads.
+let private awaitingIndexed (fixture: HandoffFixture) scope jobId () =
+    match latestRun fixture scope jobId with
+    | Some run when run.Status = AwaitingExternal ->
+        fixture.Store.AwaitingExternalRuns(scope, 50)
+        |> Async.RunSynchronously
+        |> List.exists (fun awaiting -> awaiting.RunId = run.RunId)
+    | _ -> false
+
 let private eventTypes (fixture: HandoffFixture) (scope: string) =
     fixture.EventStore.ReadAll scope
     |> Async.RunSynchronously
@@ -670,6 +682,8 @@ let private handOffAndSettle (fixture: HandoffFixture) scope jobId : JobRun =
             |> Async.RunSynchronously
             |> Option.exists (fun j -> j.LastRunStatus = Some AwaitingExternal)))
         "the dispatch finished settling the hand-off (definition updated)"
+
+    Expect.isTrue (waitFor (awaitingIndexed fixture scope jobId)) "the awaiting run is listed for reconciliation"
 
     (latestRun fixture scope jobId).Value
 
@@ -918,7 +932,7 @@ let private handoffTests =
 
             Expect.isTrue (handler.WaitForAttempts 2) "the retriable failure re-dispatched the job"
 
-            Expect.isTrue (waitFor (runStatusIs fixture scope jobId AwaitingExternal)) "attempt 2 handed off in turn"
+            Expect.isTrue (waitFor (awaitingIndexed fixture scope jobId)) "attempt 2 handed off in turn"
 
             Expect.equal handler.Attempts [ 1; 2 ] "attempt NUMBER advanced — the counter continued, it did not reset"
 
@@ -926,7 +940,7 @@ let private handoffTests =
             reconcile fixture
             Expect.isTrue (handler.WaitForAttempts 3) "attempt 3 dispatched"
 
-            Expect.isTrue (waitFor (runStatusIs fixture scope jobId AwaitingExternal)) "attempt 3 handed off"
+            Expect.isTrue (waitFor (awaitingIndexed fixture scope jobId)) "attempt 3 handed off"
 
             Expect.equal handler.Attempts [ 1; 2; 3 ] "three attempts, numbered 1..3"
 
