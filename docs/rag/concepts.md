@@ -122,7 +122,10 @@ memory and persist it as one blob per scope: `_rag/{scope}/index.json`, `_rag/{s
 - **Absent, unreadable, corrupt.** No blob is an empty scope. A blob that exists but cannot be read refuses every
   write with `RagScopeSnapshotUnreadableException` (`Fault = Unreadable`), because a write on an empty map would
   replace the corpus at the next flush; a search skips that scope with a warning, and the next access retries. A
-  blob that reads but does not decode follows the corruption policy.
+  blob that reads but does not decode follows the corruption policy. Reads and writes go through the platform's
+  document store (`BlobDocumentStore`): absence is established before the read, and undecodable bytes are copied
+  aside to `<blob>.corrupt-<sha256 prefix>` and never overwritten in place, so a corrupt snapshot an operator lets
+  start empty is preserved beside the blob the next flush writes.
 - **The corruption policy.** By default a corrupt scope starts empty. With `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION`
   set it is refused (`Fault = Corrupt`) on every access, searches included, until the blob is repaired; under the
   composition, a corrupt platform or deployment snapshot then fails the boot. Either way, every store reports it

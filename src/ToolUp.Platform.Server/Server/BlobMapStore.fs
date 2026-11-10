@@ -561,6 +561,20 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
         | Some c -> confirmConditional c container blobName
         | None -> async.Return false
 
+    /// Remove one blob; an absent one is `Ok`, a refused delete `WriteFailed`.
+    let deleteAt (container: string) (blobName: string) = async {
+        let! deleted = async {
+            try
+                return! storage.Delete(container, blobName)
+            with ex ->
+                return Error ex.Message
+        }
+
+        return
+            deleted
+            |> Result.mapError (fun reason -> BlobMapStoreError.WriteFailed(blobName, reason))
+    }
+
     /// Store over `storage` with the default retry budget.
     new(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogger) =
         BlobDocumentStore<'T>(storage, codec, logger, BlobMapStoreOptions.defaults)
@@ -574,6 +588,11 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
 
     member internal _.SupportsConditionalWritesAt(container: string, blobName: string) =
         supportsConditionalWrites container blobName
+
+    member internal _.ReplaceAt(container: string, blobName: string, value: 'T) =
+        update container blobName true (fun _ -> BlobUpdate.Write(value, ()))
+
+    member internal _.DeleteAt(container: string, blobName: string) = deleteAt container blobName
 
     /// Read and decode one document. `Ok None` = absent. A present blob that
     /// cannot be read is `Unreadable`; one that does not decode is copied
@@ -612,20 +631,8 @@ type BlobDocumentStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: 
 
     /// Remove one document. Deleting an absent document is `Ok` (the
     /// `IBlobStorage.Delete` contract); a refused delete is `WriteFailed`.
-    member _.Delete(scope: ScopeKey, path: DocPath) : Async<Result<unit, BlobMapStoreError>> = async {
-        let blobName = DocPath.value path
-
-        let! deleted = async {
-            try
-                return! storage.Delete(ScopeKey.container scope, blobName)
-            with ex ->
-                return Error ex.Message
-        }
-
-        return
-            deleted
-            |> Result.mapError (fun reason -> BlobMapStoreError.WriteFailed(blobName, reason))
-    }
+    member _.Delete(scope: ScopeKey, path: DocPath) : Async<Result<unit, BlobMapStoreError>> =
+        deleteAt (ScopeKey.container scope) (DocPath.value path)
 
     /// Every document under `prefix` in the scope's container, each with its
     /// own verdict: a blob that cannot be read or decoded is an `Error` row

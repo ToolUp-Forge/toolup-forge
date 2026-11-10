@@ -476,6 +476,25 @@ let private baseTests =
                 Expect.equal (index.Read(scope, _.Count)) (Some 8) "every concurrent write landed"
         }
 
+        testAsync "under StartEmpty a write after a corrupt load replaces the blob, its bytes kept aside" {
+            let storage = ProbeStorage()
+            let scope = freshTeam ()
+            storage.Put(blobOf scope, garbage)
+            let index = plainIndex storage
+            do! index.Mutate(scope, add "a" "1")
+            (index :> IDisposable).Dispose()
+
+            Expect.equal
+                (storage.Get(blobOf scope))
+                (Some """[["a","1"]]""")
+                "the flush is not wedged behind the corrupt blob"
+
+            Expect.isTrue
+                (storage.Calls
+                 |> List.exists (fun (op, name) -> op = "Upload" && name.StartsWith(blobOf scope + ".corrupt-")))
+                "the corrupt bytes were copied aside before the overwrite"
+        }
+
         testAsync "a corrupt snapshot under StartEmpty starts empty and reports once" {
             let storage = ProbeStorage()
             let scope = freshTeam ()
@@ -657,7 +676,21 @@ let private storeTests =
                 | rows -> failtestf "expected one KnowledgeIndexLoadFailed row, got %A" rows
 
                 Expect.equal observers.SystemErrors.Length 1 "one Error system message"
-                Expect.equal (storage.CallsOf "Upload") 0 "nothing was written over the corrupt blob"
+                let canonical = $"_rag/{VectorScope.key scope}/{store.FileName}"
+
+                let uploads =
+                    storage.Calls |> List.filter (fun (op, _) -> op = "Upload") |> List.map snd
+
+                Expect.isFalse (List.contains canonical uploads) "nothing was written over the corrupt blob"
+
+                Expect.isTrue
+                    (uploads |> List.exists (fun name -> name.StartsWith(canonical + ".corrupt-")))
+                    "the document store copied the corrupt bytes aside"
+
+                Expect.equal
+                    (storage.Get canonical)
+                    (Some(Text.Encoding.UTF8.GetString garbage))
+                    "the canonical blob still holds the corrupt bytes for an operator to repair"
             }
 
             testAsync $"{store.Name}: a corrupt snapshot under StartEmpty starts empty and records that it did" {
@@ -671,6 +704,68 @@ let private storeTests =
                 Expect.equal observers.LoadErrors 1 "the telemetry counter moved"
                 Expect.equal observers.LoadFailedRows.Length 1 "the audit row was written"
                 Expect.equal observers.SystemErrors.Length 1 "the system message was published"
+            }
+    ]
+
+/// Snapshots in the shape the stores wrote before they moved onto the
+/// document store: each still loads.
+let private legacySnapshotTests =
+    testList "snapshots written before the move" [
+        for (name, fileName, json, search) in
+            [
+                "InMemoryVectorStore",
+                "index.json",
+                """[{"ChunkId":"c1","ScopeTag":"{scope}","Vector":[1.0,0.0],"Content":"legacy chunk","Metadata":{}}]""",
+                (fun (storage: IBlobStorage) (scope: VectorScope) -> async {
+                    use store =
+                        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(
+                            storage,
+                            SilentLogger(),
+                            corruptPolicy = CorruptPolicy.Refuse
+                        )
+
+                    let! hits = (store :> IVectorStore).Search [ scope ] [| 1.0f; 0.0f |] 10
+                    return hits |> List.map _.ChunkId
+                })
+                "HnswVectorStore",
+                "hnsw-index.json",
+                """[{"ChunkId":"c1","Vector":[1.0,0.0],"Content":"legacy chunk","Metadata":{}}]""",
+                (fun storage scope -> async {
+                    use store =
+                        new ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.HnswVectorStore(
+                            storage,
+                            SilentLogger(),
+                            corruptPolicy = CorruptPolicy.Refuse
+                        )
+
+                    let! hits = (store :> IVectorStore).Search [ scope ] [| 1.0f; 0.0f |] 10
+                    return hits |> List.map _.ChunkId
+                })
+                "InMemoryBM25Index",
+                "bm25.json",
+                """{"Docs":[{"ChunkId":"c1","Length":2,"Tokens":["legacy","chunk"],"Content":"legacy chunk","Metadata":{}}],"AnalyzerId":null}""",
+                (fun storage scope -> async {
+                    use store =
+                        new ToolUp.RAG.InMemoryBM25Index.InMemoryBM25Index(
+                            storage,
+                            SilentLogger(),
+                            corruptPolicy = CorruptPolicy.Refuse
+                        )
+
+                    let! hits = (store :> ISparseIndex).Search [ scope ] "legacy" 10
+                    return hits |> List.map _.ChunkId
+                })
+            ] do
+            testAsync $"{name} loads its pre-move snapshot" {
+                let storage = InMemoryBlobStorage() :> IBlobStorage
+                let scope = freshTeam ()
+
+                let bytes =
+                    Text.Encoding.UTF8.GetBytes(json.Replace("{scope}", VectorScope.key scope))
+
+                let! _ = storage.Upload("_rag", $"_rag/{VectorScope.key scope}/{fileName}", bytes)
+                let! ids = search storage scope
+                Expect.equal ids [ "c1" ] "the persisted chunk is found"
             }
     ]
 
@@ -709,4 +804,5 @@ let private searchTests =
         }
     ]
 
-let tests = testList "ScopedSnapshotIndex" [ baseTests; storeTests; searchTests ]
+let tests =
+    testList "ScopedSnapshotIndex" [ baseTests; storeTests; legacySnapshotTests; searchTests ]

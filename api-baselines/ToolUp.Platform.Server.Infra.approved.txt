@@ -264,7 +264,7 @@ ToolUp.Platform.Infra.BlobModelRegistryModule.createWithLineage(ToolUp.Platform.
 ToolUp.Platform.Infra.BlobProviderProfile (class)
 ToolUp.Platform.Infra.BlobProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
 ToolUp.Platform.Infra.BlobSnapshot (class)
-ToolUp.Platform.Infra.BlobSnapshot.read`1(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, ToolUp.Platform.Infra.BlobCodec`1[Snapshot]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.SnapshotLoad`1[Snapshot]]
+ToolUp.Platform.Infra.BlobSnapshot.read`1(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, System.String, System.String, ToolUp.Platform.Infra.BlobCodec`1[Snapshot]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.SnapshotLoad`1[Snapshot]]
 ToolUp.Platform.Infra.BlobStorage (class)
 ToolUp.Platform.Infra.BlobStorage.trySignedUrl(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]]
 ToolUp.Platform.Infra.BlobUpdate`2 (class)

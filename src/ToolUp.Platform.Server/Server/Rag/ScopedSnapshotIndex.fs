@@ -217,39 +217,53 @@ type SnapshotLoad<'Snapshot> =
     /// The blob was read but did not decode.
     | Corrupt of bytes: int * reason: string
 
-/// The one read of a snapshot blob.
+/// The one read of a snapshot blob, through the document store.
 [<RequireQualifiedAccess>]
 module BlobSnapshot =
 
-    /// Read `blobName` in `container` through `codec`. A failed download is
-    /// `Absent` only when the blob is not there; one that is there but could
-    /// not be read is `Unreadable`. A decoder that throws is read as one that
-    /// returned `Error`.
+    /// Read `blobName` in `container` through `codec`, with
+    /// `BlobDocumentStore`'s policy: absence is established before the read, a
+    /// blob that is there but cannot be read is `Unreadable`, and bytes that do
+    /// not decode are copied aside (`<blob>.corrupt-<sha256 prefix>`) and read
+    /// as `Corrupt`, the canonical blob untouched. A decoder that throws is read
+    /// as one that returned `Error`.
     let read
         (storage: IBlobStorage)
+        (logger: ILogger)
         (container: string)
         (blobName: string)
         (codec: BlobCodec<'Snapshot>)
         : Async<SnapshotLoad<'Snapshot>> =
         async {
-            match! storage.Download(container, blobName) with
-            | Ok bytes ->
-                let decoded =
-                    try
-                        codec.Decode bytes
-                    with ex ->
-                        Error ex.Message
+            // The size of the bytes that did not decode, for the corrupt-load
+            // report; the store's verdict names the blob, not its size. One
+            // store per read, so the recorder is never shared.
+            let undecodable = ref 0
 
-                match decoded with
-                | Ok snapshot -> return SnapshotLoad.Loaded snapshot
-                | Error reason -> return SnapshotLoad.Corrupt(bytes.Length, reason)
-            | Error reason ->
-                let! present = storage.Exists(container, blobName)
+            let recording: BlobCodec<'Snapshot> = {
+                Encode = codec.Encode
+                Decode =
+                    fun bytes ->
+                        let decoded =
+                            try
+                                codec.Decode bytes
+                            with ex ->
+                                Error ex.Message
 
-                if present then
-                    return SnapshotLoad.Unreadable reason
-                else
-                    return SnapshotLoad.Absent
+                        if Result.isError decoded then
+                            undecodable.Value <- bytes.Length
+
+                        decoded
+            }
+
+            let store = BlobDocumentStore<'Snapshot>(storage, recording, logger)
+
+            match! store.ReadAt(container, blobName) with
+            | Ok(Some snapshot) -> return SnapshotLoad.Loaded snapshot
+            | Ok None -> return SnapshotLoad.Absent
+            | Error(BlobMapStoreError.Quarantined(_, _, reason)) ->
+                return SnapshotLoad.Corrupt(undecodable.Value, reason)
+            | Error error -> return SnapshotLoad.Unreadable(BlobMapStoreError.describe error)
         }
 
 /// One loaded scope: its live form and the lock its readers and writers share.
@@ -326,6 +340,11 @@ type ScopedSnapshotIndex<'Snapshot, 'Live>
 
     let blobName (scope: VectorScope) = SnapshotLayout.blobName layout scope
 
+    // Every write goes through the platform's document store: the read before
+    // the write, the conditional write where the backend has one, and the
+    // copy-aside of undecodable bytes are its, not this index's.
+    let documents = BlobDocumentStore<'Snapshot>(storage, codec, logger)
+
     let rethrow (ex: exn) : 'a =
         Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
         Unchecked.defaultof<'a>
@@ -346,19 +365,18 @@ type ScopedSnapshotIndex<'Snapshot, 'Live>
         match slots.TryGetValue(VectorScope.key scope) with
         | false, _ -> ()
         | true, slot ->
-            let! written = async {
+            // The whole document is replaced: a corrupt blob left at rest under
+            // `CorruptPolicy.StartEmpty` is copied aside before it is overwritten.
+            let! written =
                 match slot.Reading(snapshot scope) with
-                | Some rows ->
-                    let! uploaded = storage.Upload(layout.Container, blobName scope, codec.Encode rows)
-                    return uploaded |> Result.map ignore
-                | None -> return! storage.Delete(layout.Container, blobName scope)
-            }
+                | Some rows -> documents.ReplaceAt(layout.Container, blobName scope, rows)
+                | None -> documents.DeleteAt(layout.Container, blobName scope)
 
             match written with
             | Ok() -> ()
             | Error e ->
                 logger.Warn
-                    $"[{storeName}] Failed to persist scope {VectorScope.key scope}: {e} — will retry on next flush."
+                    $"[{storeName}] Failed to persist scope {VectorScope.key scope}: {BlobMapStoreError.describe e} — will retry on next flush."
 
                 markDirty scope
     }
@@ -459,7 +477,7 @@ type ScopedSnapshotIndex<'Snapshot, 'Live>
     /// snapshot leaves the scope unloaded, so the next access retries.
     let loadScope (scope: VectorScope) = async {
         let scopeKey = VectorScope.key scope
-        let! load = BlobSnapshot.read storage layout.Container (blobName scope) codec
+        let! load = BlobSnapshot.read storage logger layout.Container (blobName scope) codec
 
         let! (live: 'Live), stale = async {
             match load with

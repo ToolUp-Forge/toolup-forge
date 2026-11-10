@@ -74,6 +74,10 @@ store logs.
   scope.
 - `HnswVectorStore.ListScopes` no longer lists a loaded scope that holds no entry (a wipe not yet flushed), matching
   `InMemoryVectorStore`.
+- Snapshots are read and written through `BlobDocumentStore`, so a corrupt snapshot's bytes are copied aside to
+  `_rag/{scope}/<file>.corrupt-<sha256 prefix>` the first time it is read; the canonical blob is not overwritten
+  until a write replaces it (under the default policy, the next flush of a scope that started empty). A write reads
+  the current blob first (the store's precondition), and is conditional on a backend that supports it.
 - A snapshot whose JSON is the literal `null` is corrupt (it was an empty BM25 scope, and a crash in the vector
   store).
 
