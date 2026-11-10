@@ -794,16 +794,8 @@ let private detailPane (msgs: WebhookAdminMessages) (model: Model) (dispatch: Ms
         ]
     ]
 
-/// The module body as a React COMPONENT rather than a plain
-/// render function, so it has a hook site from which to read the resolved
-/// catalog. A module's `view` is invoked inline by the shell's own render,
-/// where a hook would join the shell's hook order and break the moment the
-/// active module changed; a component of its own has a stable identity and
-/// its own. Same pattern as `HealthMonitorUI.HealthMonitorBody`.
-[<ReactComponent>]
-let private WebhookAdminBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).WebhookAdmin
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: WebhookAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let body =
         Html.div [
             prop.className "flex h-full min-h-0"
@@ -819,38 +811,31 @@ let private WebhookAdminBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = WebhookAdminBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.WebhookAdmin model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.WebhookAdmin"
 
-/// Create the built-in webhook admin as an `ErasedModule`. The shell's
+/// The built-in webhook admin (`ShellSlots.builtIn` builds its module). The shell's
 /// `prepareModules` injects this in any non-Anonymous mode — Anonymous
 /// has no persistent scope and the API short-circuits with an error.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Webhooks"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.webhook
-
-    let route = "/" + name.ToLower().Replace(" ", "-")
-
-    // SDK-built-in — reserved under the `_sdk.` Id namespace so it can
-    // never collide with an app's RBAC-managed `ServerConfig.ModuleNames`.
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Webhooks"
+        Icon = ToolUp.Platform.Icons.webhook
     }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}
