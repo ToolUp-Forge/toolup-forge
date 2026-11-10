@@ -460,30 +460,11 @@ type IngestionQueue
     /// gives saturation) and for emitting `Retry-After` hints to clients.
     member _.Capacity = cap
 
-    /// Try to enqueue a document. Returns `true` on success, `false` when the
-    /// queue is at capacity. Callers that need user-visible feedback should
-    /// surface the failure (KB marks the doc `Failed`); fire-and-forget hooks
-    /// log a warning and move on.
-    member _.Enqueue(job: DocumentIngestionJob) : bool =
-        match store with
-        | Some _ ->
-            // Durable arm. The synchronous shape is preserved for the
-            // existing call sites (KB's upload handlers); the round-trip
-            // is one store append. New call sites should prefer
-            // `EnqueueAsync`.
-            enqueueAsync job |> Async.RunSynchronously
-        | None ->
-            if channel.Writer.TryWrite(job) then
-                Interlocked.Increment(&depth) |> ignore
-                true
-            else
-                false
-
-    /// Async `Enqueue`. Identical semantics; the only correct shape on
-    /// the durable arm, where the append is I/O.
+    /// Enqueue a document. `true` on success, `false` when the queue is at
+    /// capacity. Callers that need user-visible feedback should surface the
+    /// failure (KB marks the doc `Failed`); fire-and-forget hooks log a
+    /// warning and move on.
     member _.EnqueueAsync(job: DocumentIngestionJob) : Async<bool> = enqueueAsync job
-
-    member _.Reader = channel.Reader
 
     /// `true` when a durable store backs this queue. Drives the
     /// multi-replica validator lift.
@@ -523,13 +504,6 @@ type IngestionQueue
     member _.DroppedLast60s =
         evictDropWindow ()
         dropWindow.Count
-
-    /// Called by `IngestionBackgroundService` after a successful `ReadAsync`
-    /// to keep the depth counter consistent with the underlying channel.
-    /// Not part of the public surface for outside callers — kept `internal`
-    /// in spirit by being undocumented in the README.
-    member _.RecordDequeue() =
-        System.Threading.Interlocked.Decrement(&depth) |> ignore
 
     // ─── the drainer-facing seam ──────────────────────
     //

@@ -144,13 +144,14 @@ let private waitForIngest (storage: IBlobStorage) (container: string) (docId: st
 }
 
 let private drain (queue: IngestionQueue) : DocumentIngestionJob list =
-    let jobs = ResizeArray<DocumentIngestionJob>()
-    let mutable job = Unchecked.defaultof<DocumentIngestionJob>
+    let seam = queue :> IIngestionQueue
 
-    while queue.Reader.TryRead(&job) do
-        jobs.Add job
+    let rec drain acc =
+        match seam.TryDequeue() |> Async.RunSynchronously with
+        | Some lease -> drain (lease.Job :: acc)
+        | None -> List.rev acc
 
-    jobs |> List.ofSeq
+    drain []
 
 /// Every chunk the drained jobs carried — the set that actually reaches
 /// embedding and upsert, which is the only place a tag stamp matters.

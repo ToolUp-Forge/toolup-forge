@@ -203,7 +203,7 @@
         "src/ToolUp.Forms.Server/Server/FormsCompose.fs": 13,
         "src/ToolUp.Graph.Projection/EntityGraphProjector.fs": 2,
         "src/ToolUp.KnowledgeBase.Server/Server/AICompose.fs": 1,
-        "src/ToolUp.KnowledgeBase.Server/Server/Api/Deps.fs": 29,
+        "src/ToolUp.KnowledgeBase.Server/Server/Api/Deps.fs": 1,
         "src/ToolUp.KnowledgeBase.Server/Server/Api/NarrativeIngestor.fs": 1,
         "src/ToolUp.KnowledgeBase.Server/Server/KnowledgeBaseLifecycle.fs": 1,
         "src/ToolUp.KnowledgeBase.Server/Server/RetentionSweep.fs": 3,
@@ -215,7 +215,7 @@
         "src/ToolUp.PublicRendering/Server/PublicationReads.fs": 3,
         "src/ToolUp.PublicRendering/Server/SemanticSearchHandler.fs": 1,
         "src/ToolUp.RAG.Server/Server/RAGCitationDevEndpoint.fs": 1,
-        "src/ToolUp.RAG.Server/Server/RAGCompose.fs": 2,
+        "src/ToolUp.RAG.Server/Server/RAGCompose.fs": 1,
         "src/ToolUp.RAG.Server/Server/RagHealthHandler.fs": 1,
         "src/ToolUp.RAG.Server/Server/RagVectorStoreLifecycle.fs": 1,
         "src/ToolUp.Reporting.Server/ReportingAITools.fs": 3,
@@ -458,13 +458,6 @@
       "reason": "Cleanup in an async `finally` (F# async has no awaiting finally) on the opt-in deploy-time smoke endpoint.",
       "sites": {
         "src/ToolUp.Platform.Server/Server/SmokeTests.fs": 3
-      }
-    },
-    {
-      "rule": "TUA003",
-      "reason": "KNOWN REQUEST-PATH SITE: the synchronous `Enqueue` kept for the knowledge-base upload handlers, one durable-store append; new callers use `EnqueueAsync`.",
-      "sites": {
-        "src/ToolUp.RAG.Core/IngestionTypes.fs": 1
       }
     },
     {

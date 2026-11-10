@@ -416,30 +416,11 @@ let private enqueueTests =
             Expect.isTrue pending.Result "the job was accepted"
         }
 
-        test "the synchronous Enqueue the upload handlers used to call OCCUPIES its thread" {
-            // The contrast that makes 723.A concrete rather than
-            // stylistic: `Enqueue` is `Async.RunSynchronously` over the
-            // same round-trip, so the thread that called it is held for
-            // the whole of it. On a request thread, that is the cost.
-            let store = GatedStore()
-            let queue = IngestionQueue(store = (store :> IIngestionQueueStore))
-
-            let blocked = Task.Run(fun () -> queue.Enqueue sampleJob)
-
-            Expect.isTrue (store.Entered.Wait(TimeSpan.FromSeconds 10.0)) "the store append started"
-            Expect.isFalse (blocked.Wait 250) "the calling thread is still inside the enqueue"
-
-            store.Release()
-            Expect.isTrue (blocked.Wait(TimeSpan.FromSeconds 10.0)) "and is released only when the store answers"
-            Expect.isTrue blocked.Result "the job was accepted"
-        }
-
-        test "with no store composed the two forms are the same lock-free channel write" {
+        test "with no store composed the enqueue is the lock-free channel write" {
             let queue = IngestionQueue(capacity = 4)
 
-            Expect.isTrue (run (queue.EnqueueAsync sampleJob)) "async form accepts"
-            Expect.isTrue (queue.Enqueue sampleJob) "sync form accepts"
-            Expect.equal queue.Count 2 "both landed on the same channel"
+            Expect.isTrue (run (queue.EnqueueAsync sampleJob)) "the enqueue accepts"
+            Expect.equal queue.Count 1 "it landed on the channel"
             Expect.isFalse queue.IsDurable "and the queue is still the in-memory default (GP 11)"
         }
     ]

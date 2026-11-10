@@ -373,13 +373,15 @@ let private lineageTests =
 
             // Extraction runs off the request path (Async.Start); the
             // enqueued job is the observable hand-off point.
-            let readTask = queue.Reader.ReadAsync().AsTask()
-            let! winner = Task.WhenAny(readTask, Task.Delay 15000) |> Async.AwaitTask
+            use timeout = new System.Threading.CancellationTokenSource(15000)
 
-            if not (obj.ReferenceEquals(winner, readTask)) then
-                failtest "timed out waiting for the upload's ingestion job"
+            let! lease = (queue :> IIngestionQueue).Dequeue timeout.Token |> Async.Catch
 
-            let job = readTask.Result
+            let job =
+                match lease with
+                | Choice1Of2(Some lease) -> lease.Job
+                | _ -> failtest "timed out waiting for the upload's ingestion job"
+
             Expect.isNonEmpty job.Chunks "csv upload produces chunks"
 
             for _, chunk in job.Chunks do
