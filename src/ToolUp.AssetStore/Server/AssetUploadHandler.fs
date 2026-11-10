@@ -99,7 +99,7 @@ let readCapped (source: Stream) (cap: int64) : System.Threading.Tasks.Task<Resul
 
 /// Build the upload handler. Resolves `IAssetStore` per-request
 /// from DI, reads the scope container from
-/// `ctx.Items["ToolUp.StorageScope"]`, parses the multipart
+/// `AccessContext.scopeOf ctx.Items`, parses the multipart
 /// form, validates, uploads. Authentication is the SDK's
 /// default — `AuthEnforcementMiddleware` already covered the
 /// request before we get here (the route is not registered as

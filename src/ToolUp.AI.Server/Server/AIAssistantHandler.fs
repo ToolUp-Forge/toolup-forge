@@ -1084,7 +1084,7 @@ let private toConversationMessage
 ///
 /// Copies the pre-resolved scope / user / permission items from the
 /// original request into the background context's `Items` dictionary so
-/// any tool that reads them (`ToolUp.StorageScope` in particular) hits
+/// any tool that reads them (the principal's `StorageScope` in particular) hits
 /// the same store the Data Manager API used on the originating request.
 /// Without this copy the agent loop falls back to `getStoreForUser`
 /// which resolves a different container in every mode EXCEPT the one

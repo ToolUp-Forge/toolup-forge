@@ -17,7 +17,7 @@ open ToolUp.Platform.Config
 //
 // Production failure mode: the deployment runs in `Individual` / `Team`
 // / `MultiTeam` (or `AuthenticatedEphemeral`), the `AuthEnforcementMiddle-
-// ware` checks `ctx.Items["ToolUp.User"]` for a non-anonymous user, the
+// ware` checks `AccessContext.userOf ctx.Items` for a non-anonymous user, the
 // header-trust path lets any caller spoof any user id by setting
 // `X-User-Id`, and per-tenant data (KB, conversations, team scopes) is
 // keyed by the spoofed value.

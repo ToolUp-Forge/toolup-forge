@@ -38,7 +38,7 @@ open ToolUp.Platform.Jobs
 /// on the background async flow — resolving it there would silently
 /// yield an *unrestricted* anonymous context and bypass RBAC. The
 /// background context instead copies the pre-resolved
-/// `ToolUp.StorageScope` / `ToolUp.UserId` / the stamped principal (`AccessContext.ItemsKey`)
+/// the principal's `StorageScope` / the principal's caller id (`AccessContext.callerId`) / the stamped principal (`AccessContext.ItemsKey`)
 /// items forward, so reconstructing the context from those items is the
 /// RBAC-correct path (GP 4). It also works unchanged on a real request
 /// context (the same middleware populates the same items).

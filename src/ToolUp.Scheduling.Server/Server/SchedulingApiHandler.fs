@@ -17,7 +17,7 @@ open ToolUp.Scheduling.IBookingScheduler
 // JSON pipeline and the SDK's error classifier.
 //
 // `ScopeResolutionMiddleware` populates `HttpContext.Items` with
-// `ToolUp.UserId` / `ToolUp.StorageScope` ahead of the handler, so
+// the principal's caller id (`AccessContext.callerId`) / the principal's `StorageScope` ahead of the handler, so
 // resolution is synchronous; we just read the items and delegate.
 //
 // **Authorisation in v1**: every authenticated user can call every

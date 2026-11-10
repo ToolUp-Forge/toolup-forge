@@ -105,7 +105,7 @@ type KnowledgeApiDeps = {
     /// asymmetry where only `SetAIContext` was gated.
     EnsureContextWriteAllowed: unit -> Async<Result<unit, string>>
     /// `true` when the request carried a middleware-resolved
-    /// `ToolUp.StorageScope`; `false` when `resolve` synthesised a
+    /// the principal's `StorageScope`; `false` when `resolve` synthesised a
     /// fallback scope. The destructive handlers fail closed when this is
     /// `false` and `UserId` is the literal `"anonymous"` (the shared
     /// `user-anonymous` collapse that happens when ScopeResolutionMiddleware
@@ -277,9 +277,9 @@ module KnowledgeApiDeps =
                     member _.Error(_, _) = ()
                 }
 
-        // Scope resolution. A middleware-resolved `ToolUp.StorageScope`
+        // Scope resolution. A middleware-resolved the principal's `StorageScope`
         // is the authoritative tenant boundary (GP 4). When it's absent
-        // `resolve` synthesises a fallback — per-user when `ToolUp.UserId`
+        // `resolve` synthesises a fallback — per-user when the principal's caller id (`AccessContext.callerId`)
         // is present, or the shared `user-anonymous` container when neither
         // item is set. The shared collapse means ScopeResolutionMiddleware
         // isn't wired for this path and every unscoped caller lands in one
@@ -566,7 +566,7 @@ module KnowledgeApiDeps =
     /// Fail-closed guard for destructive KB operations. Returns `Error`
     /// when scope resolution collapsed onto the shared `user-anonymous`
     /// container (ScopeResolutionMiddleware unwired — neither
-    /// `ToolUp.StorageScope` nor `ToolUp.UserId` present on the request),
+    /// the principal's `StorageScope` nor the principal's caller id (`AccessContext.callerId`) present on the request),
     /// so a raw API call cannot wipe a container shared across every
     /// unscoped caller. Benign per-user fallbacks (a real user id, no
     /// `StorageScope`) pass — they stay tenant-isolated. `resolve`

@@ -263,7 +263,7 @@ let getUserId (ctx: HttpContext) =
     | _ ->
         match ctx.Request.Headers.TryGetValue "X-User-Id" with
         | true, values when values.Count > 0 ->
-            // `ScopeResolutionMiddleware` did not populate `ToolUp.UserId`,
+            // `ScopeResolutionMiddleware` did not populate the principal's caller id (`AccessContext.callerId`),
             // so identity is being taken from a *client-supplied* `X-User-Id`
             // request header. That is safe only behind a gateway that
             // authoritatively sets/strips the header; if the middleware was

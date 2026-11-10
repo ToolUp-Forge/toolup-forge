@@ -43,7 +43,7 @@ module private AssetJson =
 ///
 /// All blob names are scope-derived through the `scopeContainer`
 /// parameter passed by the handler layer (which resolves it
-/// from `ctx.Items["ToolUp.StorageScope"]`). Scope discipline
+/// from `AccessContext.scopeOf ctx.Items`). Scope discipline
 /// matches every other `IBlobStorage` consumer — paths inside
 /// the scope's container are flat keys; cross-scope writes are
 /// structurally impossible because the container is the scope

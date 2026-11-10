@@ -215,7 +215,7 @@ let private usageJsonOptions =
     o
 
 /// Resolve the caller's KB container the same way `KnowledgeApiDeps`
-/// does — a middleware-resolved `ToolUp.StorageScope` first, then a
+/// does — a middleware-resolved the principal's `StorageScope` first, then a
 /// per-user fallback (GP 4: the container comes from the resolver, never
 /// from the caller, so this endpoint cannot report another tenant's
 /// usage no matter what is asked for).

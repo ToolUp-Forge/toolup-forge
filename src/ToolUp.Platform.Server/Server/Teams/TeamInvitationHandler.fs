@@ -892,7 +892,7 @@ let teamInvitationApi
         // `tryConsumePendingForUser`, which is idempotent, so the two
         // triggers racing costs nothing.
         //
-        // The caller is read from `HttpContext.Items["ToolUp.User"]`
+        // The caller is read from `AccessContext.userOf ctx.Items`
         // — the `AuthenticatedUser` the middleware resolved from the
         // validated principal — never from an argument, which is why
         // the method takes `unit`. The `access.UserId` fallback covers

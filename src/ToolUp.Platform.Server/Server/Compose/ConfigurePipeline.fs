@@ -264,7 +264,7 @@ let configurePipeline
     app.UseMiddleware<ScopeResolutionMiddleware>(config) |> ignore
 
     // Phase 132 — admin structural backstop. Sits immediately after
-    // `ScopeResolutionMiddleware` (which stamps `ToolUp.PlatformRole`) and
+    // `ScopeResolutionMiddleware` (which stamps the principal's `PlatformRole`) and
     // ahead of the Giraffe router, so a non-`PlatformAdmin` request to the
     // raw `_platform` admin handlers is denied even if a handler omits its
     // in-line `canModifyPlatformConfig` check. No-ops for non-admin paths,

@@ -44,8 +44,8 @@ open ToolUp.Platform.Infra.Metrics
 //   * Default `ForgeAuthContext` resolver over Phase 66's `Subject`
 //     — when the consumer omits `?authContext` AND the API record
 //     carries forge auth attributes, the wrapper installs a default
-//     resolver that reads `HttpContext.Items["ToolUp.Subject"]` /
-//     `["ToolUp.User"]` (populated by `ScopeResolutionMiddleware`
+//     resolver that reads `AccessContext.subjectOf ctx.Items` /
+//     `AccessContext.userOf` (populated by `ScopeResolutionMiddleware`
 //     via `ISubjectResolver`). The closure-captured Subject pattern
 //     consumers used to write by hand collapses into this default,
 //     and the 0.4.3 silent-no-op guard is no longer needed — the
@@ -290,7 +290,7 @@ module internal ApiSeams =
             { new ForgeAuthContext with
                 member _.HasRole role =
                     // Phase 132 — the SDK's platform-admin grant is
-                    // server-resolved into `ToolUp.PlatformRole` (Middleware
+                    // server-resolved into the principal's `PlatformRole` (Middleware
                     // Phase 4b, from `IPlatformAdminStore`), NOT the
                     // JWT-derived `user.Roles` list — which every shipped
                     // auth provider leaves empty. Without this bridge,
@@ -590,7 +590,7 @@ type Api =
         // Phase 132 — un-emittable-role startup warning. The default
         // `ForgeAuthContext` resolver only ever emits the server-resolved
         // `"PlatformAdmin"` role (bridged from `IPlatformAdminStore` /
-        // `ToolUp.PlatformRole`); every other role string falls through to
+        // the principal's `PlatformRole`); every other role string falls through to
         // the always-empty `user.Roles` of the first-party providers. So a
         // `[<RequiresRole "Editor">]` (any non-`PlatformAdmin` role) against
         // the default resolver is a dead gate — it denies *every* caller

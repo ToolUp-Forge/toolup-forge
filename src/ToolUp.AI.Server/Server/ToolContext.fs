@@ -29,7 +29,7 @@ open ToolUp.Platform
 /// Arguments:
 ///   ctx          — the tool's `HttpContext`, used to resolve the
 ///                  `INotificationChannel` from DI and the authenticated
-///                  `userId` from `ctx.Items["ToolUp.UserId"]`
+///                  `userId` from `AccessContext.callerIdOf ctx.Items`
 ///                  (populated by `ScopeResolutionMiddleware` and
 ///                  copied into the background context by
 ///                  `AIAssistantHandler.createBackgroundContext`).

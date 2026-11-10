@@ -69,7 +69,7 @@ let SuspendedDispatchTimeoutMs = SuspendedPrompt.SuspendedDispatchTimeoutMs
 /// server-resident tool needs either. Widening that signature
 /// would retype every tool in the SDK and every tool a consumer has
 /// written, to serve one gate; stamping the items is the same stringly-keyed
-/// per-request carry the loop already uses for `ToolUp.StorageScope` /
+/// per-request carry the loop already uses for the principal's `StorageScope` /
 /// the stamped principal (and which `reconstructAccessContext`
 /// documents as the RBAC-correct path on the background flow).
 ///

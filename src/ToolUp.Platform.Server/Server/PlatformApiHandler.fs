@@ -56,13 +56,10 @@ let private defaultsSummary (defaults: Map<string, ModulePermission list>) =
 
 // ─── Per-request DI helpers ─────────────────────────────────────────
 
-/// `userId` is read from `HttpContext.Items` (populated by
-/// `ScopeResolutionMiddleware`) to avoid a second async auth call per
-/// request. Phase 1059 — the resolved `Subject` decides it, by the
-/// `AccessContext.principalId` rule, so a service-account call is attributed to the
-/// account rather than to the auth provider's `"anonymous"`; the
-/// `ToolUp.UserId` stamp, then `"anonymous"`, remain only for a request
-/// the middleware did not resolve (e.g. tests that bypass `compose`).
+/// The caller's principal id (`AccessContext.UserId` of the stamped
+/// principal), so a service-account call is attributed to the account, never
+/// to the auth provider's `"anonymous"`; `"anonymous"` where no principal was
+/// stamped.
 let internal resolveUserId (ctx: HttpContext) =
     AccessContext.ofItems ctx.Items
     |> Option.map _.UserId

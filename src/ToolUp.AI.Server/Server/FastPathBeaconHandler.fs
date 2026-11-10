@@ -44,8 +44,8 @@ open ToolUp.Platform.Compose
 // Hardening (no client-protocol change, doesn't break first-turn
 // fast paths which legitimately have no server blob yet):
 //   * The scope MUST come from `ScopeResolutionMiddleware`
-//     (`ToolUp.StorageScope`). The old code fell back to the
-//     `ToolUp.UserId` item or the literal `"anonymous"`, which on
+//     (the principal's `StorageScope`). The old code fell back to the
+//     the principal's caller id (`AccessContext.callerId`) item or the literal `"anonymous"`, which on
 //     any middleware-bypassed route silently bucketed every caller
 //     into one shared `user-anonymous` container — a cross-user
 //     injection vector. No resolved scope ⇒ 401, no writes.
@@ -258,7 +258,7 @@ type SequenceBeacon = {
 
 // ─── Storage scope resolution ───────────────────────────────────
 
-// Authoritative scope ONLY. No `ToolUp.UserId` / `"anonymous"`
+// Authoritative scope ONLY. No the principal's caller id (`AccessContext.callerId`) / `"anonymous"`
 // fallback — that silently funnelled middleware-bypassed callers
 // into one shared container. `None` ⇒ the request is rejected.
 let private tryResolveScope (ctx: HttpContext) : StorageScope option =
@@ -374,7 +374,7 @@ let private buildUserMessage (callerUserId: string) (beacon: FastPathBeacon) : C
     Parts = []
     // Establishes conversation ownership when this is the
     // first persisted message; subsequent appends are gated against this
-    // by `checkOwnership`. `callerUserId` flows from `ToolUp.UserId`
+    // by `checkOwnership`. `callerUserId` flows from the principal's caller id (`AccessContext.callerId`)
     // populated by `ScopeResolutionMiddleware`; an empty string only
     // surfaces in degenerate setups (middleware bypassed AND scope
     // resolution somehow succeeded), and is preserved as-is so the gate

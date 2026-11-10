@@ -402,7 +402,7 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
 //
 // Phases 551 and 552 each closed their own dispatch seam and each
 // recorded, in its Outcome, that this one was still open:
-// `ListAccessible` and `PlatformAITools` read `ToolUp.ModulePermissions`
+// `ListAccessible` and `PlatformAITools` read the principal's `ModulePermissions`
 // and nothing else, so a grant that was PENDING the subject's acceptance,
 // or whose counterparty consent had been REVOKED, was inert at the
 // Remoting seam while its module stayed listed to the model and callable

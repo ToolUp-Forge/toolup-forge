@@ -996,13 +996,13 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // structured log + best-effort audit event so a spike
                     // in `ScopeResolutionFailed` is visible on dashboards.
                     //
-                    // What this catch protects: a fault BEFORE the subject
-                    // is stamped. It leaves `ToolUp.Subject` unset, and
-                    // `SurfaceEnforcementMiddleware` ([Phase 336],
-                    // `db622f5f`) treats a missing Subject on an `/api/*`
-                    // path as fail-closed — a fresh `AnonymousSession`
-                    // judged by the SAME surface gate — so a crashed
-                    // resolver yields an anonymous-privilege request.
+                    // What this catch protects: a fault BEFORE the first
+                    // per-request read. No principal is stamped, and
+                    // `SurfaceEnforcementMiddleware` treats a missing
+                    // principal on an `/api/*` path as fail-closed — a fresh
+                    // `AnonymousSession` judged by the SAME surface gate —
+                    // while every handler serves it under a context that
+                    // grants nothing.
                     //
                     // A fault AFTER the first stamp (the
                     // provider's user) is not swallowed. There a downstream
