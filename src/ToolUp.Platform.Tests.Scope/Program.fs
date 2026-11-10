@@ -79,7 +79,7 @@ let private deliberatelyUnregistered = [
         TestRegistrationGuard.Binding = "ToolUp.Platform.Tests.InProcess.BuiltInModuleSurfaceTests.visibilityTests"
         TestRegistrationGuard.Reason =
             "constructs the SDK's built-in CLIENT-side UI modules (FileManagerUI.create, "
-            + "DataSubjectRequestAdminUI.create, HealthMonitorUI.builtIn, …), whose bodies touch `Icons` — "
+            + "DataSubjectRequestAdminUI.builtIn, HealthMonitorUI.builtIn, …), whose bodies touch `Icons` — "
             + "Fable `importDefault` dummy code that throws under .NET. It is a Fable-tier pack, same class "
             + "as the HomeOverviewTests client-tier landing test in the ToolUp.AI.Client.Tests Fable "
             + "harness. See the 2026-07-20 orphaned-pack audit report."

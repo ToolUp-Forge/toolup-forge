@@ -818,16 +818,8 @@ let private eraseTabView (msgs: DataSubjectRequestAdminMessages) (model: Model) 
         ]
     ]
 
-/// Phase 444 — the module body as a React COMPONENT rather than a plain
-/// render function, so it has a hook site from which to read the resolved
-/// catalog. A module's `view` is invoked inline by the shell's own render,
-/// where a hook would join the shell's hook order and break the moment the
-/// active module changed; a component of its own has a stable identity and
-/// its own. Same shape as `HealthMonitorUI.HealthMonitorBody`.
-[<ReactComponent>]
-let private DataSubjectRequestAdminBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).DataSubjectRequestAdmin
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let body =
         Html.div [
             prop.className "flex flex-col"
@@ -853,40 +845,35 @@ let private DataSubjectRequestAdminBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    DataSubjectRequestAdminBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.DataSubjectRequestAdmin model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataSubjectRequests"
 
-/// Create the built-in DSR admin module as an `ErasedModule`. The
+/// The built-in DSR admin module (`ShellSlots.builtIn` builds its module). The
 /// shell's `prepareModules` in `SDK.Client.fs` injects this when
 /// `ClientConfig.Surfaces` declares any authenticated surface
 /// (`ClientConfig.requiresAnyAuth`) and the `DataSubjectRequestAdmin`
 /// shell slot is filled by it. Owner / Admin gating is the
 /// server-side handler's job; the sidebar entry shows for every
 /// authenticated caller and the API itself rejects non-admin writes.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name =
-        config |> Option.map _.Name |> Option.defaultValue "Data subject requests"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
-
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Data subject requests"
+        Icon = ToolUp.Platform.Icons.users
     }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

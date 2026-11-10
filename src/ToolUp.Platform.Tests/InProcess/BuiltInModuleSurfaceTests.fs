@@ -343,7 +343,7 @@ let visibilityTests =
         }
 
         test "DataSubjectRequestAdminUI declares visibleToAuthenticated" {
-            let m = DataSubjectRequestAdminUI.create None
+            let m = ShellSlots.builtIn DataSubjectRequestAdminUI.builtIn None
             assertVisibleToAuthenticated "DataSubjectRequestAdminUI" m
         }
 
@@ -364,7 +364,7 @@ let visibilityTests =
                 "WebhookAdminUI", ShellSlots.builtIn WebhookAdminUI.builtIn None
                 "TeamConfigUI", TeamConfigUI.create None
                 "FileManagerUI", FileManagerUI.create [] DataManagerConfig.unlabelled
-                "DataSubjectRequestAdminUI", DataSubjectRequestAdminUI.create None
+                "DataSubjectRequestAdminUI", (ShellSlots.builtIn DataSubjectRequestAdminUI.builtIn) None
                 "NotificationPreferencesUI", NotificationPreferencesUI.create None
             ]
 

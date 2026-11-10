@@ -359,7 +359,7 @@ module ShellSlots =
         authenticatedAdmin
             _.DataSubjectRequestAdmin
             DataSubjectRequestAdminUI.moduleId
-            DataSubjectRequestAdminUI.create
+            (builtIn DataSubjectRequestAdminUI.builtIn)
             None
             "DataSubjectRequestAdmin"
 
