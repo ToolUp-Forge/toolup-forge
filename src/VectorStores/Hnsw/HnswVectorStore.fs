@@ -815,6 +815,20 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                 })
         | _ -> None
 
+    /// The scope's built graph in HNSW.Net's own serialised form, without
+    /// applying pending writes; `None` when no graph is built. The test pack
+    /// pins a seeded build byte for byte with it.
+    member internal _.GraphBytes(scope: VectorScope) : byte[] option =
+        match lock scopesLock (fun () -> scopes.TryGetValue(scopeToKey scope)) with
+        | true, state ->
+            lock state.Lock (fun () ->
+                state.Graph
+                |> Option.map (fun graph ->
+                    use buffer = new IO.MemoryStream()
+                    graph.SerializeGraph buffer
+                    buffer.ToArray()))
+        | _ -> None
+
     /// The HNSW graph is built and searched in this process's
     /// memory. It persists to blob storage, but each replica searches its
     /// own graph, so the index is per-process for the replica warning.

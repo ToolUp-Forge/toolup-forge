@@ -120,9 +120,84 @@ let private exactTopK (corpus: (string * float32[])[]) (query: float32[]) (k: in
 // byte-identical graph on every run — the recall numbers in the
 // budget checks are reproducible, not stochastic.
 
+/// The seeded build's identity: a fixed corpus, one cold build, then an
+/// incremental pass (an overwrite, a tombstone, a restore and new chunks)
+/// and a rebuild past the retirement threshold. Each graph is serialised by
+/// HNSW.Net and hashed; the hashes were captured on the store as it stood
+/// before it moved onto the shared snapshot index, so a change to how the
+/// store feeds the graph shows as a different hash.
+let private seededBuildHashes () = async {
+    let parameters = {
+        HnswVectorStore.HnswParameters.defaults with
+            TombstoneRebuildFraction = 0.05
+    }
+
+    let store, dispose = newStoreWith parameters
+
+    try
+        let hnsw = store :?> HnswVectorStore.HnswVectorStore
+        let rng = Random 20261110
+        let dim = 24
+        let scope = Team "byte-identity"
+        let corpus = Array.init 300 (fun i -> sprintf "c%03d" i, mkVec rng dim)
+
+        for (id, v) in corpus do
+            do! store.Upsert scope id v (chunk id)
+
+        let hashOf () =
+            match hnsw.GraphBytes scope with
+            | Some bytes -> Convert.ToHexString(Security.Cryptography.SHA256.HashData bytes).ToLowerInvariant()
+            | None -> "no graph"
+
+        let! _ = store.Search [ scope ] (snd corpus[0]) 10
+        let cold = hashOf ()
+
+        do! store.Upsert scope "c007" (mkVec rng dim) (chunk "c007")
+        do! store.DeleteChunk scope "c011"
+        do! store.DeleteChunk scope "c012"
+        do! store.RestoreChunk scope "c012"
+
+        for i in 300..309 do
+            do! store.Upsert scope (sprintf "c%03d" i) (mkVec rng dim) (chunk i)
+
+        let! _ = store.Search [ scope ] (snd corpus[1]) 10
+        let incremental = hashOf ()
+
+        for i in 20..39 do
+            do! store.DeleteChunk scope (sprintf "c%03d" i)
+
+        let! hits = store.Search [ scope ] (snd corpus[2]) 10
+        let rebuilt = hashOf ()
+        let ids = hits |> List.map _.ChunkId |> String.concat ","
+        return cold, incremental, rebuilt, ids
+    finally
+        dispose.Dispose()
+}
+
 let tests =
     testSequenced
     <| testList "HnswFidelity" [
+        testAsync "seeded build: the serialised graph is byte-identical to the captured fixture" {
+            let! cold, incremental, rebuilt, ids = seededBuildHashes ()
+
+            let observed =
+                sprintf "cold=%s\nincremental=%s\nrebuilt=%s\nids=%s" cold incremental rebuilt ids
+
+            let captured =
+                String.concat "\n" [
+                    "cold=b3cbc96e1a63640b9230e4bd5beaf63ca9cdbcfb72f3653240b061a6538fa848"
+                    "incremental=ccc1101a3a35e8ca6502357bd39f7a48473a2e255b2164d9404447dd8400a560"
+                    "rebuilt=6251d5e0353e2439337ba21735814b266a346884aa744ab217ff9852872dd6d4"
+                    "ids=c002,c069,c005,c068,c282,c309,c262,c268,c046,c237"
+                ]
+
+            Expect.equal
+                observed
+                captured
+                "the seeded build is byte-identical to the fixture captured before the store moved"
+        }
+
+
         testAsync "self-retrieval: an indexed vector queried back ranks itself #1" {
             let store, dispose = newStore ()
 
