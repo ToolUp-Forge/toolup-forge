@@ -263,6 +263,8 @@ ToolUp.Platform.Infra.BlobModelRegistryModule.createWithLimits(ToolUp.Platform.I
 ToolUp.Platform.Infra.BlobModelRegistryModule.createWithLineage(ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Infra.ILineageStore) : ToolUp.Platform.Infra.IModelRegistry
 ToolUp.Platform.Infra.BlobProviderProfile (class)
 ToolUp.Platform.Infra.BlobProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
+ToolUp.Platform.Infra.BlobSnapshot (class)
+ToolUp.Platform.Infra.BlobSnapshot.read`1(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, ToolUp.Platform.Infra.BlobCodec`1[Snapshot]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Infra.SnapshotLoad`1[Snapshot]]
 ToolUp.Platform.Infra.BlobStorage (class)
 ToolUp.Platform.Infra.BlobStorage.trySignedUrl(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]]
 ToolUp.Platform.Infra.BlobUpdate`2 (class)
@@ -554,6 +556,26 @@ ToolUp.Platform.Infra.ConnectorCapability+Tags.Watchable : System.Int32 (literal
 ToolUp.Platform.Infra.ConnectorCapabilityModule (class)
 ToolUp.Platform.Infra.ConnectorCapabilityModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.ConnectorCapability] { get }
 ToolUp.Platform.Infra.ConnectorCapabilityModule.name(ToolUp.Platform.Infra.ConnectorCapability) : System.String
+ToolUp.Platform.Infra.CorruptPolicy (class)
+ToolUp.Platform.Infra.CorruptPolicy.IsRefuse : System.Boolean { get }
+ToolUp.Platform.Infra.CorruptPolicy.IsStartEmpty : System.Boolean { get }
+ToolUp.Platform.Infra.CorruptPolicy.Refuse : ToolUp.Platform.Infra.CorruptPolicy { get }
+ToolUp.Platform.Infra.CorruptPolicy.StartEmpty : ToolUp.Platform.Infra.CorruptPolicy { get }
+ToolUp.Platform.Infra.CorruptPolicy.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.CorruptPolicy+Tags (class)
+ToolUp.Platform.Infra.CorruptPolicy+Tags.Refuse : System.Int32 (literal)
+ToolUp.Platform.Infra.CorruptPolicy+Tags.StartEmpty : System.Int32 (literal)
+ToolUp.Platform.Infra.CorruptPolicyModule (class)
+ToolUp.Platform.Infra.CorruptPolicyModule.fromEnvironment() : ToolUp.Platform.Infra.CorruptPolicy
+ToolUp.Platform.Infra.CorruptPolicyModule.ofSetting(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Platform.Infra.CorruptPolicy
+ToolUp.Platform.Infra.CorruptionHandling (class)
+ToolUp.Platform.Infra.CorruptionHandling..ctor(ToolUp.Platform.Infra.CorruptPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry], ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel])
+ToolUp.Platform.Infra.CorruptionHandling.AuditLog : ToolUp.Platform.IAuditLog { get }
+ToolUp.Platform.Infra.CorruptionHandling.Notifications : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel] { get }
+ToolUp.Platform.Infra.CorruptionHandling.Policy : ToolUp.Platform.Infra.CorruptPolicy { get }
+ToolUp.Platform.Infra.CorruptionHandling.Telemetry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry] { get }
+ToolUp.Platform.Infra.CorruptionHandlingModule (class)
+ToolUp.Platform.Infra.CorruptionHandlingModule.logOnly(ToolUp.Platform.Infra.CorruptPolicy) : ToolUp.Platform.Infra.CorruptionHandling
 ToolUp.Platform.Infra.CredentialNeed (class)
 ToolUp.Platform.Infra.CredentialNeed.IsNoCredential : System.Boolean { get }
 ToolUp.Platform.Infra.CredentialNeed.IsOptional : System.Boolean { get }
@@ -3001,6 +3023,13 @@ ToolUp.Platform.Infra.ProviderProbeOutcomeModule (class)
 ToolUp.Platform.Infra.ProviderProbeOutcomeModule.failed(System.String) : ToolUp.Platform.Infra.ProviderProbeOutcome
 ToolUp.Platform.Infra.ProviderProbeOutcomeModule.reachable : ToolUp.Platform.Infra.ProviderProbeOutcome { get }
 ToolUp.Platform.Infra.ProviderProbeOutcomeModule.toHealth(ToolUp.Platform.ProviderHealth, System.DateTime, ToolUp.Platform.Infra.ProviderProbeOutcome) : ToolUp.Platform.ProviderHealth
+ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException (class)
+ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException..ctor(System.String, System.String, System.String)
+ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException..ctor(System.String, System.String, System.String, ToolUp.Platform.Infra.SnapshotFault)
+ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException.BlobLocation : System.String { get }
+ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException.Fault : ToolUp.Platform.Infra.SnapshotFault { get }
+ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException.Reason : System.String { get }
+ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException.ScopeKey : System.String { get }
 ToolUp.Platform.Infra.RateLimitEventApi (class)
 ToolUp.Platform.Infra.RateLimitEventApi.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.Platform.Infra.RateLimitMiddleware (class)
@@ -3154,6 +3183,17 @@ ToolUp.Platform.Infra.SchemaOnlyGuard+AttemptedPath.DataObjectStoreGetVersion : 
 ToolUp.Platform.Infra.SchemaOnlyGuard+AttemptedPath.DataObjectStoreListObjects : System.String (literal)
 ToolUp.Platform.Infra.SchemaOnlyGuard+AttemptedPath.EntityStoreGet : System.String (literal)
 ToolUp.Platform.Infra.SchemaOnlyGuard+AttemptedPath.FileManagementGetContent : System.String (literal)
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2 (class)
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Infra.SnapshotLayout, ToolUp.Platform.Infra.BlobCodec`1[Snapshot], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Live], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpFunc`2[Snapshot, System.Tuple`2[Live, System.Boolean]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpFunc`2[Live, Microsoft.FSharp.Core.FSharpOption`1[Snapshot]]], ToolUp.Platform.Infra.SnapshotPolicy, System.String, ToolUp.Platform.ILogger)
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.BlobName(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.EnsureLoaded(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.EnsureLoadedForSearch(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.Flush() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.Layout : ToolUp.Platform.Infra.SnapshotLayout { get }
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.ListScopes(Microsoft.FSharp.Core.FSharpFunc`2[Live, System.Boolean]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope]]
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.Mutate`1(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpFunc`2[Live, System.Tuple`2[R, System.Boolean]]) : Microsoft.FSharp.Control.FSharpAsync`1[R]
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.Read`1(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpFunc`2[Live, R]) : Microsoft.FSharp.Core.FSharpOption`1[R]
+ToolUp.Platform.Infra.ScopedSnapshotIndex`2.Start() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.ScoreContext (class)
 ToolUp.Platform.Infra.ScoreContext..ctor(System.String, ToolUp.Platform.Infra.FitCompositeKey, ToolUp.Platform.Infra.ArtifactRef, ToolUp.Platform.Infra.ModelArtifactStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.ModelSpecRef], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.Infra.DatasetVersionRef)
 ToolUp.Platform.Infra.ScoreContext.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
@@ -3353,6 +3393,50 @@ ToolUp.Platform.Infra.SingleKeyResolver (class)
 ToolUp.Platform.Infra.SingleKeyResolver.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.BlobEncryption+IBlobEncryptionKeyResolver
 ToolUp.Platform.Infra.SingleKeyResolver+SingleKeyResolver (class)
 ToolUp.Platform.Infra.SingleKeyResolver+SingleKeyResolver..ctor(ToolUp.Platform.Secrets+ISecretStore)
+ToolUp.Platform.Infra.SnapshotFault (class)
+ToolUp.Platform.Infra.SnapshotFault.Corrupt : ToolUp.Platform.Infra.SnapshotFault { get }
+ToolUp.Platform.Infra.SnapshotFault.IsCorrupt : System.Boolean { get }
+ToolUp.Platform.Infra.SnapshotFault.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.Infra.SnapshotFault.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.SnapshotFault.Unreadable : ToolUp.Platform.Infra.SnapshotFault { get }
+ToolUp.Platform.Infra.SnapshotFault+Tags (class)
+ToolUp.Platform.Infra.SnapshotFault+Tags.Corrupt : System.Int32 (literal)
+ToolUp.Platform.Infra.SnapshotFault+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.Infra.SnapshotLayout (class)
+ToolUp.Platform.Infra.SnapshotLayout..ctor(System.String, System.String)
+ToolUp.Platform.Infra.SnapshotLayout.Container : System.String { get }
+ToolUp.Platform.Infra.SnapshotLayout.FileName : System.String { get }
+ToolUp.Platform.Infra.SnapshotLayoutModule (class)
+ToolUp.Platform.Infra.SnapshotLayoutModule.blobName(ToolUp.Platform.Infra.SnapshotLayout, ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : System.String
+ToolUp.Platform.Infra.SnapshotLayoutModule.rag(System.String) : ToolUp.Platform.Infra.SnapshotLayout
+ToolUp.Platform.Infra.SnapshotLayoutModule.tryScopeOfBlob(ToolUp.Platform.Infra.SnapshotLayout, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope]
+ToolUp.Platform.Infra.SnapshotLoad`1 (class)
+ToolUp.Platform.Infra.SnapshotLoad`1.Absent : ToolUp.Platform.Infra.SnapshotLoad`1[Snapshot] { get }
+ToolUp.Platform.Infra.SnapshotLoad`1.IsAbsent : System.Boolean { get }
+ToolUp.Platform.Infra.SnapshotLoad`1.IsCorrupt : System.Boolean { get }
+ToolUp.Platform.Infra.SnapshotLoad`1.IsLoaded : System.Boolean { get }
+ToolUp.Platform.Infra.SnapshotLoad`1.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.Infra.SnapshotLoad`1.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.SnapshotLoad`1+Corrupt (class)
+ToolUp.Platform.Infra.SnapshotLoad`1+Corrupt.bytes : System.Int32 { get }
+ToolUp.Platform.Infra.SnapshotLoad`1+Corrupt.reason : System.String { get }
+ToolUp.Platform.Infra.SnapshotLoad`1+Loaded (class)
+ToolUp.Platform.Infra.SnapshotLoad`1+Loaded.snapshot : Snapshot { get }
+ToolUp.Platform.Infra.SnapshotLoad`1+Tags (class)
+ToolUp.Platform.Infra.SnapshotLoad`1+Tags.Absent : System.Int32 (literal)
+ToolUp.Platform.Infra.SnapshotLoad`1+Tags.Corrupt : System.Int32 (literal)
+ToolUp.Platform.Infra.SnapshotLoad`1+Tags.Loaded : System.Int32 (literal)
+ToolUp.Platform.Infra.SnapshotLoad`1+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.Infra.SnapshotLoad`1+Unreadable (class)
+ToolUp.Platform.Infra.SnapshotLoad`1+Unreadable.reason : System.String { get }
+ToolUp.Platform.Infra.SnapshotPolicy (class)
+ToolUp.Platform.Infra.SnapshotPolicy..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry], ToolUp.Platform.Infra.CorruptionHandling)
+ToolUp.Platform.Infra.SnapshotPolicy.FlushChunkThreshold : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.Infra.SnapshotPolicy.FlushIntervalMs : System.Int32 { get }
+ToolUp.Platform.Infra.SnapshotPolicy.FlushTelemetry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry] { get }
+ToolUp.Platform.Infra.SnapshotPolicy.OnCorrupt : ToolUp.Platform.Infra.CorruptionHandling { get }
+ToolUp.Platform.Infra.SnapshotPolicyModule (class)
+ToolUp.Platform.Infra.SnapshotPolicyModule.create(ToolUp.Platform.Infra.CorruptionHandling) : ToolUp.Platform.Infra.SnapshotPolicy
 ToolUp.Platform.Infra.SoftwareBillOfMaterials (class)
 ToolUp.Platform.Infra.SoftwareBillOfMaterials..ctor(ToolUp.Platform.Infra.SbomSubject, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SbomComponent], ToolUp.Platform.Infra.SbomScope)
 ToolUp.Platform.Infra.SoftwareBillOfMaterials.Components : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SbomComponent] { get }

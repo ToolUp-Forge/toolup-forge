@@ -143,7 +143,7 @@ ToolUp.Platform.Core 8449/17470
 ToolUp.Platform.Server 3071/5523
 ToolUp.Platform.Server.Audit 370/690
 ToolUp.Platform.Server.Config 395/661
-ToolUp.Platform.Server.Infra 2147/3655
+ToolUp.Platform.Server.Infra 2196/3740
 ToolUp.Platform.Server.Jobs 921/1730
 ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 447/792
@@ -152,7 +152,7 @@ ToolUp.Platform.Transport 48/96
 ToolUp.Platform.UI 92/231
 ToolUp.PublicRendering 677/1159
 ToolUp.RAG.Core 82/133
-ToolUp.RAG.Server 339/617
+ToolUp.RAG.Server 336/614
 ToolUp.RAG.StaticCorpus.Build 23/40
 ToolUp.RAG.StaticCorpus.Core 5/19
 ToolUp.RAG.StaticCorpus.Server 7/9
@@ -185,7 +185,7 @@ ToolUp.Stripe.Webhook 30/88
 ToolUp.Tabular 103/273
 ToolUp.TelemetrySinks.Ga4 2/4
 ToolUp.TimeSeriesStores.Timescale 3/5
-ToolUp.VectorStores.Hnsw 12/34
+ToolUp.VectorStores.Hnsw 8/30
 ToolUp.VectorStores.Pgvector 102/142
 ToolUp.Voice.Client 6/18
 ToolUp.Voice.Core 31/77

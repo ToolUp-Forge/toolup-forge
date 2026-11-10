@@ -95,14 +95,16 @@ ToolUp.RAG.DataManagerIngestionObserver (class)
 ToolUp.RAG.DataManagerIngestionObserver.create(ToolUp.Platform.Infra.IIngestionStatusStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.RAG.IngestionTypes+IIngestionStatusObserver
 ToolUp.RAG.InMemoryBM25Index (class)
 ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index (class)
-ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer])
+ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.CorruptPolicy])
 ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index.AnalyzerId : System.String { get }
+ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index.Start() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.InMemoryEmbeddingCache (class)
 ToolUp.RAG.InMemoryEmbeddingCache+InMemoryEmbeddingCache (class)
 ToolUp.RAG.InMemoryEmbeddingCache+InMemoryEmbeddingCache..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.RAG.InMemoryVectorStore (class)
 ToolUp.RAG.InMemoryVectorStore+InMemoryVectorStore (class)
-ToolUp.RAG.InMemoryVectorStore+InMemoryVectorStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel])
+ToolUp.RAG.InMemoryVectorStore+InMemoryVectorStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.CorruptPolicy])
+ToolUp.RAG.InMemoryVectorStore+InMemoryVectorStore.Start() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.InMemoryVectorStore+IndexEntry (class)
 ToolUp.RAG.InMemoryVectorStore+IndexEntry..ctor()
 ToolUp.RAG.InMemoryVectorStore+IndexEntry..ctor(System.String, System.String, System.Single[], System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
@@ -111,11 +113,6 @@ ToolUp.RAG.InMemoryVectorStore+IndexEntry.Content : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Metadata : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.ScopeTag : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Vector : System.Single[] { get; set }
-ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException (class)
-ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException..ctor(System.String, System.String, System.String)
-ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.BlobLocation : System.String { get }
-ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.Reason : System.String { get }
-ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.ScopeKey : System.String { get }
 ToolUp.RAG.IngestionRetryJobHandler (class)
 ToolUp.RAG.IngestionRetryJobHandler.create(ToolUp.RAG.IngestionService+IngestionRetryDeps) : ToolUp.Platform.Jobs.IJobHandler
 ToolUp.RAG.IngestionRetryJobHandler+IngestionRetryJobHandler (class)
