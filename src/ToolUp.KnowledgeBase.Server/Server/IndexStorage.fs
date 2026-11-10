@@ -17,14 +17,14 @@ let indexBlobName = "knowledge/index.json"
 
 /// Where a `Note` document persists its markdown body — `addNote` /
 /// `updateNote` write it here, `IOriginalSourceResolver` serves it from
-/// here, and (Phase 504.C) `deleteDocument` and the retention sweep
+/// here, and `deleteDocument` and the retention sweep
 /// remove it from here. NOT the convention original path
 /// (`knowledge/{docId}/{FileName}`): a note's `FileName` is
 /// `"{title}.md"`, which never coincides with this blob unless the
 /// sanitised title happens to be `note`.
 let noteBodyBlobName (docId: string) = sprintf "knowledge/%s/note.md" docId
 
-/// Phase 510 — normalise a document read off the wire. A pre-510
+/// normalise a document read off the wire. A pre-510
 /// `index.json` record carries no `Version` property, and a missing
 /// JSON *number* deserialises to `0`, not to anything we could detect
 /// downstream — so the coercion has to happen once, here at the store,
@@ -37,7 +37,7 @@ let noteBodyBlobName (docId: string) = sprintf "knowledge/%s/note.md" docId
 let private normaliseVersion (doc: KnowledgeDocument) : KnowledgeDocument =
     if doc.Version < 1 then { doc with Version = 1 } else doc
 
-/// Phase 502.C — the same treatment for `Tags`, and for a sharper
+/// the same treatment for `Tags`, and for a sharper
 /// reason than `Version`'s.
 ///
 /// A pre-502.C `index.json` record carries no `Tags` property, and a
@@ -74,11 +74,11 @@ let loadIndex (storage: IBlobStorage) (container: string) = async {
 /// caller runs inside a `try … with` that logs or routes the failure (the
 /// upload handler surfaces it to the client, the ingestion observer logs
 /// it), which is the point: before Phase 864 each of these cases was a
-/// silent success. Phase 863 — `saveIndex` raises it too, for a refused
+/// silent success. `saveIndex` raises it too, for a refused
 /// whole-index write.
 exception KnowledgeIndexWriteFailed of message: string
 
-/// Phase 863 — a refused write raises `KnowledgeIndexWriteFailed` rather
+/// a refused write raises `KnowledgeIndexWriteFailed` rather
 /// than reading as saved.
 let saveIndex (storage: IBlobStorage) (container: string) (docs: KnowledgeDocument list) = async {
     let bytes = (toJson docs: string) |> Encoding.UTF8.GetBytes
@@ -141,7 +141,7 @@ let private raiseOnFailure (result: Result<'R, BlobMapStoreError>) : 'R =
     | Ok value -> value
     | Error e -> raise (KnowledgeIndexWriteFailed(BlobMapStoreError.describe e))
 
-/// Phase 959 — the guarded read-modify-write of `index.json`, and the one
+/// the guarded read-modify-write of `index.json`, and the one
 /// place an index writer goes. `change` is pure over the current documents
 /// (an absent index is the empty list) and decides with `BlobUpdate`:
 /// `Write(documents, result)` persists, `Keep result` writes nothing. It may
@@ -182,14 +182,14 @@ let private updateIndex
         | Some updated -> BlobUpdate.Write(updated, ())
         | None -> BlobUpdate.Keep())
 
-/// Phase 959 — whether index writes on this storage run as conditional
+/// whether index writes on this storage run as conditional
 /// writes, asked through the same `BlobMapStore` (and so the same cached
 /// capability probe) the writers use. `false` means a writer on another
 /// replica can lose an index update.
 let indexWritesAreConditional (storage: IBlobStorage) (container: string) : Async<bool> =
     (indexStoreFor storage).SupportsConditionalWrites(container, indexBlobName)
 
-// ─── Phase 510 — version + chunk-hash sidecars ────────────────────
+// ─── version + chunk-hash sidecars ────────────────────
 //
 // Both sidecars live UNDER the document's own `knowledge/{docId}/`
 // prefix rather than in a container-level file. `resetIndex` wipes
@@ -255,7 +255,7 @@ let loadChunkHashes (storage: IBlobStorage) (container: string) (docId: string) 
 let saveChunkHashes (storage: IBlobStorage) (container: string) (docId: string) (hashes: string list) = async {
     let bytes = (toJson hashes: string) |> Encoding.UTF8.GetBytes
 
-    // Phase 863 — a refused write must not leave the PREVIOUS manifest
+    // a refused write must not leave the PREVIOUS manifest
     // standing: it describes content the indexes no longer hold, so a later
     // version matching it would diff as "unchanged" and skip chunks that are
     // not there. An ABSENT manifest only costs a full re-embed, so a refused
@@ -368,7 +368,7 @@ let private versionStores =
 let private versionStoreFor (storage: IBlobStorage) =
     versionStores.GetValue(storage, fun s -> BlobMapStore<KnowledgeDocumentVersion list>(s, versionCodec, indexLogger))
 
-/// Phase 510 — append one superseded-version record under the container
+/// append one superseded-version record under the container
 /// lock.
 ///
 /// The lock matters for the same reason `upsertIndexEntry` takes it:
@@ -381,7 +381,7 @@ let private versionStoreFor (storage: IBlobStorage) =
 /// **Do not call from inside another `acquireContainerLock` critical
 /// section** — the semaphore is non-reentrant.
 ///
-/// Phase 864 — a guarded read-modify-write: an unreadable or undecodable
+/// a guarded read-modify-write: an unreadable or undecodable
 /// history raises `KnowledgeIndexWriteFailed` instead of being replaced by
 /// a one-record list, and on a conditional backend a concurrent writer on
 /// another replica cannot drop this record.
@@ -412,7 +412,7 @@ let appendVersion (storage: IBlobStorage) (container: string) (record: Knowledge
         lock.Release() |> ignore
 }
 
-/// Phase 116 — atomic add-or-replace of a single document in the index,
+/// atomic add-or-replace of a single document in the index,
 /// under the container lock. Loads, drops any existing entry with the
 /// same `Id`, appends `doc`, and saves — all while holding the lock so
 /// two concurrent additive writers (upload / addNote / updateNote /

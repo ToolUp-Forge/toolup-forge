@@ -14,7 +14,7 @@ open KnowledgeBase.ServerApiDocuments
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-// ─── Phase 4b — Platform KB write surface ─────────────────────────────
+// ─── Platform KB write surface ─────────────────────────────
 //
 // Server-side implementation of the `IPlatformKnowledgeApi` ToolUp.Remoting
 // record (defined in `Core/Shared/PlatformKnowledgeApi.fs`). Sister

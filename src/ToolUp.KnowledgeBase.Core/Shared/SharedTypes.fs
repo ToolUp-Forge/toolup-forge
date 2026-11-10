@@ -838,7 +838,7 @@ module KnowledgeObjectRetentionPolicy =
     /// The default a deployment gets without calling
     /// `withObjectStoreRetention`: originals are written to, read from
     /// and deleted at the `knowledge/{docId}/{fileName}` convention
-    /// path exactly as they were before Phase 105 — no store call on
+    /// path, with no store call on
     /// any path (GP 11 / GP 13).
     let disabled: KnowledgeObjectRetentionPolicy = { RetainOriginalsInObjectStore = false }
 
@@ -1216,7 +1216,7 @@ module UrlIngestionPolicy =
 /// instead. Deployments moving very large corpora upload the archive
 /// with `UploadDocument`'s optimised path or split the batch.
 ///
-/// **Phase 725.B — the compact cases close that cost without moving the
+/// **the compact cases close that cost without moving the
 /// transport.** `FileBase64` / `ArchiveBase64` carry the same payload as
 /// `File` / `Archive` but type it as a `string`, so the encoding is
 /// pinned by the SHAPE rather than left to whichever host serialises the

@@ -192,7 +192,7 @@ let ingestNarrative
                 }
 
                 // Persist rendered markdown so the document can be re-read
-                // even if the embedding/store is rebuilt. Phase 863 — FIRST,
+                // even if the embedding/store is rebuilt. FIRST,
                 // ahead of the tail cleanup, the index entry and the enqueue, so a
                 // refused write fails the commit with nothing else moved.
                 let rawBlobName = sprintf "knowledge/%s/%s" docId fileName

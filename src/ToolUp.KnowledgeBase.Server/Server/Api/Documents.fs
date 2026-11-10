@@ -1250,7 +1250,7 @@ type private BatchInventoryGate(publish: unit -> Async<unit>) =
 /// surviving item through the single-item upload path, and returns one
 /// report plus one completion notification.
 ///
-/// **Phase 725.A — inventory publication is batch-scoped.** Every item
+/// **inventory publication is batch-scoped.** Every item
 /// runs against a `deps` whose `PublishInventory` is the batch's
 /// `BatchInventoryGate`, so the ~2N snapshots a corpus-scale import used
 /// to emit collapse to one at the end. The substitution is a

@@ -28,7 +28,7 @@ open ToolUp.Platform.Compose
 // the user gets no signal beyond their own observation that "this doc
 // has been ingesting for an hour".
 //
-// **Phase 723 — this is no longer a second sweep.** The traversal, the
+// **this is no longer a second sweep.** The traversal, the
 // per-scope error isolation, the reason string and the logging shape now
 // live once in `ToolUp.Platform.IngestionRecoverySweep`, shared with the
 // RAG / Data-Manager status sweep that used to duplicate them. What
@@ -64,7 +64,7 @@ open ToolUp.Platform.Compose
 // that have since been re-uploaded carry a fresh non-Failed status and
 // are passed through unchanged.
 
-/// Phase 723 — the KB document index as an `IIngestionRecoverySurface`,
+/// the KB document index as an `IIngestionRecoverySurface`,
 /// so the shared `IngestionRecoverySweep` can visit it alongside the
 /// RAG per-file status store.
 let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
@@ -94,14 +94,14 @@ let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
 /// Per-container errors are logged and skipped — one bad container's
 /// index doesn't block scanning the rest.
 ///
-/// Phase 723 — kept as the explicit, operator-callable form; a
+/// kept as the explicit, operator-callable form; a
 /// deployment that composes `KnowledgeBaseServerApp.withIngestionRecovery`
 /// plus a scope enumerator gets the same sweep run automatically at
 /// startup over enumerated scopes, and does not call this at all.
 let recoverStuckDocumentsAtStartup (storage: IBlobStorage) (containers: string list) (logger: ILogger) : Async<int> =
     IngestionRecoverySweep.run [ documentIndexSurface storage ] containers logger
 
-/// Phase 723 — enrol the KB document index in the startup
+/// enrol the KB document index in the startup
 /// restart-recovery sweep.
 ///
 /// Registers the `IIngestionRecoverySurface` adapter as a DI singleton.
