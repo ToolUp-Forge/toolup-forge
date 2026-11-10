@@ -1,0 +1,15 @@
+{
+  "kind": "AdminMutationApproved",
+  "samples": [
+    {
+      "row": "{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"ApproverId\":\"\",\"MutationKind\":\"\",\"Fingerprint\":\"\",\"Applied\":false}",
+      "rowWithActor": "{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"ApproverId\":\"\",\"MutationKind\":\"\",\"Fingerprint\":\"\",\"Applied\":false,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdminMutationApproved\":{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"ApproverId\":\"\",\"MutationKind\":\"\",\"Fingerprint\":\"\",\"Applied\":false}}"
+    },
+    {
+      "row": "{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"ApproverId\":\"s\",\"MutationKind\":\"s\",\"Fingerprint\":\"s\",\"Applied\":true}",
+      "rowWithActor": "{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"ApproverId\":\"s\",\"MutationKind\":\"s\",\"Fingerprint\":\"s\",\"Applied\":true,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdminMutationApproved\":{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"ApproverId\":\"s\",\"MutationKind\":\"s\",\"Fingerprint\":\"s\",\"Applied\":true}}"
+    }
+  ]
+}

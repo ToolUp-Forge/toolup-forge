@@ -33,6 +33,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Shared\AssetTypes.fs" />
+        <Compile Include="Server\AssetAuditEvents.fs" />
         <Compile Include="Server\IDerivativeRenderer.fs" />
         <Compile Include="Server\IAssetStore.fs" />
         <Compile Include="Server\SkiaSharpDerivativeRenderer.fs" />

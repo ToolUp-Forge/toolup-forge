@@ -1,0 +1,15 @@
+{
+  "kind": "ModelArtifactTransitionAttributed",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"Channel\":\"\",\"AuthorKind\":\"\",\"AuthorId\":\"\",\"Rationale\":\"\",\"Admitted\":false,\"Refusal\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"Channel\":\"\",\"AuthorKind\":\"\",\"AuthorId\":\"\",\"Rationale\":\"\",\"Admitted\":false,\"Refusal\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactTransitionAttributed\":{\"CompositeKeyHash\":\"\",\"FromStatus\":\"\",\"ToStatus\":\"\",\"Channel\":\"\",\"AuthorKind\":\"\",\"AuthorId\":\"\",\"Rationale\":\"\",\"Admitted\":false,\"Refusal\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"Channel\":\"s\",\"AuthorKind\":\"s\",\"AuthorId\":\"s\",\"Rationale\":\"s\",\"Admitted\":true,\"Refusal\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"Channel\":\"s\",\"AuthorKind\":\"s\",\"AuthorId\":\"s\",\"Rationale\":\"s\",\"Admitted\":true,\"Refusal\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactTransitionAttributed\":{\"CompositeKeyHash\":\"s\",\"FromStatus\":\"s\",\"ToStatus\":\"s\",\"Channel\":\"s\",\"AuthorKind\":\"s\",\"AuthorId\":\"s\",\"Rationale\":\"s\",\"Admitted\":true,\"Refusal\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

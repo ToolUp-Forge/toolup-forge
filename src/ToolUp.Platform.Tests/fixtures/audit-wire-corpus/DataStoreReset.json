@@ -1,0 +1,15 @@
+{
+  "kind": "DataStoreReset",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"FileCount\":0}",
+      "rowWithActor": "{\"UserId\":\"\",\"FileCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DataStoreReset\":{\"UserId\":\"\",\"FileCount\":0}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"FileCount\":7}",
+      "rowWithActor": "{\"UserId\":\"s\",\"FileCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DataStoreReset\":{\"UserId\":\"s\",\"FileCount\":7}}"
+    }
+  ]
+}

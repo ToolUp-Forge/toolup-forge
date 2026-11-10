@@ -6,6 +6,7 @@ module ToolUp.Platform.Tests.InProcess.FastPathBeaconOwnershipTests
 open System
 open Expecto
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.AI
 open ToolUp.AI.FastPathBeaconHandler
 open ToolUp.Platform.Infra
@@ -142,13 +143,17 @@ let private auditTests =
             }
 
             do!
-                auditLog.Record(AuditScope.shard "team-acme", AuditSubject.system "test", BeaconRejected payload)
+                auditLog.Record(
+                    AuditScope.shard "team-acme",
+                    AuditSubject.system "test",
+                    AIAuditEvent.event (BeaconRejected payload)
+                )
                 |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail(AuditScope.shard "team-acme", None, Some "BeaconRejected")
 
             match trail with
-            | [ BeaconRejected p ] ->
+            | [ AIAudit(BeaconRejected p) ] ->
                 Expect.equal p.ConversationId convId "ConversationId round-trips"
                 Expect.equal p.Caller "bob" "Caller round-trips"
                 Expect.equal p.Owner "alice" "Owner round-trips"
@@ -167,19 +172,22 @@ let private auditTests =
                 auditLog.Record(
                     AuditScope.shard "team-acme",
                     AuditSubject.system "test",
-                    BeaconRejected {
-                        ConversationId = Guid.NewGuid()
-                        Caller = "bob"
-                        Owner = "alice"
-                        Surface = "submit"
-                    }
+                    AIAuditEvent.event (
+                        BeaconRejected {
+                            ConversationId = Guid.NewGuid()
+                            Caller = "bob"
+                            Owner = "alice"
+                            Surface = "submit"
+                        }
+                    )
                 )
                 |> AuditRow.orRefuse
 
             let! trail = auditLog.GetAuditTrail(AuditScope.shard "team-acme", None, Some "BeaconRejected")
 
             match trail with
-            | [ BeaconRejected p ] -> Expect.equal p.Surface "submit" "submit-surface label survives the round-trip"
+            | [ AIAudit(BeaconRejected p) ] ->
+                Expect.equal p.Surface "submit" "submit-surface label survives the round-trip"
             | other -> failtestf "expected exactly one BeaconRejected; got %A" other
         }
 
@@ -191,12 +199,14 @@ let private auditTests =
                 auditLog.Record(
                     AuditScope.shard "team-acme",
                     AuditSubject.system "test",
-                    BeaconRejected {
-                        ConversationId = Guid.NewGuid()
-                        Caller = "bob"
-                        Owner = "alice"
-                        Surface = BeaconSurfaceLabel
-                    }
+                    AIAuditEvent.event (
+                        BeaconRejected {
+                            ConversationId = Guid.NewGuid()
+                            Caller = "bob"
+                            Owner = "alice"
+                            Surface = BeaconSurfaceLabel
+                        }
+                    )
                 )
                 |> AuditRow.orRefuse
 

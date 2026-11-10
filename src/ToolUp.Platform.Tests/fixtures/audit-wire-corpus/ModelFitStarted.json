@@ -1,0 +1,15 @@
+{
+  "kind": "ModelFitStarted",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"SpecHash\":\"\",\"DatasetVersion\":\"\",\"Seed\":\"+0\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"SpecHash\":\"\",\"DatasetVersion\":\"\",\"Seed\":\"+0\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitStarted\":{\"CompositeKeyHash\":\"\",\"SpecHash\":\"\",\"DatasetVersion\":\"\",\"Seed\":\"+0\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"SpecHash\":\"s\",\"DatasetVersion\":\"s\",\"Seed\":\"+7\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"SpecHash\":\"s\",\"DatasetVersion\":\"s\",\"Seed\":\"+7\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitStarted\":{\"CompositeKeyHash\":\"s\",\"SpecHash\":\"s\",\"DatasetVersion\":\"s\",\"Seed\":\"+7\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

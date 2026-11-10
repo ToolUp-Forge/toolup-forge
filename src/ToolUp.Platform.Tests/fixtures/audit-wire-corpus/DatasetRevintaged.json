@@ -1,0 +1,15 @@
+{
+  "kind": "DatasetRevintaged",
+  "samples": [
+    {
+      "row": "{\"SpecHash\":\"\",\"SourceVersion\":\"\",\"ProducedVersions\":[],\"RequestedBy\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"SpecHash\":\"\",\"SourceVersion\":\"\",\"ProducedVersions\":[],\"RequestedBy\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetRevintaged\":{\"SpecHash\":\"\",\"SourceVersion\":\"\",\"ProducedVersions\":[],\"RequestedBy\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"SpecHash\":\"s\",\"SourceVersion\":\"s\",\"ProducedVersions\":[\"s\"],\"RequestedBy\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"SpecHash\":\"s\",\"SourceVersion\":\"s\",\"ProducedVersions\":[\"s\"],\"RequestedBy\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetRevintaged\":{\"SpecHash\":\"s\",\"SourceVersion\":\"s\",\"ProducedVersions\":[\"s\"],\"RequestedBy\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

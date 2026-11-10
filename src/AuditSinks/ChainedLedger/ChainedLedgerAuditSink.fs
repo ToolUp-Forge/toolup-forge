@@ -148,7 +148,8 @@ type LedgerVerification =
     /// The chain is broken. Carries the FIRST break, positioned.
     | LedgerBroken of LedgerBreak
 
-let private ledgerJsonOptions = PlatformJson.options
+let private ledgerJsonOptions =
+    ToolUp.Platform.Audit.AuditLog.AuditEventJson.options
 
 /// Body carried in each record's `Payload`, canonicalised before it is
 /// framed into the digest.

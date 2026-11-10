@@ -42,6 +42,63 @@ ToolUp.Forms.FormStore+FormStore..ctor(ToolUp.Platform.Infra.IEntityStore+IEntit
 ToolUp.Forms.FormValidator (class)
 ToolUp.Forms.FormValidator.emptyRegistry : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Forms.FormValidator.validate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Forms.FormSchema+FormSchema, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.FormSubmission+FieldValue]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.FormSubmission+FieldError]]
+ToolUp.Forms.FormsAuditEvents (class)
+ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload (class)
+ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Int32, System.Int32)
+ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload.FieldCount : System.Int32 { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload.FormId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload.SubmissionId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload.UserId : ToolUp.Platform.UserId { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload.Version : System.Int32 { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload (class)
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload.FieldCount : System.Int32 { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload.FormId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload.InitialState : System.String { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload.SchemaVersion : System.Int32 { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload.SubmissionId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload.UserId : ToolUp.Platform.UserId { get }
+ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload.WorkflowId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent (class)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent.IsFormSubmissionUpdated : System.Boolean { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent.IsFormSubmitted : System.Boolean { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent.IsWorkflowActionExecuted : System.Boolean { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent.IsWorkflowTransitioned : System.Boolean { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent.Tag : System.Int32 { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+FormSubmissionUpdated (class)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+FormSubmissionUpdated.Item : ToolUp.Forms.FormsAuditEvents+FormSubmissionUpdatedPayload { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+FormSubmitted (class)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+FormSubmitted.Item : ToolUp.Forms.FormsAuditEvents+FormSubmittedPayload { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+Tags (class)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+Tags.FormSubmissionUpdated : System.Int32 (literal)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+Tags.FormSubmitted : System.Int32 (literal)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+Tags.WorkflowActionExecuted : System.Int32 (literal)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+Tags.WorkflowTransitioned : System.Int32 (literal)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+WorkflowActionExecuted (class)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+WorkflowActionExecuted.Item : ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+WorkflowTransitioned (class)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEvent+WorkflowTransitioned.Item : ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEventModule (class)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEventModule.Registrant : System.String (literal)
+ToolUp.Forms.FormsAuditEvents+FormsAuditEventModule.event(ToolUp.Forms.FormsAuditEvents+FormsAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.Forms.FormsAuditEvents+FormsAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.Forms.FormsAuditEvents+FormsAuditEvent] { get }
+ToolUp.Forms.FormsAuditEvents+FormsAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Forms.FormsAuditEvents+FormsAuditEvent]
+ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload (class)
+ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload..ctor(System.String, System.String, System.String, System.String, System.String)
+ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload.ActionName : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload.Reason : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload.Status : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload.SubmissionId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowActionExecutedPayload.TransitionId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload (class)
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload.Event : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload.FormId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload.FromState : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload.SubmissionId : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload.ToState : System.String { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload.UserId : ToolUp.Platform.UserId { get }
+ToolUp.Forms.FormsAuditEvents+WorkflowTransitionedPayload.WorkflowId : System.String { get }
 ToolUp.Forms.FormsCompose (class)
 ToolUp.Forms.FormsCompose.composeForms(ToolUp.Forms.FormsCompose+FormsOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Forms.FormsCompose.formsCompanion : ToolUp.Platform.ComponentId { get }

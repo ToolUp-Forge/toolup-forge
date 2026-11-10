@@ -1,0 +1,15 @@
+{
+  "kind": "ComputeBudgetDenied",
+  "samples": [
+    {
+      "row": "{\"Denial\":{\"ScopeId\":\"\",\"SubmitterClass\":\"\",\"Dimension\":\"\",\"Quota\":0,\"Spent\":0,\"Requested\":0,\"PeriodKey\":\"\"},\"Surface\":\"\",\"Kind\":\"\",\"SubmittedBy\":\"\",\"RefusedAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"Denial\":{\"ScopeId\":\"\",\"SubmitterClass\":\"\",\"Dimension\":\"\",\"Quota\":0,\"Spent\":0,\"Requested\":0,\"PeriodKey\":\"\"},\"Surface\":\"\",\"Kind\":\"\",\"SubmittedBy\":\"\",\"RefusedAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ComputeBudgetDenied\":{\"Denial\":{\"ScopeId\":\"\",\"SubmitterClass\":\"\",\"Dimension\":\"\",\"Quota\":0,\"Spent\":0,\"Requested\":0,\"PeriodKey\":\"\"},\"Surface\":\"\",\"Kind\":\"\",\"SubmittedBy\":\"\",\"RefusedAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"Denial\":{\"ScopeId\":\"s\",\"SubmitterClass\":\"s\",\"Dimension\":\"s\",\"Quota\":1.25,\"Spent\":1.25,\"Requested\":1.25,\"PeriodKey\":\"s\"},\"Surface\":\"s\",\"Kind\":\"s\",\"SubmittedBy\":\"s\",\"RefusedAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"Denial\":{\"ScopeId\":\"s\",\"SubmitterClass\":\"s\",\"Dimension\":\"s\",\"Quota\":1.25,\"Spent\":1.25,\"Requested\":1.25,\"PeriodKey\":\"s\"},\"Surface\":\"s\",\"Kind\":\"s\",\"SubmittedBy\":\"s\",\"RefusedAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ComputeBudgetDenied\":{\"Denial\":{\"ScopeId\":\"s\",\"SubmitterClass\":\"s\",\"Dimension\":\"s\",\"Quota\":1.25,\"Spent\":1.25,\"Requested\":1.25,\"PeriodKey\":\"s\"},\"Surface\":\"s\",\"Kind\":\"s\",\"SubmittedBy\":\"s\",\"RefusedAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

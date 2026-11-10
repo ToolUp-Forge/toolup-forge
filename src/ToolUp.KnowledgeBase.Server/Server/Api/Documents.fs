@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Security.Cryptography
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
@@ -1141,18 +1142,20 @@ let uploadDocumentCore
                     deps.AuditLog.Record(
                         StorageScope.auditScope deps.Scope,
                         AuditSubject.fromSubject deps.AccessContext.Subject,
-                        ContentScanned {
-                            UserId = deps.UserId
-                            ScopeId = deps.Scope.ScopeId
-                            ScannerName = scanner.Name
-                            FileName = safeName
-                            ContentHash = contentHashOf bytes
-                            SizeBytes = int64 bytes.Length
-                            Verdict = ScanVerdict.label verdict
-                            Reason = ScanVerdict.reason verdict
-                            Refused = Option.isSome refusal
-                            OccurredAt = DateTimeOffset.UtcNow
-                        }
+                        KnowledgeAuditEvent.event (
+                            ContentScanned {
+                                UserId = deps.UserId
+                                ScopeId = deps.Scope.ScopeId
+                                ScannerName = scanner.Name
+                                FileName = safeName
+                                ContentHash = contentHashOf bytes
+                                SizeBytes = int64 bytes.Length
+                                Verdict = ScanVerdict.label verdict
+                                Reason = ScanVerdict.reason verdict
+                                Refused = Option.isSome refusal
+                                OccurredAt = DateTimeOffset.UtcNow
+                            }
+                        )
                     )
                     |> AuditRow.orRefuse
 
@@ -1199,13 +1202,15 @@ let uploadDocumentCore
                         deps.AuditLog.Record(
                             StorageScope.auditScope deps.Scope,
                             AuditSubject.fromSubject deps.AccessContext.Subject,
-                            KnowledgeDocumentDeduplicated {
-                                UserId = deps.UserId
-                                ScopeId = deps.Scope.ScopeId
-                                ExistingDocumentId = existing.Id
-                                FileName = safeName
-                                ContentHash = contentHash
-                            }
+                            KnowledgeAuditEvent.event (
+                                KnowledgeDocumentDeduplicated {
+                                    UserId = deps.UserId
+                                    ScopeId = deps.Scope.ScopeId
+                                    ExistingDocumentId = existing.Id
+                                    FileName = safeName
+                                    ContentHash = contentHash
+                                }
+                            )
                         )
                         |> AuditRow.orRefuse
 
@@ -1930,12 +1935,14 @@ let private getOriginalDocumentCore
         let denied (reason: string) =
             recordOriginalAccessAudit
                 deps
-                (KnowledgeOriginalRetrievalDenied {
-                    UserId = deps.UserId
-                    DocumentId = docId
-                    ScopeId = deps.Scope.ScopeId
-                    Reason = reason
-                })
+                (KnowledgeAuditEvent.event (
+                    KnowledgeOriginalRetrievalDenied {
+                        UserId = deps.UserId
+                        DocumentId = docId
+                        ScopeId = deps.Scope.ScopeId
+                        Reason = reason
+                    }
+                ))
 
         try
             let! index = loadIndex deps.Storage deps.Scope.Container
@@ -1987,13 +1994,15 @@ let private getOriginalDocumentCore
                         do!
                             recordOriginalAccessAudit
                                 deps
-                                (KnowledgeOriginalRetrieved {
-                                    UserId = deps.UserId
-                                    DocumentId = doc.Id
-                                    ScopeId = deps.Scope.ScopeId
-                                    SourceKind = sourceKindName doc.Source
-                                    FileName = doc.FileName
-                                })
+                                (KnowledgeAuditEvent.event (
+                                    KnowledgeOriginalRetrieved {
+                                        UserId = deps.UserId
+                                        DocumentId = doc.Id
+                                        ScopeId = deps.Scope.ScopeId
+                                        SourceKind = sourceKindName doc.Source
+                                        FileName = doc.FileName
+                                    }
+                                ))
 
                         // One value-free classification row per masked
                         // level, on this delivery only — a caller the
@@ -2084,12 +2093,14 @@ let getOriginalDelivery
             let denied (reason: string) =
                 recordOriginalAccessAudit
                     deps
-                    (KnowledgeOriginalRetrievalDenied {
-                        UserId = deps.UserId
-                        DocumentId = docId
-                        ScopeId = deps.Scope.ScopeId
-                        Reason = reason
-                    })
+                    (KnowledgeAuditEvent.event (
+                        KnowledgeOriginalRetrievalDenied {
+                            UserId = deps.UserId
+                            DocumentId = docId
+                            ScopeId = deps.Scope.ScopeId
+                            Reason = reason
+                        }
+                    ))
 
             try
                 let! index = loadIndex deps.Storage deps.Scope.Container
@@ -2142,13 +2153,15 @@ let getOriginalDelivery
                             do!
                                 recordOriginalAccessAudit
                                     deps
-                                    (KnowledgeOriginalRetrieved {
-                                        UserId = deps.UserId
-                                        DocumentId = doc.Id
-                                        ScopeId = deps.Scope.ScopeId
-                                        SourceKind = sourceKindName doc.Source
-                                        FileName = doc.FileName
-                                    })
+                                    (KnowledgeAuditEvent.event (
+                                        KnowledgeOriginalRetrieved {
+                                            UserId = deps.UserId
+                                            DocumentId = doc.Id
+                                            ScopeId = deps.Scope.ScopeId
+                                            SourceKind = sourceKindName doc.Source
+                                            FileName = doc.FileName
+                                        }
+                                    ))
 
                             return Ok target.Content
                         | Error NoOriginalAvailable ->

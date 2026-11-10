@@ -386,6 +386,7 @@ let composeForms (options: FormsOptions) (app: ServerApp) : ServerApp =
         |> ServerApp.withConfigValidator publishableValidator
         |> ServerApp.withMetricRegistrations ActionLedgerMetrics.registrations
         |> ServerApp.withMetricRegistrations FormStore.metricRegistrations
+        |> ServerApp.withAuditEvents (AuditEventFamily.registration FormsAuditEvents.FormsAuditEvent.family)
         // Phase 66 Stream B.6 — register the synthetic
         // `"Forms.PublicSubmit"` surface module so the two
         // `/api/public/forms/*` routes declare

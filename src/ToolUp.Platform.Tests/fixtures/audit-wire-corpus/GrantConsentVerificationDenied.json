@@ -1,0 +1,15 @@
+{
+  "kind": "GrantConsentVerificationDenied",
+  "samples": [
+    {
+      "row": "{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"DeclaredAlgorithm\":\"\",\"DenialCode\":\"\"}",
+      "rowWithActor": "{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"DeclaredAlgorithm\":\"\",\"DenialCode\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantConsentVerificationDenied\":{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"DeclaredAlgorithm\":\"\",\"DenialCode\":\"\"}}"
+    },
+    {
+      "row": "{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"DeclaredAlgorithm\":\"s\",\"DenialCode\":\"s\"}",
+      "rowWithActor": "{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"DeclaredAlgorithm\":\"s\",\"DenialCode\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantConsentVerificationDenied\":{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"DeclaredAlgorithm\":\"s\",\"DenialCode\":\"s\"}}"
+    }
+  ]
+}

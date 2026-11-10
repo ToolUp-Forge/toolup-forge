@@ -7,6 +7,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
@@ -226,8 +227,8 @@ let private soleRow (auditLog: IAuditLog) =
     match
         trail
         |> List.filter (function
-            | AnswerVerificationPassed _
-            | AnswerVerificationFlagged _ -> true
+            | AIAudit(AnswerVerificationPassed _)
+            | AIAudit(AnswerVerificationFlagged _) -> true
             | _ -> false)
     with
     | [ row ] -> row
@@ -235,8 +236,8 @@ let private soleRow (auditLog: IAuditLog) =
 
 let private payloadOf =
     function
-    | AnswerVerificationPassed p
-    | AnswerVerificationFlagged p -> p
+    | AIAudit(AnswerVerificationPassed p)
+    | AIAudit(AnswerVerificationFlagged p) -> p
     | other -> failtestf "not an answer-verification row: %A" other
 
 // ─── The ledger ──────────────────────────────────────────────────────
@@ -312,7 +313,7 @@ let tests =
 
             Expect.isTrue
                 (match row with
-                 | AnswerVerificationPassed _ -> true
+                 | AIAudit(AnswerVerificationPassed _) -> true
                  | _ -> false)
                 "a clean answer records the affirmative case, not the flagged one"
 
@@ -406,7 +407,7 @@ let tests =
 
             Expect.isTrue
                 (match row with
-                 | AnswerVerificationFlagged _ -> true
+                 | AIAudit(AnswerVerificationFlagged _) -> true
                  | _ -> false)
                 "an unmatched figure records the flagged case"
 
@@ -442,7 +443,7 @@ let tests =
 
             Expect.isTrue
                 (match soleRow auditLog with
-                 | AnswerVerificationPassed _ -> true
+                 | AIAudit(AnswerVerificationPassed _) -> true
                  | _ -> false)
                 "nothing was unmatched, so the affirmative case is the honest one"
         }

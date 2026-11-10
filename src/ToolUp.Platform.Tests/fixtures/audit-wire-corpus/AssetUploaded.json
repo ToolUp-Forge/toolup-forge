@@ -1,0 +1,15 @@
+{
+  "kind": "AssetUploaded",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"AssetId\":\"\",\"ContentHash\":\"\",\"OriginalFilename\":\"\",\"MimeType\":\"\",\"SizeBytes\":\"+0\",\"Profile\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"AssetId\":\"\",\"ContentHash\":\"\",\"OriginalFilename\":\"\",\"MimeType\":\"\",\"SizeBytes\":\"+0\",\"Profile\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AssetUploaded\":{\"UserId\":\"\",\"AssetId\":\"\",\"ContentHash\":\"\",\"OriginalFilename\":\"\",\"MimeType\":\"\",\"SizeBytes\":\"+0\",\"Profile\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"AssetId\":\"s\",\"ContentHash\":\"s\",\"OriginalFilename\":\"s\",\"MimeType\":\"s\",\"SizeBytes\":\"+7\",\"Profile\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"AssetId\":\"s\",\"ContentHash\":\"s\",\"OriginalFilename\":\"s\",\"MimeType\":\"s\",\"SizeBytes\":\"+7\",\"Profile\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AssetUploaded\":{\"UserId\":\"s\",\"AssetId\":\"s\",\"ContentHash\":\"s\",\"OriginalFilename\":\"s\",\"MimeType\":\"s\",\"SizeBytes\":\"+7\",\"Profile\":\"s\"}}"
+    }
+  ]
+}

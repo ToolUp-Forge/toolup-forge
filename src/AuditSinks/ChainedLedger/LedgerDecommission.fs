@@ -150,7 +150,7 @@ module DecommissionVerification =
 [<Literal>]
 let SchemaVersion = 1
 
-let private jsonOptions = PlatformJson.options
+let private jsonOptions = ToolUp.Platform.Audit.AuditLog.AuditEventJson.options
 
 // ── Producing ───────────────────────────────────────────────────────────
 

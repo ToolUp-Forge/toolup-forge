@@ -4,6 +4,7 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
+open ToolUp.Forms.FormsAuditEvents
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Infra.IEntityStore
 open ToolUp.Forms.FormSubmission
@@ -228,8 +229,8 @@ let tests =
             let failedAuditCount =
                 rig.AuditLog.EventsForScope rig.ScopeId
                 |> List.filter (fun e ->
-                    match e with
-                    | WorkflowActionExecuted p -> p.Status = "failed" && p.ActionName = "action-1"
+                    match FormsAuditEvent.tryRead e with
+                    | Some(WorkflowActionExecuted p) -> p.Status = "failed" && p.ActionName = "action-1"
                     | _ -> false)
                 |> List.length
 

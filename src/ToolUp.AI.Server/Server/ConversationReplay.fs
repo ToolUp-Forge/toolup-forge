@@ -10,6 +10,7 @@ open System.Text
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.AI.AIAuditEvents
 open ToolUp.Platform.AI
 open ToolUp.AI
 open ToolUp.Platform.Infra

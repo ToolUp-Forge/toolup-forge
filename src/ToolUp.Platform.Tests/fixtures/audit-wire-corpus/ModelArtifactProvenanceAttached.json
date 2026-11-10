@@ -1,0 +1,15 @@
+{
+  "kind": "ModelArtifactProvenanceAttached",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"AttachmentHashes\":[],\"MediaTypes\":[],\"TotalAttachments\":0,\"TotalBytes\":0,\"SigningKeyId\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"AttachmentHashes\":[],\"MediaTypes\":[],\"TotalAttachments\":0,\"TotalBytes\":0,\"SigningKeyId\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactProvenanceAttached\":{\"CompositeKeyHash\":\"\",\"AttachmentHashes\":[],\"MediaTypes\":[],\"TotalAttachments\":0,\"TotalBytes\":0,\"SigningKeyId\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"AttachmentHashes\":[\"s\"],\"MediaTypes\":[\"s\"],\"TotalAttachments\":7,\"TotalBytes\":7,\"SigningKeyId\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"AttachmentHashes\":[\"s\"],\"MediaTypes\":[\"s\"],\"TotalAttachments\":7,\"TotalBytes\":7,\"SigningKeyId\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactProvenanceAttached\":{\"CompositeKeyHash\":\"s\",\"AttachmentHashes\":[\"s\"],\"MediaTypes\":[\"s\"],\"TotalAttachments\":7,\"TotalBytes\":7,\"SigningKeyId\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

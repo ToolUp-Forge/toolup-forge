@@ -1,0 +1,15 @@
+{
+  "kind": "FactImportAccepted",
+  "samples": [
+    {
+      "row": "{\"PeerId\":\"\",\"PeerKeyId\":\"\",\"CertificateRoot\":\"\",\"CertificateRef\":\"\",\"DerivedFactId\":\"\",\"ImportedFactId\":\"\",\"Subject\":\"\",\"Metric\":\"\",\"DeclaredDisclosure\":\"\",\"EffectiveDisclosure\":\"\",\"AttestationLevel\":\"\",\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"PeerId\":\"\",\"PeerKeyId\":\"\",\"CertificateRoot\":\"\",\"CertificateRef\":\"\",\"DerivedFactId\":\"\",\"ImportedFactId\":\"\",\"Subject\":\"\",\"Metric\":\"\",\"DeclaredDisclosure\":\"\",\"EffectiveDisclosure\":\"\",\"AttestationLevel\":\"\",\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FactImportAccepted\":{\"PeerId\":\"\",\"PeerKeyId\":\"\",\"CertificateRoot\":\"\",\"CertificateRef\":\"\",\"DerivedFactId\":\"\",\"ImportedFactId\":\"\",\"Subject\":\"\",\"Metric\":\"\",\"DeclaredDisclosure\":\"\",\"EffectiveDisclosure\":\"\",\"AttestationLevel\":\"\",\"Reason\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"PeerId\":\"s\",\"PeerKeyId\":\"s\",\"CertificateRoot\":\"s\",\"CertificateRef\":\"s\",\"DerivedFactId\":\"s\",\"ImportedFactId\":\"s\",\"Subject\":\"s\",\"Metric\":\"s\",\"DeclaredDisclosure\":\"s\",\"EffectiveDisclosure\":\"s\",\"AttestationLevel\":\"s\",\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"PeerId\":\"s\",\"PeerKeyId\":\"s\",\"CertificateRoot\":\"s\",\"CertificateRef\":\"s\",\"DerivedFactId\":\"s\",\"ImportedFactId\":\"s\",\"Subject\":\"s\",\"Metric\":\"s\",\"DeclaredDisclosure\":\"s\",\"EffectiveDisclosure\":\"s\",\"AttestationLevel\":\"s\",\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FactImportAccepted\":{\"PeerId\":\"s\",\"PeerKeyId\":\"s\",\"CertificateRoot\":\"s\",\"CertificateRef\":\"s\",\"DerivedFactId\":\"s\",\"ImportedFactId\":\"s\",\"Subject\":\"s\",\"Metric\":\"s\",\"DeclaredDisclosure\":\"s\",\"EffectiveDisclosure\":\"s\",\"AttestationLevel\":\"s\",\"Reason\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

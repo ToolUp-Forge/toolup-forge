@@ -1,0 +1,15 @@
+{
+  "kind": "NotificationSent",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"NotificationKind\":\"\",\"Provider\":\"\",\"RecipientUserIds\":[],\"VendorMessageId\":null,\"CorrelationId\":null}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"NotificationKind\":\"\",\"Provider\":\"\",\"RecipientUserIds\":[],\"VendorMessageId\":null,\"CorrelationId\":null,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationSent\":{\"UserId\":\"\",\"ScopeId\":\"\",\"NotificationKind\":\"\",\"Provider\":\"\",\"RecipientUserIds\":[],\"VendorMessageId\":null,\"CorrelationId\":null}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"NotificationKind\":\"s\",\"Provider\":\"s\",\"RecipientUserIds\":[\"s\"],\"VendorMessageId\":\"s\",\"CorrelationId\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"NotificationKind\":\"s\",\"Provider\":\"s\",\"RecipientUserIds\":[\"s\"],\"VendorMessageId\":\"s\",\"CorrelationId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"NotificationSent\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"NotificationKind\":\"s\",\"Provider\":\"s\",\"RecipientUserIds\":[\"s\"],\"VendorMessageId\":\"s\",\"CorrelationId\":\"s\"}}"
+    }
+  ]
+}

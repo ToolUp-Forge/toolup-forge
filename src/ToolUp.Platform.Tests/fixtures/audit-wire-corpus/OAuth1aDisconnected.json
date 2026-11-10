@@ -1,0 +1,15 @@
+{
+  "kind": "OAuth1aDisconnected",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"ResourceId\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"ResourceId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuth1aDisconnected\":{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"ResourceId\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"ResourceId\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"ResourceId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuth1aDisconnected\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"ResourceId\":\"s\"}}"
+    }
+  ]
+}

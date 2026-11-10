@@ -1,0 +1,15 @@
+{
+  "kind": "RateLimitRefused",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"Provider\":\"\",\"SubKey\":null,\"Reason\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"Provider\":\"\",\"SubKey\":null,\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RateLimitRefused\":{\"ScopeId\":\"\",\"Provider\":\"\",\"SubKey\":null,\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"Provider\":\"s\",\"SubKey\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"Provider\":\"s\",\"SubKey\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"RateLimitRefused\":{\"ScopeId\":\"s\",\"Provider\":\"s\",\"SubKey\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

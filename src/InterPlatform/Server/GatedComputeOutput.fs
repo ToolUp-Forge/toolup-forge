@@ -5,6 +5,7 @@ namespace ToolUp.InterPlatform
 
 open System
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 

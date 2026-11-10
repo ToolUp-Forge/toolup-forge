@@ -1,0 +1,15 @@
+{
+  "kind": "OrphanedContentBlobReclaimed",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"ContentHash\":\"\",\"Bytes\":\"+0\",\"AgeHours\":\"+0\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"ContentHash\":\"\",\"Bytes\":\"+0\",\"AgeHours\":\"+0\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OrphanedContentBlobReclaimed\":{\"ScopeId\":\"\",\"ContentHash\":\"\",\"Bytes\":\"+0\",\"AgeHours\":\"+0\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"ContentHash\":\"s\",\"Bytes\":\"+7\",\"AgeHours\":\"+7\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"ContentHash\":\"s\",\"Bytes\":\"+7\",\"AgeHours\":\"+7\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OrphanedContentBlobReclaimed\":{\"ScopeId\":\"s\",\"ContentHash\":\"s\",\"Bytes\":\"+7\",\"AgeHours\":\"+7\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "FormSubmissionUpdated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"FieldCount\":0,\"Version\":0}",
+      "rowWithActor": "{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"FieldCount\":0,\"Version\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FormSubmissionUpdated\":{\"UserId\":\"\",\"FormId\":\"\",\"SubmissionId\":\"\",\"FieldCount\":0,\"Version\":0}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"FieldCount\":7,\"Version\":7}",
+      "rowWithActor": "{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"FieldCount\":7,\"Version\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"FormSubmissionUpdated\":{\"UserId\":\"s\",\"FormId\":\"s\",\"SubmissionId\":\"s\",\"FieldCount\":7,\"Version\":7}}"
+    }
+  ]
+}

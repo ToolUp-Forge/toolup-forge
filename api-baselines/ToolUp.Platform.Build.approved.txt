@@ -294,6 +294,7 @@ ToolUp.Platform.CodemodMigration.IsModelCapabilities : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsModuleHost : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsNestedConfig : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsOneScopeForm : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsOpenAuditRegistry : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRateLimitAdmission : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemoteAndMemo : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemoting : System.Boolean { get }
@@ -308,6 +309,7 @@ ToolUp.Platform.CodemodMigration.ModelCapabilities : ToolUp.Platform.CodemodMigr
 ToolUp.Platform.CodemodMigration.ModuleHost : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.NestedConfig : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.OneScopeForm : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.OpenAuditRegistry : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.RateLimitAdmission : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.RemoteAndMemo : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Remoting : ToolUp.Platform.CodemodMigration { get }
@@ -333,6 +335,7 @@ ToolUp.Platform.CodemodMigration+Tags.ModelCapabilities : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ModuleHost : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.NestedConfig : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.OneScopeForm : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.OpenAuditRegistry : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RateLimitAdmission : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RemoteAndMemo : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Remoting : System.Int32 (literal)

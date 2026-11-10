@@ -1,0 +1,15 @@
+{
+  "kind": "PeerJobCompleted",
+  "samples": [
+    {
+      "row": "{\"ContractId\":\"\",\"MethodName\":\"\",\"CallerPeerId\":\"\",\"RootRequestId\":\"\",\"JobId\":\"00000000-0000-0000-0000-000000000000\",\"Succeeded\":false,\"Outcome\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"ContractId\":\"\",\"MethodName\":\"\",\"CallerPeerId\":\"\",\"RootRequestId\":\"\",\"JobId\":\"00000000-0000-0000-0000-000000000000\",\"Succeeded\":false,\"Outcome\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PeerJobCompleted\":{\"ContractId\":\"\",\"MethodName\":\"\",\"CallerPeerId\":\"\",\"RootRequestId\":\"\",\"JobId\":\"00000000-0000-0000-0000-000000000000\",\"Succeeded\":false,\"Outcome\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"ContractId\":\"s\",\"MethodName\":\"s\",\"CallerPeerId\":\"s\",\"RootRequestId\":\"s\",\"JobId\":\"00000000-0000-0000-0000-000000000874\",\"Succeeded\":true,\"Outcome\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"ContractId\":\"s\",\"MethodName\":\"s\",\"CallerPeerId\":\"s\",\"RootRequestId\":\"s\",\"JobId\":\"00000000-0000-0000-0000-000000000874\",\"Succeeded\":true,\"Outcome\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PeerJobCompleted\":{\"ContractId\":\"s\",\"MethodName\":\"s\",\"CallerPeerId\":\"s\",\"RootRequestId\":\"s\",\"JobId\":\"00000000-0000-0000-0000-000000000874\",\"Succeeded\":true,\"Outcome\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

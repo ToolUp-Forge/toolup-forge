@@ -1,0 +1,15 @@
+{
+  "kind": "TeamCreated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TeamId\":\"\",\"TeamName\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"TeamId\":\"\",\"TeamName\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamCreated\":{\"UserId\":\"\",\"TeamId\":\"\",\"TeamName\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"TeamName\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"TeamName\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamCreated\":{\"UserId\":\"s\",\"TeamId\":\"s\",\"TeamName\":\"s\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "TenantOffboardConfirmationRequested",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"Reason\":\"\",\"ExpiresAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"Reason\":\"\",\"ExpiresAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantOffboardConfirmationRequested\":{\"ScopeId\":\"\",\"RequestedBy\":\"\",\"Reason\":\"\",\"ExpiresAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"Reason\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"Reason\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantOffboardConfirmationRequested\":{\"ScopeId\":\"s\",\"RequestedBy\":\"s\",\"Reason\":\"s\",\"ExpiresAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

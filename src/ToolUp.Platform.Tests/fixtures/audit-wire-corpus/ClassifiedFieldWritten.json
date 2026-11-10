@@ -1,0 +1,15 @@
+{
+  "kind": "ClassifiedFieldWritten",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ClassifiedFieldWritten\":{\"UserId\":\"\",\"EntityName\":\"\",\"FieldPath\":\"\",\"Level\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ClassifiedFieldWritten\":{\"UserId\":\"s\",\"EntityName\":\"s\",\"FieldPath\":\"s\",\"Level\":\"s\"}}"
+    }
+  ]
+}

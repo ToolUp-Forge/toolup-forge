@@ -23,6 +23,7 @@
         <None Include="..\ToolUp.Forms\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="Server\FormsAuditEvents.fs" />
         <Compile Include="Server\IFormStore.fs" />
         <Compile Include="Server\IWorkflowEngine.fs" />
         <Compile Include="Server\EntityRegistrations.fs" />

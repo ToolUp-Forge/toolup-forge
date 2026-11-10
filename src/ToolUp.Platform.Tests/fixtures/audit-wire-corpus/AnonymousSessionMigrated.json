@@ -1,0 +1,15 @@
+{
+  "kind": "AnonymousSessionMigrated",
+  "samples": [
+    {
+      "row": "{\"AnonymousSessionId\":\"\",\"TargetUserId\":\"\",\"Outcome\":\"\",\"ItemsMigrated\":0,\"BytesMigrated\":\"+0\",\"Modules\":[],\"FailedItems\":0,\"Error\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"AnonymousSessionId\":\"\",\"TargetUserId\":\"\",\"Outcome\":\"\",\"ItemsMigrated\":0,\"BytesMigrated\":\"+0\",\"Modules\":[],\"FailedItems\":0,\"Error\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AnonymousSessionMigrated\":{\"AnonymousSessionId\":\"\",\"TargetUserId\":\"\",\"Outcome\":\"\",\"ItemsMigrated\":0,\"BytesMigrated\":\"+0\",\"Modules\":[],\"FailedItems\":0,\"Error\":null,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"AnonymousSessionId\":\"s\",\"TargetUserId\":\"s\",\"Outcome\":\"s\",\"ItemsMigrated\":7,\"BytesMigrated\":\"+7\",\"Modules\":[\"s\"],\"FailedItems\":7,\"Error\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"AnonymousSessionId\":\"s\",\"TargetUserId\":\"s\",\"Outcome\":\"s\",\"ItemsMigrated\":7,\"BytesMigrated\":\"+7\",\"Modules\":[\"s\"],\"FailedItems\":7,\"Error\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AnonymousSessionMigrated\":{\"AnonymousSessionId\":\"s\",\"TargetUserId\":\"s\",\"Outcome\":\"s\",\"ItemsMigrated\":7,\"BytesMigrated\":\"+7\",\"Modules\":[\"s\"],\"FailedItems\":7,\"Error\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

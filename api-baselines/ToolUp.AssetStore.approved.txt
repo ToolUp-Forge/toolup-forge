@@ -6,6 +6,38 @@
 ToolUp.AssetStore.AssetApi (class)
 ToolUp.AssetStore.AssetApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.AssetStore.AssetApi.routeBuilderPrefix : System.String (literal)
+ToolUp.AssetStore.AssetAuditEvents (class)
+ToolUp.AssetStore.AssetAuditEvents.|AssetAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent]
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent (class)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent.IsAssetDeleted : System.Boolean { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent.IsAssetUploaded : System.Boolean { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent.Tag : System.Int32 { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent+AssetDeleted (class)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent+AssetDeleted.Item : ToolUp.AssetStore.AssetAuditEvents+AssetDeletedPayload { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent+AssetUploaded (class)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent+AssetUploaded.Item : ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent+Tags (class)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent+Tags.AssetDeleted : System.Int32 (literal)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent+Tags.AssetUploaded : System.Int32 (literal)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEventModule (class)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEventModule.Registrant : System.String (literal)
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEventModule.event(ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent] { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AssetStore.AssetAuditEvents+AssetAuditEvent]
+ToolUp.AssetStore.AssetAuditEvents+AssetDeletedPayload (class)
+ToolUp.AssetStore.AssetAuditEvents+AssetDeletedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String)
+ToolUp.AssetStore.AssetAuditEvents+AssetDeletedPayload.AssetId : System.String { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetDeletedPayload.ContentHash : System.String { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetDeletedPayload.UserId : ToolUp.Platform.UserId { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload (class)
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload..ctor(ToolUp.Platform.UserId, System.String, System.String, System.String, System.String, System.Int64, System.String)
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload.AssetId : System.String { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload.ContentHash : System.String { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload.MimeType : System.String { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload.OriginalFilename : System.String { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload.Profile : System.String { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload.SizeBytes : System.Int64 { get }
+ToolUp.AssetStore.AssetAuditEvents+AssetUploadedPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.AssetStore.AssetCompose (class)
 ToolUp.AssetStore.AssetCompose.assetStoreCompanion : ToolUp.Platform.ComponentId { get }
 ToolUp.AssetStore.AssetCompose.withAssetStore(ToolUp.AssetStore.AssetCompose+AssetStoreCompanionOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp

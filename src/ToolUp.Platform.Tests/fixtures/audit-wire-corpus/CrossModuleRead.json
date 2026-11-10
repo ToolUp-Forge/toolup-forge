@@ -1,0 +1,15 @@
+{
+  "kind": "CrossModuleRead",
+  "samples": [
+    {
+      "row": "{\"ConversationId\":null,\"UserId\":\"\",\"SourceConvActiveModule\":null,\"TargetModule\":null,\"TargetModules\":[],\"ToolName\":\"\",\"ComponentId\":\"\",\"QueryKey\":null,\"LatencyMs\":0.0,\"ResultBytes\":0,\"Allowed\":false,\"Outcome\":\"\"}",
+      "rowWithActor": "{\"ConversationId\":null,\"UserId\":\"\",\"SourceConvActiveModule\":null,\"TargetModule\":null,\"TargetModules\":[],\"ToolName\":\"\",\"ComponentId\":\"\",\"QueryKey\":null,\"LatencyMs\":0.0,\"ResultBytes\":0,\"Allowed\":false,\"Outcome\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CrossModuleRead\":{\"ConversationId\":null,\"UserId\":\"\",\"SourceConvActiveModule\":null,\"TargetModule\":null,\"TargetModules\":[],\"ToolName\":\"\",\"ComponentId\":\"\",\"QueryKey\":null,\"LatencyMs\":0.0,\"ResultBytes\":0,\"Allowed\":false,\"Outcome\":\"\"}}"
+    },
+    {
+      "row": "{\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"UserId\":\"s\",\"SourceConvActiveModule\":\"s\",\"TargetModule\":\"s\",\"TargetModules\":[\"s\"],\"ToolName\":\"s\",\"ComponentId\":\"s\",\"QueryKey\":\"s\",\"LatencyMs\":0.5,\"ResultBytes\":7,\"Allowed\":true,\"Outcome\":\"s\"}",
+      "rowWithActor": "{\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"UserId\":\"s\",\"SourceConvActiveModule\":\"s\",\"TargetModule\":\"s\",\"TargetModules\":[\"s\"],\"ToolName\":\"s\",\"ComponentId\":\"s\",\"QueryKey\":\"s\",\"LatencyMs\":0.5,\"ResultBytes\":7,\"Allowed\":true,\"Outcome\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"CrossModuleRead\":{\"ConversationId\":\"00000000-0000-0000-0000-000000000874\",\"UserId\":\"s\",\"SourceConvActiveModule\":\"s\",\"TargetModule\":\"s\",\"TargetModules\":[\"s\"],\"ToolName\":\"s\",\"ComponentId\":\"s\",\"QueryKey\":\"s\",\"LatencyMs\":0.5,\"ResultBytes\":7,\"Allowed\":true,\"Outcome\":\"s\"}}"
+    }
+  ]
+}

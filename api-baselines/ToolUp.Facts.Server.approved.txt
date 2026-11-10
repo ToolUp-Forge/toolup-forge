@@ -1406,6 +1406,51 @@ ToolUp.Facts.FactWithCompetition (class)
 ToolUp.Facts.FactWithCompetition..ctor(ToolUp.Facts.Fact, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.FactWithCompetition.CompetingMethods : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactWithCompetition.Fact : ToolUp.Facts.Fact { get }
+ToolUp.Facts.FactsAuditEvents (class)
+ToolUp.Facts.FactsAuditEvents.|FactsAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactsAuditEvents+FactsAuditEvent]
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload (class)
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload.Digest : System.String { get }
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload.Format : System.String { get }
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload.KeyId : System.String { get }
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload.Seal : System.String { get }
+ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload.Subject : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload (class)
+ToolUp.Facts.FactsAuditEvents+FactImportPayload..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.AttestationLevel : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.CertificateRef : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.CertificateRoot : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.DeclaredDisclosure : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.DerivedFactId : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.EffectiveDisclosure : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.ImportedFactId : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.Metric : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.PeerId : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.PeerKeyId : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.Reason : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactImportPayload.Subject : System.String { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent (class)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent.IsCertificateIssued : System.Boolean { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent.IsFactImportAccepted : System.Boolean { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent.IsFactImportRefused : System.Boolean { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent.Tag : System.Int32 { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+CertificateIssued (class)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+CertificateIssued.Item : ToolUp.Facts.FactsAuditEvents+CertificateIssuedPayload { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+FactImportAccepted (class)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+FactImportAccepted.Item : ToolUp.Facts.FactsAuditEvents+FactImportPayload { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+FactImportRefused (class)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+FactImportRefused.Item : ToolUp.Facts.FactsAuditEvents+FactImportPayload { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+Tags (class)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+Tags.CertificateIssued : System.Int32 (literal)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+Tags.FactImportAccepted : System.Int32 (literal)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEvent+Tags.FactImportRefused : System.Int32 (literal)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEventModule (class)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEventModule.Registrant : System.String (literal)
+ToolUp.Facts.FactsAuditEvents+FactsAuditEventModule.event(ToolUp.Facts.FactsAuditEvents+FactsAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.Facts.FactsAuditEvents+FactsAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.Facts.FactsAuditEvents+FactsAuditEvent] { get }
+ToolUp.Facts.FactsAuditEvents+FactsAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactsAuditEvents+FactsAuditEvent]
 ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.DeclaredPrincipal, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredPrincipal], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp

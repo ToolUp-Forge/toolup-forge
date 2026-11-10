@@ -1,0 +1,15 @@
+{
+  "kind": "DatasetPolicyDenied",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"DatasetId\":\"\",\"Version\":0,\"Policy\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"DatasetId\":\"\",\"Version\":0,\"Policy\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetPolicyDenied\":{\"ScopeId\":\"\",\"DatasetId\":\"\",\"Version\":0,\"Policy\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"DatasetId\":\"s\",\"Version\":7,\"Policy\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"DatasetId\":\"s\",\"Version\":7,\"Policy\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DatasetPolicyDenied\":{\"ScopeId\":\"s\",\"DatasetId\":\"s\",\"Version\":7,\"Policy\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

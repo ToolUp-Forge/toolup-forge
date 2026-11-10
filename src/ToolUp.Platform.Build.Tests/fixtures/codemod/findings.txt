@@ -1,4 +1,4 @@
-Codemod: 111 site(s) in 20 file(s) need human review (not rewritten):
+Codemod: 113 site(s) in 20 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -154,6 +154,10 @@ Codemod: 111 site(s) in 20 file(s) need human review (not rewritten):
       -> Phase 1062: an `IPermissionStore` implementer: the reads answer `Result<_, PermissionStoreError>` (wrap a document in `Ok`; an absent one is `Ok TeamPermissions.empty`; an unreadable one is `Error`, never empty), and `UpdateTeamPermissions(teamId, change)` is one guarded read-modify-write
     L54 [1062-audit-log-match] let quiet auditLog = match auditLog with Some log -> log | None -> NoOpAuditLog() :> IAuditLog
       -> Phase 1062: if this matches an audit log's `Some` / `None`, the log is no longer optional: keep the `Some` arm over the value (over `NoOpAuditLog` it does what the `None` arm did)
+    L57 [874-moved-audit-case] AuditRow.emit log (AuditScope.team teamId) actor (AuditEvent.FormSubmitted payload)
+      -> Phase 874: if this is an `AuditEvent` case, the companion that emits it declares it now: open its `*AuditEvents` module, construct with its family's `event` (`FormsAuditEvent.event (FormSubmitted p)`), and match with its active pattern (`FormsAudit(FormSubmitted p)`) or `tryRead`; Core carries it as `AuditEvent.Opaque`
+    L60 [874-archive-read] JsonSerializer.Deserialize<ArchiveLine>(line, PlatformJson.options)
+      -> Phase 874: if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
       -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once
@@ -260,6 +264,7 @@ Codemod: 111 site(s) in 20 file(s) need human review (not rewritten):
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
     Phase 815 — docs/migrations/815-remove-open-deprecations.md
     Phase 873 — docs/migrations/873-portable-infrastructure-interfaces.md
+    Phase 874 — docs/migrations/874-open-audit-event-registry.md
     Phase 876 — docs/migrations/876-composition-contributions.md
     Phase 877 — docs/migrations/877-nested-server-config.md
     Phase 878 — docs/migrations/878-typed-identity.md

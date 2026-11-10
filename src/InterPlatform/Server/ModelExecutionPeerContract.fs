@@ -5,6 +5,7 @@ namespace ToolUp.InterPlatform
 
 open System
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
@@ -1775,7 +1776,7 @@ module ModelExecutionPeerContract =
                     fusion.AuditLog.Record(
                         AuditScope.platform,
                         AuditSubject.system "PeerHost",
-                        PeerJobCompleted payload
+                        PeerAuditEvent.event (PeerJobCompleted payload)
                     )
                     |> AuditRow.orRefuse
             with _ ->

@@ -1,0 +1,15 @@
+{
+  "kind": "OAuthRefreshFailed",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"DataSourceId\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"DataSourceId\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthRefreshFailed\":{\"UserId\":\"\",\"ScopeId\":\"\",\"FlowName\":\"\",\"DataSourceId\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"DataSourceId\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"DataSourceId\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthRefreshFailed\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"FlowName\":\"s\",\"DataSourceId\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

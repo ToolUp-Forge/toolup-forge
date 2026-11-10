@@ -1,0 +1,15 @@
+{
+  "kind": "PublicationReaderSignedIn",
+  "samples": [
+    {
+      "row": "{\"SubjectKind\":\"\",\"ReaderId\":\"\",\"ReaderRoles\":[],\"AuthProvider\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"SubjectKind\":\"\",\"ReaderId\":\"\",\"ReaderRoles\":[],\"AuthProvider\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PublicationReaderSignedIn\":{\"SubjectKind\":\"\",\"ReaderId\":\"\",\"ReaderRoles\":[],\"AuthProvider\":\"\",\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"SubjectKind\":\"s\",\"ReaderId\":\"s\",\"ReaderRoles\":[\"s\"],\"AuthProvider\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"SubjectKind\":\"s\",\"ReaderId\":\"s\",\"ReaderRoles\":[\"s\"],\"AuthProvider\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PublicationReaderSignedIn\":{\"SubjectKind\":\"s\",\"ReaderId\":\"s\",\"ReaderRoles\":[\"s\"],\"AuthProvider\":\"s\",\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

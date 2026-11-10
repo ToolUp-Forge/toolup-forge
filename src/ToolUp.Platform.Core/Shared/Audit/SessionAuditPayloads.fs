@@ -153,62 +153,6 @@ type ServiceAccountStatusChangedPayload = {
     Disabled: bool
 }
 
-/// Phase 6j.D — the AI fast-path beacon (or the equivalent
-/// `SubmitMessage`) was rejected by the ownership gate. Emitted when
-/// the first persisted message of a shared-container conversation
-/// (`team-{teamId}`) records a `CreatedBy` that does not match the
-/// caller's `AccessContext.UserId`. Surfaces cross-user history-
-/// forgery / prompt-injection attempts before the synthetic turns
-/// reach the provider-history blob the LLM reads next.
-///
-/// `Caller` is the `UserId` that attempted the append; `Owner` is the
-/// `CreatedBy` recorded on the first persisted message. `Surface`
-/// distinguishes which entry point fired the gate (`"beacon"` for the
-/// fast-path POST, `"submit"` for `IAIAssistantApi.SubmitMessage`),
-/// so forensics can tell whether the cross-user write came in via the
-/// fire-and-forget beacon or the full agent-loop path.
-///
-/// PII-free: ids only — neither the instruction nor the conversation
-/// content travels through the audit trail. Conversation owner is
-/// already recorded by the deployment under the persisted blob; the
-/// audit row exists so cross-user attempts are visible regardless of
-/// blob-storage retention.
-type BeaconRejectedPayload = {
-    /// Conversation id whose append was refused. The blob (if any
-    /// existed) is unchanged — the gate fires before the save.
-    ConversationId: Guid
-    /// The caller's `AccessContext.UserId` at the moment of refusal.
-    /// Empty string when no identity was resolved (the handler also
-    /// refuses unauthenticated callers).
-    Caller: string
-    /// The owner recorded on the first persisted message
-    /// (`existing[0].CreatedBy`). Empty when the rejection was for a
-    /// reason other than ownership mismatch (defensive — the field
-    /// is shaped so a future use of `BeaconRejected` for non-ownership
-    /// reasons doesn't break the wire shape).
-    Owner: string
-    /// `"beacon"` for the fast-path POST, `"submit"` for
-    /// `IAIAssistantApi.SubmitMessage`. Pin-points the surface so
-    /// operator triage can correlate against per-surface metrics.
-    Surface: string
-}
-
-/// An AI conversation was exported (markdown / JSON
-/// download) from the chat side panel. Metadata only by design: the
-/// payload never carries conversation content or tool payloads (which
-/// may contain PII), only *which* conversation, *whether* the user
-/// opted into tool-detail inclusion, and *who* exported it — enough
-/// for an admin to detect cross-team export patterns without the audit
-/// trail itself becoming a PII sink.
-type ConversationExportPayload = {
-    ConversationId: string
-    /// `true` when the user ticked "Include tool details" (the export
-    /// file then contains raw `ToolCalls`); `false` for the sanitised
-    /// default (tool calls stripped from the download).
-    IncludeToolDetails: bool
-    ExportedBy: string
-}
-
 // ─── Phase 53 — `IConversationStore` lifecycle audit payloads ───
 //
 // Five payloads cover the conversation substrate's lifecycle, emitted
@@ -290,27 +234,6 @@ type ConversationErasedPayload = {
     /// regimes. Admins can re-query the store with the same subject
     /// for the per-id list if needed.
     ConversationCount: int
-}
-
-/// `ConversationReplay.replay` ran. Links the original to its replay
-/// via the two `ConversationId`s + records the operator-supplied
-/// override labels (per `ConversationReplayOptions`). `Delta` is
-/// the human-readable comparison summary from `ConversationReplayResult.Delta`.
-type ConversationReplayedPayload = {
-    OriginalConversationId: string
-    ReplayConversationId: string
-    /// SHA-256 hex of the override system prompt, if supplied;
-    /// `None` when the replay re-used the original prompt.
-    NewSystemPromptDigest: string option
-    /// Provider label override, if supplied; `None` when the replay
-    /// re-used the original provider.
-    NewProvider: string option
-    /// Free-form SDK label the operator stamped on the replay;
-    /// `None` when the replay re-used the original SDK version.
-    SdkAnnotation: string option
-    /// Operator-readable summary from `ConversationReplayResult.Delta`.
-    /// Today: turn-count + per-turn token deltas. Do not machine-parse.
-    Delta: string
 }
 
 /// One field-level difference between the previous startup's
@@ -544,35 +467,4 @@ type DataSubjectRequestAuditPayload = {
     /// PreviewCompleted, segment counts at ExportCompleted, total
     /// affected at ErasureCompleted, etc.). Empty for RequestStarted.
     Properties: Map<string, string>
-}
-
-/// Phase 504 — the conversation retention sweep purged one or more AI
-/// conversations from a scope. One row per run that removed something;
-/// a run that expired nothing writes no row (a purge trail records
-/// deletions, not the absence of them), mirroring
-/// `KnowledgeDocumentsPurged`.
-///
-/// The conversation ids ARE recorded, unlike `ConversationErased`: a
-/// retention purge is a scope-level housekeeping act keyed by
-/// conversation id, not by data subject, and a count alone cannot be
-/// reconciled against the store afterwards. The ids are opaque GUIDs
-/// and name no user.
-type ConversationsPurgedPayload = {
-    /// Scope whose conversations were swept (GP 4: one scope per run).
-    ScopeId: string
-    /// Conversation ids removed by this run, oldest activity first.
-    ConversationIds: string list
-    /// `ConversationIds.Length`, denormalised so a sink can aggregate
-    /// without parsing the list.
-    PurgedCount: int
-    /// The age limit in whole seconds that selected them, when the
-    /// policy set one — the row carries the policy that produced it.
-    MaxAgeSeconds: int64 option
-    /// The count limit, when the policy set one.
-    MaxCount: int option
-    /// Conversations the sweep selected but could not fully remove
-    /// (a sibling blob's delete failed). Non-zero means the next sweep
-    /// retries them; the trail carries the same loud signal the
-    /// operator log does (GP 9).
-    FailedCount: int
 }

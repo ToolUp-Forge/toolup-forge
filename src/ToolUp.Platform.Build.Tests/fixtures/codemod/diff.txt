@@ -309,10 +309,10 @@
 @@ L52 [1062-audit-log-option]
 -let sink (audit: IAuditLog option) = audit
 +let sink (audit: IAuditLog) = audit
-@@ L56 [1084-hnsw-snapshot-exception]
+@@ L62 [1084-hnsw-snapshot-exception]
 -let refusedHnsw (ex: exn) = match ex with :? HnswVectorStore.HnswScopeSnapshotUnreadableException -> true | _ -> false
 +let refusedHnsw (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
-@@ L58 [1084-rag-snapshot-exception-home]
+@@ L64 [1084-rag-snapshot-exception-home]
 -let refusedVector (ex: exn) = match ex with :? InMemoryVectorStore.RagScopeSnapshotUnreadableException -> true | _ -> false
 +let refusedVector (ex: exn) = match ex with :? ToolUp.Platform.Infra.RagScopeSnapshotUnreadableException -> true | _ -> false
 --- a/src/Server/Jobs.fs

@@ -10,6 +10,7 @@ open System.Text
 open System.Text.Json
 open Expecto
 open ToolUp.Platform
+open ToolUp.Facts.FactsAuditEvents
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.AuditSinks.ChainedLedger
@@ -107,7 +108,7 @@ type private RecordingAuditLog() =
 let private scopeA = "team-issuer"
 let private scopeB = "team-other"
 
-let private jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
+let private jsonOptions = ToolUp.Platform.Audit.AuditLog.AuditEventJson.options
 
 let private q2: TemporalExtent = {
     From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -286,7 +287,7 @@ let tests =
             let rows =
                 audit.All
                 |> List.choose (function
-                    | AuditEvent.CertificateIssued p -> Some p
+                    | FactsAudit(CertificateIssued p) -> Some p
                     | _ -> None)
 
             let row =

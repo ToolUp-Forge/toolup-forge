@@ -1,0 +1,15 @@
+{
+  "kind": "SchemaChanged",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"SchemaId\":\"\",\"Version\":0,\"VersionLabel\":\"\",\"ChangeKind\":\"\",\"EvolvedFrom\":null,\"MigrationsApplied\":0,\"InstancesMigrated\":0}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"SchemaId\":\"\",\"Version\":0,\"VersionLabel\":\"\",\"ChangeKind\":\"\",\"EvolvedFrom\":null,\"MigrationsApplied\":0,\"InstancesMigrated\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SchemaChanged\":{\"UserId\":\"\",\"ScopeId\":\"\",\"SchemaId\":\"\",\"Version\":0,\"VersionLabel\":\"\",\"ChangeKind\":\"\",\"EvolvedFrom\":null,\"MigrationsApplied\":0,\"InstancesMigrated\":0}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"SchemaId\":\"s\",\"Version\":7,\"VersionLabel\":\"s\",\"ChangeKind\":\"s\",\"EvolvedFrom\":\"s\",\"MigrationsApplied\":7,\"InstancesMigrated\":7}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"SchemaId\":\"s\",\"Version\":7,\"VersionLabel\":\"s\",\"ChangeKind\":\"s\",\"EvolvedFrom\":\"s\",\"MigrationsApplied\":7,\"InstancesMigrated\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"SchemaChanged\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"SchemaId\":\"s\",\"Version\":7,\"VersionLabel\":\"s\",\"ChangeKind\":\"s\",\"EvolvedFrom\":\"s\",\"MigrationsApplied\":7,\"InstancesMigrated\":7}}"
+    }
+  ]
+}

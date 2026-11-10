@@ -1,0 +1,15 @@
+{
+  "kind": "AuditSinkDeadLettered",
+  "samples": [
+    {
+      "row": "{\"SinkName\":\"\",\"BatchScopeId\":\"\",\"BatchSize\":0,\"AttemptCount\":0,\"LastError\":\"\",\"DeadLetteredAt\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"SinkName\":\"\",\"BatchScopeId\":\"\",\"BatchSize\":0,\"AttemptCount\":0,\"LastError\":\"\",\"DeadLetteredAt\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AuditSinkDeadLettered\":{\"SinkName\":\"\",\"BatchScopeId\":\"\",\"BatchSize\":0,\"AttemptCount\":0,\"LastError\":\"\",\"DeadLetteredAt\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"SinkName\":\"s\",\"BatchScopeId\":\"s\",\"BatchSize\":7,\"AttemptCount\":7,\"LastError\":\"s\",\"DeadLetteredAt\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"SinkName\":\"s\",\"BatchScopeId\":\"s\",\"BatchSize\":7,\"AttemptCount\":7,\"LastError\":\"s\",\"DeadLetteredAt\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AuditSinkDeadLettered\":{\"SinkName\":\"s\",\"BatchScopeId\":\"s\",\"BatchSize\":7,\"AttemptCount\":7,\"LastError\":\"s\",\"DeadLetteredAt\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

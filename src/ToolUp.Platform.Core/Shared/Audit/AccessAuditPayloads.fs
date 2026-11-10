@@ -34,40 +34,6 @@ module AssetSourceModule =
     [<Literal>]
     let value = "_platform.assets"
 
-/// Emitted by `IAssetStore.Upload` on success. PII-free —
-/// `OriginalFilename` is the only user-supplied string and is the
-/// uploader's own filename (the data already exists in their
-/// scope; the audit echoes it for forensic linkage). Excludes
-/// `AltText` and `Caption` deliberately.
-type AssetUploadedPayload = {
-    /// Actor who performed the upload. Resolved server-side from
-    /// `AccessContext.UserId`.
-    UserId: UserId
-    /// Asset id minted by the store.
-    AssetId: string
-    /// SHA-256 of the original bytes (hex, lowercase). Two uploads
-    /// of identical bytes share this — operators reconciling
-    /// storage footprint with record count grep on this value.
-    ContentHash: string
-    /// User's original filename. Echoed verbatim from the upload.
-    OriginalFilename: string
-    /// MIME type sniffed at upload.
-    MimeType: string
-    /// Size of the original bytes.
-    SizeBytes: int64
-    /// Derivative profile pinned to the record.
-    Profile: string
-}
-
-/// Emitted by `IAssetStore.Delete` on a record that existed.
-/// Idempotent deletes of unknown ids do NOT emit (the delete
-/// returned `Ok` after a no-op — there's no state change to record).
-type AssetDeletedPayload = {
-    UserId: UserId
-    AssetId: string
-    ContentHash: string
-}
-
 // ─── Phase 3d — team-invitation audit payloads ───────────────────────
 //
 // One payload per audit lifecycle event for the team-invitation

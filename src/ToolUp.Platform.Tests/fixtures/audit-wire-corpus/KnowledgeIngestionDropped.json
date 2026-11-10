@@ -1,0 +1,15 @@
+{
+  "kind": "KnowledgeIngestionDropped",
+  "samples": [
+    {
+      "row": "{\"ScopeKey\":\"\",\"DocId\":\"\",\"ChunkCount\":0,\"QueueCapacity\":0,\"Reason\":\"\"}",
+      "rowWithActor": "{\"ScopeKey\":\"\",\"DocId\":\"\",\"ChunkCount\":0,\"QueueCapacity\":0,\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeIngestionDropped\":{\"ScopeKey\":\"\",\"DocId\":\"\",\"ChunkCount\":0,\"QueueCapacity\":0,\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeKey\":\"s\",\"DocId\":\"s\",\"ChunkCount\":7,\"QueueCapacity\":7,\"Reason\":\"s\"}",
+      "rowWithActor": "{\"ScopeKey\":\"s\",\"DocId\":\"s\",\"ChunkCount\":7,\"QueueCapacity\":7,\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeIngestionDropped\":{\"ScopeKey\":\"s\",\"DocId\":\"s\",\"ChunkCount\":7,\"QueueCapacity\":7,\"Reason\":\"s\"}}"
+    }
+  ]
+}

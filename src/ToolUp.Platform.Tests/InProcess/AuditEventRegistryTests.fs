@@ -10,25 +10,21 @@ open Microsoft.FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
+open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
-// ─── Phase 114 — audit-event registry exhaustiveness gate ────────────
+// ─── The open audit-event registry ────────────────────────────────────
 //
-// The single declarative codec registry in `AuditLog.fs`
-// (`auditEventCodecs`) replaced three hand-maintained mirrors that had
-// silently drifted: the write-path `serialise`, the read-path
-// `decodeAuditEvent`, and the `AuditReplicator`'s inline decoder. The
-// drift cost real audit rows — every `SurfaceDenied` emission lost
-// pre-0.5.2 (Phase 66), 7 cases throwing-and-losing on the write path,
-// and 59 of ~80 event types dropped from external SIEM/archive sinks
-// with no signal (Gap C1, 2026-06-12).
-//
-// This pack is the structural gate that prevents a fourth incident. It
-// enumerates every `AuditEvent` union case via reflection and asserts
-// that the registry covers it for BOTH encode and decode, and that
-// every case round-trips serialise → registry-decode (the function the
-// replicator now shares). Adding a new union case without a registry
-// row fails one of these tests — by design.
+// Audit kinds are an open registry: the platform declares its own as the
+// cases of `AuditEvent` with one codec in `AuditLog.fs`, and every
+// companion declares its own through an `AuditEventFamily`. This pack
+// holds the three things that keep that honest. The platform's decoders
+// cover every case of its union, and nothing else (the reflection gate a
+// hand-kept table once needed; the encoder is a compiler-checked match).
+// Every kind ever written is pinned by the wire corpus, and decodes,
+// re-encodes and archives to the same bytes, through the platform or
+// through the one companion that declares it. And a kind no registrant
+// declares still reads, as an opaque event carrying its id and payload.
 
 /// Deterministically synthesise a default value for an arbitrary type,
 /// deep enough to construct every `AuditEvent` payload (records, nested
@@ -111,11 +107,102 @@ let rec private defaultValue (t: Type) : obj =
 /// The identifiers that DO diverge are pinned by their own test below.
 let private allCaseSamples: (string * AuditEvent) list =
     FSharpType.GetUnionCases typeof<AuditEvent>
+    |> Array.filter (fun case -> case.Name <> "Opaque")
     |> Array.map (fun case ->
         let fieldVals = case.GetFields() |> Array.map (fun f -> defaultValue f.PropertyType)
         let evt = FSharpValue.MakeUnion(case, fieldVals) :?> AuditEvent
         AuditEvent.eventTypeName evt, evt)
     |> List.ofArray
+
+// ─── The wire corpus: one fixture per event kind ──────────────────────
+//
+// Captured from the encoder BEFORE the registry replaced the closed
+// union (when every kind was a case of it), and held byte-for-byte since.
+// Each fixture carries, for a default and a populated sample: the stored
+// row (the codec's bytes), the same row with an `_actor` appended, and the
+// archive shape a sink writes. A kind's bytes are what operator archives,
+// SIEM rules and the permission chain already hold; none of them can be
+// migrated, so none of them may move. The corpus is frozen: nothing
+// regenerates it.
+
+let private wireCorpusDir () =
+    let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+
+    Path.GetFullPath(
+        Path.Combine(
+            assemblyDir,
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "ToolUp.Platform.Tests",
+            "fixtures",
+            "audit-wire-corpus"
+        )
+    )
+
+/// The subject every corpus row with an actor was written with.
+let private corpusActor =
+    AuditSubject.TeamAudit(UserId "corpus-user", TeamId "corpus-team")
+
+type private CorpusSample = {
+    Row: string
+    RowWithActor: string
+    Archive: string
+}
+
+/// Every fixture: its kind and its samples, exactly as stored.
+let private corpus () : (string * CorpusSample list) list =
+    Directory.GetFiles(wireCorpusDir (), "*.json")
+    |> Array.sort
+    |> Array.map (fun path ->
+        use doc = Text.Json.JsonDocument.Parse(File.ReadAllText path)
+        let root = doc.RootElement
+
+        let samples =
+            root.GetProperty("samples").EnumerateArray()
+            |> Seq.map (fun s -> {
+                Row = s.GetProperty("row").GetString()
+                RowWithActor = s.GetProperty("rowWithActor").GetString()
+                Archive = s.GetProperty("archive").GetString()
+            })
+            |> List.ofSeq
+
+        root.GetProperty("kind").GetString(), samples)
+    |> List.ofArray
+
+/// A registrant the corpus is checked against: its registration, and the
+/// typed round trip of one of its events (read the event back through the
+/// family, record it again, answer the stored bytes).
+type private Registrant = {
+    Registration: AuditEventRegistration
+    Retype: AuditEvent -> string option
+}
+
+let private registrant (family: AuditEventFamily<'E>) : Registrant = {
+    Registration = AuditEventFamily.registration family
+    Retype =
+        fun audit ->
+            AuditEventFamily.tryRead family audit
+            |> Option.map (fun typed -> AuditLog.serialiseAuditEvent (AuditEventFamily.event family typed))
+}
+
+/// Every companion family in the tree. A companion that registers audit
+/// kinds is listed here, so the corpus proves its typed codec writes the
+/// bytes its kinds have always had.
+let private companionRegistrants: Registrant list = [
+    registrant ToolUp.Forms.FormsAuditEvents.FormsAuditEvent.family
+    registrant KnowledgeBase.ServerKnowledgeAuditEvents.KnowledgeAuditEvent.family
+    registrant ToolUp.AssetStore.AssetAuditEvents.AssetAuditEvent.family
+    registrant ToolUp.AuthProviders.Passkey.PasskeyAuditEvents.PasskeyAuditEvent.family
+    registrant ToolUp.Facts.FactsAuditEvents.FactsAuditEvent.family
+    registrant ToolUp.RAG.RagAuditEvents.RagAuditEvent.family
+    registrant ToolUp.ArtefactSigning.ArtefactAuditEvents.ArtefactAuditEvent.family
+    registrant ToolUp.AI.AIAuditEvents.AIAuditEvent.family
+    registrant ToolUp.InterPlatform.PeerAuditEvents.PeerAuditEvent.family
+]
 
 /// Phase 625 — the wire discriminators that deliberately differ from
 /// their F# case identifier, pinned so a future "tidy the strings to
@@ -227,6 +314,7 @@ module private AuditEventReference =
     /// keeps each family contiguous. Alphabetising would scatter them.
     let private rows () =
         FSharpType.GetUnionCases typeof<AuditEvent>
+        |> Array.filter (fun case -> case.Name <> "Opaque")
         |> Array.map (fun case ->
             let fields = case.GetFields()
             let fieldVals = fields |> Array.map (fun f -> defaultValue f.PropertyType)
@@ -257,10 +345,10 @@ module private AuditEventReference =
                 "     (or `TOOLUP_REGEN_AUDIT_EVENT_REFERENCE=1 dotnet run --project src/ToolUp.Platform.Tests`). The"
             )
             .AppendLine(
-                "     sources of truth are the `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs and"
+                "     sources of truth are the platform's `AuditEvent` union in src/ToolUp.Platform.Core/Shared/AuditTypes.fs,"
             )
             .AppendLine(
-                "     the codec registry `auditEventCodecs` in src/ToolUp.Platform.Server/Server/AuditLog.fs. -->"
+                "     its codec in src/ToolUp.Platform.Server/Server/AuditLog.fs, and each companion's `AuditEventFamily`. -->"
             )
         |> ignore
 
@@ -268,7 +356,7 @@ module private AuditEventReference =
 
         sb.AppendLine(
             sprintf
-                "Every audit event the SDK emits (%d cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2)."
+                "Every audit event the platform emits (%d cases). All of them are recorded under the reserved `_platform.audit` source module, and every one is decodable for external replication — that is a build gate, not a convention (see [PLATFORM-SECURITY-RULES.md](../security/PLATFORM-SECURITY-RULES.md) AU-2)."
                 all.Length
         )
         |> ignore
@@ -314,13 +402,168 @@ module private AuditEventReference =
             "Payload record definitions live in the `src/ToolUp.Platform.Core/Shared/Audit/*AuditPayloads.fs` lane files compiled before the union; each case carries a doc comment explaining when it is emitted."
         |> ignore
 
+        let companionKinds =
+            companionRegistrants
+            |> List.collect (fun r -> r.Registration.Kinds |> List.map (fun k -> k.Kind, r.Registration.Registrant))
+            |> List.sortBy fst
+
+        if not companionKinds.IsEmpty then
+            sb.AppendLine "" |> ignore
+            sb.AppendLine "## Companion kinds" |> ignore
+            sb.AppendLine "" |> ignore
+
+            sb.AppendLine(
+                sprintf
+                    "Kinds a companion declares through its own `AuditEventFamily` and registers from its compose step (%d). Core carries them as `AuditEvent.Opaque`; the companion's assembly holds their event type and payload records."
+                    companionKinds.Length
+            )
+            |> ignore
+
+            sb.AppendLine "" |> ignore
+            sb.AppendLine "| Event type (wire) | Registrant |" |> ignore
+            sb.AppendLine "|---|---|" |> ignore
+
+            for kind, owner in companionKinds do
+                sb.AppendLine(sprintf "| `%s` | `%s` |" kind owner) |> ignore
+
         // Normalise to `\n` so the golden comparison is stable across
         // platforms (`AppendLine` emits the platform newline).
         sb.ToString().Replace("\r\n", "\n")
 
+/// A module outside Core declaring its own audit kind: the shape the
+/// research-ethics-review-board recipe needs for its `EthicsDecided`
+/// outcome.
+module private EthicsReview =
+    open System.Text.Json
+    open ToolUp.Remoting.Json.SystemTextJson
+
+    type EthicsDecidedPayload = {
+        ProposalId: string
+        Decision: string
+        DecidedBy: string
+    }
+
+    type EthicsReviewAuditEvent = EthicsDecided of EthicsDecidedPayload
+
+    let family: AuditEventFamily<EthicsReviewAuditEvent> = {
+        Registrant = "research-ethics-review-board"
+        Kinds = [
+            {
+                Kind = "EthicsDecided"
+                Registrant = "research-ethics-review-board"
+                Severity = Some AuditMedium
+            }
+        ]
+        Encode =
+            function
+            | EthicsDecided p -> "EthicsDecided", JsonSerializer.Serialize(p, PlatformJson.options)
+        Decode =
+            fun kind json ->
+                match kind with
+                | "EthicsDecided" ->
+                    EthicsDecided(JsonSerializer.Deserialize<EthicsDecidedPayload>(json, PlatformJson.options))
+                | other -> failwithf "not an ethics-review kind: %s" other
+    }
+
+let private silentLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
 [<Tests>]
 let tests =
-    testList "Phase 114 — audit-event registry exhaustiveness" [
+    testList "Phase 874 — the open audit-event registry (Phase 114 exhaustiveness)" [
+
+        test "every corpus kind has exactly one registrant: the platform or one companion" {
+            let registry =
+                AuditEventRegistry.build (
+                    AuditLog.platformAuditRegistration
+                    :: (companionRegistrants |> List.map _.Registration)
+                )
+
+            match registry with
+            | Error error -> failtest (AuditEventRegistry.describeError error)
+            | Ok registry ->
+                let registered = AuditEventRegistry.kinds registry |> List.map _.Kind |> Set.ofList
+
+                let captured = corpus () |> List.map fst |> Set.ofList
+                Expect.equal captured.Count 206 "the corpus holds the 206 kinds captured before the registry"
+
+                Expect.equal
+                    registered
+                    captured
+                    "every kind ever written is declared by exactly one registrant, and no registrant declares a kind the corpus has never seen"
+        }
+
+        test "the wire corpus round-trips byte-for-byte: row, row with actor, archive" {
+            for kind, samples in corpus () do
+                for sample in samples do
+                    let decoded =
+                        match AuditLog.tryDecodeAuditEvent kind sample.Row with
+                        | Ok audit -> audit
+                        | Error reason -> failtestf "%s: the stored row does not decode: %s" kind reason
+
+                    Expect.equal (AuditEvent.eventTypeName decoded) kind (sprintf "%s: the kind reads back" kind)
+                    Expect.equal (AuditLog.serialiseAuditEvent decoded) sample.Row (sprintf "%s: row bytes" kind)
+
+                    match AuditLog.tryDecodeAuditEvent kind sample.RowWithActor with
+                    | Error reason -> failtestf "%s: the row with an actor does not decode: %s" kind reason
+                    | Ok withActor ->
+                        let rewritten = AuditLog.serialiseAuditEvent withActor
+
+                        Expect.equal rewritten sample.Row (sprintf "%s: the actor is not part of the event" kind)
+
+                        Expect.equal
+                            (AuditLog.withActor corpusActor rewritten)
+                            sample.RowWithActor
+                            (sprintf "%s: row-with-actor bytes" kind)
+
+                        Expect.equal
+                            (AuditLog.decodeActor sample.RowWithActor)
+                            corpusActor
+                            (sprintf "%s: the actor reads back" kind)
+
+                    let archived =
+                        Text.Json.JsonSerializer.Serialize(decoded, AuditLog.AuditEventJson.options)
+
+                    Expect.equal archived sample.Archive (sprintf "%s: archive bytes" kind)
+
+                    let reread =
+                        Text.Json.JsonSerializer.Deserialize<AuditEvent>(
+                            sample.Archive,
+                            AuditLog.AuditEventJson.options
+                        )
+
+                    Expect.equal
+                        (AuditLog.serialiseAuditEvent reread)
+                        sample.Row
+                        (sprintf "%s: an archived event reads back to the same row" kind)
+        }
+
+        test "a companion's typed codec writes the bytes its kinds have always had" {
+            let byKind =
+                companionRegistrants
+                |> List.collect (fun r -> r.Registration.Kinds |> List.map (fun k -> k.Kind, r))
+                |> Map.ofList
+
+            for kind, samples in corpus () do
+                match Map.tryFind kind byKind with
+                | None -> ()
+                | Some owner ->
+                    for sample in samples do
+                        let decoded =
+                            match AuditLog.tryDecodeAuditEvent kind sample.Row with
+                            | Ok audit -> audit
+                            | Error reason -> failtestf "%s: %s" kind reason
+
+                        Expect.equal
+                            (owner.Retype decoded)
+                            (Some sample.Row)
+                            (sprintf "%s: the companion reads its event back and re-records the same bytes" kind)
+        }
 
         test "every AuditEvent union case has a decode registry entry" {
             let decoderKeys =
@@ -334,7 +577,7 @@ let tests =
             Expect.isEmpty
                 missing
                 (sprintf
-                    "every union case must have a registry decode entry; missing: %s (add to AuditLog.auditEventCodecs)"
+                    "every union case must have a registry decode entry; missing: %s (add it to AuditLog.auditDecoderByType)"
                     (String.concat ", " missing))
         }
 
@@ -342,8 +585,9 @@ let tests =
             let wireNames = allCaseSamples |> List.map fst |> Set.ofList
 
             let orphans =
-                AuditLog.auditEventCodecs
-                |> List.map _.EventType
+                AuditLog.auditDecoderByType
+                |> Map.toList
+                |> List.map fst
                 |> List.filter (fun et -> not (Set.contains et wireNames))
 
             Expect.isEmpty
@@ -373,7 +617,7 @@ let tests =
             // operator-owned SIEM rule keyed on it, the
             // `toolup.audit.write_failures_total` `event_type` tag, and
             // would orphan every archived row of the family (they would
-            // decode to `Error "unknown event type ..."`). None of that
+            // read back as an unregistered `Opaque` kind). None of that
             // produces a compile error, so it is asserted here.
             let byCaseName =
                 FSharpType.GetUnionCases typeof<AuditEvent>
@@ -425,14 +669,121 @@ let tests =
                 | Error reason -> failtestf "round-trip decode failed for %s: %s" name reason
         }
 
-        test "unknown event type decodes to Error (routes to decodeFailures, not silent drop)" {
-            // The Gap C1 fix: an unrecognised / future event type must
-            // surface as a decode failure (which the replicator records in
-            // the AuditEventDecodeFailed summary row) rather than vanishing
-            // through a silent `| _ -> None`.
-            match AuditLog.tryDecodeAuditEvent "SomeFutureEventTypeV2" "{}" with
-            | Error _ -> ()
-            | Ok _ -> failtest "unknown event type must not decode"
+        test "a stored row of a kind no registrant declares decodes to Opaque, never a failure" {
+            // The replicator and the trail share this decoder, so such a row
+            // is forwarded and read rather than counted as a decode failure.
+            let row = "{\"Ref\":\"r-1\",\"Count\":3}"
+            let stored = AuditLog.withActor corpusActor row
+
+            match AuditLog.tryDecodeAuditEvent "SomeFutureEventTypeV2" stored with
+            | Ok(Opaque o) ->
+                Expect.equal o.Kind "SomeFutureEventTypeV2" "it carries its id"
+                Expect.equal o.Payload row "it carries its raw payload, without the row's actor"
+                Expect.equal (AuditLog.serialiseAuditEvent (Opaque o)) row "it re-exports byte-for-byte"
+            | other -> failtestf "expected an opaque event; got %A" other
+        }
+
+        test "withoutActor removes only the actor the row appended" {
+            let row = "{\"Note\":\"_actor\",\"_actorish\":1}"
+            Expect.equal (AuditLog.withoutActor (AuditLog.withActor corpusActor row)) row "the appended actor goes"
+            Expect.equal (AuditLog.withoutActor row) row "a row without one is untouched"
+
+            Expect.equal
+                (AuditLog.withoutActor (AuditLog.withActor corpusActor "{}"))
+                "{}"
+                "an empty event keeps its braces"
+        }
+
+        test "the registry refuses a kind two registrants declare, naming both" {
+            let kind owner = {
+                Kind = "EthicsDecided"
+                Registrant = owner
+                Severity = None
+            }
+
+            let first: AuditEventRegistration = {
+                Registrant = "ethics-a"
+                Kinds = [ kind "ethics-a" ]
+            }
+
+            let second: AuditEventRegistration = {
+                Registrant = "ethics-b"
+                Kinds = [ kind "ethics-b" ]
+            }
+
+            match AuditEventRegistry.build [ first; second ] with
+            | Error(DuplicateAuditKind(k, a, b) as error) ->
+                Expect.equal (k, a, b) ("EthicsDecided", "ethics-a", "ethics-b") "both registrants are named"
+                let message = AuditEventRegistry.describeError error
+                Expect.stringContains message "ethics-a" "the message names the first"
+                Expect.stringContains message "ethics-b" "the message names the second"
+            | Ok _ -> failtest "a kind declared twice must be refused"
+        }
+
+        test "the registry refuses a companion kind that is a platform kind" {
+            let squatter: AuditEventRegistration = {
+                Registrant = "squatter"
+                Kinds = [
+                    {
+                        Kind = "UserLoggedIn"
+                        Registrant = "squatter"
+                        Severity = None
+                    }
+                ]
+            }
+
+            match AuditEventRegistry.build [ AuditLog.platformAuditRegistration; squatter ] with
+            | Error(DuplicateAuditKind(k, a, b)) ->
+                Expect.equal (k, a, b) ("UserLoggedIn", AuditEventRegistry.PlatformRegistrant, "squatter") "named"
+            | Ok _ -> failtest "a companion may not declare a platform kind"
+        }
+
+        testCaseAsync "a module registers its own kind from outside Core and round-trips it through the log"
+        <| async {
+            // The research-ethics-review-board recipe's case: a module
+            // records its own `EthicsDecided` outcome. Nothing here is in
+            // ToolUp.Platform.Core; the family is the module's.
+            let registry =
+                AuditEventRegistry.build [
+                    AuditLog.platformAuditRegistration
+                    AuditEventFamily.registration EthicsReview.family
+                ]
+
+            Expect.isOk registry "the module's kind composes beside the platform's"
+
+            let decided =
+                EthicsReview.EthicsDecided {
+                    ProposalId = "prop-7"
+                    Decision = "approved-with-conditions"
+                    DecidedBy = "board"
+                }
+
+            let store = InMemoryEventStore.InMemoryEventStore()
+            let log = AuditLog.EventStoreAuditLog(store, silentLogger) :> IAuditLog
+            let actor = TeamAudit(UserId "chair", TeamId "ethics")
+            let scope = AuditScope.team (TeamId "ethics")
+            let! answer = log.Record(scope, actor, AuditEventFamily.event EthicsReview.family decided)
+            Expect.equal answer (Ok()) "the row lands"
+
+            let! persisted = (store :> IEventStore).ReadBySource("ethics", AuditSourceModule.value)
+
+            match persisted with
+            | [ row ] ->
+                Expect.equal row.EventType "EthicsDecided" "the row is stored under the module's kind"
+                Expect.equal (AuditLog.decodeActor row.Payload) actor "the actor rides the row"
+            | rows -> failtestf "expected one row; got %d" rows.Length
+
+            let! trail = log.GetAuditTrail(scope, None, Some "EthicsDecided")
+
+            Expect.equal
+                (trail |> List.choose (AuditEventFamily.tryRead EthicsReview.family))
+                [ decided ]
+                "the module reads its own event back, typed"
+
+            let archived =
+                Text.Json.JsonSerializer.Serialize(List.head trail, AuditLog.AuditEventJson.options)
+
+            Expect.stringStarts archived "{\"EthicsDecided\":{" "a sink archives it under its kind"
         }
 
         test "malformed payload for a known type decodes to Error" {
@@ -542,9 +893,13 @@ let tests =
             // the three `ModuleArtefact*` rows, and the reference table
             // is where the mapping is stated.
             let known =
-                Set.union
-                    (allCaseSamples |> List.map fst |> Set.ofList)
-                    (FSharpType.GetUnionCases typeof<AuditEvent> |> Array.map _.Name |> Set.ofArray)
+                Set.unionMany [
+                    allCaseSamples |> List.map fst |> Set.ofList
+                    FSharpType.GetUnionCases typeof<AuditEvent> |> Array.map _.Name |> Set.ofArray
+                    companionRegistrants
+                    |> List.collect (fun r -> r.Registration.Kinds |> List.map _.Kind)
+                    |> Set.ofList
+                ]
 
             let cited =
                 backtickedIdentifierPattern.Matches region

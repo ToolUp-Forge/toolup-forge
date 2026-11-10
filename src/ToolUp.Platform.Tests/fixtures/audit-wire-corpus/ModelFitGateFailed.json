@@ -1,0 +1,15 @@
+{
+  "kind": "ModelFitGateFailed",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"FailedGates\":[],\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"FailedGates\":[],\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitGateFailed\":{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"FailedGates\":[],\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"FailedGates\":[\"s\"],\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"FailedGates\":[\"s\"],\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitGateFailed\":{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"FailedGates\":[\"s\"],\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

@@ -207,27 +207,3 @@ type RemotingMethodAuditedPayload = {
     /// for `[<PiiSafe>]` fields; `<redacted:TypeName>` otherwise.
     Payload: Map<string, string>
 }
-
-/// Phase 443 — a WebAuthn passkey credential was enrolled for a user via
-/// the passkey auth companion's registration ceremony. PII-free apart
-/// from the platform `UserId` (already the audit actor). The credential
-/// id is truncated so the trail correlates without persisting the full
-/// authenticator handle. Source-module label `_platform.auth.passkey`.
-type PasskeyCredentialRegisteredPayload = {
-    UserId: UserId
-    /// First 12 chars of the base64url credential id — correlatable,
-    /// non-reversible to the raw authenticator handle.
-    CredentialIdPrefix: string
-    /// How the registration was authorised: `ExistingSession` /
-    /// `Bootstrap` / `PendingInvite` / `OpenRegistration`.
-    Grant: string
-}
-
-/// Phase 443 — a passkey credential was removed for a user (self-service
-/// deregistration or admin revocation). Source-module label
-/// `_platform.auth.passkey`.
-type PasskeyCredentialRemovedPayload = {
-    UserId: UserId
-    /// First 12 chars of the base64url credential id.
-    CredentialIdPrefix: string
-}

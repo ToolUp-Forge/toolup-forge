@@ -1,0 +1,15 @@
+{
+  "kind": "AllSessionsRevoked",
+  "samples": [
+    {
+      "row": "{\"ActorUserId\":\"\",\"SubjectUserId\":\"\",\"RevokedCount\":0,\"ByAdministrator\":false}",
+      "rowWithActor": "{\"ActorUserId\":\"\",\"SubjectUserId\":\"\",\"RevokedCount\":0,\"ByAdministrator\":false,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AllSessionsRevoked\":{\"ActorUserId\":\"\",\"SubjectUserId\":\"\",\"RevokedCount\":0,\"ByAdministrator\":false}}"
+    },
+    {
+      "row": "{\"ActorUserId\":\"s\",\"SubjectUserId\":\"s\",\"RevokedCount\":7,\"ByAdministrator\":true}",
+      "rowWithActor": "{\"ActorUserId\":\"s\",\"SubjectUserId\":\"s\",\"RevokedCount\":7,\"ByAdministrator\":true,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AllSessionsRevoked\":{\"ActorUserId\":\"s\",\"SubjectUserId\":\"s\",\"RevokedCount\":7,\"ByAdministrator\":true}}"
+    }
+  ]
+}

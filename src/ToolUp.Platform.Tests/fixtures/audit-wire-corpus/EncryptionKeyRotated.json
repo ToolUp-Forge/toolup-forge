@@ -1,0 +1,15 @@
+{
+  "kind": "EncryptionKeyRotated",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyRotated\":{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyRotated\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\"}}"
+    }
+  ]
+}

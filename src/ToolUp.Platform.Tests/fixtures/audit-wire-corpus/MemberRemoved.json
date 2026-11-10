@@ -1,0 +1,15 @@
+{
+  "kind": "MemberRemoved",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MemberRemoved\":{\"UserId\":\"\",\"TeamId\":\"\",\"AffectedUserId\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MemberRemoved\":{\"UserId\":\"s\",\"TeamId\":\"s\",\"AffectedUserId\":\"s\"}}"
+    }
+  ]
+}

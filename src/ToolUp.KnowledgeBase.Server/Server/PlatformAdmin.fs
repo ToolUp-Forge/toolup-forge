@@ -2,6 +2,7 @@ module KnowledgeBase.ServerPlatformAdmin
 
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open SharedTypes
@@ -160,12 +161,14 @@ let platformKnowledgeApi (ctx: HttpContext) : PlatformKnowledgeApi.IPlatformKnow
 
                     recordAudit
                         auditLog
-                        (PlatformDocumentUploaded {
-                            Actor = accessContext.UserId
-                            DocumentId = doc.Id
-                            FileName = fileName
-                            SizeBytes = int64 bytes.Length
-                        })
+                        (KnowledgeAuditEvent.event (
+                            PlatformDocumentUploaded {
+                                Actor = accessContext.UserId
+                                DocumentId = doc.Id
+                                FileName = fileName
+                                SizeBytes = int64 bytes.Length
+                            }
+                        ))
 
                     do! publishPlatformKbRefresh pdeps
 
@@ -192,11 +195,13 @@ let platformKnowledgeApi (ctx: HttpContext) : PlatformKnowledgeApi.IPlatformKnow
                     | Ok(), Some doc ->
                         recordAudit
                             auditLog
-                            (PlatformDocumentDeleted {
-                                Actor = accessContext.UserId
-                                DocumentId = doc.Id
-                                FileName = doc.FileName
-                            })
+                            (KnowledgeAuditEvent.event (
+                                PlatformDocumentDeleted {
+                                    Actor = accessContext.UserId
+                                    DocumentId = doc.Id
+                                    FileName = doc.FileName
+                                }
+                            ))
                     | _ -> ()
 
                     match result with
@@ -246,12 +251,14 @@ let platformKnowledgeApi (ctx: HttpContext) : PlatformKnowledgeApi.IPlatformKnow
 
                             recordAudit
                                 auditLog
-                                (PlatformDocumentUploaded {
-                                    Actor = accessContext.UserId
-                                    DocumentId = newDoc.Id
-                                    FileName = doc.FileName
-                                    SizeBytes = int64 bytes.Length
-                                })
+                                (KnowledgeAuditEvent.event (
+                                    PlatformDocumentUploaded {
+                                        Actor = accessContext.UserId
+                                        DocumentId = newDoc.Id
+                                        FileName = doc.FileName
+                                        SizeBytes = int64 bytes.Length
+                                    }
+                                ))
 
                             do! publishPlatformKbRefresh pdeps
 

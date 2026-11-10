@@ -1,0 +1,15 @@
+{
+  "kind": "AdminMutationApprovalRefused",
+  "samples": [
+    {
+      "row": "{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"AttemptedApproverId\":\"\",\"MutationKind\":\"\",\"RefusalCode\":\"\"}",
+      "rowWithActor": "{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"AttemptedApproverId\":\"\",\"MutationKind\":\"\",\"RefusalCode\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdminMutationApprovalRefused\":{\"RequestId\":\"\",\"TeamId\":\"\",\"ProposerId\":\"\",\"AttemptedApproverId\":\"\",\"MutationKind\":\"\",\"RefusalCode\":\"\"}}"
+    },
+    {
+      "row": "{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"AttemptedApproverId\":\"s\",\"MutationKind\":\"s\",\"RefusalCode\":\"s\"}",
+      "rowWithActor": "{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"AttemptedApproverId\":\"s\",\"MutationKind\":\"s\",\"RefusalCode\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AdminMutationApprovalRefused\":{\"RequestId\":\"s\",\"TeamId\":\"s\",\"ProposerId\":\"s\",\"AttemptedApproverId\":\"s\",\"MutationKind\":\"s\",\"RefusalCode\":\"s\"}}"
+    }
+  ]
+}

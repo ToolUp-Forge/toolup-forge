@@ -1,0 +1,15 @@
+{
+  "kind": "PlatformAdminAssigned",
+  "samples": [
+    {
+      "row": "{\"Actor\":\"\",\"TargetUserId\":\"\"}",
+      "rowWithActor": "{\"Actor\":\"\",\"TargetUserId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformAdminAssigned\":{\"Actor\":\"\",\"TargetUserId\":\"\"}}"
+    },
+    {
+      "row": "{\"Actor\":\"s\",\"TargetUserId\":\"s\"}",
+      "rowWithActor": "{\"Actor\":\"s\",\"TargetUserId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PlatformAdminAssigned\":{\"Actor\":\"s\",\"TargetUserId\":\"s\"}}"
+    }
+  ]
+}

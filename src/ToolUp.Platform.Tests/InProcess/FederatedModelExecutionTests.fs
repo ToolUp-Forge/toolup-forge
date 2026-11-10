@@ -4,6 +4,7 @@ open System
 open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 // Phase 642 — the disclosure plane's own vocabulary (`IFactDisclosureGate`,
 // `FactEgressSurface`, `FactDisclosureVerdict`), which the federated-egress
 // cases stub, and the compose record the descriptor cases build.
@@ -2457,7 +2458,7 @@ type private CapturingAuditLog() =
     member this.JobCompletions =
         this.Events
         |> List.choose (function
-            | PeerJobCompleted p -> Some p
+            | PeerAudit(PeerJobCompleted p) -> Some p
             | _ -> None)
 
     interface IAuditLog with

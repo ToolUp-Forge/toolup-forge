@@ -1,0 +1,15 @@
+{
+  "kind": "GrantConsentRevoked",
+  "samples": [
+    {
+      "row": "{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"RecordedBy\":\"\",\"Supersedes\":\"\"}",
+      "rowWithActor": "{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"RecordedBy\":\"\",\"Supersedes\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantConsentRevoked\":{\"ConsentId\":\"\",\"TeamId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"Party\":\"\",\"KeyId\":\"\",\"RecordedBy\":\"\",\"Supersedes\":\"\"}}"
+    },
+    {
+      "row": "{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"RecordedBy\":\"s\",\"Supersedes\":\"s\"}",
+      "rowWithActor": "{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"RecordedBy\":\"s\",\"Supersedes\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantConsentRevoked\":{\"ConsentId\":\"s\",\"TeamId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"Party\":\"s\",\"KeyId\":\"s\",\"RecordedBy\":\"s\",\"Supersedes\":\"s\"}}"
+    }
+  ]
+}

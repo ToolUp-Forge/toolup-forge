@@ -1,0 +1,15 @@
+{
+  "kind": "ModelFitCompleted",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"DiagnosticCount\":0,\"GatesEvaluated\":0,\"GatesFailed\":0,\"ArtifactHash\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"DiagnosticCount\":0,\"GatesEvaluated\":0,\"GatesFailed\":0,\"ArtifactHash\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitCompleted\":{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"DiagnosticCount\":0,\"GatesEvaluated\":0,\"GatesFailed\":0,\"ArtifactHash\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"DiagnosticCount\":7,\"GatesEvaluated\":7,\"GatesFailed\":7,\"ArtifactHash\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"DiagnosticCount\":7,\"GatesEvaluated\":7,\"GatesFailed\":7,\"ArtifactHash\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelFitCompleted\":{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"DiagnosticCount\":7,\"GatesEvaluated\":7,\"GatesFailed\":7,\"ArtifactHash\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

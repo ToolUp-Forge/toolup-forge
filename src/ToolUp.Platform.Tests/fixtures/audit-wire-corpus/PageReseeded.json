@@ -1,0 +1,15 @@
+{
+  "kind": "PageReseeded",
+  "samples": [
+    {
+      "row": "{\"Module\":\"\",\"Page\":\"\",\"ActorId\":\"\",\"PreviousSeedHash\":null,\"SeedHash\":\"\",\"ConflictCount\":0,\"Version\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"Module\":\"\",\"Page\":\"\",\"ActorId\":\"\",\"PreviousSeedHash\":null,\"SeedHash\":\"\",\"ConflictCount\":0,\"Version\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PageReseeded\":{\"Module\":\"\",\"Page\":\"\",\"ActorId\":\"\",\"PreviousSeedHash\":null,\"SeedHash\":\"\",\"ConflictCount\":0,\"Version\":0,\"OccurredAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"Module\":\"s\",\"Page\":\"s\",\"ActorId\":\"s\",\"PreviousSeedHash\":\"s\",\"SeedHash\":\"s\",\"ConflictCount\":7,\"Version\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"Module\":\"s\",\"Page\":\"s\",\"ActorId\":\"s\",\"PreviousSeedHash\":\"s\",\"SeedHash\":\"s\",\"ConflictCount\":7,\"Version\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"PageReseeded\":{\"Module\":\"s\",\"Page\":\"s\",\"ActorId\":\"s\",\"PreviousSeedHash\":\"s\",\"SeedHash\":\"s\",\"ConflictCount\":7,\"Version\":7,\"OccurredAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

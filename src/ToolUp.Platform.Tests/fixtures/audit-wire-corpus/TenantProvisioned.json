@@ -1,0 +1,15 @@
+{
+  "kind": "TenantProvisioned",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"Actor\":\"\",\"HooksRun\":0,\"HooksCompleted\":0,\"HooksSkipped\":0,\"HooksFailed\":0,\"ElapsedMs\":\"+0\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"Actor\":\"\",\"HooksRun\":0,\"HooksCompleted\":0,\"HooksSkipped\":0,\"HooksFailed\":0,\"ElapsedMs\":\"+0\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantProvisioned\":{\"ScopeId\":\"\",\"Actor\":\"\",\"HooksRun\":0,\"HooksCompleted\":0,\"HooksSkipped\":0,\"HooksFailed\":0,\"ElapsedMs\":\"+0\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"HooksRun\":7,\"HooksCompleted\":7,\"HooksSkipped\":7,\"HooksFailed\":7,\"ElapsedMs\":\"+7\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"HooksRun\":7,\"HooksCompleted\":7,\"HooksSkipped\":7,\"HooksFailed\":7,\"ElapsedMs\":\"+7\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantProvisioned\":{\"ScopeId\":\"s\",\"Actor\":\"s\",\"HooksRun\":7,\"HooksCompleted\":7,\"HooksSkipped\":7,\"HooksFailed\":7,\"ElapsedMs\":\"+7\"}}"
+    }
+  ]
+}

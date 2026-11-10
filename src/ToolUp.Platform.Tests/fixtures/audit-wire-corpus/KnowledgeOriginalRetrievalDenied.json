@@ -1,0 +1,15 @@
+{
+  "kind": "KnowledgeOriginalRetrievalDenied",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"DocumentId\":\"\",\"ScopeId\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"DocumentId\":\"\",\"ScopeId\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeOriginalRetrievalDenied\":{\"UserId\":\"\",\"DocumentId\":\"\",\"ScopeId\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"DocumentId\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"DocumentId\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeOriginalRetrievalDenied\":{\"UserId\":\"s\",\"DocumentId\":\"s\",\"ScopeId\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

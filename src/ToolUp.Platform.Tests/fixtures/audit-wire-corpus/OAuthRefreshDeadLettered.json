@@ -1,0 +1,15 @@
+{
+  "kind": "OAuthRefreshDeadLettered",
+  "samples": [
+    {
+      "row": "{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Attempts\":0,\"FinalReason\":\"\"}",
+      "rowWithActor": "{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Attempts\":0,\"FinalReason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthRefreshDeadLettered\":{\"Provider\":\"\",\"ConfigId\":\"\",\"ScopeId\":\"\",\"Attempts\":0,\"FinalReason\":\"\"}}"
+    },
+    {
+      "row": "{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Attempts\":7,\"FinalReason\":\"s\"}",
+      "rowWithActor": "{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Attempts\":7,\"FinalReason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"OAuthRefreshDeadLettered\":{\"Provider\":\"s\",\"ConfigId\":\"s\",\"ScopeId\":\"s\",\"Attempts\":7,\"FinalReason\":\"s\"}}"
+    }
+  ]
+}

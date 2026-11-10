@@ -1,0 +1,15 @@
+{
+  "kind": "KnowledgeIndexLoadFailed",
+  "samples": [
+    {
+      "row": "{\"ScopeKey\":\"\",\"Reason\":\"\",\"Bytes\":0,\"BlobLocation\":\"\"}",
+      "rowWithActor": "{\"ScopeKey\":\"\",\"Reason\":\"\",\"Bytes\":0,\"BlobLocation\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeIndexLoadFailed\":{\"ScopeKey\":\"\",\"Reason\":\"\",\"Bytes\":0,\"BlobLocation\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeKey\":\"s\",\"Reason\":\"s\",\"Bytes\":7,\"BlobLocation\":\"s\"}",
+      "rowWithActor": "{\"ScopeKey\":\"s\",\"Reason\":\"s\",\"Bytes\":7,\"BlobLocation\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeIndexLoadFailed\":{\"ScopeKey\":\"s\",\"Reason\":\"s\",\"Bytes\":7,\"BlobLocation\":\"s\"}}"
+    }
+  ]
+}

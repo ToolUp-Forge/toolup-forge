@@ -243,6 +243,7 @@ ToolUp.Platform.Compose.BackgroundUnitRecord	Singleton
 Microsoft.Extensions.Hosting.IHostedService	Singleton
 ToolUp.Platform.Compose.Substrate	Singleton
 Microsoft.Extensions.Hosting.IHostedService	Singleton
+ToolUp.Platform.AuditEventRegistry	Singleton
 ToolUp.Platform.ConfigValidation+IConfigValidator	Singleton
 ToolUp.Platform.Compose.CompositionInspectorHandler+CompositionInspectorSnapshot	Singleton
 ToolUp.Platform.Compose.StartupModes+DescribeRenderer	Singleton

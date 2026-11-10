@@ -1,0 +1,15 @@
+{
+  "kind": "ModelArtifactTransitionDenied",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"AttemptedStatus\":\"\",\"ActorUserId\":\"\",\"Reason\":\"\",\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"AttemptedStatus\":\"\",\"ActorUserId\":\"\",\"Reason\":\"\",\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactTransitionDenied\":{\"CompositeKeyHash\":\"\",\"AttemptedStatus\":\"\",\"ActorUserId\":\"\",\"Reason\":\"\",\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"AttemptedStatus\":\"s\",\"ActorUserId\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"AttemptedStatus\":\"s\",\"ActorUserId\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelArtifactTransitionDenied\":{\"CompositeKeyHash\":\"s\",\"AttemptedStatus\":\"s\",\"ActorUserId\":\"s\",\"Reason\":\"s\",\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

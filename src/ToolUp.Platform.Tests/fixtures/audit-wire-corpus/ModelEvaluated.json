@@ -1,0 +1,15 @@
+{
+  "kind": "ModelEvaluated",
+  "samples": [
+    {
+      "row": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"HoldoutVersion\":\"\",\"PredictionsVersion\":\"\",\"MetricCount\":0,\"ScopeId\":\"\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"HoldoutVersion\":\"\",\"PredictionsVersion\":\"\",\"MetricCount\":0,\"ScopeId\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelEvaluated\":{\"CompositeKeyHash\":\"\",\"ProviderId\":\"\",\"ProviderVersion\":\"\",\"HoldoutVersion\":\"\",\"PredictionsVersion\":\"\",\"MetricCount\":0,\"ScopeId\":\"\"}}"
+    },
+    {
+      "row": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"HoldoutVersion\":\"s\",\"PredictionsVersion\":\"s\",\"MetricCount\":7,\"ScopeId\":\"s\"}",
+      "rowWithActor": "{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"HoldoutVersion\":\"s\",\"PredictionsVersion\":\"s\",\"MetricCount\":7,\"ScopeId\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ModelEvaluated\":{\"CompositeKeyHash\":\"s\",\"ProviderId\":\"s\",\"ProviderVersion\":\"s\",\"HoldoutVersion\":\"s\",\"PredictionsVersion\":\"s\",\"MetricCount\":7,\"ScopeId\":\"s\"}}"
+    }
+  ]
+}

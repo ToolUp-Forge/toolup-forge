@@ -1,0 +1,15 @@
+{
+  "kind": "GrantRecorded",
+  "samples": [
+    {
+      "row": "{\"ActorId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"State\":\"\",\"Permissions\":\"\",\"Justification\":\"\"}",
+      "rowWithActor": "{\"ActorId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"State\":\"\",\"Permissions\":\"\",\"Justification\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantRecorded\":{\"ActorId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"State\":\"\",\"Permissions\":\"\",\"Justification\":\"\"}}"
+    },
+    {
+      "row": "{\"ActorId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"State\":\"s\",\"Permissions\":\"s\",\"Justification\":\"s\"}",
+      "rowWithActor": "{\"ActorId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"State\":\"s\",\"Permissions\":\"s\",\"Justification\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantRecorded\":{\"ActorId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"State\":\"s\",\"Permissions\":\"s\",\"Justification\":\"s\"}}"
+    }
+  ]
+}

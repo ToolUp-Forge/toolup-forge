@@ -3,6 +3,7 @@ module ToolUp.Forms.PublicFormApiHandler
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Forms.FormsAuditEvents
 open ToolUp.Forms.FormSchema
 open ToolUp.Forms.FormSubmission
 open ToolUp.Forms.PublicFormApi
@@ -182,7 +183,7 @@ let publicFormApi
                                         auditLog.Record(
                                             AuditScope.shard claim.ScopeId,
                                             AuditSubject.fromSubject (ClaimBearer claim),
-                                            AuditEvent.FormSubmitted payload
+                                            FormsAuditEvent.event (FormSubmitted payload)
                                         )
                                         |> AuditRow.orRefuse
 

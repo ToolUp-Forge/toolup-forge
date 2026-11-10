@@ -3,6 +3,7 @@ module KnowledgeBase.ServerApiNarrative
 open System
 open System.Text
 open ToolUp.Platform
+open KnowledgeBase.ServerKnowledgeAuditEvents
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Narrative
@@ -581,12 +582,14 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
             deps.AuditLog.Record(
                 StorageScope.auditScope deps.Scope,
                 AuditSubject.fromSubject deps.AccessContext.Subject,
-                KnowledgeScopeErased {
-                    UserId = deps.UserId
-                    ScopeId = deps.Scope.ScopeId
-                    DocumentCount = documentCount
-                    OrphanChunkCount = orphanChunkCount
-                }
+                KnowledgeAuditEvent.event (
+                    KnowledgeScopeErased {
+                        UserId = deps.UserId
+                        ScopeId = deps.Scope.ScopeId
+                        DocumentCount = documentCount
+                        OrphanChunkCount = orphanChunkCount
+                    }
+                )
             )
             |> AuditRow.orRefuse
 

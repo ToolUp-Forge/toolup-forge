@@ -307,6 +307,102 @@ ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule (class)
 ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule.firstMessage : ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy { get }
 ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule.generated : ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy { get }
 ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicyModule.generatedOn(System.String) : ToolUp.AI.AIAssistantHandler+ConversationTitlingPolicy
+ToolUp.AI.AIAuditEvents (class)
+ToolUp.AI.AIAuditEvents.|AIAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAuditEvents+AIAuditEvent]
+ToolUp.AI.AIAuditEvents+AIAuditEvent (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent.IsAnswerVerificationFlagged : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent.IsAnswerVerificationPassed : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent.IsBeaconRejected : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent.IsConversationExported : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent.IsConversationReplayed : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent.IsConversationsPurged : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent.IsCrossModuleRead : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent.Tag : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+AnswerVerificationFlagged (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+AnswerVerificationFlagged.Item : ToolUp.AI.AIAuditEvents+AnswerVerificationPayload { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+AnswerVerificationPassed (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+AnswerVerificationPassed.Item : ToolUp.AI.AIAuditEvents+AnswerVerificationPayload { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+BeaconRejected (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+BeaconRejected.Item : ToolUp.AI.AIAuditEvents+BeaconRejectedPayload { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+ConversationExported (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+ConversationExported.Item : ToolUp.AI.AIAuditEvents+ConversationExportPayload { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+ConversationReplayed (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+ConversationReplayed.Item : ToolUp.AI.AIAuditEvents+ConversationReplayedPayload { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+ConversationsPurged (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+ConversationsPurged.Item : ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+CrossModuleRead (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+CrossModuleRead.Item : ToolUp.AI.AIAuditEvents+CrossModuleReadPayload { get }
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags (class)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags.AnswerVerificationFlagged : System.Int32 (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags.AnswerVerificationPassed : System.Int32 (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags.BeaconRejected : System.Int32 (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags.ConversationExported : System.Int32 (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags.ConversationReplayed : System.Int32 (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags.ConversationsPurged : System.Int32 (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEvent+Tags.CrossModuleRead : System.Int32 (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEventModule (class)
+ToolUp.AI.AIAuditEvents+AIAuditEventModule.Registrant : System.String (literal)
+ToolUp.AI.AIAuditEvents+AIAuditEventModule.event(ToolUp.AI.AIAuditEvents+AIAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.AI.AIAuditEvents+AIAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.AI.AIAuditEvents+AIAuditEvent] { get }
+ToolUp.AI.AIAuditEvents+AIAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAuditEvents+AIAuditEvent]
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload (class)
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload..ctor(System.Guid, System.Guid, System.String, System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AnswerVerificationTokenAudit], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.DateTimeOffset)
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.CertificateRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.CitedFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.CompositionSealId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.ConversationId : System.Guid { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.FactsInScope : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.Mode : System.String { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.ProvenanceChainHead : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.ProviderModel : System.String { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.ProviderName : System.String { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.TaskId : System.Guid { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.Tokens : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AnswerVerificationTokenAudit] { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.Unmatched : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.Unverifiable : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+AnswerVerificationPayload.Verified : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+BeaconRejectedPayload (class)
+ToolUp.AI.AIAuditEvents+BeaconRejectedPayload..ctor(System.Guid, System.String, System.String, System.String)
+ToolUp.AI.AIAuditEvents+BeaconRejectedPayload.Caller : System.String { get }
+ToolUp.AI.AIAuditEvents+BeaconRejectedPayload.ConversationId : System.Guid { get }
+ToolUp.AI.AIAuditEvents+BeaconRejectedPayload.Owner : System.String { get }
+ToolUp.AI.AIAuditEvents+BeaconRejectedPayload.Surface : System.String { get }
+ToolUp.AI.AIAuditEvents+ConversationExportPayload (class)
+ToolUp.AI.AIAuditEvents+ConversationExportPayload..ctor(System.String, System.Boolean, System.String)
+ToolUp.AI.AIAuditEvents+ConversationExportPayload.ConversationId : System.String { get }
+ToolUp.AI.AIAuditEvents+ConversationExportPayload.ExportedBy : System.String { get }
+ToolUp.AI.AIAuditEvents+ConversationExportPayload.IncludeToolDetails : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload (class)
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload.Delta : System.String { get }
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload.NewProvider : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload.NewSystemPromptDigest : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload.OriginalConversationId : System.String { get }
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload.ReplayConversationId : System.String { get }
+ToolUp.AI.AIAuditEvents+ConversationReplayedPayload.SdkAnnotation : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload (class)
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32)
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload.ConversationIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload.FailedCount : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload.MaxAgeSeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload.MaxCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload.PurgedCount : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+ConversationsPurgedPayload.ScopeId : System.String { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload (class)
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], ToolUp.Platform.UserId, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Double, System.Int32, System.Boolean, System.String)
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.Allowed : System.Boolean { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.ComponentId : System.String { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.LatencyMs : System.Double { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.Outcome : System.String { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.QueryKey : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.ResultBytes : System.Int32 { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.SourceConvActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.TargetModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.TargetModules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.ToolName : System.String { get }
+ToolUp.AI.AIAuditEvents+CrossModuleReadPayload.UserId : ToolUp.Platform.UserId { get }
 ToolUp.AI.AIBudgetEnforcer (class)
 ToolUp.AI.AIBudgetEnforcer.AssumedOutputTokens : System.Int32 (literal)
 ToolUp.AI.AIBudgetEnforcer.EstimateDriftTolerance : System.Decimal { get }
@@ -493,7 +589,7 @@ ToolUp.AI.AICrossModuleAudit.OkOutcome : System.String (literal)
 ToolUp.AI.AICrossModuleAudit.audited(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleAudit+ReadTarget]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.AI.AICrossModuleAudit.createAuditedTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleAudit+ReadTarget]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
 ToolUp.AI.AICrossModuleAudit.outcomeOf(ToolUp.AI.ToolOutcome) : System.String
-ToolUp.AI.AICrossModuleAudit.payloadOf(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.AI.AICrossModuleAudit+ReadTarget, System.Double, System.Int32, System.String) : ToolUp.Platform.CrossModuleReadPayload
+ToolUp.AI.AICrossModuleAudit.payloadOf(Microsoft.FSharp.Core.FSharpOption`1[System.Guid], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.AI.AICrossModuleAudit+ReadTarget, System.Double, System.Int32, System.String) : ToolUp.AI.AIAuditEvents+CrossModuleReadPayload
 ToolUp.AI.AICrossModuleAudit+ItemsKeys (class)
 ToolUp.AI.AICrossModuleAudit+ItemsKeys.ActiveModule : System.String (literal)
 ToolUp.AI.AICrossModuleAudit+ReadTarget (class)
@@ -506,10 +602,10 @@ ToolUp.AI.AICrossModuleAudit+ReadTargetModule.ofModule(Microsoft.FSharp.Core.FSh
 ToolUp.AI.AICrossModuleObservability (class)
 ToolUp.AI.AICrossModuleObservability.EventType : System.String (literal)
 ToolUp.AI.AICrossModuleObservability.UnattributedTargetLabel : System.String (literal)
-ToolUp.AI.AICrossModuleObservability.computeReport(System.String, System.DateTime, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CrossModuleReadPayload]) : ToolUp.AI.AICrossModuleObservability+CrossModuleReport
+ToolUp.AI.AICrossModuleObservability.computeReport(System.String, System.DateTime, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIAuditEvents+CrossModuleReadPayload]) : ToolUp.AI.AICrossModuleObservability+CrossModuleReport
 ToolUp.AI.AICrossModuleObservability.reportFor(ToolUp.Platform.IAuditLog, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.AICrossModuleObservability+CrossModuleReport]
 ToolUp.AI.AICrossModuleObservability.routes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
-ToolUp.AI.AICrossModuleObservability.targetLabel(ToolUp.Platform.CrossModuleReadPayload) : System.String
+ToolUp.AI.AICrossModuleObservability.targetLabel(ToolUp.AI.AIAuditEvents+CrossModuleReadPayload) : System.String
 ToolUp.AI.AICrossModuleObservability+CrossModuleGroup (class)
 ToolUp.AI.AICrossModuleObservability+CrossModuleGroup..ctor(System.String, System.String, System.Int32, System.Int32, System.Int32, System.Double, System.Double, System.Double, System.Double, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AICrossModuleObservability+OutcomeCount])
 ToolUp.AI.AICrossModuleObservability+CrossModuleGroup.AllowedCount : System.Int32 { get }
@@ -749,7 +845,7 @@ ToolUp.AI.AnswerVerifier.deploymentVerificationSource(ToolUp.Platform.IAuditLog,
 ToolUp.AI.AnswerVerifier.extractTokens(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AnswerVerifier+NumericToken]
 ToolUp.AI.AnswerVerifier.provenanceChainHead(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.AnswerVerifier.registrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }
-ToolUp.AI.AnswerVerifier.rejoinAnswerVerification(ToolUp.Platform.AnswerVerificationPayload) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.AI.AnswerVerifier.rejoinAnswerVerification(ToolUp.AI.AIAuditEvents+AnswerVerificationPayload) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.AI.AnswerVerifier.runVerificationStage(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], System.String, System.Guid, System.Guid, System.String, System.String, ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification]]]
 ToolUp.AI.AnswerVerifier.runVerificationStageWithJoin(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.AI.AnswerVerifier+AnswerAuditJoin, System.String, System.Guid, System.Guid, System.String, System.String, ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification]]]
 ToolUp.AI.AnswerVerifier.runVerificationStageWithScope(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerifier+AnswerGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AnswerVerifier+ScopedFact], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.Metrics.IMetricsSink], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.AI.AnswerVerifier+AnswerAuditJoin, System.String, System.Guid, System.Guid, System.String, System.String, ToolUp.Platform.ILogger) : Microsoft.FSharp.Control.FSharpAsync`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AnswerVerification]]]

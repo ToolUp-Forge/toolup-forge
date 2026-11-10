@@ -1,0 +1,15 @@
+{
+  "kind": "ConversationCompleted",
+  "samples": [
+    {
+      "row": "{\"ConversationId\":\"\",\"FinalStatus\":\"\",\"ErrorReason\":\"\",\"TurnCount\":0}",
+      "rowWithActor": "{\"ConversationId\":\"\",\"FinalStatus\":\"\",\"ErrorReason\":\"\",\"TurnCount\":0,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationCompleted\":{\"ConversationId\":\"\",\"FinalStatus\":\"\",\"ErrorReason\":\"\",\"TurnCount\":0}}"
+    },
+    {
+      "row": "{\"ConversationId\":\"s\",\"FinalStatus\":\"s\",\"ErrorReason\":\"s\",\"TurnCount\":7}",
+      "rowWithActor": "{\"ConversationId\":\"s\",\"FinalStatus\":\"s\",\"ErrorReason\":\"s\",\"TurnCount\":7,\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"ConversationCompleted\":{\"ConversationId\":\"s\",\"FinalStatus\":\"s\",\"ErrorReason\":\"s\",\"TurnCount\":7}}"
+    }
+  ]
+}

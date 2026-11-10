@@ -1,0 +1,15 @@
+{
+  "kind": "MediaKeyDelivered",
+  "samples": [
+    {
+      "row": "{\"MediaId\":\"\",\"SubjectKind\":\"\",\"SubjectId\":null,\"ScopeContainer\":\"\",\"AdmissionRoute\":\"\",\"At\":\"2020-01-01T00:00:00.0000000Z\"}",
+      "rowWithActor": "{\"MediaId\":\"\",\"SubjectKind\":\"\",\"SubjectId\":null,\"ScopeContainer\":\"\",\"AdmissionRoute\":\"\",\"At\":\"2020-01-01T00:00:00.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MediaKeyDelivered\":{\"MediaId\":\"\",\"SubjectKind\":\"\",\"SubjectId\":null,\"ScopeContainer\":\"\",\"AdmissionRoute\":\"\",\"At\":\"2020-01-01T00:00:00.0000000Z\"}}"
+    },
+    {
+      "row": "{\"MediaId\":\"s\",\"SubjectKind\":\"s\",\"SubjectId\":\"s\",\"ScopeContainer\":\"s\",\"AdmissionRoute\":\"s\",\"At\":\"2021-02-03T04:05:06.0000000Z\"}",
+      "rowWithActor": "{\"MediaId\":\"s\",\"SubjectKind\":\"s\",\"SubjectId\":\"s\",\"ScopeContainer\":\"s\",\"AdmissionRoute\":\"s\",\"At\":\"2021-02-03T04:05:06.0000000Z\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"MediaKeyDelivered\":{\"MediaId\":\"s\",\"SubjectKind\":\"s\",\"SubjectId\":\"s\",\"ScopeContainer\":\"s\",\"AdmissionRoute\":\"s\",\"At\":\"2021-02-03T04:05:06.0000000Z\"}}"
+    }
+  ]
+}

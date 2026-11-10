@@ -1,0 +1,15 @@
+{
+  "kind": "KnowledgeOriginalRetrieved",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"DocumentId\":\"\",\"ScopeId\":\"\",\"SourceKind\":\"\",\"FileName\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"DocumentId\":\"\",\"ScopeId\":\"\",\"SourceKind\":\"\",\"FileName\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeOriginalRetrieved\":{\"UserId\":\"\",\"DocumentId\":\"\",\"ScopeId\":\"\",\"SourceKind\":\"\",\"FileName\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"DocumentId\":\"s\",\"ScopeId\":\"s\",\"SourceKind\":\"s\",\"FileName\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"DocumentId\":\"s\",\"ScopeId\":\"s\",\"SourceKind\":\"s\",\"FileName\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"KnowledgeOriginalRetrieved\":{\"UserId\":\"s\",\"DocumentId\":\"s\",\"ScopeId\":\"s\",\"SourceKind\":\"s\",\"FileName\":\"s\"}}"
+    }
+  ]
+}

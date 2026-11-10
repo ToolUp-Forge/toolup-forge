@@ -6,6 +6,7 @@ namespace ToolUp.InterPlatform
 open System
 open System.Text
 open ToolUp.Platform
+open ToolUp.InterPlatform.PeerAuditEvents
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics

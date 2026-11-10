@@ -1,0 +1,15 @@
+{
+  "kind": "AnalysisRun",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ModuleName\":\"\",\"Summary\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ModuleName\":\"\",\"Summary\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AnalysisRun\":{\"UserId\":\"\",\"ModuleName\":\"\",\"Summary\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ModuleName\":\"s\",\"Summary\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ModuleName\":\"s\",\"Summary\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"AnalysisRun\":{\"UserId\":\"s\",\"ModuleName\":\"s\",\"Summary\":\"s\"}}"
+    }
+  ]
+}

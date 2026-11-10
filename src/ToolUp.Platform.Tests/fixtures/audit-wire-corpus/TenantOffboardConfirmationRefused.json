@@ -1,0 +1,15 @@
+{
+  "kind": "TenantOffboardConfirmationRefused",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"Actor\":\"\",\"Reason\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"Actor\":\"\",\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantOffboardConfirmationRefused\":{\"ScopeId\":\"\",\"Actor\":\"\",\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"Reason\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"Actor\":\"s\",\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TenantOffboardConfirmationRefused\":{\"ScopeId\":\"s\",\"Actor\":\"s\",\"Reason\":\"s\"}}"
+    }
+  ]
+}

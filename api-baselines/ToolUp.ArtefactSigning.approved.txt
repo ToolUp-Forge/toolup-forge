@@ -29,6 +29,36 @@ ToolUp.ArtefactSigning.ApplicationSigning.registerProvider(Microsoft.Extensions.
 ToolUp.ArtefactSigning.ApplicationSigning.retire(ToolUp.ArtefactSigning.ISigningKeyLedger, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.ArtefactSigning.ApplicationSigning.revoke(ToolUp.ArtefactSigning.ISigningKeyLedger, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.ArtefactSigning.ApplicationSigning.withLedger(ToolUp.ArtefactSigning.ISigningKeyLedger, ToolUp.ArtefactSigning.SigningProvider) : ToolUp.ArtefactSigning.SigningProvider
+ToolUp.ArtefactSigning.ArtefactAuditEvents (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents.|ArtefactAudit|_|(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent]
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent.IsArtefactSigned : System.Boolean { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent.IsSigningKeyRotated : System.Boolean { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent.Tag : System.Int32 { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent+ArtefactSigned (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent+ArtefactSigned.Item : ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactSignedPayload { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent+SigningKeyRotated (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent+SigningKeyRotated.Item : ToolUp.ArtefactSigning.ArtefactAuditEvents+SigningKeyRotatedPayload { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent+Tags (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent+Tags.ArtefactSigned : System.Int32 (literal)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent+Tags.SigningKeyRotated : System.Int32 (literal)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEventModule (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEventModule.Registrant : System.String (literal)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEventModule.event(ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent) : ToolUp.Platform.AuditEvent
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEventModule.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent] { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEventModule.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactAuditEvent]
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactSignedPayload (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactSignedPayload..ctor(System.String, System.String, System.String, System.String)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactSignedPayload.Actor : System.String { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactSignedPayload.Algorithm : System.String { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactSignedPayload.ArtefactSha256 : System.String { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+ArtefactSignedPayload.KeyId : System.String { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+SigningKeyRotatedPayload (class)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+SigningKeyRotatedPayload..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String)
+ToolUp.ArtefactSigning.ArtefactAuditEvents+SigningKeyRotatedPayload.Actor : System.String { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+SigningKeyRotatedPayload.Algorithm : System.String { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+SigningKeyRotatedPayload.NewKeyId : System.String { get }
+ToolUp.ArtefactSigning.ArtefactAuditEvents+SigningKeyRotatedPayload.OldKeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.ArtefactSigning.ArtefactSignature (class)
 ToolUp.ArtefactSigning.ArtefactSignature..ctor(System.String, ToolUp.ArtefactSigning.SigningAlgorithm, System.DateTimeOffset, System.String)
 ToolUp.ArtefactSigning.ArtefactSignature.Algorithm : ToolUp.ArtefactSigning.SigningAlgorithm { get }

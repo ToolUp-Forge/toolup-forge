@@ -1,0 +1,15 @@
+{
+  "kind": "EncryptionKeyDestroyAcknowledged",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"AcknowledgedBy\":\"\",\"OriginReplicaId\":\"\",\"RequestedAt\":\"2020-01-01T00:00:00+00:00\",\"AcknowledgedAt\":\"2020-01-01T00:00:00+00:00\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"AcknowledgedBy\":\"\",\"OriginReplicaId\":\"\",\"RequestedAt\":\"2020-01-01T00:00:00+00:00\",\"AcknowledgedAt\":\"2020-01-01T00:00:00+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyDestroyAcknowledged\":{\"UserId\":\"\",\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"AcknowledgedBy\":\"\",\"OriginReplicaId\":\"\",\"RequestedAt\":\"2020-01-01T00:00:00+00:00\",\"AcknowledgedAt\":\"2020-01-01T00:00:00+00:00\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"AcknowledgedBy\":\"s\",\"OriginReplicaId\":\"s\",\"RequestedAt\":\"2021-02-03T04:05:06+00:00\",\"AcknowledgedAt\":\"2021-02-03T04:05:06+00:00\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"AcknowledgedBy\":\"s\",\"OriginReplicaId\":\"s\",\"RequestedAt\":\"2021-02-03T04:05:06+00:00\",\"AcknowledgedAt\":\"2021-02-03T04:05:06+00:00\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyDestroyAcknowledged\":{\"UserId\":\"s\",\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"AcknowledgedBy\":\"s\",\"OriginReplicaId\":\"s\",\"RequestedAt\":\"2021-02-03T04:05:06+00:00\",\"AcknowledgedAt\":\"2021-02-03T04:05:06+00:00\"}}"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "EncryptionKeyUnreadable",
+  "samples": [
+    {
+      "row": "{\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"LengthSeen\":null,\"Reason\":\"\"}",
+      "rowWithActor": "{\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"LengthSeen\":null,\"Reason\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyUnreadable\":{\"ScopeId\":\"\",\"KeyId\":\"\",\"Resolver\":\"\",\"LengthSeen\":null,\"Reason\":\"\"}}"
+    },
+    {
+      "row": "{\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"LengthSeen\":7,\"Reason\":\"s\"}",
+      "rowWithActor": "{\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"LengthSeen\":7,\"Reason\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"EncryptionKeyUnreadable\":{\"ScopeId\":\"s\",\"KeyId\":\"s\",\"Resolver\":\"s\",\"LengthSeen\":7,\"Reason\":\"s\"}}"
+    }
+  ]
+}

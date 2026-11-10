@@ -1,0 +1,15 @@
+{
+  "kind": "TeamCreationDenied",
+  "samples": [
+    {
+      "row": "{\"UserId\":\"\",\"AttemptedName\":\"\"}",
+      "rowWithActor": "{\"UserId\":\"\",\"AttemptedName\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamCreationDenied\":{\"UserId\":\"\",\"AttemptedName\":\"\"}}"
+    },
+    {
+      "row": "{\"UserId\":\"s\",\"AttemptedName\":\"s\"}",
+      "rowWithActor": "{\"UserId\":\"s\",\"AttemptedName\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"TeamCreationDenied\":{\"UserId\":\"s\",\"AttemptedName\":\"s\"}}"
+    }
+  ]
+}

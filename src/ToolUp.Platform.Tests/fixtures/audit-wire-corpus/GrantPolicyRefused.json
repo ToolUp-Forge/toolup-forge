@@ -1,0 +1,15 @@
+{
+  "kind": "GrantPolicyRefused",
+  "samples": [
+    {
+      "row": "{\"ActorId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"RefusalCode\":\"\"}",
+      "rowWithActor": "{\"ActorId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"RefusalCode\":\"\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantPolicyRefused\":{\"ActorId\":\"\",\"SubjectId\":\"\",\"ModuleName\":\"\",\"DeclaredPolicy\":\"\",\"RefusalCode\":\"\"}}"
+    },
+    {
+      "row": "{\"ActorId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"RefusalCode\":\"s\"}",
+      "rowWithActor": "{\"ActorId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"RefusalCode\":\"s\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"GrantPolicyRefused\":{\"ActorId\":\"s\",\"SubjectId\":\"s\",\"ModuleName\":\"s\",\"DeclaredPolicy\":\"s\",\"RefusalCode\":\"s\"}}"
+    }
+  ]
+}
