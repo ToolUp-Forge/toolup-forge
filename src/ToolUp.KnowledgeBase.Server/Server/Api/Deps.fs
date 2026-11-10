@@ -474,7 +474,7 @@ module KnowledgeApiDeps =
         let accessContext =
             match services.GetService(typeof<AccessContext>) with
             | :? AccessContext as ac -> ac
-            | _ -> AccessContext.unrestricted (AnonymousSession userId)
+            | _ -> AccessContext.unresolved "Deps"
 
         let publishInventory () =
             publishInventoryUpdate storage notifications logger userId scope.Container

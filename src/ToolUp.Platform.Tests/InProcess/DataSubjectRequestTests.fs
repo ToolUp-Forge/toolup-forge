@@ -19,10 +19,10 @@ let tests = IDataSubjectRequestContract.tests
 // confirm even if the deployment auth middleware admitted them).
 
 let private nonAdmin: AccessContext =
-    AccessContext.unrestricted (AuthenticatedUser "regular-user")
+    AccessContexts.forSubject (AuthenticatedUser "regular-user")
 
 let private admin: AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser "admin-user") with
+    AccessContexts.forSubject (AuthenticatedUser "admin-user") with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 

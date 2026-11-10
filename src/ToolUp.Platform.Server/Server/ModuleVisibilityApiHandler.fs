@@ -59,17 +59,8 @@ let moduleVisibilityApi (registeredModuleIds: string list) (ctx: HttpContext) : 
             }
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests that bypass ScopeResolutionMiddleware —
-            // same pattern as ConfigHandler / FeatureFlagHandler.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "ModuleVisibilityApiHandler")
 
     /// Team-mode write gate. Mirrors `FeatureFlagHandler.ensureWriteAllowed`:
     /// Owner/Admin may write the team profile; Member is read-only; other

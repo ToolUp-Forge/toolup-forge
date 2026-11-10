@@ -60,7 +60,10 @@ let private permissionStore (fault: Fault option) =
         member _.GetTeamPermissions _ = read TeamPermissions.empty
         member _.SetTeamPermissions(_, _) = async { return Ok() }
         member _.UpdateTeamPermissions(_, _) = async { return Ok() }
-        member _.GetEffectivePermissions(_, _) = read restricted
+
+        member _.GetEffectivePermissions(_, _) =
+            read (ModulePermissions.Restricted restricted)
+
         member _.SetMemberPermissions(_, _, _, _) = async { return Ok() }
         member _.SetTeamDefaults(_, _) = async { return Ok() }
         member _.GetModuleExposure _ = read Map.empty
@@ -127,7 +130,10 @@ let private runWithAdmin (store: IPermissionStore) (adminFault: exn option) (onR
         RequestDelegate(fun c ->
             reached.Value <- true
             onReached c
-            let access = ComposeScopeResolver.accessContextOf c
+
+            let access =
+                ComposeScopeResolver.accessContextOf c
+                |> Option.defaultWith (fun () -> AccessContext.unresolved "ScopeResolutionFailClosedTests")
 
             c.Response.StatusCode <-
                 if AccessContext.canAccessModule moduleName access then

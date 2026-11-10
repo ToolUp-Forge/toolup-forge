@@ -366,7 +366,7 @@ let private liveTests (connectionString: string) =
                     do! storeA.Upsert scope chunkId vector chunk
                     do! sparseA.Upsert scope chunkId chunk
 
-                let ctx = AccessContext.unrestricted (TeamMember("u1", "t1"))
+                let ctx = AccessContexts.forSubject (TeamMember("u1", "t1"))
 
                 for query in [ "revenue budget"; "northern region"; "relocation" ] do
                     let request = RetrievalRequest.create query [ scope ] 10 Interleaved

@@ -9,6 +9,7 @@
          dedicated pack (rather than entries in the contended
          ToolUp.Platform.Tests.fsproj) referencing Core + Server. -->
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="Support\Doubles.fs" />
         <Compile Include="Contracts\IBackgroundExportStoreContract.fs" />
         <Compile Include="InProcess\BackgroundExportStoreTests.fs" />

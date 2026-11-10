@@ -11,6 +11,7 @@
              this pack needs only the double, not the whole Platform
              test surface. -->
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\InMemoryBlobStorage.fs" Link="Support\InMemoryBlobStorage.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="Doubles.fs" />
         <Compile Include="InProcess\DerivativePipelineTests.fs" />
         <Compile Include="InProcess\DerivativeDlqTests.fs" />

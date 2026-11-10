@@ -174,7 +174,7 @@ type private FixedPermissionStore(documents: Map<string, TeamPermissions>) =
 
         member _.SetTeamPermissions(_, _) = async { return Error "read-only fixture" }
         member _.UpdateTeamPermissions(_, _) = async { return Error "read-only fixture" }
-        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
+        member _.GetEffectivePermissions(_, _) = async { return Ok ModulePermissions.Unrestricted }
         member _.SetMemberPermissions(_, _, _, _) = async { return Error "read-only fixture" }
         member _.SetTeamDefaults(_, _) = async { return Error "read-only fixture" }
         member _.GetModuleExposure(_) = async { return Ok Map.empty }
@@ -189,7 +189,7 @@ type private BrokenPermissionStore() =
 
         member _.SetTeamPermissions(_, _) = async { return Error "broken" }
         member _.UpdateTeamPermissions(_, _) = async { return Error "broken" }
-        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
+        member _.GetEffectivePermissions(_, _) = async { return Ok ModulePermissions.Unrestricted }
         member _.SetMemberPermissions(_, _, _, _) = async { return Error "broken" }
         member _.SetTeamDefaults(_, _) = async { return Error "broken" }
         member _.GetModuleExposure(_) = async { return Ok Map.empty }

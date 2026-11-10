@@ -646,7 +646,7 @@ type private CarryingScheduler(handler: unit -> IJobHandler, remints: bool) =
                 let ctx: JobContext = {
                     JobId = jobId
                     ScopeId = registration.ScopeId
-                    AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId.Value)
+                    AccessContext = AccessContexts.forSubject (AuthenticatedUser byUserId.Value)
                     Attempt = 1
                     Trigger = registration.Trigger
                     Scope =
@@ -894,7 +894,7 @@ let private reactivePathTests =
             let ctx: JobContext = {
                 JobId = Guid.NewGuid()
                 ScopeId = jobShard.ScopeId
-                AccessContext = AccessContext.unrestricted (AuthenticatedUser "tester")
+                AccessContext = AccessContexts.forSubject (AuthenticatedUser "tester")
                 Attempt = 1
                 Trigger = Trigger.Manual
                 Scope = otherShard
@@ -921,7 +921,7 @@ let private reactivePathTests =
                 let services = ServiceCollection()
                 services.AddSingleton<IJobScheduler>(scheduler) |> ignore
 
-                services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "user-930"))
+                services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "user-930"))
                 |> ignore
 
                 let ctx = DefaultHttpContext()

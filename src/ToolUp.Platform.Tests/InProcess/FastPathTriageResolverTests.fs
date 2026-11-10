@@ -1560,7 +1560,7 @@ let private routeTests =
                 )
                 :> IAIProviderFactory
 
-            let! resolved = chain.Resolve(AccessContext.unrestricted (TeamMember(HarnessUserId, "team-1")))
+            let! resolved = chain.Resolve(AccessContexts.forSubject (TeamMember(HarnessUserId, "team-1")))
 
             let gated =
                 match resolved with

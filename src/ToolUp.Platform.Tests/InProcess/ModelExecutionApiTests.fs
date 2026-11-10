@@ -153,7 +153,7 @@ let private ctxFor (fixture: Fixture) (userId: string) (withScorer: bool) : Http
     services.AddSingleton<IAuditLog>(fixture.Audit :> IAuditLog) |> ignore
     services.AddSingleton<ModelFitProviderRegistry>(fixture.Providers) |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userId))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser userId))
     |> ignore
 
     if withScorer then
@@ -174,7 +174,7 @@ let private ctxFor (fixture: Fixture) (userId: string) (withScorer: bool) : Http
 let private bareCtx (userId: string) : HttpContext =
     let services = ServiceCollection()
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userId))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser userId))
     |> ignore
 
     let ctx = DefaultHttpContext() :> HttpContext
@@ -271,7 +271,7 @@ let private ctxWithGatePolicy (fixture: Fixture) (userId: string) : HttpContext 
     services.AddSingleton<IAuditLog>(fixture.Audit :> IAuditLog) |> ignore
     services.AddSingleton<ModelFitProviderRegistry>(fixture.Providers) |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser userId))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser userId))
     |> ignore
 
     let scoreProviders =
@@ -775,7 +775,7 @@ let tests =
             let services = ServiceCollection()
             services.AddSingleton<IModelRegistry>(throwingRegistry) |> ignore
 
-            services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "op-1"))
+            services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "op-1"))
             |> ignore
 
             let ctx = DefaultHttpContext() :> HttpContext
@@ -802,7 +802,7 @@ let tests =
         <| async {
             let services = ServiceCollection()
 
-            services.AddSingleton<AccessContext>(AccessContext.unrestricted (AnonymousSession "anon-1"))
+            services.AddSingleton<AccessContext>(AccessContexts.forSubject (AnonymousSession "anon-1"))
             |> ignore
 
             let ctx = DefaultHttpContext() :> HttpContext

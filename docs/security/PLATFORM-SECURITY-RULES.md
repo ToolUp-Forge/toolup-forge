@@ -635,15 +635,29 @@ section eliminates structurally.
 > denied. The property is covered by a dedicated adversarial test suite and a
 > contract pack an external implementation can run against itself.
 > The same holds where the authorisation STATE is read: a team member's
-> permission document that cannot be read (`PermissionStoreUnavailableException`,
-> or any other permission-store fault) refuses the request with a 503 and an
-> `AuthScopeResolutionFailed` audit row naming the store. It never runs the
-> request with an empty permission map, which would read as unrestricted
-> (Phase 1059).
+> permission document that cannot be read (a `PermissionStoreError`, or any
+> other fault after the middleware's first stamp) refuses the request with a 503
+> and an `AuthScopeResolutionFailed` audit row. The request's principal is
+> stamped ONCE, after every grant was read; a request without one has no access
+> context, and a handler serves it under `AccessContext.unresolved`, which grants
+> no module, no role and no scope. Module permissions are a closed type:
+> `Unrestricted` is stated only where module RBAC does not apply (a team that
+> never configured permissions, decided in the permission store; a subject in
+> no team; a named system or scope-carrying context), and `Restricted Map.empty`
+> grants nothing, so an absent or empty permission value never reads as every
+> module. `VerifyAccessFallbacks` (a `VerifyAll` leg) refuses the retired
+> fallback and an `Unrestricted` stated anywhere else.
 > **Evidence:** `src/ToolUp.Platform.Server/Server/Remoting/Auth.fs` ·
 > `src/ToolUp.Platform.Server/Server/RemotingHelpers.fs` ·
 > `src/ToolUp.Platform.Server/Server/Middleware.fs` (`ScopeResolutionMiddleware`,
-> the permission-read refusal) ·
+> `principalOf`, the post-stamp refusal) ·
+> `src/ToolUp.Platform.Core/Shared/Types/AccessContext.fs` (`ModulePermissions`,
+> `tryResolve`, `unresolved`, `system`, `carrying`) ·
+> `src/ToolUp.Platform.Server/Server/Compose/ComposeScopeResolver.fs` (the scoped
+> factory yields no context without a principal) ·
+> `src/ToolUp.Platform.Server/Server/Scope/PermissionStore.fs`
+> (`modulePermissionsFor`) · `Build.fs` (`VerifyAccessFallbacks`) ·
+> `src/ToolUp.Platform.Tests/InProcess/AccessContextFactoryTests.fs` ·
 > `src/ToolUp.Platform.Tests/Contracts/FailClosedContract.fs` ·
 > `src/ToolUp.Platform.Tests/InProcess/AdversarialFailClosedTests.fs` ·
 > `src/ToolUp.Platform.Tests/InProcess/ScopeResolutionFailClosedTests.fs` ·

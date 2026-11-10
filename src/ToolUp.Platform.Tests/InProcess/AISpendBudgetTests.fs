@@ -279,7 +279,7 @@ let private enforcerOver
 
 let private sendThrough (factory: IAIProviderFactory) (userId: string) (text: string) =
     async {
-        let ctx = AccessContext.unrestricted (TeamMember(userId, scopeId))
+        let ctx = AccessContexts.forSubject (TeamMember(userId, scopeId))
         let! resolved = factory.Resolve ctx
 
         match resolved with

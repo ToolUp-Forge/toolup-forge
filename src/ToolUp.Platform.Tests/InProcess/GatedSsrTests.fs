@@ -52,21 +52,21 @@ open ToolUp.Platform.Compose
 
 // ─── AccessContext fixtures ─────────────────────────────────────────
 
-let private anon = AccessContext.unrestricted (AnonymousSession "s1")
-let private user = AccessContext.unrestricted (AuthenticatedUser "u1")
-let private teamA = AccessContext.unrestricted (TeamMember("u1", "team-a"))
+let private anon = AccessContexts.forSubject (AnonymousSession "s1")
+let private user = AccessContexts.forSubject (AuthenticatedUser "u1")
+let private teamA = AccessContexts.forSubject (TeamMember("u1", "team-a"))
 
 /// An authenticated user whose RBAC is configured (non-empty) but lacks
 /// the gating role — the "viewer without the role → 403" case.
 let private userNoEditor = {
     user with
-        ModulePermissions = Map["viewer", [ ModulePermission.Read ]]
+        ModulePermissions = ModulePermissions.Restricted(Map["viewer", [ ModulePermission.Read ]])
 }
 
 /// An authenticated user who holds the gating role.
 let private userEditor = {
     user with
-        ModulePermissions = Map["editor", [ ModulePermission.Write ]]
+        ModulePermissions = ModulePermissions.Restricted(Map["editor", [ ModulePermission.Write ]])
 }
 
 let private platformAdmin = {
@@ -152,7 +152,7 @@ let private gateTests =
         <| fun _ ->
             let revoked = {
                 user with
-                    ModulePermissions = Map["editor", []]
+                    ModulePermissions = ModulePermissions.Restricted(Map["editor", []])
             }
 
             Expect.equal
@@ -331,12 +331,12 @@ let private exclusionTests =
 
             let api = PublicContentApiImpl.create loader (Some store) []
 
-            let ctxA = AccessContext.unrestricted (TeamMember("u1", "team-a"))
-            let ctxB = AccessContext.unrestricted (TeamMember("u2", "team-b"))
+            let ctxA = AccessContexts.forSubject (TeamMember("u1", "team-a"))
+            let ctxB = AccessContexts.forSubject (TeamMember("u2", "team-b"))
 
             let! seenByA = api.GetPageInContext("dashboard", ctxA)
             let! seenByB = api.GetPageInContext("dashboard", ctxB)
-            let! seenByAnon = api.GetPageInContext("dashboard", AccessContext.unrestricted (AnonymousSession "x"))
+            let! seenByAnon = api.GetPageInContext("dashboard", AccessContexts.forSubject (AnonymousSession "x"))
 
             Expect.isSome seenByA "team A resolves its own scoped page"
             Expect.equal (seenByA |> Option.map _.Title) (Some "Team A Dashboard") "correct page body"
@@ -892,7 +892,10 @@ let private claimMappingTests =
             // The module-RBAC reading is untouched: an empty permission map is
             // still unrestricted for modules (GP 11), and a token role adds no
             // permission entry.
-            Expect.isTrue directoryEditor.ModulePermissions.IsEmpty "no module permission was granted"
+            Expect.equal
+                directoryEditor.ModulePermissions
+                ModulePermissions.Unrestricted
+                "no module permission was granted"
     ]
 
 // ─── 6b. the composed pipeline, with the mock OIDC issuer ────────────
@@ -1399,7 +1402,7 @@ let private disclosureDenying
     }
 
 let private publicationReader = {
-    AccessContext.unrestricted (AuthenticatedUser "rhea") with
+    AccessContexts.forSubject (AuthenticatedUser "rhea") with
         TokenRoles = [ "board-readers" ]
         Admission = PrincipalAdmission.PublicationReader
 }
@@ -1421,7 +1424,7 @@ let private publicationUnitTests =
             Expect.equal AuthenticatedUser.anonymous.Admission PrincipalAdmission.Member "the default user"
 
             Expect.equal
-                (AccessContext.unrestricted (AuthenticatedUser "u")).Admission
+                (AccessContexts.forSubject (AuthenticatedUser "u")).Admission
                 PrincipalAdmission.Member
                 "the default context"
 
@@ -1540,8 +1543,8 @@ let private publicationUnitTests =
             Expect.equal (AudienceGate.evaluate publicationReader page) AudienceDecision.Allow "a reader in the group"
 
             let memberOutside = {
-                AccessContext.unrestricted (TeamMember("carol", "team-a")) with
-                    ModulePermissions = Map[("editor", [ ModulePermission.Read ])]
+                AccessContexts.forSubject (TeamMember("carol", "team-a")) with
+                    ModulePermissions = ModulePermissions.Restricted(Map[("editor", [ ModulePermission.Read ])])
                     TokenRoles = [ "app-user" ]
             }
 
@@ -1700,7 +1703,7 @@ let private publicationUnitTests =
             | other -> failtestf "expected Withheld, got %A" other
 
             let carol = {
-                AccessContext.unrestricted (TeamMember("carol", "team-a")) with
+                AccessContexts.forSubject (TeamMember("carol", "team-a")) with
                     TokenRoles = [ "app-user" ]
             }
 
@@ -1837,7 +1840,7 @@ let private publicationReaderSubjectTests =
             let reader = Subject.PublicationReader "rhea"
 
             let ctx = {
-                AccessContext.unrestricted reader with
+                AccessContexts.forSubject reader with
                     TokenRoles = AccessContext.tokenRolesFor reader [ "board-readers" ]
                     Admission = AccessContext.admissionFor reader PrincipalAdmission.Member
             }
@@ -2652,7 +2655,7 @@ let private boardGrant: PublicationReaderGrant = {
 
 /// A principal admitted on an in-platform grant alone: no asserted role.
 let private grantOnlyReader = {
-    AccessContext.unrestricted (AuthenticatedUser "gina") with
+    AccessContexts.forSubject (AuthenticatedUser "gina") with
         Admission = PrincipalAdmission.PublicationReader
         PublicationGrants = [ boardGrant ]
 }
@@ -2673,7 +2676,7 @@ let private inPlatformGrantTests =
         testCase "AudienceGate — the Publication arm admits an asserted role OR a grant of it, and nothing else"
         <| fun _ ->
             let page = PageAudience.Publication boardAudience
-            let signedIn = AccessContext.unrestricted (AuthenticatedUser "gina")
+            let signedIn = AccessContexts.forSubject (AuthenticatedUser "gina")
 
             let cases = [
                 "grant only",
@@ -2729,8 +2732,8 @@ let private inPlatformGrantTests =
             // Every existing refusal still refuses: a member of the publishing
             // team with module permissions who is also the platform admin.
             let teamMember = {
-                AccessContext.unrestricted (TeamMember("carol", "team-a")) with
-                    ModulePermissions = Map[("editor", [ ModulePermission.Read ])]
+                AccessContexts.forSubject (TeamMember("carol", "team-a")) with
+                    ModulePermissions = ModulePermissions.Restricted(Map[("editor", [ ModulePermission.Read ])])
                     PlatformRole = Some PlatformRole.PlatformAdmin
             }
 
@@ -2763,8 +2766,8 @@ let private inPlatformGrantTests =
             // not hold that role for a ScopeGated page: the grant widens nothing
             // but the publication.
             let memberWithGrant = {
-                AccessContext.unrestricted (AuthenticatedUser "gina") with
-                    ModulePermissions = Map[("viewer", [ ModulePermission.Read ])]
+                AccessContexts.forSubject (AuthenticatedUser "gina") with
+                    ModulePermissions = ModulePermissions.Restricted(Map[("viewer", [ ModulePermission.Read ])])
                     PublicationGrants = [ boardGrant ]
             }
 
@@ -2879,7 +2882,7 @@ let private inPlatformGrantTests =
 
                 services.AddSingleton<AccessContext>(
                     {
-                        AccessContext.unrestricted subject with
+                        AccessContexts.forSubject subject with
                             PlatformRole =
                                 (if platformAdmin then
                                      Some PlatformRole.PlatformAdmin

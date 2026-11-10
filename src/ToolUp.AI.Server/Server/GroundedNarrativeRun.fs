@@ -1405,7 +1405,8 @@ type GroundedNarrativeRunner
         | Some access -> access
         | None ->
             AccessContext.forConfigScope definition.Principal scope
-            |> Option.defaultWith (fun () -> AccessContext.unrestricted (AuthenticatedUser definition.Principal))
+            |> Option.defaultWith (fun () ->
+                AccessContext.carrying "narrative run" (AuthenticatedUser definition.Principal))
 
     /// The request context the agent loop and the fact tools read: the run's
     /// resolved scope (carried, never minted) and principal, over a fresh DI

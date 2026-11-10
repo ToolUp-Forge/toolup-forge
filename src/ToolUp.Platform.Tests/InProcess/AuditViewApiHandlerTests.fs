@@ -98,7 +98,7 @@ let private teamContextWith (teamId: string) (userId: string) (role: TeamRole) =
     let store = freshTeamStore ()
     let! _ = store.CreateTeam(TeamId teamId, "Test Team")
     let! _ = (store :> ITeamStore).AddMember(TeamId teamId, UserId userId, role)
-    return AccessContext.unrestricted (TeamMember(userId, teamId)), (store :> ITeamStore)
+    return AccessContexts.forSubject (TeamMember(userId, teamId)), (store :> ITeamStore)
 }
 
 let private expectOk (label: string) (result: Result<'T, string>) : 'T =
@@ -121,7 +121,7 @@ let roleGateTests =
             // Every method, not one: the export is the method whose
             // omission would leave the trail as a downloadable file, and
             // it is the one added last.
-            let ctx = AccessContext.unrestricted (AnonymousSession "sess-1")
+            let ctx = AccessContexts.forSubject (AnonymousSession "sess-1")
 
             let api =
                 buildApi ctx None FeatureMode.Enabled [
@@ -183,7 +183,7 @@ let roleGateTests =
             // No team, therefore no role to hold: the single-scope modes
             // read their own scope, which is the same authority the
             // usage dashboard grants them.
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "carol")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "carol")
 
             let api =
                 buildApi accessContext None FeatureMode.Enabled [
@@ -262,7 +262,7 @@ let filterTests =
 
         testCaseAsync "the page is newest-first"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried = api.Query AuditViewApi.defaultQuery
@@ -274,7 +274,7 @@ let filterTests =
 
         testCaseAsync "the time window is inclusive at both ends"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
@@ -290,7 +290,7 @@ let filterTests =
 
         testCaseAsync "the event-type filter is exact, not a prefix"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
@@ -307,7 +307,7 @@ let filterTests =
 
         testCaseAsync "the actor filter matches a case-insensitive substring of the projected actor"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
@@ -329,7 +329,7 @@ let filterTests =
             // "Unattributed" must not behave as a wildcard: an operator
             // narrowing to one actor and being shown every anonymous
             // system row would read the noise as that actor's activity.
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             let api =
                 buildApi accessContext None FeatureMode.Enabled [
@@ -355,7 +355,7 @@ let filterTests =
             // row must stay in the trail — that a row was redacted is
             // itself audit-relevant — so the projections have to survive
             // a payload that is not a JSON object.
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             let api =
                 buildApi accessContext None FeatureMode.Enabled [
@@ -377,7 +377,7 @@ let pagingTests =
 
         testCaseAsync "the page size is capped server-side"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             let events =
                 [ 1 .. (AuditViewApi.MaxPageSize + 10) ]
@@ -400,7 +400,7 @@ let pagingTests =
 
         testCaseAsync "paging walks the whole trail exactly once, with no repeats"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             let events =
                 [ 1..7 ]
@@ -436,7 +436,7 @@ let pagingTests =
             // A cursor expressed on time alone would either skip the rest
             // of a tied group or serve it again forever; the id is the
             // tiebreak that makes the boundary a single row.
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             let events =
                 [ 1..5 ]
@@ -472,7 +472,7 @@ let pagingTests =
 
         testCaseAsync "the last page terminates rather than offering an empty next"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
@@ -491,7 +491,7 @@ let pagingTests =
             // Restarting from the top on a bad token would render a page
             // that looks like the continuation and is not — a page an
             // operator would read as the older half of the trail.
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! queried =
@@ -512,7 +512,7 @@ let exportTests =
 
         testCaseAsync "the export covers the filtered window, not the current page"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             let events =
                 [ 1..5 ]
@@ -539,7 +539,7 @@ let exportTests =
 
         testCaseAsync "the export honours the filters"
         <| async {
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Enabled (trailOf "alice")
 
             let! exported =
@@ -561,7 +561,7 @@ let exportTests =
             // usually commas: an unescaped export would shift every
             // column right of it, which a spreadsheet renders without
             // complaint.
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             let api =
                 buildApi accessContext None FeatureMode.Enabled [
@@ -589,7 +589,7 @@ let substratePairingTests =
             // the trail was switched off is physically present. A
             // deployment that has turned the audit log off has said it
             // keeps no trail, and the viewer must agree with it.
-            let accessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let accessContext = AccessContexts.forSubject (AuthenticatedUser "alice")
             let api = buildApi accessContext None FeatureMode.Disabled (trailOf "alice")
 
             let! queried = api.Query AuditViewApi.defaultQuery
@@ -611,7 +611,7 @@ let substratePairingTests =
             // short-circuit sits INSIDE the gate, and a refactor that
             // moved it outside would turn the disabled case into an
             // ungated endpoint.
-            let ctx = AccessContext.unrestricted (AnonymousSession "sess-1")
+            let ctx = AccessContexts.forSubject (AnonymousSession "sess-1")
             let api = buildApi ctx None FeatureMode.Disabled []
 
             let! queried = api.Query AuditViewApi.defaultQuery

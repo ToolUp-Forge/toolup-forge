@@ -70,7 +70,7 @@ let private registryUnder (policy: ToolPolicy) (tools: RegisteredTool list) =
     registry.RegisterAll tools
     registry
 
-let private alice = AccessContext.unrestricted (AuthenticatedUser "alice")
+let private alice = AccessContexts.forSubject (AuthenticatedUser "alice")
 let private everyGrantLive (_: string) = true
 
 /// Minimal provider that emits ONE tool call on its first turn and ends
@@ -144,6 +144,7 @@ let private buildContext (eventStore: IEventStore) : HttpContext =
             Persist = true
         }
 
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items [])
     ctx :> HttpContext
 
 /// Run one forged-call turn against `registry` and return the tool-result
@@ -325,7 +326,7 @@ let tests =
         <| fun () ->
             let noRead = {
                 alice with
-                    ModulePermissions = Map.ofList [ "HR", [ ModulePermission.Read ] ]
+                    ModulePermissions = ModulePermissions.Restricted(Map.ofList [ "HR", [ ModulePermission.Read ] ])
             }
 
             let egress = ToolEffectDeclaration.declare [ Egress "api.example.com" ]

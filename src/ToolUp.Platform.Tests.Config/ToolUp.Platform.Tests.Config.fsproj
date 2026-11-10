@@ -28,6 +28,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\FileSecretStoreAtomicityTests.fs" Link="InProcess\FileSecretStoreAtomicityTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\FileSecretStoreCancellationTests.fs" Link="InProcess\FileSecretStoreCancellationTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\FeatureFlagStoreTests.fs" Link="InProcess\FeatureFlagStoreTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\FlagEvaluatorTests.fs" Link="InProcess\FlagEvaluatorTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\InMemoryNotificationChannelTests.fs" Link="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConfigKeyReadBoolTests.fs" Link="InProcess\ConfigKeyReadBoolTests.fs" />

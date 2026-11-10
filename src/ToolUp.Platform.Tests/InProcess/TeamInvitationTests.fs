@@ -76,6 +76,7 @@ let private freshShareTokenStore () =
 
 let private ctxFor (userId: string) : HttpContext =
     let services = ServiceCollection()
+    services.AddScoped<AccessContext>(fun _ -> AccessContexts.user userId) |> ignore
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
@@ -204,7 +205,12 @@ let tests =
             | Ok r ->
                 let token = r.InviteUrl.Substring(r.InviteUrl.LastIndexOf('/') + 1)
                 let ctx = DefaultHttpContext() :> HttpContext
-                ctx.RequestServices <- ServiceCollection().BuildServiceProvider()
+                let services = ServiceCollection()
+
+                services.AddScoped<AccessContext>(fun _ -> AccessContexts.user "dana@example.com")
+                |> ignore
+
+                ctx.RequestServices <- services.BuildServiceProvider()
                 ctx.Items["ToolUp.Subject"] <- box (Subject.AuthenticatedUser "dana@example.com")
                 let recipient = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
                 let! accepted = recipient.AcceptInvite token
@@ -377,6 +383,9 @@ let tests =
             // root's default registration.
             services.AddSingleton<IPendingInviteStore>(pendingStore storage) |> ignore
 
+            services.AddScoped<AccessContext>(fun _ -> AccessContexts.user "alice@example.com")
+            |> ignore
+
             let sp = services.BuildServiceProvider() :> IServiceProvider
             let ctx = DefaultHttpContext() :> HttpContext
             ctx.RequestServices <- sp
@@ -503,6 +512,9 @@ let tests =
             // from RequestServices. Mirrors the production composition
             // root's default registration.
             services.AddSingleton<IPendingInviteStore>(pendingStore storage) |> ignore
+
+            services.AddScoped<AccessContext>(fun _ -> AccessContexts.user "alice@example.com")
+            |> ignore
 
             let sp = services.BuildServiceProvider() :> IServiceProvider
             let ctx = DefaultHttpContext() :> HttpContext
@@ -857,6 +869,7 @@ let private ctxWithPendingStore (storage: IBlobStorage) (store: IPendingInviteSt
     let services = ServiceCollection()
     services.AddSingleton<IBlobStorage>(storage) |> ignore
     services.AddSingleton<IPendingInviteStore>(store) |> ignore
+    services.AddScoped<AccessContext>(fun _ -> AccessContexts.user userId) |> ignore
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
@@ -1243,6 +1256,10 @@ let activeTeamPolicyTests =
 let private ctxForAuthenticatedUser (store: IPendingInviteStore) (user: AuthenticatedUser) : HttpContext =
     let services = ServiceCollection()
     services.AddSingleton<IPendingInviteStore>(store) |> ignore
+
+    services.AddScoped<AccessContext>(fun _ -> AccessContexts.user user.UserId.Value)
+    |> ignore
+
     let sp = services.BuildServiceProvider() :> IServiceProvider
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp

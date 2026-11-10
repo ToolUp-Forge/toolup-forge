@@ -72,15 +72,7 @@ let sessionApi (ctx: HttpContext) : ISessionApi =
     let accessContext =
         match ctx.RequestServices.GetService typeof<AccessContext> with
         | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests that bypass ScopeResolutionMiddleware —
-            // same pattern as ConfigHandler / ModuleVisibilityApiHandler.
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        | _ -> AccessContext.unresolved "SessionApiHandler"
 
     let scopeIdOpt =
         match ctx.Items.TryGetValue "ToolUp.StorageScope" with

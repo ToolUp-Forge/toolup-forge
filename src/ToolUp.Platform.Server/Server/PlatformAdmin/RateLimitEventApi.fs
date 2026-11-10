@@ -48,15 +48,8 @@ open ToolUp.Platform
 let private jsonOptions = PlatformJson.options
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "RateLimitEventApi")
 
 let private resolveStore (ctx: HttpContext) : IRateLimitStore option =
     match ctx.RequestServices.GetService(typeof<IRateLimitStore>) with

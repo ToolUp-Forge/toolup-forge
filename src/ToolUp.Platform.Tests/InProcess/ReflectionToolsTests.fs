@@ -100,7 +100,7 @@ type private RecordingAuditLog() =
         member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 let private platformAdmin: AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser "ops") with
+    AccessContexts.forSubject (AuthenticatedUser "ops") with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 
@@ -317,7 +317,7 @@ let private gateTests =
     testList "Phase 782 — reflection tools apply the APIs' own gates and audit every call" [
         test "anonymous is refused by every tool, and each refusal is an audit row" {
             let fixture =
-                fixtureWith (AccessContext.unrestricted (AnonymousSession "s-1")) None None
+                fixtureWith (AccessContexts.forSubject (AnonymousSession "s-1")) None None
 
             let ctx = contextOf fixture "s-1"
 
@@ -338,7 +338,7 @@ let private gateTests =
             let store = teamStoreWith "team-1" "mia" Member
 
             let fixture =
-                fixtureWith (AccessContext.unrestricted (TeamMember("mia", "team-1"))) (Some store) None
+                fixtureWith (AccessContexts.forSubject (TeamMember("mia", "team-1"))) (Some store) None
 
             let ctx = contextOf fixture "mia"
 
@@ -357,7 +357,7 @@ let private gateTests =
 
         test "an authenticated non-admin may describe the composition but not read the report or the reach" {
             let fixture =
-                fixtureWith (AccessContext.unrestricted (AuthenticatedUser "dev")) None None
+                fixtureWith (AccessContexts.forSubject (AuthenticatedUser "dev")) None None
 
             let ctx = contextOf fixture "dev"
 

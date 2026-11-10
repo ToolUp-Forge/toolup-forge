@@ -54,6 +54,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\MembershipDoctorTests.fs" Link="InProcess\MembershipDoctorTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SessionRegistryTests.fs" Link="InProcess\SessionRegistryTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\BuiltInModuleSurfaceTests.fs" Link="InProcess\BuiltInModuleSurfaceTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModuleVisibilityContractTests.fs" Link="InProcess\ModuleVisibilityContractTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigratorTests.fs" Link="InProcess\AnonymousSessionMigratorTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\DefaultSubjectResolverTests.fs" Link="InProcess\DefaultSubjectResolverTests.fs" />

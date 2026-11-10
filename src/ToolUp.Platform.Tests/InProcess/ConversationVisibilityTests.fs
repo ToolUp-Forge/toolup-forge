@@ -161,7 +161,7 @@ let private contextForWith
     |> Option.iter (fun s -> services.AddSingleton<TeamConversationVisibilitySettings>(s) |> ignore)
 
     let access = {
-        AccessContext.unrestricted (TeamMember(userId, teamId)) with
+        AccessContexts.forSubject (TeamMember(userId, teamId)) with
             PlatformRole =
                 if platformAdmins.Contains userId then
                     Some PlatformRole.PlatformAdmin
@@ -477,7 +477,7 @@ let private readPathTests =
             let! world = newWorld None
             let services = chatServices world.Storage
 
-            services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "alice"))
+            services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "alice"))
             |> ignore
 
             let ctx = DefaultHttpContext()
@@ -892,7 +892,7 @@ let private contextWithStore (world: World) (teamId: string) (userId: string) (s
     services.AddSingleton<IAuditLog>(world.Audit) |> ignore
     services.AddSingleton<IConversationStore>(store) |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (TeamMember(userId, teamId)))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (TeamMember(userId, teamId)))
     |> ignore
 
     let ctx = DefaultHttpContext()

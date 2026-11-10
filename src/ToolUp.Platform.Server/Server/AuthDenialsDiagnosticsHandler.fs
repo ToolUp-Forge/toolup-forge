@@ -75,9 +75,8 @@ type private AuthDenialsRollup = {
 /// anonymous context (which scopes the read to `_platform`) when absent,
 /// e.g. a test bypassing the middleware.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "AuthDenialsDiagnosticsHandler")
 
 /// Caller scope to read denials from: the configured per-scope container
 /// id (team / user / claim) when present, else `_platform` for anonymous

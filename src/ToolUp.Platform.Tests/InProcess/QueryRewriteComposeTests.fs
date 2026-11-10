@@ -111,7 +111,7 @@ let private history = [
 ]
 
 let private access =
-    AccessContext.unrestricted (Subject.AnonymousSession "query-rewrite-compose")
+    AccessContexts.forSubject (Subject.AnonymousSession "query-rewrite-compose")
 
 // ── Harness ──
 

@@ -1106,13 +1106,12 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     // the list in lockstep with that middleware is a stringly-typed
     // coupling a typed `RequestContext` would remove.
     //
-    // The list carries all six items `reconstructAccessContext` reads.
-    // Dropping any of them would make the agent loop rebuild `Subject` from
-    // the scope-container prefix rather than carry the one the request
-    // resolved, or leave `ModuleExposure` / `PlatformRole` empty — every
-    // authorization row the loop emits would then attribute a subject it
-    // inferred, and the whole point of resolving a subject once is that
-    // nothing downstream has to guess.
+    // The request's principal is ONE item
+    // (`AccessContext.ItemsKey`), the record `reconstructAccessContext`
+    // reads: subject, permissions, exposure and role travel together, so the
+    // loop never reassembles a principal from separate stamps, and a
+    // background context without it is served under a context that grants
+    // nothing. The remaining items serve their own readers (scope, user id).
     //
     // The two grant stamps are load-bearing for the tool gate. Both are
     // resolved PER REQUEST by the middleware — the consent verdicts
@@ -1126,7 +1125,7 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
     let itemsToCopy = [
         "ToolUp.StorageScope"
         "ToolUp.UserId"
-        "ToolUp.ModulePermissions"
+        AccessContext.ItemsKey
         "ToolUp.Subject"
         "ToolUp.ModuleExposure"
         "ToolUp.PlatformRole"
@@ -1508,12 +1507,8 @@ let aiAssistantApi
         | _ -> "anonymous"
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback: construct from Items. Only used when the AccessContext
-            // DI factory didn't run (tests bypassing compose).
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "AIAssistantHandler")
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
 
@@ -2294,15 +2289,12 @@ let aiAssistantApi
         // caller's per-module `Read` permission, the same predicate the
         // agent loop's per-turn list and its dispatch re-check use — a
         // user must not be able to enumerate the tool surface of a module
-        // they cannot read. Unrestricted deployments (empty
-        // `ModulePermissions`) see the full registry as before (GP 11).
+        // they cannot read. Unrestricted deployments (`ModulePermissions
+        // .Unrestricted`) see the full registry as before (GP 11).
         //
-        // Resolved through the items-backed reconstruction rather than the
-        // `accessContext` above, whose fall-through is
-        // `AccessContext.unrestricted` — a silent unrestricted fallback is
-        // the one thing a permission filter must not have. Both read the
-        // same middleware-populated request; the reconstruction keeps
-        // `ModulePermissions` when the DI factory did not run.
+        // Read from the stamped principal when the DI factory did not run:
+        // a silent unrestricted fallback is the one thing a permission
+        // filter must not have, and neither path has one.
         GetAvailableTools =
             fun () -> async {
                 let toolAccess =

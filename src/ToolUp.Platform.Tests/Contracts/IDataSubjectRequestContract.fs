@@ -83,7 +83,7 @@ let private mkApi (exporters: IDataExporter list) (handlers: IErasureHandler lis
     // test is exercised. (The gate itself is covered by
     // DataSubjectRequestTests.authorizationTests.)
     let adminContext: AccessContext = {
-        AccessContext.unrestricted (AuthenticatedUser "admin-actor") with
+        AccessContexts.forSubject (AuthenticatedUser "admin-actor") with
             PlatformRole = Some PlatformRole.PlatformAdmin
     }
 

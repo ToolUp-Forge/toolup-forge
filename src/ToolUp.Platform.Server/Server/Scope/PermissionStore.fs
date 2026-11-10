@@ -12,8 +12,8 @@ open ToolUp.Platform.Infra
 /// decided in the store and nowhere else (a brand-new team behaves as it did
 /// before module RBAC until an admin writes its first grants). A document
 /// that exists and cannot be read, or does not decode, is never read as that
-/// empty (= unrestricted) map: the store answers one of these and the caller
-/// refuses, so a storage blip or a corrupt blob fails closed.
+/// empty (not-configured) document: the store answers one of these and the
+/// caller refuses, so a storage blip or a corrupt blob fails closed.
 [<RequireQualifiedAccess>]
 type PermissionStoreError =
     /// The document is present and could not be read.
@@ -88,6 +88,26 @@ let effectivePermissions (perms: TeamPermissions) (userId: UserId) : Map<string,
     (perms.Defaults, userEntries)
     ||> Map.fold (fun acc moduleName modulePerms -> Map.add moduleName modulePerms acc)
 
+/// Whether a team configured module RBAC at all: its document
+/// holds a member grant or a team default. Exposure, grant records and page
+/// grants are other axes; a team that set only those never restricted a
+/// module.
+let isConfigured (perms: TeamPermissions) : bool =
+    not perms.Members.IsEmpty || not perms.Defaults.IsEmpty
+
+/// "Not configured" is decided HERE and nowhere else. A team that
+/// never configured module RBAC (no document, or one with no member grant and
+/// no default) is `Unrestricted`, stated, as the pre-RBAC default (GP 11). A
+/// team that did is `Restricted` to the user's effective map, where a module
+/// the user holds no entry for is not accessible — even when that map is
+/// empty. An unreadable document never reaches this function: the store
+/// answers a `PermissionStoreError` for it, and the caller refuses.
+let modulePermissionsFor (perms: TeamPermissions) (userId: UserId) : ModulePermissions =
+    if isConfigured perms then
+        ModulePermissions.Restricted(effectivePermissions perms userId)
+    else
+        ModulePermissions.Unrestricted
+
 // ─── Interface ───────────────────────────────────────────────────────
 
 /// Team-scoped permission store. Persists per-team permission documents
@@ -99,9 +119,9 @@ let effectivePermissions (perms: TeamPermissions) (userId: UserId) : Map<string,
 /// `Ok` or an `Error` carrying the refusal or the store's own account.
 type IPermissionStore =
     /// Fetch the raw per-team document. `Ok TeamPermissions.empty` ONLY when
-    /// no document exists — `canAccessModule` treats an empty map as
-    /// unrestricted. A document that exists but cannot be read or parsed is
-    /// `Error`, never the unrestricted empty map.
+    /// no document exists — a team that never configured permissions. A
+    /// document that exists but cannot be read or parsed is `Error`, never
+    /// the empty document.
     abstract GetTeamPermissions: teamId: TeamId -> Async<Result<TeamPermissions, PermissionStoreError>>
 
     /// Replace the entire per-team document. Used for bulk admin
@@ -121,9 +141,11 @@ type IPermissionStore =
     /// Compute a user's effective per-module permissions for a team:
     /// their explicit `Members[userId]` entries merged with team
     /// `Defaults` on any module the user has no explicit entry for.
-    /// Returned shape matches `AccessContext.ModulePermissions`.
+    /// Answered as `AccessContext.ModulePermissions` is held:
+    /// `Unrestricted` for a team that never configured module RBAC,
+    /// `Restricted` otherwise (`modulePermissionsFor`).
     abstract GetEffectivePermissions:
-        userId: UserId * teamId: TeamId -> Async<Result<Map<string, ModulePermission list>, PermissionStoreError>>
+        userId: UserId * teamId: TeamId -> Async<Result<ModulePermissions, PermissionStoreError>>
 
     /// Set one member's permissions for one module. Pass an empty
     /// list to revoke all access for that user on that module; to
@@ -518,7 +540,7 @@ type PermissionStore(storage: IBlobStorage, ?logger: ILogger) =
 
         member _.GetEffectivePermissions(userId, teamId) = async {
             let! perms = load teamId
-            return perms |> Result.map (fun p -> effectivePermissions p userId)
+            return perms |> Result.map (fun p -> modulePermissionsFor p userId)
         }
 
         member _.SetMemberPermissions(teamId, userId, moduleName, permissions) =

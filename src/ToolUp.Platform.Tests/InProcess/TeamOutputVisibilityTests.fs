@@ -556,7 +556,9 @@ let private contextWith (userId: string) (subject: Subject) (isPlatformAdmin: bo
 
     // Module permission that does NOT include the module whose output is
     // read: permission governs use, not sight.
-    ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList [ "Sales", ([]: ModulePermission list) ])
+    ctx.Items[AccessContext.ItemsKey] <-
+        box (AccessContexts.ofItems ctx.Items ([ "Sales", ([]: ModulePermission list) ]))
+
     ctx
 
 let private viewerTests =
@@ -753,7 +755,7 @@ let private requestFor (world: World) (output: TeamOutputVisibilitySettings opti
 
     services.AddSingleton<AccessContext>(
         {
-            AccessContext.unrestricted (TeamMember(userId, team)) with
+            AccessContexts.forSubject (TeamMember(userId, team)) with
                 PlatformRole =
                     if userId = "pat" then
                         Some PlatformRole.PlatformAdmin
@@ -1133,7 +1135,7 @@ let private factsOnly world store events =
 let private requestIn (services: ServiceCollection) (userId: string) : HttpContext =
     services.AddSingleton<AccessContext>(
         {
-            AccessContext.unrestricted (TeamMember(userId, team)) with
+            AccessContexts.forSubject (TeamMember(userId, team)) with
                 PlatformRole =
                     if userId = "pat" then
                         Some PlatformRole.PlatformAdmin

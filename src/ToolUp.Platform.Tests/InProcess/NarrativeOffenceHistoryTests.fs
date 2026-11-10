@@ -564,7 +564,7 @@ let private runOnce (deployment: Deployment) : GroundedNarrativeOutcome =
 let private apiAs (deployment: Deployment) (userId: string) : NarrativePromptApi =
     let services = ServiceCollection()
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (TeamMember(userId, deployment.TeamId)))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (TeamMember(userId, deployment.TeamId)))
     |> ignore
 
     services.AddSingleton<TeamManagement.ITeamStore>(deployment.Teams) |> ignore

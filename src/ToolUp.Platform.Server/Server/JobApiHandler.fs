@@ -49,21 +49,8 @@ let jobApi (ctx: HttpContext) : JobApi =
         | _ -> None
 
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            // Fallback for tests bypassing the middleware. Mirrors
-            // ConfigHandler.configApi's fallback.
-            // (Phase 930 dropped an unused team-id read of the storage
-            // scope item from here: the fallback is anonymous whatever that
-            // item says, and the 797 guard now scans this file for the
-            // pre-797 bag read.)
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "JobApiHandler")
 
     let scopeOpt = AccessContext.configScope accessContext
 

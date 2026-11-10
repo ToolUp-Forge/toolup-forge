@@ -23,122 +23,17 @@ open ToolUp.Platform.Jobs
 // definition captured and returns the same shape. Zero behaviour
 // change.
 
-/// The `AccessContext` a request carries, read from the `HttpContext.Items`
-/// `ScopeResolutionMiddleware` stamped. The scoped factory below is this
-/// function over the request's context; it is separate so the reading is
-/// testable without composing a server (Phase 1059).
-let internal accessContextOf (ctx: HttpContext) : AccessContext =
-    // Phase 527 — a validated service-account token's effective
-    // permission map takes precedence over the team-derived one.
-    //
-    // Precedence rather than merge, and stated here rather than
-    // left to middleware ordering: the machine principal's
-    // declared set IS its authority, and merging it with whatever
-    // the owning team grants its human members would silently
-    // widen a credential that was deliberately scoped narrower.
-    // The overlay is written by `ServiceAccountTokenMiddleware`,
-    // which runs BEFORE `ScopeResolutionMiddleware` (the claim has
-    // to exist for the subject to resolve) and so would otherwise
-    // be overwritten by the team-derived map written after it.
-    //
-    // The overlay is never empty by construction — the store
-    // refuses an empty declared set, `ValidateToken` refuses an
-    // empty effective set, and the middleware refuses to write
-    // one — which matters because an empty map reads as
-    // UNRESTRICTED in `AccessContext.canAccessModule`. The
-    // `IsEmpty` guard below is the last of those three checks,
-    // placed where the value is actually consumed: falling
-    // through to the team map on an empty overlay is strictly
-    // safer than adopting it.
-    let serviceAccountPermissions =
-        match ctx.Items.TryGetValue ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey with
-        | true, (:? Map<string, ModulePermission list> as perms) when not perms.IsEmpty -> Some perms
-        | _ -> None
-
-    let modulePermissions =
-        match serviceAccountPermissions with
-        | Some perms -> perms
-        | None ->
-            match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
-            | true, (:? Map<string, ModulePermission list> as perms) -> perms
-            | _ -> Map.empty
-
-    let moduleExposure =
-        match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
-        | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
-        | _ -> Map.empty
-
-    let platformRole =
-        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-        | true, (:? PlatformRole as role) -> Some role
-        | _ -> None
-
-    // Phase 66 A.6 stashed a resolved `Subject` on
-    // `HttpContext.Items["ToolUp.Subject"]` upstream
-    // (`ScopeResolutionMiddleware` → `ISubjectResolver`).
-    // That is the only source of a principal.
-    //
-    // Phase 989 — when no Subject was resolved the request is
-    // ANONYMOUS, whatever the deployment's surfaces say (this
-    // branch used to derive a subject from the surfaces). A
-    // missing Subject means the resolver did not run or did not
-    // finish, and neither is evidence of identity, so the
-    // context also carries none of the per-request grants read
-    // above: no permissions, no exposure overrides, no platform
-    // role.
-    //
-    // Phase 987 — the provider-asserted roles of the request's
-    // user (written by the same middleware) ride along as
-    // `TokenRoles`, for a signed-in human principal only: an
-    // anonymous session and a share-token bearer carry none,
-    // whatever the request's user says. Phase 993 — the page
-    // roles are the user's API roles PLUS its directory roles
-    // (`AuthenticatedUser.pageRoles`); `[<RequiresRole>]` reads
-    // only the former.
-    let providerRoles =
-        match ctx.Items.TryGetValue "ToolUp.User" with
-        | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-            ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user
-        | _ -> []
-
-    // Phase 996 — the admission the provider decided rides along
-    // under the same rule as the roles: a signed-in human
-    // principal only. `Member` everywhere a publication audience
-    // is not configured.
-    let providerAdmission =
-        match ctx.Items.TryGetValue "ToolUp.User" with
-        | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Admission
-        | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
-
-    // Phase 1107 — the in-platform publication reader grants the same
-    // middleware read for this principal, under the same rule.
-    let publicationGrants =
-        match ctx.Items.TryGetValue "ToolUp.PublicationGrants" with
-        | true, (:? (PublicationReaderGrant list) as grants) -> grants
-        | _ -> []
-
-    match ctx.Items.TryGetValue "ToolUp.Subject" with
-    | true, (:? Subject as subject) ->
-        // Phase 1059 — `UserId` and `TeamId` come from the Subject, by
-        // `AccessContext.unrestricted`'s rule: a claim's attributed handle
-        // (else its issuer), a session id, a user id; the team of a
-        // `TeamMember` only. Never from `ToolUp.UserId` — the auth
-        // provider's user, which is `"anonymous"` for a service-account
-        // bearer it does not recognise — nor from a container prefix.
-        let identity = AccessContext.unrestricted subject
-
-        {
-            UserId = identity.UserId
-            TeamId = identity.TeamId
-            Subject = subject
-            ModulePermissions = modulePermissions
-            ModuleExposure = moduleExposure
-            PlatformRole = platformRole
-            TokenRoles = AccessContext.tokenRolesFor subject providerRoles
-            Admission = AccessContext.admissionFor subject providerAdmission
-            PublicationGrants = AccessContext.publicationGrantsFor subject publicationGrants
-        }
-    | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+/// The `AccessContext` a request carries: the principal
+/// `ScopeResolutionMiddleware` stamped ONCE under `AccessContext.ItemsKey`
+///, or `None` when no principal was resolved — the middleware did
+/// not run, or a fault before its first stamp fell through. Nothing is
+/// substituted for a stamp the middleware did not write. The scoped factory
+/// below is this function over the request's context; it is separate so the
+/// reading is testable without composing a server.
+let internal accessContextOf (ctx: HttpContext) : AccessContext option =
+    match ctx.Items.TryGetValue AccessContext.ItemsKey with
+    | true, (:? AccessContext as access) -> Some access
+    | _ -> None
 
 /// Build + register the per-request scope-resolution substrate:
 ///
@@ -274,24 +169,22 @@ let registerScopeResolution
         .AddSingleton<DeclaredPrincipalResolver>(DeclaredPrincipalResolver(scopeResolver.Resolve)) // Phase 1005
         .AddSingleton<IAnonymousSessionMigrator>(subjectMigrator)
         .AddScoped<AccessContext>(fun sp ->
-            // Read pre-resolved user, scope, and permissions from
-            // HttpContext.Items (populated by ScopeResolutionMiddleware).
-            // The factory itself stays synchronous — any async
-            // resolution (auth, team lookup, permission fetch)
-            // ran earlier in the request pipeline.
+            // The principal ScopeResolutionMiddleware stamped,
+            // or NO context: the factory yields null (which `GetService`
+            // returns as no service) for a request with no resolved
+            // principal and for a resolve outside any request. It never
+            // synthesises a default; `AccessContext.tryResolve` is the
+            // typed read, and work outside a request names
+            // `AccessContext.system` / `AccessContext.carrying` instead.
             let httpCtxAccessor =
                 sp.GetService(typeof<IHttpContextAccessor>) :?> IHttpContextAccessor
 
             match httpCtxAccessor.HttpContext with
-            | null ->
-                // Out-of-request fallback (e.g. resolved during
-                // startup, hosted-service composition). No HttpContext
-                // means no resolved Subject, so synthesise the
-                // anonymous floor directly — there is no caller to
-                // attribute, and an unrestricted anonymous context is
-                // the safe default for the rare out-of-request resolve.
-                AccessContext.unrestricted (AnonymousSession "anonymous")
-            | ctx -> accessContextOf ctx)
+            | null -> Unchecked.defaultof<AccessContext>
+            | ctx ->
+                match accessContextOf ctx with
+                | Some access -> access
+                | None -> Unchecked.defaultof<AccessContext>)
         .AddHttpContextAccessor()
         .AddSession()
     |> ignore

@@ -157,7 +157,7 @@ let private recomputerReturning (f: Fact -> Result<FactDraft option, string>) : 
 let private jobCtxCarrying (scopeId: string) (scope: ResolvedScope) (payload: string) : JobContext = {
     JobId = Guid.NewGuid()
     ScopeId = scopeId
-    AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
+    AccessContext = AccessContexts.forSubject (AuthenticatedUser "system")
     Attempt = 1
     Trigger = Trigger.Manual
     Scope = scope

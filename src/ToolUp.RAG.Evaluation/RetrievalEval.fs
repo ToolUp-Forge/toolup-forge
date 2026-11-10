@@ -11,8 +11,7 @@ open ToolUp.Platform.Infra
 /// `Deployment` scopes pass; `Team` scopes are filtered out by the
 /// pipeline's `authorisedScopes`. Fixtures should use `Deployment` (or
 /// expose a team id matching `ctx.TeamId`) to match meaningfully.
-let evalContext: AccessContext =
-    AccessContext.unrestricted (Subject.AnonymousSession "eval-harness")
+let evalContext: AccessContext = AccessContext.system "eval-harness"
 
 /// Seed a pipeline with the corpus entries — `Index` each chunk under its
 /// declared scope and chunkId. Done before evaluation so all queries see

@@ -17,6 +17,7 @@
     <ItemGroup>
         <Compile Include="..\ToolUp.AI.Wire.Conformance\Shared\ConnectorFixtures.fs" Link="Support\ConnectorFixtures.fs" />
         <Compile Include="Support\InMemoryStores.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="Support\ProviderTestPack.fs" />
         <Compile Include="Tests\ClaudeProviderTests.fs" />
         <Compile Include="Tests\OpenAIProviderTests.fs" />

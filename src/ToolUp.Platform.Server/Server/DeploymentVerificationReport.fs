@@ -3391,15 +3391,8 @@ module DeploymentVerificationReport =
     // ─── Platform-Admin endpoint ─────────────────────────────────────────
 
     let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ ->
-            let userId =
-                match ctx.Items.TryGetValue "ToolUp.UserId" with
-                | true, (:? string as id) -> id
-                | _ -> "anonymous"
-
-            AccessContext.unrestricted (AnonymousSession userId)
+        AccessContext.tryResolve ctx.RequestServices
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "DeploymentVerificationReport")
 
     /// The Platform-Admin read gate the endpoint applies (Phase 686): the
     /// caller's resolved `AccessContext` must carry `canModifyPlatformConfig`.

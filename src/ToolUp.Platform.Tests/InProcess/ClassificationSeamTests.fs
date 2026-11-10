@@ -119,6 +119,7 @@ let private requestOver (provider: IServiceProvider) : HttpContext =
             Persist = true
         }
 
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items [])
     ctx :> HttpContext
 
 let private composed (modules: ServerModule list) =

@@ -435,7 +435,7 @@ let composedLoopTests =
 
                 let pipeline = pipelineOver vectorStore sp
 
-                let! results = pipeline.Retrieve clausedRequest (AccessContext.unrestricted (AuthenticatedUser "u"))
+                let! results = pipeline.Retrieve clausedRequest (AccessContexts.forSubject (AuthenticatedUser "u"))
 
                 match results with
                 | top :: rest ->
@@ -480,7 +480,7 @@ let composedLoopTests =
                         Metadata = Map.empty
                     }
 
-                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+                let ctx = AccessContexts.forSubject (AuthenticatedUser "u")
 
                 // The FeatureMode.Disabled composition: withFactStore is a no-op, so
                 // the pickup resolves nothing and the ctor args are omitted.
@@ -530,7 +530,7 @@ let divergenceTests =
                 let teamPointer = "team-pointer"
 
                 let ctx = {
-                    AccessContext.unrestricted (AuthenticatedUser resolvedId) with
+                    AccessContexts.forSubject (AuthenticatedUser resolvedId) with
                         TeamId = Some teamPointer
                 }
 
@@ -599,7 +599,7 @@ let divergenceTests =
                 Expect.isTrue request.FactScope.IsAnonymous "RetrievalRequest.create defaults to the anonymous scope"
 
                 let! results =
-                    (pipelineOver vectorStore sp).Retrieve request (AccessContext.unrestricted (AuthenticatedUser "u"))
+                    (pipelineOver vectorStore sp).Retrieve request (AccessContexts.forSubject (AuthenticatedUser "u"))
 
                 Expect.isFalse
                     (results

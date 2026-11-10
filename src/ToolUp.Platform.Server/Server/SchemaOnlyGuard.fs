@@ -60,26 +60,20 @@ module AttemptedPath =
 
 /// True when the caller holds `ModulePermission.SchemaOnly` on
 /// `moduleName` AND no real-data grant (Read / Write / Admin).
-/// Returns `false` when `ModulePermissions` is empty (unrestricted)
-/// or when any real-data grant is present.
+/// Returns `false` under `ModulePermissions.Unrestricted` (a guard
+/// against an unrestricted caller would lock the deployment out of its
+/// own data) or when any real-data grant is present.
 let isSchemaOnlyCaller (ctx: AccessContext) (moduleName: string) : bool =
-    if ctx.ModulePermissions.IsEmpty then
-        // Empty map = unrestricted (the pre-Phase-4 default; see
-        // `AccessContext.hasPermission`). A guard against an
-        // unrestricted caller would lock the deployment out of its
-        // own data — fail-open here is the correct policy.
-        false
-    else
-        match Map.tryFind moduleName ctx.ModulePermissions with
-        | None -> false
-        | Some perms ->
-            let hasRealReadGrant =
-                perms
-                |> List.exists (fun granted -> ModulePermission.implies granted ModulePermission.Read)
+    match ModulePermissions.tryFind moduleName ctx.ModulePermissions with
+    | None -> false
+    | Some perms ->
+        let hasRealReadGrant =
+            perms
+            |> List.exists (fun granted -> ModulePermission.implies granted ModulePermission.Read)
 
-            let hasSchemaOnly = perms |> List.contains ModulePermission.SchemaOnly
+        let hasSchemaOnly = perms |> List.contains ModulePermission.SchemaOnly
 
-            hasSchemaOnly && not hasRealReadGrant
+        hasSchemaOnly && not hasRealReadGrant
 
 /// Refuses real-data reads from `SchemaOnly`-only callers. Emits a
 /// `SchemaOnlyAccessAttempted` audit event before returning

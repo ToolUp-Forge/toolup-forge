@@ -145,7 +145,10 @@ let private documentBytes (storage: IBlobStorage) (teamId: string) =
 
 let private effectiveFor (store: IPermissionStore) userId teamId =
     match store.GetEffectivePermissions(userId, teamId) |> Async.RunSynchronously with
-    | Ok perms -> perms
+    // The grants the store answers; a team that configured none reads as
+    // the empty map, as these cases compare it.
+    | Ok(ModulePermissions.Restricted perms) -> perms
+    | Ok ModulePermissions.Unrestricted -> Map.empty
     | Error e -> failtestf "the permission read failed: %s" (PermissionStoreError.describe e)
 
 let private run x = Async.RunSynchronously x

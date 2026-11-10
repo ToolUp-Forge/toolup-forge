@@ -117,6 +117,7 @@ let private userTurn = AIProviderMessage.text "user" "do the thing"
 let private context () =
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- ServiceCollection().BuildServiceProvider()
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.anonymous "anonymous")
     ctx :> HttpContext
 
 /// Run the loop through its public entry and report what the client was
@@ -616,13 +617,14 @@ let private assistantWith (storage: IBlobStorage) (provider: IAIProvider) (tools
     )
     |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AnonymousSession "alice"))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AnonymousSession "alice"))
     |> ignore
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
     ctx.Items["ToolUp.StorageScope"] <- box scope
     ctx.Items["ToolUp.UserId"] <- box "alice"
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items [])
     AIAssistantHandler.aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx
 
 let private collectStream (stream: System.Collections.Generic.IAsyncEnumerable<AIStreamEvent>) = async {

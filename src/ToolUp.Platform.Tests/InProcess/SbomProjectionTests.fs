@@ -684,14 +684,14 @@ let private contextFor (accessContext: AccessContext) (query: string) : HttpCont
     ctx.Response.Body <- new MemoryStream()
     ctx :> HttpContext
 
-let private adminContext = AccessContext.unrestricted (AuthenticatedUser "admin")
+let private adminContext = AccessContexts.forSubject (AuthenticatedUser "admin")
 
 let private platformAdmin = {
     adminContext with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 
-let private ordinaryUser = AccessContext.unrestricted (AuthenticatedUser "someone")
+let private ordinaryUser = AccessContexts.forSubject (AuthenticatedUser "someone")
 
 let private runRoute (source: ISbomSource) (ctx: HttpContext) =
     let next: Giraffe.Core.HttpFunc =

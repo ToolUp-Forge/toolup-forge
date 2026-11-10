@@ -16,7 +16,7 @@ open ToolUp.Platform.Config
 
 let private resolverTests =
     let baseContext: AccessContext =
-        AccessContext.unrestricted (Subject.AnonymousSession "alice")
+        AccessContexts.forSubject (Subject.AnonymousSession "alice")
 
     let resolver: ILocaleResolver =
         LocaleResolver.DefaultLocaleResolver(I18nDefaults.defaultFallback) :> _

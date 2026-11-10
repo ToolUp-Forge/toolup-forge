@@ -29,13 +29,7 @@ open ToolUp.Platform.Infra
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.Items.TryGetValue "ToolUp.AccessContext" with
     | true, (:? AccessContext as ac) -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    | _ -> AccessContext.unresolved "UserSchemaApiHandler"
 
 let private resolveScopeId (ctx: HttpContext) (accessContext: AccessContext) : string =
     match ctx.Items.TryGetValue "ToolUp.StorageScope" with

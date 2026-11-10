@@ -297,7 +297,7 @@ let private buildTeamScoped (userId: string) (teamId: string) (roles: (string * 
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
     let store = BlobProviderProfile.create storage
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (TeamMember(userId, teamId)))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (TeamMember(userId, teamId)))
     |> ignore
 
     services.AddSingleton<ISecretStore>(secrets) |> ignore

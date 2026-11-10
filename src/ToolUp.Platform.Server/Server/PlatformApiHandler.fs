@@ -59,13 +59,13 @@ let private defaultsSummary (defaults: Map<string, ModulePermission list>) =
 /// `userId` is read from `HttpContext.Items` (populated by
 /// `ScopeResolutionMiddleware`) to avoid a second async auth call per
 /// request. Phase 1059 — the resolved `Subject` decides it, by the
-/// `AccessContext` rule, so a service-account call is attributed to the
+/// `AccessContext.principalId` rule, so a service-account call is attributed to the
 /// account rather than to the auth provider's `"anonymous"`; the
 /// `ToolUp.UserId` stamp, then `"anonymous"`, remain only for a request
 /// the middleware did not resolve (e.g. tests that bypass `compose`).
 let internal resolveUserId (ctx: HttpContext) =
     match ctx.Items.TryGetValue "ToolUp.Subject" with
-    | true, (:? Subject as subject) -> (AccessContext.unrestricted subject).UserId
+    | true, (:? Subject as subject) -> AccessContext.principalId subject
     | _ ->
         match ctx.Items.TryGetValue "ToolUp.UserId" with
         | true, (:? string as id) -> id
@@ -1120,9 +1120,8 @@ let accessibilityApiHandler (config: ServerConfig) =
                     // Fall back to an unrestricted context when DI is
                     // bypassed (tests calling the handler directly).
                     let accessCtx =
-                        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                        | :? AccessContext as ac -> ac
-                        | _ -> AccessContext.unrestricted (AnonymousSession userId)
+                        AccessContext.tryResolve ctx.RequestServices
+                        |> Option.defaultWith (fun () -> AccessContext.unresolved "PlatformApiHandler")
 
                     // Team-mode onboarding: a freshly-signed-up user has
                     // no active team yet. Every team-scoped API call
@@ -1200,9 +1199,8 @@ let dataCatalogApiHandler (_config: ServerConfig) =
                 // available producer survive. `ModuleExposure` is empty for
                 // non-team subjects, so this is a no-op outside team scope.
                 let accessCtx =
-                    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                    | :? AccessContext as ac -> ac
-                    | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+                    AccessContext.tryResolve ctx.RequestServices
+                    |> Option.defaultWith (fun () -> AccessContext.unresolved "PlatformApiHandler")
 
                 let! types = catalog.ListTypes()
 

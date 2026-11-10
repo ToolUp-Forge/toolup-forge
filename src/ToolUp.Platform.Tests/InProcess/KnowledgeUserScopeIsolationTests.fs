@@ -90,7 +90,7 @@ let tests =
                 let request =
                     RetrievalRequest.create "anything" [ User "alice"; User "bob" ] 10 Interleaved
 
-                let bobCtx = AccessContext.unrestricted (AuthenticatedUser "bob")
+                let bobCtx = AccessContexts.forSubject (AuthenticatedUser "bob")
 
                 let! results = pipeline.Retrieve request bobCtx
 
@@ -118,7 +118,7 @@ let tests =
                 let request =
                     RetrievalRequest.create "anything" [ User "alice"; User "bob" ] 10 Interleaved
 
-                let aliceCtx = AccessContext.unrestricted (AuthenticatedUser "alice")
+                let aliceCtx = AccessContexts.forSubject (AuthenticatedUser "alice")
 
                 let! results = pipeline.Retrieve request aliceCtx
 
@@ -145,7 +145,7 @@ let tests =
                 let pipeline = newPipeline store
 
                 let request = RetrievalRequest.create "anything" [ User "alice" ] 10 Interleaved
-                let bobCtx = AccessContext.unrestricted (AuthenticatedUser "bob")
+                let bobCtx = AccessContexts.forSubject (AuthenticatedUser "bob")
 
                 let! results = pipeline.Retrieve request bobCtx
 

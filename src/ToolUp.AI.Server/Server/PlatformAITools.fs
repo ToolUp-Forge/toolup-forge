@@ -38,7 +38,7 @@ open ToolUp.Platform.Jobs
 /// on the background async flow — resolving it there would silently
 /// yield an *unrestricted* anonymous context and bypass RBAC. The
 /// background context instead copies the pre-resolved
-/// `ToolUp.StorageScope` / `ToolUp.UserId` / `ToolUp.ModulePermissions`
+/// `ToolUp.StorageScope` / `ToolUp.UserId` / the stamped principal (`AccessContext.ItemsKey`)
 /// items forward, so reconstructing the context from those items is the
 /// RBAC-correct path (GP 4). It also works unchanged on a real request
 /// context (the same middleware populates the same items).
@@ -247,7 +247,6 @@ let private listAccessibleModulesDef: AIToolDefinition = {
 
 let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<string> = async {
     let access = reconstructAccessContext ctx
-    let rbacConfigured = not access.ModulePermissions.IsEmpty
 
     let! catalogModules = async {
         match ctx.RequestServices.GetService(typeof<IDataCatalog>) with
@@ -261,7 +260,10 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
     }
 
     let allModules =
-        (catalogModules @ (access.ModulePermissions |> Map.toList |> List.map fst))
+        (catalogModules
+         @ (match access.ModulePermissions with
+            | ModulePermissions.Restricted map -> map |> Map.toList |> List.map fst
+            | ModulePermissions.Unrestricted -> []))
         |> List.distinct
         |> List.sort
 
@@ -277,12 +279,12 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
         |> List.filter (fun m -> AccessContext.canAccessModule m access && isGrantLive m)
         |> List.map (fun m ->
             let perms =
-                if rbacConfigured then
-                    match access.ModulePermissions.TryFind m with
+                match access.ModulePermissions with
+                | ModulePermissions.Restricted map ->
+                    match map.TryFind m with
                     | Some ps -> ps |> List.map permToken
                     | None -> []
-                else
-                    [ "unrestricted" ]
+                | ModulePermissions.Unrestricted -> [ "unrestricted" ]
 
             {|
                 moduleName = m
@@ -303,7 +305,10 @@ let private executeListModules (ctx: HttpContext) (_argsJson: string) : Async<st
 
     return
         fableSerialize {|
-            rbacConfigured = rbacConfigured
+            rbacConfigured =
+                match access.ModulePermissions with
+                | ModulePermissions.Restricted _ -> true
+                | ModulePermissions.Unrestricted -> false
             modules = entries
         |}
 }

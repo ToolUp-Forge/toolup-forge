@@ -46,7 +46,7 @@ let private scopeId = "team-replay"
 let private operator = "op-1"
 
 let private accessContext =
-    AccessContext.unrestricted (TeamMember(operator, scopeId))
+    AccessContexts.forSubject (TeamMember(operator, scopeId))
 
 let private response (text: string) : AIProviderResponse = {
     Content = text

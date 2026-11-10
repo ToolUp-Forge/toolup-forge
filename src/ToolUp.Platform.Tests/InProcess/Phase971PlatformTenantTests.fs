@@ -49,7 +49,7 @@ let private handlerOver (ledger: ILifecycleLedger) (hook: CountingHook) : IPlatf
 
     services.AddSingleton<AccessContext>(
         {
-            AccessContext.unrestricted (AuthenticatedUser "admin-971") with
+            AccessContexts.forSubject (AuthenticatedUser "admin-971") with
                 PlatformRole = Some PlatformRole.PlatformAdmin
         }
     )

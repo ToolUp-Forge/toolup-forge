@@ -202,7 +202,7 @@ type SessionRevocationMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                             let record: SessionRecord = {
                                 SessionId = sessionId
-                                UserId = AccessContext.unrestricted(subject).UserId
+                                UserId = AccessContext.principalId subject
                                 ScopeId = scope.ScopeId
                                 DeviceDescriptor = SessionApi.deviceDescriptorOf userAgent
                                 AuthProvider =

@@ -224,21 +224,21 @@ let scopeWalkTests =
     testList "ModuleVisibilityResolver.scopesFor" [
         test "a team member's walk is Platform → Team → User" {
             Expect.equal
-                (ModuleVisibilityResolver.scopesFor (AccessContext.unrestricted (TeamMember("u1", "t1"))))
+                (ModuleVisibilityResolver.scopesFor (AccessContexts.forSubject (TeamMember("u1", "t1"))))
                 [ FlagScope.Platform; FlagScope.Team "t1"; FlagScope.User "u1" ]
                 "outermost-first — this is FlagEvaluator's scope SET in the opposite order, because these layers compose rather than override"
         }
 
         test "an authenticated user's walk is Platform → User" {
             Expect.equal
-                (ModuleVisibilityResolver.scopesFor (AccessContext.unrestricted (AuthenticatedUser "u1")))
+                (ModuleVisibilityResolver.scopesFor (AccessContexts.forSubject (AuthenticatedUser "u1")))
                 [ FlagScope.Platform; FlagScope.User "u1" ]
                 "no team layer outside team scope"
         }
 
         test "anonymous and claim-bearer callers read Platform only" {
             Expect.equal
-                (ModuleVisibilityResolver.scopesFor (AccessContext.unrestricted (AnonymousSession "anon")))
+                (ModuleVisibilityResolver.scopesFor (AccessContexts.forSubject (AnonymousSession "anon")))
                 [ FlagScope.Platform ]
                 "an anonymous caller has no persistent scope to narrow by"
         }

@@ -96,7 +96,7 @@ type private InMemoryShareTokenStore() =
 // ─── Handler builder ─────────────────────────────────────────────────
 
 let private adminCtx (userId: string) : AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser userId) with
+    AccessContexts.forSubject (AuthenticatedUser userId) with
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 

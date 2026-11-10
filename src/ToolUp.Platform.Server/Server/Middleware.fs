@@ -418,6 +418,64 @@ let private claimPendingInvite (ctx: HttpContext) (user: AuthenticatedUser) : Sy
         | _ -> ()
 }
 
+/// The request's principal, built ONCE from what this middleware
+/// stamped and stamped under `AccessContext.ItemsKey`. `permissions` is the
+/// value the middleware decided: the store's answer for a team scope, and
+/// `Unrestricted`, stated, for a subject in no team (module RBAC is per team).
+///
+/// A validated service-account token's declared permission map
+/// takes precedence over `permissions` (precedence rather than merge: the
+/// machine principal's declared set IS its authority, and merging it with
+/// what the owning team grants its human members would silently widen a
+/// credential deliberately scoped narrower). The overlay is adopted as
+/// `Restricted`, so an empty one grants nothing.
+///
+/// `UserId` and `TeamId` come from the Subject (`AccessContext.principalId`),
+/// never from `ToolUp.UserId` — the auth provider's user, `"anonymous"` for a
+/// service-account bearer it does not recognise. Provider roles,
+/// the provider's admission and publication grants ride for a signed-in human
+/// principal only.
+let internal principalOf (ctx: HttpContext) (subject: Subject) (permissions: ModulePermissions) : AccessContext =
+    let permissions =
+        match ctx.Items.TryGetValue ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey with
+        | true, (:? Map<string, ModulePermission list> as declared) -> ModulePermissions.Restricted declared
+        | _ -> permissions
+
+    let moduleExposure =
+        match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
+        | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
+        | _ -> Map.empty
+
+    let platformRole =
+        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
+        | true, (:? PlatformRole as role) -> Some role
+        | _ -> None
+
+    let user =
+        match ctx.Items.TryGetValue "ToolUp.User" with
+        | true, (:? AuthenticatedUser as user) -> Some user
+        | _ -> None
+
+    let publicationGrants =
+        match ctx.Items.TryGetValue "ToolUp.PublicationGrants" with
+        | true, (:? (PublicationReaderGrant list) as grants) -> grants
+        | _ -> []
+
+    {
+        AccessContext.ofSubject permissions subject with
+            ModuleExposure = moduleExposure
+            PlatformRole = platformRole
+            TokenRoles =
+                AccessContext.tokenRolesFor
+                    subject
+                    (user |> Option.map AuthenticatedUser.pageRoles |> Option.defaultValue [])
+            Admission =
+                AccessContext.admissionFor
+                    subject
+                    (user |> Option.map _.Admission |> Option.defaultValue PrincipalAdmission.Member)
+            PublicationGrants = AccessContext.publicationGrantsFor subject publicationGrants
+    }
+
 /// ASP.NET Core middleware that resolves the per-request `Subject`,
 /// `StorageScope`, and authenticated user, stashing all three on
 /// `HttpContext.Items`. See the module preamble for the full key
@@ -567,9 +625,15 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
             let rootActivityOpt = activitySink.StartActivity(spanName, parentContext)
 
-            // Phase 1059 — set when the team permission read faults; the
-            // request is then refused after the catch-all, never run.
-            let permissionFault: (string * exn) option ref = ref None
+            // Set when the team permission read faults, or when ANY fault
+            // lands after the first stamp: the request is then refused after
+            // the catch-all, never run.
+            let refusal: (string * exn) option ref = ref None
+
+            // The module permissions the principal is stamped
+            // with: `Unrestricted`, stated, unless a team scope's store
+            // answers otherwise below (module RBAC is per team).
+            let permissions = ref ModulePermissions.Unrestricted
 
             try
                 try
@@ -759,10 +823,10 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                             | _ -> ()
 
                         // Team scopes — load the user's effective
-                        // module permissions so the AccessContext
-                        // factory and the per-route guard see a
-                        // populated map. For non-Team scopes the map
-                        // stays empty (unrestricted — opt-in RBAC).
+                        // module permissions; the store decides whether
+                        // the team configured any. For
+                        // non-Team scopes no RBAC applies and the
+                        // principal is stamped `Unrestricted`.
                         // Phase 1060 — "is this a team scope" is read
                         // through the one parser, not a prefix test.
                         let isTeamScope =
@@ -773,7 +837,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         if isTeamScope then
                             match ctx.RequestServices.GetService(typeof<IPermissionStore>) with
                             | :? IPermissionStore as permStore ->
-                                // Phase 1059 — a fault reading this team's permission state
+                                // A fault reading this team's permission state
                                 // REFUSES the request (below, after the catch-all): left to
                                 // the catch-all it was swallowed, the permission map was never
                                 // stamped, and the empty map the access-context factory then
@@ -790,9 +854,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     let! perms =
                                         runAsync (permStore.GetEffectivePermissions(user.UserId, TeamId scope.ScopeId))
 
-                                    let perms = refusedOn perms
-
-                                    ctx.Items["ToolUp.ModulePermissions"] <- box perms
+                                    permissions.Value <- refusedOn perms
 
                                     // Phase 245 — the team's per-module exposure
                                     // (tri-state) map, alongside the permission
@@ -915,7 +977,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                             ctx.Items[GrantConsentStore.ModuleGrantConsentsItemsKey] <- box verdicts
                                     | _ -> ()
                                 with ex ->
-                                    permissionFault.Value <- Some(permStore.GetType().Name, ex)
+                                    refusal.Value <-
+                                        Some(
+                                            sprintf
+                                                "IPermissionStore (%s) fault: %s"
+                                                (permStore.GetType().Name)
+                                                ex.Message,
+                                            ex
+                                        )
                             | _ -> ()
 
                         // Phase 4b — resolve PlatformRole per request.
@@ -927,7 +996,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         // the AccessContext factory and any handler
                         // touching `canModifyPlatformConfig` reads
                         // the same value without re-querying.
-                        if permissionFault.Value.IsNone && not (AuthenticatedUser.isAnonymous user) then
+                        if refusal.Value.IsNone && not (AuthenticatedUser.isAnonymous user) then
                             match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
                             | :? IPlatformAdminStore as adminStore ->
                                 let! isAdmin = runAsync (adminStore.IsPlatformAdmin(user.UserId))
@@ -936,6 +1005,13 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin
                             | _ -> ()
                     | Error _ -> ()
+
+                    // The principal, stamped ONCE, after every
+                    // per-request grant above was read. A request this line
+                    // did not run for has no principal: the access-context
+                    // factory yields no context and every reader refuses.
+                    if refusal.Value.IsNone then
+                        ctx.Items[AccessContext.ItemsKey] <- box (principalOf ctx subject permissions.Value)
                 with ex ->
                     // Auth-observability A1 — infrastructure error in
                     // the scope-resolution pipeline (DI hiccup, resolver
@@ -951,28 +1027,26 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // judged by the SAME surface gate — so a crashed
                     // resolver yields an anonymous-privilege request.
                     //
-                    // What it does NOT protect: a fault AFTER the subject
-                    // and scope are stamped. There the subject is not
-                    // missing, so the surface gate passes a valid member,
-                    // and any per-request grant the fault left unstamped
-                    // reads as its permissive default. That is why the
-                    // permission read is NOT left to this catch (Phase
-                    // 1059): it refuses with a 503 below. A new read of
-                    // authorisation state placed after the stamps must do
-                    // the same, never rely on this swallow.
-                    observeResolutionFailure ctx ex "request fell through to anonymous" ex.Message
+                    // A fault AFTER the first stamp (the
+                    // provider's user) is not swallowed. There a downstream
+                    // reader would see a user or a subject with no
+                    // principal: the surface gate would pass a valid member
+                    // and the dispatcher an authenticated caller, whatever
+                    // per-request grant the fault left unread. So it is
+                    // REFUSED with a 503 below, as a permission-store fault
+                    // is, whichever read faulted.
+                    if ctx.Items.ContainsKey "ToolUp.User" then
+                        refusal.Value <-
+                            Some(sprintf "%s after the principal stamp began: %s" (ex.GetType().Name) ex.Message, ex)
+                    else
+                        observeResolutionFailure ctx ex "request fell through to anonymous" ex.Message
 
-                match permissionFault.Value with
-                | Some(storeName, ex) ->
-                    // Phase 1059 — the team's permission state could not be
-                    // read: refuse rather than run the request with an empty
-                    // (unrestricted) map. A 503, because the store is
-                    // unavailable, not the caller unauthorised.
-                    observeResolutionFailure
-                        ctx
-                        ex
-                        "request refused with 503"
-                        (sprintf "IPermissionStore (%s) fault: %s" storeName ex.Message)
+                match refusal.Value with
+                | Some(detail, ex) ->
+                    // The principal could not be resolved
+                    // whole: refuse rather than run the request without one.
+                    // A 503, because a dependency failed, not the caller.
+                    observeResolutionFailure ctx ex "request refused with 503" detail
 
                     ctx.Response.StatusCode <- StatusCodes.Status503ServiceUnavailable
                 | None -> do! next.Invoke(ctx)

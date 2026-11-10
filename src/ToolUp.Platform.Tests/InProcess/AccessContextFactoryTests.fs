@@ -1,7 +1,7 @@
 module ToolUp.Platform.Tests.InProcess.AccessContextFactoryTests
 
 // Phase 1059 — the request's `AccessContext` takes its `UserId` and `TeamId`
-// from the resolved `Subject`, by `AccessContext.unrestricted`'s rule.
+// from the resolved `Subject`, by `AccessContext.principalId`'s rule.
 //
 // A `tusa_` service-account bearer is validated by
 // `ServiceAccountTokenMiddleware`, not by the auth provider: the provider
@@ -48,6 +48,13 @@ let private stamped (user: AuthenticatedUser) (subject: Subject) (scope: Storage
     ctx.Items["ToolUp.StorageScope"] <- box scope
     ctx
 
+/// The principal `ScopeResolutionMiddleware` stamps for those items, for a
+/// subject to which no module RBAC applies.
+let private principalOf (ctx: HttpContext) =
+    match ctx.Items["ToolUp.Subject"] with
+    | :? Subject as subject -> Middleware.principalOf ctx subject ModulePermissions.Unrestricted
+    | other -> failtestf "no subject stamped: %A" other
+
 let tests =
     testList "Phase 1059 — the access context's UserId and TeamId come from the Subject" [
 
@@ -59,7 +66,7 @@ let tests =
                     Persist = true
                 }
 
-            let access = ComposeScopeResolver.accessContextOf ctx
+            let access = principalOf ctx
             Expect.equal access.UserId accountId "AccessContext.UserId is the service account, never \"anonymous\""
         }
 
@@ -88,7 +95,7 @@ let tests =
                     Persist = true
                 }
 
-            let access = ComposeScopeResolver.accessContextOf ctx
+            let access = principalOf ctx
             Expect.equal access.TeamId (Some "acme") "TeamId is read from TeamMember(_, teamId)"
             Expect.equal access.UserId "u-1059" "a member's UserId is its user id"
         }
@@ -107,11 +114,10 @@ let tests =
                     Persist = true
                 }
 
-            let access = ComposeScopeResolver.accessContextOf ctx
+            let access = principalOf ctx
             Expect.equal access.TeamId None "a container prefix is not evidence of team membership"
         }
 
-        // Phase 882 — pinned red on the unchanged tree.
         test "Phase 882 — a stamped subject with no permission stamp is denied a module the team restricts" {
             let user = {
                 AuthenticatedUser.anonymous with
@@ -126,14 +132,18 @@ let tests =
                     Persist = true
                 }
 
-            let access = ComposeScopeResolver.accessContextOf ctx
+            Expect.isNone
+                (ComposeScopeResolver.accessContextOf ctx)
+                "a subject the middleware never completed a principal for yields no context"
+
+            let access = AccessContext.unresolved "AccessContextFactoryTests"
             Expect.isFalse (AccessContext.canAccessModule "Reports" access) "no permission stamp grants nothing"
         }
 
         test "Phase 882 — an empty permission map does not read as unrestricted" {
             let access = {
-                AccessContext.unrestricted (TeamMember("u-882", "acme")) with
-                    ModulePermissions = Map.empty
+                AccessContexts.forSubject (TeamMember("u-882", "acme")) with
+                    ModulePermissions = ModulePermissions.Restricted Map.empty
             }
 
             Expect.isFalse (AccessContext.canAccessModule "Reports" access) "an empty map grants nothing"

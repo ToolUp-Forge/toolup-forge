@@ -26,6 +26,7 @@
          compile stay here; this project compiles only its own and the helpers
          they use. -->
     <ItemGroup>
+        <Compile Include="TestSupport\AccessContexts.fs" />
         <Compile Include="Contracts\Approval.fs" />
         <Compile Include="Support\TestScope.fs" />
         <Compile Include="Contracts\IBlobStorageContract.fs" />

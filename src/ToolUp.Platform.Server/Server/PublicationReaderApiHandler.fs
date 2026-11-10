@@ -44,7 +44,7 @@ let private declaredRoles (ctx: HttpContext) (scope: string) : Async<string list
 let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
     let accessContext =
         service<AccessContext> ctx
-        |> Option.defaultWith (fun () -> AccessContext.unrestricted (AnonymousSession "anonymous"))
+        |> Option.defaultWith (fun () -> AccessContext.unresolved "PublicationReaderApiHandler")
 
     let authorised (f: IPublicationReaderGrantStore -> string -> Async<Result<'T, string>>) = async {
         match service<IPublicationReaderGrantStore> ctx with

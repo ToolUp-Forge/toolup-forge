@@ -85,22 +85,11 @@ let private parseAttribution (claim: ShareTokenClaim) : Result<TeamRole * string
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-/// The caller's `AccessContext`: the DI one, else one built from the
-/// `ToolUp.Subject` the middleware stamped. Phase 1059 — never an
-/// `AnonymousSession` carrying a signed-in user's id, which made every
-/// signed-in caller read as anonymous. The `ToolUp.UserId` read remains only
-/// for a request no middleware resolved (the fallback Phase 882 removes).
+/// The caller's `AccessContext`, or — the context of a request
+/// with no resolved principal, which grants nothing.
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        match ctx.Items.TryGetValue "ToolUp.Subject" with
-        | true, (:? Subject as subject) -> AccessContext.unrestricted subject
-        | _ ->
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) when id <> "anonymous" ->
-                AccessContext.unrestricted (Subject.AuthenticatedUser id)
-            | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "TeamInvitationHandler")
 
 /// The share-token store scope a team's invitations live under. NOT its
 /// audit stream key: audit rows go through `AuditScope.team`.
@@ -920,7 +909,7 @@ let teamInvitationApi
                             UserId = UserId access.UserId
                       }
 
-                if AuthenticatedUser.isAnonymous user then
+                if AuthenticatedUser.isAnonymous user || AccessContext.isAnonymous access then
                     return Error "You must sign in before checking for invitations."
                 else
                     match ctx.RequestServices.GetService(typeof<IPendingInviteStore>) with

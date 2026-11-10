@@ -118,6 +118,7 @@ let private buildHttpContext (eventStore: IEventStore) (authorizer: IClientToolA
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- provider
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.anonymous "anonymous")
     ctx :> HttpContext
 
 let private buildToolRegistry (toolName: string) : AIToolRegistry.AIToolRegistry =

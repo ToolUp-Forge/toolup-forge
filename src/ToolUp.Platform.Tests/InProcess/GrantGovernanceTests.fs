@@ -133,7 +133,7 @@ let private registryOf declarations =
 type private FailingStore(message: string) =
     interface IPermissionStore with
         member _.GetTeamPermissions _ = async { return Ok TeamPermissions.empty }
-        member _.GetEffectivePermissions(_, _) = async { return Ok Map.empty }
+        member _.GetEffectivePermissions(_, _) = async { return Ok ModulePermissions.Unrestricted }
         member _.GetModuleExposure _ = async { return Ok Map.empty }
         member _.UpdateTeamPermissions(_, _) = async { return Error message }
         member _.SetModuleExposure(_, _, _) = async { return Error message }
@@ -206,8 +206,7 @@ let private buildContext
             Persist = true
         }
 
-    if not (List.isEmpty perms) then
-        ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items perms)
 
     if not (List.isEmpty grants) then
         ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box (Map.ofList grants)
@@ -221,7 +220,7 @@ let private accessFor (perms: (string * ModulePermission list) list) = {
     UserId = "alice"
     TeamId = Some "t1"
     Subject = TeamMember("alice", "t1")
-    ModulePermissions = Map.ofList perms
+    ModulePermissions = AccessContexts.permissionsOf perms
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     PublicationGrants = []

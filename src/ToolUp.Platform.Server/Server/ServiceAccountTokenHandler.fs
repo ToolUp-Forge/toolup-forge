@@ -44,19 +44,15 @@ open ToolUp.Platform.Config
 // bearer matches `claim.ResourceKind = ServiceAccountTypes.ClaimResourceKind`.
 //
 // **The permission overlay is the load-bearing half, and it is not
-// symmetric with the claim.** `AccessContext.canAccessModule` treats an
-// EMPTY `ModulePermissions` map as UNRESTRICTED (opt-in RBAC — the
-// default for a team that never configured permissions). For a human
-// that is a reasonable floor; for a machine credential it is the
-// opposite of what anyone means. So the overlay is refused empty at
-// three independent points — the store rejects an account created or
-// updated with an empty declared set, `ValidateToken` refuses a token
-// whose effective set computes empty, and this middleware treats a
-// present-but-empty overlay as a 401 rather than writing it. Three
-// checks for one invariant is not redundancy here: the invariant is
-// "an empty map never reaches `AccessContext`", and each layer can be
-// reached without the others (a hand-composed store, a directly-called
-// validator, a future second caller of this middleware).
+// symmetric with the claim.** The principal adopts it as
+// `ModulePermissions.Restricted`, so the account's declared set
+// IS its module authority and an empty one grants nothing. The store still
+// refuses an account created or updated with an empty declared set, and
+// `ValidateToken` a token whose effective set computes empty — a credential
+// with no authority is refused where it is issued and presented. The
+// consumption-side guards that kept an empty map from reaching the context,
+// because the empty map once read as every module, went with that
+// representation.
 //
 // **Pass-through when no service-account token is present.** A request
 // with no `Authorization` header, a non-Bearer scheme, or a Bearer token
@@ -81,17 +77,13 @@ open ToolUp.Platform.Config
 // a design question, not a plumbing one.
 
 /// `HttpContext.Items` key carrying the effective module-permission map
-/// of a validated service-account token. Read by the `AccessContext` DI
-/// factory in `ComposeScopeResolver`, which prefers it over the
-/// team-derived `ToolUp.ModulePermissions` map.
+/// of a validated service-account token. Read by
+/// `ScopeResolutionMiddleware` when it stamps the request's principal
+/// (`Middleware.principalOf`), which prefers it over the team-derived
+/// permissions — the precedence is decided there, in one place.
 ///
-/// A separate key rather than writing `ToolUp.ModulePermissions`
-/// directly, because the two are written at different points in the
-/// pipeline: this middleware runs BEFORE scope resolution (the claim has
-/// to exist for the subject to resolve), and `ScopeResolutionMiddleware`
-/// would then overwrite whatever this had written. Distinct keys make
-/// the precedence explicit and readable at the point it is decided,
-/// instead of implicit in middleware ordering.
+/// This middleware runs BEFORE scope resolution (the claim has to exist
+/// for the subject to resolve), so it cannot stamp the principal itself.
 [<Literal>]
 let ServiceAccountPermissionsItemsKey = "ToolUp.ServiceAccountPermissions"
 
@@ -280,7 +272,7 @@ let internal claimFor (principal: ServiceAccountPrincipal) : ShareTokenClaim = {
 /// ASP.NET Core middleware validating an inbound service-account bearer
 /// token. Registered ahead of `ScopeResolutionMiddleware` so the
 /// synthesised claim is in `HttpContext.Items` before the subject is
-/// resolved. See the module preamble for the pass-through, empty-map and
+/// resolved. See the module preamble for the pass-through, overlay and
 /// SCIM-seam contracts.
 type ServiceAccountTokenMiddleware(next: RequestDelegate) =
     member _.InvokeAsync(ctx: HttpContext) =
@@ -327,14 +319,6 @@ type ServiceAccountTokenMiddleware(next: RequestDelegate) =
                     match result with
                     | Error err ->
                         let code, description = classifyError err
-                        emitDenial ctx code description
-                        do! writeUnauthorized ctx code description
-                    | Ok principal when principal.Permissions.IsEmpty ->
-                        // Belt to the store's braces — see the preamble.
-                        // An empty map downstream means UNRESTRICTED, so
-                        // it is refused here even though `ValidateToken`
-                        // already promises never to return one.
-                        let code, description = classifyError ServiceAccountError.NoPermissionsDeclared
                         emitDenial ctx code description
                         do! writeUnauthorized ctx code description
                     | Ok principal ->

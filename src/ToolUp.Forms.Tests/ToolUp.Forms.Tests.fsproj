@@ -16,6 +16,7 @@
              contract packs observe through, source-linked from ToolUp.Platform.Tests. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\PrincipalRecordingEntityStore.fs" Link="Support\PrincipalRecordingEntityStore.fs" />
         <Compile Include="Contracts\IFormStoreContract.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="Contracts\IWorkflowEngineContract.fs" />
         <Compile Include="Contracts\IActionLedgerContract.fs" />
         <Compile Include="Contracts\IShareTokenRateLimiterContract.fs" />

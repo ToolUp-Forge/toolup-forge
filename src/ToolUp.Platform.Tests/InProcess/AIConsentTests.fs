@@ -169,7 +169,7 @@ let private postDecision
     ctx.RequestServices <- services
     ctx.Items["ToolUp.UserId"] <- box userId
     ctx.Items["ToolUp.StorageScope"] <- box scope
-    ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items (perms))
 
     let request: AIConsentDecisionRequest = {
         ConsentId = consentId
@@ -243,7 +243,7 @@ let private buildHarness
     ctx.RequestServices <- provider
     ctx.Items["ToolUp.UserId"] <- box "alice"
     ctx.Items["ToolUp.StorageScope"] <- box scope
-    ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items (perms))
     ctx.Items[AIConsentDispatch.ItemsKeys.ConversationId] <- box conversationId
     ctx.Items[AIConsentDispatch.ItemsKeys.TaskId] <- box (Guid.NewGuid())
 

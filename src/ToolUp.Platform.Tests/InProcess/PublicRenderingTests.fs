@@ -541,7 +541,7 @@ let private composeTests =
 
 // ─── Phase 83 — content-source chain (GetPageInContext) tests ───────
 
-let private csAnon = AccessContext.unrestricted (AnonymousSession "test-anon")
+let private csAnon = AccessContexts.forSubject (AnonymousSession "test-anon")
 
 let private contentSourceImplTests =
     testList "PublicRendering — Phase 83 content-source chain" [
@@ -764,7 +764,7 @@ let private renderMetricsTests =
         testCase "instrumentSource records per-source resolve latency and delegates the result"
         <| fun _ ->
             let sink = RecordingSink()
-            let ctx = AccessContext.unrestricted (AnonymousSession "s")
+            let ctx = AccessContexts.forSubject (AnonymousSession "s")
 
             let inner =
                 ContentSource.create (fun _slug _ctx -> async { return Some(ContentBody.Html "<p>x</p>") })

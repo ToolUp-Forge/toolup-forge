@@ -80,15 +80,8 @@ let private tryFindFlow (ctx: HttpContext) (flowName: string) : IOAuth1aFlow opt
     |> Seq.tryFind (fun f -> f.Name = flowName)
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "OAuth1aFlowHandler")
 
 /// Owner / Admin gate — mirrors `OAuthFlowHandler.ensureOwnerAdmin`.
 let private ensureOwnerAdmin (ctx: HttpContext) (accessContext: AccessContext) : Async<Result<unit, string>> = async {

@@ -256,7 +256,7 @@ let tests =
             }
 
             let pipeline = StaticCorpusRetrievalPipeline.create embedder corpus
-            let access = AccessContext.unrestricted (AnonymousSession "t")
+            let access = AccessContexts.forSubject (AnonymousSession "t")
 
             let request query topK = {
                 RetrievalRequest.create query [ Deployment ] topK MergeStrategy.Interleaved with

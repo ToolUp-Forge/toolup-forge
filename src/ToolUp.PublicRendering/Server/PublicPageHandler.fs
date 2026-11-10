@@ -745,9 +745,8 @@ module PublicPageHandler =
             // resolved this request's principal (page routes included) and
             // the registered factory builds the context from it.
             let accessContext =
-                match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                | :? AccessContext as ac -> ac
-                | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+                AccessContext.tryResolve ctx.RequestServices
+                |> Option.defaultWith (fun () -> AccessContext.unresolved "PublicPageHandler")
 
             // Phase 93 — render observability. Resolve the sink once
             // (NoOp when none composed → every emit is free, GP 13) and

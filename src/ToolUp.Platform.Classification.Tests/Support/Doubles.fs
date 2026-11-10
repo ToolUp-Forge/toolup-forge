@@ -50,16 +50,19 @@ module Ctx =
 
     /// Unrestricted authenticated user — no reader capabilities, not admin.
     let plainUser (userId: string) : AccessContext =
-        AccessContext.unrestricted (subject userId)
+        AccessContexts.forSubject (subject userId)
 
     /// Authenticated user holding `Read` on a per-level reader pseudo-module.
     let readerOf (level: ClassificationLevel) (userId: string) : AccessContext = {
-        AccessContext.unrestricted (subject userId) with
-            ModulePermissions = Map.ofList [ ClassificationGate.readerModule level, [ ModulePermission.Read ] ]
+        AccessContexts.forSubject (subject userId) with
+            ModulePermissions =
+                ModulePermissions.Restricted(
+                    Map.ofList [ ClassificationGate.readerModule level, [ ModulePermission.Read ] ]
+                )
     }
 
     /// Platform admin.
     let admin (userId: string) : AccessContext = {
-        AccessContext.unrestricted (subject userId) with
+        AccessContexts.forSubject (subject userId) with
             PlatformRole = Some PlatformRole.PlatformAdmin
     }

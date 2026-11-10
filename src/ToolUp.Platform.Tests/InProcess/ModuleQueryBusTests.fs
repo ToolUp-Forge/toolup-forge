@@ -169,7 +169,7 @@ let private latestContract: ModuleQueryContract<LatestReq, LatestResp> =
     ModuleQueryBus.contract<LatestReq, LatestResp> "Reports" "latest"
 
 let private access =
-    AccessContext.unrestricted (Subject.AnonymousSession "phase-584")
+    AccessContexts.forSubject (Subject.AnonymousSession "phase-584")
 
 /// Build a bus over an explicit registration list, the same way the
 /// composition root does (`ServerApp` folds each module's

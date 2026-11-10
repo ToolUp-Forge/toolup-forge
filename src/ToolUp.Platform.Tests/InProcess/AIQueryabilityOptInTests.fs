@@ -137,8 +137,7 @@ let private buildContext
             Persist = true
         }
 
-    if not (List.isEmpty perms) then
-        ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items perms)
 
     ctx :> HttpContext
 

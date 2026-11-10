@@ -36,13 +36,13 @@ open ToolUp.Platform.Compose
 let private run a = a |> Async.RunSynchronously
 
 let private anonCtx: AccessContext =
-    AccessContext.unrestricted (AnonymousSession "toy-session")
+    AccessContexts.forSubject (AnonymousSession "toy-session")
 
 let private teamCtx (userId: string) (teamId: string) : AccessContext = {
     UserId = userId
     TeamId = Some teamId
     Subject = TeamMember(userId, teamId)
-    ModulePermissions = Map.empty
+    ModulePermissions = ModulePermissions.Unrestricted
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     PublicationGrants = []

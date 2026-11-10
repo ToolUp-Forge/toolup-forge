@@ -767,7 +767,7 @@ type private DispatchingScheduler() =
                         handler.Execute {
                             JobId = jobId
                             ScopeId = scopeId
-                            AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId.Value)
+                            AccessContext = AccessContexts.forSubject (AuthenticatedUser byUserId.Value)
                             Attempt = 1
                             Trigger = registration.Trigger
                             Scope = scope
@@ -1435,7 +1435,7 @@ let triggerTests =
             let contextAt (attempt: int) (jobScope: ResolvedScope) : JobContext = {
                 JobId = Guid.NewGuid()
                 ScopeId = teamId
-                AccessContext = AccessContext.unrestricted (AuthenticatedUser "_platform")
+                AccessContext = AccessContexts.forSubject (AuthenticatedUser "_platform")
                 Attempt = attempt
                 Trigger = Trigger.Manual
                 Scope = jobScope
@@ -1603,7 +1603,7 @@ let private narrativeJob (deployment: Deployment) : JobResult =
     handler.Execute {
         JobId = Guid.NewGuid()
         ScopeId = deployment.TeamId
-        AccessContext = AccessContext.unrestricted (AuthenticatedUser "_platform")
+        AccessContext = AccessContexts.forSubject (AuthenticatedUser "_platform")
         Attempt = 1
         Trigger = Trigger.Manual
         Scope = deployment.Scope
@@ -1695,7 +1695,7 @@ let scopedProviderTests =
             let deployment = deployWith funding.FactoryFor citingWriter
             funding.StoreTeamKey(deployment.TeamId, "the-team-own-key")
             withRevenueFact deployment
-            let named = AccessContext.unrestricted (AuthenticatedUser "someone-else")
+            let named = AccessContexts.forSubject (AuthenticatedUser "someone-else")
 
             let outcome =
                 deployment.Services
@@ -2195,7 +2195,7 @@ let private promptApi
     : NarrativePromptApi =
     let services = ServiceCollection()
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (TeamMember(userId, teamId)))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (TeamMember(userId, teamId)))
     |> ignore
 
     services.AddSingleton<TeamManagement.ITeamStore>(teams) |> ignore
@@ -3287,7 +3287,7 @@ let private recordedTrigger (job: Trigger) (source: TriggerSource) (attempt: int
         handler.Execute {
             JobId = Guid.NewGuid()
             ScopeId = teamId
-            AccessContext = AccessContext.unrestricted (AuthenticatedUser "_platform")
+            AccessContext = AccessContexts.forSubject (AuthenticatedUser "_platform")
             Attempt = attempt
             Trigger = job
             Scope = ScopeResolution.ofStorageScope (storageFor teamId)

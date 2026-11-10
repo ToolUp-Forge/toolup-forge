@@ -95,6 +95,10 @@ type CodemodMigration =
     /// `AuditEvent` for the companion's own family, and an archive is read
     /// with the audit options.
     | OpenAuditRegistry
+    /// An access context's module permissions are a closed type with a
+    /// stated `Unrestricted`, and a request with no resolved principal is
+    /// served a context that grants nothing.
+    | AccessContextRefuses
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -130,6 +134,7 @@ module CodemodMigration =
             "docs/migrations/1062-redesign-c-audit-failure-as-data-and-permission-store-result.md"
         | CodemodMigration.ModuleHost -> "docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md"
         | CodemodMigration.OpenAuditRegistry -> "docs/migrations/874-open-audit-event-registry.md"
+        | CodemodMigration.AccessContextRefuses -> "docs/migrations/882-access-context-refuses.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -158,6 +163,7 @@ module CodemodMigration =
         | CodemodMigration.AuditFailureAsData -> "Phase 1062"
         | CodemodMigration.ModuleHost -> "Phase 1071"
         | CodemodMigration.OpenAuditRegistry -> "Phase 874"
+        | CodemodMigration.AccessContextRefuses -> "Phase 882"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1081,6 +1087,14 @@ module Codemod =
             @"^(\s*)ConfigsPrefetch\s*=.*$"
             "$1AwaitingFirstInit = Client.firstInitGates"
             "`ConfigsPrefetch = …` in a full `Client.Model` literal → `AwaitingFirstInit = Client.firstInitGates` (delete the `FlagsPrefetch` line beside it)"
+        // The fallback constructor states what it grants.
+        rewrite
+            "882-unrestricted-constructor"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bAccessContext\.unrestricted\b"
+            "AccessContext.ofSubject ModulePermissions.Unrestricted"
+            "`AccessContext.unrestricted subject` → `AccessContext.ofSubject ModulePermissions.Unrestricted subject` (same behaviour, stated; review where it was a fallback)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1701,6 +1715,27 @@ module Codemod =
             CodemodFileClass.Source
             @"\bDeserialize<[^>]*(?:AuditEvent|AuditEnvelope|Archive\w*|Ledger\w*)>\s*\(.*\bPlatformJson\.options\b"
             "if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode"
+        // A fallback for a request with no principal grants nothing.
+        review
+            "882-unresolved-fallback"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\bAccessContext\.ofSubject\s+ModulePermissions\.Unrestricted\s+\(\s*(?:Subject\.)?AnonymousSession\b"
+            "if this is a handler's fallback for a request with no resolved principal, write `AccessContext.tryResolve ctx.RequestServices |> Option.defaultWith (fun () -> AccessContext.unresolved \"<site>\")` (it grants nothing); work outside a request names `AccessContext.system \"<reason>\"` or `AccessContext.carrying \"<reason>\" subject`"
+        // The permission value is a closed type: an empty map no longer means every module.
+        review
+            "882-permissions-map-read"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"\.ModulePermissions\s*(?:\.(?:IsEmpty|TryFind|ContainsKey|Count)\b|\|>\s*Map\.)|Map\.\w+\s+\S+\s+\w+\.ModulePermissions\b"
+            "`ModulePermissions` is `Unrestricted | Restricted of Map<…>`: match on the case or use `ModulePermissions.tryFind` / `grantsAccess` / `grants`; `Restricted Map.empty` grants nothing, so an `IsEmpty` test for \"unrestricted\" is `= ModulePermissions.Unrestricted`"
+        // The permission item is gone: the principal is one stamp.
+        review
+            "882-permissions-item"
+            CodemodMigration.AccessContextRefuses
+            CodemodFileClass.Source
+            @"""ToolUp\.ModulePermissions"""
+            "the `ToolUp.ModulePermissions` item is no longer stamped: the request's principal is one `AccessContext` under `AccessContext.ItemsKey` (read it, or copy that key to a background context)"
     ]
 
 

@@ -357,7 +357,7 @@ let tests =
 
             services.AddSingleton<AccessContext>(
                 {
-                    AccessContext.unrestricted (AuthenticatedUser "admin-1") with
+                    AccessContexts.forSubject (AuthenticatedUser "admin-1") with
                         PlatformRole = Some PlatformRole.PlatformAdmin
                 }
             )

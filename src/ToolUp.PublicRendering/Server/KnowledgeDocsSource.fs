@@ -236,11 +236,11 @@ module KnowledgeDocsSource =
                   // Sitemap / static-export discovery runs under an
                   // anonymous context: the provider returns only what an
                   // anonymous caller may see (GP 4), so nothing gated
-                  // leaks to a crawler. (`unrestricted` here means empty
-                  // module-permissions, not data-scope bypass — the
-                  // subject is still `AnonymousSession`, so the
-                  // provider's own team/scope checks hold.)
-                  let anon = AccessContext.unrestricted (AnonymousSession "kb-docs-enumerate")
+                  // leaks to a crawler. (A system context holds no module
+                  // RBAC, not a data-scope bypass — its subject is an
+                  // `AnonymousSession`, so the provider's own team/scope
+                  // checks hold.)
+                  let anon = AccessContext.system "kb-docs-enumerate"
                   let! docs = provider.ListDocuments anon
                   let prefix = config.SlugPrefix.Trim('/')
                   return Slug prefix :: (docs |> List.map (fun d -> Slug(prefix + "/" + d.Id)))

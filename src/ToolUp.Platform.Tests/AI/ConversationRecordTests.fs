@@ -177,7 +177,7 @@ let private contextOver (storage: IBlobStorage) (provider: IAIProvider) : HttpCo
     )
     |> ignore
 
-    services.AddSingleton<AccessContext>(AccessContext.unrestricted (AnonymousSession "alice"))
+    services.AddSingleton<AccessContext>(AccessContexts.forSubject (AnonymousSession "alice"))
     |> ignore
 
     let ctx = DefaultHttpContext()

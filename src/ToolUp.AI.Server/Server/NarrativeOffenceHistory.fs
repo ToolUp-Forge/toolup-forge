@@ -691,7 +691,7 @@ type internal NarrativeOffenceLearningRun
                     request.Access
                     |> Option.orElse (AccessContext.forConfigScope definition.Principal scope)
                     |> Option.defaultWith (fun () ->
-                        AccessContext.unrestricted (AuthenticatedUser definition.Principal))
+                        AccessContext.carrying "narrative offence history" (AuthenticatedUser definition.Principal))
 
                 match! factory.Resolve access with
                 | Ok provider -> return Some provider

@@ -72,8 +72,8 @@ let private registryOf (tools: AIToolRegistry.RegisteredTool list) =
     registry
 
 let private accessWith (perms: (string * ModulePermission list) list) : AccessContext = {
-    AccessContext.unrestricted (AuthenticatedUser "alice") with
-        ModulePermissions = Map.ofList perms
+    AccessContexts.forSubject (AuthenticatedUser "alice") with
+        ModulePermissions = AccessContexts.permissionsOf perms
 }
 
 /// Minimal provider that emits ONE tool call on its first turn and ends
@@ -154,8 +154,7 @@ let private buildContext (eventStore: IEventStore option) (perms: (string * Modu
             Persist = true
         }
 
-    if not (List.isEmpty perms) then
-        ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList perms)
+    ctx.Items[AccessContext.ItemsKey] <- box (AccessContexts.ofItems ctx.Items perms)
 
     ctx :> HttpContext
 
@@ -192,7 +191,7 @@ let tests =
                     AIToolRegistry.createTool (toolDef "sales.forecast" "SalesAnalysis" ServerResident) mustNotRun
                 ]
 
-            let access = AccessContext.unrestricted (AuthenticatedUser "alice")
+            let access = AccessContexts.forSubject (AuthenticatedUser "alice")
 
             Expect.equal
                 (registry.ListAccessible access |> List.map _.Definition.Name)
@@ -427,7 +426,9 @@ let tests =
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
             ctx.Items["ToolUp.UserId"] <- box "alice"
-            ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList [ "MoodJournal", [ ModulePermission.Read ] ])
+
+            ctx.Items[AccessContext.ItemsKey] <-
+                box (AccessContexts.ofItems ctx.Items ([ "MoodJournal", [ ModulePermission.Read ] ]))
 
             let body = sprintf "{\"ToolCallId\":\"%O\",\"ResultJson\":\"{}\"}" toolCallId
 
@@ -466,7 +467,9 @@ let tests =
             let ctx = DefaultHttpContext()
             ctx.RequestServices <- services.BuildServiceProvider()
             ctx.Items["ToolUp.UserId"] <- box "alice"
-            ctx.Items["ToolUp.ModulePermissions"] <- box (Map.ofList [ "MoodJournal", [ ModulePermission.Read ] ])
+
+            ctx.Items[AccessContext.ItemsKey] <-
+                box (AccessContexts.ofItems ctx.Items ([ "MoodJournal", [ ModulePermission.Read ] ]))
 
             let body =
                 sprintf "{\"ToolCallId\":\"%O\",\"ResultJson\":\"{\\\"ok\\\":true}\"}" toolCallId

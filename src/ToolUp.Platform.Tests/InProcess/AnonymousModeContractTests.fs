@@ -33,11 +33,11 @@ let private cfg (surfaces: SurfaceProfile list) (moduleNames: string list) : Ser
         ModuleNames = moduleNames
 }
 
-let private unrestricted (subject: Subject) : AccessContext = AccessContext.unrestricted subject
+let private unrestricted (subject: Subject) : AccessContext = AccessContexts.forSubject subject
 
 let private restricted (ctx: AccessContext) (perms: Map<string, ModulePermission list>) : AccessContext = {
     ctx with
-        ModulePermissions = perms
+        ModulePermissions = ModulePermissions.Restricted(perms)
 }
 
 [<Tests>]

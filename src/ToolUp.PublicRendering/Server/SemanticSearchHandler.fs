@@ -276,9 +276,8 @@ module SemanticSearchHandler =
             let rawQuery = ctx.TryGetQueryStringValue "q" |> Option.defaultValue ""
 
             let accessContext =
-                match ctx.RequestServices.GetService(typeof<AccessContext>) with
-                | :? AccessContext as ac -> ac
-                | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+                AccessContext.tryResolve ctx.RequestServices
+                |> Option.defaultWith (fun () -> AccessContext.unresolved "SemanticSearchHandler")
 
             match SemanticSearch.classify config rawQuery with
             // Retrieval runs under the caller's scope, and a

@@ -106,7 +106,7 @@ let private mkApiWith (sources: IContentSource list) : IPublicContentApi =
     let loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
     PublicContentApiImpl.create loader None sources
 
-let private anonCtx = AccessContext.unrestricted (AnonymousSession "test")
+let private anonCtx = AccessContexts.forSubject (AnonymousSession "test")
 
 let private resolvedSource (slug: string) : IContentSource =
     ContentSource.ofResolved (fun (Slug s) _ctx -> async {

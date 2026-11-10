@@ -49,20 +49,8 @@ let private capDetails (maxItems: int) (items: string list) : string list =
         head @ [ sprintf "… (+%d more)" (items.Length - maxItems) ]
 
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
-    match ctx.RequestServices.GetService(typeof<AccessContext>) with
-    | :? AccessContext as ac -> ac
-    | _ ->
-        let userId =
-            match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        let teamId =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) -> StorageScope.tryTeamId s
-            | _ -> None
-
-        AccessContext.unrestricted (AnonymousSession userId)
+    AccessContext.tryResolve ctx.RequestServices
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "ServiceStatusBoardApiHandler")
 
 let private ensureReadAllowed (accessContext: AccessContext) : Async<Result<unit, string>> = async {
     if AccessContext.canModifyPlatformConfig accessContext then
