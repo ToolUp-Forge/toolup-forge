@@ -57,9 +57,11 @@ open Feliz
 open ToolUp.Platform
 open HelloWorld.ClientModel
 
-let view (model: Model) (dispatch: Msg -> unit) =
-    Html.div [],                                    // left panel
-    Html.div [ Html.text model.Text ]               // right panel
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.SplitPanel(
+        Html.div [],                                // left panel
+        Html.div [ Html.text model.Text ]           // right panel
+    )
 
 let register () : ErasedModule =
     ClientModule.create {
@@ -72,7 +74,12 @@ let register () : ErasedModule =
     |> ClientModule.register
 ```
 
-That's it. The view signature `Model -> (Msg -> unit) -> ReactElement * ReactElement` returns left + right panels; the shell wraps them in `SplitPanel(l, r)`.
+That's it. A view is `'Model -> RenderContext<'Msg> -> PageContent`: it takes the model and the context the
+shell hands it on every render — `ctx.Dispatch` (the module's dispatch), `ctx.Messages` (the catalog resolved for
+the session) and `ctx.Locale` (for the toolkit's number formatters) — and returns its page's layout:
+`SplitPanel(left, right)` for a controls pane beside an output pane, `FullWidth body` for a single pane, or
+`Stacked` / `Dashboard` / `Custom`. A view reads its strings from `ctx.Messages`; it needs no
+`[<ReactComponent>]` hook site to reach the catalog.
 
 The runnable version of this minimum module lives at `samples/HelloWorld/`.
 
@@ -333,11 +340,22 @@ command palette, browser history, offline mode — sit on `ClientConfig.Shell`, 
 `ClientConfig.Auth`, and an on/off setting is a `FeatureMode` (Phase 1074; the field map is in
 [`docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md`](../migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md)).
 
+
+### How a built-in is declared — `BuiltIn`
+
+Each SDK module is one `BuiltIn<'Model, 'Msg>` value: its reserved `Id`, its `Defaults` label, its own gates
+(`Group`, `NavRole`, `Area`, `Visibility` — a slot places and tiles whatever fills it but enforces no behaviour,
+so the module declares them), its `Init` / `Update`, its `View` (`BuiltInView.Page view` or
+`BuiltInView.Pages [ page, view; … ]`) and `Extend` for anything further (processed data, a sidebar placement).
+`ShellSlots.builtIn b label` is the one place the construction is written: it builds the `ErasedModule` under the
+slot's label (`None` keeps the module's defaults). To place a built-in yourself — in another group, say — build it
+the same way: `ShellSlots.builtIn DataIngestionUI.builtIn None |> ErasedModule.withGroup "Operations"`.
+
 ## Modules vs pages
 
 A **module** is one Elmish MVU (one `Model` / `Msg` / `init` / `update`). A **page** is a sidebar-visible entry rendered against that MVU.
 
-Single-page modules (the default) keep the legacy `View: 'Model -> ('Msg -> unit) -> ReactElement * ReactElement` contract — the shell wraps the tuple in `SplitPanel(l, r)`.
+Single-page modules (the default) set one view with `ClientModule.withView`; its `PageContent` picks the layout.
 
 Multi-page modules opt in with `ClientModule.withPages`, which takes one `(PageConfig, view)` pair per page — the `PageConfig` supplies the sidebar `Route` / `Title` / `Icon`, and the view returns a `PageContent` value directly (`SplitPanel | Stacked | FullWidth | Dashboard | Custom`), picking its own layout shape:
 
@@ -475,11 +493,13 @@ Until Phase 817 the summary crossed the wire boxed — `ProcessedFileEntry.Info:
 Modules consume processed data from upstream modules via the `ProcessedDataContext`:
 
 ```fsharp
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+[<ReactComponent>]
+let private SalesCount () =
     let salesEntries = ProcessedDataContext.ProcessedData.forType "SalesData"
     let summaries = salesEntries |> List.choose _.Summary // the ProcessedData envelopes (Phase 817)
+    Html.div [ Html.text $"{summaries.Length} sales files" ]
 
-    Html.none, Html.div [ Html.text $"{summaries.Length} sales files" ]
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent = PageContent.FullWidth(SalesCount())
 ```
 
 `ProcessedDataContext.Context` is a React context carrying the shell's aggregated `ProcessedFileEntry list`; `ProcessedData.forType` is the hook over it, filtering to one `DataTypeId` and dropping entries whose processing failed. Each entry's `Summary` is the producing module's summary as a `ProcessedData` envelope (Phase 817), which a consumer decodes with `DataTypeDisplay.tryDecode<TheirSummary>` — the producing module's shared types name it. (Before 817 this was `Info: obj option`, a boxed record the consumer cast to the producer's known type — the symmetric same-module erasure boundary, now closed.) This is the only sanctioned cross-module data flow — modules consume what other modules produce, declared via `ClientModule.withNeedsData` and `ClientModule.withProcessedData`.

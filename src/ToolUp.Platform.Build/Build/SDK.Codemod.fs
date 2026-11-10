@@ -2097,7 +2097,7 @@ module Codemod =
             "1075-view-lambda"
             CodemodMigration.OneViewContract
             CodemodFileClass.Source
-            @"\b(?:withView|withFullWidthView)\s*\(\s*fun\b|\bwithPages\b"
+            @"\b(?:withView|withFullWidthView)\s*\(\s*fun\b(?!\s+model\s+ctx\s*->\s*PageContent\.)|\bwithPages\b"
             "if this view is not yet `'Model -> RenderContext<'Msg> -> PageContent`: it takes `model ctx`, dispatches with `ctx.Dispatch`, reads strings from `ctx.Messages`, and returns a `PageContent` — a `(left, right)` pair is `PageContent.SplitPanel(left, right)`, a single pane `PageContent.FullWidth body`"
         review
             "1075-use-messages"

@@ -226,6 +226,20 @@
 @@ L43 [879-slot-case-nullary]
 -let usageOn = config.UsageDashboard <> NoUsageDashboard
 +let usageOn = config.UsageDashboard <> SlotFill.Empty
+--- a/src/Client/Views.fs
++++ b/src/Client/Views.fs
+@@ L10 [1075-split-panel-view]
+-    |> ClientModule.withView view
++    |> ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
+@@ L15 [1075-full-width-view]
+-    |> ClientModule.withFullWidthView settingsView
++    |> ClientModule.withView (fun model ctx -> PageContent.FullWidth(settingsView model ctx.Dispatch))
+@@ L23 [1075-build-sections-with]
+-let sections = Toolup.Sidebar.buildSectionsWith catalog.Sidebar modules prefs
++let sections = Toolup.Sidebar.buildSections catalog.Sidebar modules prefs
+@@ L24 [1075-banner-with]
+-let degraded = BootDegradation.bannerWith catalog.BootDegradation degradations retry dismiss
++let degraded = BootDegradation.banner catalog.BootDegradation degradations retry dismiss
 --- a/src/Server/Assistant.fs
 +++ b/src/Server/Assistant.fs
 @@ L14 [1077-history-window-default]
@@ -553,4 +567,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 149 rewrite(s) across 22 file(s) pending.
+Codemod: 153 rewrite(s) across 23 file(s) pending.

@@ -1,0 +1,27 @@
+module MyApp.Views
+
+open Feliz
+open ToolUp.Platform
+open Toolup.UIToolkit
+
+// Phase 1075 — one view contract, the toolkit's locale, one shell entry.
+let sales () =
+    ClientModule.create { Init = init; Update = update; Name = "Sales"; Icon = Html.none }
+    |> ClientModule.withView view
+    |> ClientModule.register
+
+let settings () =
+    ClientModule.create { Init = init; Update = update; Name = "Settings"; Icon = Html.none }
+    |> ClientModule.withFullWidthView settingsView
+    |> ClientModule.register
+
+let reports () =
+    ClientModule.create { Init = init; Update = update; Name = "Reports"; Icon = Html.none }
+    |> ClientModule.withPages [ overviewPage, overviewView ]
+    |> ClientModule.register
+
+let sections = Toolup.Sidebar.buildSectionsWith catalog.Sidebar modules prefs
+let degraded = BootDegradation.bannerWith catalog.BootDegradation degradations retry dismiss
+let total = OutputFormatting.formatDecimal amount
+let shell = Layout.AppShellWith sidebar content None None Narrow
+let heading = (MessageCatalogProvider.useMessages ()).Shell.Loading
