@@ -333,14 +333,8 @@ let private dataTypesTable
             ]
             dataTypes
 
-/// The module body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render, so a hook there would join the shell's
-/// hook order and break the moment the active module changed.
-[<ReactComponent>]
-let private MigrationStatusBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).MigrationStatus
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: MigrationStatusMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let loading = Remote.isLoading model.DataTypes
     let noticeMsgs = { Dismiss = msgs.Dismiss }
 
@@ -385,36 +379,33 @@ let private MigrationStatusBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    Html.div [
-        prop.className "flex flex-col h-full"
-        prop.children [ MigrationStatusBody model dispatch ]
-    ]
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(
+        Html.div [
+            prop.className "flex flex-col h-full"
+            prop.children [ body ctx.Messages.MigrationStatus model ctx.Dispatch ]
+        ]
+    )
 
 // ─── Module creation ────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataMigrations"
 
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Data Migrations"
-
-    let icon =
-        config
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.arrowUpwards
-
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Data Migrations"
+        Icon = ToolUp.Platform.Icons.arrowUpwards
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

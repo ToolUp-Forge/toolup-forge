@@ -374,7 +374,12 @@ module ShellSlots =
             "DataSubjectRequestAdmin"
 
     let private migrationAdmin =
-        authenticatedAdmin _.MigrationAdmin MigrationStatusUI.moduleId MigrationStatusUI.create None "MigrationAdmin"
+        authenticatedAdmin
+            _.MigrationAdmin
+            MigrationStatusUI.moduleId
+            (builtIn MigrationStatusUI.builtIn)
+            None
+            "MigrationAdmin"
 
     let private compositionInspector =
         authenticatedAdmin
