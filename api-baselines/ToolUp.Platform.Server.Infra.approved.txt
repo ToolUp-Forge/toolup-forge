@@ -3163,6 +3163,38 @@ ToolUp.Platform.Infra.RollingOriginPlan.FoldCount : System.Int32 { get }
 ToolUp.Platform.Infra.RollingOriginPlan.InitialTrainSize : System.Int32 { get }
 ToolUp.Platform.Infra.RollingOriginPlan.Step : System.Int32 { get }
 ToolUp.Platform.Infra.RollingOriginPlan.TestSize : System.Int32 { get }
+ToolUp.Platform.Infra.RouteClass (class)
+ToolUp.Platform.Infra.RouteClass.Api : ToolUp.Platform.Infra.RouteClass { get }
+ToolUp.Platform.Infra.RouteClass.Dev : ToolUp.Platform.Infra.RouteClass { get }
+ToolUp.Platform.Infra.RouteClass.Health : ToolUp.Platform.Infra.RouteClass { get }
+ToolUp.Platform.Infra.RouteClass.IsApi : System.Boolean { get }
+ToolUp.Platform.Infra.RouteClass.IsDev : System.Boolean { get }
+ToolUp.Platform.Infra.RouteClass.IsHealth : System.Boolean { get }
+ToolUp.Platform.Infra.RouteClass.IsMetrics : System.Boolean { get }
+ToolUp.Platform.Infra.RouteClass.IsPage : System.Boolean { get }
+ToolUp.Platform.Infra.RouteClass.IsSse : System.Boolean { get }
+ToolUp.Platform.Infra.RouteClass.Metrics : ToolUp.Platform.Infra.RouteClass { get }
+ToolUp.Platform.Infra.RouteClass.Page : ToolUp.Platform.Infra.RouteClass { get }
+ToolUp.Platform.Infra.RouteClass.Sse : ToolUp.Platform.Infra.RouteClass { get }
+ToolUp.Platform.Infra.RouteClass.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.RouteClass+Tags (class)
+ToolUp.Platform.Infra.RouteClass+Tags.Api : System.Int32 (literal)
+ToolUp.Platform.Infra.RouteClass+Tags.Dev : System.Int32 (literal)
+ToolUp.Platform.Infra.RouteClass+Tags.Health : System.Int32 (literal)
+ToolUp.Platform.Infra.RouteClass+Tags.Metrics : System.Int32 (literal)
+ToolUp.Platform.Infra.RouteClass+Tags.Page : System.Int32 (literal)
+ToolUp.Platform.Infra.RouteClass+Tags.Sse : System.Int32 (literal)
+ToolUp.Platform.Infra.RouteClassModule (class)
+ToolUp.Platform.Infra.RouteClassModule.isApiSurface(ToolUp.Platform.Infra.RouteClass) : System.Boolean
+ToolUp.Platform.Infra.RouteClassModule.name(ToolUp.Platform.Infra.RouteClass) : System.String
+ToolUp.Platform.Infra.RouteClassifier (class)
+ToolUp.Platform.Infra.RouteClassifier.ItemsKey : System.String (literal)
+ToolUp.Platform.Infra.RouteClassifier.classify(System.String) : ToolUp.Platform.Infra.RouteClass
+ToolUp.Platform.Infra.RouteClassifier.ofItems(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.RouteClass]
+ToolUp.Platform.Infra.RouteClassifier.ofRequest(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.Infra.RouteClass
+ToolUp.Platform.Infra.RouteClassifier.prefixesOf(ToolUp.Platform.Infra.RouteClass) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Infra.RouteClassifier.stamp(System.Collections.Generic.IDictionary`2[System.Object, System.Object], ToolUp.Platform.Infra.RouteClass) : System.Void
+ToolUp.Platform.Infra.RouteClassifier.table : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Infra.RouteClass]] { get }
 ToolUp.Platform.Infra.RoutingComputeDispatcher (class)
 ToolUp.Platform.Infra.RoutingComputeDispatcher..ctor(ToolUp.Platform.Infra.ComputeBackendRegistry, ToolUp.Platform.Infra.ComputeFleetTelemetry, ToolUp.Platform.Infra.Metrics.IMetricsSink)
 ToolUp.Platform.Infra.RoutingComputeDispatcher.BackendName : System.String { get }

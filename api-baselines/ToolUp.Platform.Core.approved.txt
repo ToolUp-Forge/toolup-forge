@@ -10740,6 +10740,8 @@ ToolUp.Platform.NotificationKind.TransactionalSms : System.String (literal)
 ToolUp.Platform.NotificationKind.TransactionalWhatsApp : System.String (literal)
 ToolUp.Platform.NotificationKind.isTransactional(ToolUp.Platform.Notification) : System.Boolean
 ToolUp.Platform.NotificationKind.ofNotification(ToolUp.Platform.Notification) : System.String
+ToolUp.Platform.NotificationKind.route(ToolUp.Platform.Notification) : ToolUp.Platform.NotificationKind+Route
+ToolUp.Platform.NotificationKind.sinkKindOf(ToolUp.Platform.Notification) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationKind+SinkKind]
 ToolUp.Platform.NotificationKind+PushVariant (class)
 ToolUp.Platform.NotificationKind+PushVariant.Apns : ToolUp.Platform.NotificationKind+PushVariant { get }
 ToolUp.Platform.NotificationKind+PushVariant.Fcm : ToolUp.Platform.NotificationKind+PushVariant { get }
@@ -10756,6 +10758,16 @@ ToolUp.Platform.NotificationKind+PushVariant+Tags.Apns : System.Int32 (literal)
 ToolUp.Platform.NotificationKind+PushVariant+Tags.Fcm : System.Int32 (literal)
 ToolUp.Platform.NotificationKind+PushVariant+Tags.Other : System.Int32 (literal)
 ToolUp.Platform.NotificationKind+PushVariant+Tags.WebPush : System.Int32 (literal)
+ToolUp.Platform.NotificationKind+Route (class)
+ToolUp.Platform.NotificationKind+Route.IsSink : System.Boolean { get }
+ToolUp.Platform.NotificationKind+Route.IsSseFanOut : System.Boolean { get }
+ToolUp.Platform.NotificationKind+Route.SseFanOut : ToolUp.Platform.NotificationKind+Route { get }
+ToolUp.Platform.NotificationKind+Route.Tag : System.Int32 { get }
+ToolUp.Platform.NotificationKind+Route+Sink (class)
+ToolUp.Platform.NotificationKind+Route+Sink.Item : ToolUp.Platform.NotificationKind+SinkKind { get }
+ToolUp.Platform.NotificationKind+Route+Tags (class)
+ToolUp.Platform.NotificationKind+Route+Tags.Sink : System.Int32 (literal)
+ToolUp.Platform.NotificationKind+Route+Tags.SseFanOut : System.Int32 (literal)
 ToolUp.Platform.NotificationKind+SinkKind (class)
 ToolUp.Platform.NotificationKind+SinkKind.Email : ToolUp.Platform.NotificationKind+SinkKind { get }
 ToolUp.Platform.NotificationKind+SinkKind.IsEmail : System.Boolean { get }
