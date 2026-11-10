@@ -405,4 +405,37 @@ let stagedTests =
 
             Expect.equal built.Value 1 "the app's own container built the data-object store, once, and RAG read it"
         }
+
+        // The composition declares what it reads instead of probing for it:
+        // RAG builds no container of its own, and neither composition root
+        // writes a hand-made service probe or an empty `ref` cell.
+        test "no container is built in RAG.Server, and no hand-written probe or ref cell remains" {
+            let root = ToolUp.Platform.Tests.Contracts.ArchitectureFitness.repoRoot ()
+            let ragServer = System.IO.Path.Combine(root, "src", "ToolUp.RAG.Server")
+
+            let sources =
+                System.IO.Directory.EnumerateFiles(ragServer, "*.fs", System.IO.SearchOption.AllDirectories)
+                |> Seq.filter (fun f ->
+                    let relative = System.IO.Path.GetRelativePath(ragServer, f)
+                    not (relative.StartsWith "bin") && not (relative.StartsWith "obj"))
+                |> List.ofSeq
+
+            Expect.isGreaterThan sources.Length 10 "the scan reads the RAG.Server sources"
+
+            let buildsContainer =
+                sources
+                |> List.filter (fun f -> (System.IO.File.ReadAllText f).Contains "BuildServiceProvider")
+
+            Expect.isEmpty buildsContainer "no RAG.Server source builds a service provider (ASP0000)"
+
+            let read (relative: string) =
+                System.IO.File.ReadAllText(System.IO.Path.Combine(root, relative))
+
+            let ragCompose = read "src/ToolUp.RAG.Server/Server/RAGCompose.fs"
+            let deps = read "src/ToolUp.KnowledgeBase.Server/Server/Api/Deps.fs"
+
+            Expect.isFalse (ragCompose.Contains "GetService(typeof<") "RAGCompose reads services through tryService"
+            Expect.isFalse (deps.Contains "GetService(typeof<") "KnowledgeApiDeps reads services through tryService"
+            Expect.isFalse (ragCompose.Contains "ref None") "no empty ref cell waits for a later callback in RAGCompose"
+        }
     ]
