@@ -351,7 +351,7 @@ module ShellSlots =
         everywhereAdmin
             _.ServiceStatusBoard
             ServiceStatusBoardUI.moduleId
-            (fun _ label -> ServiceStatusBoardUI.create label)
+            (fun _ label -> builtIn ServiceStatusBoardUI.builtIn label)
             (Some ServiceStatusBoardUI.adminTile)
             "ServiceStatusBoard"
 

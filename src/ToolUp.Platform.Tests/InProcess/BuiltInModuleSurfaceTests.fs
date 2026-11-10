@@ -310,7 +310,7 @@ let visibilityTests =
             // module is admin-shaped (group "Platform Admin", role gated
             // server-side), so its sidebar Visibility hides from
             // AnonymousKind in line with the other admin built-ins.
-            let m = ServiceStatusBoardUI.create None
+            let m = ShellSlots.builtIn ServiceStatusBoardUI.builtIn None
             assertVisibleToAuthenticated "ServiceStatusBoardUI" m
         }
 
@@ -358,7 +358,7 @@ let visibilityTests =
                 "TeamManagerUI", ShellSlots.builtIn TeamManagerUI.builtIn None
                 "HealthMonitorUI", ShellSlots.builtIn HealthMonitorUI.builtIn None
                 "UsageDashboard", UsageDashboard.create None
-                "ServiceStatusBoardUI", ServiceStatusBoardUI.create None
+                "ServiceStatusBoardUI", ShellSlots.builtIn ServiceStatusBoardUI.builtIn None
                 "PermissionsAdminUI", ShellSlots.builtIn PermissionsAdminUI.builtIn None
                 "DataIngestionUI", ShellSlots.builtIn DataIngestionUI.builtIn None
                 "WebhookAdminUI", WebhookAdminUI.create None
