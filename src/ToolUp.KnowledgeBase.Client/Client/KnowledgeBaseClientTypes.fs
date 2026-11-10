@@ -19,7 +19,7 @@ open ToolUp.Platform
 // lives in `ToolUp.AI.Client`: the platform shell must not take a
 // dependency on a companion, and `DefaultKnowledgeBase` has to
 // construct the companion's own module. `ToolUp.AI.Client`'s
-// `AIClientConfig.appendAssistantModule` is the precedent — the
+// the AI slots (`AIClientConfig.slotExtensions`) is the precedent — the
 // companion owns a module-list transform, the shell owns nothing.
 //
 // Server-side wiring stays explicit (the `KnowledgeApi` registration,
@@ -98,7 +98,7 @@ type KnowledgeBaseMode =
     ///    it dispatch through the global `Toolup.NarrativeCommit`
     ///    broker — no module imports Knowledge Base types directly. An
     ///    external Knowledge Base supplies its own
-    ///    `ClientConfig.Handlers.NarrativeCommitHandler` (a
+    ///    `ClientConfig.Composition.Handlers.NarrativeCommitHandler` (a
     ///    `NarrativeCommitHandler` record whose `Submit` takes the
     ///    `NarrativeDocument` plus an overwrite flag and returns a
     ///    `NarrativeCommitResult`). Leave it `None` and the button

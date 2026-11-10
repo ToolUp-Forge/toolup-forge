@@ -120,7 +120,7 @@ type AdClick = {
     ClickToken: string
 }
 
-/// AdPanel composition mode — `ClientConfig.AdPanel`. Default
+/// AdPanel composition mode — `ClientConfig.PublicUtility.AdPanel`. Default
 /// `NoAdPanel` strips every `<AdSlot>` render path (slot renders
 /// empty fragment without loading AdSense JS). `EnabledAdPanel`
 /// activates the substrate; per-slot ad units pick their config up
@@ -162,7 +162,7 @@ type PlatformAdminProfile =
     | PublicUtilityPlatformAdminProfile
 
 /// Phase 59 — declarative consent-provider selection visible to the
-/// client `ClientConfig.ConsentProvider`. `NoConsentProvider`
+/// client `ClientConfig.PublicUtility.ConsentProvider`. `NoConsentProvider`
 /// (default) is the `NoOpConsentProvider` shape — `Necessary` always
 /// granted, every other category `NotYetDecided`; appropriate for
 /// deployments outside jurisdictions that require explicit consent.

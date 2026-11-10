@@ -837,7 +837,7 @@ type ServerConfig = {
     /// (whitespace ignored) are dropped at `ServerApp.addModule` time.
     /// Populated from the `TOOLUP_MODULE` env var in the reference app;
     /// `None` / empty keeps every module registered. Keeps single-module
-    /// dev runs consistent with the client's `ClientConfig.ModuleFilter`.
+    /// dev runs consistent with the client's `ClientConfig.Composition.ModuleFilter`.
     ModuleFilter: string option
     /// Phase 170 — module-binding trust configuration (anchor descriptors +
     /// the unbound-allowed policy bit). Default = no anchors + `AllowUnbound`
@@ -1597,7 +1597,7 @@ type ServerConfig = {
     /// composed-but-not-declared.
     ///
     /// Parity between the two roots comes from declaring the SAME list on
-    /// `ClientConfig.ExpectedModules`, which `ModuleParityValidator`
+    /// `ClientConfig.Composition.ExpectedModules`, which `ModuleParityValidator`
     /// checks at client boot — two sets equal to the same set are equal
     /// to each other. The entries are the cross-tier identity token: the
     /// server's `ServerModule.Name`, which is also the client's

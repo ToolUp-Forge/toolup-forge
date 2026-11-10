@@ -348,7 +348,7 @@ let private kindAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts)
 
 /// Stage 4 — the no-active-team landing collapse.
 ///
-/// Opt-in via `ClientConfig.NoActiveTeamLandingModuleId` (a custom
+/// Opt-in via `ClientConfig.Chrome.NoActiveTeamLanding` (`NoActiveTeamLandingFill.Module`) (a custom
 /// module) or `ClientConfig.NoActiveTeamLanding` (the SDK built-in
 /// landing); `effectiveNoActiveTeamLandingId` unifies both into
 /// `NoActiveTeamLandingId`. When the deployment declares a `Team` surface
@@ -542,7 +542,7 @@ let canNavigateTo (facts: 'm -> SidebarModuleFacts) (inputs: SidebarVisibilityIn
 ///    escape) rather than expanding, and running it earlier would let a
 ///    later stage re-widen the collapsed set.
 ///
-/// Downstream of this function, Phase 567's `SeparateArea` split
+/// Downstream of this function, Phase 567's the Administration area split
 /// re-buckets the result into product / administration areas. That is a
 /// partition, not a fifth filter — it never re-admits a module this
 /// function removed, which is why the admin partition can only ever

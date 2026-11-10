@@ -7,7 +7,7 @@ open ToolUp.Platform
 
 // ─── Provider resolver ────────────────────────────────────────────
 //
-// SDK.Client resolves `ClientConfig.ConsentProvider` to a concrete
+// SDK.Client resolves `ClientConfig.PublicUtility.ConsentProvider` to a concrete
 // `IConsentProvider` instance once per tab. Components access it via
 // the `current` accessor below. The instance is a tab-singleton —
 // the consent decision is browser-local so a single provider per tab

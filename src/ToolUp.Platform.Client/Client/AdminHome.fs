@@ -17,7 +17,7 @@ open ToolUp.Platform
 // first. This module is where that flip lands instead.
 //
 // It is an ordinary registered module (`_sdk.admin-home`), injected only
-// under `AdminSurface = SeparateArea` and lifted by the sidebar into the
+// under `Chrome.AdminArea = ChromeFill.On()` and lifted by the sidebar into the
 // same always-visible leading section the product Home occupies — so
 // "first in the admin rail" is structural, not a sort order somebody has
 // to maintain.
@@ -217,7 +217,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
 /// Create the administration-landing module as an `ErasedModule`. The
 /// shell's `prepareModules` injects it only under
-/// `AdminSurface = SeparateArea` — under the default `InlineGroups`
+/// `Chrome.AdminArea = ChromeFill.On()` — under the default inline groups
 /// there are no areas to land between, so the composition is
 /// byte-for-byte pre-573 (GP 11).
 ///

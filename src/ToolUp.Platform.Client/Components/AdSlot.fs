@@ -21,7 +21,7 @@ open ToolUp.Platform.DataProp
 // `AdPanelConfig.ConsentCategoriesRequired` — slot renders an empty
 // fragment until the user grants the required categories.
 //
-// `AdPanelMode = NoAdPanel` (default `ClientConfig.AdPanel`) skips
+// `AdPanelMode = NoAdPanel` (default `ClientConfig.PublicUtility.AdPanel`) skips
 // the render path entirely — `AdSlot` returns `Html.none` and the
 // AdSense script never loads.
 

@@ -1107,7 +1107,7 @@ let accessibleNameTests =
 // special-cased their literal ids — so the Phase 567 area-switcher rows,
 // added later with `Group = None` and no special case, bucketed into
 // `_other`: last in the rail and collapsed on a fresh profile. Observed
-// live in a `SeparateArea` deployment, where a platform admin had to
+// live in a the Administration area deployment, where a platform admin had to
 // expand "Other" to find the only route into the administration area
 // (Phase 608, superseded by 611).
 //

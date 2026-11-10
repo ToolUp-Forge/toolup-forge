@@ -22,7 +22,7 @@ open Fable.Core
 //                standard SPA-only path).
 //
 // Stock SPA deployments stay byte-for-byte unchanged:
-// `ClientConfig.PrerenderRoutes = []` ⇒ no prerendered HTML ⇒
+// `ClientConfig.PublicUtility.PrerenderRoutes = []` ⇒ no prerendered HTML ⇒
 // no marker ⇒ standard `createRoot` mount.
 
 [<Emit("typeof document !== 'undefined' && document.querySelector('meta[name=\"toolup-prerendered\"]') !== null")>]

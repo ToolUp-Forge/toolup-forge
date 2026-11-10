@@ -14,7 +14,7 @@ let config =
             Auth.AuthUI = ToolUp.AuthProviders.ClerkRegister.authUI { PublishableKey = "pk_test" }
             Auth.HttpOnlySession = FeatureMode.Enabled
             Shell.CommandPalette = FeatureMode.Enabled
-            Shell.BrowserHistory = FeatureMode.Enabled
+            BrowserHistory = HashHistory
             Chrome.AdminArea = ChromeFill.On()
             Chrome.Observability = ChromeFill.On()
             Chrome.PlatformUsers = ChromeFill.Off

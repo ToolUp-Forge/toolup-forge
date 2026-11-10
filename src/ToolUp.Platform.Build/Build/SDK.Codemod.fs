@@ -1125,23 +1125,23 @@ module Codemod =
             "1074-feature-mode-off"
             CodemodMigration.ClientConfigByConcern
             CodemodFileClass.Source
-            @"\b(?:(?:CommandPaletteMode|BrowserHistoryMode|AuthTokenStorage)\.)?(?:NoCommandPalette|NoBrowserHistory|ClientCookieAndLocalStorage)\b"
+            @"\b(?:(?:CommandPaletteMode|AuthTokenStorage)\.)?(?:NoCommandPalette|ClientCookieAndLocalStorage)\b"
             "FeatureMode.Disabled"
-            "`NoCommandPalette` / `NoBrowserHistory` / `ClientCookieAndLocalStorage` → `FeatureMode.Disabled`"
+            "`NoCommandPalette` / `ClientCookieAndLocalStorage` → `FeatureMode.Disabled`"
         rewrite
             "1074-feature-mode-on"
             CodemodMigration.ClientConfigByConcern
             CodemodFileClass.Source
-            @"\b(?:(?:CommandPaletteMode|BrowserHistoryMode|AuthTokenStorage)\.)?(?:DefaultCommandPalette|HashHistory|ServerSetHttpOnlyCookie)\b"
+            @"\b(?:(?:CommandPaletteMode|AuthTokenStorage)\.)?(?:DefaultCommandPalette|ServerSetHttpOnlyCookie)\b"
             "FeatureMode.Enabled"
-            "`DefaultCommandPalette` / `HashHistory` / `ServerSetHttpOnlyCookie` → `FeatureMode.Enabled`"
+            "`DefaultCommandPalette` / `ServerSetHttpOnlyCookie` → `FeatureMode.Enabled`"
         rewrite
             "1074-feature-mode-type"
             CodemodMigration.ClientConfigByConcern
             CodemodFileClass.Source
-            @"(?<=:\s*)\b(?:CommandPaletteMode|BrowserHistoryMode|AuthTokenStorage)\b"
+            @"(?<=:\s*)\b(?:CommandPaletteMode|AuthTokenStorage)\b"
             "FeatureMode"
-            "`: CommandPaletteMode` / `: BrowserHistoryMode` / `: AuthTokenStorage` (a type annotation) → `: FeatureMode`"
+            "`: CommandPaletteMode` / `: AuthTokenStorage` (a type annotation) → `: FeatureMode`"
         rewrite
             "1074-chrome-off"
             CodemodMigration.ClientConfigByConcern
@@ -2596,7 +2596,6 @@ module Codemod =
         [
             "LoadingIndicator"
             "ActiveModule"
-            "BrowserHistory"
             "NotAuthorisedView"
             "CommandPalette"
             "HomeRecents"

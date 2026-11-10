@@ -1141,7 +1141,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 
 /// Create the AI settings module as an ErasedModule. Mirrors the
 /// `AIAssistantUI.create` pattern; appended alongside the assistant
-/// module by `AIClientConfig.appendAssistantModule` when AI is
+/// module by the AI slots (`AIClientConfig.slotExtensions`) when AI is
 /// enabled.
 let create () : ErasedModule =
     // Companion-provided built-in — `Id` is reserved under the `_ai.`

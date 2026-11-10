@@ -68,7 +68,7 @@ let extractToken (path: string) : string option =
     else
         None
 
-/// Predicate the consumer passes to `ClientConfig.PublicEntryDispatchers`
+/// Predicate the consumer passes to `ClientConfig.Composition.PublicEntryDispatchers`
 /// to short-circuit the shell on `/invite/{token}`. Returns `true`
 /// when the current path matches; the dispatcher renders the accept
 /// component in place of the shell.

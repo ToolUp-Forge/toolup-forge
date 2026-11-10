@@ -154,7 +154,7 @@ module NotificationMode =
 
 /// Case- and whitespace-insensitive substring match against module
 /// names. Shared by `ServerConfig.ModuleFilter` and
-/// `ClientConfig.ModuleFilter` so single-module dev runs behave the
+/// `ClientConfig.Composition.ModuleFilter` so single-module dev runs behave the
 /// same on both sides.
 module ModuleFilter =
     let private normalise (s: string) = s.ToLowerInvariant().Replace(" ", "")

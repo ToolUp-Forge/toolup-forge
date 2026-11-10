@@ -19,12 +19,12 @@
 ///     changes the active module, which the sidebar highlights.
 ///
 /// Three counters measure the scope. The CHROME counter is a
-/// `ClientConfig.GlobalOverlays` thunk, which the shell invokes exactly
+/// `ClientConfig.Shell.GlobalOverlays` thunk, which the shell invokes exactly
 /// once per construction of its chrome (the overlays are built in the same
 /// pass as the sidebar's inputs, the header and the providers). The MODULE
 /// counter is the active module's own view function. The SIDEBAR counter
 /// (Phase 883) is the catalog's `Sidebar.Reorder` formatter, supplied
-/// through `ClientConfig.MessageCatalogOverride`: the sidebar component
+/// through `ClientConfig.Locale.MessageCatalogOverride`: the sidebar component
 /// calls it while rendering each reorderable row, so counting the calls
 /// made for ONE named row counts the sidebar component's renders — and
 /// nothing else calls it (the chrome hands the sidebar its section titles,

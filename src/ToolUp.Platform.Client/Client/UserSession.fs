@@ -100,7 +100,7 @@ type private SubjectAndBridgeState = {
     /// Phase 4b dev convenience — when set, `getUserId` seeds an empty
     /// `toolup-user-id` localStorage entry with this value instead of
     /// an auto-generated GUID. Set by `SDK.Client.run` from
-    /// `ClientConfig.DevDefaultUserId`. Stays `None` in production.
+    /// `ClientConfig.Auth.DevDefaultUserId`. Stays `None` in production.
     DevDefaultUserId: string option
     /// Phase 6k Workstream A — optional bridge to a deployment-chosen
     /// identity SDK (Clerk, Microsoft Entra via MSAL, Auth0, WorkOS).
@@ -466,7 +466,7 @@ let getUserId () =
         | null
         | "" ->
             // Phase 4b — dev composition roots can opt in to a stable
-            // seed via `ClientConfig.DevDefaultUserId` so the local-run
+            // seed via `ClientConfig.Auth.DevDefaultUserId` so the local-run
             // `X-User-Id` matches `ServerConfig.AutoBootstrapDevAdmin`
             // end-to-end. Production leaves it `None` and gets a fresh
             // GUID per first-visit (existing localStorage values are
@@ -803,7 +803,7 @@ let private setInterval (cb: unit -> unit) (ms: int) : int = jsNative
 let private clearInterval (handle: int) : unit = jsNative
 
 /// Install a deployment-specific auth bridge. Called once during
-/// `SDK.Client.run` if `ClientConfig.AuthBridge` is `Some`. Kicks off
+/// `SDK.Client.run` if `ClientConfig.Auth.AuthBridge` is `Some`. Kicks off
 /// an immediate JWT fetch + a periodic refresh loop. Idempotent — a
 /// re-install replaces the previous bridge AND stops the previous
 /// refresh interval (pre-121 the old interval leaked and kept polling

@@ -12,7 +12,7 @@ module ToolUp.AI.Client.Tests.SidebarPlacementTests
 // escaped it only because the fold special-cased their literal ids. The
 // Phase 567 area-switcher rows, added later with `Group = None` and no
 // special case, therefore bucketed into `_other`: last in the rail and
-// collapsed on a fresh profile. Observed live in a `SeparateArea`
+// collapsed on a fresh profile. Observed live in a the Administration area
 // deployment, where a platform admin had to expand "Other" to find the
 // only route into the administration area (Phase 608, superseded by 611).
 //
@@ -330,7 +330,7 @@ let tests =
                                 out of `_other` but not out of reach."))
 
         testCase "the fresh-profile switcher is reachable with no persisted state (Phase 608)" (fun () ->
-            // The reproduction, as a test. `SeparateArea` + platform admin in
+            // The reproduction, as a test. the Administration area + platform admin in
             // the product area: the shell hands the fold that area's modules
             // plus the role-gated switcher, and the user has never expanded
             // anything, so `ExpandedGroups` is empty.

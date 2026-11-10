@@ -61,7 +61,7 @@ type GoogleButtonShape =
     | SquareButton
 
 /// Inputs the consumer supplies in
-/// `ClientConfig.AuthUI = GoogleIdentityRegister.authUI config`.
+/// `ClientConfig.Auth.AuthUI = GoogleIdentityRegister.authUI config`.
 ///
 /// The only required input is `ClientId` — Google's issuer is a fixed
 /// constant (`https://accounts.google.com`), so unlike every other

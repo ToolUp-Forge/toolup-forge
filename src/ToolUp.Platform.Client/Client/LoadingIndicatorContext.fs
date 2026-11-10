@@ -21,7 +21,7 @@ open Toolup.UIToolkit
 
 /// React context carrying the configured indicator mode. The shell
 /// mounts a provider in `SDK.Client.view` from
-/// `ClientConfig.LoadingIndicator`. Default `SkeletonLoader` matches
+/// `ClientConfig.Shell.LoadingIndicator`. Default `SkeletonLoader` matches
 /// `ClientConfig.defaults`, so an isolated render (tests, no provider)
 /// degrades to the same compact skeleton.
 let private context =

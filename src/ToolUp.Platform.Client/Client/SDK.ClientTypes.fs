@@ -13,7 +13,7 @@ open Fable.SimpleJson
 // `ToolUp.Platform.Core/Shared/Types/PrerenderTypes.fs` so the
 // `ToolUp.Platform.Build` FAKE Prerender target factory can
 // consume them without a Build → Client dep. The
-// `ClientConfig.PrerenderRoutes` field below references the lifted
+// `ClientConfig.PublicUtility.PrerenderRoutes` field below references the lifted
 // types directly via the shared `ToolUp.Platform` namespace.
 
 // ─── Data type display ────────────────────────────────────────────
@@ -811,7 +811,7 @@ type ToastCentreMode =
 // ─── Auth UI configuration ────────────────────────────────────────
 
 /// Configuration for the OIDC Authorization Code + PKCE flow, used
-/// when `ClientConfig.AuthUI = OidcAuthUI _`. The OidcClient companion
+/// when `ClientConfig.Auth.AuthUI = OidcAuthUI _`. The OidcClient companion
 /// reads this to orchestrate sign-in against an OIDC-compliant issuer.
 /// Which of the two tokens an OIDC sign-in returns is stored and sent
 /// as the session's HTTP `Authorization: Bearer` credential.
@@ -1110,7 +1110,7 @@ type ClerkUIConfig = {
 type CustomAuthUI = { Wrap: ReactElement -> ReactElement }
 
 /// Phase 443 — configuration for the WebAuthn / passkey sign-in flow,
-/// used when `ClientConfig.AuthUI = PasskeyAuthUI _`. The PasskeyClient
+/// used when `ClientConfig.Auth.AuthUI = PasskeyAuthUI _`. The PasskeyClient
 /// companion reads this to orchestrate the `navigator.credentials`
 /// ceremonies against the server-side passkey companion's endpoints.
 /// The relying-party id + origin allow-list live server-side (the
@@ -1138,7 +1138,7 @@ module PasskeyUIConfig =
 /// How the shell handles sign-in UI in authenticated modes. Ignored
 /// in `Anonymous` mode (there is nothing to sign in to). The actual
 /// sign-in provider code lives in companion packages whose exported
-/// handler values are added to `ClientConfig.Handlers.AuthUIHandlers`
+/// handler values are added to `ClientConfig.Composition.Handlers.AuthUIHandlers`
 /// (tag-keyed — see `AuthUIProvider`).
 type AuthUIMode =
     /// No SDK-provided sign-in UI. The shell runs as-is; the app is
@@ -1155,7 +1155,7 @@ type AuthUIMode =
     /// WebAuthn is a protocol, not a vendor — this case stays alongside
     /// `OidcAuthUI` rather than folding into `ProviderAuthUI`. Requires
     /// `ToolUp.AuthProviders.PasskeyRegister.handler` in
-    /// `ClientConfig.Handlers.AuthUIHandlers`. Additive DU case (pre-1.0
+    /// `ClientConfig.Composition.Handlers.AuthUIHandlers`. Additive DU case (pre-1.0
     /// window) — consumers pattern-matching `AuthUIMode` exhaustively get
     /// a compile-time prompt; see `docs/migrations/443-passkey-companion.md`.
     | PasskeyAuthUI of PasskeyUIConfig
@@ -1165,7 +1165,7 @@ type AuthUIMode =
     | CustomAuthUI of CustomAuthUI
     /// Vendor-neutral companion-backed sign-in flow (Phase 494). `tag`
     /// names the handler entry in
-    /// `ClientConfig.Handlers.AuthUIHandlers` (the same key the
+    /// `ClientConfig.Composition.Handlers.AuthUIHandlers` (the same key the
     /// `AuthUIProvider` registry dispatches on — e.g. `"clerk"`,
     /// `"oidc"`, or any third-party companion's tag); `config` is the
     /// provider-specific config payload, type-erased at this sanctioned
@@ -1181,7 +1181,7 @@ type AuthUIMode =
 // call-to-action) on the Home / Overview landing surface (Phase 171)
 // without `Platform.Client` ever naming it (GP 9). It exports an
 // `IHomeWidgetContributor` value; the consumer adds it to
-// `ClientConfig.Handlers.HomeWidgetContributors`. The built-in `Home`
+// `ClientConfig.Composition.Handlers.HomeWidgetContributors`. The built-in `Home`
 // module collects every contributor's widgets, sorts by `Weight`, and
 // renders them below the built-in tool / Active-AI / deployment cards.
 // Click-through reuses `NavigationRequest.request` (Phase 6g.C) — a
@@ -1223,7 +1223,7 @@ type HomeWidget = {
 /// this type declaring the widgets it contributes to Home; the SDK
 /// never names the contributing module. Mirrors the value-handler
 /// registration pattern used for auth / data-source UIs — consumers
-/// add contributors to `ClientConfig.Handlers.HomeWidgetContributors`
+/// add contributors to `ClientConfig.Composition.Handlers.HomeWidgetContributors`
 /// at compose time (no module-load side effects).
 type IHomeWidgetContributor =
     /// The widgets this contributor surfaces on Home. Called once at
@@ -1273,14 +1273,14 @@ type AdminTile = {
 /// the `IHomeWidgetContributor` twin. A module (or an SDK built-in)
 /// exports a value of this type declaring the tiles it contributes to
 /// the administration landing surface; consumers add contributors to
-/// `ClientConfig.Handlers.AdminTileContributors` at compose time.
+/// `ClientConfig.Composition.Handlers.AdminTileContributors` at compose time.
 type IAdminTileContributor =
     /// The tiles this contributor surfaces on the administration
     /// landing. Called once at boot; the result is flattened across
     /// contributors and ordered by `Widget.Weight`.
     abstract Tiles: unit -> AdminTile list
 
-/// Phase 12c — payload delivered to `ClientConfig.OnError` when a module's
+/// Phase 12c — payload delivered to `ClientConfig.Composition.OnError` when a module's
 /// view tree throws. `ComponentStack` carries the React component-stack
 /// captured by the boundary's `componentDidCatch` (empty string when React
 /// did not provide one). Telemetry consumers can forward this to a server
@@ -1297,7 +1297,7 @@ type ModuleErrorReport = {
 // data-on-`ClientConfig` shape that replaces the legacy module-load
 // `register()` pattern. Companion packages (OidcClient, ClerkUI,
 // KnowledgeBase, data-source credential UIs) export handler values;
-// consumers add them to the matching field on `ClientConfig.Handlers`.
+// consumers add them to the matching field on `ClientConfig.Composition.Handlers`.
 // The SDK validates the registry at `Client.run` (fail-loud naming
 // the missing import) and reads `RequestSeam` thunks at request-send
 // time so values populated post-init (async CSRF prefetch, auth-bridge
@@ -1404,11 +1404,11 @@ module ClientRequestSeam =
 /// `KnowledgeBaseView.narrativeCommitHandler : NarrativeCommitHandler`,
 /// etc.) that consumers add to the matching field at compose time.
 /// No module-load side effects; missing handlers for a declared
-/// `ClientConfig.AuthUI` mode or `DataSource.Kind` fail loud at
+/// `ClientConfig.Auth.AuthUI` mode or `DataSource.Kind` fail loud at
 /// `Client.run` naming the missing import.
 type ClientHandlerRegistry = {
     /// Sign-in UI handlers keyed by `AuthUIMode` tag. The SDK looks
-    /// up the handler matching `ClientConfig.AuthUI` and wraps the
+    /// up the handler matching `ClientConfig.Auth.AuthUI` and wraps the
     /// shell. Default: empty (compatible with `AuthUI = NoAuthUI`).
     AuthUIHandlers: (string * AuthUIHandler) list
 
@@ -1463,7 +1463,7 @@ type ClientHandlerRegistry = {
 
 module ClientHandlerRegistry =
     /// No companion handlers wired in. Compatible with apps that
-    /// declare `ClientConfig.AuthUI = NoAuthUI`, don't use the
+    /// declare `ClientConfig.Auth.AuthUI = NoAuthUI`, don't use the
     /// data-ingestion admin, and don't ship a Knowledge Base.
     let empty: ClientHandlerRegistry = {
         AuthUIHandlers = []
@@ -1546,6 +1546,21 @@ type NotAuthorisedMode =
     /// Deployment-supplied renderer. Receives the full
     /// `NotAuthorisedContext`; replaces the default entirely.
     | CustomNotAuthorised of (NotAuthorisedContext -> ReactElement)
+
+/// Phase 1240 — whether the shell's views have browser history and a URL.
+///
+/// Kept as its own union by Phase 1074: the public composition profile
+/// binds it (`spec/surface-binding.json`, `clientShell.browserHistory`) —
+/// one case per profile token and one for the absent member — so retyping
+/// it, or moving the field, is a profile change.
+type BrowserHistoryMode =
+    /// The default — the active view lives in the model alone: no history
+    /// entry is written, and the URL is neither read nor changed.
+    | NoBrowserHistory
+    /// Each view has the URL `#/{moduleId}{pageRoute}`. A navigation adds a
+    /// history entry, Back and Forward move between views, and a reload
+    /// restores the view through the route guard (Phase 569).
+    | HashHistory
 
 /// Phase 24 — PWA install manifest, for deployments that opt into
 /// offline mode.
@@ -1690,7 +1705,7 @@ type OfflineMode =
 /// showing the page to every visitor would be a reconnaissance gift).
 type ShellSlotFills = {
     /// The Home / Overview landing module (Phase 171) — injected at the
-    /// very top of the sidebar and, unless `ClientConfig.ActiveModule`
+    /// very top of the sidebar and, unless `ClientConfig.Shell.ActiveModule`
     /// names a module, the surface the shell lands on. It summarises the
     /// deployment through `IHomeOverviewApi` (auto-mounted server-side,
     /// never called unless the module is on). **Default `Empty`** — off,
@@ -1877,7 +1892,7 @@ type ChromeFill<'cfg> =
 
 /// Phase 1074 — what the no-active-team gate lands a team-less caller on.
 /// One choice where there used to be two fields and a precedence rule
-/// between them (`NoActiveTeamLandingModuleId` won over `NoActiveTeamLanding`).
+/// between them (`NoActiveTeamLandingFill.Module` won over `NoActiveTeamLanding`).
 [<RequireQualifiedAccess>]
 type NoActiveTeamLandingFill =
     /// The SDK's built-in landing (stable id `NoActiveTeamLanding.moduleId`),
@@ -2133,13 +2148,6 @@ type ShellConfig = {
     /// Name of the module to show on startup. Falls back to the first
     /// module if None or not found.
     ActiveModule: string option
-    /// Phase 1240 — browser history and a URL per view. **Default
-    /// `FeatureMode.Disabled`** (the URL is neither read nor written).
-    /// `FeatureMode.Enabled` gives each view the URL
-    /// `#/{moduleId}{pageRoute}`: a navigation adds a history entry, Back
-    /// and Forward move between views, and a reload restores the view
-    /// through the route guard (Phase 569).
-    BrowserHistory: FeatureMode
     /// Phase 569 — the view rendered when the route guard refuses a
     /// deep-linked module. **Default `DefaultNotAuthorised`** — the SDK's
     /// reason-aware surface. The guard itself is not configurable: a
@@ -2192,14 +2200,13 @@ type ShellConfig = {
 
 /// Phase 1074 — shell presentation defaults.
 module ShellConfig =
-    /// The skeleton loader, the first module, no URL history, the SDK's
+    /// The skeleton loader, the first module, the SDK's
     /// denial surface, no palette, no recents, the built-in toasts, no
     /// overlays, a narrow inputs pane, Community grid modules, no
     /// presence mount, online-only.
     let defaults: ShellConfig = {
         LoadingIndicator = SkeletonLoader
         ActiveModule = None
-        BrowserHistory = FeatureMode.Disabled
         NotAuthorisedView = DefaultNotAuthorised
         CommandPalette = FeatureMode.Disabled
         HomeRecents = false
@@ -2225,6 +2232,13 @@ type ClientConfig = {
     /// derives the active `SubjectKind` per render from the list + auth
     /// state + active team scope (`ClientConfig.resolveSubjectKind`).
     Surfaces: SurfaceProfile list
+    /// Phase 1240 — browser history and a URL per view. **Default
+    /// `NoBrowserHistory`** (the URL is neither read nor written).
+    /// `HashHistory` makes Back, Forward and reload work. It stays at the
+    /// top level, beside the concern records, because the public
+    /// composition profile binds it here (`clientShell.browserHistory`):
+    /// a composition's reduction writes this field.
+    BrowserHistory: BrowserHistoryMode
     /// Phase 879 — what fills each shell slot: the data manager, the team
     /// manager, the Home landing and the admin built-ins a deployment can
     /// replace. Default `ShellSlotFills.defaults`; set a slot with a
@@ -2331,6 +2345,7 @@ module ClientConfig =
         AppName = "My App"
         AppLogo = "favicon.png"
         Surfaces = Surfaces.anonymous
+        BrowserHistory = NoBrowserHistory
         Slots = ShellSlotFills.defaults
         Chrome = ShellChrome.defaults
         Auth = AuthConfig.defaults

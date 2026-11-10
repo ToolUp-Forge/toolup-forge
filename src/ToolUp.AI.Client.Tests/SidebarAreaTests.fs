@@ -6,7 +6,7 @@ module ToolUp.AI.Client.Tests.SidebarAreaTests
 // ─── Two-surface Admin Area (Phase 567) ─────────────────────────────
 //
 // Pins `ClientConfig.effectiveArea` — the derivation behind the
-// `AdminSurface = SeparateArea` sidebar split in `SDK.Client.fs` — and
+// `Chrome.AdminArea = ChromeFill.On()` sidebar split in `SDK.Client.fs` — and
 // the switcher-gating / partition semantics the shell layers on top.
 //
 // Design: a module's *effective* area is `Administration` if it declares
@@ -18,7 +18,7 @@ module ToolUp.AI.Client.Tests.SidebarAreaTests
 // former inline `adminGroupFiltered`) already strips platform-scoped
 // groups from non-admins, a plain user's admin set is empty and no
 // switcher renders (GP 12 — server enforcement is authoritative). The
-// default `InlineGroups` never consults any of this (byte-identical to
+// default inline groups never consults any of this (byte-identical to
 // pre-567).
 
 open ToolUp.Platform

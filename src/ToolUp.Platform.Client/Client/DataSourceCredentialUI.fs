@@ -10,7 +10,7 @@ open Feliz
 // Each connector companion (`src/DataSources/<Provider>/`) exports a
 // `let handler : string * DataSourceCredentialHandler` value keyed by
 // its `Kind` discriminator. Consumers add the handler to
-// `ClientConfig.Handlers.DataSourceCredentialHandlers`. The built-in
+// `ClientConfig.Composition.Handlers.DataSourceCredentialHandlers`. The built-in
 // `DataIngestionUI` admin module looks the form up at render time and
 // inlines it inside the row for the matching data source.
 //
@@ -35,7 +35,7 @@ module DataSourceCredentialUIRegistry =
     let mutable private handlers: Map<string, DataSourceCredentialHandler> = Map.empty
 
     /// Called once by `SDK.Client.program` with the value from
-    /// `ClientConfig.Handlers.DataSourceCredentialHandlers`.
+    /// `ClientConfig.Composition.Handlers.DataSourceCredentialHandlers`.
     /// Duplicate Kinds within the supplied list collapse to last-wins
     /// (the SDK's `Client.run` validator surfaces duplicates
     /// separately).

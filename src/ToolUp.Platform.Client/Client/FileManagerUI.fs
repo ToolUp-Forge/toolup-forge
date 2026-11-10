@@ -310,7 +310,7 @@ let update msg model =
 // ─── View ─────────────────────────────────────────────────────────
 
 /// Renders the deployment's configured loading indicator
-/// (`ClientConfig.LoadingIndicator`) read from context. A
+/// (`ClientConfig.Shell.LoadingIndicator`) read from context. A
 /// `[<ReactComponent>]` because `useIndicator` is a hook and must run in
 /// a component body; mounted in the "Uploaded Files" panel while the
 /// initial `ListFiles` is in flight.

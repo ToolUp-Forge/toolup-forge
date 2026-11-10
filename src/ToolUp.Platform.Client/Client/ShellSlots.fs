@@ -45,7 +45,7 @@ namespace ToolUp.Platform
 [<RequireQualifiedAccess>]
 type ShellSlotPosition =
     /// At the very head. The shell lands on the first module when
-    /// `ClientConfig.ActiveModule` names none, so a module here is the
+    /// `ClientConfig.Shell.ActiveModule` names none, so a module here is the
     /// default start surface.
     | Home
     /// Ahead of the app's own modules.
@@ -456,7 +456,7 @@ module ShellSlots =
     /// module filling it, in which case that tile is the module's own
     /// and the slot's steps aside (one tile per module). `supplied` is
     /// every tile the deployment wires through
-    /// `ClientConfig.Handlers.AdminTileContributors`.
+    /// `ClientConfig.Composition.Handlers.AdminTileContributors`.
     ///
     /// The slot's gate is deliberately NOT consulted, exactly as before
     /// the slots existed: the landing distinguishes "nothing was

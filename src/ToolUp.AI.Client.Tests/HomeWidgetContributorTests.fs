@@ -22,7 +22,7 @@ open ToolUp.Platform
 
 /// A contributor declaring the supplied widgets — the value a module
 /// would export and the consumer would add to
-/// `ClientConfig.Handlers.HomeWidgetContributors`.
+/// `ClientConfig.Composition.Handlers.HomeWidgetContributors`.
 let private contributor (widgets: HomeWidget list) : IHomeWidgetContributor =
     { new IHomeWidgetContributor with
         member _.Widgets() = widgets

@@ -841,7 +841,7 @@ let update (msg: Msg) (model: Model) =
 // ─── Narrative → KB commit handler (Phase 13a) ─────────────────────
 //
 // `narrativeCommitHandler` is a value the SDK reads from
-// `ClientConfig.Handlers.NarrativeCommitHandler` at boot. It brokers
+// `ClientConfig.Composition.Handlers.NarrativeCommitHandler` at boot. It brokers
 // the `Save to Knowledge Base` button in `NarrativeRenderer`.
 //
 // Was (legacy):
@@ -882,7 +882,7 @@ let private submitNarrative
     }
 
 /// Companion-exported NarrativeCommit handler. Add to
-/// `ClientConfig.Handlers.NarrativeCommitHandler` (as `Some
+/// `ClientConfig.Composition.Handlers.NarrativeCommitHandler` (as `Some
 /// KnowledgeBaseView.narrativeCommitHandler`) to enable
 /// `NarrativeRenderer`'s "Save to Knowledge Base" button.
 let narrativeCommitHandler: NarrativeCommitHandler = { Submit = submitNarrative }

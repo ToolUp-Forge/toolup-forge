@@ -26,7 +26,7 @@ open ProcessedDataTypes
 type Model = {
     Overview: Remote<HomeOverview, string>
     // Phase 217 — recents/pinning. `Recents` mirrors
-    // `ClientConfig.HomeRecents` (captured at module creation); when
+    // `ClientConfig.Shell.HomeRecents` (captured at module creation); when
     // false the surface is byte-for-byte Phase 171 (GP 13).
     Recents: bool
     Pinning: HomePinningState
@@ -60,7 +60,7 @@ let private loadPinningCmd =
     Cmd.OfRemoting.call homeApi.GetPinning () PinningLoaded (fun _ -> PinningLoaded HomePinningState.empty)
 
 /// `recents` is partially applied at module creation from
-/// `ClientConfig.HomeRecents`. Pinning is only fetched when opted in,
+/// `ClientConfig.Shell.HomeRecents`. Pinning is only fetched when opted in,
 /// so a non-recents deployment makes exactly the Phase 171 call set.
 let init (recents: bool) () =
     let model = {
@@ -437,7 +437,7 @@ let moduleId = "_sdk.home"
 /// (`SlotFill.Default` / `Configured`), and lands on it by
 /// default (unless `ActiveModule` names another module). Ungrouped so
 /// it renders as the leading sidebar entry. `recents` is
-/// `ClientConfig.HomeRecents` — captured here and threaded into `init`
+/// `ClientConfig.Shell.HomeRecents` — captured here and threaded into `init`
 /// so the per-user recents/pinning fetch + widget only activate when
 /// opted in (GP 13).
 let create (recents: bool) (config: ModuleLabel option) : ErasedModule =

@@ -172,7 +172,7 @@ let GoogleIdentityShell (config: GoogleIdentityUIConfig) (shell: ReactElement) :
 // ─── Public surface ──────────────────────────────────────────────────
 
 /// Build a wrapper suitable for
-/// `ClientConfig.AuthUI = CustomAuthUI { Wrap = GoogleIdentityAuthUI.wrap config }`.
+/// `ClientConfig.Auth.AuthUI = CustomAuthUI { Wrap = GoogleIdentityAuthUI.wrap config }`.
 /// The registry route (`GoogleIdentityRegister.authUI` +
 /// `GoogleIdentityRegister.handler`) is preferred — this exists for a
 /// deployment already composing a custom wrapper chain.

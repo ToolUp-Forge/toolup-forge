@@ -18,7 +18,7 @@ open ToolUp.Platform.Infra
 //
 // `NarrativePrerender.fromDocument` / `fromPage` derive a
 // `PrerenderMeta` from a Narrative document in one place; route
-// authors consume the result via `ClientConfig.PrerenderRoutes`
+// authors consume the result via `ClientConfig.PublicUtility.PrerenderRoutes`
 // alongside (or in place of) hand-authored entries.
 
 module NarrativePrerender =

@@ -223,7 +223,7 @@ let private expanding (keys: string list) = {
 /// | the hidden-items section | 7 |
 /// | the no-active-team collapse | 8, 9 |
 let railStates: RailState list = [
-    // 1 + 2 — the Product area, both rail widths. `SeparateArea` with a
+    // 1 + 2 — the Product area, both rail widths. the Administration area with a
     // platform admin in the product area: the landing, two grouped
     // modules, an ungrouped one, and the role-gated switcher into
     // administration. Groups expanded, so every row is on screen and every

@@ -79,12 +79,12 @@ do Feliz.AgCharts.setChartsModulesRegistered ()
 do AgGridEnterpriseProvenance.activate ()
 
 // ─── Variant B (recommended): AgGridProvider ─────────────────────
-// Returns an AgGridModuleConfig for use with ClientConfig.GridModules.
+// Returns an AgGridModuleConfig for use with ClientConfig.Shell.GridModules.
 // Module registration already happened above; this just captures the module
 // list for AgGridProvider's React Context and sets the license key.
 
 /// Get an AgGridModuleConfig with Enterprise grid modules.
-/// Pass the result to ClientConfig.GridModules.
+/// Pass the result to ClientConfig.Shell.GridModules.
 let gridModuleConfig (licenseKey: string) : Feliz.AgGrid.AgGridModuleConfig =
     validateLicenseKey licenseKey
     licenseManager?setLicenseKey licenseKey

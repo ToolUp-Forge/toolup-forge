@@ -29,7 +29,7 @@ open ToolUp.AI
 // `NarrativePromptHandler.withPromptAdmin`, so the module is not appended by
 // any SDK default: a deployment that composes the server half adds `create`
 // to its module list and contributes `adminTile` through
-// `ClientConfig.Handlers.AdminTileContributors` (docs/migrations/1111).
+// `ClientConfig.Composition.Handlers.AdminTileContributors` (docs/migrations/1111).
 
 // ─── Pure decisions ─────────────────────────────────────────────────
 
@@ -933,7 +933,7 @@ let create () : ErasedModule =
 /// `JobsAdminUI.adminTile` is: the platform's shell owns the
 /// `IAdminTileContributor` that carries tiles onto the landing page, and a
 /// deployment hands this one to it through
-/// `ClientConfig.Handlers.AdminTileContributors` (docs/migrations/1111). It
+/// `ClientConfig.Composition.Handlers.AdminTileContributors` (docs/migrations/1111). It
 /// is shown only to a caller who can reach the module it fronts.
 let adminTile: AdminTile = {
     OwnerModuleId = moduleId

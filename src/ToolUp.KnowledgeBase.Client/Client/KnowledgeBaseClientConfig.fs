@@ -4,7 +4,7 @@
 module ToolUp.KnowledgeBase.Client.KnowledgeBaseClientConfig
 
 // Phase 1e — the `KnowledgeBaseMode` application seam. Mirrors
-// `ToolUp.AI.Client.AIClientConfig.appendAssistantModule`: the
+// `ToolUp.AI.Client.the AI slots (`AIClientConfig.slotExtensions`)`: the
 // companion owns the module-list transform, the platform shell owns
 // nothing and takes no dependency on this package.
 //
@@ -43,7 +43,7 @@ open ToolUp.KnowledgeBase
 /// (`_sdk.PlatformKnowledgeAdmin`). The admin's sidebar entry is
 /// role-gated at render time by its "Platform Management" group, so the
 /// unconditional append is safe on every deployment shape — the same
-/// argument `AIClientConfig.appendAssistantModule` makes for
+/// argument the AI slots (`AIClientConfig.slotExtensions`) makes for
 /// `PlatformAIKeysAdminUI`.
 ///
 /// Appended (not prepended) so the companion's "Knowledge" group lands
@@ -67,7 +67,7 @@ let appendKnowledgeBaseModule (mode: KnowledgeBaseMode) (modules: ErasedModule l
 // ─── Handler-registry transformation ─────────────────────────────
 
 /// Install the companion's "Save to Knowledge Base" broker into
-/// `ClientConfig.Handlers` when — and only when — the deployment runs
+/// `ClientConfig.Composition.Handlers` when — and only when — the deployment runs
 /// the companion's own Knowledge Base.
 ///
 /// Integration contract 1 (see `ExternalKnowledgeBase`): an

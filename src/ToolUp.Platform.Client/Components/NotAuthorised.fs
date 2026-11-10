@@ -28,7 +28,7 @@ open ToolUp.Platform
 // guards are the enforcement; this is UX coherence over the same
 // decision. Nothing here is load-bearing for access control, which is
 // also why a deployment may replace it wholesale
-// (`ClientConfig.NotAuthorisedView = CustomNotAuthorised …`).
+// (`ClientConfig.Shell.NotAuthorisedView = CustomNotAuthorised …`).
 //
 // Theme-aware by construction: it composes `UIToolkit.StateViews`
 // `emptyState`, so it inherits the toolkit's `var(--text-strong)` /
