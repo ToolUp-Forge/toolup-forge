@@ -177,7 +177,7 @@ let private runDelivery
     (envelope: NotificationEnvelope)
     : Async<unit> =
     async {
-        // Child activity per envelope. Re-parents the trace
+        // Phase 9l — child activity per envelope. Re-parents the trace
         // under the W3C `traceparent` stamped on the envelope by the
         // publisher (whichever request / job / webhook handler called
         // `INotificationChannel.Publish`); when the field is `None`
@@ -206,7 +206,7 @@ let private runDelivery
                 logger.Debug
                     $"%s{LogPrefix} skipped scope=%s{envelope.ScopeId} kind=%s{sinkKindWire} reason=team_opted_out envelopeId=%O{envelope.Id}"
 
-                // Emit a `NotificationSilentlySkipped` audit
+                // Phase 6l.C — emit a `NotificationSilentlySkipped` audit
                 // event so an operator who disabled notifications via the
                 // team UI but a publish happened anyway can correlate
                 // "thought email was on" against "actually dropped". PII-
@@ -374,7 +374,7 @@ type TransactionalDispatcher
 
     do validateSinkRegistration sinks
 
-    /// Every delivery and every gap-audit row the drain loop
+    /// Phase 1026 — every delivery and every gap-audit row the drain loop
     /// starts. Each is started through `Background.start`, so a sink or an
     /// `IAuditLog` that throws is logged at `Error` and never takes the
     /// host down; `StopAsync` cancels the set and waits for it within the
@@ -441,7 +441,7 @@ type TransactionalDispatcher
     /// `BackgroundService` cancellation token fires on shutdown.
     /// Each task fans out through `Background.start` under `deliveries`
     /// so a slow vendor call doesn't block sibling envelopes, and a throw
-    /// from the sink or the audit write is caught and logged.
+    /// from the sink or the audit write (Phase 1026) is caught and logged.
     member private _.DrainQueue(cancellationToken: CancellationToken) = async {
         try
             while not cancellationToken.IsCancellationRequested do
