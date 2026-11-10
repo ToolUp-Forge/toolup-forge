@@ -68,6 +68,68 @@ module Forms =
                 prop.onClick (fun _ -> onClick ())
             ]
 
+        /// An action button's state, set by the caller from its own model:
+        /// `Busy` carries the label shown while the action is in flight (the
+        /// caller's string — the toolkit names no wording).
+        type ButtonState =
+            | Enabled
+            | Disabled
+            | Busy of label: string
+
+        let private withState (tone: string) (state: ButtonState) (text: string) (onClick: unit -> unit) =
+            let busy =
+                match state with
+                | Busy _ -> true
+                | Enabled
+                | Disabled -> false
+
+            let inert = busy || state = Disabled
+
+            Html.button [
+                prop.type' "button"
+                prop.className [
+                    "px-4 py-2 text-sm font-medium rounded-[var(--radius)] transition-colors"
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                    tone
+                ]
+                prop.disabled inert
+                if busy then
+                    prop.ariaBusy true
+                prop.text (
+                    match state with
+                    | Busy label -> label
+                    | Enabled
+                    | Disabled -> text
+                )
+                prop.onClick (fun _ ->
+                    if not inert then
+                        onClick ())
+            ]
+
+        /// The admin action button: brand-filled, disabled while `Disabled`
+        /// or `Busy`, showing the busy label while `Busy`.
+        let primaryWith (state: ButtonState) (text: string) (onClick: unit -> unit) =
+            withState "bg-brand text-white hover:bg-brand-dark" state text onClick
+
+        /// The quiet companion of `primaryWith` (cancel, back, refresh).
+        let secondaryWith (state: ButtonState) (text: string) (onClick: unit -> unit) =
+            withState
+                "border border-border bg-[var(--surface)] text-[var(--text-strong)] hover:bg-[var(--surface-2)]"
+                state
+                text
+                onClick
+
+        /// A destructive action (delete, revoke, offboard).
+        let dangerWith (state: ButtonState) (text: string) (onClick: unit -> unit) =
+            withState "bg-[var(--neg)] text-white hover:opacity-90" state text onClick
+
+        /// `Disabled` when `blocked`, else `Busy busyLabel` when `inFlight`,
+        /// else `Enabled` — the reading most admin buttons need.
+        let stateOf (inFlight: bool) (busyLabel: string) (blocked: bool) =
+            if inFlight then Busy busyLabel
+            elif blocked then Disabled
+            else Enabled
+
 
     /// Text input component
     module Input =

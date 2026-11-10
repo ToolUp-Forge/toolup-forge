@@ -4,6 +4,7 @@
 module TeamProviderUI
 
 open Feliz
+open Toolup.UIToolkit
 open ToolUp.Elmish
 open ToolUp.Platform
 
@@ -155,10 +156,10 @@ let TeamProviderPanel
             Html.div [
                 prop.children [
                     Html.h2 [
-                        prop.className "text-lg font-semibold text-slate-900"
+                        prop.className [ "text-lg font-semibold"; Tokens.Text.primary ]
                         prop.text config.Messages.Title
                     ]
-                    Html.p [ prop.className "text-sm text-slate-600"; prop.text subtitle ]
+                    Html.p [ prop.className [ "text-sm"; Tokens.Text.secondary ]; prop.text subtitle ]
                 ]
             ]
 

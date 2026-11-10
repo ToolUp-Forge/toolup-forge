@@ -384,8 +384,8 @@ module Layout =
     //
     // What makes the boundary hold is the caller's half of the contract:
     // the six callbacks must be the SAME functions from render to render
-    // (the SDK shell builds them once per Elmish loop, beside
-    // `Client.moduleDispatchFor`), and the icons must be the elements the
+    // (the SDK shell builds them once per Elmish loop, in `Client.Dispatchers`
+    // through `Program.withStableDispatch`), and the icons must be the elements the
     // modules declared rather than fresh ones. A caller that passes fresh
     // closures gets a correct sidebar that renders every time, as
     // `AppShell` does.
@@ -541,44 +541,4 @@ module Layout =
                     Typography.subheading title
                     Html.div [ prop.className "space-y-3"; prop.children children ]
                 ]
-            ]
-
-    /// Tab navigation component
-    module Tabs =
-
-        /// Individual tab item
-        let tab (name: string) (isSelected: bool) (onClick: unit -> unit) =
-            Html.button [
-                prop.onClick (fun _ -> onClick ())
-                prop.className [
-                    "px-6 py-3 text-base font-medium transition-all relative group"
-                    if isSelected then
-                        "text-brand"
-                    else
-                        "text-muted hover:text-text"
-                ]
-                prop.children [
-                    Html.text name
-                    // Bottom border indicator - thicker line positioned at bottom
-                    Html.div [
-                        prop.className [
-                            "absolute bottom-0 left-0 right-0 h-[2px] transition-all"
-                            if isSelected then
-                                "bg-brand"
-                            else
-                                "bg-transparent group-hover:bg-brand/30"
-                        ]
-                    ]
-                ]
-            ]
-
-        /// Tab container with multiple tabs
-        let container (tabs: ReactElement list) =
-            Html.div [ prop.className "flex gap-4"; prop.children tabs ]
-
-        /// Helper to generate tabs from a list of (value, label) pairs
-        let tabGroup (tabs: ('T * string) list) (selectedTab: 'T) (onTabChange: 'T -> unit) =
-            container [
-                for value, label in tabs do
-                    tab label (selectedTab = value) (fun () -> onTabChange value)
             ]

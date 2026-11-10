@@ -18,10 +18,20 @@ module Tokens =
     module Text =
         let primary = "text-[var(--text-strong)]"
         let secondary = "text-[var(--text)]"
+        /// Hints, captions, empty-state prose and timestamps.
+        let muted = "text-[var(--muted)]"
+        let success = "text-[var(--pos)]"
+        let danger = "text-[var(--neg)]"
 
     module Bg =
         let panel = "bg-bg-light"
         let card = "bg-[var(--surface)]"
+        /// A recessed surface: table headers, read-only fields, hover rows.
+        let subtle = "bg-[var(--surface-2)]"
+        /// Status backgrounds, tinted from the status tokens so a re-skin of
+        /// `--pos` / `--neg` re-tints them too.
+        let success = "bg-[color-mix(in_srgb,var(--pos)_10%,transparent)]"
+        let danger = "bg-[color-mix(in_srgb,var(--neg)_10%,transparent)]"
 
     module Border =
         let defaultValue = "border border-border"

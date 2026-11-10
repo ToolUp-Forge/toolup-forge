@@ -9,7 +9,7 @@ open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 544 — platform user-management admin module ───────────────
+// ─── Platform user-management admin module ──────────────────────────
 //
 // The operator surface `TenantLifecycleAdminUI` was missing: instead of
 // paste-a-scope-id diagnostics, this panel enumerates every principal the
@@ -99,12 +99,10 @@ type Model = {
     Loading: bool
     /// Show only team-less principals — the cleanup workflow's entry point.
     TeamLessOnly: bool
-    /// Resolved directory entries keyed by user id (id → display name +
-    /// email), populated lazily via `IUserDirectoryApi.ResolveUsers` after
-    /// the principal list loads. Ids absent from the map render as the raw
-    /// id — the list stays functional, just less friendly. Same
-    /// resolve-on-miss pattern as `TeamManagerUI`.
-    Directory: Map<string, UserSummary>
+    /// The reverse directory (id → display name + email) the rows render
+    /// through, resolved after the principal list loads. Ids it does not
+    /// hold render raw — the list stays functional, just less friendly.
+    Directory: UserDirectory.Model
     /// Page-level error banner (list load failure, non-admin caller,
     /// disabled substrate), as a `Notice.Problem`. Cleared by `DismissError`
     /// or the next load.
@@ -121,8 +119,7 @@ type Msg =
     | LoadPrincipals
     | PrincipalsLoaded of Result<PrincipalSummary list, string>
     | ToggleTeamLessOnly
-    /// Reverse directory resolution (id → name/email) completed.
-    | DirectoryResolved of Result<UserSummary list, string>
+    | DirectoryMsg of UserDirectory.Msg
     | DismissError
     // ─── Per-row offboard flow ────────────────────────────────────────
     | OpenOffboard of userId: string * OffboardKind
@@ -149,23 +146,6 @@ let private tenantApi: IPlatformTenantApi =
         customOptions = UserSession.withRequestHeaders
     )
 
-// Reverse directory lookup (id → email/name). No-op for an empty list or
-// when no directory companion is wired (degrades to raw ids). Mirrors
-// `TeamManagerUI` / `PlatformAdminUI`.
-let private directoryApi: IUserDirectoryApi =
-    Api.makeProxy<IUserDirectoryApi> (customOptions = UserSession.withRequestHeaders)
-
-/// Errors fold to a silent `DirectoryResolved(Error _)` — a directory
-/// hiccup just leaves the raw ids on screen, never blocks the page.
-let private resolveDirectoryCmd (ids: string list) =
-    let cleaned = ids |> List.filter (fun id -> not (String.IsNullOrWhiteSpace id))
-
-    if List.isEmpty cleaned then
-        Cmd.none
-    else
-        Cmd.OfRemoting.call directoryApi.ResolveUsers cleaned DirectoryResolved (fun ex ->
-            DirectoryResolved(Error ex.Message))
-
 /// The signed-in operator's user id — the `actorUserId` attributed to
 /// every offboard the panel fires.
 let private actorUserId () = UserSession.getUserId ()
@@ -185,7 +165,7 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Principals = None
         Loading = true
         TeamLessOnly = false
-        Directory = Map.empty
+        Directory = UserDirectory.empty
         Error = None
         Offboard = None
         Messages = ctx.Messages.PlatformUsers
@@ -287,21 +267,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         Cmd.OfRemoting.call tenantApi.ListPrincipals () PrincipalsLoaded (fun e -> PrincipalsLoaded(Error e.Message))
 
     | PrincipalsLoaded(Ok principals) ->
-        // Resolve the ids we don't already have a directory entry for.
-        // Errors are silent — the list still renders with raw ids.
-        let unresolved =
-            principals
-            |> List.map _.UserId
-            |> List.filter (fun id -> not (Map.containsKey id model.Directory))
-            |> List.distinct
-
         {
             model with
                 Principals = Some principals
                 Loading = false
                 Error = None
         },
-        resolveDirectoryCmd unresolved
+        UserDirectory.resolve (principals |> List.map _.UserId) model.Directory
+        |> Cmd.map DirectoryMsg
 
     | PrincipalsLoaded(Error e) ->
         {
@@ -319,15 +292,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         },
         Cmd.none
 
-    | DirectoryResolved(Ok summaries) ->
-        let directory =
-            summaries
-            |> List.fold (fun acc (s: UserSummary) -> Map.add s.UserId s acc) model.Directory
-
-        { model with Directory = directory }, Cmd.none
-
-    // Silent — a directory failure just leaves raw ids on screen.
-    | DirectoryResolved(Error _) -> model, Cmd.none
+    | DirectoryMsg subMsg ->
+        let directory, cmd = UserDirectory.update subMsg model.Directory
+        { model with Directory = directory }, Cmd.map DirectoryMsg cmd
 
     | DismissError -> { model with Error = None }, Cmd.none
 
@@ -481,21 +448,6 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
 // ─── View helpers ────────────────────────────────────────────────────
 
-/// Best-effort human label for a principal, mirroring `TeamManagerUI`:
-/// directory-resolved name / email, else the raw id. `PlatformUsersUI`
-/// never renders "self" specially — every row is another principal.
-let private displayLabels (directory: Map<string, UserSummary>) (userId: string) : string * string option =
-    match Map.tryFind userId directory with
-    | Some s ->
-        let name = s.DisplayName |> Option.filter (String.IsNullOrWhiteSpace >> not)
-        let email = s.Email |> Option.filter (String.IsNullOrWhiteSpace >> not)
-
-        match name, email with
-        | Some n, _ -> n, email
-        | None, Some e -> e, None
-        | None, None -> userId, None
-    | None -> userId, None
-
 /// Membership summary — "3 teams · Admin, Member" — or a team-less badge.
 let private membershipLabel (msgs: PlatformUsersMessages) (p: PrincipalSummary) : string =
     if p.TeamLess then
@@ -522,7 +474,7 @@ let private badge (cls: string) (label: string) =
 
 let private previewResultBadge (msgs: PlatformUsersMessages) (item: LifecyclePreviewItem) =
     if not item.HasPreview then
-        badge "bg-gray-100 text-gray-500" msgs.NoPreviewBadge
+        badge ("bg-gray-100 " + Tokens.Text.muted) msgs.NoPreviewBadge
     elif item.WouldAffect = 0 then
         badge "bg-green-50 text-green-700" "0"
     else
@@ -542,118 +494,75 @@ let private summaryResultDetail (result: LifecycleHookResult) =
 
 // ─── Modal sub-views ─────────────────────────────────────────────────
 
-let private modalShell (children: ReactElement list) =
-    Html.div [
-        prop.className "fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-        prop.children [
-            Html.div [
-                prop.className
-                    "bg-white rounded-lg shadow-lg p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto"
-                prop.children children
-            ]
-        ]
-    ]
-
 let private kindTitle (msgs: PlatformUsersMessages) =
     function
     | PlainOffboard -> msgs.OffboardTitle
     | ExportOffboard -> msgs.ExportOffboardTitle
 
 let private primaryActionLabel (msgs: PlatformUsersMessages) (state: OffboardModalState) =
-    if state.Busy then
-        msgs.Working
-    else
-        match state.Step, state.Kind with
-        | Confirming, _ -> msgs.ConfirmOffboard
-        | _, PlainOffboard -> msgs.OffboardAction
-        | _, ExportOffboard -> msgs.ExportOffboardAction
+    match state.Step, state.Kind with
+    | Confirming, _ -> msgs.ConfirmOffboard
+    | _, PlainOffboard -> msgs.OffboardAction
+    | _, ExportOffboard -> msgs.ExportOffboardAction
 
+/// The destructive submit — busy (showing `Working`) while a call is in flight.
 let private primaryButton (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
-    Html.button [
-        prop.disabled state.Busy
-        prop.className [
-            "px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            if state.Busy then
-                "bg-gray-300 text-gray-500 cursor-not-allowed"
-            else
-                "bg-red-600 text-white hover:bg-red-700"
-        ]
-        prop.text (primaryActionLabel msgs state)
-        prop.onClick (fun _ -> dispatch SubmitOffboard)
+    Forms.Button.dangerWith
+        (Forms.Button.stateOf state.Busy msgs.Working false)
+        (primaryActionLabel msgs state)
+        (fun () -> dispatch SubmitOffboard)
+
+/// A quiet action that is inert while another call is in flight.
+let private secondaryAction (state: OffboardModalState) (label: string) (onClick: unit -> unit) =
+    Forms.Button.secondaryWith
+        (if state.Busy then
+             Forms.Button.Disabled
+         else
+             Forms.Button.Enabled)
+        label
+        onClick
+
+let private fieldLabel (text: string) =
+    Html.label [
+        prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
+        prop.text text
     ]
 
 let private reasonField (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
     Html.div [
         prop.children [
-            Html.label [
-                prop.className "block text-xs font-medium text-gray-700 mb-1"
-                prop.text msgs.ReasonLabel
-            ]
-            // Per-keystroke binding into modal state — same idiom as
-            // TeamManagerUI's single-input modals; the toolkit input
-            // commits on blur and would drop the typed value here.
-            Html.textarea [
-                prop.value state.Reason
-                prop.placeholder msgs.ReasonPlaceholder
-                prop.rows 2
-                prop.onChange (fun (v: string) -> dispatch (SetOffboardReason v))
-                prop.className
-                    "border border-border rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:border-brand"
-            ]
+            fieldLabel msgs.ReasonLabel
+            Forms.Input.text state.Reason (SetOffboardReason >> dispatch) msgs.ReasonPlaceholder
         ]
     ]
 
 let private previewTable (msgs: PlatformUsersMessages) (preview: LifecyclePreview) =
-    Html.div [
-        prop.className "border border-border rounded-lg overflow-hidden"
-        prop.children [
-            Html.table [
-                prop.className "w-full text-xs"
-                prop.children [
-                    Html.thead [
-                        prop.className "bg-gray-50"
-                        prop.children [
-                            Html.tr [
-                                prop.children [
-                                    Html.th [
-                                        prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                        prop.text msgs.ColumnHook
-                                    ]
-                                    Html.th [
-                                        prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                        prop.text msgs.ColumnWouldAffect
-                                    ]
-                                    Html.th [
-                                        prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                        prop.text msgs.ColumnDetail
-                                    ]
-                                ]
-                            ]
+    Data.table
+        [
+            {
+                Header = msgs.ColumnHook
+                Align = Data.Left
+                Cell =
+                    fun (item: LifecyclePreviewItem) ->
+                        Html.span [ prop.className "font-mono text-xs"; prop.text item.HookName ]
+            }
+            {
+                Header = msgs.ColumnWouldAffect
+                Align = Data.Left
+                Cell = previewResultBadge msgs
+            }
+            {
+                Header = msgs.ColumnDetail
+                Align = Data.Left
+                Cell =
+                    fun item ->
+                        Html.span [
+                            prop.className [ "text-xs break-all"; Tokens.Text.secondary ]
+                            prop.text item.Detail
                         ]
-                    ]
-                    Html.tbody [
-                        prop.children [
-                            for item in preview.Items ->
-                                Html.tr [
-                                    prop.className "border-t border-border"
-                                    prop.children [
-                                        Html.td [ prop.className "px-3 py-2 font-mono"; prop.text item.HookName ]
-                                        Html.td [
-                                            prop.className "px-3 py-2"
-                                            prop.children [ previewResultBadge msgs item ]
-                                        ]
-                                        Html.td [
-                                            prop.className "px-3 py-2 text-gray-600 break-all"
-                                            prop.text item.Detail
-                                        ]
-                                    ]
-                                ]
-                        ]
-                    ]
-                ]
-            ]
+            }
         ]
-    ]
+        preview.Items
 
 let private summaryTable
     (msgs: PlatformUsersMessages)
@@ -669,7 +578,7 @@ let private summaryTable
                     badge "bg-green-50 text-green-700" (msgs.CompletedCount(LifecycleSummary.completedCount summary))
                     badge "bg-yellow-50 text-yellow-800" (msgs.SkippedCount(LifecycleSummary.skippedCount summary))
                     badge "bg-red-50 text-red-700" (msgs.FailedCount(LifecycleSummary.failedCount summary))
-                    badge "bg-gray-100 text-gray-600" (sprintf "%d ms" (int summary.TotalElapsedMs))
+                    badge ("bg-gray-100 " + Tokens.Text.secondary) (sprintf "%d ms" (int summary.TotalElapsedMs))
                 ]
             ]
 
@@ -692,61 +601,34 @@ let private summaryTable
             | None -> Html.none
 
             if List.isEmpty summary.Outcomes then
-                Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoHooksRan ]
+                Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.NoHooksRan ]
             else
-                Html.div [
-                    prop.className "border border-border rounded-lg overflow-hidden"
-                    prop.children [
-                        Html.table [
-                            prop.className "w-full text-xs"
-                            prop.children [
-                                Html.thead [
-                                    prop.className "bg-gray-50"
-                                    prop.children [
-                                        Html.tr [
-                                            prop.children [
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnHook
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnResult
-                                                ]
-                                                Html.th [
-                                                    prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                    prop.text msgs.ColumnDetail
-                                                ]
-                                            ]
-                                        ]
+                Data.table
+                    [
+                        {
+                            Header = msgs.ColumnHook
+                            Align = Data.Left
+                            Cell =
+                                fun (outcome: LifecycleHookOutcome) ->
+                                    Html.span [ prop.className "font-mono text-xs"; prop.text outcome.HookName ]
+                        }
+                        {
+                            Header = msgs.ColumnResult
+                            Align = Data.Left
+                            Cell = fun outcome -> summaryResultBadge msgs outcome.Result
+                        }
+                        {
+                            Header = msgs.ColumnDetail
+                            Align = Data.Left
+                            Cell =
+                                fun outcome ->
+                                    Html.span [
+                                        prop.className [ "text-xs break-all"; Tokens.Text.secondary ]
+                                        prop.text (summaryResultDetail outcome.Result)
                                     ]
-                                ]
-                                Html.tbody [
-                                    prop.children [
-                                        for outcome in summary.Outcomes ->
-                                            Html.tr [
-                                                prop.className "border-t border-border"
-                                                prop.children [
-                                                    Html.td [
-                                                        prop.className "px-3 py-2 font-mono"
-                                                        prop.text outcome.HookName
-                                                    ]
-                                                    Html.td [
-                                                        prop.className "px-3 py-2"
-                                                        prop.children [ summaryResultBadge msgs outcome.Result ]
-                                                    ]
-                                                    Html.td [
-                                                        prop.className "px-3 py-2 text-gray-600 break-all"
-                                                        prop.text (summaryResultDetail outcome.Result)
-                                                    ]
-                                                ]
-                                            ]
-                                    ]
-                                ]
-                            ]
-                        ]
+                        }
                     ]
-                ]
+                    summary.Outcomes
         ]
     ]
 
@@ -770,56 +652,36 @@ let private offboardModalView
             ]
         ]
 
-    let footer (children: ReactElement list) =
-        Html.div [ prop.className "flex justify-end gap-3 pt-2"; prop.children children ]
-
     let modalError =
         state.Error
         |> Option.map StateViews.noticeStatic
         |> Option.defaultValue Html.none
 
-    modalShell [
-        Html.h3 [ prop.className "text-lg font-semibold"; prop.text heading ]
-        subject
+    let cancel = Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
 
-        match state.Step with
-        | Compose ->
-            reasonField msgs state dispatch
-            modalError
+    match state.Step with
+    | Compose ->
+        Modal.overlay heading [ subject; reasonField msgs state dispatch; modalError ] [
+            cancel
+            secondaryAction state msgs.PreviewImpact (fun () -> dispatch RequestPreview)
+            primaryButton msgs state dispatch
+        ]
 
-            footer [
-                Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
-                Html.button [
-                    prop.disabled state.Busy
-                    prop.className [
-                        "px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
-                        if state.Busy then
-                            "border-border text-gray-400 cursor-not-allowed"
-                        else
-                            "border-border text-text hover:bg-gray-50"
-                    ]
-                    prop.text msgs.PreviewImpact
-                    prop.onClick (fun _ -> dispatch RequestPreview)
-                ]
-                primaryButton msgs state dispatch
-            ]
-
-        | Previewed preview ->
+    | Previewed preview ->
+        Modal.overlay heading [
+            subject
             Html.p [
                 prop.className "text-sm text-muted"
                 prop.text (msgs.PreviewSummary preview.TotalWouldAffect)
             ]
-
             previewTable msgs preview
             reasonField msgs state dispatch
             modalError
+        ] [ cancel; primaryButton msgs state dispatch ]
 
-            footer [
-                Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
-                primaryButton msgs state dispatch
-            ]
-
-        | Confirming ->
+    | Confirming ->
+        Modal.overlay heading [
+            subject
             Html.div [
                 prop.className "text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800"
                 prop.children [
@@ -833,63 +695,39 @@ let private offboardModalView
                     | PlainOffboard -> Html.none
                 ]
             ]
-
             Html.div [
                 prop.className "flex items-end gap-2"
                 prop.children [
                     Html.div [
                         prop.className "flex-1"
                         prop.children [
-                            Html.label [
-                                prop.className "block text-xs font-medium text-gray-700 mb-1"
-                                prop.text msgs.ConfirmationTokenLabel
-                            ]
-                            Html.input [
-                                prop.type' "text"
-                                prop.value state.Token
-                                prop.placeholder msgs.ConfirmationTokenPlaceholder
-                                prop.onChange (fun (v: string) -> dispatch (SetOffboardToken v))
-                                prop.className
-                                    "border border-border rounded-lg px-3 py-2 w-full text-xs font-mono focus:outline-none focus:border-brand"
-                            ]
+                            fieldLabel msgs.ConfirmationTokenLabel
+                            Forms.Input.text
+                                state.Token
+                                (SetOffboardToken >> dispatch)
+                                msgs.ConfirmationTokenPlaceholder
                         ]
                     ]
-                    Html.button [
-                        prop.disabled state.Busy
-                        prop.className [
-                            "px-3 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap"
-                            if state.Busy then
-                                "border-border text-gray-400 cursor-not-allowed"
-                            else
-                                "border-border text-text hover:bg-gray-50"
-                        ]
-                        prop.text msgs.RequestToken
-                        prop.onClick (fun _ -> dispatch RequestToken)
-                    ]
+                    secondaryAction state msgs.RequestToken (fun () -> dispatch RequestToken)
                 ]
             ]
-
             modalError
+        ] [ cancel; primaryButton msgs state dispatch ]
 
-            footer [
-                Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
-                primaryButton msgs state dispatch
-            ]
-
-        | Completed(summary, archive) ->
-            summaryTable msgs summary archive
-            footer [ Forms.Button.primary msgs.Close (fun () -> dispatch CloseOffboard) ]
-    ]
+    | Completed(summary, archive) ->
+        Modal.overlay heading [ subject; summaryTable msgs summary archive ] [
+            Forms.Button.primary msgs.Close (fun () -> dispatch CloseOffboard)
+        ]
 
 // ─── List row ────────────────────────────────────────────────────────
 
 let private principalRow
     (msgs: PlatformUsersMessages)
-    (directory: Map<string, UserSummary>)
+    (directory: UserDirectory.Model)
     (p: PrincipalSummary)
     (dispatch: Msg -> unit)
     =
-    let primaryLabel, secondaryLabel = displayLabels directory p.UserId
+    let primaryLabel, secondaryLabel = UserDirectory.labels directory p.UserId
 
     Html.div [
         prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2 gap-3 flex-wrap"
@@ -904,7 +742,7 @@ let private principalRow
                             if p.TeamLess then
                                 badge "bg-orange-100 text-orange-700" msgs.TeamLessBadge
                             if p.HasUserScopeData then
-                                badge "bg-gray-100 text-gray-600" msgs.HasDataBadge
+                                badge ("bg-gray-100 " + Tokens.Text.secondary) msgs.HasDataBadge
                         ]
                     ]
                     match secondaryLabel with
@@ -915,7 +753,7 @@ let private principalRow
                         prop.text (msgs.RowSubtitle (membershipLabel msgs p) (lastSeenLabel p))
                     ]
                     Html.span [
-                        prop.className "text-xs text-gray-400 font-mono break-all"
+                        prop.className [ "text-xs font-mono break-all"; Tokens.Text.muted ]
                         prop.text p.UserId
                     ]
                 ]
@@ -940,7 +778,7 @@ let private principalRow
 
 // ─── View ────────────────────────────────────────────────────────────
 
-/// Phase 751 — the module body as a React COMPONENT, for the same reason
+/// The module body as a React COMPONENT, for the same reason
 /// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
 /// inline by the shell's own render, so a hook called there joins the
 /// shell's hook order and breaks the moment the active module changes. A
@@ -954,7 +792,7 @@ let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
             prop.className "flex items-center justify-between mb-4 flex-wrap gap-2"
             prop.children [
                 Html.label [
-                    prop.className "flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+                    prop.className [ "flex items-center gap-2 text-sm cursor-pointer"; Tokens.Text.secondary ]
                     prop.children [
                         Html.input [
                             prop.type' "checkbox"
@@ -974,7 +812,11 @@ let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
 
     let listPane =
         match model.Principals with
-        | None -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.LoadingPrincipals ]
+        | None ->
+            Html.p [
+                prop.className [ "text-sm"; Tokens.Text.muted ]
+                prop.text msgs.LoadingPrincipals
+            ]
         | Some principals ->
             let visible =
                 if model.TeamLessOnly then
@@ -988,13 +830,19 @@ let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
                 Html.div [
                     prop.className "bg-white rounded-lg border border-border p-6 text-center"
                     prop.children [
-                        Html.p [ prop.className "text-sm text-gray-600"; prop.text msgs.NoPrincipalsHeading ]
-                        Html.p [ prop.className "text-xs text-gray-400 mt-1"; prop.text msgs.NoPrincipalsBody ]
+                        Html.p [
+                            prop.className [ "text-sm"; Tokens.Text.secondary ]
+                            prop.text msgs.NoPrincipalsHeading
+                        ]
+                        Html.p [
+                            prop.className [ "text-xs mt-1"; Tokens.Text.muted ]
+                            prop.text msgs.NoPrincipalsBody
+                        ]
                     ]
                 ]
             elif List.isEmpty visible then
                 Html.p [
-                    prop.className "text-sm text-gray-500 py-4"
+                    prop.className [ "text-sm py-4"; Tokens.Text.muted ]
                     prop.text msgs.NoTeamLessPrincipals
                 ]
             else
@@ -1006,14 +854,17 @@ let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
                 ]
 
     let selfLabelForModal (state: OffboardModalState) =
-        let primary, _ = displayLabels model.Directory state.UserId
+        let primary, _ = UserDirectory.labels model.Directory state.UserId
         primary
 
     Html.div [
         prop.className "p-6 max-w-3xl"
         prop.children [
             Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
+                prop.text msgs.Subheading
+            ]
             StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
             filterBar
             listPane

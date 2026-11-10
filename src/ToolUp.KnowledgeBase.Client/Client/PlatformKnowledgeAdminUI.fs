@@ -177,15 +177,11 @@ let private deleteRowAction
     Html.div [
         prop.className "flex flex-col items-end gap-1"
         prop.children [
-            Html.button [
-                prop.className "text-xs text-red-600 hover:text-red-800 font-medium"
-                prop.text msgs.Delete
-                prop.onClick (fun _ -> dispatch (RequestDelete doc.Id))
-            ]
+            Forms.Button.dangerWith Forms.Button.Enabled msgs.Delete (fun () -> dispatch (RequestDelete doc.Id))
             match deleteError with
             | Some msg ->
                 Html.span [
-                    prop.className "text-xs text-red-600 max-w-[14rem] text-right"
+                    prop.className [ "text-xs max-w-[14rem] text-right"; Tokens.Text.danger ]
                     prop.text msg
                 ]
             | None -> Html.none
@@ -196,7 +192,7 @@ let private uploadInput (model: Model) (dispatch: Msg -> unit) =
     Html.input [
         prop.type' "file"
         prop.disabled model.Uploading
-        prop.className "block text-sm text-text-secondary"
+        prop.className [ "block text-sm"; Tokens.Text.secondary ]
         prop.onChange (fun (e: Browser.Types.Event) ->
             let target = e.target :?> Browser.Types.HTMLInputElement
             let files = target.files
@@ -218,19 +214,22 @@ let private uploadInput (model: Model) (dispatch: Msg -> unit) =
 
 let private uploadPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispatch: Msg -> unit) =
     Html.div [
-        prop.className "flex flex-col gap-2 p-3 rounded border border-border bg-white"
+        prop.className [ "flex flex-col gap-2 p-3 rounded border border-border"; Tokens.Bg.card ]
         prop.children [
             Html.h3 [
-                prop.className "text-sm font-medium text-text-primary"
+                prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
                 prop.text msgs.UploadHeading
             ]
             Html.p [
-                prop.className "text-xs text-text-secondary"
+                prop.className [ "text-xs"; Tokens.Text.secondary ]
                 prop.text msgs.UploadDescription
             ]
             uploadInput model dispatch
             if model.Uploading then
-                Html.p [ prop.className "text-xs text-text-secondary"; prop.text msgs.Uploading ]
+                Html.p [
+                    prop.className [ "text-xs"; Tokens.Text.secondary ]
+                    prop.text msgs.Uploading
+                ]
             match model.UploadError with
             | Some msg -> StateViews.noticeStatic (Notice.Problem msg)
             | None -> Html.none
@@ -243,21 +242,20 @@ let private documentsPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispat
             prop.className "flex items-center justify-between"
             prop.children [
                 Html.h3 [
-                    prop.className "text-sm font-medium text-text-primary"
+                    prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
                     prop.text msgs.DocumentsHeading
                 ]
-                Html.button [
-                    prop.className "text-xs text-brand hover:underline"
-                    prop.text msgs.Refresh
-                    prop.onClick (fun _ -> dispatch RefreshDocs)
-                ]
+                Forms.Button.secondaryWith
+                    (Forms.Button.stateOf (Remote.isLoading model.Documents) msgs.Loading false)
+                    msgs.Refresh
+                    (fun () -> dispatch RefreshDocs)
             ]
         ]
 
     let listBody =
         match model.Documents with
         | Remote.NotAsked
-        | Remote.Loading -> Html.p [ prop.className "text-sm text-text-secondary p-3"; prop.text msgs.Loading ]
+        | Remote.Loading -> Html.p [ prop.className [ "text-sm p-3"; Tokens.Text.muted ]; prop.text msgs.Loading ]
         | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
         | Remote.Reloading docs
         | Remote.Loaded docs ->

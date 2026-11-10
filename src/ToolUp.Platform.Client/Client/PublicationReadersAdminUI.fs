@@ -92,8 +92,10 @@ let private ReadersPanel (msgs: TeamManagerMessages) =
                                     prop.children [
                                         Html.span [ prop.className "text-sm"; prop.text reader.UserId ]
                                         Html.span [ prop.className "text-xs text-muted"; prop.text reader.Role ]
-                                        Forms.Button.secondary msgs.PublicationReaderRemove (fun () ->
-                                            run api.RevokeReader reader)
+                                        Forms.Button.secondaryWith
+                                            (if busy then Forms.Button.Disabled else Forms.Button.Enabled)
+                                            msgs.PublicationReaderRemove
+                                            (fun () -> run api.RevokeReader reader)
                                     ]
                                 ]
                         ]
@@ -128,15 +130,13 @@ let private ReadersPanel (msgs: TeamManagerMessages) =
                         UserDirectoryTypeahead.pickUserId
 
                     Html.div [
-                        if busy || System.String.IsNullOrWhiteSpace userId || role = "" then
-                            Html.button [
-                                prop.disabled true
-                                prop.className "rounded-lg px-4 py-2 text-sm opacity-50 cursor-not-allowed"
-                                prop.text msgs.PublicationReaderAdd
-                            ]
-                        else
-                            Forms.Button.primary msgs.PublicationReaderAdd (fun () ->
-                                run api.GrantReader { UserId = userId.Trim(); Role = role })
+                        Forms.Button.primaryWith
+                            (Forms.Button.stateOf
+                                busy
+                                msgs.PublicationReaderAdd
+                                (System.String.IsNullOrWhiteSpace userId || role = ""))
+                            msgs.PublicationReaderAdd
+                            (fun () -> run api.GrantReader { UserId = userId.Trim(); Role = role })
                     ]
             ]
         ]

@@ -1,0 +1,7 @@
+module MyApp.Client.Reports
+
+open Feliz
+open Toolup.UIToolkit
+
+let summary rows =
+    Data.table [ "Region"; "Spend" ] [ for r in rows -> [ Html.text r.Region; Html.text (string r.Spend) ] ]
