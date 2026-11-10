@@ -418,7 +418,8 @@ module ShellSlots =
     /// and exists only while the Administration area is on.
     let private adminHome = chrome _.AdminArea AdminHome.create
 
-    let private datadogReadback = chrome _.DatadogReadback DatadogReadbackUI.create
+    let private datadogReadback =
+        chrome _.DatadogReadback (fun cfg -> builtIn (DatadogReadbackUI.builtIn cfg) None)
 
     let private observability =
         chrome _.Observability (fun () -> builtIn ObservabilityUI.builtIn None)
