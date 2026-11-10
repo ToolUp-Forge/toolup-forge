@@ -286,7 +286,7 @@ module ShellSlots =
         authenticatedAdmin
             _.NotificationPreferences
             NotificationPreferencesUI.moduleId
-            NotificationPreferencesUI.create
+            (builtIn NotificationPreferencesUI.builtIn)
             None
             "NotificationPreferences"
 

@@ -365,7 +365,7 @@ let visibilityTests =
                 "TeamConfigUI", TeamConfigUI.create None
                 "FileManagerUI", FileManagerUI.create [] DataManagerConfig.unlabelled
                 "DataSubjectRequestAdminUI", (ShellSlots.builtIn DataSubjectRequestAdminUI.builtIn) None
-                "NotificationPreferencesUI", NotificationPreferencesUI.create None
+                "NotificationPreferencesUI", ShellSlots.builtIn NotificationPreferencesUI.builtIn None
             ]
 
             Expect.equal (List.length builtIns) 12 "twelve Platform.Client built-ins pinned"
