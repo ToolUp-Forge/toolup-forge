@@ -345,7 +345,7 @@ module ShellSlots =
         everywhereAdmin
             _.PlatformAdmin
             PlatformAdminUI.moduleId
-            (fun ctx label -> PlatformAdminUI.create label ctx.Config.PublicUtility)
+            (fun ctx label -> builtIn (PlatformAdminUI.builtIn ctx.Config.PublicUtility) label)
             None
             "PlatformAdmin"
 
@@ -411,7 +411,9 @@ module ShellSlots =
     /// own landing module is one of its own modules).
     let private noActiveTeamLanding (ctx: ShellSlotContext) =
         match ClientConfig.hasTeamScope ctx.Config, ctx.Config.Chrome.NoActiveTeamLanding with
-        | true, ChromeFill.On(NoActiveTeamLandingFill.BuiltIn landing) -> [ NoActiveTeamLandingUI.create landing ]
+        | true, ChromeFill.On(NoActiveTeamLandingFill.BuiltIn landing) -> [
+            builtIn (NoActiveTeamLandingUI.builtIn landing) None
+          ]
         | _ -> []
 
     /// Phase 573 — the administration landing leads the admin partition,

@@ -1109,15 +1109,12 @@ let private settingsTabView (msgs: PlatformAdminMessages) (model: Model) (dispat
 
 // ─── View ────────────────────────────────────────────────────────────
 
-/// The module body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render (via `withFullWidthView`), so a hook
-/// called there would join the shell's hook order and break the moment the
-/// active module changed. A component of its own has a stable identity and
-/// its own hook order.
-[<ReactComponent>]
-let private PlatformAdminBody (config: PublicUtilityConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let msgs = (MessageCatalogProvider.useMessages ()).PlatformAdmin
+/// The page, closed over the deployment's `PublicUtilityConfig` so the
+/// public-utility widgets (appended below the tabs under
+/// `PublicUtilityPlatformAdminProfile`) can read ad / premium substrate state.
+let private view (config: PublicUtilityConfig) (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let msgs = ctx.Messages.PlatformAdmin
+    let dispatch = ctx.Dispatch
 
     let content =
         match model.ActiveTab with
@@ -1126,9 +1123,10 @@ let private PlatformAdminBody (config: PublicUtilityConfig) (model: Model) (disp
         | SettingsTab -> settingsTabView msgs model dispatch
 
     let publicUtilitySection =
-        ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.render config
+        ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.render ctx.Messages.PublicUtilityWidgets config
 
-    Html.div [
+    PageContent.FullWidth
+    <| Html.div [
         prop.className "flex flex-col h-full"
         prop.children [
             Html.div [
@@ -1155,18 +1153,6 @@ let private PlatformAdminBody (config: PublicUtilityConfig) (model: Model) (disp
         ]
     ]
 
-/// View factory closed over the deployment's `PublicUtilityConfig` so the
-/// public-utility widgets can read ad / premium substrate state. The
-/// public-utility widgets append below the existing tab content when
-/// `PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
-///
-/// Renders as a single full-width pane (via `withFullWidthView` in
-/// `create`) rather than the legacy `body, Html.none` `SplitPanel`
-/// tuple — the admin tabs (admin list, teams table, settings) have no
-/// "controls left / output right" affordance and were being squashed
-/// into the left third of the shell by the SplitPanel wrap.
-let private viewWith (config: PublicUtilityConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    PlatformAdminBody config model dispatch
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -1189,23 +1175,18 @@ let moduleId = "_sdk.PlatformAdmin"
 /// `ServerConfig.ModuleNames` keys (RBAC permission entries) keyed
 /// to it don't have to migrate. The display name and group label
 /// are presentation only.
-let create (config: ModuleLabel option) (publicUtility: PublicUtilityConfig) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Platform Management"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
-
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn (publicUtility: PublicUtilityConfig) : BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Platform Management"
+        Icon = ToolUp.Platform.Icons.users
     }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx ->
-        PageContent.FullWidth(viewWith publicUtility model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page(view publicUtility)
+    Extend = id
+}

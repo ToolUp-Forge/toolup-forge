@@ -121,12 +121,10 @@ let inline private fetchJson<'T>
 // renders the substrate stub the original body shipped — opt-in
 // surface, no broken fetches.
 
-let trafficDashboardWith (msgs: TrafficWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
+let trafficDashboard (msgs: TrafficWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     let body = substrateStub msgs.Stub
     widgetCard msgs.Title msgs.Subtitle body
 
-let trafficDashboard (config: PublicUtilityConfig) : ReactElement =
-    trafficDashboardWith MessageCatalog.english.PublicUtilityWidgets.Traffic config
 
 // ─── Widget 2 — Rate-limit event log ──────────────────────────────
 // GET /api/_platform/admin/rate-limits?count=100 → RateLimitDecisionEvent list
@@ -312,11 +310,9 @@ let RateLimitEventLogBody () : ReactElement =
 
     Html.div [ prop.children [ controls; body ] ]
 
-let rateLimitEventLogWith (msgs: RateLimitWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
+let rateLimitEventLog (msgs: RateLimitWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     widgetCard msgs.Title msgs.Subtitle (RateLimitEventLogBody())
 
-let rateLimitEventLog (config: PublicUtilityConfig) : ReactElement =
-    rateLimitEventLogWith MessageCatalog.english.PublicUtilityWidgets.RateLimits config
 
 // ─── Widget 3 — Ad-unit configuration ─────────────────────────────
 // CRUD over /api/_platform/admin/ad-units. Skips entirely when
@@ -679,14 +675,12 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
 
     Html.div [ prop.children [ listSection; formSection ] ]
 
-let adUnitConfigWith (msgs: AdUnitWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
+let adUnitConfig (msgs: AdUnitWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     match config.AdPanel with
     | NoAdPanel -> widgetCard msgs.Title msgs.Subtitle (substrateStub msgs.DisabledStub)
     | EnabledAdPanel panelConfig ->
         widgetCard msgs.Title msgs.Subtitle (AdUnitConfigBody(panelConfig.DefaultAdClientId))
 
-let adUnitConfig (config: PublicUtilityConfig) : ReactElement =
-    adUnitConfigWith MessageCatalog.english.PublicUtilityWidgets.AdUnits config
 
 // ─── Widget 4 — Premium-user list ─────────────────────────────────
 // GET /api/_platform/admin/premium-users → (string * PremiumStatus) list.
@@ -797,42 +791,31 @@ let PremiumUserListBody () : ReactElement =
 
     Html.div [ prop.children [ controls; body ] ]
 
-let premiumUserListWith (msgs: PremiumUserWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
+let premiumUserList (msgs: PremiumUserWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     match config.PremiumModel with
     | AnonymousFirst -> widgetCard msgs.Title msgs.Subtitle (PremiumUserListBody())
 
-let premiumUserList (config: PublicUtilityConfig) : ReactElement =
-    premiumUserListWith MessageCatalog.english.PublicUtilityWidgets.PremiumUsers config
 
 // ─── Composition entry ────────────────────────────────────────────
 // Render every widget that applies under the current PublicUtilityConfig +
 // PlatformAdminProfile combination.
 
-/// Phase 751 — the composed page as a React COMPONENT, for the same
-/// reason `HealthMonitorUI.HealthMonitorBody` / `AdminHome.TileGrid`
-/// are: `render` is invoked inline by the shell's own render (via
-/// `PlatformAdminUI.viewWith`), so a hook there would join the shell's
-/// hook order and break the moment the active module changed. `render`
-/// itself keeps its existing signature and delegates here.
-[<ReactComponent>]
-let private PublicUtilityWidgetsBody (config: PublicUtilityConfig) : ReactElement =
-    let msgs = (MessageCatalogProvider.useMessages ()).PublicUtilityWidgets
-
-    Html.div [
-        prop.className "p-4"
-        prop.children [
-            Html.h2 [
-                prop.className "text-lg font-semibold text-slate-900 mb-4"
-                prop.text msgs.Heading
-            ]
-            trafficDashboardWith msgs.Traffic config
-            rateLimitEventLogWith msgs.RateLimits config
-            adUnitConfigWith msgs.AdUnits config
-            premiumUserListWith msgs.PremiumUsers config
-        ]
-    ]
-
-let render (config: PublicUtilityConfig) : ReactElement =
+/// Every widget that applies, under the catalog section the platform-admin
+/// view hands it; nothing under the standard profile.
+let render (msgs: PublicUtilityWidgetsMessages) (config: PublicUtilityConfig) : ReactElement =
     match config.PlatformAdminProfile with
     | StandardPlatformAdminProfile -> Html.none
-    | PublicUtilityPlatformAdminProfile -> PublicUtilityWidgetsBody config
+    | PublicUtilityPlatformAdminProfile ->
+        Html.div [
+            prop.className "p-4"
+            prop.children [
+                Html.h2 [
+                    prop.className "text-lg font-semibold text-slate-900 mb-4"
+                    prop.text msgs.Heading
+                ]
+                trafficDashboard msgs.Traffic config
+                rateLimitEventLog msgs.RateLimits config
+                adUnitConfig msgs.AdUnits config
+                premiumUserList msgs.PremiumUsers config
+            ]
+        ]

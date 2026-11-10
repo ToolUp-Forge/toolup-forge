@@ -280,7 +280,9 @@ let visibilityTests =
     testList "Phase 66 Stream B.4 — SDK built-in client-side Visibility" [
 
         test "PlatformAdminUI declares visibleToAuthenticated" {
-            let m = PlatformAdminUI.create None PublicUtilityConfig.defaults
+            let m =
+                ShellSlots.builtIn (PlatformAdminUI.builtIn PublicUtilityConfig.defaults) None
+
             assertVisibleToAuthenticated "PlatformAdminUI" m
         }
 
@@ -354,7 +356,7 @@ let visibilityTests =
             // sidebar shape. Pinning the set here means a future addition
             // is a deliberate edit.
             let builtIns: (string * ErasedModule) list = [
-                "PlatformAdminUI", PlatformAdminUI.create None PublicUtilityConfig.defaults
+                "PlatformAdminUI", ShellSlots.builtIn (PlatformAdminUI.builtIn PublicUtilityConfig.defaults) None
                 "TeamManagerUI", ShellSlots.builtIn TeamManagerUI.builtIn None
                 "HealthMonitorUI", ShellSlots.builtIn HealthMonitorUI.builtIn None
                 "UsageDashboard", ShellSlots.builtIn UsageDashboard.builtIn None
