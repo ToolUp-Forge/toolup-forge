@@ -1399,13 +1399,8 @@ let private pendingInvitesView (msgs: TeamManagerMessages) (teamId: string) (mod
         ]
     ]
 
-/// The module body as a React COMPONENT, so it has a hook site from which
-/// to read the resolved catalog. See `HealthMonitorUI`'s equivalent for
-/// why a module's `view` cannot hold the hook itself.
-[<ReactComponent>]
-let private TeamManagerBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).TeamManager
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let body =
         match model.CurrentView with
         | MyTeams -> myTeamsView msgs model dispatch
@@ -1422,44 +1417,34 @@ let private TeamManagerBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamManagerBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.TeamManager model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.TeamManager"
 
-/// Create the built-in team manager as an `ErasedModule`. It fills the
+/// The built-in team manager (`ShellSlots.builtIn` builds its module). It fills the
 /// `TeamManager` shell slot (Default / Configured), which the shell
 /// admits on any `Team` surface.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Teams"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
-
-    let route = "/" + name.ToLower().Replace(" ", "-")
-
-    // SDK-built-in module — `Id` is reserved under the `_sdk.` namespace so
-    // it can never collide with an app's RBAC-managed `ServerConfig.ModuleNames`
-    // key. A deployment's own module in the slot carries its own Id.
-    // `init` here is `ClientModuleContext -> Model * Cmd<Msg>` so we use
-    // `withContextInit` to override `create`'s unit-init default.
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Teams"
+        Icon = ToolUp.Platform.Icons.users
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}
 
 /// The administration-landing tile of this built-in's
 /// slot (see `HealthMonitorUI.adminTile` for the full rationale): built

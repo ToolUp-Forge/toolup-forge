@@ -244,7 +244,7 @@ module ShellSlots =
             ShellSlotGate.AnyTeamSurface
             _.TeamManager
             TeamManagerUI.moduleId
-            (fun _ label -> TeamManagerUI.create label)
+            (fun _ label -> builtIn TeamManagerUI.builtIn label)
             (Some TeamManagerUI.adminTile)
 
     let private authenticatedAdmin fillOf moduleId create tile id =

@@ -289,7 +289,7 @@ let visibilityTests =
             // a user with no active team can reach the create-team /
             // accept-invite flow. `visibleToAuthenticated` admits UserKind
             // + TeamMemberKind + ClaimBearerKind — the right shape.
-            let m = TeamManagerUI.create None
+            let m = ShellSlots.builtIn TeamManagerUI.builtIn None
             assertVisibleToAuthenticated "TeamManagerUI" m
         }
 
@@ -355,7 +355,7 @@ let visibilityTests =
             // is a deliberate edit.
             let builtIns: (string * ErasedModule) list = [
                 "PlatformAdminUI", PlatformAdminUI.create None PublicUtilityConfig.defaults
-                "TeamManagerUI", TeamManagerUI.create None
+                "TeamManagerUI", ShellSlots.builtIn TeamManagerUI.builtIn None
                 "HealthMonitorUI", HealthMonitorUI.create None
                 "UsageDashboard", UsageDashboard.create None
                 "ServiceStatusBoardUI", ServiceStatusBoardUI.create None
