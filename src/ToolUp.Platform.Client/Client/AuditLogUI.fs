@@ -335,7 +335,7 @@ let private filterBar (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> 
         Html.div [
             prop.className "flex flex-col"
             prop.children [
-                Html.label [ prop.className "text-xs text-gray-600 mb-1"; prop.text label ]
+                Html.label [ prop.className ("text-xs mb-1 " + Tokens.Text.secondary); prop.text label ]
                 control
             ]
         ]
@@ -374,107 +374,93 @@ let private filterBar (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> 
                             |> List.map (fun t -> Html.option [ prop.value t; prop.text t ]))
                     )
                 ])
-            field
-                msgs.ActorLabel
-                (Html.input [
-                    prop.type' "text"
-                    prop.ariaLabel msgs.ActorLabel
-                    prop.placeholder msgs.ActorPlaceholder
-                    prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                    prop.value model.Draft.Actor
-                    prop.onChange (SetActor >> dispatch)
-                ])
-            Html.button [
-                prop.className "px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded"
-                prop.onClick (fun _ -> dispatch ApplyFilters)
-                prop.text msgs.ApplyFilters
-            ]
-            Html.button [
-                prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
-                prop.onClick (fun _ -> dispatch ClearFilters)
-                prop.text msgs.ClearFilters
-            ]
-            Html.button [
-                prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
-                prop.onClick (fun _ -> dispatch Refresh)
-                prop.text msgs.Refresh
-            ]
-            Html.button [
-                prop.className "px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-                prop.disabled (model.Exporting || List.isEmpty model.Events)
-                prop.onClick (fun _ -> dispatch ExportCsv)
-                prop.text (if model.Exporting then msgs.Exporting else msgs.ExportCsv)
-            ]
-        ]
-    ]
-
-let private headerCell (label: string) =
-    Html.th [
-        prop.className "px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider"
-        prop.text label
-    ]
-
-let private detailRow (msgs: AuditLogMessages) (view: AuditEventView) =
-    Html.tr [
-        prop.key (view.Id.ToString "N" + ":detail")
-        prop.children [
-            Html.td [
-                prop.colSpan 5
-                prop.className "px-3 py-3 bg-gray-50"
+            // The text input commits on Enter / blur, so it takes its
+            // accessible name from a wrapping <label>.
+            Html.label [
+                prop.className "flex flex-col"
                 prop.children [
-                    Html.div [
-                        prop.className "text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1"
-                        prop.text msgs.PayloadHeading
+                    Html.span [
+                        prop.className [ "text-xs mb-1"; Tokens.Text.secondary ]
+                        prop.text msgs.ActorLabel
                     ]
-                    Html.pre [
-                        prop.className "text-xs text-gray-700 font-mono whitespace-pre-wrap break-all"
-                        prop.text (prettyPayload view.Payload)
-                    ]
+                    Forms.Input.text model.Draft.Actor (SetActor >> dispatch) msgs.ActorPlaceholder
                 ]
             ]
+            Forms.Button.primaryWith Forms.Button.Enabled msgs.ApplyFilters (fun () -> dispatch ApplyFilters)
+            Forms.Button.secondaryWith Forms.Button.Enabled msgs.ClearFilters (fun () -> dispatch ClearFilters)
+            Forms.Button.secondaryWith Forms.Button.Enabled msgs.Refresh (fun () -> dispatch Refresh)
+            Forms.Button.primaryWith
+                (Forms.Button.stateOf model.Exporting msgs.Exporting (List.isEmpty model.Events))
+                msgs.ExportCsv
+                (fun () -> dispatch ExportCsv)
         ]
     ]
 
-let private eventRows (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) (view: AuditEventView) =
-    let isExpanded = Set.contains view.Id model.Expanded
+/// The recorded payload, shown under the row's summary while its detail is open.
+let private detail (msgs: AuditLogMessages) (view: AuditEventView) =
+    Html.div [
+        prop.className [ "mt-2 p-3 rounded"; Tokens.Bg.subtle ]
+        prop.children [
+            Html.div [
+                prop.className [ "text-xs font-semibold uppercase tracking-wider mb-1"; Tokens.Text.secondary ]
+                prop.text msgs.PayloadHeading
+            ]
+            Html.pre [
+                prop.className [ "text-xs font-mono whitespace-pre-wrap break-all"; Tokens.Text.secondary ]
+                prop.text (prettyPayload view.Payload)
+            ]
+        ]
+    ]
+
+let private columns (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) : Data.Column<AuditEventView> list =
+    let mono (text: string) =
+        Html.span [ prop.className "font-mono whitespace-nowrap"; prop.text text ]
 
     [
-        Html.tr [
-            prop.key (view.Id.ToString "N")
-            prop.children [
-                Html.td [
-                    prop.className "px-3 py-2 text-sm text-gray-700 font-mono whitespace-nowrap"
-                    prop.text (formatTimestamp view.OccurredAt)
-                ]
-                Html.td [
-                    prop.className "px-3 py-2 text-sm text-gray-700 font-mono"
-                    prop.text view.EventType
-                ]
-                Html.td [
-                    prop.className "px-3 py-2 text-sm text-gray-700 font-mono"
-                    prop.text (view.Actor |> Option.defaultValue msgs.UnattributedActor)
-                ]
-                Html.td [
-                    prop.className "px-3 py-2 text-sm text-gray-700 break-all"
-                    prop.text view.Summary
-                ]
-                Html.td [
-                    prop.className "px-3 py-2 text-sm text-right"
-                    prop.children [
-                        Html.button [
-                            prop.ariaExpanded isExpanded
-                            prop.ariaLabel (if isExpanded then msgs.HideDetail else msgs.ShowDetail)
-                            prop.className
-                                "px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
-                            prop.onClick (fun _ -> dispatch (ToggleDetail view.Id))
-                            prop.text (if isExpanded then "−" else "+")
+        {
+            Header = msgs.ColumnTime
+            Align = Data.Left
+            Cell = fun v -> mono (formatTimestamp v.OccurredAt)
+        }
+        {
+            Header = msgs.ColumnEventType
+            Align = Data.Left
+            Cell = fun v -> mono v.EventType
+        }
+        {
+            Header = msgs.ColumnActor
+            Align = Data.Left
+            Cell = fun v -> mono (v.Actor |> Option.defaultValue msgs.UnattributedActor)
+        }
+        {
+            Header = msgs.ColumnSummary
+            Align = Data.Left
+            Cell =
+                fun v ->
+                    Html.div [
+                        prop.className "break-all"
+                        prop.children [
+                            Html.text v.Summary
+                            if Set.contains v.Id model.Expanded then
+                                detail msgs v
                         ]
                     ]
-                ]
-            ]
-        ]
-        if isExpanded then
-            detailRow msgs view
+        }
+        {
+            Header = ""
+            Align = Data.Right
+            Cell =
+                fun v ->
+                    let isExpanded = Set.contains v.Id model.Expanded
+
+                    Html.button [
+                        prop.ariaExpanded isExpanded
+                        prop.ariaLabel (if isExpanded then msgs.HideDetail else msgs.ShowDetail)
+                        prop.className "px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
+                        prop.onClick (fun _ -> dispatch (ToggleDetail v.Id))
+                        prop.text (if isExpanded then "−" else "+")
+                    ]
+        }
     ]
 
 /// The two empty states are DIFFERENT states, not one message with two
@@ -487,7 +473,7 @@ let private emptyState (msgs: AuditLogMessages) (model: Model) =
     let filtered = model.Applied <> emptyFilters || not (List.isEmpty model.EventTypes)
 
     Html.div [
-        prop.className "p-8 text-center text-sm text-gray-500"
+        prop.className ("p-8 text-center text-sm " + Tokens.Text.muted)
         prop.text (if filtered then msgs.NoMatches else msgs.NoEvents)
     ]
 
@@ -497,52 +483,29 @@ let private eventTable (msgs: AuditLogMessages) (model: Model) (dispatch: Msg ->
     else
         Html.div [
             prop.children [
-                Html.table [
-                    prop.className "min-w-full divide-y divide-gray-200 border border-gray-200 rounded"
-                    prop.children [
-                        Html.thead [
-                            prop.className "bg-gray-50"
-                            prop.children [
-                                Html.tr [
-                                    headerCell msgs.ColumnTime
-                                    headerCell msgs.ColumnEventType
-                                    headerCell msgs.ColumnActor
-                                    headerCell msgs.ColumnSummary
-                                    Html.th [ prop.className "px-3 py-2" ]
-                                ]
-                            ]
-                        ]
-                        Html.tbody [
-                            prop.className "bg-white divide-y divide-gray-200"
-                            prop.children (model.Events |> List.collect (eventRows msgs model dispatch))
-                        ]
-                    ]
-                ]
+                Data.table (columns msgs model dispatch) model.Events
                 Html.div [
                     prop.className "flex items-center justify-between mt-3"
                     prop.children [
                         Html.span [
-                            prop.className "text-xs text-gray-500"
+                            prop.className ("text-xs " + Tokens.Text.muted)
                             prop.text (msgs.ShowingCount (List.length model.Events) model.MatchedCount)
                         ]
                         match model.NextCursor with
                         | None -> Html.none
                         | Some _ ->
-                            Html.button [
-                                prop.className
-                                    "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded disabled:opacity-50"
-                                prop.disabled model.LoadingMore
-                                prop.onClick (fun _ -> dispatch LoadMore)
-                                prop.text (if model.LoadingMore then msgs.Loading else msgs.LoadMore)
-                            ]
+                            Forms.Button.secondaryWith
+                                (Forms.Button.stateOf model.LoadingMore msgs.Loading false)
+                                msgs.LoadMore
+                                (fun () -> dispatch LoadMore)
                     ]
                 ]
             ]
         ]
 
-/// Phase 444 — the module body as a React COMPONENT rather than a plain
-/// render function, so it has a hook site of its own from which to read
-/// the resolved catalog. See `HealthMonitorUI.HealthMonitorBody`.
+/// The module body as a React COMPONENT rather than a plain render
+/// function, so it has a hook site of its own from which to read the
+/// resolved catalog. See `HealthMonitorUI.HealthMonitorBody`.
 [<ReactComponent>]
 let private AuditLogBody (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).AuditLog
@@ -551,16 +514,19 @@ let private AuditLogBody (model: Model) (dispatch: Msg -> unit) =
         prop.className "p-4"
         prop.children [
             Html.h2 [
-                prop.className "text-lg font-semibold text-gray-800 mb-2"
+                prop.className ("text-lg font-semibold mb-2 " + Tokens.Text.primary)
                 prop.text msgs.Heading
             ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+            Html.p [
+                prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
+                prop.text msgs.Subheading
+            ]
             filterBar msgs model dispatch
 
             match model.Status with
             | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
             | Remote.NotAsked
-            | Remote.Loading -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+            | Remote.Loading -> Html.div [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
             | Remote.Reloading()
             | Remote.Loaded() -> eventTable msgs model dispatch
         ]
