@@ -275,7 +275,72 @@ let private platformAdminTests =
 
 // ── MappingDataManagerUI ───────────────────────────────────────────────
 
-let private mappingDataManagerTests = testList "MappingDataManagerUI" []
+let private heldCsv: MappingDataManagerUI.HeldFile = {
+    FileName = "people.csv"
+    RawContents = "Name\nAda\nBo"
+    Headers = [ "Name" ]
+    Samples = Map.ofList [ "Name", [ "Ada"; "Bo" ] ]
+    Fingerprint = "fp-name"
+}
+
+let private mappingParent () =
+    fst (MappingDataManagerUI.init ClientModuleContext.empty)
+
+let private mappingDataManagerTests =
+    testList "MappingDataManagerUI" [
+        testCase "the wizard steps and reports its outcome with no parent model"
+        <| fun () ->
+            let msgs = (mappingParent ()).Messages
+            let wizard = MappingDataManagerUI.Wizard.init heldCsv
+
+            Expect.equal wizard.Step MappingDataManagerUI.Wizard.PickTarget "a clean file starts on the target picker"
+
+            let toggled, _, outcome =
+                MappingDataManagerUI.Wizard.update msgs [] (MappingDataManagerUI.Wizard.ToggleColumnFixes "Name") wizard
+
+            Expect.isTrue (toggled.DisabledFixes.Contains "Name") "the column's fixes are opted out"
+            Expect.equal outcome MappingDataManagerUI.Wizard.Stayed "a step needs nothing from the parent"
+
+            let _, _, noSchema =
+                MappingDataManagerUI.Wizard.update msgs [] (MappingDataManagerUI.Wizard.SelectTarget "Sales") wizard
+
+            Expect.equal
+                noSchema
+                (MappingDataManagerUI.Wizard.Errored msgs.NoSchemaCannotMap)
+                "an unregistered target is an error for the parent to show"
+
+            let _, _, cancelled =
+                MappingDataManagerUI.Wizard.update msgs [] MappingDataManagerUI.Wizard.Cancel wizard
+
+            Expect.equal cancelled MappingDataManagerUI.Wizard.Cancelled "cancel is reported, not applied"
+
+        testCase "a WizardMsg routed through the parent reaches the wizard"
+        <| fun () ->
+            let fresh = mappingParent ()
+
+            let parent = {
+                fresh with
+                    Wizard = Some(MappingDataManagerUI.Wizard.init heldCsv)
+            }
+
+            let toggled, _ =
+                MappingDataManagerUI.update
+                    []
+                    (MappingDataManagerUI.WizardMsg(MappingDataManagerUI.Wizard.ToggleColumnFixes "Name"))
+                    parent
+
+            match toggled.Wizard with
+            | Some w -> Expect.isTrue (w.DisabledFixes.Contains "Name") "the parent's wizard state changed"
+            | None -> Expect.isTrue false "the wizard stays open"
+
+            let closed, _ =
+                MappingDataManagerUI.update
+                    []
+                    (MappingDataManagerUI.WizardMsg MappingDataManagerUI.Wizard.Cancel)
+                    toggled
+
+            Expect.isTrue closed.Wizard.IsNone "the parent closes the wizard on its Cancelled outcome"
+    ]
 
 // ───────────────────────────────────────────────────────────────────────
 
