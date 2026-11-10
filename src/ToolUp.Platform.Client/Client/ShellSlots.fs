@@ -294,7 +294,7 @@ module ShellSlots =
         authenticatedAdmin
             _.ModuleVisibilityAdmin
             ModuleVisibilityAdminUI.moduleId
-            ModuleVisibilityAdminUI.create
+            (builtIn ModuleVisibilityAdminUI.builtIn)
             None
             "ModuleVisibilityAdmin"
 
