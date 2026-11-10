@@ -115,6 +115,11 @@ type CodemodMigration =
     /// on/off unions are `FeatureMode` or `ChromeFill`, the AI assistant
     /// family is three slot fills, and the `ClerkAuthUI` case is gone.
     | ClientConfigByConcern
+    /// One resolver (`ISubjectResolver` + `StorageScopeDerivation`; the
+    /// `IStorageScopeResolver` family is gone), one team-authority gate, the
+    /// permission write chain built over the principal, one `LifecycleRun`
+    /// with three entry points, and the session file stores as a service.
+    | OneResolverOneGate
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -157,6 +162,8 @@ module CodemodMigration =
         | CodemodMigration.IngestionAttempt -> "docs/migrations/1085-redesign-g-ingestion-attempt-and-its-lattice.md"
         | CodemodMigration.ClientConfigByConcern ->
             "docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md"
+        | CodemodMigration.OneResolverOneGate ->
+            "docs/migrations/1063-redesign-c-one-resolver-teamauthority-lifecyclerun-sessionfilestores.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -190,6 +197,7 @@ module CodemodMigration =
         | CodemodMigration.AccessContextRefuses -> "Phase 882"
         | CodemodMigration.IngestionAttempt -> "Phase 1085"
         | CodemodMigration.ClientConfigByConcern -> "Phase 1074"
+        | CodemodMigration.OneResolverOneGate -> "Phase 1063"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1256,6 +1264,29 @@ module Codemod =
             @"\bDataManagerChoice\.ColumnMapping\s*(?:\(\s*None\s*\)|None\b)"
             "DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled"
             "`DataManagerChoice.ColumnMapping None` → `DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled`"
+        // A guarded run is a `LifecycleRun` whose guard is the lock.
+        rewrite
+            "1063-lifecycle-guarded-with"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\bTenantLifecycleAggregator\.runGuardedWith\s+(\w+)\s+([\w.]+)\s+(\w+|\[[^\]\n]*\])\s+(\w+)\s+(\w+|""[^""\n]*"")\s+(\w+|""[^""\n]*"")"
+            "TenantLifecycleAggregator.run { TenantLifecycleAggregator.LifecycleRun.create $2 $3 $4 $5 $6 with Guard = Some $1 }"
+            "`runGuardedWith lock audit hooks phase scope actor` → `run { LifecycleRun.create audit hooks phase scope actor with Guard = Some lock }` (the same `GuardedRun`)"
+        rewrite
+            "1063-lifecycle-export-with"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\bTenantLifecycleAggregator\.exportThenDeprovisionWith\s+(\w+)\s+([\w.]+)\s+(\w+)\s+(\w+|\[[^\]\n]*\])\s+(\w+|""[^""\n]*"")\s+(\w+|""[^""\n]*"")"
+            "TenantLifecycleAggregator.exportThenDeprovision $3 { TenantLifecycleAggregator.LifecycleRun.create $2 $4 Deprovisioning $5 $6 with Guard = Some $1 }"
+            "`exportThenDeprovisionWith lock audit export hooks scope actor` → `exportThenDeprovision export { LifecycleRun.create audit hooks Deprovisioning scope actor with Guard = Some lock }` (the same `GuardedExportThenDeprovision`)"
+        // The one resolver: a scope is a subject projected.
+        rewrite
+            "1063-storage-scope-resolver"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\bIStorageScopeResolver\b"
+            "ISubjectResolver"
+            "`IStorageScopeResolver` → `ISubjectResolver` (derive the storage scope from the resolved subject with `StorageScopeDerivation.tryFromSubject`, or `SubjectScope.resolve`)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -1984,6 +2015,45 @@ module Codemod =
             CodemodFileClass.Source
             @"\bDataManagerChoice\.(?:FileUpload|ColumnMapping)\s*\(?\s*(?:Some\s*)?\(?\s*\{"
             "a data manager's configuration is `{ Label = Some { Name = …; Icon = … }; Group = … }` now (`Label = None` keeps the manager's own), the same for both managers; `ColumnMapping (Some cfg)` drops the `Some`"
+        // The lifecycle wrappers are one record and three functions.
+        review
+            "1063-lifecycle-wrappers"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\bTenantLifecycleAggregator\.(?:runWithRequest|runWithDefaults|runWithDefaultsRequest|runGuarded|runGuardedRequest|runResumable)\b"
+            "build a `LifecycleRun` (`LifecycleRun.create audit hooks phase scope actor`, then `with Request = Some r` / `Timeout = t` / `Guard = None` for a caller that already holds the scope) and call `run`, `runResumable cursor` or `exportThenDeprovision export`; all three answer whether the guard admitted the run (`GuardedRun.Ran summary` / `AlreadyInProgress`), and `runResumable` takes its ledger, progress and retry policy as one `LifecycleCursor`"
+        review
+            "1063-export-then-deprovision"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\bTenantLifecycleAggregator\.exportThenDeprovision\s+\w+\s+\w+\s"
+            "`exportThenDeprovision audit export hooks scope actor` → `exportThenDeprovision export (LifecycleRun.create audit hooks Deprovisioning scope actor)`; it answers `GuardedExportThenDeprovision` (`Ran` / `ExportFailed` / `AlreadyInProgress`), not a `Result`"
+        // The retired resolvers and their header fallback.
+        review
+            "1063-retired-resolvers"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\b(?:TeamScopeResolver|AnonymousScopeResolver|AuthenticatedEphemeralScopeResolver|AuthenticatedScopeResolver|ScopeRequestExtractor|TestStorageScopeResolver|fixedScopeResolver)\b|\.InvalidateUser\b"
+            "the per-mode scope resolvers are gone: resolve the subject with the registered `ISubjectResolver` and derive the scope with `StorageScopeDerivation.tryFromSubject` (or `SubjectScope.resolve subjects derive request`); a request's resolved scope is `ScopeResolution.forRequest ctx`; evict a member's cached active team by publishing `MembershipChanged` (`ActiveTeamSet`) on the reserved topic; a test fake is `Fakes.TestSubjectResolver subject`. `X-User-Id` names no caller any more"
+        review
+            "1063-file-management-registry"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\bFileManagement\.(?:getUserId|getStore|getStoreForUser|configureEvictionMinutes|storeEvictionMinutes)\b"
+            "the session file stores are a registered service: resolve `ISessionFileStores` and `Resolve(dataTypes, dataObjectStore, runtime, scope)` (it awaits the scope's one hydration); the caller id is `AccessContext.callerIdOf ctx.Items`, never the `X-User-Id` header; the eviction TTL is the `SessionFileStores` constructor's"
+        review
+            "1063-file-contents-async"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\.GetFileContents\b|\bFileManagement\.getFileContents\b"
+            "`GetFileContents` / `getFileContents` answer `Async<string>` now (the scope's store is awaited): bind it with `let!` inside the endpoint's `async`, or use `FromFile`"
+        // The decorators take the caller; the chain is built once per caller.
+        review
+            "1063-permission-decorators"
+            CodemodMigration.OneResolverOneGate
+            CodemodFileClass.Source
+            @"\b(?:GrantPolicyPermissionStore|DualControlPermissionStore|GrantNotificationObserver)\s*\("
+            "the decorators take the caller's `AccessContext` in place of an actor id or a `unit -> string option` closure; a handler wraps its writes once with `PermissionWrites.asPrincipal principal writes` (the registered `PermissionWrites`), which builds grant policy outside dual control"
     ]
 
 
@@ -3212,6 +3282,7 @@ module Codemod =
             CodemodMigration.AccessContextRefuses
             CodemodMigration.IngestionAttempt
             CodemodMigration.ClientConfigByConcern
+            CodemodMigration.OneResolverOneGate
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

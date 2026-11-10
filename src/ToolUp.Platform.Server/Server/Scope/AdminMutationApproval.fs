@@ -31,20 +31,12 @@ open ToolUp.Platform.Scope.PermissionStore
 // person still handed authority to the wrong subject. That is the gap.
 //
 // **The composition order is fixed and it is load-bearing** (555.D).
-// This decorator sits INSIDE the Phase 551 `GrantPolicyPermissionStore`,
-// so a write reaches the module's declared grant policy FIRST:
-//
-//     GrantPolicyPermissionStore        (551 — outermost)
-//       └── DualControlPermissionStore  (555 — this file)
-//             └── SanitisingPermissionStore
-//                   └── PermissionStore
-//
-// Reverse the two and a write the module would never admit is parked
-// awaiting an approval that could not have applied it — a queue entry
-// that is guaranteed to fail at the end of a ceremony two people
-// performed. The phase says it directly: a write that can never be
-// approved is refused, not parked. Refusal-before-capture is what that
-// order buys.
+// This decorator sits INSIDE the grant-policy `GrantPolicyPermissionStore`,
+// so a write reaches the module's declared grant policy FIRST. A write
+// that policy would refuse is never parked awaiting an approval that could
+// not apply it. The order is not prose a composer must follow: it is the
+// body of `PermissionWrites.asPrincipal` at the foot of this file, the one
+// function that builds the chain.
 //
 // **Why revocation is never gated.** A pending record narrows nothing
 // while it sits there — the authority it would create does not exist, so
@@ -62,9 +54,9 @@ open ToolUp.Platform.Scope.PermissionStore
 // proposal. So an unattributable gated write is REFUSED
 // (`UnattributedProposer`), never parked. The legacy `IPermissionStore`
 // signature carries no caller identity — and per GP 4 must not — so the
-// decorator is handed a `resolveProposer` seam at composition, wired to
-// the live request's `AccessContext` in production and passed explicitly
-// in tests.
+// decorator is built over the caller's principal: `PermissionWrites.asPrincipal`
+// at the handler, and a principal with no person behind it (an anonymous
+// session, `AccessContext.system`) proposes nothing.
 //
 // **What distinctness means today.** Distinct USER ID, trimmed and
 // case-insensitive, which is what the phase specifies until Phase 527
@@ -735,6 +727,15 @@ let private applyMutation (mutation: AdminMutation) (current: TeamPermissions) :
 
 // ─── The `IPermissionStore` decorator ────────────────────────────────
 
+/// The administrator a principal names as a proposer: its user id, or
+/// `None` for an anonymous session (which `AccessContext.system` is too) or
+/// a blank id — a two-person rule cannot count either as a person.
+let internal proposerOf (principal: AccessContext) : string option =
+    match principal.Subject with
+    | AnonymousSession _ -> None
+    | _ when String.IsNullOrWhiteSpace principal.UserId -> None
+    | _ -> Some principal.UserId
+
 /// `IPermissionStore` decorator implementing the two-person rule.
 /// Composed ONLY when `ServerConfig.AdminMutationPolicy` is
 /// `DualControl`, so a `SingleAdmin` deployment resolves the undecorated
@@ -756,7 +757,7 @@ type DualControlPermissionStore
         settings: DualControlSettings,
         approvals: IAdminMutationApprovalStore,
         isPolicyBearing: string -> bool,
-        resolveProposer: unit -> string option,
+        principal: AccessContext,
         now: unit -> DateTimeOffset,
         auditLog: IAuditLog
     ) =
@@ -822,9 +823,8 @@ type DualControlPermissionStore
         match! decide teamId mutationOf with
         | None, applied -> return applied
         | Some mutation, _ ->
-            match resolveProposer () with
-            | None
-            | Some "" -> return Error(AdminMutationRefusal.describe AdminMutationRefusal.UnattributedProposer)
+            match proposerOf principal with
+            | None -> return Error(AdminMutationRefusal.describe AdminMutationRefusal.UnattributedProposer)
             | Some proposerId ->
                 match! propose approvals settings auditLog (now ()) teamId proposerId mutation with
                 | Error refusal -> return Error(AdminMutationRefusal.describe refusal)
@@ -896,3 +896,81 @@ type DualControlPermissionStore
 
         member _.SetModuleExposure(teamId, moduleName, state) =
             gate teamId.Value (fun _ -> Ok(AdminMutation.SetModuleExposure(moduleName, state)))
+
+// ─── The permission write chain, wrapped once per caller ─────────────
+
+/// The dual-control layer a deployment composed: its settings, the queue a
+/// gated write parks in, which modules carry a grant policy, the clock and
+/// the audit log.
+[<NoEquality; NoComparison>]
+type DualControlLayer = {
+    Settings: DualControlSettings
+    Approvals: IAdminMutationApprovalStore
+    IsPolicyBearing: string -> bool
+    Now: unit -> DateTimeOffset
+    AuditLog: IAuditLog
+}
+
+/// The grant-policy layer a deployment composed: the module registry, the
+/// counterparty-consent oracle and the audit log.
+[<NoEquality; NoComparison>]
+type GrantPolicyLayer = {
+    Registry: GrantPolicyGuard.ModuleGrantPolicyRegistry
+    Consent: GrantPolicyGuard.CounterpartyConsentOracle
+    AuditLog: IAuditLog
+}
+
+/// The permission write chain a deployment composed, without the caller:
+/// the store every layer wraps, the two decision layers it composed, and
+/// an observer over the guarded result (the grant-notice loop), each
+/// `None` where the deployment composed none.
+[<NoEquality; NoComparison>]
+type PermissionWrites = {
+    Store: IPermissionStore
+    DualControl: DualControlLayer option
+    GrantPolicy: GrantPolicyLayer option
+    Observe: (AccessContext -> IPermissionStore -> IPermissionStore) option
+}
+
+/// Building the write chain for a caller.
+[<RequireQualifiedAccess>]
+module PermissionWrites =
+
+    /// The chain with no decision layer: writes go straight to `store`.
+    let direct (store: IPermissionStore) : PermissionWrites = {
+        Store = store
+        DualControl = None
+        GrantPolicy = None
+        Observe = None
+    }
+
+    /// The store `principal`'s writes go through: grant policy OUTSIDE dual
+    /// control, so a write the module's policy refuses is refused before it
+    /// could be parked, and the observer outside both, so it sees only what
+    /// was written. The one place the order is stated.
+    let asPrincipal (principal: AccessContext) (writes: PermissionWrites) : IPermissionStore =
+        let dual =
+            match writes.DualControl with
+            | Some d ->
+                DualControlPermissionStore(
+                    writes.Store,
+                    d.Settings,
+                    d.Approvals,
+                    d.IsPolicyBearing,
+                    principal,
+                    d.Now,
+                    d.AuditLog
+                )
+                :> IPermissionStore
+            | None -> writes.Store
+
+        let guarded =
+            match writes.GrantPolicy with
+            | Some g ->
+                GrantPolicyGuard.GrantPolicyPermissionStore(dual, g.Registry, g.Consent, g.AuditLog, principal)
+                :> IPermissionStore
+            | None -> dual
+
+        match writes.Observe with
+        | Some observe -> observe principal guarded
+        | None -> guarded

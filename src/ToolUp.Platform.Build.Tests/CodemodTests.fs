@@ -135,6 +135,7 @@ let tests =
                             "src/Server/Infrastructure.fs"
                             "src/Server/Ingestion.fs"
                             "src/Server/Jobs.fs"
+                            "src/Server/Lifecycle.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/RateLimit.fs"
@@ -188,6 +189,7 @@ let tests =
                             "src/Server/Infrastructure.fs"
                             "src/Server/Ingestion.fs"
                             "src/Server/Jobs.fs"
+                            "src/Server/Lifecycle.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/RateLimit.fs"
@@ -268,7 +270,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 26 file(s) visited, 146 rewrite(s) in 21 file(s), 131 site(s) for review."
+                        "Codemod: 27 file(s) visited, 149 rewrite(s) in 22 file(s), 137 site(s) for review."
                         "summary")
         ]
 
@@ -914,6 +916,40 @@ let tests =
                 Expect.equal
                     (Codemod.migrationOfPhase "1084")
                     (Some CodemodMigration.SnapshotIndex)
+                    "the migration is reachable by its phase"
+
+            testCase "Phase 1063 — the guarded lifecycle wrappers become a LifecycleRun; the rest is reported"
+            <| fun () ->
+                let source =
+                    String.concat "\n" [
+                        "let! a = TenantLifecycleAggregator.runGuardedWith lock audit hooks Deprovisioning scopeId actor"
+                        "let! b = TenantLifecycleAggregator.exportThenDeprovisionWith lock audit runExport hooks scopeId actor"
+                        "let resolver: IStorageScopeResolver = resolve ()"
+                        "let! c = TenantLifecycleAggregator.runGuarded audit hooks Provisioning scopeId actor"
+                    ]
+
+                let rewritten, rewrites = rewriteSource source
+
+                Expect.equal
+                    rewritten
+                    (String.concat "\n" [
+                        "let! a = TenantLifecycleAggregator.run { TenantLifecycleAggregator.LifecycleRun.create audit hooks Deprovisioning scopeId actor with Guard = Some lock }"
+                        "let! b = TenantLifecycleAggregator.exportThenDeprovision runExport { TenantLifecycleAggregator.LifecycleRun.create audit hooks Deprovisioning scopeId actor with Guard = Some lock }"
+                        "let resolver: ISubjectResolver = resolve ()"
+                        "let! c = TenantLifecycleAggregator.runGuarded audit hooks Provisioning scopeId actor"
+                    ])
+                    "the two same-result wrappers and the interface rewrite; the summary-returning wrapper does not"
+
+                Expect.equal rewrites.Length 3 "three rewrites"
+
+                Expect.equal
+                    (reviewSource rewritten |> List.map (fun f -> f.RuleId, f.Line))
+                    [ "1063-lifecycle-wrappers", 4 ]
+                    "the wrapper whose result changes is reported"
+
+                Expect.equal
+                    (Codemod.migrationOfPhase "1063")
+                    (Some CodemodMigration.OneResolverOneGate)
                     "the migration is reachable by its phase"
 
             testCase "every migration resolves by its phase number, 874 included"

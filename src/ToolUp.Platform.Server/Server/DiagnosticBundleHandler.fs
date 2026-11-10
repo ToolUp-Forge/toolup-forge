@@ -321,15 +321,15 @@ let private buildDependencyGraphJson (capture: DevDiagnosticsHandler.DevDiagnost
 /// best-effort identity / scope resolution that never fails the
 /// endpoint — if scope resolution throws, the bundle still produces
 /// and the audit trail narrows to `_platform` scope.
-let private resolveCaller (ctx: HttpContext) : Async<string * string option> = async {
+let private resolveCaller (config: ServerConfig) (ctx: HttpContext) : Async<string * string option> = async {
     try
         let authProv =
             ctx.RequestServices.GetService(typeof<IAuthProvider>) :?> IAuthProvider
 
-        let resolver =
-            ctx.RequestServices.GetService(typeof<IStorageScopeResolver>) :?> IStorageScopeResolver
+        let subjects =
+            ctx.RequestServices.GetService(typeof<ISubjectResolver>) :?> ISubjectResolver
 
-        let! request = ScopeRequestExtractor.fromHttpContext ctx authProv
+        let! request = Middleware.SubjectRequestExtractor.fromHttpContext ctx authProv
         let user = request.User |> Option.defaultValue AuthenticatedUser.anonymous
 
         let userId =
@@ -338,7 +338,8 @@ let private resolveCaller (ctx: HttpContext) : Async<string * string option> = a
             else
                 user.UserId.Value
 
-        let! scopeResult = resolver.Resolve request
+        let! scopeResult =
+            SubjectScope.resolve subjects (Middleware.StorageScopeDerivation.tryFromSubject None config) request
 
         let scopeId =
             match scopeResult with
@@ -496,7 +497,7 @@ let private writeTar (entries: (string * byte[]) list) : byte[] =
 
 let private bundleHandler (config: ServerConfig) (capture: DevDiagnosticsHandler.DevDiagnosticsCapture) : HttpHandler =
     fun next ctx -> task {
-        let! callerUserId, callerScopeId = resolveCaller ctx
+        let! callerUserId, callerScopeId = resolveCaller config ctx
 
         // Build the bounded sections first so the audit-tail can claim
         // whatever cap budget remains. Each section is built in

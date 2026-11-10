@@ -23,10 +23,9 @@ open ToolUp.Platform.Jobs
 // tail). Zero behaviour change.
 
 /// Create + register `ITeamStore`, `IPendingInviteStore`,
-/// `IPermissionStore`. The team store is shared with the
-/// `TeamScopeResolver` downstream (extracted to
-/// `ComposeScopeResolver`) — the same instance is used both places so
-/// `SetActiveTeam`'s cache invalidation lands in the right cache.
+/// `IPermissionStore`. The team store is shared with the subject resolver
+/// downstream (`ComposeScopeResolver`) — the same instance is used both
+/// places so `SetActiveTeam`'s cache invalidation lands in the right cache.
 /// `IPendingInviteStore` defaults to `InMemoryPendingInviteStore` over
 /// the resolved `IBlobStorage` for a single replica, and (Phase 5h) to
 /// the ETag-based `BlobPendingInviteStore` for `ReplicaCount > 1` when
@@ -211,19 +210,11 @@ let registerTeamPermissionStores
     // decorator does not exist at all in a deployment that does not use
     // it (GP 13), rather than existing and always answering yes.
     //
-    // Phase 555 — dual control (the two-person rule) sits BETWEEN the
-    // sanitising store and the Phase 551 grant-policy guard, and that
-    // position is the whole of 555.D's "module policy refusal pre-empts
-    // queueing": a write reaches the module's declared `GrantPolicy`
-    // FIRST, so one the module would never admit is refused outright
-    // rather than parked awaiting an approval that could not have applied
-    // it. Reversing the two would queue writes guaranteed to fail at the
-    // end of a ceremony two administrators performed.
-    //
-    // Registered only under `DualControl` (GP 13): a `SingleAdmin`
-    // deployment builds no approval store, wraps no decorator and reads
-    // no `admin-mutations/` blob — the chain below is the exact one that
-    // shipped before this phase.
+    // Dual control (the two-person rule) sits between the sanitising store
+    // and the grant-policy guard; `PermissionWrites.asPrincipal` is the one
+    // function that orders them. Registered only under `DualControl`
+    // (GP 13): a `SingleAdmin` deployment builds no approval store and
+    // reads no `admin-mutations/` blob.
     let resolveGrantRegistry (sp: System.IServiceProvider) =
         match sp.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>) with
         | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as r -> r
@@ -233,51 +224,13 @@ let registerTeamPermissionStores
         StoreIdSanitising.SanitisingPermissionStore(PermissionStore(resolvedBlobStorage, resolvedLogger))
         :> IPermissionStore
 
-    /// The acting administrator for the live request. `None` when no
-    /// identity can be resolved — the decorator then REFUSES the gated
-    /// write rather than parking it, because a two-person rule whose
-    /// first person is unknown cannot prove distinctness.
-    let resolveProposer (sp: System.IServiceProvider) () =
-        match sp.GetService(typeof<Microsoft.AspNetCore.Http.IHttpContextAccessor>) with
-        | :? Microsoft.AspNetCore.Http.IHttpContextAccessor as accessor when not (isNull (box accessor.HttpContext)) ->
-            match AccessContext.ofItems accessor.HttpContext.Items with
-            | Some ac when not (System.String.IsNullOrWhiteSpace ac.UserId) -> Some ac.UserId
-            | _ ->
-                match AccessContext.callerIdOf accessor.HttpContext.Items with
-                | Some id when not (System.String.IsNullOrWhiteSpace id) -> Some id
-                | _ -> None
-        | _ -> None
-
     match config.AdminMutationPolicy with
     | AdminMutationPolicy.SingleAdmin -> ()
-    | AdminMutationPolicy.DualControl settings ->
-        let approvals =
+    | AdminMutationPolicy.DualControl _ ->
+        services.AddSingleton<AdminMutationApproval.IAdminMutationApprovalStore>(
             AdminMutationApproval.BlobAdminMutationApprovalStore(resolvedBlobStorage, resolvedLogger)
             :> AdminMutationApproval.IAdminMutationApprovalStore
-
-        services.AddSingleton<AdminMutationApproval.IAdminMutationApprovalStore>(approvals)
-        |> ignore
-
-        // Registered as the CONCRETE type as well as inside the
-        // `IPermissionStore` chain, and resolved from there rather than
-        // constructed twice, so an admin approval surface drives the same
-        // instance the write path parked into.
-        services.AddSingleton<AdminMutationApproval.DualControlPermissionStore>(fun (sp: System.IServiceProvider) ->
-            let registry = resolveGrantRegistry sp
-
-            let isPolicyBearing moduleName =
-                GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve registry moduleName
-                <> GrantPolicy.AdminDiscretion
-
-            AdminMutationApproval.DualControlPermissionStore(
-                sanitisedPermissionStore (),
-                settings,
-                approvals,
-                isPolicyBearing,
-                resolveProposer sp,
-                (fun () -> System.DateTimeOffset.UtcNow),
-                auditLog
-            ))
+        )
         |> ignore
 
     // Phase 1107 — in-platform publication reader grants, beside the
@@ -289,92 +242,113 @@ let registerTeamPermissionStores
     )
     |> ignore
 
-    services.AddSingleton<IPermissionStore>(fun (sp: System.IServiceProvider) ->
-        let inner =
-            match config.AdminMutationPolicy with
-            | AdminMutationPolicy.SingleAdmin -> sanitisedPermissionStore ()
-            | AdminMutationPolicy.DualControl _ ->
-                match sp.GetService(typeof<AdminMutationApproval.DualControlPermissionStore>) with
-                | :? AdminMutationApproval.DualControlPermissionStore as d -> d :> IPermissionStore
-                // Unreachable — the registration above runs whenever the
-                // mode is `DualControl`. Falling back to the undecorated
-                // store would silently disable the control, so the miss is
-                // logged rather than passed over in silence.
-                | _ ->
-                    resolvedLogger.Error(
-                        "ComposeTeamRuntime: AdminMutationPolicy is DualControl but no DualControlPermissionStore is registered; permission writes are NOT under dual control.",
-                        None
-                    )
-
-                    sanitisedPermissionStore ()
-
+    // The write chain without its caller. A handler wraps it once per
+    // request with `PermissionWrites.asPrincipal`, which fixes the order
+    // (grant policy outside dual control, the notice loop outside both).
+    services.AddSingleton<AdminMutationApproval.PermissionWrites>(fun (sp: System.IServiceProvider) ->
         let registry = resolveGrantRegistry sp
 
-        if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
-            inner
-        else
-            // Phase 552 — the counterparty oracle. Built over whatever
-            // consent registry `registerGrantConsentStore` composed; when
-            // none was (the default `NoGrantConsentStore`), the oracle is
-            // constructed with `None` and answers `false` for everything,
-            // which is precisely the Phase 551 refusal. So the decorator is
-            // built the same way in both cases and the difference is a
-            // resolved service, not a branch — there is no configuration in
-            // which the counterparty arm is enforced by one code path here
-            // and a different one there.
-            let consentOracle =
-                let consentStore =
-                    match sp.GetService(typeof<GrantConsentStore.IGrantConsentStore>) with
-                    | :? GrantConsentStore.IGrantConsentStore as s -> Some s
+        let dualControl: AdminMutationApproval.DualControlLayer option =
+            match
+                config.AdminMutationPolicy, sp.GetService(typeof<AdminMutationApproval.IAdminMutationApprovalStore>)
+            with
+            | AdminMutationPolicy.SingleAdmin, _ -> None
+            | AdminMutationPolicy.DualControl settings,
+              (:? AdminMutationApproval.IAdminMutationApprovalStore as approvals) ->
+                Some {
+                    AdminMutationApproval.DualControlLayer.Settings = settings
+                    Approvals = approvals
+                    IsPolicyBearing =
+                        fun moduleName ->
+                            GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve registry moduleName
+                            <> GrantPolicy.AdminDiscretion
+                    Now = fun () -> System.DateTimeOffset.UtcNow
+                    AuditLog = auditLog
+                }
+            | AdminMutationPolicy.DualControl _, _ ->
+                // Unreachable — the approval store is registered above
+                // whenever the mode is `DualControl`. Passing writes over
+                // undecided would silently disable the control.
+                invalidOp
+                    "ComposeTeamRuntime: AdminMutationPolicy is DualControl but no IAdminMutationApprovalStore is registered."
+
+        // An `AdminDiscretion`-only deployment reaches neither the grant
+        // guard nor the notice loop and pays for neither (GP 13).
+        let grantPolicy, observe =
+            if GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry then
+                None, None
+            else
+                // The counterparty oracle, over whatever consent registry
+                // `registerGrantConsentStore` composed; with none it
+                // answers `false` for everything.
+                let consentOracle =
+                    let consentStore =
+                        match sp.GetService(typeof<GrantConsentStore.IGrantConsentStore>) with
+                        | :? GrantConsentStore.IGrantConsentStore as s -> Some s
+                        | _ -> None
+
+                    let verifier =
+                        match sp.GetService(typeof<GrantConsentStore.IGrantConsentVerifier>) with
+                        | :? GrantConsentStore.IGrantConsentVerifier as v -> v
+                        | _ -> GrantConsentStore.denyingVerifier
+
+                    GrantConsentStore.StoreCounterpartyConsentOracle(
+                        consentStore,
+                        verifier,
+                        (fun () -> System.DateTimeOffset.UtcNow),
+                        auditLog
+                    )
+                    :> GrantPolicyGuard.CounterpartyConsentOracle
+
+                // The grant-event notice loop observes what was actually
+                // written and never refuses; composed only when a channel
+                // is resolvable.
+                let observe =
+                    match sp.GetService(typeof<INotificationChannel>) with
+                    | :? INotificationChannel as channel when not (isNull (box channel)) ->
+                        let settings =
+                            match sp.GetService(typeof<GrantNotification.GrantNotificationSettings>) with
+                            | :? GrantNotification.GrantNotificationSettings as s -> s
+                            | _ -> GrantNotification.GrantNotificationSettings.defaults
+
+                        Some(fun (principal: AccessContext) (guarded: IPermissionStore) ->
+                            GrantNotification.GrantNotificationObserver(
+                                guarded,
+                                registry,
+                                channel,
+                                settings,
+                                resolvedLogger,
+                                principal,
+                                (fun () -> System.DateTimeOffset.UtcNow)
+                            )
+                            :> IPermissionStore)
                     | _ -> None
 
-                let verifier =
-                    match sp.GetService(typeof<GrantConsentStore.IGrantConsentVerifier>) with
-                    | :? GrantConsentStore.IGrantConsentVerifier as v -> v
-                    | _ -> GrantConsentStore.denyingVerifier
+                let layer: AdminMutationApproval.GrantPolicyLayer = {
+                    Registry = registry
+                    Consent = consentOracle
+                    AuditLog = auditLog
+                }
 
-                GrantConsentStore.StoreCounterpartyConsentOracle(
-                    consentStore,
-                    verifier,
-                    (fun () -> System.DateTimeOffset.UtcNow),
-                    auditLog
-                )
-                :> GrantPolicyGuard.CounterpartyConsentOracle
+                Some layer, observe
 
-            let guarded =
-                GrantPolicyGuard.GrantPolicyPermissionStore(inner, registry, consentOracle, auditLog, None)
-                :> IPermissionStore
+        let writes: AdminMutationApproval.PermissionWrites = {
+            Store = sanitisedPermissionStore ()
+            DualControl = dualControl
+            GrantPolicy = grantPolicy
+            Observe = observe
+        }
 
-            // Phase 556 — the grant-event notice loop, OUTSIDE the write
-            // guard because it must observe what was actually written: a
-            // grant 551 refused, or 555 parked, is not a grant anybody
-            // should be told they hold. It observes only — it never
-            // refuses, never rewrites a result, and swallows every
-            // delivery failure, because a notification outage must not
-            // fail a permission write.
-            //
-            // Composed only when a channel is resolvable, on top of the
-            // non-empty-registry condition that already guards this whole
-            // branch: an `AdminDiscretion`-only deployment reaches neither
-            // decorator and pays for neither (GP 13).
-            match sp.GetService(typeof<INotificationChannel>) with
-            | :? INotificationChannel as channel when not (isNull (box channel)) ->
-                let settings =
-                    match sp.GetService(typeof<GrantNotification.GrantNotificationSettings>) with
-                    | :? GrantNotification.GrantNotificationSettings as s -> s
-                    | _ -> GrantNotification.GrantNotificationSettings.defaults
+        writes)
+    |> ignore
 
-                GrantNotification.GrantNotificationObserver(
-                    guarded,
-                    registry,
-                    channel,
-                    settings,
-                    resolvedLogger,
-                    resolveProposer sp,
-                    (fun () -> System.DateTimeOffset.UtcNow)
-                )
-                :> IPermissionStore
-            | _ -> guarded)
+    // The store every reader and every caller-less writer resolves: the same
+    // chain under a principal that names no person, so a gated write through
+    // it is refused as unattributed rather than parked or attributed to
+    // nobody. A request's writes go through `PermissionWrites.asPrincipal`.
+    services.AddSingleton<IPermissionStore>(fun (sp: System.IServiceProvider) ->
+        sp.GetService(typeof<AdminMutationApproval.PermissionWrites>) :?> AdminMutationApproval.PermissionWrites
+        |> AdminMutationApproval.PermissionWrites.asPrincipal (AccessContext.system "permission-store"))
     |> ignore
 
     teamStoreOpt

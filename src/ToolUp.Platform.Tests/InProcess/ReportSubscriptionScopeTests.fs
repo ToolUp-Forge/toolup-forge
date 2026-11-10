@@ -1153,10 +1153,28 @@ let private teamResolution () =
     let cache =
         new Microsoft.Extensions.Caching.Memory.MemoryCache(Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())
 
-    let resolver =
-        new TeamScopeResolver(teamStore, cache, notifications) :> IStorageScopeResolver
+    // The deployment's one resolver over a team surface; a declared
+    // principal's scope is its subject's, persistent.
+    let subjects =
+        new ToolUp.Platform.Scope.DefaultSubjectResolver.DefaultSubjectResolver(
+            [ SurfaceProfile.team ],
+            Some(teamStore :> TeamManagement.ITeamStore),
+            cache,
+            notifications
+        )
 
-    teamStore, DeclaredPrincipalResolver(resolver.Resolve)
+    // Started as the host starts it, so a membership write evicts the
+    // resolver's cached active team.
+    (subjects :> Microsoft.Extensions.Hosting.IHostedService).StartAsync Threading.CancellationToken.None
+    |> Async.AwaitTask
+    |> Async.RunSynchronously
+
+    teamStore,
+    DeclaredPrincipalResolver(
+        subjects :> ISubjectResolver,
+        Middleware.StorageScopeDerivation.tryKeyFromSubject
+        >> Option.map (StorageScope.ofKey true)
+    )
 
 /// Make `userId` an owner of a fresh team, active on it; the team's id.
 let private memberOfNewTeam (teamStore: TeamManagement.TeamStore) (userId: string) =
@@ -1484,7 +1502,16 @@ let standingSubscriptionTests =
             let world = worldWith (probe (ConcurrentQueue()))
 
             let ephemeral =
-                DeclaredPrincipalResolver((AuthenticatedEphemeralScopeResolver() :> IStorageScopeResolver).Resolve)
+                // A deployment whose user scopes do not persist.
+                DeclaredPrincipalResolver(
+                    { new ISubjectResolver with
+                        member _.Resolve request = async {
+                            return Ok(Subject.AuthenticatedUser request.User.Value.UserId.Value)
+                        }
+                    },
+                    Middleware.StorageScopeDerivation.tryKeyFromSubject
+                    >> Option.map (StorageScope.ofKey false)
+                )
 
             let principal = principalNamed "trading"
 

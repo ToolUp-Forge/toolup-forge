@@ -294,7 +294,7 @@ module NarrativePublisher =
     let private resolveScopeId (ctx: HttpContext) : string =
         match AccessContext.scopeOf ctx.Items with
         | Some scope -> scope.ScopeId
-        | _ -> FileManagement.getUserId ctx
+        | _ -> AccessContext.callerIdOf ctx.Items |> Option.defaultValue "anonymous"
 
     let private resolveStore (ctx: HttpContext) : INarrativeStore option =
         match ctx.RequestServices.GetService(typeof<INarrativeStore>) with

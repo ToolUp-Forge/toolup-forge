@@ -4,7 +4,6 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
-open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Scope.SurfaceEnforcement
 open ToolUp.Platform.Config
@@ -13,15 +12,13 @@ open ToolUp.Platform.Jobs
 
 // ─── compose phase: scope + access-context wiring ────────────────────
 //
-// Resolves the four substrate values that drive per-request scope /
-// subject / surface / migrator wiring (`IStorageScopeResolver`,
-// `ISubjectResolver`, `SurfaceRequirementRegistry`,
-// `IAnonymousSessionMigrator`) and registers them alongside the
-// scoped `AccessContext` factory + `IHttpContextAccessor` + session.
-// Extracted from `compose` for the per-concern subdivision (Phase 15e
-// follow-up tail). Takes the exact substrate values the inline
-// definition captured and returns the same shape. Zero behaviour
-// change.
+// Resolves the substrate values that drive per-request subject /
+// surface / migrator wiring (`ISubjectResolver`,
+// `SurfaceRequirementRegistry`, `IAnonymousSessionMigrator`) and
+// registers them alongside the scoped `AccessContext` factory +
+// `IHttpContextAccessor` + session. `ISubjectResolver` is the
+// deployment's one resolver: every caller's scope is its subject
+// projected by `StorageScopeDerivation`.
 
 /// The `AccessContext` a request carries: the principal
 /// `ScopeResolutionMiddleware` stamped ONCE under `AccessContext.ItemsKey`
@@ -34,17 +31,11 @@ let internal accessContextOf (ctx: HttpContext) : AccessContext option = AccessC
 
 /// Build + register the per-request scope-resolution substrate:
 ///
-///   - `IStorageScopeResolver` — picked from the deployment's
-///     `Surfaces`: `TeamScopeResolver` over the shared `ITeamStore`
-///     when any `Team` surface is declared; otherwise the dominant
-///     `AuthenticatedUser` surface's `Persistence` chooses
-///     `AuthenticatedEphemeralScopeResolver` / `AuthenticatedScopeResolver`;
-///     otherwise `AnonymousScopeResolver`. Byte-identical mapping to
-///     the retiring ServerConfig.legacyMode 5-arm dispatch for every
-///     single-surface deployment.
 ///   - `ISubjectResolver` — `DefaultSubjectResolver` over
-///     `config.Surfaces`. Post-Phase-66-Stream-A.2 the canonical shape
-///     lives on `ServerConfig` directly (no per-Mode bridge derivation).
+///     `config.Surfaces`, registered also as a hosted unit so its
+///     membership-change subscription is taken at start, not in its
+///     constructor. `DeclaredPrincipalResolver` runs declared principals
+///     through the same resolver.
 ///   - `SurfaceRequirementRegistry` — bridge entries from
 ///     `fromServerConfig` overlaid with per-module
 ///     `DefaultSurfaceRequirement` × `RoutePrefixes`
@@ -74,36 +65,7 @@ let registerScopeResolution
     (subjectMigratorOverride: IAnonymousSessionMigrator option)
     : unit =
 
-    let scopeResolver: IStorageScopeResolver =
-        if DeploymentConfig.hasTeamScope config then
-            new TeamScopeResolver(
-                teamStoreOpt.Value :> ITeamStore,
-                new MemoryCache(MemoryCacheOptions()),
-                resolvedNotificationChannel,
-                resolvedLogger
-            )
-        else
-            let pickUserPersistence =
-                config.Surfaces
-                |> List.tryPick (function
-                    | SurfaceProfile.AuthenticatedUser cfg -> Some cfg.Persistence
-                    | _ -> None)
-
-            match pickUserPersistence with
-            | Some Ephemeral -> AuthenticatedEphemeralScopeResolver()
-            | Some Persistent -> AuthenticatedScopeResolver()
-            | None -> AnonymousScopeResolver()
-
-    // Phase 66 Stream A.6 + A.2 — `ISubjectResolver` +
-    // `SurfaceRequirementRegistry` wiring. Both Singletons sit
-    // alongside the retiring `IStorageScopeResolver` until Stream A.7
-    // migrates the remaining handlers (`DevDiagnosticsHandler` /
-    // `DiagnosticBundleHandler`) and the legacy registration retires.
-    //
-    // The resolver reads `config.Surfaces` directly post Stream A.2
-    // — the per-Mode bridge derivation that A.6 stood up is gone
-    // because the canonical shape now lives on `ServerConfig`.
-    let subjectResolver: ISubjectResolver =
+    let defaultSubjectResolver =
         new DefaultSubjectResolver.DefaultSubjectResolver(
             config.Surfaces,
             teamStoreOpt |> Option.map (fun ts -> ts :> ITeamStore),
@@ -111,7 +73,13 @@ let registerScopeResolution
             resolvedNotificationChannel,
             resolvedLogger
         )
-        :> ISubjectResolver
+
+    let subjectResolver = defaultSubjectResolver :> ISubjectResolver
+
+    // Once at start: the resolver subscribes to membership changes, on every
+    // profile (a serverless host's cache must evict too).
+    Hosting.register services (BackgroundUnit.ofInstance "subject-resolver" OnceAtStart defaultSubjectResolver)
+    |> ignore
 
     // **Surface-requirement registry.** Two-layer merge:
     //   1. `fromServerConfig` produces the bridge entries the SDK has
@@ -162,8 +130,12 @@ let registerScopeResolution
         .AddSingleton<ISubjectResolver>(subjectResolver)
         .AddSingleton<SurfaceRequirementRegistry>(bridgeRegistry)
         .AddSingleton<ModuleVisibilityRoutes.ModuleRouteRegistry>(moduleRouteRegistry)
-        .AddSingleton<IStorageScopeResolver>(scopeResolver)
-        .AddSingleton<DeclaredPrincipalResolver>(DeclaredPrincipalResolver(scopeResolver.Resolve)) // Phase 1005
+        .AddSingleton<DeclaredPrincipalResolver>(
+            DeclaredPrincipalResolver(
+                subjectResolver,
+                Middleware.StorageScopeDerivation.tryFromSubject (Some resolvedLogger) config
+            )
+        )
         .AddSingleton<IAnonymousSessionMigrator>(subjectMigrator)
         .AddScoped<AccessContext>(fun sp ->
             // The principal ScopeResolutionMiddleware stamped,

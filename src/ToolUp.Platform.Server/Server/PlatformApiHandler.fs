@@ -88,15 +88,11 @@ let private resolvePermissionStore (ctx: HttpContext) =
 
 let private resolveAuditLog (ctx: HttpContext) = Background.auditLogOf ctx
 
-/// Phase 5f — resolves `IPlatformAdminStore` for the `CreateTeam`
-/// admin-gate. The store is registered unconditionally by
-/// `ComposeAuth.registerPlatformAdminStore`, so `None` only happens on
-/// test paths that bypass `compose`. Tests asserting the gate construct
-/// the store + register it themselves.
-let private resolvePlatformAdminStore (ctx: HttpContext) =
-    match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
-    | :? IPlatformAdminStore as s -> Some s
-    | _ -> None
+/// The request's stamped principal, or the unresolved one (anonymous,
+/// holding no role) where none was stamped.
+let private resolvePrincipal (ctx: HttpContext) =
+    AccessContext.ofItems ctx.Items
+    |> Option.defaultWith (fun () -> AccessContext.unresolved "PlatformApiHandler")
 
 /// Fire-and-forget audit emission. Phase 9 — audit events for team
 /// CRUD / permission changes are emitted from the handler (not from
@@ -164,59 +160,17 @@ let platformInfoApiHandler (config: ServerConfig) (fileManagementMounted: bool) 
 let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     let teamStore = resolveTeamStore ctx
     let auditLog = resolveAuditLog ctx
-    let userId = resolveUserId ctx
+    let principal = resolvePrincipal ctx
+    let userId = principal.UserId
     let audit = recordAudit ctx auditLog
 
-    // Phase 5f — resolve the admin-gate at request time (the store is
-    // a singleton; resolving inside the helper matches the pattern
-    // used for `teamStore` / `auditLog` above so test paths that
-    // bypass `compose` can construct an `HttpContext` with only the
-    // services they need).
-    let isAdminAllowed () = async {
+    // The platform role is the principal's: the scope middleware read it
+    // once for the request. A request with no stamped principal holds none,
+    // so `PlatformAdminOnly` fails closed for it.
+    let isAdminAllowed () =
         match config.TeamCreationPolicy with
-        | AnyAuthenticatedUser -> return true
-        | PlatformAdminOnly ->
-            match resolvePlatformAdminStore ctx with
-            | Some store -> return! store.IsPlatformAdmin(UserId userId)
-            | None ->
-                // Fail closed when the policy is `PlatformAdminOnly`
-                // but the store is missing. This branch is unreachable
-                // in production (`compose` registers the store
-                // unconditionally) and reachable only in tests that
-                // bypass `compose` without wiring the store; failing
-                // closed surfaces the misconfigured fixture instead of
-                // silently letting the secure-by-default gate become
-                // open-by-accident.
-                return false
-    }
-
-    // 2026-06 — Platform-Admin bypass for every team-membership gate
-    // (Add / Remove / ChangeRole). Platform Admins hold "complete
-    // rights across all teams" by contract; the team-role gate is
-    // skipped when this returns `true`. Resolves the store at request
-    // time (same pattern as `isAdminAllowed`); missing-store fails
-    // closed (returns `false`) so a misconfigured fixture doesn't
-    // silently elevate every caller.
-    let isPlatformAdmin () = async {
-        match resolvePlatformAdminStore ctx with
-        | Some store -> return! store.IsPlatformAdmin(UserId userId)
-        | None -> return false
-    }
-
-    /// Caller's "effective" team role for the supplied team, accounting
-    /// for the Platform-Admin bypass. Returns `Owner` when the caller
-    /// holds `PlatformRole.PlatformAdmin` even if they have no team
-    /// membership at all — that matches the "complete rights across
-    /// all teams" contract. Otherwise returns whatever the team store
-    /// says (or `None` for non-members of a non-admin).
-    let effectiveCallerRole (ts: ITeamStore) (teamId: string) = async {
-        let! isAdmin = isPlatformAdmin ()
-
-        if isAdmin then
-            return Some Owner
-        else
-            return! ts.GetMemberRole(TeamId teamId, UserId userId)
-    }
+        | AnyAuthenticatedUser -> true
+        | PlatformAdminOnly -> AccessContext.canModifyPlatformConfig principal
 
     // ── Phase 549 — directory existence proof for direct adds ───────
     //
@@ -286,11 +240,12 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     /// otherwise. Centralised so the three handlers share the same
     /// error string.
     let authoriseManageRole (ts: ITeamStore) (teamId: string) (targetRole: TeamRole) = async {
-        let! callerRole = effectiveCallerRole ts teamId
-
-        match callerRole with
-        | Some r when TeamRoles.canManageRole r targetRole -> return Ok()
-        | _ -> return Error "Insufficient permissions"
+        match!
+            TeamAuthority.require ts TeamAuthority.AdminBypass.PlatformAdminIsOwner principal (TeamId teamId) (fun r ->
+                TeamRoles.canManageRole r targetRole)
+        with
+        | Ok _ -> return Ok()
+        | Error _ -> return Error "Insufficient permissions"
     }
 
     // The team-create flow is shared by both `CreateTeam` (legacy —
@@ -330,7 +285,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             elif trimmedName.Length > 100 then
                 return Error "Team name is too long (max 100 characters)"
             else
-                let! allowed = isAdminAllowed ()
+                let allowed = isAdminAllowed ()
 
                 // Opt-in per-user team-creation quota (AnyAuthenticatedUser
                 // only; Platform Admins exempt). Counts the teams the caller
@@ -339,7 +294,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                 let! quotaError = async {
                     match config.TeamCreationPolicy, config.TeamCreationQuota with
                     | AnyAuthenticatedUser, Some maxTeams ->
-                        let! isAdmin = isPlatformAdmin ()
+                        let isAdmin = AccessContext.canModifyPlatformConfig principal
 
                         if isAdmin then
                             return None
@@ -463,7 +418,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                             // Owner-membership write failed — roll back the
                             // orphan team blob and fail honestly rather than
                             // returning Ok over an owner-less, inaccessible team.
-                            let! _ = ts.DeleteTeam(TeamId teamId)
+                            let! _ = ts.DeleteTeam(TeamId teamId) // best-effort-write: the owner write already failed; the caller is told so, and an orphan team blob holds no member
                             return Error addErr
                     | Error e -> return Error e
         | None -> return Error "Team management not available in this mode"
@@ -668,7 +623,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                         // Cache invalidation is event-driven:
                         // `TeamStore.RemoveMember` publishes
                         // `MembershipChanged` on the reserved
-                        // `_platform` topic, which `TeamScopeResolver`
+                        // `_platform` topic, which `DefaultSubjectResolver`
                         // subscribes to. Per-request membership re-check
                         // remains the defense-in-depth braces.
                         let! result = ts.RemoveMember(TeamId teamId, UserId memberId)
@@ -711,7 +666,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                     // Verify caller is a member of the target team
                     // before persisting. Without this check a user
                     // could point their active-team at any team id
-                    // they know; `TeamScopeResolver`'s per-request
+                    // they know; the resolver's per-request
                     // membership check would deny the scope anyway,
                     // but the stored pointer would be junk. Reject
                     // eagerly — cleaner error path, no stale state.
@@ -741,7 +696,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
         GetTeamCreationPolicy = fun () -> async { return config.TeamCreationPolicy }
         ListAllTeams =
             fun () -> async {
-                let! isAdmin = isPlatformAdmin ()
+                let isAdmin = AccessContext.canModifyPlatformConfig principal
 
                 if not isAdmin then
                     return Error "Platform Admin required"
@@ -777,7 +732,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             }
         ArchiveTeam =
             fun teamId -> async {
-                let! isAdmin = isPlatformAdmin ()
+                let isAdmin = AccessContext.canModifyPlatformConfig principal
 
                 if not isAdmin then
                     return Error "Platform Admin required"
@@ -803,7 +758,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             }
         RestoreTeam =
             fun teamId -> async {
-                let! isAdmin = isPlatformAdmin ()
+                let isAdmin = AccessContext.canModifyPlatformConfig principal
 
                 if not isAdmin then
                     return Error "Platform Admin required"
@@ -829,7 +784,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
             }
         DeleteTeamHard =
             fun teamId -> async {
-                let! isAdmin = isPlatformAdmin ()
+                let isAdmin = AccessContext.canModifyPlatformConfig principal
 
                 if not isAdmin then
                     return Error "Platform Admin required"
@@ -872,9 +827,18 @@ let teamApiHandler (config: ServerConfig) = makeApi (teamApi config)
 let permissionApiHandler (_config: ServerConfig) =
     makeApi (fun (ctx: HttpContext) ->
         let teamStore = resolveTeamStore ctx
-        let permStore = resolvePermissionStore ctx
         let auditLog = resolveAuditLog ctx
-        let userId = resolveUserId ctx
+        let principal = resolvePrincipal ctx
+        let userId = principal.UserId
+
+        // The caller's writes go through the deployment's write chain,
+        // wrapped once here for this principal.
+        let permStore =
+            match ctx.RequestServices.GetService(typeof<AdminMutationApproval.PermissionWrites>) with
+            | :? AdminMutationApproval.PermissionWrites as writes ->
+                Some(AdminMutationApproval.PermissionWrites.asPrincipal principal writes)
+            | _ -> resolvePermissionStore ctx
+
         let audit = recordAudit ctx auditLog
 
         {
@@ -882,10 +846,15 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun teamId -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
-
-                        match callerRole with
-                        | Some r when TeamRoles.canManageMembers r ->
+                        match!
+                            TeamAuthority.require
+                                ts
+                                TeamAuthority.AdminBypass.MembershipOnly
+                                principal
+                                (TeamId teamId)
+                                TeamRoles.canManageMembers
+                        with
+                        | Ok _ ->
                             let! perms = ps.GetTeamPermissions(TeamId teamId)
                             return perms |> Result.mapError PermissionStoreError.describe
                         | _ -> return Error "Insufficient permissions"
@@ -896,10 +865,15 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun (teamId, memberId, moduleName, permissions) -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
-
-                        match callerRole with
-                        | Some r when TeamRoles.canManageMembers r ->
+                        match!
+                            TeamAuthority.require
+                                ts
+                                TeamAuthority.AdminBypass.MembershipOnly
+                                principal
+                                (TeamId teamId)
+                                TeamRoles.canManageMembers
+                        with
+                        | Ok _ ->
                             let! result =
                                 ps.SetMemberPermissions(TeamId teamId, UserId memberId, moduleName, permissions)
 
@@ -930,10 +904,15 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun (teamId, defaults) -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
-
-                        match callerRole with
-                        | Some r when TeamRoles.canManageMembers r ->
+                        match!
+                            TeamAuthority.require
+                                ts
+                                TeamAuthority.AdminBypass.MembershipOnly
+                                principal
+                                (TeamId teamId)
+                                TeamRoles.canManageMembers
+                        with
+                        | Ok _ ->
                             let! result = ps.SetTeamDefaults(TeamId teamId, defaults)
 
                             match result with
@@ -966,10 +945,15 @@ let permissionApiHandler (_config: ServerConfig) =
                 fun (teamId, moduleName, state) -> async {
                     match teamStore, permStore with
                     | Some ts, Some ps ->
-                        let! callerRole = ts.GetMemberRole(TeamId teamId, UserId userId)
-
-                        match callerRole with
-                        | Some r when TeamRoles.canManageMembers r ->
+                        match!
+                            TeamAuthority.require
+                                ts
+                                TeamAuthority.AdminBypass.MembershipOnly
+                                principal
+                                (TeamId teamId)
+                                TeamRoles.canManageMembers
+                        with
+                        | Ok _ ->
                             let! result = ps.SetModuleExposure(TeamId teamId, moduleName, state)
 
                             match result with
@@ -1131,20 +1115,9 @@ let accessibilityApiHandler (config: ServerConfig) =
                     let noActiveTeamInTeamMode =
                         DeploymentConfig.hasTeamScope config && accessCtx.TeamId.IsNone
 
-                    // 0.5.3 — platform admins bypass the team-mode
-                    // blanket-hide. Resolves `IPlatformAdminStore` per
-                    // request (DI Singleton) and queries `IsPlatformAdmin`
-                    // against the resolved subject's user id. The check
-                    // is async + IO-bound but cheap in steady state:
-                    // `BlobBackedPlatformAdminStore` caches the admin
-                    // list on first read and hits storage only on
-                    // membership change events. Falls back to `false`
-                    // when no store is wired (Anonymous-only deploys —
-                    // the Anonymous branch above wins anyway).
-                    let! isPlatformAdmin =
-                        match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
-                        | :? IPlatformAdminStore as store -> store.IsPlatformAdmin(UserId accessCtx.UserId)
-                        | _ -> async { return false }
+                    // Platform admins bypass the team-mode blanket-hide;
+                    // the platform role is the principal's.
+                    let isPlatformAdmin = AccessContext.canModifyPlatformConfig accessCtx
 
                     // Phase 637 — resolve the module-visibility profile
                     // and carry it alongside the RBAC answer, so the

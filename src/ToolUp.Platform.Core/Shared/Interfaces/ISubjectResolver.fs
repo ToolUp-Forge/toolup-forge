@@ -8,8 +8,8 @@ open ToolUp.Platform.Auth
 // ─── ISubjectResolver — Phase 66 Stream A.3 ──────────────────────────
 //
 // Per-request resolution of the `Subject` for a single deployment.
-// Replaces the per-mode `IStorageScopeResolver` dispatch with a single
-// stateless resolver that walks the four-step algorithm (design §3.1)
+// The deployment's one resolver (the per-mode storage-scope resolvers are
+// gone): a single stateless resolver that walks the four-step algorithm (design §3.1)
 // and returns the resolved subject:
 //
 //   1. ShareTokenClaim present → `ClaimBearer claim`

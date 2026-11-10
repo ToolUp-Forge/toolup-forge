@@ -151,11 +151,11 @@ let tests =
             Expect.isTrue (isSkipped result) "skipped without an encryption resolver"
         }
 
-        testCaseAsync "MembershipCacheLifecycle skips when no TeamScopeResolver is registered"
+        testCaseAsync "MembershipCacheLifecycle skips when no DefaultSubjectResolver is registered"
         <| async {
             let hook = MembershipCacheLifecycle.create emptyProvider
             let! result = hook.OnDeprovisioned("team-x", UserId "admin")
-            Expect.isTrue (isSkipped result) "skipped without a team scope resolver"
+            Expect.isTrue (isSkipped result) "skipped without the resolver's membership cache"
         }
 
         testCaseAsync "JobSchedulerLifecycle skips when no IJobScheduler is registered"
@@ -821,15 +821,17 @@ let tests =
 
             let! result =
                 TenantLifecycleAggregator.exportThenDeprovision
-                    noAudit
                     runExport
-                    [ configHook; teamHook ]
-                    "team-export306"
-                    "owner-1"
+                    (TenantLifecycleAggregator.LifecycleRun.create
+                        noAudit
+                        [ configHook; teamHook ]
+                        Deprovisioning
+                        "team-export306"
+                        "owner-1")
 
             match result with
-            | Ok _ -> ()
-            | Error e -> failtestf "expected Ok; got %s" e
+            | TenantLifecycleAggregator.GuardedExportThenDeprovision.Ran _ -> ()
+            | other -> failtestf "expected the bundle to run; got %A" other
 
             Expect.isTrue configAtCapture.Value "the export saw the seeded config present (captured before teardown)"
             Expect.isTrue teamAtCapture.Value "the export saw the owner team present (captured before teardown)"

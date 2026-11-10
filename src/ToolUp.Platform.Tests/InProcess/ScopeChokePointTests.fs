@@ -189,7 +189,7 @@ let private publicSurfaceTests =
 
         test "the server-side mint and memo are internal too" {
             let scopeResolution =
-                typeof<IStorageScopeResolver>.Assembly
+                typeof<DefaultSubjectResolver.DefaultSubjectResolver>.Assembly
                     .GetType("ToolUp.Platform.Scope.StorageScopeResolver+ScopeResolution")
 
             Expect.isNotNull

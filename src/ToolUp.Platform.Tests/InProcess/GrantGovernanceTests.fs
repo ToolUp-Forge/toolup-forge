@@ -244,7 +244,12 @@ let tests =
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresAcknowledgement ]
 
                 let store =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, log :> IAuditLog, "admin-bob")
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        freshStore (),
+                        registry,
+                        log :> IAuditLog,
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
+                    )
                     :> IPermissionStore
 
                 let outcome =
@@ -296,7 +301,12 @@ let tests =
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresSubjectConsent ]
 
                 let store =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, log :> IAuditLog, "admin-bob")
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        freshStore (),
+                        registry,
+                        log :> IAuditLog,
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
+                    )
                     :> IPermissionStore
 
                 let outcome =
@@ -327,7 +337,12 @@ let tests =
                 let registry = registryOf [ "Payroll", GrantPolicy.RequiresAcknowledgement ]
 
                 let store =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, log :> IAuditLog, "admin-bob")
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        freshStore (),
+                        registry,
+                        log :> IAuditLog,
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
+                    )
                     :> IPermissionStore
 
                 let outcome =
@@ -362,7 +377,7 @@ let tests =
                         FailingStore "STORAGE-DOWN: the blob backend is unreachable." :> IPermissionStore,
                         registry,
                         log :> IAuditLog,
-                        "admin-bob"
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
                     )
                     :> IPermissionStore
 
@@ -395,7 +410,7 @@ let tests =
                         registry,
                         GrantPolicyGuard.CounterpartyConsentOracle.denyAll,
                         noAudit,
-                        Some "admin-bob"
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
                     )
                     :> IPermissionStore
 
@@ -442,7 +457,7 @@ let tests =
                         registry,
                         GrantPolicyGuard.CounterpartyConsentOracle.denyAll,
                         noAudit,
-                        Some "admin-bob"
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-bob"))
                     )
                     :> IPermissionStore
 

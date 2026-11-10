@@ -681,7 +681,11 @@ let private publicationTests =
     let setting = "TEST_PUBLICATION_PRINCIPAL_1253"
 
     let resolvingTo (scope: string) =
-        DeclaredPrincipalResolver(fun _ -> async.Return(Ok(storage scope)))
+        // A deployment resolver that places every principal in `scope`.
+        DeclaredPrincipalResolver(
+            ToolUp.Platform.Testing.Fakes.TestSubjectResolver(Subject.AuthenticatedUser "declared"),
+            fun _ -> Some(storage scope)
+        )
 
     let provider (app: ServerApp) (resolver: DeclaredPrincipalResolver option) =
         let logger = DeliveryTriggerLogger()
@@ -758,9 +762,14 @@ let private publicationTests =
             let seen = ConcurrentQueue<string>()
 
             let resolver =
-                DeclaredPrincipalResolver(fun request ->
-                    request.User |> Option.iter (fun u -> seen.Enqueue u.UserId.Value)
-                    async.Return(Ok(storage publishing)))
+                DeclaredPrincipalResolver(
+                    { new ISubjectResolver with
+                        member _.Resolve request =
+                            request.User |> Option.iter (fun u -> seen.Enqueue u.UserId.Value)
+                            async.Return(Ok(Subject.AuthenticatedUser "declared"))
+                    },
+                    fun _ -> Some(storage publishing)
+                )
 
             withSetting (Some "  reader-1 ") (fun () ->
                 let sp, _ = provider bound (Some resolver)
@@ -779,7 +788,15 @@ let private publicationTests =
         }
 
         test "a principal the resolver refuses is a named refusal" {
-            let resolver = DeclaredPrincipalResolver(fun _ -> async.Return(Error NoActiveTeam))
+            // A team deployment's resolver, for a principal with no active team.
+            let resolver =
+                DeclaredPrincipalResolver(
+                    { new ISubjectResolver with
+                        member _.Resolve _ =
+                            async.Return(Error(SubjectResolutionError.UnsupportedSubject UserKind))
+                    },
+                    fun _ -> None
+                )
 
             withSetting (Some "reader-1") (fun () -> refusedWith "lacks an active team" (Some resolver) publishing)
         }

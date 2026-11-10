@@ -91,9 +91,8 @@ type private DispatchTask = {
 ///
 /// Reconstructs a minimal `StorageScope` from `scopeId` because the
 /// existing `IConfigStore.GetRaw` surface is scope-typed, not
-/// scope-id-typed. This avoids threading a full
-/// `IStorageScopeResolver` through the dispatcher just to ask "is
-/// this kind enabled".
+/// scope-id-typed. This avoids resolving a subject through the
+/// dispatcher just to ask "is this kind enabled".
 let private isKindEnabledForScope
     (configStore: IConfigStore)
     (logger: ILogger)

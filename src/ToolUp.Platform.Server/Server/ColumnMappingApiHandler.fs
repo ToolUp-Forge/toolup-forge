@@ -23,7 +23,10 @@ open ToolUp.Platform.Config
 let private resolveScopeId (ctx: HttpContext) : string =
     match AccessContext.scopeOf ctx.Items with
     | Some s -> s.Container
-    | _ -> ScopeKey.container (ScopeKey.User(UserId(FileManagement.getUserId ctx)))
+    | _ ->
+        ScopeKey.container (
+            ScopeKey.User(UserId(AccessContext.callerIdOf ctx.Items |> Option.defaultValue "anonymous"))
+        )
 
 let columnMappingApi (ctx: HttpContext) : IConversionApi =
     let store =

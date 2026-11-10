@@ -315,7 +315,8 @@ let tests =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
                         UnreadablePermissionStore(),
                         registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ],
-                        noAudit
+                        noAudit,
+                        (AccessContext.system "test")
                     )
                     :> IPermissionStore
 
@@ -534,7 +535,12 @@ let tests =
                 let audit = RecordingAuditLog()
 
                 let store =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, audit, "admin")
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        freshStore (),
+                        registry,
+                        audit,
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin"))
+                    )
                     :> IPermissionStore
 
                 match! store.SetMemberPermissions(TeamId "t1", UserId "alice", "Partner", [ Read ]) with
@@ -561,7 +567,13 @@ let tests =
                 let registry = registryOf [ "Partner", GrantPolicy.RequiresSubjectConsent ]
 
                 let store =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, noAudit) :> IPermissionStore
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        freshStore (),
+                        registry,
+                        noAudit,
+                        (AccessContext.system "test")
+                    )
+                    :> IPermissionStore
 
                 match! store.SetTeamDefaults(TeamId "t1", Map.ofList [ "Partner", [ Read ] ]) with
                 | Error msg -> Expect.stringContains msg "GRANT-POLICY-UNBACKED-GRANT" "refused, naming the module"
@@ -578,7 +590,12 @@ let tests =
                 let audit = RecordingAuditLog()
 
                 let store =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(freshStore (), registry, audit, "admin-7")
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        freshStore (),
+                        registry,
+                        audit,
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-7"))
+                    )
                     :> IPermissionStore
 
                 let! _ = store.SetMemberPermissions(TeamId "t1", UserId "alice", "Partner", [ Read ])

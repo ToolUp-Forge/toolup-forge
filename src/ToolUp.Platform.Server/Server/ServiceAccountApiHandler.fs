@@ -93,18 +93,21 @@ let serviceAccountApi (ctx: HttpContext) : IServiceAccountApi =
                 | None -> return Error "Service accounts require a persistent scope. Sign in or join a team."
                 | Some scope ->
                     match subject with
-                    | TeamMember(userId, teamId) ->
+                    | TeamMember(_, teamId) ->
                         match ctx.RequestServices.GetService(typeof<ITeamStore>) with
                         | :? ITeamStore as teams ->
-                            let! role = teams.GetMemberRole(TeamId teamId, UserId userId)
-
-                            match role with
-                            | Some r when TeamRoles.canWriteTeamConfig r -> return! f s scope.ScopeId
-                            | Some r ->
+                            match!
+                                TeamAuthority.require
+                                    teams
+                                    TeamAuthority.AdminBypass.MembershipOnly
+                                    accessContext
+                                    (TeamId teamId)
+                                    TeamRoles.canWriteTeamConfig
+                            with
+                            | Ok _ -> return! f s scope.ScopeId
+                            | Error refusal ->
                                 return
-                                    Error
-                                        $"Only team owners and admins can manage service accounts. Your role: {TeamRoles.displayName r}."
-                            | None -> return Error "You are not a member of this team."
+                                    Error(TeamAuthority.describe "owners and admins" "manage service accounts" refusal)
                         | _ -> return Error "Team management is not available in this deployment."
                     | _ ->
                         // Personal / non-team scope: the caller owns the

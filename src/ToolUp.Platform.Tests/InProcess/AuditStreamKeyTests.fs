@@ -71,7 +71,12 @@ let private grantGuardKey () = async {
         GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations [ "Partner", GrantPolicy.RequiresAcknowledgement ]
 
     let store =
-        GrantPolicyGuard.GrantPolicyPermissionStore(PermissionStore(InMemoryBlobStorage()), registry, audit, "admin")
+        GrantPolicyGuard.GrantPolicyPermissionStore(
+            PermissionStore(InMemoryBlobStorage()),
+            registry,
+            audit,
+            (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin"))
+        )
         :> IPermissionStore
 
     let! _ = store.SetMemberPermissions(TeamId teamId, UserId "alice", "Partner", [ ModulePermission.Read ])

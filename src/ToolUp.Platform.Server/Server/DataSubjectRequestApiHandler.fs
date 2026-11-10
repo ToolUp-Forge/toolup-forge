@@ -14,8 +14,8 @@ open ToolUp.Platform.Jobs
 // ─── Phase 9h — IDataSubjectRequestApi handler factory ──────────────
 //
 // Per-scope handler builder. The composition root resolves the
-// caller's scope (per the established `IStorageScopeResolver`
-// pattern) and builds an `IDataSubjectRequestApi` instance bound to
+// caller's scope (the request's subject, resolved by `ISubjectResolver`
+// and projected by `StorageScopeDerivation`) and builds an `IDataSubjectRequestApi` instance bound to
 // that scope; the orchestrator runs against the registered handler
 // list.
 //

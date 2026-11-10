@@ -7,7 +7,7 @@ open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.Jobs
 
-// ─── Phase 54 — tenant-lifecycle aggregator ──────────────────────────
+// ─── tenant-lifecycle aggregator ──────────────────────────
 //
 // Runs every registered `ITenantLifecycle` hook for one provision /
 // deprovision call, in parallel with a per-hook timeout, aggregates the
@@ -29,16 +29,21 @@ open ToolUp.Platform.Jobs
 // offboard property — a single misbehaving companion hook must not
 // block the crypto-shred / erasure of the rest.
 //
-// **Per-scope idempotency.** `runGuarded` serialises concurrent runs
-// for the *same* scope so two operators (or a double-clicked admin
-// button) can't interleave two offboards of one tenant. Different scopes
-// never contend. Phase 54h lifts the exclusion behind `ILifecycleLock`:
-// `runGuarded` routes through the process-local `InProcessLifecycleLock`
-// (byte-identical single-instance serialisation), while `runGuardedWith`
-// accepts an explicit lock so a distributed deployment composes a
-// cross-replica lock (the Redis reference impl) and the losing replica
-// gets a prompt `AlreadyInProgress` rather than interleaving a second
-// offboard. The audit trail stays the cross-replica record of truth.
+// **Per-scope idempotency.** A run carries its guard: an `ILifecycleLock`
+// acquired for the scope before any hook runs, so two operators (or a
+// double-clicked admin button) can't interleave two offboards of one
+// tenant. Different scopes never contend. `LifecycleRun.create` guards with
+// the process-local `InProcessLifecycleLock` (it blocks until the scope
+// frees, so it never refuses); a distributed deployment sets a
+// cross-replica lock, and the losing replica gets a prompt
+// `AlreadyInProgress` rather than interleaving a second offboard. A caller
+// that already holds the scope sets `Guard = None`. The audit trail stays
+// the cross-replica record of truth.
+//
+// **Three entry points over one record.** `run` (parallel, per-hook
+// timeout), `runResumable` (sequential, ledger-backed, for the background
+// job) and `exportThenDeprovision` (export, audit, then the erasure sweep,
+// under one lease) each take a `LifecycleRun`.
 
 /// Default per-hook timeout for `OnProvisioned`. Provisioning hooks are
 /// fast (key creation, config seeding); 30 s is generous headroom.
@@ -61,7 +66,7 @@ let defaultTimeout =
 /// caller's `Async.Parallel` always resolves every hook. Retry /
 /// supervision as data (GP 12 rule 3).
 ///
-/// Phase 305 — on the `Provisioning` phase a hook that opts into
+/// On the `Provisioning` phase a hook that opts into
 /// `ITenantLifecycleProvisionContext` is dispatched via `OnProvisionedWith`
 /// (carrying `request`), so it can seed per-deployment values from the
 /// triggering `ProvisioningRequest`; a hook that doesn't falls back to the
@@ -127,7 +132,7 @@ let private invokeHook
             sw.Stop()
     }
 
-/// Invoke one hook with `LifecycleRetryPolicy` retry (Phase 54b): a hook
+/// Invoke one hook with `LifecycleRetryPolicy` retry: a hook
 /// that returns `Failed` is re-invoked (after the policy's backoff) up to
 /// `MaxAttempts`, returning the first non-`Failed` outcome or the last
 /// `Failed`. `Completed` / `Skipped` short-circuits immediately. Retry as
@@ -218,191 +223,142 @@ let private emitRunAudit
             do! emitAudit scopeId (AuditEvent.TenantDeprovisioned payload)
     }
 
-/// Run every hook for `phase` against `scopeId` (attributed to
-/// `actorUserId`, with the triggering `request` on provision) with the
-/// supplied per-hook `timeout`, emit the audit rows via `emitAudit`
-/// (scopeId + event), and return the aggregated `LifecycleSummary`. Hooks
-/// run in parallel; per-hook failure does not abort the run. `emitAudit`
-/// is best-effort from the run's perspective — the canonical wiring
-/// (`IAuditLog.Record`) swallows its own failures, so an audit-sink outage
-/// cannot fail an offboard.
-///
-/// Phase 305 — `request` is forwarded to each provisioning hook's
-/// `OnProvisionedWith` (when it opts into `ITenantLifecycleProvisionContext`);
-/// `None` reproduces the base `OnProvisioned` behaviour exactly. The
-/// request-free `run` below delegates here with `None`.
-let runWithRequest
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (request: ProvisioningRequest option)
-    (timeout: TimeSpan)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<LifecycleSummary> =
-    async {
-        let sw = Stopwatch.StartNew()
+/// One tenant-lifecycle run: which scope, which phase, who asked, the
+/// provisioning request (provision only), the per-hook timeout, the guard,
+/// where audit rows go and the hooks to run.
+[<NoEquality; NoComparison>]
+type LifecycleRun = {
+    /// The scope the hooks run against.
+    Scope: string
+    /// Provisioning or deprovisioning.
+    Phase: TenantLifecyclePhase
+    /// The actor the run and its audit rows are attributed to.
+    Actor: string
+    /// The triggering request, forwarded to each provisioning hook that opts
+    /// into `ITenantLifecycleProvisionContext`; `None` on every offboard.
+    Request: ProvisioningRequest option
+    /// The per-hook timeout; `create` takes the phase's default.
+    Timeout: TimeSpan
+    /// The lock acquired for the scope before any hook runs; `None` when the
+    /// caller already holds the scope.
+    Guard: ILifecycleLock option
+    /// Best-effort audit emission (scope id + event); the canonical wiring
+    /// (`IAuditLog.Record`) swallows its own failures, so an audit-sink
+    /// outage cannot fail an offboard.
+    Audit: string -> AuditEvent -> Async<unit>
+    /// The hooks to run.
+    Hooks: ITenantLifecycle list
+}
 
-        let! outcomesArr =
-            hooks
-            |> List.map (invokeHook phase scopeId actorUserId request timeout)
-            |> Async.Parallel
+/// The resumable sweep's cursor: the ledger it reads and records completed
+/// hooks in, where partial progress goes, and the per-hook retry policy.
+[<NoEquality; NoComparison>]
+type LifecycleCursor = {
+    /// Hook names already done on a prior (crashed) attempt.
+    ReadCompleted: unit -> Async<Set<string>>
+    /// Record a hook that reached a terminal success.
+    RecordCompleted: LifecycleHookOutcome -> Async<unit>
+    /// Receives each intermediate summary.
+    OnProgress: LifecycleSummary -> Async<unit>
+    /// Re-invokes a `Failed` hook per backoff before recording its outcome.
+    RetryPolicy: LifecycleRetryPolicy
+}
 
-        sw.Stop()
-        let outcomes = List.ofArray outcomesArr
-
-        let summary = {
-            ScopeId = scopeId
-            Phase = phase
-            Outcomes = outcomes
-            TotalElapsedMs = sw.ElapsedMilliseconds
-        }
-
-        do! emitRunAudit emitAudit phase scopeId actorUserId summary
-        return summary
-    }
-
-/// `runWithRequest` with no provisioning request — the request-free
-/// entry point every offboard path (and legacy provisioning caller) uses.
-let run
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (timeout: TimeSpan)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<LifecycleSummary> =
-    runWithRequest emitAudit None timeout hooks phase scopeId actorUserId
-
-/// `runWithRequest` with the phase's default per-hook timeout (Phase 305).
-let runWithDefaultsRequest
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (request: ProvisioningRequest option)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<LifecycleSummary> =
-    runWithRequest emitAudit request (defaultTimeout phase) hooks phase scopeId actorUserId
-
-/// `run` with the phase's default per-hook timeout.
-let runWithDefaults
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<LifecycleSummary> =
-    runWithDefaultsRequest emitAudit None hooks phase scopeId actorUserId
-
-/// Outcome of a lock-guarded lifecycle run (Phase 54h).
+/// Outcome of a guarded lifecycle run.
 [<RequireQualifiedAccess>]
 type GuardedRun =
-    /// The lock was acquired and the run completed with this summary.
+    /// The guard was acquired (or none was set) and the run completed with
+    /// this summary.
     | Ran of LifecycleSummary
     /// Another holder (a concurrent replica under a distributed lock)
     /// already holds the scope, so the run did not start. The in-process
-    /// default never yields this — it serialises same-scope runs — so this
-    /// case only materialises under a distributed `ILifecycleLock`.
+    /// default never yields this — it serialises same-scope runs.
     | AlreadyInProgress
 
-/// `runWithDefaults` guarded by an explicit `ILifecycleLock` (Phase 54h):
-/// acquire the scope, run on success, release the lease on completion.
-/// Returns `GuardedRun.AlreadyInProgress` WITHOUT running when the lock
-/// reports another holder (a concurrent replica under a distributed lock),
-/// so the caller can surface a prompt "offboard already in progress"
-/// rather than blocking the request for the minutes a cross-store offboard
-/// can take. Under the in-process default the acquire blocks until the
-/// scope frees and so always returns `Some`, making this always `Ran`
-/// (Phase 54 serialisation preserved). `lease.Dispose()` releases in a
-/// `finally`, so a hook that throws still frees the scope.
-///
-/// Phase 305 — `runGuardedWithRequest` carries the provisioning `request`
-/// through to the hooks; `runGuardedWith` delegates with `None` (its
-/// signature stays byte-identical for the offboard callers + the contract
-/// pack).
-let runGuardedWithRequest
-    (lock: ILifecycleLock)
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (request: ProvisioningRequest option)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<GuardedRun> =
-    async {
-        match! lock.Acquire scopeId with
-        | None -> return GuardedRun.AlreadyInProgress
+/// Building a `LifecycleRun`.
+[<RequireQualifiedAccess>]
+module LifecycleRun =
+
+    /// A run of `phase` against `scope` for `actor`, with no provisioning
+    /// request, the phase's default per-hook timeout and the process-local
+    /// lock as its guard.
+    let create
+        (audit: string -> AuditEvent -> Async<unit>)
+        (hooks: ITenantLifecycle list)
+        (phase: TenantLifecyclePhase)
+        (scope: string)
+        (actor: string)
+        : LifecycleRun =
+        {
+            Scope = scope
+            Phase = phase
+            Actor = actor
+            Request = None
+            Timeout = defaultTimeout phase
+            Guard = Some InProcessLifecycleLock.shared
+            Audit = audit
+            Hooks = hooks
+        }
+
+/// Hold the run's guard for `body`: acquire the scope, run, release the
+/// lease in a `finally` so a hook that throws still frees the scope. `None`
+/// when the lock reports another holder.
+let private guarded (r: LifecycleRun) (body: unit -> Async<'T>) : Async<'T option> = async {
+    match r.Guard with
+    | None ->
+        let! result = body ()
+        return Some result
+    | Some lock ->
+        match! lock.Acquire r.Scope with
+        | None -> return None
         | Some lease ->
             try
-                let! summary = runWithDefaultsRequest emitAudit request hooks phase scopeId actorUserId
-                return GuardedRun.Ran summary
+                let! result = body ()
+                return Some result
             finally
                 lease.Dispose()
+}
+
+/// The parallel sweep, guard already held.
+let private sweep (r: LifecycleRun) : Async<LifecycleSummary> = async {
+    let sw = Stopwatch.StartNew()
+
+    let! outcomesArr =
+        r.Hooks
+        |> List.map (invokeHook r.Phase r.Scope r.Actor r.Request r.Timeout)
+        |> Async.Parallel
+
+    sw.Stop()
+
+    let summary = {
+        ScopeId = r.Scope
+        Phase = r.Phase
+        Outcomes = List.ofArray outcomesArr
+        TotalElapsedMs = sw.ElapsedMilliseconds
     }
 
-let runGuardedWith
-    (lock: ILifecycleLock)
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<GuardedRun> =
-    runGuardedWithRequest lock emitAudit None hooks phase scopeId actorUserId
+    do! emitRunAudit r.Audit r.Phase r.Scope r.Actor summary
+    return summary
+}
 
-/// `runWithDefaults` serialised per scope: concurrent runs for the same
-/// `scopeId` execute one-at-a-time, so two operators offboarding the same
-/// tenant don't interleave. Different scopes run fully in parallel. Use
-/// this from the request handler; the contract pack exercises both `run`
-/// (parallel/timeout/isolation) and the per-scope serialisation directly.
-///
-/// Phase 54h — routes through `runGuardedWith` over the process-local
-/// `InProcessLifecycleLock`, whose `Acquire` blocks until the scope frees,
-/// so single-instance behaviour is byte-identical to Phase 54. A
-/// deployment that needs cross-replica exclusion composes a distributed
-/// `ILifecycleLock` and calls `runGuardedWith` instead.
-///
-/// Phase 305 — `runGuardedRequest` carries the provisioning `request`
-/// through the same per-scope-serialised path (this is the provisioning
-/// entry point `ITenantFleet.ProvisionTenant` calls);
-/// `runGuarded` delegates with `None`.
-let runGuardedRequest
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (request: ProvisioningRequest option)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<LifecycleSummary> =
-    async {
-        match!
-            runGuardedWithRequest InProcessLifecycleLock.shared emitAudit request hooks phase scopeId actorUserId
-        with
-        | GuardedRun.Ran summary -> return summary
-        | GuardedRun.AlreadyInProgress ->
-            // Unreachable with the in-process lock (it serialises, never
-            // refuses); kept total so the match is exhaustive.
-            return! runWithDefaultsRequest emitAudit request hooks phase scopeId actorUserId
-    }
+/// Run every hook for the run's phase in parallel under its per-hook
+/// timeout, emit the audit rows, and return the aggregated summary. Per-hook
+/// failure does not abort the run. The guard is acquired first; a lock that
+/// reports another holder yields `AlreadyInProgress` without running.
+let run (r: LifecycleRun) : Async<GuardedRun> = async {
+    match! guarded r (fun () -> sweep r) with
+    | Some summary -> return GuardedRun.Ran summary
+    | None -> return GuardedRun.AlreadyInProgress
+}
 
-let runGuarded
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<LifecycleSummary> =
-    runGuardedRequest emitAudit None hooks phase scopeId actorUserId
-
-// ─── Phase 54a — background / async offboard ─────────────────────────
+// ─── background / async offboard ─────────────────────────
 //
 // When an `IJobScheduler` is composed, a long offboard runs as a
 // background lifecycle job instead of awaiting inline under the per-hook
 // timeout: `enqueue` schedules + fires the job (returning a
 // `LifecycleJobHandle` promptly), and `runResumable` is the
 // progress-persisting, restart-survivable sweep `LifecycleJobHandler`
-// drives on the job thread. The inline `run` / `runGuarded` path above is
+// drives on the job thread. The inline `run` path above is
 // unchanged — deployments without a scheduler keep the synchronous
 // behaviour (GP 11 / GP 13).
 
@@ -441,7 +397,7 @@ module LifecycleJobPayload =
 
 /// Enqueue a background offboard against `scheduler` and fire it
 /// immediately, returning a `LifecycleJobHandle` without awaiting the
-/// sweep. `Manual` trigger + `TriggerOnce` (mirrors the Phase 9h.A async
+/// sweep. `Manual` trigger + `TriggerOnce` (mirrors the data-subject async
 /// DSR path) so the work starts now rather than at the next scheduler
 /// tick. An idempotency key per `(phase, scope)` dedups a double-clicked
 /// admin button within the TTL; a re-offboard inside the window returns
@@ -473,7 +429,7 @@ let enqueue
         match! scheduler.Schedule registration with
         | Error err -> return Error(sprintf "failed to schedule offboard job: %A" err)
         | Ok(Scheduled jobId | Coalesced jobId) ->
-            // Fire it now: a `Manual` job never fires on its own. Phase 1059 —
+            // Fire it now: a `Manual` job never fires on its own, and
             // a refused trigger is reported, not discarded: discarded, the
             // caller held a handle to an offboard that would never start.
             match! scheduler.TriggerOnce(scopeId, jobId, UserId actorUserId) with
@@ -494,12 +450,12 @@ let enqueue
                     }
     }
 
-// ─── Phase 54f — scheduled / grace-period offboard ───────────────────
+// ─── scheduled / grace-period offboard ───────────────────
 //
 // `ScheduleDeprovision` registers a cron-polled job under the tenant scope
 // whose handler (`ScheduledDeprovisionJobHandler`) checks each tick
 // whether the grace window has elapsed; when it has, it fires the offboard
-// (via `enqueue` — reusing the Phase 54a/54b resumable path) and retires
+// (via `enqueue` — reusing the resumable path) and retires
 // itself. The pending window is the job's payload, so `Get` / `Cancel`
 // read/act on the persisted job with no extra store.
 
@@ -652,44 +608,27 @@ let cancelScheduledDeprovision
     }
 
 /// Resumable, progress-persisting sweep for the background path. Unlike
-/// `run` (parallel, fire-and-forget audit), this runs hooks
-/// **sequentially** and records each terminal-success hook
-/// (`Completed` / `Skipped`) via `recordCompleted` as it lands, so a
-/// process killed mid-sweep re-dispatches and resumes from the last
-/// completed hook without re-running it. `readCompleted` returns the set
-/// of hook names already done on a prior (crashed) attempt — those are
-/// recorded as `Completed` outcomes without re-invocation. `onProgress`
-/// receives each intermediate `LifecycleSummary` so a snapshot surface
-/// (`GetLifecycleSummary`) can stream running → N-of-M progress. A
-/// `Failed` hook is NOT recorded as done, so the re-dispatch retries it;
-/// the end-of-run audit (`emitRunAudit`) matches the inline path exactly.
-///
-/// Phase 54b — `retryPolicy` re-invokes a `Failed` hook per backoff
-/// before recording its terminal outcome (`LifecycleRetryPolicy.noRetry`
-/// preserves the prior single-attempt behaviour). `readCompleted` /
-/// `recordCompleted` are the ledger seam: a hook already recorded for
-/// this `(scopeId, phase)` is skipped (idempotent re-run).
-let runResumable
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (readCompleted: unit -> Async<Set<string>>)
-    (recordCompleted: LifecycleHookOutcome -> Async<unit>)
-    (onProgress: LifecycleSummary -> Async<unit>)
-    (retryPolicy: LifecycleRetryPolicy)
-    (timeout: TimeSpan)
-    (hooks: ITenantLifecycle list)
-    (phase: TenantLifecyclePhase)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<LifecycleSummary> =
-    async {
+/// `run` (parallel), this runs hooks **sequentially** under the run's guard
+/// and records each terminal-success hook (`Completed` / `Skipped`) through
+/// the cursor's `RecordCompleted` as it lands, so a process killed
+/// mid-sweep re-dispatches and resumes from the last completed hook without
+/// re-running it. `ReadCompleted` names the hooks already done on a prior
+/// (crashed) attempt; those are recorded as `Completed` outcomes without
+/// re-invocation. `OnProgress` receives each intermediate summary so a
+/// snapshot surface (`GetLifecycleSummary`) can stream N-of-M progress. A
+/// `Failed` hook is retried per `RetryPolicy` and, if it stays failed, is
+/// NOT recorded as done, so the re-dispatch retries it. The end-of-run
+/// audit matches `run` exactly.
+let runResumable (cursor: LifecycleCursor) (r: LifecycleRun) : Async<GuardedRun> =
+    let resumable () = async {
         let sw = Stopwatch.StartNew()
-        let! alreadyDone = readCompleted ()
+        let! alreadyDone = cursor.ReadCompleted()
 
         // Hooks completed on a prior (crashed) attempt — recorded as
         // Completed outcomes (elapsed 0) WITHOUT re-invoking, so the
         // summary reaches its terminal marker without re-running them.
         let resumed =
-            hooks
+            r.Hooks
             |> List.filter (fun h -> Set.contains h.Name alreadyDone)
             |> List.map (fun h -> {
                 HookName = h.Name
@@ -698,25 +637,26 @@ let runResumable
             })
 
         let outcomes = ResizeArray<LifecycleHookOutcome>(resumed)
-        let pending = hooks |> List.filter (fun h -> not (Set.contains h.Name alreadyDone))
+
+        let pending =
+            r.Hooks |> List.filter (fun h -> not (Set.contains h.Name alreadyDone))
 
         for hook in pending do
-            // Phase 305 — the resumable sweep is the background *offboard*
-            // path (Deprovisioning); no provisioning request rides it, so
-            // `None` keeps every hook on the base `OnProvisioned` surface.
-            let! outcome = invokeHookWithRetry retryPolicy phase scopeId actorUserId None timeout 1 hook
+            // The resumable sweep is the background offboard path; no
+            // provisioning request rides it.
+            let! outcome = invokeHookWithRetry cursor.RetryPolicy r.Phase r.Scope r.Actor None r.Timeout 1 hook
             outcomes.Add outcome
 
             match outcome.Result with
             | LifecycleHookResult.Completed
-            | LifecycleHookResult.Skipped _ -> do! recordCompleted outcome
+            | LifecycleHookResult.Skipped _ -> do! cursor.RecordCompleted outcome
             | LifecycleHookResult.Failed _ -> ()
 
             // Stream partial progress after each hook resolves.
             do!
-                onProgress {
-                    ScopeId = scopeId
-                    Phase = phase
+                cursor.OnProgress {
+                    ScopeId = r.Scope
+                    Phase = r.Phase
                     Outcomes = List.ofSeq outcomes
                     TotalElapsedMs = sw.ElapsedMilliseconds
                 }
@@ -724,17 +664,23 @@ let runResumable
         sw.Stop()
 
         let summary = {
-            ScopeId = scopeId
-            Phase = phase
+            ScopeId = r.Scope
+            Phase = r.Phase
             Outcomes = List.ofSeq outcomes
             TotalElapsedMs = sw.ElapsedMilliseconds
         }
 
-        do! emitRunAudit emitAudit phase scopeId actorUserId summary
+        do! emitRunAudit r.Audit r.Phase r.Scope r.Actor summary
         return summary
     }
 
-// ─── Phase 54c — offboard preview / dry-run ──────────────────────────
+    async {
+        match! guarded r resumable with
+        | Some summary -> return GuardedRun.Ran summary
+        | None -> return GuardedRun.AlreadyInProgress
+    }
+
+// ─── offboard preview / dry-run ──────────────────────────
 //
 // Mutation-free projection of what a `Deprovisioning` run WOULD do. Each
 // hook that implements `ITenantLifecyclePreview` contributes a count-only
@@ -787,11 +733,11 @@ let previewDeprovision
         }
     }
 
-// ─── Phase 54j — export-then-erase bundle ────────────────────────────
+// ─── export-then-erase bundle ────────────────────────────
 //
 // "Give me my data, then delete it" in one operation: produce the
 // tenant's export archive (via the caller-supplied `runExport`, which
-// drives the Phase 9h `IDataExporter` surface) and ONLY THEN run the
+// drives the `IDataExporter` surface) and ONLY THEN run the
 // erasure sweep. Fail-closed ordering (the load-bearing GDPR property):
 // a failed export aborts the offboard before any destruction, so the
 // tenant's data stays intact. The `TenantDataExported` audit row is
@@ -800,8 +746,8 @@ let previewDeprovision
 // aggregator stays DI-free (the handler resolves `IDataExporter` /
 // `IBlobStorage`); it returns the durable archive reference or an error.
 
-/// Outcome of a lock-guarded export-then-erase bundle (Phase 54h). Mirrors
-/// `GuardedRun` for the Phase 54j bundle: because the WHOLE bundle
+/// Outcome of a lock-guarded export-then-erase bundle. Mirrors
+/// `GuardedRun` for the export-then-erase bundle: because the WHOLE bundle
 /// (export + audit + erasure sweep) runs under one lease, a distributed
 /// lock's refusal aborts BEFORE the export — so two replicas can never run
 /// concurrent export-then-erase bundles of one tenant.
@@ -819,90 +765,50 @@ type GuardedExportThenDeprovision =
     /// frees — so this only materialises under a distributed `ILifecycleLock`.
     | AlreadyInProgress
 
-/// `exportThenDeprovision` guarded by an explicit `ILifecycleLock` (Phase
-/// 54h). Acquires the scope BEFORE the export so the whole bundle (export +
-/// audit + erasure sweep) is one cross-replica-exclusive unit: under a
-/// distributed lock a peer replica already mid-bundle yields
-/// `AlreadyInProgress` and neither the export nor the erasure runs, closing
-/// the window where two replicas produce concurrent export-then-erase
-/// bundles of the same tenant (which the Phase 54j inline `runGuarded` —
-/// process-local, and guarding only the erasure — left open). Fail-closed
-/// ordering is preserved inside the lease (a failed export is `ExportFailed`,
-/// no erasure). The erasure runs via `runWithDefaults` — NOT `runGuarded` —
-/// because the lease is already held; re-entering the same-scope in-process
-/// semaphore would deadlock. Under the in-process default the acquire blocks
-/// until the scope frees, so this is always `Ran` / `ExportFailed` (Phase 54j
-/// behaviour preserved, now also serialising the export in-process).
-let exportThenDeprovisionWith
-    (lock: ILifecycleLock)
-    (emitAudit: string -> AuditEvent -> Async<unit>)
+/// Export-then-erase under the run's guard, acquired BEFORE the export so
+/// the whole bundle (export + audit + erasure sweep) is one exclusive unit:
+/// under a distributed lock a peer replica already mid-bundle yields
+/// `AlreadyInProgress` and neither the export nor the erasure runs.
+/// Fail-closed ordering holds inside the lease: a failed export is
+/// `ExportFailed`, and no erasure hook runs. The erasure is the run's
+/// `Deprovisioning` sweep, run with the lease already held.
+let exportThenDeprovision
     (runExport: unit -> Async<Result<LifecycleExportArchive, string>>)
-    (hooks: ITenantLifecycle list)
-    (scopeId: string)
-    (actorUserId: string)
+    (r: LifecycleRun)
     : Async<GuardedExportThenDeprovision> =
-    async {
-        match! lock.Acquire scopeId with
-        | None -> return GuardedExportThenDeprovision.AlreadyInProgress
-        | Some lease ->
-            try
-                match! runExport () with
-                | Error err ->
-                    // Fail-closed — nothing erased, the tenant's data is intact.
-                    return
-                        GuardedExportThenDeprovision.ExportFailed(
-                            sprintf "export failed — offboard aborted, no data erased: %s" err
-                        )
-                | Ok archive ->
-                    // Audit the export BEFORE the erasure sweep (ordering proof).
-                    let payload: TenantDataExportedPayload = {
-                        ScopeId = scopeId
-                        Actor = actorUserId
-                        ArchiveContainer = archive.Container
-                        ArchivePath = archive.BlobPath
-                        ContentHash = archive.ContentHash
-                        SegmentCount = archive.SegmentCount
-                    }
+    let bundle () = async {
+        match! runExport () with
+        | Error err ->
+            // Fail-closed — nothing erased, the tenant's data is intact.
+            return
+                GuardedExportThenDeprovision.ExportFailed(
+                    sprintf "export failed — offboard aborted, no data erased: %s" err
+                )
+        | Ok archive ->
+            // Audit the export BEFORE the erasure sweep (ordering proof).
+            let payload: TenantDataExportedPayload = {
+                ScopeId = r.Scope
+                Actor = r.Actor
+                ArchiveContainer = archive.Container
+                ArchivePath = archive.BlobPath
+                ContentHash = archive.ContentHash
+                SegmentCount = archive.SegmentCount
+            }
 
-                    do! emitAudit scopeId (AuditEvent.TenantDataExported payload)
+            do! r.Audit r.Scope (AuditEvent.TenantDataExported payload)
 
-                    // The lease is already held, so run the sweep directly
-                    // (`runWithDefaults`, not `runGuarded`) — re-entering the
-                    // same-scope in-process lock would deadlock.
-                    let! summary = runWithDefaults emitAudit hooks Deprovisioning scopeId actorUserId
+            let! summary =
+                sweep {
+                    r with
+                        Phase = Deprovisioning
+                        Request = None
+                }
 
-                    return GuardedExportThenDeprovision.Ran { Summary = summary; Archive = archive }
-            finally
-                lease.Dispose()
+            return GuardedExportThenDeprovision.Ran { Summary = summary; Archive = archive }
     }
 
-/// Export-then-erase: run `runExport` (export the scope's data durably),
-/// then — only on success — audit `TenantDataExported` and run the
-/// `Deprovisioning` sweep. A failed export returns `Error` and runs NO
-/// erasure hook (fail-closed). Returns the erasure summary + the archive
-/// reference.
-///
-/// Phase 54h — delegates to `exportThenDeprovisionWith` over the
-/// process-local `InProcessLifecycleLock`, whose `Acquire` blocks until the
-/// scope frees, so single-instance behaviour is preserved (the export now
-/// also serialises in-process against a concurrent same-scope bundle). A
-/// deployment that needs cross-replica exclusion composes a distributed
-/// `ILifecycleLock` and calls `exportThenDeprovisionWith` instead.
-let exportThenDeprovision
-    (emitAudit: string -> AuditEvent -> Async<unit>)
-    (runExport: unit -> Async<Result<LifecycleExportArchive, string>>)
-    (hooks: ITenantLifecycle list)
-    (scopeId: string)
-    (actorUserId: string)
-    : Async<Result<ExportThenDeprovisionResult, string>> =
     async {
-        match!
-            exportThenDeprovisionWith InProcessLifecycleLock.shared emitAudit runExport hooks scopeId actorUserId
-        with
-        | GuardedExportThenDeprovision.Ran result -> return Ok result
-        | GuardedExportThenDeprovision.ExportFailed err -> return Error err
-        | GuardedExportThenDeprovision.AlreadyInProgress ->
-            // Unreachable with the in-process lock (it blocks, never
-            // refuses); kept total so the match is exhaustive.
-            return Error "offboard already in progress for this scope"
+        match! guarded r bundle with
+        | Some outcome -> return outcome
+        | None -> return GuardedExportThenDeprovision.AlreadyInProgress
     }

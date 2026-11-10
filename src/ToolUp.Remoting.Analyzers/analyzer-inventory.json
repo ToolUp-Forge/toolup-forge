@@ -54,7 +54,7 @@
         "src/ToolUp.Platform.Server/Server/Compose/ComposeBootstrap.fs": 3,
         "src/ToolUp.Platform.Server/Server/Compose/ComposeRuntimeServices.fs": 3,
         "src/ToolUp.Platform.Server/Server/Compose/ComposeStores.fs": 2,
-        "src/ToolUp.Platform.Server/Server/Compose/ComposeTeamRuntime.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeTeamRuntime.fs": 1,
         "src/ToolUp.Platform.Server/Server/Compose/ComposeTenantLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Compose/LiveSessionsCompose.fs": 1,
         "src/ToolUp.Platform.Server/Server/Compose/ServiceComposition.fs": 1,
@@ -75,7 +75,7 @@
         "src/ToolUp.Platform.Server/Server/ExternalComputeCallback.fs": 4,
         "src/ToolUp.Platform.Server/Server/ExternalContactApiHandler.fs": 3,
         "src/ToolUp.Platform.Server/Server/FeatureFlagHandler.fs": 6,
-        "src/ToolUp.Platform.Server/Server/Files/FileManagement.fs": 10,
+        "src/ToolUp.Platform.Server/Server/Files/FileManagement.fs": 9,
         "src/ToolUp.Platform.Server/Server/HealthCheckResponseWriter.fs": 1,
         "src/ToolUp.Platform.Server/Server/HealthMonitorApiHandler.fs": 6,
         "src/ToolUp.Platform.Server/Server/HealthStateTracker.fs": 1,
@@ -90,7 +90,7 @@
         "src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyProvisionLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Lifecycle/JobSchedulerLifecycle.fs": 1,
-        "src/ToolUp.Platform.Server/Server/Lifecycle/MembershipCacheLifecycle.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/MembershipCacheLifecycle.fs": 3,
         "src/ToolUp.Platform.Server/Server/Lifecycle/OwnerTeamBootstrapLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Lifecycle/UserMembershipTeardownLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/LifecycleJobHandler.fs": 5,
@@ -126,7 +126,6 @@
         "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 2,
         "src/ToolUp.Platform.Server/Server/SbomProjection.fs": 1,
         "src/ToolUp.Platform.Server/Server/ScheduledDeprovisionJobHandler.fs": 1,
-        "src/ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs": 3,
         "src/ToolUp.Platform.Server/Server/SeedDataLoader.fs": 2,
         "src/ToolUp.Platform.Server/Server/ServerApp.fs": 2,
         "src/ToolUp.Platform.Server/Server/ServiceAccountApiHandler.fs": 3,
@@ -435,13 +434,6 @@
     },
     {
       "rule": "TUA003",
-      "reason": "KNOWN REQUEST-PATH SITE: lazy per-scope hydration on first access, bounded by a timeout and degrade-not-throw; making it asynchronous reshapes the file-management scope cache.",
-      "sites": {
-        "src/ToolUp.Platform.Server/Server/Files/FileManagement.fs": 1
-      }
-    },
-    {
-      "rule": "TUA003",
       "reason": "Compose-time registration of declared recurring jobs.",
       "sites": {
         "src/ToolUp.Platform.Server/Server/IJobScheduler.fs": 1
@@ -452,20 +444,6 @@
       "reason": "The CLI startup modes (--verify-deployment, --describe, --operator-task): build a provider, run the deployment report, render the description or run the contributed operator task, and exit; no host is serving.",
       "sites": {
         "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 3
-      }
-    },
-    {
-      "rule": "TUA003",
-      "reason": "Subscribes once at singleton activation and unsubscribes once in Dispose at shutdown.",
-      "sites": {
-        "src/ToolUp.Platform.Server/Server/Scope/DefaultSubjectResolver.fs": 2
-      }
-    },
-    {
-      "rule": "TUA003",
-      "reason": "Subscribe at singleton activation, unsubscribe at shutdown, and the pre-Phase-5d synchronous compat shim no production request path calls.",
-      "sites": {
-        "src/ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs": 3
       }
     },
     {

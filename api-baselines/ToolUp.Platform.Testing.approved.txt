@@ -105,7 +105,7 @@ ToolUp.Platform.Testing.DataTypeTestKit.process_(ToolUp.Platform.FileProcessor+D
 ToolUp.Platform.Testing.Fakes (class)
 ToolUp.Platform.Testing.Fakes.anonymousAuthProvider() : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.Platform.Testing.Fakes.authedAuthProvider(ToolUp.Platform.Auth+AuthenticatedUser) : ToolUp.Platform.Auth+IAuthProvider
-ToolUp.Platform.Testing.Fakes.fixedScopeResolver(System.String) : ToolUp.Platform.Scope.StorageScopeResolver+IStorageScopeResolver
+ToolUp.Platform.Testing.Fakes.fixedSubjectResolver(ToolUp.Platform.Subject) : ToolUp.Platform.ISubjectResolver
 ToolUp.Platform.Testing.Fakes.standardBlobStorage() : ToolUp.Platform.BlobStorage+IBlobStorage
 ToolUp.Platform.Testing.Fakes.standardEventStore() : ToolUp.Platform.IEventStore
 ToolUp.Platform.Testing.Fakes.standardSecretStore() : ToolUp.Platform.Secrets+ISecretStore
@@ -119,9 +119,8 @@ ToolUp.Platform.Testing.Fakes+TestEventStore..ctor()
 ToolUp.Platform.Testing.Fakes+TestSecretStore (class)
 ToolUp.Platform.Testing.Fakes+TestSecretStore..ctor()
 ToolUp.Platform.Testing.Fakes+TestSecretStore.Seed(System.String, System.String, System.String) : System.Void
-ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver (class)
-ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(System.String)
-ToolUp.Platform.Testing.Fakes+TestStorageScopeResolver..ctor(ToolUp.Platform.StorageScope)
+ToolUp.Platform.Testing.Fakes+TestSubjectResolver (class)
+ToolUp.Platform.Testing.Fakes+TestSubjectResolver..ctor(ToolUp.Platform.Subject)
 ToolUp.Platform.Testing.FaultInjectingBlobStorage (class)
 ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault (class)
 ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault.DownloadCorrupt : ToolUp.Platform.Testing.FaultInjectingBlobStorage+BlobFault { get }
@@ -256,13 +255,13 @@ ToolUp.Platform.Testing.ServerHarness.seedBlob`1(ToolUp.Platform.Testing.ServerH
 ToolUp.Platform.Testing.ServerHarness.seedSecret`1(ToolUp.Platform.Testing.ServerHarness+ServerHarness`1[Api], System.String, System.String, System.String) : ToolUp.Platform.Testing.ServerHarness+ServerHarness`1[Api]
 ToolUp.Platform.Testing.ServerHarness.withApi`1(ToolUp.Platform.Testing.ServerHarness+ServerFakes, Api) : ToolUp.Platform.Testing.ServerHarness+ServerHarness`1[Api]
 ToolUp.Platform.Testing.ServerHarness+ServerFakes (class)
-ToolUp.Platform.Testing.ServerHarness+ServerFakes..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.Scope.StorageScopeResolver+IStorageScopeResolver, ToolUp.Platform.StorageScope)
+ToolUp.Platform.Testing.ServerHarness+ServerFakes..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Auth+IAuthProvider, ToolUp.Platform.ISubjectResolver, ToolUp.Platform.StorageScope)
 ToolUp.Platform.Testing.ServerHarness+ServerFakes.AuthProvider : ToolUp.Platform.Auth+IAuthProvider { get }
 ToolUp.Platform.Testing.ServerHarness+ServerFakes.BlobStorage : ToolUp.Platform.BlobStorage+IBlobStorage { get }
 ToolUp.Platform.Testing.ServerHarness+ServerFakes.EventStore : ToolUp.Platform.IEventStore { get }
 ToolUp.Platform.Testing.ServerHarness+ServerFakes.Scope : ToolUp.Platform.StorageScope { get }
-ToolUp.Platform.Testing.ServerHarness+ServerFakes.ScopeResolver : ToolUp.Platform.Scope.StorageScopeResolver+IStorageScopeResolver { get }
 ToolUp.Platform.Testing.ServerHarness+ServerFakes.SecretStore : ToolUp.Platform.Secrets+ISecretStore { get }
+ToolUp.Platform.Testing.ServerHarness+ServerFakes.SubjectResolver : ToolUp.Platform.ISubjectResolver { get }
 ToolUp.Platform.Testing.ServerHarness+ServerHarness`1 (class)
 ToolUp.Platform.Testing.ServerHarness+ServerHarness`1..ctor(ToolUp.Platform.Testing.ServerHarness+ServerFakes, Api)
 ToolUp.Platform.Testing.ServerHarness+ServerHarness`1.Api : Api { get }

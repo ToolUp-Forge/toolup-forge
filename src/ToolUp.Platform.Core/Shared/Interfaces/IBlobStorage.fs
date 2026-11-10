@@ -69,7 +69,7 @@ type ComposeRefusal =
 /// cloud-storage providers have shipped (Azure / S3 / GCS) and the call is: keep
 /// `container: string`. Rationale:
 ///   1. The invariant is already enforced at its single source — the server-side
-///      `IStorageScopeResolver` is the only place a scope container is minted;
+///      scope derivation (`ScopeKey` from the resolved subject) is the only place a scope container is minted;
 ///      user input never reaches it. A newtype would re-assert at ~70 call sites
 ///      a property that one chokepoint already guarantees.
 ///   2. Legitimate non-scope containers exist (`_platform`, audit-sink target

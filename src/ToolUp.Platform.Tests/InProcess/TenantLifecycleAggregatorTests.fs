@@ -7,13 +7,13 @@ open ToolUp.Platform
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-// ─── Phase 54 — TenantLifecycleAggregator tests ──────────────────────
+// ─── TenantLifecycleAggregator tests ──────────────────────
 //
 // Exercises the aggregator with synthetic `ITenantLifecycle` hooks (no
 // DI container, no HTTP context — `run` is a pure function of
 // (hooks, phase, scope, actor)): parallel execution, per-hook timeout,
-// per-hook isolation, audit emission + counts, and the per-scope
-// `runGuarded` serialisation.
+// per-hook isolation, audit emission + counts, the per-scope guard and
+// the resumable cursor.
 
 /// Synthetic hook with caller-supplied provision / deprovision bodies.
 type private StubHook(name: string, onProv: Async<LifecycleHookResult>, onDeprov: Async<LifecycleHookResult>) =
@@ -111,13 +111,51 @@ type private AuditCollector() =
 
 let private shortTimeout = TimeSpan.FromMilliseconds 50.0
 
+// ─── Building runs ───────────────────────────────────────────────────
+//
+// Every entry point takes a `LifecycleRun`. The cases that pin the sweep
+// (isolation, timeout, audit) run it with no guard; the guard cases set one.
+
+/// A run of `phase` over `hooks` with `timeout`, holding no lock.
+let private runOf audit timeout hooks phase scope actor : TenantLifecycleAggregator.LifecycleRun = {
+    TenantLifecycleAggregator.LifecycleRun.create audit hooks phase scope actor with
+        Timeout = timeout
+        Guard = None
+}
+
+/// The summary of a run that cannot be refused (it holds no guard).
+let private summaryOf (outcome: TenantLifecycleAggregator.GuardedRun) =
+    match outcome with
+    | TenantLifecycleAggregator.GuardedRun.Ran summary -> summary
+    | TenantLifecycleAggregator.GuardedRun.AlreadyInProgress -> failtest "a run with no guard cannot be refused"
+
+let private sweep (r: TenantLifecycleAggregator.LifecycleRun) = async {
+    let! outcome = TenantLifecycleAggregator.run r
+    return summaryOf outcome
+}
+
+let private resumable (cursor: TenantLifecycleAggregator.LifecycleCursor) (r: TenantLifecycleAggregator.LifecycleRun) = async {
+    let! outcome = TenantLifecycleAggregator.runResumable cursor r
+    return summaryOf outcome
+}
+
+/// Export-then-erase under the in-process lock, as a result: the bundle, or
+/// the reason it did not run.
+let private exportOf (r: TenantLifecycleAggregator.LifecycleRun) runExport = async {
+    match! TenantLifecycleAggregator.exportThenDeprovision runExport r with
+    | TenantLifecycleAggregator.GuardedExportThenDeprovision.Ran result -> return Ok result
+    | TenantLifecycleAggregator.GuardedExportThenDeprovision.ExportFailed reason -> return Error reason
+    | TenantLifecycleAggregator.GuardedExportThenDeprovision.AlreadyInProgress ->
+        return failtest "the in-process lock blocks a free scope rather than refusing it"
+}
+
 let tests =
     testList "TenantLifecycleAggregator" [
 
         testCaseAsync "empty hook list — empty summary + a single phase marker audit"
         <| async {
             let audit = AuditCollector()
-            let! summary = TenantLifecycleAggregator.run audit.Emit shortTimeout [] Deprovisioning "team-x" "admin"
+            let! summary = sweep (runOf audit.Emit shortTimeout [] Deprovisioning "team-x" "admin")
 
             Expect.equal summary.Outcomes [] "no outcomes"
             Expect.equal summary.ScopeId "team-x" "scope preserved"
@@ -129,7 +167,7 @@ let tests =
         <| async {
             let audit = AuditCollector()
             let hooks = [ completed "a"; completed "b"; completed "c" ]
-            let! summary = TenantLifecycleAggregator.run audit.Emit shortTimeout hooks Provisioning "team-y" "admin"
+            let! summary = sweep (runOf audit.Emit shortTimeout hooks Provisioning "team-y" "admin")
 
             Expect.equal summary.Outcomes.Length 3 "every hook produced an outcome"
 
@@ -145,7 +183,7 @@ let tests =
 
             let hooks = [ completed "ok"; skipped "off" "substrate inactive"; failing "bad" "kaboom" ]
 
-            let! summary = TenantLifecycleAggregator.run audit.Emit shortTimeout hooks Deprovisioning "team-z" "admin"
+            let! summary = sweep (runOf audit.Emit shortTimeout hooks Deprovisioning "team-z" "admin")
 
             Expect.equal (LifecycleSummary.completedCount summary) 1 "one completed"
             Expect.equal (LifecycleSummary.skippedCount summary) 1 "one skipped"
@@ -159,7 +197,7 @@ let tests =
 
             let hooks = [ completed "first"; failing "middle" "deliberate"; completed "last" ]
 
-            let! summary = TenantLifecycleAggregator.run audit.Emit shortTimeout hooks Deprovisioning "team-iso" "admin"
+            let! summary = sweep (runOf audit.Emit shortTimeout hooks Deprovisioning "team-iso" "admin")
 
             Expect.equal summary.Outcomes.Length 3 "all three hooks ran despite the middle failure"
             Expect.equal (LifecycleSummary.completedCount summary) 2 "both completers ran"
@@ -170,8 +208,7 @@ let tests =
             let audit = AuditCollector()
             let hooks = [ completed "safe"; throwing "explodes" ]
 
-            let! summary =
-                TenantLifecycleAggregator.run audit.Emit shortTimeout hooks Deprovisioning "team-throw" "admin"
+            let! summary = sweep (runOf audit.Emit shortTimeout hooks Deprovisioning "team-throw" "admin")
 
             Expect.equal summary.Outcomes.Length 2 "both hooks resolved"
             Expect.equal (LifecycleSummary.completedCount summary) 1 "the safe hook completed"
@@ -193,8 +230,7 @@ let tests =
                 )
                 :> ITenantLifecycle
 
-            let! summary =
-                TenantLifecycleAggregator.run audit.Emit shortTimeout [ slow ] Deprovisioning "team-slow" "admin"
+            let! summary = sweep (runOf audit.Emit shortTimeout [ slow ] Deprovisioning "team-slow" "admin")
 
             Expect.equal (LifecycleSummary.failedCount summary) 1 "slow hook failed on timeout"
 
@@ -211,7 +247,7 @@ let tests =
 
             let hooks = [ completed "ok"; failing "f1" "e1"; failing "f2" "e2" ]
 
-            let! _ = TenantLifecycleAggregator.run audit.Emit shortTimeout hooks Deprovisioning "team-audit" "admin"
+            let! _ = sweep (runOf audit.Emit shortTimeout hooks Deprovisioning "team-audit" "admin")
 
             let failedRows =
                 audit.TypeNames |> List.filter (fun n -> n = "TenantLifecycleHookFailed")
@@ -227,8 +263,7 @@ let tests =
 
             let hooks = [ completed "a"; completed "b"; skipped "c" "off"; failing "d" "x" ]
 
-            let! _ =
-                TenantLifecycleAggregator.run audit.Emit shortTimeout hooks Deprovisioning "team-counts" "operator-1"
+            let! _ = sweep (runOf audit.Emit shortTimeout hooks Deprovisioning "team-counts" "operator-1")
 
             let marker =
                 audit.Events
@@ -248,7 +283,7 @@ let tests =
             | None -> failtest "no TenantDeprovisioned marker emitted"
         }
 
-        testCaseAsync "runGuarded serialises concurrent runs for the same scope"
+        testCaseAsync "the in-process guard serialises concurrent runs for the same scope"
         <| async {
             // Two concurrent guarded runs against the same scope must not
             // interleave: a hook that records enter/exit timestamps should
@@ -276,17 +311,24 @@ let tests =
                 :> ITenantLifecycle
 
             let runOnce () =
-                TenantLifecycleAggregator.runGuarded audit.Emit [ trackingHook ] Deprovisioning "team-guard" "admin"
+                TenantLifecycleAggregator.run (
+                    TenantLifecycleAggregator.LifecycleRun.create
+                        audit.Emit
+                        [ trackingHook ]
+                        Deprovisioning
+                        "team-guard"
+                        "admin"
+                )
 
             let! _ = [ runOnce (); runOnce () ] |> Async.Parallel
 
             Expect.equal maxConcurrent.Value 1 "same-scope guarded runs never overlapped"
         }
 
-        // ─── Phase 54h — runGuardedWith under an explicit ILifecycleLock ─
+        // ─── a run guarded by an explicit ILifecycleLock ─
 
         testCaseAsync
-            "runGuardedWith returns AlreadyInProgress when the lock refuses (loser sees offboard already in progress)"
+            "a guarded run returns AlreadyInProgress when the lock refuses (loser sees offboard already in progress)"
         <| async {
             let audit = AuditCollector()
 
@@ -298,13 +340,15 @@ let tests =
                 }
 
             let! outcome =
-                TenantLifecycleAggregator.runGuardedWith
-                    refusingLock
-                    audit.Emit
-                    [ completed "h" ]
-                    Deprovisioning
-                    "team-busy"
-                    "admin"
+                TenantLifecycleAggregator.run {
+                    TenantLifecycleAggregator.LifecycleRun.create
+                        audit.Emit
+                        [ completed "h" ]
+                        Deprovisioning
+                        "team-busy"
+                        "admin" with
+                        Guard = Some refusingLock
+                }
 
             Expect.equal
                 outcome
@@ -314,19 +358,21 @@ let tests =
             Expect.isEmpty audit.Events "no audit emitted — the run never started, so no hooks ran and no marker fired"
         }
 
-        testCaseAsync "runGuardedWith over the in-process default runs (Ran) — single-instance behaviour preserved"
+        testCaseAsync "a run over the in-process default runs (Ran) — single-instance behaviour preserved"
         <| async {
             let audit = AuditCollector()
             let lock = InProcessLifecycleLock.create ()
 
             let! outcome =
-                TenantLifecycleAggregator.runGuardedWith
-                    lock
-                    audit.Emit
-                    [ completed "h" ]
-                    Deprovisioning
-                    "team-ok"
-                    "admin"
+                TenantLifecycleAggregator.run {
+                    TenantLifecycleAggregator.LifecycleRun.create
+                        audit.Emit
+                        [ completed "h" ]
+                        Deprovisioning
+                        "team-ok"
+                        "admin" with
+                        Guard = Some lock
+                }
 
             match outcome with
             | TenantLifecycleAggregator.GuardedRun.Ran summary ->
@@ -335,7 +381,7 @@ let tests =
                 failtest "the in-process lock blocks rather than refusing a free scope"
         }
 
-        // ─── Phase 54a — runResumable (background offboard sweep) ────────
+        // ─── runResumable (background offboard sweep) ────────
 
         testCaseAsync "runResumable with no prior progress runs every hook + emits the marker"
         <| async {
@@ -352,17 +398,14 @@ let tests =
             let hooks = [ completed "a"; completed "b"; completed "c" ]
 
             let! summary =
-                TenantLifecycleAggregator.runResumable
-                    audit.Emit
-                    read
-                    record
-                    onProgress
-                    LifecycleRetryPolicy.noRetry
-                    shortTimeout
-                    hooks
-                    Deprovisioning
-                    "team-fresh"
-                    "admin"
+                resumable
+                    {
+                        ReadCompleted = read
+                        RecordCompleted = record
+                        OnProgress = onProgress
+                        RetryPolicy = LifecycleRetryPolicy.noRetry
+                    }
+                    (runOf audit.Emit shortTimeout hooks Deprovisioning "team-fresh" "admin")
 
             Expect.equal summary.Outcomes.Length 3 "every hook produced an outcome"
             Expect.equal (LifecycleSummary.completedCount summary) 3 "all completed"
@@ -386,17 +429,14 @@ let tests =
             let hooks = [ completed "a"; completed "b"; completed "c" ]
 
             let! _ =
-                TenantLifecycleAggregator.runResumable
-                    audit.Emit
-                    read
-                    record
-                    onProgress
-                    LifecycleRetryPolicy.noRetry
-                    shortTimeout
-                    hooks
-                    Deprovisioning
-                    "team-progress"
-                    "admin"
+                resumable
+                    {
+                        ReadCompleted = read
+                        RecordCompleted = record
+                        OnProgress = onProgress
+                        RetryPolicy = LifecycleRetryPolicy.noRetry
+                    }
+                    (runOf audit.Emit shortTimeout hooks Deprovisioning "team-progress" "admin")
 
             Expect.equal (List.ofSeq progressSizes) [ 1; 2; 3 ] "progress streamed N-of-M after each hook"
         }
@@ -451,17 +491,14 @@ let tests =
 
             // Pass 1 — crash simulation: b fails, so only a + c are recorded.
             let! pass1 =
-                TenantLifecycleAggregator.runResumable
-                    audit.Emit
-                    read
-                    record
-                    onProgress
-                    LifecycleRetryPolicy.noRetry
-                    shortTimeout
-                    hooks
-                    Deprovisioning
-                    "team-resume"
-                    "admin"
+                resumable
+                    {
+                        ReadCompleted = read
+                        RecordCompleted = record
+                        OnProgress = onProgress
+                        RetryPolicy = LifecycleRetryPolicy.noRetry
+                    }
+                    (runOf audit.Emit shortTimeout hooks Deprovisioning "team-resume" "admin")
 
             Expect.equal (LifecycleSummary.failedCount pass1) 1 "b failed on the first pass"
             Expect.equal (Set.ofSeq store) (Set.ofList [ "a"; "c" ]) "only the completed hooks recorded"
@@ -474,17 +511,14 @@ let tests =
             bShouldFail.Value <- false
 
             let! pass2 =
-                TenantLifecycleAggregator.runResumable
-                    audit.Emit
-                    read
-                    record
-                    onProgress
-                    LifecycleRetryPolicy.noRetry
-                    shortTimeout
-                    hooks
-                    Deprovisioning
-                    "team-resume"
-                    "admin"
+                resumable
+                    {
+                        ReadCompleted = read
+                        RecordCompleted = record
+                        OnProgress = onProgress
+                        RetryPolicy = LifecycleRetryPolicy.noRetry
+                    }
+                    (runOf audit.Emit shortTimeout hooks Deprovisioning "team-resume" "admin")
 
             Expect.equal counts["a"] 1 "a NOT re-invoked on resume"
             Expect.equal counts["c"] 1 "c NOT re-invoked on resume"
@@ -499,7 +533,7 @@ let tests =
             Expect.equal deprovMarkers.Length 2 "each pass emits a TenantDeprovisioned marker"
         }
 
-        // ─── Phase 54c — offboard preview / dry-run ─────────────────────
+        // ─── offboard preview / dry-run ─────────────────────
 
         testCaseAsync "previewDeprovision aggregates per-hook items and mutates nothing (canary)"
         <| async {
@@ -524,7 +558,7 @@ let tests =
             Expect.equal previewItem.WouldAffect 7 "its would-affect count is surfaced"
         }
 
-        // ─── Phase 54b — per-hook retry ─────────────────────────────────
+        // ─── per-hook retry ─────────────────────────────────
 
         testCaseAsync "runResumable retries a transient Failed hook per policy until it succeeds"
         <| async {
@@ -564,17 +598,14 @@ let tests =
                 :> ITenantLifecycle
 
             let! summary =
-                TenantLifecycleAggregator.runResumable
-                    audit.Emit
-                    read
-                    record
-                    onProgress
-                    policy
-                    shortTimeout
-                    [ flaky ]
-                    Deprovisioning
-                    "team-retry"
-                    "admin"
+                resumable
+                    {
+                        ReadCompleted = read
+                        RecordCompleted = record
+                        OnProgress = onProgress
+                        RetryPolicy = policy
+                    }
+                    (runOf audit.Emit shortTimeout [ flaky ] Deprovisioning "team-retry" "admin")
 
             Expect.equal attempts.Value 3 "invoked 3 times (2 fails + 1 success)"
             Expect.equal (LifecycleSummary.completedCount summary) 1 "terminal outcome is Completed"
@@ -613,24 +644,21 @@ let tests =
                 :> ITenantLifecycle
 
             let! summary =
-                TenantLifecycleAggregator.runResumable
-                    audit.Emit
-                    read
-                    record
-                    onProgress
-                    policy
-                    shortTimeout
-                    [ broken ]
-                    Deprovisioning
-                    "team-giveup"
-                    "admin"
+                resumable
+                    {
+                        ReadCompleted = read
+                        RecordCompleted = record
+                        OnProgress = onProgress
+                        RetryPolicy = policy
+                    }
+                    (runOf audit.Emit shortTimeout [ broken ] Deprovisioning "team-giveup" "admin")
 
             Expect.equal attempts.Value 2 "invoked MaxAttempts times"
             Expect.equal (LifecycleSummary.failedCount summary) 1 "terminal Failed"
             Expect.isFalse (store.Contains "broken") "a Failed hook is NOT recorded — it re-runs next sweep"
         }
 
-        // ─── Phase 54j — export-then-erase bundle ───────────────────────
+        // ─── export-then-erase bundle ───────────────────────
 
         testCaseAsync "exportThenDeprovision aborts before any erasure when the export fails (fail-closed)"
         <| async {
@@ -651,7 +679,14 @@ let tests =
             let runExport () = async { return Error "blob store unreachable" }
 
             let! result =
-                TenantLifecycleAggregator.exportThenDeprovision audit.Emit runExport [ hook ] "team-export" "admin"
+                exportOf
+                    (TenantLifecycleAggregator.LifecycleRun.create
+                        audit.Emit
+                        [ hook ]
+                        Deprovisioning
+                        "team-export"
+                        "admin")
+                    runExport
 
             match result with
             | Error msg -> Expect.stringContains msg "no data erased" "the error explains the fail-closed abort"
@@ -688,7 +723,14 @@ let tests =
             let runExport () = async { return Ok archive }
 
             let! result =
-                TenantLifecycleAggregator.exportThenDeprovision audit.Emit runExport [ hook ] "team-export" "admin"
+                exportOf
+                    (TenantLifecycleAggregator.LifecycleRun.create
+                        audit.Emit
+                        [ hook ]
+                        Deprovisioning
+                        "team-export"
+                        "admin")
+                    runExport
 
             match result with
             | Ok r ->
@@ -700,7 +742,7 @@ let tests =
             Expect.contains audit.TypeNames "TenantDeprovisioned" "the offboard marker was emitted"
         }
 
-        // ─── Phase 54h — exportThenDeprovisionWith cross-replica exclusion ─
+        // ─── exportThenDeprovisionWith cross-replica exclusion ─
 
         testCaseAsync
             "exportThenDeprovisionWith returns AlreadyInProgress under a refusing lock — no export, no erasure (cross-replica exclusion)"
@@ -741,13 +783,10 @@ let tests =
             }
 
             let! outcome =
-                TenantLifecycleAggregator.exportThenDeprovisionWith
-                    refusingLock
-                    audit.Emit
-                    runExport
-                    [ hook ]
-                    "team-busy"
-                    "admin"
+                TenantLifecycleAggregator.exportThenDeprovision runExport {
+                    TenantLifecycleAggregator.LifecycleRun.create audit.Emit [ hook ] Deprovisioning "team-busy" "admin" with
+                        Guard = Some refusingLock
+                }
 
             Expect.equal
                 outcome
@@ -787,7 +826,10 @@ let tests =
             let runExport () = async { return Ok archive }
 
             let! outcome =
-                TenantLifecycleAggregator.exportThenDeprovisionWith lock audit.Emit runExport [ hook ] "team-ok" "admin"
+                TenantLifecycleAggregator.exportThenDeprovision runExport {
+                    TenantLifecycleAggregator.LifecycleRun.create audit.Emit [ hook ] Deprovisioning "team-ok" "admin" with
+                        Guard = Some lock
+                }
 
             match outcome with
             | TenantLifecycleAggregator.GuardedExportThenDeprovision.Ran result ->
@@ -798,7 +840,7 @@ let tests =
             | other -> failtestf "the in-process lock blocks a free scope rather than refusing; got %A" other
         }
 
-        testCaseAsync "runGuarded allows different scopes to run in parallel"
+        testCaseAsync "the in-process guard allows different scopes to run in parallel"
         <| async {
             let audit = AuditCollector()
             let active = ref 0
@@ -824,15 +866,29 @@ let tests =
 
             let! _ =
                 [
-                    TenantLifecycleAggregator.runGuarded audit.Emit [ trackingHook () ] Deprovisioning "team-a" "admin"
-                    TenantLifecycleAggregator.runGuarded audit.Emit [ trackingHook () ] Deprovisioning "team-b" "admin"
+                    TenantLifecycleAggregator.run (
+                        TenantLifecycleAggregator.LifecycleRun.create
+                            audit.Emit
+                            [ trackingHook () ]
+                            Deprovisioning
+                            "team-a"
+                            "admin"
+                    )
+                    TenantLifecycleAggregator.run (
+                        TenantLifecycleAggregator.LifecycleRun.create
+                            audit.Emit
+                            [ trackingHook () ]
+                            Deprovisioning
+                            "team-b"
+                            "admin"
+                    )
                 ]
                 |> Async.Parallel
 
             Expect.equal maxConcurrent.Value 2 "distinct scopes ran concurrently"
         }
 
-        // ─── Phase 305 — ProvisioningRequest threading ───────────────
+        // ─── ProvisioningRequest threading ───────────────
 
         testCaseAsync "runWithRequest forwards the request to a request-aware hook's OnProvisionedWith"
         <| async {
@@ -840,14 +896,10 @@ let tests =
             let hook = RecordingProvisionHook("rec")
 
             let! summary =
-                TenantLifecycleAggregator.runWithRequest
-                    audit.Emit
-                    (Some sampleRequest)
-                    shortTimeout
-                    [ hook :> ITenantLifecycle ]
-                    Provisioning
-                    "team-req"
-                    "admin"
+                sweep {
+                    runOf audit.Emit shortTimeout [ hook :> ITenantLifecycle ] Provisioning "team-req" "admin" with
+                        Request = Some sampleRequest
+                }
 
             Expect.equal (LifecycleSummary.completedCount summary) 1 "the request-aware hook completed"
             Expect.equal hook.Received.Length 1 "the hook was invoked once"
@@ -865,13 +917,7 @@ let tests =
             // OnProvisionedWith, but with `None` — byte-identical semantics
             // to the base OnProvisioned.
             let! _ =
-                TenantLifecycleAggregator.run
-                    audit.Emit
-                    shortTimeout
-                    [ hook :> ITenantLifecycle ]
-                    Provisioning
-                    "team-noreq"
-                    "admin"
+                sweep (runOf audit.Emit shortTimeout [ hook :> ITenantLifecycle ] Provisioning "team-noreq" "admin")
 
             Expect.equal hook.Received.Length 1 "the hook was invoked once"
             Expect.equal hook.Received.Head.Request None "no request rides the request-free path"
@@ -883,13 +929,7 @@ let tests =
             let hook = RecordingProvisionHook("rec")
 
             let! summary =
-                TenantLifecycleAggregator.run
-                    audit.Emit
-                    shortTimeout
-                    [ hook :> ITenantLifecycle ]
-                    Deprovisioning
-                    "team-off"
-                    "admin"
+                sweep (runOf audit.Emit shortTimeout [ hook :> ITenantLifecycle ] Deprovisioning "team-off" "admin")
 
             // OnDeprovisioned Skips (provision-only recording hook), so no
             // provisioning context is recorded at all.

@@ -40,8 +40,7 @@ type internal PermissionReadRefused(message: string) =
 
 /// Build a `SubjectResolutionRequest` from a live `HttpContext`.
 /// Lives in server code so the resolver interface itself stays
-/// runtime-agnostic (GP 12). Mirrors the retiring
-/// `ScopeRequestExtractor` shape but adds the `Claim` field, read
+/// runtime-agnostic (GP 12). Carries the `Claim` field, read
 /// from `HttpContext.Items` (populated by
 /// `ShareTokenAuthMiddleware` ahead of this middleware in the
 /// pipeline).
@@ -113,8 +112,7 @@ module SubjectRequestExtractor =
 ///                          `AuthenticatedEphemeralScopeResolver`;
 ///                          `Persistent` matches `AuthenticatedScopeResolver`.
 /// * `TeamMember`         → `TeamConfig.Persistence`. Almost always
-///                          `Persistent` (matches retiring
-///                          `TeamScopeResolver`).
+///                          `Persistent`.
 /// * `ClaimBearer`        → `Persist = true` — claim-bearer flows
 ///                          land in persistent scopes carried on the
 ///                          claim itself (`BlobShareTokenStore`
@@ -199,16 +197,6 @@ module StorageScopeDerivation =
             invalidArg
                 (nameof subject)
                 "StorageScopeDerivation.fromSubject: a PublicationReader holds no storage scope (use tryFromSubject)"
-
-/// Map a `SubjectResolutionError` back into the legacy
-/// `ScopeResolutionError` shape used by handlers that still read
-/// scope-derivation result the middleware decides on.
-module SubjectResolutionErrorBridge =
-    let toScopeError (err: SubjectResolutionError) : ScopeResolutionError =
-        match err with
-        | SubjectResolutionError.UnsupportedSubject _ -> NotAuthenticated
-        | SubjectResolutionError.NotTeamMember teamId -> NotTeamMember teamId
-        | SubjectResolutionError.SubjectResolutionFailed msg -> ScopeResolutionFailed msg
 
 /// Phase 246 — observe an authorization-shaped scope-resolution
 /// downgrade. When `ISubjectResolver.Resolve` returns `Error err`, the
@@ -664,7 +652,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                             | None -> s, Error NotAuthenticated
                         | Error err ->
                             let fallback = fallbackAnonymous request
-                            let bridged = SubjectResolutionErrorBridge.toScopeError err
+                            let bridged = StorageScopeResolver.SubjectScope.toScopeError err
                             // Phase 246 — make the silent authorization-shaped
                             // downgrade observable (distinct from a normal
                             // anonymous request). user.UserId is the resolved

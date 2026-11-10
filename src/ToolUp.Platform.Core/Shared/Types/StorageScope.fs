@@ -7,7 +7,8 @@ namespace ToolUp.Platform
 // compiled ahead of the disclosure gate's contract); this file keeps the
 // resolver's request and error types, which need `AuthenticatedUser`.
 
-/// Input to `IStorageScopeResolver.Resolve`. Extracted from `HttpContext`
+/// A storage-scope resolution request (`DeclaredPrincipal` readings and the
+/// scope errors use its error type). Extracted from `HttpContext`
 /// upstream so the resolver interface has no ASP.NET Core coupling and can
 /// be implemented outside an ASP.NET process (e.g. in a sidecar grain or
 /// actor under Akka/Orleans — the portability contract).

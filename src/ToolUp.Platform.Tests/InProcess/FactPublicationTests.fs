@@ -1871,9 +1871,10 @@ let startupTests =
             // The platform's declared-principal resolver, bound to a resolver
             // that resolves the sweep principal to the north shard.
             let declared =
-                DeclaredPrincipalResolver(fun _ ->
-                    async.Return(
-                        Ok(
+                DeclaredPrincipalResolver(
+                    ToolUp.Platform.Testing.Fakes.TestSubjectResolver(Subject.AuthenticatedUser "declared"),
+                    fun _ ->
+                        Some(
                             {
                                 ScopeId = north
                                 Container = north
@@ -1881,7 +1882,7 @@ let startupTests =
                             }
                             : StorageScope
                         )
-                    ))
+                )
 
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let scheduler = HeldScheduler()

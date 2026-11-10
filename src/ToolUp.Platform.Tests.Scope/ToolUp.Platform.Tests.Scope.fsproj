@@ -30,7 +30,6 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\PermissionStoreTests.fs" Link="InProcess\PermissionStoreTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AdminMutationApprovalTests.fs" Link="InProcess\AdminMutationApprovalTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\GrantConsentTests.fs" Link="InProcess\GrantConsentTests.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StorageScopeResolverTests.fs" Link="InProcess\StorageScopeResolverTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\GoogleIdentityCompanionTests.fs" Link="InProcess\GoogleIdentityCompanionTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ShareTokenStoreTests.fs" Link="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ServiceAccountStoreTests.fs" Link="InProcess\ServiceAccountStoreTests.fs" />
@@ -58,6 +57,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModuleVisibilityContractTests.fs" Link="InProcess\ModuleVisibilityContractTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigratorTests.fs" Link="InProcess\AnonymousSessionMigratorTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\DefaultSubjectResolverTests.fs" Link="InProcess\DefaultSubjectResolverTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\TeamAuthorityTests.fs" Link="InProcess\TeamAuthorityTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\CsrfCarveOutDerivationTests.fs" Link="InProcess\CsrfCarveOutDerivationTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SurfaceEnforcementMiddlewareTests.fs" Link="InProcess\SurfaceEnforcementMiddlewareTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigrationMiddlewareTests.fs" Link="InProcess\AnonymousSessionMigrationMiddlewareTests.fs" />

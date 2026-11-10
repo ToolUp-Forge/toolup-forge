@@ -130,7 +130,7 @@ let private observerOver
         channel,
         settings,
         logger,
-        (fun () -> Some "admin-1"),
+        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-1")),
         (fun () -> DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero))
     )
     :> IPermissionStore
@@ -515,7 +515,8 @@ let tests =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
                         freshStore (),
                         registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ],
-                        noAudit
+                        noAudit,
+                        (AccessContext.system "test")
                     )
                     :> IPermissionStore
 

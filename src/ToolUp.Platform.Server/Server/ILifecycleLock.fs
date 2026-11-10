@@ -9,9 +9,9 @@ open System
 open System.Collections.Concurrent
 open System.Threading
 
-// ─── Phase 54h — distributed offboard exclusion lock ─────────────────
+// ─── Distributed offboard exclusion lock ─────────────────
 //
-// Phase 54's `runGuarded` serialises concurrent offboards of one tenant
+// A lifecycle run's guard serialises concurrent offboards of one tenant
 // scope via a process-local `SemaphoreSlim` — correct for a single
 // process, but two replicas behind a load balancer can each start an
 // offboard of the same tenant and interleave (double crypto-shred,
@@ -72,10 +72,9 @@ type ILifecycleLock =
 
 // ─── in-process default ──────────────────────────────────────────────
 
-/// Phase 54h — process-local `ILifecycleLock`: the zero-dependency floor,
-/// and the default `runGuarded` uses when no distributed lock is composed.
-/// Wraps the same per-scope `SemaphoreSlim(1, 1)` Phase 54's `runGuarded`
-/// held, so a single-instance deployment serialises concurrent same-scope
+/// Process-local `ILifecycleLock`: the zero-dependency floor, and the guard
+/// `LifecycleRun.create` sets when no distributed lock is composed. A
+/// per-scope `SemaphoreSlim(1, 1)`, so a single-instance deployment serialises concurrent same-scope
 /// offboards byte-identically: `Acquire` *blocks* on the scope's semaphore
 /// and then returns `Some lease` — it never returns `None`, so a guarded
 /// run under it always proceeds (Phase 54 behaviour), one-at-a-time per
@@ -120,7 +119,7 @@ module InProcessLifecycleLock =
     let create () : ILifecycleLock =
         InProcessLifecycleLock() :> ILifecycleLock
 
-    /// The shared default backing `runGuarded` — one per process, so every
+    /// The shared default backing `LifecycleRun.create` — one per process, so every
     /// inline guarded offboard contends on the same per-scope semaphores
-    /// (the process-wide exclusion Phase 54's module-level dictionary gave).
+    /// (one process-wide exclusion).
     let shared: ILifecycleLock = create ()
