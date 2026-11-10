@@ -106,7 +106,7 @@ let deterministicOrderingContract (storeName: string) (makeStore: unit -> IVecto
             dispose.Dispose()
     }
 
-// ─── Phase 1007 — incremental writes ─────────────────────────────
+// ─── Incremental writes ──────────────────────────────────────────
 //
 // The store keeps a built graph current instead of rebuilding it after
 // every write. These cases read the graph's own bookkeeping through
@@ -549,7 +549,7 @@ let tests =
                 Expect.equal (chunks |> List.map fst) [ sprintf "c%d" i ] "every scope written is readable"
         }
 
-        // Phase 861 — the restart laws: every mutation hydrates a lazily
+        // The restart laws: every mutation hydrates a lazily
         // loaded scope first, and an unreadable snapshot refuses it. Over
         // the in-memory blob double, because these laws are ABOUT reloading
         // from storage (the `team:<id>` segment cannot materialise on a
@@ -561,7 +561,7 @@ let tests =
         ToolUp.Platform.Tests.Contracts.IVectorStoreContract.unreadableSnapshotTests
             "HnswVectorStore"
             (function
-            | :? HnswVectorStore.HnswScopeSnapshotUnreadableException -> true
+            | :? RagScopeSnapshotUnreadableException -> true
             | _ -> false)
             (fun storage ->
                 new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)

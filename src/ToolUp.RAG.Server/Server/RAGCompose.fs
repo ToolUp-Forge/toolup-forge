@@ -1097,6 +1097,48 @@ let private minScoreSpaceValidator
 
 // ─── Phase 869 — flush the composition's own stores at a graceful stop ──
 //
+/// An in-process retrieval store a composition CONSTRUCTS, and so owns.
+[<RequireQualifiedAccess>]
+type internal OwnedRetrievalStore =
+    /// The default `InMemoryVectorStore` (no `withVectorStore`).
+    | VectorStore
+    /// The default `InMemoryBM25Index` (the in-process keyword index).
+    | SparseIndex
+
+[<RequireQualifiedAccess>]
+module internal OwnedRetrievalStore =
+
+    /// The store's name in the flush service's log lines.
+    let name (store: OwnedRetrievalStore) =
+        match store with
+        | OwnedRetrievalStore.VectorStore -> "vector-store"
+        | OwnedRetrievalStore.SparseIndex -> "sparse-index"
+
+    /// The type the replica validator names.
+    let typeName (store: OwnedRetrievalStore) =
+        match store with
+        | OwnedRetrievalStore.VectorStore -> "InMemoryVectorStore"
+        | OwnedRetrievalStore.SparseIndex -> "InMemoryBM25Index"
+
+/// The stores `options` makes the composition construct — the ONE reading of
+/// which stores are the composition's. The construction, the flush service and
+/// the replica validator all read it.
+let internal ownedRetrievalStores (options: RagOptions) : OwnedRetrievalStore list = [
+    if options.VectorStore.IsNone then
+        OwnedRetrievalStore.VectorStore
+
+    match options.SparseIndex with
+    | SparseIndexComposition.InProcessSparseIndex -> OwnedRetrievalStore.SparseIndex
+    | _ -> ()
+]
+
+/// An owned store's lifetime: started at boot, disposed (flushed) at stop.
+type internal OwnedStoreLifetime = {
+    Role: OwnedRetrievalStore
+    Start: unit -> Async<unit>
+    Store: System.IDisposable
+}
+
 // `composeRAG` registers its vector store and keyword index as INSTANCES (so
 // resolution order is what it always was), and the container never disposes
 // an instance it was handed. The final flush each in-process store performs
@@ -1120,20 +1162,30 @@ let private minScoreSpaceValidator
 // dispose it themselves — disposing it here as well would make their own
 // `Dispose` the second one.
 //
-// Placed `OnceAtStart`: it runs no loop, only a stop hook, and the stores
-// hold THIS process's acknowledged writes, so every profile that opened them
-// — a serverless host included, whose provider disposal is the hook's
-// fallback — must flush them rather than let a peer cover for it.
-type internal RetrievalStoreFlushService(owned: (string * System.IDisposable) list, logger: ILogger) =
+// It also STARTS them, from `StartingAsync`: a store's constructor does no
+// I/O, so the platform and deployment scopes load here, and a corrupt
+// snapshot under `CorruptPolicy.Refuse` fails the boot rather than the
+// first request that reads it.
+//
+// Placed `OnceAtStart`: it runs no loop, only a start and a stop hook, and
+// the stores hold THIS process's acknowledged writes, so every profile that
+// opened them — a serverless host included, whose provider disposal is the
+// hook's fallback — must flush them rather than let a peer cover for it.
+type internal RetrievalStoreFlushService(owned: OwnedStoreLifetime list, logger: ILogger) =
     let mutable flushed = 0
 
     let flushOnce () =
         if System.Threading.Interlocked.Exchange(&flushed, 1) = 0 then
-            for name, store in owned do
+            for store in owned do
                 try
-                    store.Dispose()
+                    store.Store.Dispose()
                 with ex ->
-                    logger.Error(sprintf "[RAGCompose] event=store_flush_at_stop_failed store=%s" name, Some ex)
+                    logger.Error(
+                        sprintf
+                            "[RAGCompose] event=store_flush_at_stop_failed store=%s"
+                            (OwnedRetrievalStore.name store.Role),
+                        Some ex
+                    )
 
     interface IHostedService with
         member _.StartAsync _ =
@@ -1143,8 +1195,15 @@ type internal RetrievalStoreFlushService(owned: (string * System.IDisposable) li
             System.Threading.Tasks.Task.CompletedTask
 
     interface IHostedLifecycleService with
-        member _.StartingAsync _ =
-            System.Threading.Tasks.Task.CompletedTask
+        member _.StartingAsync token =
+            Async.StartAsTask(
+                async {
+                    for store in owned do
+                        do! store.Start()
+                },
+                cancellationToken = token
+            )
+            :> System.Threading.Tasks.Task
 
         member _.StartedAsync _ =
             System.Threading.Tasks.Task.CompletedTask
@@ -1285,6 +1344,14 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             Some(build (analyzer |> Option.defaultValue ToolUp.RAG.SparseAnalysis.identity))
         | SparseIndexComposition.InProcessSparseIndex, _
         | SparseIndexComposition.NoSparseIndex, _ -> None
+
+    // The stores this composition constructs, read once: the construction,
+    // the flush service and the replica validator below all read it.
+    let owned = ownedRetrievalStores options
+
+    // The corruption policy, read from the environment ONCE here and passed
+    // to every store the composition constructs.
+    let corruptPolicy = CorruptPolicy.fromEnvironment ()
 
     // Default to a 60-second rolling-window telemetry sink so `/health/rag`
     // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel
@@ -1479,19 +1546,26 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // the in-process index; a supplied or analyzer-built index was
         // resolved at composition (`composedSparseIndex`, above); `None` is
         // dense-only.
-        let sparseIndex: ISparseIndex option =
-            match options.SparseIndex with
-            | SparseIndexComposition.InProcessSparseIndex ->
-                match options.SparseAnalyzer with
-                | None -> Some(new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex)
-                | Some analyzer ->
-                    Some(
-                        new InMemoryBM25Index(blobStorageForRag, logger = ragLogger, analyzer = analyzer)
-                        :> ISparseIndex
+        let ownedSparseIndex =
+            if List.contains OwnedRetrievalStore.SparseIndex owned then
+                Some(
+                    new InMemoryBM25Index(
+                        blobStorageForRag,
+                        logger = ragLogger,
+                        analyzer = (options.SparseAnalyzer |> Option.defaultValue ToolUp.RAG.SparseAnalysis.identity),
+                        telemetry = telemetry,
+                        auditLog = substrate.AuditLog,
+                        notifications = notifications,
+                        corruptPolicy = corruptPolicy
                     )
-            | SparseIndexComposition.SuppliedSparseIndex _
-            | SparseIndexComposition.AnalyzedSparseIndex _ -> composedSparseIndex
-            | SparseIndexComposition.NoSparseIndex -> None
+                )
+            else
+                None
+
+        let sparseIndex: ISparseIndex option =
+            match ownedSparseIndex with
+            | Some index -> Some(index :> ISparseIndex)
+            | None -> composedSparseIndex
 
         // Wrap the supplied embedder so repeated query / chunk text hits a
         // cache rather than the underlying provider. Cache key includes
@@ -1516,23 +1590,32 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             QueryRewriteTimeoutMs = RetrievalPipelineOptions.defaults.QueryRewriteTimeoutMs
         }
 
-        // The default vector store makes corrupt-index loads loud (audit
-        // event + telemetry counter + SystemMessage) instead of starting the
-        // scope silently empty, through the audit log and notification
-        // channel compose built. It is an INSTANCE registration, so the
-        // container never disposes it: `RetrievalStoreFlushService` ends its
-        // lifetime at stop.
-        let vectorStore: IVectorStore =
-            options.VectorStore
-            |> Option.defaultWith (fun () ->
-                new InMemoryVectorStore(
-                    blobStorageForRag,
-                    logger = ragLogger,
-                    telemetry = telemetry,
-                    auditLog = substrate.AuditLog,
-                    notifications = notifications
+        // The stores this composition constructs report a corrupt snapshot
+        // (audit event + telemetry counter + SystemMessage) through the audit
+        // log and notification channel compose built, under the one corruption
+        // policy. Each is an INSTANCE registration, so the container never
+        // disposes it: `RetrievalStoreFlushService` starts it at boot and ends
+        // its lifetime at stop.
+        let ownedVectorStore =
+            if List.contains OwnedRetrievalStore.VectorStore owned then
+                Some(
+                    new InMemoryVectorStore(
+                        blobStorageForRag,
+                        logger = ragLogger,
+                        telemetry = telemetry,
+                        auditLog = substrate.AuditLog,
+                        notifications = notifications,
+                        corruptPolicy = corruptPolicy
+                    )
                 )
-                :> IVectorStore)
+            else
+                None
+
+        // Not owned means supplied (`ownedRetrievalStores`).
+        let vectorStore: IVectorStore =
+            match ownedVectorStore with
+            | Some store -> store :> IVectorStore
+            | None -> Option.get options.VectorStore
 
         // One shared alert state spans the first-attempt path (the
         // background service) and the scheduled retry handler, so
@@ -1693,27 +1776,32 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
         // composition constructed. Nothing constructed, nothing registered
         // (GP 13).
         let s =
-            let owned = [
-                match options.VectorStore, box vectorStore with
-                | None, (:? System.IDisposable as store) -> "vector-store", store
-                | _ -> ()
+            let lifetimes = [
+                for store in ownedVectorStore |> Option.toList do
+                    {
+                        Role = OwnedRetrievalStore.VectorStore
+                        Start = store.Start
+                        Store = store
+                    }
 
-                match options.SparseIndex, sparseIndex |> Option.map box with
-                | SparseIndexComposition.InProcessSparseIndex, Some(:? System.IDisposable as index) ->
-                    "sparse-index", index
-                | _ -> ()
+                for index in ownedSparseIndex |> Option.toList do
+                    {
+                        Role = OwnedRetrievalStore.SparseIndex
+                        Start = index.Start
+                        Store = index
+                    }
             ]
 
-            match owned with
+            match lifetimes with
             | [] -> s
             | _ ->
-                // No loop, only a stop hook flushing the stores THIS process
-                // opened: a silo that skipped it would lose its own
+                // No loop, only a start and a stop hook over the stores THIS
+                // process opened: a silo that skipped it would lose its own
                 // acknowledged writes, so every profile runs it.
                 Hosting.register
                     s
                     (BackgroundUnit.create "rag-retrieval-store-flush" OnceAtStart (fun _ ->
-                        new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService))
+                        new RetrievalStoreFlushService(lifetimes, ragLogger) :> IHostedService))
 
         // The off-path trace queue, registered so `/health/rag` can report
         // its lost-trace count. Absent when traces are written inline
@@ -2131,20 +2219,20 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
             config,
             (if options.RetrievalPipelineOverride.IsSome then
                  None
+             elif List.contains OwnedRetrievalStore.VectorStore owned then
+                 Some(OwnedRetrievalStore.typeName OwnedRetrievalStore.VectorStore)
              else
                  match options.VectorStore with
-                 | None -> Some "InMemoryVectorStore"
                  | Some store when isInProcessVectorStore store -> Some(store.GetType().Name)
-                 | Some _ -> None),
+                 | _ -> None),
             (if options.RetrievalPipelineOverride.IsSome then
                  None
+             elif List.contains OwnedRetrievalStore.SparseIndex owned then
+                 Some(OwnedRetrievalStore.typeName OwnedRetrievalStore.SparseIndex)
              else
-                 match options.SparseIndex with
-                 | SparseIndexComposition.InProcessSparseIndex -> Some "InMemoryBM25Index"
-                 | _ ->
-                     match composedSparseIndex with
-                     | Some index when isInProcessSparseIndex index -> Some "InMemoryBM25Index"
-                     | _ -> None)
+                 match composedSparseIndex with
+                 | Some index when isInProcessSparseIndex index -> Some "InMemoryBM25Index"
+                 | _ -> None)
         )
     ]
 

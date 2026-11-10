@@ -1,16 +1,13 @@
 module ToolUp.RAG.InMemoryBM25Index
 
 open System
-open System.Collections.Concurrent
 open System.Collections.Generic
-open System.Threading
-open System.Text.Json
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Infra.ISparseIndex
 open ToolUp.RAG.SparseAnalysis
+open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
@@ -18,11 +15,9 @@ open ToolUp.Platform.Compose
 
 // ─── Tokenisation ─────────────────────────────────────────────────
 //
-// Tokenisation moved behind `ISparseAnalyzer`
-// (`ToolUp.RAG.SparseAnalysis`). The pre-501 rule (Unicode letter/digit runs,
-// lower-cased) is now `SparseAnalysis.identity` and remains the default, so an
-// index constructed without an analyzer behaves byte-for-byte as before
-// (GP 11). Language-aware analyzers ship as companions under
+// Tokenisation is behind `ISparseAnalyzer` (`ToolUp.RAG.SparseAnalysis`). The
+// default, `SparseAnalysis.identity`, is Unicode letter/digit runs,
+// lower-cased. Language-aware analyzers ship as companions under
 // `src/SparseIndices/`.
 
 // ─── BM25 parameters ──────────────────────────────────────────────
@@ -52,7 +47,7 @@ type private DocEntry = {
 /// otherwise search a stemmed vocabulary against unstemmed postings until
 /// every document happened to be re-ingested.
 ///
-/// A pre-501 snapshot has no such field, so `AnalyzerId` deserialises `null`;
+/// A snapshot written before analyzers were pluggable has no such field, so `AnalyzerId` deserialises `null`;
 /// that is read as `SparseAnalysis.IdentityAnalyzerId`, because the identity
 /// analyzer IS what wrote it. With the default analyzer composed, such a
 /// snapshot therefore loads its tokens unchanged (GP 11).
@@ -62,24 +57,12 @@ type private ScopeSnapshot = {
     AnalyzerId: string
 }
 
-let private scopeToKey (scope: VectorScope) = VectorScope.key scope
-
-let private blobName (scope: VectorScope) = $"_rag/{scopeToKey scope}/bm25.json"
-
-let private jsonOptions = PlatformJson.options
-
-let private toJson o =
-    JsonSerializer.Serialize(o, jsonOptions)
-
-let private fromJson<'T> (s: string) =
-    JsonSerializer.Deserialize<'T>(s, jsonOptions)
-
 // ─── Per-scope index state ────────────────────────────────────────
 
 /// A scope's lexical index. Each scope owns its own state so cross-scope
-/// queries fan out and union without ever sharing posting lists. Mutated
-/// only under `lockObj`; read paths take the lock briefly to snapshot
-/// what they need.
+/// queries fan out and union without ever sharing posting lists. The owning
+/// `ScopedSnapshotIndex` serialises writers and lets readers run together, so
+/// the type holds no lock of its own.
 ///
 /// Both term-bearing entry points (`Upsert`, `Score`) take an
 /// `AnalysedText`, never a `string list`. `AnalysedText` has a private
@@ -88,8 +71,6 @@ let private fromJson<'T> (s: string) =
 /// postings were built with, and terms from any other analyzer are refused
 /// rather than scored against them.
 type private ScopeIndex(analyzerId: string) =
-    let lockObj = obj ()
-
     let expect (label: string) (analysed: AnalysedText) =
         if analysed.AnalyzerId <> analyzerId then
             // Unreachable through the public surface — the owning index binds
@@ -124,94 +105,97 @@ type private ScopeIndex(analyzerId: string) =
             length
 
     member _.Upsert(chunkId: string, analysed: AnalysedText, content: string, metadata: Map<string, string>) =
-        lock lockObj (fun () ->
-            let removedLength = removeFromPostings chunkId
+        (let removedLength = removeFromPostings chunkId
 
-            let tokens = expect "Upsert" analysed |> List.toArray
-            let length = tokens.Length
+         let tokens = expect "Upsert" analysed |> List.toArray
+         let length = tokens.Length
 
-            // Per-document term frequencies — counted once for the entire
-            // document so a `Search` over many query terms sees a single
-            // hash-table lookup per (term, chunk) pair.
-            let tfPerTerm = Dictionary<string, int>()
+         // Per-document term frequencies — counted once for the entire
+         // document so a `Search` over many query terms sees a single
+         // hash-table lookup per (term, chunk) pair.
+         let tfPerTerm = Dictionary<string, int>()
 
-            for term in tokens do
-                match tfPerTerm.TryGetValue term with
-                | true, n -> tfPerTerm[term] <- n + 1
-                | false, _ -> tfPerTerm[term] <- 1
+         for term in tokens do
+             match tfPerTerm.TryGetValue term with
+             | true, n -> tfPerTerm[term] <- n + 1
+             | false, _ -> tfPerTerm[term] <- 1
 
-            for KeyValue(term, tf) in tfPerTerm do
-                let entry =
-                    match postings.TryGetValue term with
-                    | true, e -> e
-                    | false, _ ->
-                        let e = Dictionary<string, int>()
-                        postings[term] <- e
-                        e
+         for KeyValue(term, tf) in tfPerTerm do
+             let entry =
+                 match postings.TryGetValue term with
+                 | true, e -> e
+                 | false, _ ->
+                     let e = Dictionary<string, int>()
+                     postings[term] <- e
+                     e
 
-                entry[chunkId] <- tf
+             entry[chunkId] <- tf
 
-            docs[chunkId] <- (tokens, length, content, metadata)
-            totalLength <- totalLength - int64 removedLength + int64 length)
+         docs[chunkId] <- (tokens, length, content, metadata)
+         totalLength <- totalLength - int64 removedLength + int64 length)
 
     member _.Delete(chunkId: string) =
-        lock lockObj (fun () ->
-            let removedLength = removeFromPostings chunkId
-            docs.Remove chunkId |> ignore
-            totalLength <- totalLength - int64 removedLength)
+        (let removedLength = removeFromPostings chunkId
+         docs.Remove chunkId |> ignore
+         totalLength <- totalLength - int64 removedLength)
 
-    member _.IsEmpty = lock lockObj (fun () -> docs.Count = 0)
+    /// Drop every document.
+    member _.Clear() =
+        docs.Clear()
+        postings.Clear()
+        totalLength <- 0L
 
-    member _.DocCount = lock lockObj (fun () -> docs.Count)
+    member _.IsEmpty = (docs.Count = 0)
+
+    member _.DocCount = (docs.Count)
 
     /// Score every document containing at least one query term using BM25.
     /// Returns `(chunkId, score, content, metadata)` tuples.
     member _.Score(analysedQuery: AnalysedText) : (string * float * string * Map<string, string>) list =
         let queryTerms = expect "Score" analysedQuery
 
-        lock lockObj (fun () ->
-            let n = docs.Count
+        (let n = docs.Count
 
-            if n = 0 || queryTerms.IsEmpty then
-                []
-            else
-                let avgDl = float32 totalLength / float32 n
+         if n = 0 || queryTerms.IsEmpty then
+             []
+         else
+             let avgDl = float32 totalLength / float32 n
 
-                let scores = Dictionary<string, float32>()
+             let scores = Dictionary<string, float32>()
 
-                for term in queryTerms |> List.distinct do
-                    match postings.TryGetValue term with
-                    | false, _ -> ()
-                    | true, postingEntry ->
-                        let df = postingEntry.Count
-                        // Lucene-style BM25 IDF: ln(1 + (N − df + 0.5) / (df + 0.5)).
-                        // Always positive for df ≤ N, avoiding the negative-IDF
-                        // pathology in classic BM25 when a term appears in a
-                        // majority of documents.
-                        let idf = log (1.0f + (float32 (n - df) + 0.5f) / (float32 df + 0.5f))
+             for term in queryTerms |> List.distinct do
+                 match postings.TryGetValue term with
+                 | false, _ -> ()
+                 | true, postingEntry ->
+                     let df = postingEntry.Count
+                     // Lucene-style BM25 IDF: ln(1 + (N − df + 0.5) / (df + 0.5)).
+                     // Always positive for df ≤ N, avoiding the negative-IDF
+                     // pathology in classic BM25 when a term appears in a
+                     // majority of documents.
+                     let idf = log (1.0f + (float32 (n - df) + 0.5f) / (float32 df + 0.5f))
 
-                        for KeyValue(chunkId, tf) in postingEntry do
-                            match docs.TryGetValue chunkId with
-                            | false, _ -> ()
-                            | true, (_, length, _, _) ->
-                                let dl = float32 length
-                                let tfFloat = float32 tf
-                                let norm = 1.0f - B + B * (dl / avgDl)
-                                let contribution = idf * (tfFloat * (K1 + 1.0f)) / (tfFloat + K1 * norm)
+                     for KeyValue(chunkId, tf) in postingEntry do
+                         match docs.TryGetValue chunkId with
+                         | false, _ -> ()
+                         | true, (_, length, _, _) ->
+                             let dl = float32 length
+                             let tfFloat = float32 tf
+                             let norm = 1.0f - B + B * (dl / avgDl)
+                             let contribution = idf * (tfFloat * (K1 + 1.0f)) / (tfFloat + K1 * norm)
 
-                                match scores.TryGetValue chunkId with
-                                | true, existing -> scores[chunkId] <- existing + contribution
-                                | false, _ -> scores[chunkId] <- contribution
+                             match scores.TryGetValue chunkId with
+                             | true, existing -> scores[chunkId] <- existing + contribution
+                             | false, _ -> scores[chunkId] <- contribution
 
-                [
-                    for KeyValue(chunkId, score) in scores do
-                        match docs.TryGetValue chunkId with
-                        | true, (_, _, content, metadata) -> yield (chunkId, float score, content, metadata)
-                        | false, _ -> ()
-                ])
+             [
+                 for KeyValue(chunkId, score) in scores do
+                     match docs.TryGetValue chunkId with
+                     | true, (_, _, content, metadata) -> yield (chunkId, float score, content, metadata)
+                     | false, _ -> ()
+             ])
 
     member _.Snapshot() : DocEntry array =
-        lock lockObj (fun () -> [|
+        ([|
             for KeyValue(chunkId, (tokens, length, content, metadata)) in docs do
                 {
                     ChunkId = chunkId
@@ -229,89 +213,89 @@ type private ScopeIndex(analyzerId: string) =
     /// re-analysed instead. Returns the number of entries re-analysed so the
     /// caller can say so once, rather than per chunk.
     member _.LoadSnapshot(snapshot: ScopeSnapshot, reanalyse: string -> AnalysedText) : int =
-        lock lockObj (fun () ->
-            docs.Clear()
-            postings.Clear()
-            totalLength <- 0L
+        (docs.Clear()
+         postings.Clear()
+         totalLength <- 0L
 
-            let mutable reanalysed = 0
+         let mutable reanalysed = 0
 
-            // A pre-Phase-501 snapshot has no AnalyzerId field, so STJ leaves
-            // it null — and the identity analyzer is exactly what wrote it.
-            let snapshotAnalyzerId =
-                if isNull (box snapshot) || String.IsNullOrEmpty snapshot.AnalyzerId then
-                    IdentityAnalyzerId
-                else
-                    snapshot.AnalyzerId
+         // A snapshot written before analyzers were pluggable has no AnalyzerId field, so STJ leaves
+         // it null — and the identity analyzer is exactly what wrote it.
+         let snapshotAnalyzerId =
+             if isNull (box snapshot) || String.IsNullOrEmpty snapshot.AnalyzerId then
+                 IdentityAnalyzerId
+             else
+                 snapshot.AnalyzerId
 
-            let tokensMatch = snapshotAnalyzerId = analyzerId
+         let tokensMatch = snapshotAnalyzerId = analyzerId
 
-            if not (isNull (box snapshot)) && not (isNull snapshot.Docs) then
-                for entry in snapshot.Docs do
-                    let stored = if isNull entry.Tokens then [||] else entry.Tokens
+         if not (isNull (box snapshot)) && not (isNull snapshot.Docs) then
+             for entry in snapshot.Docs do
+                 let stored = if isNull entry.Tokens then [||] else entry.Tokens
 
-                    let tokens =
-                        if tokensMatch then
-                            stored
-                        else
-                            reanalysed <- reanalysed + 1
-                            expect "LoadSnapshot" (reanalyse entry.Content) |> List.toArray
+                 let tokens =
+                     if tokensMatch then
+                         stored
+                     else
+                         reanalysed <- reanalysed + 1
+                         expect "LoadSnapshot" (reanalyse entry.Content) |> List.toArray
 
-                    let length =
-                        if tokensMatch && entry.Length > 0 then
-                            entry.Length
-                        else
-                            tokens.Length
+                 let length =
+                     if tokensMatch && entry.Length > 0 then
+                         entry.Length
+                     else
+                         tokens.Length
 
-                    let tfPerTerm = Dictionary<string, int>()
+                 let tfPerTerm = Dictionary<string, int>()
 
-                    for term in tokens do
-                        match tfPerTerm.TryGetValue term with
-                        | true, n -> tfPerTerm[term] <- n + 1
-                        | false, _ -> tfPerTerm[term] <- 1
+                 for term in tokens do
+                     match tfPerTerm.TryGetValue term with
+                     | true, n -> tfPerTerm[term] <- n + 1
+                     | false, _ -> tfPerTerm[term] <- 1
 
-                    for KeyValue(term, tf) in tfPerTerm do
-                        let postingEntry =
-                            match postings.TryGetValue term with
-                            | true, e -> e
-                            | false, _ ->
-                                let e = Dictionary<string, int>()
-                                postings[term] <- e
-                                e
+                 for KeyValue(term, tf) in tfPerTerm do
+                     let postingEntry =
+                         match postings.TryGetValue term with
+                         | true, e -> e
+                         | false, _ ->
+                             let e = Dictionary<string, int>()
+                             postings[term] <- e
+                             e
 
-                        postingEntry[entry.ChunkId] <- tf
+                     postingEntry[entry.ChunkId] <- tf
 
-                    let metadata =
-                        if isNull (box entry.Metadata) then
-                            Map.empty
-                        else
-                            entry.Metadata
+                 let metadata =
+                     if isNull (box entry.Metadata) then
+                         Map.empty
+                     else
+                         entry.Metadata
 
-                    docs[entry.ChunkId] <- (tokens, length, entry.Content, metadata)
-                    totalLength <- totalLength + int64 length
+                 docs[entry.ChunkId] <- (tokens, length, entry.Content, metadata)
+                 totalLength <- totalLength + int64 length
 
-            reanalysed)
+         reanalysed)
 
 // ─── In-memory sparse index ───────────────────────────────────────
 
-/// In-memory BM25 sparse index backed by `IBlobStorage` for persistence.
-/// Sibling to `InMemoryVectorStore`: each scope has its own inverted index
-/// serialised to `_rag/{scopeKey}/bm25.json`.
+let private layout = SnapshotLayout.rag "bm25.json"
+
+/// In-memory BM25 sparse index backed by `IBlobStorage` for persistence, over
+/// the shared `ScopedSnapshotIndex` (the same hydration, flush and corruption
+/// law as `InMemoryVectorStore`): each scope has its own inverted index,
+/// serialised to `_rag/{scopeKey}/bm25.json`. A scope holding no document has
+/// no snapshot at rest: its blob is deleted at the next flush, so a scope-level
+/// delete survives a restart.
 ///
-/// Persistence is debounced — `Upsert`, `DeleteChunk`, and `DeleteByScope`
-/// mark the affected scope dirty and return immediately; a background loop
-/// flushes the dirty set at a bounded cadence. This matches
-/// `InMemoryVectorStore`'s amortisation strategy so a 10,000-chunk bulk
-/// load triggers O(scopes) persistence passes, not O(chunks).
+/// Persistence is debounced — a mutation marks the scope dirty and returns;
+/// the index flushes the dirty set every `flushIntervalMs` (two seconds by
+/// default), so a 10,000-chunk bulk load costs O(scopes) persistence passes,
+/// not O(chunks).
 ///
-/// Tokenisation is pluggable as of Phase 501. The default analyzer
-/// (`SparseAnalysis.identity`) is the pre-501 rule — Unicode word runs,
-/// lower-cased — so an index constructed without one behaves exactly as
-/// before (GP 11). Stemming, stop-word removal and CJK segmentation arrive by
-/// composing an `ISparseAnalyzer` from a companion under `src/SparseIndices/`
-/// (`ToolUp.SparseIndices.Snowball`, `ToolUp.SparseIndices.Cjk`); the
-/// `ISparseIndex` interface itself is Phase 9c-clean and accepts richer
-/// backends (Tantivy, Lucene.NET, Meilisearch) without changing call sites.
+/// Tokenisation is pluggable. The default analyzer (`SparseAnalysis.identity`)
+/// is Unicode word runs, lower-cased. Stemming, stop-word removal and CJK
+/// segmentation arrive by composing an `ISparseAnalyzer` from a companion under
+/// `src/SparseIndices/` (`ToolUp.SparseIndices.Snowball`,
+/// `ToolUp.SparseIndices.Cjk`).
 ///
 /// The analyzer is applied on BOTH sides by construction: this type binds one
 /// analyzer, exposes a single `analyse` path, and the per-scope index accepts
@@ -320,17 +304,28 @@ type private ScopeIndex(analyzerId: string) =
 /// an analyzer over an existing corpus does not leave the postings in one
 /// vocabulary and the queries in another.
 ///
+/// A corrupt snapshot follows `corruptPolicy` (read from
+/// `TOOLUP_RAG_REFUSE_ON_INDEX_CORRUPTION` when not supplied) and is reported
+/// through `telemetry`, `auditLog` and `notifications`, once per scope.
+///
 /// Suitable for deployments with up to ~50,000 chunks; for larger corpora
-/// switch to a companion. The store implements `IDisposable`; ASP.NET
-/// Core's DI container disposes it during shutdown, which performs one
-/// final synchronous flush so no acknowledged writes are lost.
-type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: int, ?analyzer: ISparseAnalyzer) =
+/// switch to a companion. The store implements `IDisposable`: disposing it
+/// performs one final flush so no acknowledged write is lost.
+type InMemoryBM25Index
+    (
+        storage: IBlobStorage,
+        ?logger: ILogger,
+        ?flushIntervalMs: int,
+        ?analyzer: ISparseAnalyzer,
+        ?telemetry: IRagTelemetry,
+        ?auditLog: IAuditLog,
+        ?notifications: INotificationChannel,
+        ?corruptPolicy: CorruptPolicy
+    ) =
 
     let log =
         logger
         |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
-
-    let flushMs = defaultArg flushIntervalMs 2000
 
     /// The one analyzer this index owns. Every term it stores and every term
     /// it searches for comes from `analyse` below — there is no second path.
@@ -338,190 +333,63 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
     let analyse (text: string) = SparseAnalysis.analyse analyzer text
 
-    let scopes = ConcurrentDictionary<string, ScopeIndex>()
+    /// The snapshot-analyzer mismatch is re-analysed here, on the way in; the
+    /// re-analysed postings exist only in memory until the next flush, so the
+    /// scope is reported stale and written back rather than re-analysed on
+    /// every restart.
+    let materialise (scope: VectorScope) (snapshot: ScopeSnapshot) =
+        let idx = ScopeIndex(analyzer.Id)
+        let reanalysed = idx.LoadSnapshot(snapshot, analyse)
 
-    // Scope keys whose persisted snapshot has been read into memory.
-    //
-    // Loadedness is tracked EXPLICITLY, never inferred from
-    // `scopes.ContainsKey`. Emptiness is a legitimate state: `DeleteByScope`
-    // drops the scope's index while the persisted `bm25.json` survives until
-    // the next flush, so reading "holds nothing for this scope" as "not yet
-    // loaded" made the very next `Search` re-hydrate the whole deleted corpus
-    // — full chunk text included — and the following flush wrote it back.
-    // Deliberately a separate map from `scopes`: a wiped scope must stay
-    // LOADED while holding no index at all, which one map cannot express.
-    let loadedScopes = ConcurrentDictionary<string, byte>()
+        if reanalysed > 0 then
+            // Said once per scope, at Info: the expected (and correct)
+            // response to composing a new analyzer over an existing corpus.
+            log.Info
+                $"[InMemoryBM25Index] Scope {VectorScope.key scope}: re-analysed {reanalysed} chunk(s) — the persisted snapshot was written by a different analyzer than the composed '{analyzer.Id}'."
 
-    let dirty = ConcurrentDictionary<string, VectorScope>()
+        idx, reanalysed > 0
 
-    let cts = new CancellationTokenSource()
-
-    let getOrCreateScopeIndex (scope: VectorScope) =
-        scopes.GetOrAdd(scopeToKey scope, fun _ -> ScopeIndex(analyzer.Id))
-
-    let markDirty (scope: VectorScope) = dirty[scopeToKey scope] <- scope
-
-    let persistScope (scope: VectorScope) = async {
-        let scopeKey = scopeToKey scope
-
-        match scopes.TryGetValue scopeKey with
-        | false, _ ->
-            // A dirty scope that is absent from the in-memory
-            // map was removed by `DeleteByScope` (dirty-marking is the
-            // only way to reach here). Pre-115 this short-circuited,
-            // leaving the stale `bm25.json` at rest — the deleted corpus
-            // (full chunk text included) resurrected on the next process
-            // restart. Delete the persisted snapshot so the scope-level
-            // delete survives restart, mirroring what the vector store
-            // achieves by persisting an empty list.
-            let! result = storage.Delete("_rag", blobName scope)
-
-            match result with
-            | Ok _ -> ()
-            | Error e ->
-                log.Warn
-                    $"[InMemoryBM25Index] Failed to delete persisted snapshot for removed scope {scopeKey}: {e} — will retry on next flush."
-
-                markDirty scope
-        | true, idx ->
-            let snapshot = {
+    /// A scope that holds no document persists no rows: its blob is deleted.
+    let snapshot (_: VectorScope) (idx: ScopeIndex) =
+        if idx.IsEmpty then
+            None
+        else
+            Some {
                 Docs = idx.Snapshot()
                 AnalyzerId = analyzer.Id
             }
 
-            let bytes = toJson snapshot |> System.Text.Encoding.UTF8.GetBytes
-            let! result = storage.Upload("_rag", blobName scope, bytes)
-
-            match result with
-            | Ok _ -> ()
-            | Error e ->
-                log.Warn $"[InMemoryBM25Index] Failed to persist scope {scopeKey}: {e} — will retry on next flush."
-                markDirty scope
-    }
-
-    let flushAll () = async {
-        let captured = ResizeArray()
-
-        for kvp in dirty do
-            match dirty.TryRemove(kvp.Key) with
-            | true, scope -> captured.Add scope
-            | _ -> ()
-
-        for scope in captured do
-            try
-                do! persistScope scope
-            with ex ->
-                log.Error($"[InMemoryBM25Index] Flush failed for {scopeToKey scope}", Some ex)
-                markDirty scope
-    }
-
-    let loadScope (scope: VectorScope) = async {
-        match! storage.Download("_rag", blobName scope) with
-        | Ok bytes ->
-            try
-                let json = System.Text.Encoding.UTF8.GetString bytes
-                let snapshot = fromJson<ScopeSnapshot> json
-                let idx = getOrCreateScopeIndex scope
-                let reanalysed = idx.LoadSnapshot(snapshot, analyse)
-
-                if reanalysed > 0 then
-                    // Said once per scope, at Info: this is the expected
-                    // (and correct) response to composing a new analyzer over
-                    // an existing corpus, not a fault.
-                    log.Info
-                        $"[InMemoryBM25Index] Scope {scopeToKey scope}: re-analysed {reanalysed} chunk(s) — the persisted snapshot was written by a different analyzer than the composed '{analyzer.Id}'."
-
-                    // The re-analysed postings only exist in memory until the
-                    // next flush; mark dirty so the snapshot on disk catches
-                    // up rather than re-triggering this on every restart.
-                    markDirty scope
-            with ex ->
-                log.Warn $"[InMemoryBM25Index] Corrupt index for {scopeToKey scope}: {ex.Message} — starting empty."
-        | Error reason ->
-            // A failed download is ABSENT only when the blob is
-            // not there. A snapshot that is there but could not be read must
-            // not be taken for an empty scope: the next mutation's flush
-            // would replace the whole persisted index. Refuse, and leave the
-            // scope unloaded so the next access retries.
-            let! present = storage.Exists("_rag", blobName scope)
-
-            if present then
-                raise (
-                    ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException(
-                        scopeToKey scope,
-                        blobName scope,
-                        reason
-                    )
-                )
-
-        // Mark loaded after a completed attempt, on every path.
-        // A corrupt or absent snapshot leaves the scope loaded-and-empty,
-        // which is the honest state: there is nothing readable at rest for a
-        // later read to resurrect. (An unreadable one, above, is not marked.)
-        loadedScopes[scopeToKey scope] <- 0uy
-    }
-
-    // Cold loads are single-flight, so a mutation cannot land
-    // between a concurrent load's download and its replay into the index.
-    let loadGate = new SemaphoreSlim(1, 1)
-
-    /// Guarantee this scope's persisted snapshot has been read into memory.
-    /// Team and User scopes hydrate lazily (neither id is known at
-    /// construction); Platform and Deployment are loaded eagerly below and
-    /// mark themselves loaded like any other, so this one lookup answers for
-    /// every scope and no caller re-encodes which scopes are lazy.
-    ///
-    /// EVERY mutating member calls this first. It raises
-    /// `RagScopeSnapshotUnreadableException` when the snapshot exists but
-    /// cannot be read.
-    let ensureScopeLoaded (scope: VectorScope) = async {
-        if not (loadedScopes.ContainsKey(scopeToKey scope)) then
-            do! loadGate.WaitAsync() |> Async.AwaitTask
-
-            try
-                if not (loadedScopes.ContainsKey(scopeToKey scope)) then
-                    do! loadScope scope
-            finally
-                loadGate.Release() |> ignore
-    }
-
-    /// The retrieval path's load: an unreadable snapshot degrades the scope
-    /// to no results for this call (with a warning) instead of failing the
-    /// whole search; the scope stays unloaded, so mutations still refuse.
-    let ensureScopeLoadedForSearch (scope: VectorScope) = async {
-        match! ensureScopeLoaded scope |> Async.Catch with
-        | Choice1Of2() -> ()
-        | Choice2Of2(:? ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException as refused) ->
-            log.Warn
-                $"[InMemoryBM25Index] Snapshot '{refused.BlobLocation}' for {refused.ScopeKey} exists but could not be read ({refused.Reason}) — searching without it; mutations of the scope are refused until it reads."
-        | Choice2Of2 ex -> ToolUp.RAG.InMemoryVectorStore.rethrow ex
-    }
-
-    // An unreadable eager snapshot does not fail construction:
-    // the scope stays unloaded and the first access retries.
-    do
-        ensureScopeLoadedForSearch Platform |> Async.RunSynchronously
-        ensureScopeLoadedForSearch Deployment |> Async.RunSynchronously
-
-    let flushLoop = async {
-        while not cts.IsCancellationRequested do
-            try
-                do! Async.Sleep flushMs
-
-                if not cts.IsCancellationRequested then
-                    do! flushAll ()
-            with
-            | :? OperationCanceledException -> ()
-            | ex -> log.Error("[InMemoryBM25Index] Flush loop error", Some ex)
-    }
-
-    do Async.Start(flushLoop, cts.Token)
+    let index =
+        new ScopedSnapshotIndex<ScopeSnapshot, ScopeIndex>(
+            storage
+            , layout
+            , BlobCodec.json<ScopeSnapshot>
+            , (fun _ -> ScopeIndex(analyzer.Id))
+            , materialise
+            , snapshot
+            , SnapshotPolicy.create {
+                Policy = corruptPolicy |> Option.defaultWith CorruptPolicy.fromEnvironment
+                Telemetry = telemetry
+                AuditLog = defaultArg auditLog (NoOpAuditLog() :> IAuditLog)
+                Notifications = notifications
+              }
+              |> fun policy -> {
+                  policy with
+                      FlushIntervalMs = defaultArg flushIntervalMs 2000
+              }
+            , "InMemoryBM25Index"
+            , log
+        )
 
     /// Id of the composed analyzer — `SparseAnalysis.IdentityAnalyzerId` when
     /// none was supplied. Surfaced so an operator (or a test) can confirm from
     /// the outside which vocabulary the postings are in; it is the same value
     /// stamped into every persisted snapshot.
     member _.AnalyzerId = analyzer.Id
+
+    /// Load the platform and deployment scopes now (see
+    /// `ScopedSnapshotIndex.Start`).
+    member _.Start() = index.Start()
 
     /// The postings are this process's in-memory maps, flushed
     /// to blob storage but searched from memory: each replica holds its own.
@@ -531,23 +399,19 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
 
     interface ISparseIndex with
 
-        member _.Upsert scope chunkId chunk = async {
-            // Hydrate first. An upsert that is the first thing a
-            // restarted process does to a lazily-loaded scope would otherwise
-            // create a fresh, empty index for it, and the next flush would
-            // replace the persisted `bm25.json` with just the new chunks.
-            do! ensureScopeLoaded scope
-            let idx = getOrCreateScopeIndex scope
-            idx.Upsert(chunkId, analyse chunk.Content, chunk.Content, chunk.Metadata)
-            markDirty scope
-        }
+        member _.Upsert scope chunkId chunk =
+            let analysed = analyse chunk.Content
 
-        member _.Search scopes' query topK = async {
-            // Lazy-load Team and User scopes on first access. Platform/
-            // Deployment are already loaded at construction, and say so
-            // through the same `loadedScopes` map.
-            for scope in scopes' do
-                do! ensureScopeLoadedForSearch scope
+            index.Mutate(
+                scope,
+                fun idx ->
+                    idx.Upsert(chunkId, analysed, chunk.Content, chunk.Metadata)
+                    (), true
+            )
+
+        member _.Search scopes query topK = async {
+            for scope in scopes do
+                do! index.EnsureLoadedForSearch scope
 
             // The SAME `analyse` the index-time path uses — one binding, one
             // analyzer, no way to reach the postings with anything else.
@@ -556,138 +420,102 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
             if analysedQuery.Terms.IsEmpty then
                 return []
             else
-                let results =
-                    scopes'
+                return
+                    scopes
                     |> List.collect (fun scope ->
-                        match scopes.TryGetValue(scopeToKey scope) with
-                        | false, _ -> []
-                        | true, idx ->
-                            idx.Score analysedQuery
-                            |> List.map (fun (chunkId, score, content, metadata) -> {
-                                ChunkId = chunkId
-                                Content = content
-                                Score = score
-                                Scope = scope
-                                Metadata = metadata
-                            }))
+                        index.Read(scope, (fun idx -> idx.Score analysedQuery))
+                        |> Option.defaultValue []
+                        |> List.map (fun (chunkId, score, content, metadata) -> {
+                            ChunkId = chunkId
+                            Content = content
+                            Score = score
+                            Scope = scope
+                            Metadata = metadata
+                        }))
                     // Total-order sort: `ScopeIndex.Score` yields from a
                     // Dictionary in unspecified order and equal BM25 scores
-                    // are common (short fixture docs). A score-only sort
-                    // would freeze that non-deterministic order. Tie-break
-                    // on the unique `(Scope, ChunkId)`.
+                    // are common (short fixture docs). Tie-break on the unique
+                    // `(Scope, ChunkId)`.
                     |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
                     |> List.truncate topK
-
-                return results
         }
 
-        member _.DeleteByScope scope = async {
-            // Hydrate BEFORE dropping the scope. A wipe issued on
-            // a fresh process before anything has read this scope would
-            // otherwise remove nothing, leave the scope unloaded, and let the
-            // very next `Search` re-hydrate the corpus the wipe claimed to
-            // have deleted. Hydrating first also means the scope is recorded
-            // as loaded, so the read after the wipe sees the empty state
-            // rather than reaching for the snapshot again.
-            do! ensureScopeLoaded scope
-            scopes.TryRemove(scopeToKey scope) |> ignore
-            markDirty scope
-        }
+        member _.DeleteByScope scope =
+            index.Mutate(
+                scope,
+                fun idx ->
+                    idx.Clear()
+                    (), true
+            )
 
-        member _.DeleteChunk scope chunkId = async {
-            // Same reason as `DeleteByScope` above: a per-chunk delete issued
-            // before this scope has ever been read would find no index, no-op,
-            // and leave the chunk in the persisted snapshot.
-            do! ensureScopeLoaded scope
-
-            match scopes.TryGetValue(scopeToKey scope) with
-            | true, idx ->
-                idx.Delete chunkId
-                markDirty scope
-            | false, _ -> ()
-        }
+        member _.DeleteChunk scope chunkId =
+            index.Mutate(
+                scope,
+                fun idx ->
+                    idx.Delete chunkId
+                    (), true
+            )
 
         member _.Erase(scope, subjectUserId, policy, dryRun) = async {
-            // Same matching contract as
-            // `IVectorStore.eraseSubject`: the subject id appears in the
-            // chunk content or in any metadata value. BM25 keeps the full
-            // chunk text + metadata per entry, so the match is exact, not
-            // approximate. No tombstone tier exists here — every policy
-            // collapses to a hard delete (noted in the summary); the
-            // persisted `bm25.json` follows on the next flush via
-            // `markDirty`, so the erased text also leaves blob storage.
+            // Same matching contract as `IVectorStore.eraseSubject`: the
+            // subject id appears in the chunk content or in any metadata
+            // value. BM25 keeps the full chunk text + metadata per entry, so
+            // the match is exact, not approximate. No tombstone tier exists
+            // here — every policy collapses to a hard delete (noted in the
+            // summary); the persisted `bm25.json` follows at the next flush,
+            // so the erased text also leaves blob storage.
+            ignore policy
+
+            let summary count note : ErasureSummary = {
+                HandlerName = "sparse-index"
+                RecordsAffected = count
+                Note = Some note
+            }
+
             if Erasure.isBlankSubject subjectUserId.Value then
-                return
-                    Result.Ok {
-                        HandlerName = "sparse-index"
-                        RecordsAffected = 0
-                        Note = Some "blank subject — no-op"
-                    }
+                return Result.Ok(summary 0 "blank subject — no-op")
             else
-                // Team and User scopes are lazy-loaded on first access (same
-                // as `Search`) — erasure must see the persisted corpus even
-                // when this process has never searched the scope. Phase 861 —
-                // a snapshot that exists but cannot be read is the interface's
-                // own typed failure, which the orchestrator retries.
-                let! loaded = ensureScopeLoaded scope |> Async.Catch
+                // A snapshot that exists but cannot be read is the
+                // interface's own typed failure, which the orchestrator retries.
+                let! erased =
+                    index.Mutate(
+                        scope,
+                        fun idx ->
+                            let matched =
+                                idx.Snapshot()
+                                |> Array.filter (fun entry ->
+                                    entry.Content.Contains subjectUserId.Value
+                                    || entry.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId.Value))
+                                |> Array.map _.ChunkId
 
-                match loaded, scopes.TryGetValue(scopeToKey scope) with
-                | Choice2Of2(:? ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException as ex), _ ->
+                            let empty = idx.IsEmpty
+                            let erase = not dryRun && not (Array.isEmpty matched)
+
+                            if erase then
+                                for chunkId in matched do
+                                    idx.Delete chunkId
+
+                            (empty, matched.Length, erase), erase
+                    )
+                    |> Async.Catch
+
+                match erased with
+                | Choice2Of2(:? RagScopeSnapshotUnreadableException as ex) ->
                     return Result.Error(ErasureError.StoreUnreachable("sparse-index", ex.Message))
-                | Choice2Of2 ex, _ -> return ToolUp.RAG.InMemoryVectorStore.rethrow ex
-                | Choice1Of2(), (false, _) ->
+                | Choice2Of2 ex ->
+                    Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
+                    return Unchecked.defaultof<_>
+                | Choice1Of2(true, _, _) -> return Result.Ok(summary 0 "scope empty — nothing to erase")
+                | Choice1Of2(false, count, true) ->
                     return
-                        Result.Ok {
-                            HandlerName = "sparse-index"
-                            RecordsAffected = 0
-                            Note = Some "scope empty — nothing to erase"
-                        }
-                | Choice1Of2(), (true, idx) ->
-                    let matched =
-                        idx.Snapshot()
-                        |> Array.filter (fun entry ->
-                            entry.Content.Contains subjectUserId.Value
-                            || entry.Metadata |> Map.exists (fun _ v -> v.Contains subjectUserId.Value))
-                        |> Array.map _.ChunkId
-
-                    if dryRun || Array.isEmpty matched then
-                        return
-                            Result.Ok {
-                                HandlerName = "sparse-index"
-                                RecordsAffected = matched.Length
-                                Note = Some(sprintf "%d chunk(s) would be erased in scope" matched.Length)
-                            }
-                    else
-                        for chunkId in matched do
-                            idx.Delete chunkId
-
-                        markDirty scope
-
-                        // `policy` intentionally unused beyond documentation:
-                        // a lexical index holds no soft-delete tier, so
-                        // SoftDelete and HardDelete are the same operation.
-                        ignore policy
-
-                        return
-                            Result.Ok {
-                                HandlerName = "sparse-index"
-                                RecordsAffected = matched.Length
-                                Note =
-                                    Some(
-                                        sprintf
-                                            "%d chunk(s) hard-deleted (lexical index has no tombstone tier)"
-                                            matched.Length
-                                    )
-                            }
+                        Result.Ok(
+                            summary
+                                count
+                                (sprintf "%d chunk(s) hard-deleted (lexical index has no tombstone tier)" count)
+                        )
+                | Choice1Of2(false, count, false) ->
+                    return Result.Ok(summary count (sprintf "%d chunk(s) would be erased in scope" count))
         }
 
     interface IDisposable with
-        member _.Dispose() =
-            cts.Cancel()
-
-            try
-                flushAll () |> Async.RunSynchronously
-            with ex ->
-                log.Error("[InMemoryBM25Index] Final flush on dispose failed", Some ex)
-
-            cts.Dispose()
+        member _.Dispose() = (index :> IDisposable).Dispose()

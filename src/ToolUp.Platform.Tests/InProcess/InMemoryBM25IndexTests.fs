@@ -174,7 +174,46 @@ let tests =
                 (logger.Warnings |> List.filter (fun w -> w.Contains "Corrupt index"))
                 "corrupt snapshot must be surfaced with the starting-empty warning"
         }
-        // Phase 893 — the ISparseIndex contract pack, bound first to the
+
+        testAsync "a scope that holds no document has no snapshot at rest" {
+            // The index's snapshot of an empty scope is no rows, which deletes
+            // the blob: a scope-level delete survives a restart, and so does a
+            // scope emptied one chunk at a time.
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let wiped = Team(Guid.NewGuid().ToString "N")
+            let emptied = Team(Guid.NewGuid().ToString "N")
+
+            let blobOf scope =
+                $"_rag/{VectorScope.key scope}/bm25.json"
+
+            do
+                use index = new InMemoryBM25Index(storage, flushIntervalMs = 60000)
+                let sparse = index :> ISparseIndex
+
+                for scope in [ wiped; emptied ] do
+                    sparse.Upsert scope "doc-1" (chunk "alpha beta" Map.empty)
+                    |> Async.RunSynchronously
+
+            for scope in [ wiped; emptied ] do
+                let! present = storage.Exists("_rag", blobOf scope)
+                Expect.isTrue present "the first boot persisted each scope"
+
+            do
+                use index = new InMemoryBM25Index(storage, flushIntervalMs = 60000)
+                let sparse = index :> ISparseIndex
+                sparse.DeleteByScope wiped |> Async.RunSynchronously
+                sparse.DeleteChunk emptied "doc-1" |> Async.RunSynchronously
+
+            for scope in [ wiped; emptied ] do
+                let! present = storage.Exists("_rag", blobOf scope)
+                Expect.isFalse present $"the snapshot of the emptied scope {VectorScope.key scope} is deleted"
+
+            use index = new InMemoryBM25Index(storage, flushIntervalMs = 60000)
+            let! results = (index :> ISparseIndex).Search [ wiped; emptied ] "alpha" 10
+            Expect.isEmpty results "nothing comes back after a restart"
+        }
+
+        // The ISparseIndex contract pack, bound first to the
         // in-process index. Each case gets its own blob storage; re-opening
         // disposes the index (its final synchronous flush) and constructs
         // another over the same storage — a restart.
@@ -189,13 +228,13 @@ let tests =
 
             harness)
 
-        // Phase 861 — the restart laws of the vector-store pack's sparse
+        // The restart laws of the vector-store pack's sparse
         // half: every mutation hydrates a lazily loaded scope first, and an
         // unreadable snapshot refuses it.
         IVectorStoreContract.sparseIndexTests
             "InMemoryBM25Index"
             (function
-            | :? ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException -> true
+            | :? RagScopeSnapshotUnreadableException -> true
             | _ -> false)
             (fun storage -> new InMemoryBM25Index(storage, flushIntervalMs = 60000) :> ISparseIndex)
     ]

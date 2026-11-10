@@ -16,12 +16,11 @@ open ToolUp.RAG.VectorStores.Hnsw
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
-// ─── Phase 14k WS5 — HNSW recall-fidelity + latency smoke ───────
+// ─── HNSW recall-fidelity + latency smoke ────────────────────────
 //
 // The strict acceptance bounds ("HNSW recall@10 within 2% of flat
-// scan; p95 < 50 ms on a 500k representative corpus") were deferred by
-// Phase 14k and measured by Phase 970 with the `--hnsw-scale` benchmark
-// mode; the measured trade-off is in the RAG technical guide's scale
+// scan; p95 < 50 ms on a 500k representative corpus") are measured
+// with the `--hnsw-scale` benchmark mode; the measured trade-off is in the RAG technical guide's scale
 // story. The recall bound is pinned below by an OPT-IN case that runs
 // only when `TOOLUP_HNSW_SCALE_CORPUS` names a corpus. What runs by
 // default is the CI-safe, dependency-free smoke:
@@ -33,7 +32,7 @@ open ToolUp.Platform.Compose
 //     catastrophic graph regression without flaking on the inherent
 //     approximate-NN looseness of random high-dim vectors;
 //   • a loose latency ceiling that catches a pathological slowdown
-//     (NOT the 500k/50ms perf bound — Phase 970 measures that, opt-in).
+//     (NOT the 500k/50ms perf bound — the benchmark measures that, opt-in).
 //
 // Ground truth is computed in-test by brute-force cosine, so this
 // needs no `InMemoryVectorStore` reference (keeps the test project's
@@ -257,7 +256,7 @@ let tests =
                 // ≥0.5 catches a broken graph without flaking on the
                 // inherent approximate-NN looseness; the strict 2%
                 // acceptance bound needs a representative corpus — the
-                // opt-in Phase 970 case at the end of this list.
+                // opt-in case at the end of this list.
                 Expect.isGreaterThan
                     meanOverlap
                     0.5
@@ -267,7 +266,7 @@ let tests =
         }
 
         testAsync "dimension-mismatch defence: mixed-dim chunks in one scope do not corrupt retrieval" {
-            // Phase 14k WS5 audit slice. The TECHNICAL_GUIDE documents
+            // The TECHNICAL_GUIDE documents
             // a one-graph-per-scope contract that implies one embedding
             // dimensionality per scope. A future `IImageEmbedder`
             // companion that lands image vectors at a different
@@ -332,7 +331,7 @@ let tests =
         }
 
         testAsync "mixed-dim fixture: HNSW recall-fidelity matches flat scan, cross-dim purity holds" {
-            // Phase 14k WS5 Item 2 — fixture-driven multi-dim recall-fidelity.
+            // Fixture-driven multi-dim recall-fidelity.
             // Loads `eval-mixed-dim.json` (250 text@96 + 250 image@192
             // chunks under a single scope; 10 anchor-perturbed queries
             // per kind), seeds HNSW with the entire mixed-dim corpus,
@@ -344,9 +343,9 @@ let tests =
             //      against the matching-dim subset of the corpus only —
             //      mismatched-dim chunks are filtered by cosineDistance
             //      returning 1.0 and never reach the flat top-10).
-            //   2. HNSW's anchor recall@10 is within the Phase 14k
+            //   2. HNSW's anchor recall@10 is within the
             //      acceptance budget of the flat-scan anchor recall@10.
-            //      Phase 14k pins the absolute bound at 2% on a 500k
+            //      The absolute bound is 2% on a 500k
             //      corpus with tuned efSearch; this 500-chunk smoke
             //      uses a 10% absolute-gap budget to absorb the noise
             //      a default-M / untuned-efSearch HNSW exhibits on
@@ -414,7 +413,7 @@ let tests =
                 Expect.isLessThanOrEqual
                     recallGap
                     0.10
-                    $"HNSW anchor recall@10 {hnswAnchorRecall:F3} lagged flat-scan anchor recall@10 {flatAnchorRecall:F3} by {recallGap:F3} — outside the Phase 14k recall-fidelity budget"
+                    $"HNSW anchor recall@10 {hnswAnchorRecall:F3} lagged flat-scan anchor recall@10 {flatAnchorRecall:F3} by {recallGap:F3} — outside the recall-fidelity budget"
 
                 Expect.isFalse
                     crossDimLeakSeen
@@ -425,7 +424,7 @@ let tests =
 
         testAsync
             "latency smoke: HNSW stays far below a brute-force flat scan (no pathological O(n)-per-query regression)" {
-            // Phase 1007 — re-sized from 10k vectors at the default profile to
+            // Re-sized from 10k vectors at the default profile to
             // 5k at `HnswParameters.fastBuild`. The old build cost ~9 minutes
             // of every full gate (539 s measured 2026-09-12, 56 % of the
             // gate) while asserting nothing about the build: the case pins
@@ -482,7 +481,7 @@ let tests =
 
                 let! hnswMeanMs = meanSearchMs ()
 
-                // NOT the 500k/<50ms perf bound (Phase 970 measures that,
+                // NOT the 500k/<50ms perf bound (the benchmark measures that,
                 // opt-in, with the benchmark). This only trips on a pathological
                 // O(n)-per-query regression: a graph that has degenerated to
                 // a full scan does far more node work than a healthy
@@ -503,7 +502,7 @@ let tests =
                     ceilingMs
                     $"HNSW mean query latency {hnswMeanMs:F1} ms over a {n}-vector graph was >100x the {flatMeanMs:F2} ms flat-scan baseline — pathological O(n)-per-query slowdown"
 
-                // Phase 1007 — the same bound with a fifth of the graph
+                // The same bound with a fifth of the graph
                 // RETIRED (deleted, under the default rebuild threshold, so
                 // no rebuild): the search skips retired nodes inside the
                 // traversal, and a filter that degenerated into a scan of the
@@ -521,7 +520,7 @@ let tests =
                 dispose.Dispose()
         }
 
-        // Phase 970 — the recall bound at representative scale, OPT-IN.
+        // The recall bound at representative scale, OPT-IN.
         // `TOOLUP_HNSW_SCALE_CORPUS` names an extracted BEIR-format dataset
         // directory (`corpus.jsonl` + `queries.jsonl`, e.g. the `scifact`
         // directory the benchmark's BEIR cache holds). Unset, the case is
@@ -532,7 +531,7 @@ let tests =
         //
         // What it pins: at the SHIPPED `HnswParameters.defaults`, HNSW's
         // recall@10 against an exact flat scan over the same local-embedder
-        // vectors is at least 0.98 — Phase 14k's "within 2 %". Recall is the
+        // vectors is at least 0.98 — "within 2 %". Recall is the
         // ann-benchmarks definition (a result counts when its cosine reaches
         // the K-th exact cosine, less 1e-6), so duplicate documents tying at
         // the boundary are not misses. Latency is reported, not asserted:

@@ -110,6 +110,7 @@
              BlobIdempotencyStore.fs is the remoting tier's distributed idempotency store: it
              reads through the document store, so it compiles here rather than in Remoting. -->
         <Compile Include="..\ToolUp.Platform.Server\Server\BlobMapStore.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Rag\ScopedSnapshotIndex.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\BlobIdempotencyStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\SecondaryIndex.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Infra\PersistentEventStore.fs" />
