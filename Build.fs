@@ -285,6 +285,8 @@ let main args =
             "entity-test", factory
             "eval-resolve", factory
             "eval-test", factory
+            "fitbatch-sched", background
+            "fitbatch-tests", background
             "flags-test", factory
             "fleet-test", factory
             "grantconsent", factory
