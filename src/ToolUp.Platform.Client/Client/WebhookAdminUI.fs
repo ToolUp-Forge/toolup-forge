@@ -381,7 +381,7 @@ let private statusView (msgs: WebhookAdminMessages) (status: FormStatus) (onDism
 
     match status with
     | Idle -> Html.none
-    | Working -> Html.div [ prop.className "mt-2 text-sm text-gray-500"; prop.text msgs.Working ]
+    | Working -> Html.div [ prop.className [ "mt-2 text-sm"; Tokens.Text.muted ]; prop.text msgs.Working ]
     | Done msg -> settled (Notice.Info msg)
     | Failed err -> settled (Notice.Problem err)
 
@@ -438,7 +438,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                 prop.className "mb-3"
                 prop.children [
                     Html.label [
-                        prop.className "block text-xs font-medium text-gray-700 mb-1"
+                        prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                         prop.text msgs.TargetUrlLabel
                     ]
                     Html.input [
@@ -456,7 +456,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                 prop.className "mb-3"
                 prop.children [
                     Html.label [
-                        prop.className "block text-xs font-medium text-gray-700 mb-1"
+                        prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                         prop.text msgs.SecretLabel
                     ]
                     Html.div [
@@ -470,15 +470,13 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                                 prop.className
                                     "border border-border rounded-lg px-4 py-2 focus:outline-none focus:border-brand flex-1 font-mono text-xs"
                             ]
-                            Html.button [
-                                prop.className
-                                    "px-3 py-2 text-xs rounded-lg border border-border hover:bg-gray-50 transition-colors"
-                                prop.text msgs.Generate
-                                prop.onClick (fun _ -> generateSecret ())
-                            ]
+                            Forms.Button.secondaryWith Forms.Button.Enabled msgs.Generate generateSecret
                         ]
                     ]
-                    Html.p [ prop.className "text-xs text-gray-500 mt-1"; prop.text msgs.SecretHelp ]
+                    Html.p [
+                        prop.className [ "text-xs mt-1"; Tokens.Text.muted ]
+                        prop.text msgs.SecretHelp
+                    ]
                 ]
             ]
 
@@ -486,7 +484,7 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
                 prop.className "mb-3"
                 prop.children [
                     Html.label [
-                        prop.className "block text-xs font-medium text-gray-700 mb-1"
+                        prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
                         prop.text msgs.EventTypesLabel
                     ]
                     Html.input [
@@ -503,18 +501,13 @@ let private CreateForm (onSubmit: CreateWebhookRequest -> unit) =
             Html.div [
                 prop.className "flex gap-2"
                 prop.children [
-                    Html.button [
-                        prop.className [
-                            "px-4 py-2 text-sm rounded-lg text-white transition-colors"
-                            if canSubmit then
-                                "bg-brand hover:bg-brand-dark cursor-pointer"
-                            else
-                                "bg-gray-300 cursor-not-allowed"
-                        ]
-                        prop.disabled (not canSubmit)
-                        prop.text msgs.Create
-                        prop.onClick (fun _ -> submit ())
-                    ]
+                    Forms.Button.primaryWith
+                        (if canSubmit then
+                             Forms.Button.Enabled
+                         else
+                             Forms.Button.Disabled)
+                        msgs.Create
+                        submit
                 ]
             ]
         ]
@@ -569,50 +562,37 @@ let private subscriptionDetail
         | _ -> Html.none
 
     let actionButtons =
+        // Every action is inert while one of this subscription's calls is
+        // in flight, so a second click cannot re-send it.
+        let state =
+            if status = Working then
+                Forms.Button.Disabled
+            else
+                Forms.Button.Enabled
+
         let toggleStatusButton =
             match sub.Status with
             | WebhookStatus.Active ->
-                Html.button [
-                    prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text msgs.Pause
-                    prop.onClick (fun _ -> dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Paused)))
-                ]
+                Forms.Button.secondaryWith state msgs.Pause (fun () ->
+                    dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Paused)))
             | WebhookStatus.Paused ->
-                Html.button [
-                    prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text msgs.Resume
-                    prop.onClick (fun _ -> dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Active)))
-                ]
+                Forms.Button.secondaryWith state msgs.Resume (fun () ->
+                    dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Active)))
             | WebhookStatus.Disabled ->
-                Html.button [
-                    prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text msgs.ReEnable
-                    prop.onClick (fun _ -> dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Active)))
-                ]
+                Forms.Button.secondaryWith state msgs.ReEnable (fun () ->
+                    dispatch (UpdateStatusSubmit(sub.SubscriptionId, WebhookStatus.Active)))
 
         Html.div [
             prop.className "flex gap-2 flex-wrap"
             prop.children [
                 toggleStatusButton
-                Html.button [
-                    prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text msgs.TestFire
-                    prop.onClick (fun _ -> dispatch (TestFireSubmit sub.SubscriptionId))
-                ]
-                Html.button [
-                    prop.className "px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-gray-50"
-                    prop.text msgs.RotateSecret
-                    prop.onClick (fun _ ->
-                        if Browser.Dom.window.confirm msgs.RotateSecretConfirm then
-                            dispatch (RotateSecretSubmit sub.SubscriptionId))
-                ]
-                Html.button [
-                    prop.className "px-3 py-1.5 text-xs rounded-lg border border-red-300 text-red-700 hover:bg-red-50"
-                    prop.text msgs.Delete
-                    prop.onClick (fun _ ->
-                        if Browser.Dom.window.confirm msgs.DeleteConfirm then
-                            dispatch (DeleteSubmit sub.SubscriptionId))
-                ]
+                Forms.Button.secondaryWith state msgs.TestFire (fun () -> dispatch (TestFireSubmit sub.SubscriptionId))
+                Forms.Button.secondaryWith state msgs.RotateSecret (fun () ->
+                    if Browser.Dom.window.confirm msgs.RotateSecretConfirm then
+                        dispatch (RotateSecretSubmit sub.SubscriptionId))
+                Forms.Button.dangerWith state msgs.Delete (fun () ->
+                    if Browser.Dom.window.confirm msgs.DeleteConfirm then
+                        dispatch (DeleteSubmit sub.SubscriptionId))
             ]
         ]
 
@@ -621,7 +601,10 @@ let private subscriptionDetail
             Html.div [
                 prop.className "flex items-baseline gap-2 mb-1"
                 prop.children [
-                    Html.span [ prop.className "text-xs text-gray-500 w-32 shrink-0"; prop.text label ]
+                    Html.span [
+                        prop.className [ "text-xs w-32 shrink-0"; Tokens.Text.muted ]
+                        prop.text label
+                    ]
                     value
                 ]
             ]
@@ -665,72 +648,52 @@ let private subscriptionDetail
             prop.children [
                 Html.h4 [ prop.className "text-sm font-semibold mb-2"; prop.text msgs.RecentDeliveries ]
                 if List.isEmpty deliveries then
-                    Html.p [ prop.className "text-xs text-gray-500"; prop.text msgs.NoDeliveriesYet ]
-                else
-                    Html.div [
-                        prop.className "border border-border rounded-lg overflow-hidden"
-                        prop.children [
-                            Html.table [
-                                prop.className "w-full text-xs"
-                                prop.children [
-                                    Html.thead [
-                                        prop.className "bg-gray-50"
-                                        prop.children [
-                                            Html.tr [
-                                                prop.children [
-                                                    Html.th [
-                                                        prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text msgs.ColumnAttempted
-                                                    ]
-                                                    Html.th [
-                                                        prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text msgs.ColumnAttempt
-                                                    ]
-                                                    Html.th [
-                                                        prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text msgs.ColumnOutcome
-                                                    ]
-                                                    Html.th [
-                                                        prop.className "text-left px-3 py-2 font-medium text-gray-600"
-                                                        prop.text msgs.ColumnEventId
-                                                    ]
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                    Html.tbody [
-                                        prop.children [
-                                            for row in deliveries ->
-                                                let label, cls = outcomeLabel msgs row.Outcome
-
-                                                Html.tr [
-                                                    prop.className "border-t border-border"
-                                                    prop.children [
-                                                        Html.td [
-                                                            prop.className "px-3 py-2 font-mono"
-                                                            prop.text (row.AttemptedAt.ToString("u"))
-                                                        ]
-                                                        Html.td [
-                                                            prop.className "px-3 py-2"
-                                                            prop.text (string row.Attempt)
-                                                        ]
-                                                        Html.td [ prop.className $"px-3 py-2 {cls}"; prop.text label ]
-                                                        Html.td [
-                                                            prop.className "px-3 py-2 font-mono text-gray-500"
-                                                            prop.text (
-                                                                row.EventId
-                                                                |> Option.map _.ToString("N").Substring(0, 8)
-                                                                |> Option.defaultValue "—"
-                                                            )
-                                                        ]
-                                                    ]
-                                                ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
+                    Html.p [
+                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                        prop.text msgs.NoDeliveriesYet
                     ]
+                else
+                    Data.table
+                        [
+                            {
+                                Header = msgs.ColumnAttempted
+                                Align = Data.Left
+                                Cell =
+                                    fun (row: WebhookDelivery) ->
+                                        Html.span [
+                                            prop.className "font-mono text-xs"
+                                            prop.text (row.AttemptedAt.ToString("u"))
+                                        ]
+                            }
+                            {
+                                Header = msgs.ColumnAttempt
+                                Align = Data.Left
+                                Cell = fun (row: WebhookDelivery) -> Html.text (string row.Attempt)
+                            }
+                            {
+                                Header = msgs.ColumnOutcome
+                                Align = Data.Left
+                                Cell =
+                                    fun (row: WebhookDelivery) ->
+                                        let label, cls = outcomeLabel msgs row.Outcome
+                                        Html.span [ prop.className [ "text-xs"; cls ]; prop.text label ]
+                            }
+                            {
+                                Header = msgs.ColumnEventId
+                                Align = Data.Left
+                                Cell =
+                                    fun (row: WebhookDelivery) ->
+                                        Html.span [
+                                            prop.className [ "font-mono text-xs"; Tokens.Text.muted ]
+                                            prop.text (
+                                                row.EventId
+                                                |> Option.map _.ToString("N").Substring(0, 8)
+                                                |> Option.defaultValue "—"
+                                            )
+                                        ]
+                            }
+                        ]
+                        deliveries
             ]
         ]
 
@@ -759,14 +722,17 @@ let private sidebar (msgs: WebhookAdminMessages) (model: Model) (dispatch: Msg -
             CreateForm(fun req -> dispatch (CreateSubmit req))
 
             Html.h3 [
-                prop.className "text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
+                prop.className [ "text-xs font-semibold uppercase tracking-wide mb-2"; Tokens.Text.muted ]
                 prop.text msgs.SubscriptionsHeading
             ]
 
             if not model.Loaded then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+                Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
             elif List.isEmpty model.Subscriptions then
-                Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.NoSubscriptionsYet ]
+                Html.p [
+                    prop.className [ "text-sm"; Tokens.Text.muted ]
+                    prop.text msgs.NoSubscriptionsYet
+                ]
             else
                 Html.div [
                     prop.className "flex flex-col gap-1"
@@ -780,7 +746,7 @@ let private sidebar (msgs: WebhookAdminMessages) (model: Model) (dispatch: Msg -
                                     if isSelected then
                                         "bg-brand text-white border-brand"
                                     else
-                                        "hover:bg-gray-100 text-gray-700 border-transparent"
+                                        ("hover:bg-gray-100 border-transparent " + Tokens.Text.secondary)
                                 ]
                                 prop.onClick (fun _ -> dispatch (SelectSubscription sub.SubscriptionId))
                                 prop.children [
@@ -791,7 +757,7 @@ let private sidebar (msgs: WebhookAdminMessages) (model: Model) (dispatch: Msg -
                                     Html.div [
                                         prop.className [
                                             "text-xs"
-                                            if isSelected then "text-white/80" else "text-gray-500"
+                                            if isSelected then "text-white/80" else Tokens.Text.muted
                                         ]
                                         prop.text (statusLabel msgs sub.Status)
                                     ]
@@ -809,7 +775,7 @@ let private detailPane (msgs: WebhookAdminMessages) (model: Model) (dispatch: Ms
             match model.SelectedId with
             | None ->
                 Html.p [
-                    prop.className "text-sm text-gray-500"
+                    prop.className [ "text-sm"; Tokens.Text.muted ]
                     prop.text (
                         if model.Loaded then
                             msgs.CreateOrSelectPrompt
@@ -820,11 +786,15 @@ let private detailPane (msgs: WebhookAdminMessages) (model: Model) (dispatch: Ms
             | Some id ->
                 match model.Subscriptions |> List.tryFind (fun s -> s.SubscriptionId = id) with
                 | Some sub -> subscriptionDetail msgs model sub dispatch
-                | None -> Html.p [ prop.className "text-sm text-gray-500"; prop.text msgs.SubscriptionNotFound ]
+                | None ->
+                    Html.p [
+                        prop.className [ "text-sm"; Tokens.Text.muted ]
+                        prop.text msgs.SubscriptionNotFound
+                    ]
         ]
     ]
 
-/// Phase 751 — the module body as a React COMPONENT rather than a plain
+/// The module body as a React COMPONENT rather than a plain
 /// render function, so it has a hook site from which to read the resolved
 /// catalog. A module's `view` is invoked inline by the shell's own render,
 /// where a hook would join the shell's hook order and break the moment the
