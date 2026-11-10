@@ -170,6 +170,7 @@ case ToolUp.Platform DoesNotCompose ToolUp.Platform.Compose
 case ToolUp.Platform Downstream ToolUp.Platform.Infra
 case ToolUp.Platform Draft ToolUp.Platform.Infra
 case ToolUp.Platform Drifted ToolUp.Platform.Compose
+case ToolUp.Platform Dropped ToolUp.Platform.Infra
 case ToolUp.Platform Duplicate ToolUp.Platform.Jobs
 case ToolUp.Platform EdgeCacheUnset ToolUp.Platform.Infra
 case ToolUp.Platform EdgeNoStore ToolUp.Platform.Infra
@@ -205,6 +206,7 @@ case ToolUp.Platform ExternalProbeRule ToolUp.Platform.Compose
 case ToolUp.Platform ExternalTable ToolUp.Platform.Infra
 case ToolUp.Platform FactNode ToolUp.Platform.Infra
 case ToolUp.Platform FactRef ToolUp.Platform.Infra
+case ToolUp.Platform Failed ToolUp.Platform.Infra
 case ToolUp.Platform Failed ToolUp.Platform.Jobs
 case ToolUp.Platform FilledSlot ToolUp.Platform.Compose
 case ToolUp.Platform Filter ToolUp.Platform.Infra
@@ -242,6 +244,7 @@ case ToolUp.Platform HostingBaselineBelowFloor ToolUp.Platform.Compose
 case ToolUp.Platform IllegalTransition ToolUp.Platform.Infra
 case ToolUp.Platform ImgSrc ToolUp.Platform.Scope
 case ToolUp.Platform ImprovesOnIncumbentBy ToolUp.Platform.Jobs
+case ToolUp.Platform Indexed ToolUp.Platform.Infra
 case ToolUp.Platform Individual ToolUp.Platform.Compose
 case ToolUp.Platform InferenceSubsystem ToolUp.Platform.Compose
 case ToolUp.Platform InheritedDefaultDeny ToolUp.Platform.Compose
@@ -313,6 +316,7 @@ case ToolUp.Platform ModuleFiltered ToolUp.Platform.Compose
 case ToolUp.Platform ModuleRegistered ToolUp.Platform.Compose
 case ToolUp.Platform ModuleUnboundAllowed ToolUp.Platform.Compose
 case ToolUp.Platform MonthlyBudget ToolUp.Platform.Compose
+case ToolUp.Platform Moved ToolUp.Platform.Infra
 case ToolUp.Platform MultiImpl ToolUp.Platform.Compose
 case ToolUp.Platform MultiInstance ToolUp.Platform.Compose
 case ToolUp.Platform MultiInstanceSafe ToolUp.Platform.Compose
@@ -506,6 +510,7 @@ case ToolUp.Platform StaleWrite ToolUp.Platform.Compose
 case ToolUp.Platform Standard ToolUp.Platform.Compose
 case ToolUp.Platform StartEmpty ToolUp.Platform.Infra
 case ToolUp.Platform StateMismatch ToolUp.Platform.Infra
+case ToolUp.Platform Stepped ToolUp.Platform.Infra
 case ToolUp.Platform Storage ToolUp.Platform.Compose
 case ToolUp.Platform StorageFailure ToolUp.Platform.Infra
 case ToolUp.Platform StorageFailure ToolUp.Platform.Jobs
@@ -536,6 +541,7 @@ case ToolUp.Platform Team ToolUp.Platform.Compose
 case ToolUp.Platform TeamOwnerPrincipal ToolUp.Platform.Compose
 case ToolUp.Platform TenantCompositionInvalid ToolUp.Platform.Compose
 case ToolUp.Platform TenantNotRegistered ToolUp.Platform.Compose
+case ToolUp.Platform Terminal ToolUp.Platform.Infra
 case ToolUp.Platform Terminal ToolUp.Platform.Jobs
 case ToolUp.Platform Text ToolUp.Platform.Compose
 case ToolUp.Platform TiedAtBest ToolUp.Platform.Infra
@@ -565,6 +571,7 @@ case ToolUp.Platform UnknownKey ToolUp.Platform.Infra
 case ToolUp.Platform UnknownWorkerKey ToolUp.Platform.Infra
 case ToolUp.Platform UnlockedWhenUnprovisioned ToolUp.Platform.Compose
 case ToolUp.Platform UnmetRequirement ToolUp.Platform.Compose
+case ToolUp.Platform Unmoved ToolUp.Platform.Infra
 case ToolUp.Platform UnparseableTimestamp ToolUp.Platform.Infra
 case ToolUp.Platform Unreadable ToolUp.Platform.Infra
 case ToolUp.Platform UnresolvedComponent ToolUp.Platform.Compose
@@ -677,6 +684,12 @@ type ToolUp.Platform AssemblyProvenance ToolUp.Platform.Infra
 type ToolUp.Platform AssemblySource ToolUp.Platform.Infra
 type ToolUp.Platform AssemblySplit ToolUp.Platform.Infra
 type ToolUp.Platform AssemblyTransform ToolUp.Platform.Infra
+type ToolUp.Platform AttemptAnnouncement ToolUp.Platform.Infra
+type ToolUp.Platform AttemptRecord ToolUp.Platform.Infra
+type ToolUp.Platform AttemptRecords ToolUp.Platform.Infra
+type ToolUp.Platform AttemptReport ToolUp.Platform.Infra
+type ToolUp.Platform AttemptStep ToolUp.Platform.Infra
+type ToolUp.Platform AttemptTransition ToolUp.Platform.Infra
 type ToolUp.Platform AuditFallbackReplayService ToolUp.Platform.Audit
 type ToolUp.Platform AuditFallbackStore ToolUp.Platform.Audit
 type ToolUp.Platform AuditLog ToolUp.Platform.Audit
@@ -780,6 +793,7 @@ type ToolUp.Platform CertificateIssuanceIntegrity ToolUp.Platform.Compose
 type ToolUp.Platform CertifiedSurfaceProjection ToolUp.Platform.Compose
 type ToolUp.Platform ChampionChallengerGate ToolUp.Platform.Jobs
 type ToolUp.Platform ChampionChallengerPolicy ToolUp.Platform.Infra
+type ToolUp.Platform ChunkReport ToolUp.Platform.Infra
 type ToolUp.Platform CitableReferenceResolution ToolUp.Platform.Compose
 type ToolUp.Platform ClassificationDecision ToolUp.Platform.Audit
 type ToolUp.Platform ClassificationGate ToolUp.Platform.Audit
@@ -1306,6 +1320,7 @@ type ToolUp.Platform IHostedTreeUsageExport ToolUp.Platform.Compose
 type ToolUp.Platform IHostingBaselineEvidence ToolUp.Platform.Compose
 type ToolUp.Platform IImageEmbedder ToolUp.Platform.Infra
 type ToolUp.Platform IIndexLifecycle ToolUp.Platform.Infra
+type ToolUp.Platform IIngestionAttemptStore ToolUp.Platform.Infra
 type ToolUp.Platform IIngestionRecoverySurface ToolUp.Platform.Compose
 type ToolUp.Platform IIngestionStatusStore ToolUp.Platform.Infra
 type ToolUp.Platform IInstructedNarrativeGroundingGate ToolUp.Platform.Compose
@@ -1438,6 +1453,7 @@ type ToolUp.Platform InProcessRateLimiter ToolUp.Platform.Infra
 type ToolUp.Platform InTotoSubject ToolUp.Platform.Audit
 type ToolUp.Platform IndividualLayer ToolUp.Platform.Compose
 type ToolUp.Platform IngestedPayload ToolUp.Platform.Infra
+type ToolUp.Platform IngestionAttemptStore ToolUp.Platform.Infra
 type ToolUp.Platform IngestionLabel ToolUp.Platform.Infra
 type ToolUp.Platform IngestionLabelError ToolUp.Platform.Infra
 type ToolUp.Platform IngestionRecoverySweep ToolUp.Platform.Compose

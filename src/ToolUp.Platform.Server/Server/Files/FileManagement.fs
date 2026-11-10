@@ -1141,7 +1141,7 @@ let configureEvictionMinutes (minutes: float) =
 /// needs no server memory at all — see `SessionStoreResetNotification`.
 /// Serialiser for the `SessionStoreResetKey` payload. `FableConverters`
 /// is the same options instance every other `CustomNotification`
-/// publisher uses (`DataManagerIngestionObserver`), so the JSON the
+/// publisher uses (the Data Manager's ingestion attempts among them), so the JSON the
 /// client's `Json.parseAs` reads has the shape it expects.
 let private sessionStoreResetJsonOptions = PlatformJson.options
 

@@ -16,6 +16,7 @@ open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.VectorisationTypes
 open ProcessedDataTypes
+open DataManagementTypes
 open ToolUp.RAG.IngestionTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
@@ -58,24 +59,39 @@ let private handler: VectorisationHandler = {
     Summarise = None
 }
 
+/// The post-save hook over `handlers`, a status store and the Data
+/// Manager's attempts over `storage`.
+let private hookOver
+    (handlers: VectorisationHandler list)
+    (queue: IngestionQueue)
+    (status: IIngestionStatusStore)
+    (storage: BlobStorage.IBlobStorage)
+    =
+    ToolUp.RAG.RAGCompose.makeVectorisationHook
+        handlers
+        queue
+        (ToolUp.RAG.RagTelemetry.createNoOp ())
+        false
+        None
+        None
+        (InMemoryEventStore.InMemoryEventStore())
+        status
+        (IngestionAttemptStore.dataManager status storage (SilentLogger()))
+        DropWrite
+        (NoOpAuditLog())
+        (NotificationChannel.NoOpNotificationChannel())
+        (SilentLogger())
+
 /// Run the hook for one saved file and return the job it enqueued.
 let private enqueueFor (scope: StorageScope) (createdBy: string) : Async<DocumentIngestionJob> = async {
     let queue = IngestionQueue(16)
 
     let hook =
-        ToolUp.RAG.RAGCompose.makeVectorisationHook
+        hookOver
             [ handler ]
             queue
-            (ToolUp.RAG.RagTelemetry.createNoOp ())
-            false
-            None
-            None
-            (InMemoryEventStore.InMemoryEventStore())
             (IngestionStatusStore.createInMemory ())
-            DropWrite
-            (NoOpAuditLog())
-            (NotificationChannel.NoOpNotificationChannel())
-            (SilentLogger())
+            (ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage())
 
     let processed: ProcessedData = { TypeName = "Notes"; Payload = "{}" }
 
@@ -163,6 +179,91 @@ let tests =
                     ""
 
             Expect.equal job.Scope Deployment "the deployment container is deployment-wide shared content"
+        }
+
+        testAsync "a Data Manager file reaches Indexed from its persisted attempt across a replica switch" {
+            let storage =
+                ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage() :> BlobStorage.IBlobStorage
+
+            // One durable status store per "replica", over the same backend.
+            let replicaStatus () =
+                IngestionStatusStore.create
+                    (DataObjectStore.DataObjectStore(storage, SilentLogger()) :> IDataObjectStore)
+                    None
+
+            let threeChunks: VectorisationHandler = {
+                handler with
+                    Vectorise =
+                        fun _ -> [
+                            for i in 1..3 ->
+                                {
+                                    Content = sprintf "figures part %d" i
+                                    Metadata = Map.empty
+                                }
+                        ]
+            }
+
+            let queue = IngestionQueue(16)
+            let status = replicaStatus ()
+            let hook = hookOver [ threeChunks ] queue status storage
+            let processed: ProcessedData = { TypeName = "Notes"; Payload = "{}" }
+
+            let entry =
+                ProcessedFileEntry.summarised "figures.csv" dataType DateTime.UtcNow processed
+
+            do! hook (processed, entry, userScope "alice", "alice")
+
+            let! lease = (queue :> IIngestionQueue).TryDequeue()
+
+            let job =
+                match lease with
+                | Some lease -> lease.Job
+                | None -> failtest "the hook enqueued no job"
+
+            Expect.isSome job.Attempt "the job carries the attempt the Data Manager store began"
+
+            let chunkJobs = [
+                for chunkId, chunk in job.Chunks ->
+                    {
+                        DocumentId = job.DocumentId
+                        DocumentName = job.DocumentName
+                        ChunkId = chunkId
+                        Chunk = chunk
+                        Scope = job.Scope
+                        ScopeId = job.ScopeId
+                        Container = job.Container
+                        OriginatingUserId = job.OriginatingUserId
+                        Attempt = job.Attempt
+                    }
+                    : IngestionJob
+            ]
+
+            Expect.hasLength chunkJobs 3 "precondition: three chunks"
+
+            // Two replicas: nothing in process is shared between them.
+            let replica () =
+                let replicaStore = replicaStatus ()
+
+                ToolUp.RAG.IngestionObserver.create
+                    (IngestionAttemptStore.dataManager replicaStore storage (SilentLogger()))
+                    None
+                    (SilentLogger())
+
+            let first = replica ()
+            let second = replica ()
+
+            do! first.OnChunkIndexed chunkJobs[0]
+            do! second.OnChunkIndexed chunkJobs[1]
+            // The first replica re-delivers a chunk the second counted.
+            do! first.OnChunkIndexed chunkJobs[1]
+
+            let! midway = (replicaStatus ()).Get(job.Container, job.DocumentId)
+            Expect.equal midway (Some Pending) "a chunk counted on another replica is not counted twice"
+
+            do! second.OnChunkIndexed chunkJobs[2]
+
+            let! settled = (replicaStatus ()).Get(job.Container, job.DocumentId)
+            Expect.equal settled (Some Indexed) "the file completes from the persisted attempt"
         }
     ]
 

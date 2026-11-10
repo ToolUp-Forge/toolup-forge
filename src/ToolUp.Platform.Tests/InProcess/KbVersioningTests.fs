@@ -145,7 +145,6 @@ let private mkDeps
         AuditLog = (NoOpAuditLog())
         RecordEnqueue = ignore
         PublishInventory = fun () -> async.Return()
-        MarkIngestionFailed = fun _ _ _ -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
         UploadPolicy = KnowledgeUploadPolicy.permissive
@@ -688,9 +687,9 @@ let ingestionStatusTruth =
             | Failed _ -> ()
             | other -> failtestf "Failed must be terminal for the attempt; a later success moved it to %A" other
 
-            match statusCache.TryGetValue doc.Id with
-            | true, Failed _ -> ()
-            | _, other -> failtestf "the status cache must agree with the index; it holds %A" other
+            match! persistedStatus storage container doc.Id with
+            | Some(Failed _) -> ()
+            | other -> failtestf "the status read must agree with the index; it reads %A" other
         }
 
         testCaseAsync "a late callback from a superseded ingestion attempt does not advance the current one"

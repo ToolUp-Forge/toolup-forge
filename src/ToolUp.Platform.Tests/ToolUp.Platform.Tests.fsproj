@@ -65,6 +65,7 @@
         <Compile Include="Contracts\IScoredRetrievalPipelineContract.fs" />
         <Compile Include="Contracts\IConditionalDataObjectStoreContract.fs" />
         <Compile Include="Contracts\IConditionalBlobStorageContract.fs" />
+        <Compile Include="Contracts\IIngestionAttemptStoreContract.fs" />
         <Compile Include="Contracts\IDataSubjectRequestContract.fs" />
         <Compile Include="Contracts\ITenantLifecycleContract.fs" />
         <Compile Include="Contracts\ILifecycleLockContract.fs" />
@@ -112,6 +113,7 @@
         <Compile Include="InProcess\DataObjectStoreTests.fs" />
         <Compile Include="InProcess\ConfigMigrationTests.fs" />
         <Compile Include="InProcess\IngestionStatusTests.fs" />
+        <Compile Include="InProcess\IngestionAttemptStoreTests.fs" />
         <Compile Include="InProcess\IngestionRetryTests.fs" />
         <Compile Include="InProcess\IngestionEmbedderRetryTests.fs" />
         <Compile Include="Contracts\IEmbeddingProviderCallOverrideContract.fs" />

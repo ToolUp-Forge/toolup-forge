@@ -106,6 +106,10 @@ type CodemodMigration =
     /// stated `Unrestricted`, and a request with no resolved principal is
     /// served a context that grants nothing.
     | AccessContextRefuses
+    /// Ingestion is an attempt advanced through one `IIngestionAttemptStore`:
+    /// the Data Manager observer and the knowledge base's status helpers and
+    /// `MarkIngestionFailed` closure are gone.
+    | IngestionAttempt
     /// `ClientConfig` is a record of concern records (`Chrome`, `Auth`,
     /// `PublicUtility`, `Locale`, `Shell`, `Composition` beside `Slots`), its
     /// on/off unions are `FeatureMode` or `ChromeFill`, the AI assistant
@@ -150,6 +154,7 @@ module CodemodMigration =
         | CodemodMigration.SnapshotIndex ->
             "docs/migrations/1084-redesign-g-scopedsnapshotindex-under-the-three-stores.md"
         | CodemodMigration.AccessContextRefuses -> "docs/migrations/882-access-context-refuses.md"
+        | CodemodMigration.IngestionAttempt -> "docs/migrations/1085-redesign-g-ingestion-attempt-and-its-lattice.md"
         | CodemodMigration.ClientConfigByConcern ->
             "docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md"
 
@@ -183,6 +188,7 @@ module CodemodMigration =
         | CodemodMigration.AdminPageKit -> "Phase 1073"
         | CodemodMigration.SnapshotIndex -> "Phase 1084"
         | CodemodMigration.AccessContextRefuses -> "Phase 882"
+        | CodemodMigration.IngestionAttempt -> "Phase 1085"
         | CodemodMigration.ClientConfigByConcern -> "Phase 1074"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
@@ -1140,6 +1146,22 @@ module Codemod =
             @"\bEntityPrincipal\.ofPrincipal\s+(\w+)\.UserId\b"
             "AccessContext.entityPrincipal $1"
             "`EntityPrincipal.ofPrincipal ctx.UserId` → `AccessContext.entityPrincipal ctx` (the actor is a projection of the principal)"
+        // The knowledge base's terminal set is the lattice's.
+        rewrite
+            "1085-is-terminal-status"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bKnowledgeBase\.ServerIngestionStatusStream\.isTerminalStatus\b"
+            "IngestionStatus.isTerminal"
+            "`KnowledgeBase.ServerIngestionStatusStream.isTerminalStatus` → `IngestionStatus.isTerminal` (KnowledgeBase.Core, beside the type; a bare `isTerminalStatus` is reported, since a consumer may have its own)"
+        // A test double's no-op failure closure has no field to fill.
+        rewrite
+            "1085-mark-ingestion-failed-stub"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"^[ \t]*MarkIngestionFailed\s*=\s*fun\s+_\s+_\s+_\s*->\s*async\.Return\s*\(\s*\)[ \t]*$"
+            ""
+            "`MarkIngestionFailed = fun _ _ _ -> async.Return()` in a full `KnowledgeApiDeps` literal → an empty line (the field is gone; delete the line)"
         // Phase 1074 — the client's payload-free on/off unions are 877's
         // `FeatureMode`; the chrome rows' are `ChromeFill`. The labels move
         // in the `ClientConfig` nesting pass, after these.
@@ -1896,6 +1918,35 @@ module Codemod =
             CodemodFileClass.Source
             @"\b(?:SurfaceEnforcement\.SubjectItemsKey|ServiceAccountPermissionsItemsKey)\b"
             "`SurfaceEnforcement.SubjectItemsKey` and `ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey` are gone: read the subject with `AccessContext.subjectOf ctx.Items`; a service account's permissions are its principal's (`ServiceAccountPrincipalItemsKey`), adopted by scope resolution as the request's `ModulePermissions`"
+        // The Data Manager observer is the one observer over the Data
+        // Manager's attempt store.
+        review
+            "1085-data-manager-observer"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bDataManagerIngestionObserver\.create\b"
+            "`DataManagerIngestionObserver.create store channel logger` → `IngestionObserver.create (IngestionAttemptStore.dataManager store blobStorage logger) channel logger`; the post-save hook begins each file's attempt before it enqueues"
+        // The failure closure is a settle on the attempt store.
+        review
+            "1085-mark-ingestion-failed"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bMarkIngestionFailed\b"
+            "`KnowledgeApiDeps.MarkIngestionFailed` is gone: settle a document with `KnowledgeIngest.settle deps docId (Failed reason)` (it forgets the attempt, writes the index and announces), and drop the field from a full `KnowledgeApiDeps` literal"
+        // The knowledge base's status cache and its helpers are gone.
+        review
+            "1085-status-helpers"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\b(?:statusCache|beginIngestionAttempt|publishTerminalStatus|updateIndexChunkCount|isTerminalStatus)\b|\bServerIndexStorage\.(?:setStatus|updateStatus)\b"
+            "a document's status is read from storage (`persistedStatus storage container docId`, or `GetStatus`); begin an ingestion with `KnowledgeIngest.enqueue deps doc chunkPairs`, settle one with `KnowledgeIngest.settle`, and announce a terminal with `terminalAnnouncement` + `AttemptAnnouncement.publish`; the knowledge base's `isTerminalStatus` is `IngestionStatus.isTerminal`"
+        // The status stream seeds from storage.
+        review
+            "1085-status-stream"
+            CodemodMigration.IngestionAttempt
+            CodemodFileClass.Source
+            @"\bingestionStatusStream\s+\w+\s*$|\bingestionStatusStream\s*$"
+            "`ingestionStatusStream docId` → `ingestionStatusStream storage container docId`: the first element is read from storage, not a process-local cache"
         // Phase 1074 — what the codemod cannot prove or reshape.
         review
             "1074-no-active-team-landing"
@@ -3159,6 +3210,7 @@ module Codemod =
             CodemodMigration.AdminPageKit
             CodemodMigration.SnapshotIndex
             CodemodMigration.AccessContextRefuses
+            CodemodMigration.IngestionAttempt
             CodemodMigration.ClientConfigByConcern
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())

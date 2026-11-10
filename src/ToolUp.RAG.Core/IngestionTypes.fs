@@ -9,7 +9,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── Ingestion job record ─────────────────────────────────────────
 
-/// Phase 867 — one ingestion attempt of one document: which attempt a
+/// one ingestion attempt of one document: which attempt a
 /// chunk belongs to, and how many chunks that attempt enqueued.
 ///
 /// Minted by the producer at enqueue time and carried on every job and
@@ -52,7 +52,7 @@ type IngestionJob = {
     /// treat `None` as "no re-auth, fall back to historical
     /// publish-to-UploadedBy" for backwards compatibility.
     OriginatingUserId: UserId option
-    /// Phase 867 — the ingestion attempt this chunk belongs to. `None`
+    /// the ingestion attempt this chunk belongs to. `None`
     /// when the producer mints no attempt, or the job was persisted
     /// before attempts existed; observers then fall back to the document's
     /// own chunk count and cannot tell attempts apart.
@@ -77,14 +77,14 @@ type DocumentIngestionJob = {
     /// User id of the originating principal. See `IngestionJob.OriginatingUserId`
     /// for the re-auth contract. `None` for non-user enqueue paths.
     OriginatingUserId: UserId option
-    /// Phase 867 — the attempt this enqueue starts; copied onto every
+    /// the attempt this enqueue starts; copied onto every
     /// per-chunk `IngestionJob` and retry payload. See `IngestionJob.Attempt`.
     Attempt: IngestionAttempt option
 }
 
 // ─── Ingestion queue ──────────────────────────────────────────────
 
-/// Phase 303 — behaviour when a `DocumentIngestionJob` is offered to a
+/// behaviour when a `DocumentIngestionJob` is offered to a
 /// full ingestion queue. Expressed as data (portability rule 3 — no
 /// callbacks) so a future distributed ingestion companion can map the
 /// same choice onto its native backpressure mechanism.
@@ -110,7 +110,7 @@ type IngestionOverflowPolicy =
     /// a screaming error over a quiet drop.
     | Refuse
 
-// ─── Phase 509 — durable ingestion-queue seam ─────────────────────
+// ─── durable ingestion-queue seam ─────────────────────
 
 /// One document job handed to a drainer under a lease. The lease is the
 /// unit of at-least-once delivery: the drainer `Ack`s it when the
@@ -195,7 +195,7 @@ type IIngestionQueue =
     /// Await the next job. `None` only when `ct` is cancelled.
     abstract Dequeue: ct: CancellationToken -> Async<IngestionLease option>
 
-    /// Phase 945 — wait until a job MAY be available, without taking it.
+    /// wait until a job MAY be available, without taking it.
     /// `true` when work may be there; `false` when `ct` is cancelled (or
     /// the queue will never produce another job). A `true` is a hint, not
     /// a reservation: another drainer can take the job first, so the
@@ -204,7 +204,7 @@ type IIngestionQueue =
     /// rather than holding the permit through an idle wait.
     abstract WaitForWork: ct: CancellationToken -> Async<bool>
 
-    /// Phase 945 — take the head job if there is one, without waiting.
+    /// take the head job if there is one, without waiting.
     /// `None` when the queue is empty.
     abstract TryDequeue: unit -> Async<IngestionLease option>
 
@@ -340,7 +340,7 @@ type InMemoryIngestionQueueStore(?maxDeliveryAttempts: int, ?name: string) =
 /// telemetry under `/health/rag` so admins can see when backpressure
 /// is active before users notice.
 ///
-/// Phase 509 — an optional `store` swaps the process-local channel for a
+/// an optional `store` swaps the process-local channel for a
 /// durable backing (`IIngestionQueueStore`) WITHOUT changing this type's
 /// surface, so every existing call site (`Enqueue` / `Count` / `Capacity`
 /// / the drop counters) keeps working and a deployment that composes no
@@ -358,7 +358,7 @@ type IngestionQueue
     let cap = defaultArg capacity 5000
     let policy = defaultArg overflowPolicy DropWrite
 
-    // Phase 509 — how long a claimed job may go unacknowledged before
+    // how long a claimed job may go unacknowledged before
     // another drainer may reclaim it. Comfortably longer than a normal
     // document (batched embed + N index calls); short enough that a
     // crashed replica's work is picked up in a bounded window.
@@ -370,7 +370,7 @@ type IngestionQueue
     let claimPollInterval =
         defaultArg claimPollInterval (TimeSpan.FromMilliseconds 100.0)
 
-    // Phase 303 — drop observability. `RecordDrop` is called by the
+    // drop observability. `RecordDrop` is called by the
     // enqueue-site (the post-save hook) each time a document is permanently
     // dropped after the bounded retry, so the counters reflect *final*
     // drops, not transient full-then-cleared enqueues. `droppedCumulative`
@@ -404,12 +404,12 @@ type IngestionQueue
 
     let mutable depth = 0
 
-    // Phase 945 — `1` when the durable arm's last claim found a job, so
+    // `1` when the durable arm's last claim found a job, so
     // `WaitForWork` answers at once while work is flowing and paces its
     // probe at `claimPollInterval` once the store has come up empty.
     let mutable lastClaimFound = 0
 
-    // Phase 509 — the enqueue paths, let-bound so the class members and
+    // the enqueue paths, let-bound so the class members and
     // the `IIngestionQueue` implementation below are the SAME code rather
     // than two members that could drift.
     let enqueueAsync (job: DocumentIngestionJob) : Async<bool> = async {
@@ -486,7 +486,7 @@ type IngestionQueue
     member _.Reader = channel.Reader
 
     /// `true` when a durable store backs this queue. Drives the
-    /// multi-replica validator lift (Phase 509.D).
+    /// multi-replica validator lift.
     member _.IsDurable = store.IsSome
 
     /// The durable store's name, or `"in-memory-channel"` for the
@@ -496,29 +496,28 @@ type IngestionQueue
         | Some s -> s.Name
         | None -> "in-memory-channel"
 
-    /// Configured overflow policy (Phase 303). Read by the post-save hook
+    /// Configured overflow policy. Read by the post-save hook
     /// to decide between drop-with-observability (`DropWrite` / `Refuse`)
     /// and never-drop blocking (`Block`).
     member _.Policy = policy
 
-    /// Await queue space and enqueue (Phase 303 — `Block` policy). Uses the
+    /// Await queue space and enqueue (`Block` policy). Uses the
     /// channel's blocking `WriteAsync`, so a full queue suspends the caller
     /// until the drainer frees a slot rather than returning `false`. Only
     /// called on the fire-and-forget post-save path, so the wait never
     /// delays an upload's HTTP response.
     member _.EnqueueBlocking(job: DocumentIngestionJob) : Async<unit> = enqueueBlocking job
 
-    /// Record one permanently-dropped document (Phase 303). Increments the
+    /// Record one permanently-dropped document. Increments the
     /// cumulative total and stamps the rolling 60s window.
     member _.RecordDrop() =
         System.Threading.Interlocked.Increment(&droppedCumulative) |> ignore
         dropWindow.Enqueue(DateTimeOffset.UtcNow)
 
-    /// Process-lifetime count of documents dropped on a full queue
-    /// (Phase 303).
+    /// Process-lifetime count of documents dropped on a full queue.
     member _.Dropped = System.Threading.Interlocked.Read(&droppedCumulative)
 
-    /// Documents dropped within the trailing 60 seconds (Phase 303).
+    /// Documents dropped within the trailing 60 seconds.
     /// Evicts stale window entries on read, so it is a live saturation
     /// gauge for `/health/rag`.
     member _.DroppedLast60s =
@@ -532,7 +531,7 @@ type IngestionQueue
     member _.RecordDequeue() =
         System.Threading.Interlocked.Decrement(&depth) |> ignore
 
-    // ─── Phase 509 — the drainer-facing seam ──────────────────────
+    // ─── the drainer-facing seam ──────────────────────
     //
     // The in-memory arm reproduces the historical loop exactly: read one
     // job off the channel, decrement the depth gauge, hand it to the
@@ -573,7 +572,7 @@ type IngestionQueue
                     }
         }
 
-        // Phase 945 — the in-memory arm waits on the channel itself, so a
+        // the in-memory arm waits on the channel itself, so a
         // waiter wakes the moment a job is written and takes nothing. The
         // durable arm has no blocking wait or peek in the store seam, so it
         // probes the store's depth gauge at `claimPollInterval` — the same
@@ -679,12 +678,14 @@ type IngestionQueue
 // ─── Ingestion status observer ────────────────────────────────────
 
 /// Optional observer hook invoked by `IngestionBackgroundService` after each
-/// chunk's pipeline call completes. Modules that ingested the document
-/// (e.g. `KnowledgeBase`) implement this to surface live progress and to
-/// persist terminal transitions back to their own status index.
+/// chunk's pipeline call completes. The SDK's one implementation is
+/// `ToolUp.RAG.IngestionObserver.create`, which advances the job's attempt in
+/// an `IIngestionAttemptStore` (the knowledge base's, or the Data Manager's)
+/// and announces the transition the store reports as terminal; a module with
+/// its own status implements an attempt store rather than an observer.
 ///
-/// Phase 9c portability: identity is by value (`IngestionJob.DocumentId` is
-/// `string`), every method is `Async<unit>`, no callback shape leaks framework
+/// Portability: identity is by value (`IngestionJob.DocumentId` is `string`),
+/// every method is `Async<unit>`, no callback shape leaks framework
 /// semantics, and observers receive all relevant state via the job parameter
 /// rather than assuming in-memory state across invocations.
 type IIngestionStatusObserver =
@@ -693,7 +694,7 @@ type IIngestionStatusObserver =
     /// Fired when a chunk's pipeline call threw. `error` is the exception message.
     abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
 
-// ─── Retry / dead-letter policy (Phase 14t) ───────────────────────
+// ─── Retry / dead-letter policy ───────────────────────
 
 /// Retry / dead-letter policy applied to transient embedder failures
 /// during ingestion. Expressed as data (portability rule 3 — no
@@ -763,7 +764,7 @@ module IngestionRetryPolicy =
             TimeSpan.FromMilliseconds(baseMs * policy.JitterFactor * clampedSample)
 
 /// Classification of a per-chunk index failure, deciding whether the
-/// chunk is retried or dead-lettered immediately (Phase 14t). Derived
+/// chunk is retried or dead-lettered immediately. Derived
 /// from the embedder exception by `IngestionService.classifyIndexFailure`.
 type EmbedFailureClass =
     /// Non-retryable — bad credentials (401 / 403) or a malformed
@@ -778,7 +779,7 @@ type EmbedFailureClass =
     | Transient of retryAfter: TimeSpan option
 
 /// Event-type names for the ingestion retry / dead-letter audit family
-/// (Phase 14t). Emitted under `SourceModule = "ToolUp.RAG"` alongside
+///. Emitted under `SourceModule = "ToolUp.RAG"` alongside
 /// the existing `KnowledgeChunkIndexed` / `KnowledgeChunkFailed` events.
 module IngestionEventTypes =
     /// The embedding provider rejected the call in a non-retryable way
@@ -811,7 +812,7 @@ type IngestionRetryPayload = {
     ScopeId: string
     Container: string
     OriginatingUserId: UserId option
-    /// Phase 867 — the attempt the retried chunk belongs to. Absent from a
+    /// the attempt the retried chunk belongs to. Absent from a
     /// payload persisted before 867, which reads back as `None`.
     Attempt: IngestionAttempt option
 }

@@ -315,6 +315,7 @@ let internal makeVectorisationHook
     (maxDocumentBytes: int option)
     (eventStore: IEventStore)
     (ingestionStatusStore: IIngestionStatusStore)
+    (ingestionAttempts: IIngestionAttemptStore)
     (overflowPolicy: IngestionOverflowPolicy)
     (auditLog: IAuditLog)
     (notifications: INotificationChannel)
@@ -336,11 +337,21 @@ let internal makeVectorisationHook
             logger.Warn(sprintf "[RAGCompose] ingestion-status write failed for %s: %s" documentId ex.Message)
     }
 
-    let setPending (scopeId: string) (documentId: string) (totalChunks: int) = async {
+    // Begin the file's attempt BEFORE the enqueue, so the first chunk
+    // callback finds it (and its total) persisted. Best-effort like the
+    // status writes: an outage leaves the badge where it was.
+    let beginAttempt (scopeId: string) (documentId: string) (enqueuedChunks: int) = async {
+        let attempt: IngestionAttempt = {
+            AttemptId = System.Guid.NewGuid().ToString("N")
+            EnqueuedChunks = enqueuedChunks
+        }
+
         try
-            do! ingestionStatusStore.SetPending(scopeId, documentId, totalChunks)
+            do! ingestionAttempts.Begin(scopeId, documentId, attempt.AttemptId, enqueuedChunks)
         with ex ->
-            logger.Warn(sprintf "[RAGCompose] ingestion-status pending write failed for %s: %s" documentId ex.Message)
+            logger.Warn(sprintf "[RAGCompose] ingestion attempt write failed for %s: %s" documentId ex.Message)
+
+        return attempt
     }
 
     let writeEvent (scopeId: string) (eventName: string) (payload: obj) = async {
@@ -502,6 +513,9 @@ let internal makeVectorisationHook
                     do! setStatus scope.Container entry.FileName (FileIngestionStatus.Failed reason)
                 else
 
+                    let chunkCount = List.length chunkPairs
+                    let! attempt = beginAttempt scope.Container entry.FileName chunkCount
+
                     let job: DocumentIngestionJob = {
                         DocumentId = entry.FileName
                         DocumentName = entry.FileName
@@ -523,9 +537,7 @@ let internal makeVectorisationHook
                                 None
                             else
                                 Some(UserId createdBy)
-                        // The Data Manager status store tracks a file, not
-                        // an attempt.
-                        Attempt = None
+                        Attempt = Some attempt
                     }
 
                     // Bounded retry: a full queue is often just the drainer
@@ -551,8 +563,6 @@ let internal makeVectorisationHook
 
                     let scopeKey = VectorScope.key vectorScope
 
-                    let chunkCount = List.length chunkPairs
-
                     match overflowPolicy with
                     | Block ->
                         // Never drop. Await queue space instead of
@@ -561,18 +571,12 @@ let internal makeVectorisationHook
                         // load but never loses a document.
                         do! queue.EnqueueBlocking job
                         telemetry.RecordEnqueue(queue.Count, queue.Capacity, true)
-                        do! setPending scope.Container entry.FileName chunkCount
                     | DropWrite
                     | Refuse ->
                         let! accepted = tryEnqueue enqueueRetryDelaysMs
                         telemetry.RecordEnqueue(queue.Count, queue.Capacity, accepted)
 
-                        if accepted then
-                            // Mark the file `Pending` with its chunk total so the
-                            // ingestion observer can flip it to `Indexed` once the
-                            // last chunk lands.
-                            do! setPending scope.Container entry.FileName chunkCount
-                        else
+                        if not accepted then
                             // Retries exhausted — permanent data loss for this
                             // document's searchability. Log at Error so it trips
                             // error-rate alerting, AND write an event so the drop
@@ -616,6 +620,7 @@ let internal makeVectorisationHook
                                     job.OriginatingUserId
 
                             do! setStatus scope.Container entry.FileName (FileIngestionStatus.Failed reason)
+                            do! ingestionAttempts.Forget(scope.Container, entry.FileName)
 
                             // Compliance-grade fail-loud. Under
                             // `Refuse`, sustained saturation (≥ threshold drops in
@@ -1098,7 +1103,7 @@ let private minScoreSpaceValidator
         }
     }
 
-// ─── Phase 869 — flush the composition's own stores at a graceful stop ──
+// ─── flush the composition's own stores at a graceful stop ──
 //
 /// An in-process retrieval store a composition CONSTRUCTS, and so owns.
 [<RequireQualifiedAccess>]
@@ -1234,8 +1239,11 @@ type internal RetrievalStoreFlushService(owned: OwnedStoreLifetime list, logger:
 [<NoEquality; NoComparison>]
 type internal RagRuntime = {
     /// The per-file ingestion status: written by the post-save hook and the
-    /// Data Manager observer, read by the file list.
+    /// Data Manager attempts, read by the file list.
     IngestionStatusStore: IIngestionStatusStore
+    /// The Data Manager's attempts over `IngestionStatusStore`: begun by the
+    /// post-save hook, advanced by its observer.
+    IngestionAttempts: IIngestionAttemptStore
     /// The tracer the pipeline writes through (the off-path queue when composed).
     Tracer: IRetrievalTracer
     /// The off-path trace queue, when traces are not written inline.
@@ -1294,7 +1302,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
 
     // Derive the tool-aware framing summary once, from the
     // deployment's aggregated module tool list (tools land here via
-    // `withAITools`). Phase 538 — the derivation reads each tool's typed
+    // `withAITools`). the derivation reads each tool's typed
     // `IsLiveInterface` declaration (or its `ClientResident` location),
     // never its name. Drives both the framing companion below and the
     // retrieval builder's empty-result message. A deployment with no
@@ -1415,7 +1423,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
 
     // Framing preamble: explains to the model what the KB is, that retrieval
     // has already run for the current turn, and how to behave when nothing was
-    // found. The `GroundingMode` further shapes the directive. Phase 14r — the
+    // found. The `GroundingMode` further shapes the directive. the
     // tool-aware resolver appends the live-interface companion under
     // `Preferred` when the deployment has such tools, so live-screen questions
     // defer to the inspection tool rather than a KB-miss refusal.
@@ -1641,8 +1649,17 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                 | Some dos -> IngestionStatusStore.create dos (Some ragLogger)
                 | None -> IngestionStatusStore.createInMemory ()
 
+            // The Data Manager's attempt records live in the app's blob
+            // storage, so a file's progress survives a replica switch.
+            let ingestionAttempts =
+                IngestionAttemptStore.dataManager
+                    ingestionStatusStore
+                    (ServiceComposition.tryService<IBlobStorage> sp
+                     |> Option.defaultValue blobStorageForRag)
+                    ragLogger
+
             let dataManagerIngestionObserver =
-                ToolUp.RAG.DataManagerIngestionObserver.create ingestionStatusStore (Some notifications) ragLogger
+                ToolUp.RAG.IngestionObserver.create ingestionAttempts (Some notifications) ragLogger
 
             // The registered tracer if any; default to the event-store tracer
             // so retrieval traces are persisted out-of-the-box.
@@ -1719,6 +1736,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
 
             {
                 IngestionStatusStore = ingestionStatusStore
+                IngestionAttempts = ingestionAttempts
                 Tracer = retrievalTracer
                 BackgroundTracer = backgroundTracer
                 Pipeline = pipeline
@@ -1883,6 +1901,7 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                                 options.MaxDocumentBytes
                                 eventStore
                                 (RagRuntime.resolve sp).IngestionStatusStore
+                                (RagRuntime.resolve sp).IngestionAttempts
                                 options.OverflowPolicy
                                 substrate.AuditLog
                                 notifications
@@ -2585,7 +2604,7 @@ module RagOptions =
     /// Containers are named by the consumer. Empty (default) ⇒ no sweep
     /// and no hosted service (GP 11 / GP 13).
     ///
-    /// **Phase 723 — prefer `withScopeEnumerator` for anything but a
+    /// **prefer `withScopeEnumerator` for anything but a
     /// fixed scope set.** A hand-written list is the shape that made the
     /// sweep least likely to be wired exactly where it mattered most: a
     /// deployment large enough to need restart recovery is the one whose
@@ -2939,7 +2958,7 @@ module RagOptions =
             VacuumSchedule = Some cron
     }
 
-    // ─── Phase 894 — per-turn retrieval budgets ─────────────────────
+    // ─── per-turn retrieval budgets ─────────────────────
 
     /// Replace the whole per-turn budget record. Default
     /// `RetrievalBudgets.defaults`.

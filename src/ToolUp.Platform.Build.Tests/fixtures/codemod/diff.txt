@@ -422,6 +422,14 @@
 @@ L73 [882-entity-principal]
 -let actor (access: AccessContext) = EntityPrincipal.ofPrincipal access.UserId
 +let actor (access: AccessContext) = AccessContext.entityPrincipal access
+--- a/src/Server/Ingestion.fs
++++ b/src/Server/Ingestion.fs
+@@ L3 [1085-is-terminal-status]
+-let terminal status = KnowledgeBase.ServerIngestionStatusStream.isTerminalStatus status
++let terminal status = IngestionStatus.isTerminal status
+@@ L7 [1085-mark-ingestion-failed-stub]
+-    MarkIngestionFailed = fun _ _ _ -> async.Return()
++
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -534,4 +542,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 144 rewrite(s) across 20 file(s) pending.
+Codemod: 146 rewrite(s) across 21 file(s) pending.

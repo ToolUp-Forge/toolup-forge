@@ -132,6 +132,9 @@
              FileManagement can join status onto the file-list read; RAG owns
              the writes. -->
         <Compile Include="..\ToolUp.Platform.Server\Server\IngestionStatusStore.fs" />
+        <!-- The ingestion attempt both observers advance, and the Data
+             Manager's store of it over IIngestionStatusStore. -->
+        <Compile Include="..\ToolUp.Platform.Server\Server\IIngestionAttemptStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\IEntityStore.fs" />
         <!-- Write-ahead-intent outbox coupling entity saves to
              event publication; after the store surface it wraps, before the

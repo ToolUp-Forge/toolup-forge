@@ -1,4 +1,4 @@
-Codemod: 127 site(s) in 22 file(s) need human review (not rewritten):
+Codemod: 131 site(s) in 23 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] Auth.DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -188,6 +188,15 @@ Codemod: 127 site(s) in 22 file(s) need human review (not rewritten):
       -> Phase 882: `TeamPolicyViewer.resolve` takes `services access teamId` and `ConversationVisibility.resolveViewer` takes `ctx teamId`: drop the user-id argument, the viewer's id is the principal's (`AccessContext.callerId`)
     L77 [882-retired-item-constant] let subjectKey = SurfaceEnforcement.SubjectItemsKey
       -> Phase 882: `SurfaceEnforcement.SubjectItemsKey` and `ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey` are gone: read the subject with `AccessContext.subjectOf ctx.Items`; a service account's permissions are its principal's (`ServiceAccountPrincipalItemsKey`), adopted by scope resolution as the request's `ModulePermissions`
+  src/Server/Ingestion.fs
+    L11 [1085-data-manager-observer] let observer = ToolUp.RAG.DataManagerIngestionObserver.create store None logger
+      -> Phase 1085: `DataManagerIngestionObserver.create store channel logger` → `IngestionObserver.create (IngestionAttemptStore.dataManager store blobStorage logger) channel logger`; the post-save hook begins each file's attempt before it enqueues
+    L13 [1085-mark-ingestion-failed] let fail = deps.MarkIngestionFailed docId fileName reason
+      -> Phase 1085: `KnowledgeApiDeps.MarkIngestionFailed` is gone: settle a document with `KnowledgeIngest.settle deps docId (Failed reason)` (it forgets the attempt, writes the index and announces), and drop the field from a full `KnowledgeApiDeps` literal
+    L15 [1085-status-helpers] let cached = statusCache.TryGetValue docId
+      -> Phase 1085: a document's status is read from storage (`persistedStatus storage container docId`, or `GetStatus`); begin an ingestion with `KnowledgeIngest.enqueue deps doc chunkPairs`, settle one with `KnowledgeIngest.settle`, and announce a terminal with `terminalAnnouncement` + `AttemptAnnouncement.publish`; the knowledge base's `isTerminalStatus` is `IngestionStatus.isTerminal`
+    L17 [1085-status-stream] let stream = ingestionStatusStream docId
+      -> Phase 1085: `ingestionStatusStream docId` → `ingestionStatusStream storage container docId`: the first element is read from storage, not a process-local cache
   src/Server/Jobs.fs
     L8 [1066-schedule-call] match! scheduler.Schedule registration with
       -> Phase 1066: `Schedule` answers `Ok(Scheduled jobId)` for a job it created and `Ok(Coalesced jobId)` for one an idempotency key recovered: `Ok _` still compiles; a site that reads the id matches both (`Ok(Scheduled jobId | Coalesced jobId)`) or calls `ScheduleOutcome.jobId`, and a site that fires what it schedules fires only `Scheduled`, so a replayed request runs once
@@ -288,6 +297,7 @@ Codemod: 127 site(s) in 22 file(s) need human review (not rewritten):
     Phase 1074 — docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1079 — docs/migrations/1079-redesign-f-the-connector-kernel.md
+    Phase 1085 — docs/migrations/1085-redesign-g-ingestion-attempt-and-its-lattice.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md

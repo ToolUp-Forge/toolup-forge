@@ -1,0 +1,17 @@
+module Consumer.Ingestion
+
+let terminal status = KnowledgeBase.ServerIngestionStatusStream.isTerminalStatus status
+
+let deps = {
+    Storage = storage
+    MarkIngestionFailed = fun _ _ _ -> async.Return()
+    Logger = logger
+}
+
+let observer = ToolUp.RAG.DataManagerIngestionObserver.create store None logger
+
+let fail = deps.MarkIngestionFailed docId fileName reason
+
+let cached = statusCache.TryGetValue docId
+
+let stream = ingestionStatusStream docId
