@@ -416,7 +416,8 @@ module ShellSlots =
 
     /// Phase 573 — the administration landing leads the admin partition,
     /// and exists only while the Administration area is on.
-    let private adminHome = chrome _.AdminArea AdminHome.create
+    let private adminHome =
+        chrome _.AdminArea (fun () -> builtIn AdminHome.builtIn None)
 
     let private datadogReadback =
         chrome _.DatadogReadback (fun cfg -> builtIn (DatadogReadbackUI.builtIn cfg) None)

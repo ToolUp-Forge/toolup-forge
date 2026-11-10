@@ -164,8 +164,7 @@ let private renderNoTilesForSubject (msgs: AdminHomeMessages) =
 /// comes from the registry, and the two together choose between the
 /// grid and the two empty states (`AdminTiles.landingState`).
 [<ReactComponent>]
-let private TileGrid (data: Map<string, string>) (onOpen: string -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).AdminHome
+let private TileGrid (msgs: AdminHomeMessages) (data: Map<string, string>) (onOpen: string -> unit) =
     let visibleTiles = React.useContext AdminTileContext.Context
     let contributed = AdminTileRegistry.tiles () |> List.length
     let ctx: HomeWidgetContext = { Data = data }
@@ -179,13 +178,8 @@ let private TileGrid (data: Map<string, string>) (onOpen: string -> unit) =
             prop.children (tiles |> List.map (renderTile msgs ctx onOpen))
         ]
 
-/// Phase 751 — the page header as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render, so a hook there would join the shell's
-/// hook order and break the moment the active module changed.
-[<ReactComponent>]
-let private AdminHomeHeader (onRefresh: unit -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).AdminHome
+/// The page header.
+let private header (msgs: AdminHomeMessages) (onRefresh: unit -> unit) =
 
     Html.div [
         prop.className "flex items-center justify-between mb-4"
@@ -204,18 +198,22 @@ let private AdminHomeHeader (onRefresh: unit -> unit) =
         ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    Html.div [
-        prop.className "p-4"
-        prop.children [
-            AdminHomeHeader(fun () -> dispatch Refresh)
-            TileGrid model.Data (OpenModule >> dispatch)
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let msgs = ctx.Messages.AdminHome
+
+    PageContent.FullWidth(
+        Html.div [
+            prop.className "p-4"
+            prop.children [
+                header msgs (fun () -> ctx.Dispatch Refresh)
+                TileGrid msgs model.Data (OpenModule >> ctx.Dispatch)
+            ]
         ]
-    ]
+    )
 
 // ─── Module creation ─────────────────────────────────────────────
 
-/// Create the administration-landing module as an `ErasedModule`. The
+/// The administration-landing module (`ShellSlots.builtIn` builds it). The
 /// shell's `prepareModules` injects it only under
 /// `ShellChrome.AdminArea = ChromeFill.On()` — under the default inline groups
 /// there are no areas to land between, so the composition is
@@ -229,20 +227,18 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 /// caller who has an administration area to enter can see its landing,
 /// and a plain Member — who has no admin modules and therefore no
 /// switcher — never does.
-let create () : ErasedModule =
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
         Name = "Administration"
         Icon = ToolUp.Platform.Icons.settings
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    // Phase 611 — declared placement, replacing the `isLandingId` id check
-    // `buildSections` used to carry: this landing shares the leading
-    // always-visible section with the product one, and says so itself.
-    |> ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withArea ModuleArea.Administration
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = None
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = ModuleArea.Administration
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
+}
