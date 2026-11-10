@@ -6,7 +6,7 @@ module ToolUp.AI.Client.Tests.SidebarAreaTests
 // ─── Two-surface Admin Area (Phase 567) ─────────────────────────────
 //
 // Pins `ClientConfig.effectiveArea` — the derivation behind the
-// `Chrome.AdminArea = ChromeFill.On()` sidebar split in `SDK.Client.fs` — and
+// `ShellChrome.AdminArea = ChromeFill.On()` sidebar split in `SDK.Client.fs` — and
 // the switcher-gating / partition semantics the shell layers on top.
 //
 // Design: a module's *effective* area is `Administration` if it declares

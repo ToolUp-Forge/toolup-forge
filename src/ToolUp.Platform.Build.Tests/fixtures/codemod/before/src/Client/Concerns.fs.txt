@@ -21,6 +21,7 @@ let config =
             DatadogReadback = NoDatadogReadback
             Locale = TeamDefault "en"
             ModuleFilter = None
+            Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
             NoActiveTeamLandingModuleId = Some "welcome"
             Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping None)
     }

@@ -38,7 +38,7 @@ let Tag = "clerk"
 let handler: string * AuthUIHandler = Tag, clerkHandler
 
 /// Phase 494 — typed smart constructor for the vendor-neutral
-/// `ClientConfig.Auth.AuthUI` case. Builds
+/// `AuthConfig.AuthUI` case. Builds
 /// `ProviderAuthUI ("clerk", box cfg)` so the consumer never boxes by
 /// hand and no vendor-named SDK case appears in its config:
 ///

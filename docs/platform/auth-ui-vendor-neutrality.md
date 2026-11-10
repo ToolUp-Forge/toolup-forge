@@ -65,7 +65,7 @@ open ToolUp.AuthProviders
 
 { ClientConfig.defaults with
     Auth.AuthUI = ClerkRegister.authUI { PublishableKey = key }
-    Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ ClerkRegister.handler ] } }
+    Composition.Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ ClerkRegister.handler ] } }
 ```
 
 The type safety lives at the companion seam (the constructor and the handler agree on the concrete

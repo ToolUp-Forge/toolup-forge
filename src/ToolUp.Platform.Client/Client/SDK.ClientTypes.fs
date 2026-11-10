@@ -210,7 +210,7 @@ type ModuleDefinition = {
 // ─── Navigation area (Phase 567) ──────────────────────────────────
 
 /// The sidebar navigation area a module belongs to. With
-/// `ClientConfig.Chrome.AdminArea` on, the sidebar renders one area at a
+/// `ShellChrome.AdminArea` on, the sidebar renders one area at a
 /// time (product modules vs admin modules) with a switcher; with it off
 /// (the default) the area is ignored (inline groups). A module's
 /// *effective* area is `Administration` if it either declares
@@ -397,7 +397,7 @@ type ErasedModule = {
     NavRole: NavRole option
     /// Phase 567 — declared navigation area. Default `Product`; set to
     /// `Administration` via `ClientModule.withArea` to place a consumer
-    /// module in the admin area when `Chrome.AdminArea` is on. SDK
+    /// module in the admin area when `ShellChrome.AdminArea` is on. SDK
     /// admin built-ins leave this `Product` and are derived into the admin
     /// area from their group (`ClientConfig.effectiveArea`).
     Area: ModuleArea
@@ -811,7 +811,7 @@ type ToastCentreMode =
 // ─── Auth UI configuration ────────────────────────────────────────
 
 /// Configuration for the OIDC Authorization Code + PKCE flow, used
-/// when `ClientConfig.Auth.AuthUI = OidcAuthUI _`. The OidcClient companion
+/// when `AuthConfig.AuthUI = OidcAuthUI _`. The OidcClient companion
 /// reads this to orchestrate sign-in against an OIDC-compliant issuer.
 /// Which of the two tokens an OIDC sign-in returns is stored and sent
 /// as the session's HTTP `Authorization: Bearer` credential.
@@ -1093,7 +1093,7 @@ module OidcUIConfig =
         OidcRefreshPolicy.resolve cfg.RefreshPolicy
 
 /// Configuration for the Clerk sign-in flow, used when
-/// `ClientConfig.Auth.AuthUI = ProviderAuthUI ("clerk", box clerkUIConfig)`.
+/// `AuthConfig.AuthUI = ProviderAuthUI ("clerk", box clerkUIConfig)`.
 /// The ClerkUI companion
 /// reads this to configure the Clerk React provider; its
 /// `ClerkRegister.authUI` smart constructor builds the neutral case
@@ -1110,7 +1110,7 @@ type ClerkUIConfig = {
 type CustomAuthUI = { Wrap: ReactElement -> ReactElement }
 
 /// Phase 443 — configuration for the WebAuthn / passkey sign-in flow,
-/// used when `ClientConfig.Auth.AuthUI = PasskeyAuthUI _`. The PasskeyClient
+/// used when `AuthConfig.AuthUI = PasskeyAuthUI _`. The PasskeyClient
 /// companion reads this to orchestrate the `navigator.credentials`
 /// ceremonies against the server-side passkey companion's endpoints.
 /// The relying-party id + origin allow-list live server-side (the
@@ -1251,7 +1251,7 @@ type IHomeWidgetContributor =
 //
 // Default-off by absence (GP 13): no contributor and no tile-
 // contributing built-in ⇒ the landing surface renders its designed
-// empty state, and with the default `Chrome.AdminArea = ChromeFill.Off`
+// empty state, and with the default `ShellChrome.AdminArea = ChromeFill.Off`
 // there is no landing surface at all.
 
 /// One module-contributed administration-landing tile. `Widget` is the
@@ -1404,11 +1404,11 @@ module ClientRequestSeam =
 /// `KnowledgeBaseView.narrativeCommitHandler : NarrativeCommitHandler`,
 /// etc.) that consumers add to the matching field at compose time.
 /// No module-load side effects; missing handlers for a declared
-/// `ClientConfig.Auth.AuthUI` mode or `DataSource.Kind` fail loud at
+/// `AuthConfig.AuthUI` mode or `DataSource.Kind` fail loud at
 /// `Client.run` naming the missing import.
 type ClientHandlerRegistry = {
     /// Sign-in UI handlers keyed by `AuthUIMode` tag. The SDK looks
-    /// up the handler matching `ClientConfig.Auth.AuthUI` and wraps the
+    /// up the handler matching `AuthConfig.AuthUI` and wraps the
     /// shell. Default: empty (compatible with `AuthUI = NoAuthUI`).
     AuthUIHandlers: (string * AuthUIHandler) list
 
@@ -1434,7 +1434,7 @@ type ClientHandlerRegistry = {
     /// owned by the module filling such a slot replaces the slot's.
     /// Default: empty —
     /// with no contributor the landing renders its designed empty
-    /// state, and with `Chrome.AdminArea` off there is no
+    /// state, and with `ShellChrome.AdminArea` off there is no
     /// landing surface at all (GP 13).
     AdminTileContributors: IAdminTileContributor list
 
@@ -1463,7 +1463,7 @@ type ClientHandlerRegistry = {
 
 module ClientHandlerRegistry =
     /// No companion handlers wired in. Compatible with apps that
-    /// declare `ClientConfig.Auth.AuthUI = NoAuthUI`, don't use the
+    /// declare `AuthConfig.AuthUI = NoAuthUI`, don't use the
     /// data-ingestion admin, and don't ship a Knowledge Base.
     let empty: ClientHandlerRegistry = {
         AuthUIHandlers = []
@@ -2390,7 +2390,7 @@ module ClientConfig =
     /// Administration`) OR sits in an admin sidebar group
     /// (`SidebarVisibility.isAdminSidebarGroup`, so SDK admin built-ins
     /// land in the admin area with no registration change, GP 9);
-    /// otherwise `Product`. Consulted only when `Chrome.AdminArea` is on.
+    /// otherwise `Product`. Consulted only when `ShellChrome.AdminArea` is on.
     let effectiveArea (area: ModuleArea) (group: string option) : ModuleArea =
         match area with
         | Administration -> Administration
@@ -2980,7 +2980,7 @@ module ClientModule =
     }
 
     /// Phase 567 — place this module in the given navigation `area`. Only
-    /// consulted when `ClientConfig.Chrome.AdminArea` is on; the
+    /// consulted when `ShellChrome.AdminArea` is on; the
     /// default `Product` (and the default inline groups) leaves
     /// behaviour unchanged. SDK admin built-ins do NOT call this — they are
     /// derived into `Administration` from their sidebar group

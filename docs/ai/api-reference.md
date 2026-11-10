@@ -8,19 +8,19 @@ Shared types — referenced by both `Server` and `Client`. Source ships under `f
 
 ### `AISlotFills`
 
-```fsharp
-// ToolUp.AI.Client — the AI companion's three shell slots (Phase 1074).
-type AISlotFills = {
-    AIAssistant: SlotFill<AIAssistantClientBranding>
-    AISettings: SlotFill<ModuleLabel>
-    PlatformAIKeys: SlotFill<ModuleLabel>
-}
-// AISlotFills.defaults / AISlotFills.empty / AISlotFills.configured branding
+The AI companion's three shell slots (`ToolUp.AI.Client`, Phase 1074): `AIAssistant:
+SlotFill<AIAssistantClientBranding>` (a `Name`, a typed `Icon: ReactElement`, `ShowSidePanel`),
+`AISettings: SlotFill<ModuleLabel>` and `PlatformAIKeys: SlotFill<ModuleLabel>`.
+`AISlotFills.defaults` is the built-in family, `AISlotFills.empty` none of it, and
+`AISlotFills.configured branding` the family with the assistant rebranded.
 
-and AIAssistantClientBranding = {
-    Name: string
-    Icon: ReactElement
-    ShowSidePanel: bool
+```fsharp
+open ToolUp.Platform
+open ToolUp.AI
+
+let fills: AISlotFills = {
+    AISlotFills.defaults with
+        PlatformAIKeys = SlotFill.Empty
 }
 ```
 

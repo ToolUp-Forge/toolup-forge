@@ -39,7 +39,7 @@ let Tag = "google-identity"
 /// Identity Services sign-in surface.
 let handler: string * AuthUIHandler = Tag, googleIdentityHandler
 
-/// Typed smart constructor for the vendor-neutral `ClientConfig.Auth.AuthUI`
+/// Typed smart constructor for the vendor-neutral `AuthConfig.AuthUI`
 /// case:
 ///
 ///   AuthUI = GoogleIdentityRegister.authUI (GoogleIdentityUIConfig.create clientId)

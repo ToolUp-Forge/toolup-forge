@@ -80,8 +80,8 @@ The `config` parameter is the deployment's `ClientConfig` — the component bran
 The `<AdSlot>` component wraps its render in `ConsentGate` — see the [`IConsentProvider`](../../src/ToolUp.Platform.Client/Client/Consent/IConsentProvider.fs) interface header for the substrate shape and the [consent-provider migration](../migrations/59-iconsentprovider.md) for the consumer migration walk-through. The gate reads the deployment's `IConsentProvider`:
 
 ```fsharp
-type ClientConfig = {
-    // ...
+type PublicUtilityConfig = {
+    // ...  (ClientConfig.PublicUtility)
     AdPanel: AdPanelMode
     ConsentProvider: ConsentProviderMode
 }

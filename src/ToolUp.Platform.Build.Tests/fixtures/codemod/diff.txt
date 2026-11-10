@@ -97,37 +97,40 @@
 @@ L23 [1074-client-config-field]
 -            ModuleFilter = None
 +            Composition.ModuleFilter = None
-@@ L25 [1074-column-mapping-unlabelled]
+@@ L24 [1074-client-config-field]
+-            Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
++            Composition.Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
+@@ L26 [1074-column-mapping-unlabelled]
 -            Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping None)
 +            Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)
-@@ L33 [1074-feature-mode-off]
+@@ L34 [1074-feature-mode-off]
 -let palette: CommandPaletteMode = NoCommandPalette
 +let palette: CommandPaletteMode = FeatureMode.Disabled
-@@ L33 [1074-feature-mode-type]
+@@ L34 [1074-feature-mode-type]
 -let palette: CommandPaletteMode = FeatureMode.Disabled
 +let palette: FeatureMode = FeatureMode.Disabled
-@@ L35 [1074-chrome-off]
+@@ L36 [1074-chrome-off]
 -let surface: AdminSurfaceMode = InlineGroups
 +let surface: AdminSurfaceMode = ChromeFill.Off
-@@ L35 [1074-chrome-type]
+@@ L36 [1074-chrome-type]
 -let surface: AdminSurfaceMode = ChromeFill.Off
 +let surface: ChromeFill<unit> = ChromeFill.Off
-@@ L39 [1074-client-config-field]
+@@ L40 [1074-client-config-field]
 -let name = config.AuthUI
 +let name = config.Auth.AuthUI
-@@ L41 [1074-ai-assistant-configured]
+@@ L42 [1074-ai-assistant-configured]
 -let aiSlots = ConfiguredAIAssistant { Name = "Claude"; Icon = icon; ShowSidePanel = true }
 +let aiSlots = AISlotFills.configured { Name = "Claude"; Icon = icon; ShowSidePanel = true }
-@@ L43 [1074-ai-assistant-default]
+@@ L44 [1074-ai-assistant-default]
 -let run () = AIClientConfig.run DefaultAIAssistant config modules
 +let run () = AIClientConfig.run AISlotFills.defaults config modules
-@@ L45 [1074-ai-assistant-none]
+@@ L46 [1074-ai-assistant-none]
 -let plain = AIClientConfig.appendAssistantModule NoAIAssistant modules
 +let plain = AIClientConfig.appendAssistantModule AISlotFills.empty modules
-@@ L47 [1074-ai-assistant-none]
+@@ L48 [1074-ai-assistant-none]
 -let off: AIAssistantMode = NoAIAssistant
 +let off: AIAssistantMode = AISlotFills.empty
-@@ L47 [1074-ai-assistant-type]
+@@ L48 [1074-ai-assistant-type]
 -let off: AIAssistantMode = AISlotFills.empty
 +let off: AISlotFills = AISlotFills.empty
 --- a/src/Client/Grid.fs
@@ -519,4 +522,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 139 rewrite(s) across 20 file(s) pending.
+Codemod: 140 rewrite(s) across 20 file(s) pending.

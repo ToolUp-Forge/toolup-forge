@@ -2720,26 +2720,17 @@ module Codemod =
                     else
                         clientUpdateWithLine.Match line
 
-                if one.Success then
-                    let isClient = clientBase.IsMatch(one.Groups["base"].Value.Trim())
-
-                    let rest = one.Groups["rest"]
-
-                    if isClient then
-                        let moved = clientLabel.Replace(rest.Value, (fun m -> clientPathOf[m.Value]))
-                        after <- line.Substring(0, rest.Index) + moved
-
-                    if not (rest.Value.Contains "}") then
-                        blocks.Push(indent, isClient, ref None)
-                elif two.Success then
-                    blocks.Push(indent, clientBase.IsMatch(two.Groups["base"].Value.Trim()), ref None)
-                elif blocks.Count > 0 then
-                    let (_, isClient, column) = blocks.Peek()
+                // A label of the enclosing client update moves even when its
+                // own value opens a record (`Handlers = { … with … }`).
+                if blocks.Count > 0 then
+                    let _, isClient, column = blocks.Peek()
 
                     if isClient then
-                        match column.Value with
-                        | None -> column.Value <- Some indent
-                        | Some _ -> ()
+                        if
+                            column.Value.IsNone
+                            && (labelLine.IsMatch trimmed || not (one.Success || two.Success))
+                        then
+                            column.Value <- Some indent
 
                         if column.Value = Some indent then
                             let m = clientLabel.Match line
@@ -2749,6 +2740,21 @@ module Codemod =
                                     line.Substring(0, m.Index)
                                     + clientPathOf[m.Value]
                                     + line.Substring(m.Index + m.Length)
+
+                let opener = clientUpdateOpener.Match after
+
+                if opener.Success then
+                    let isClient = clientBase.IsMatch(opener.Groups["base"].Value.Trim())
+                    let rest = opener.Groups["rest"]
+
+                    if isClient then
+                        let moved = clientLabel.Replace(rest.Value, (fun m -> clientPathOf[m.Value]))
+                        after <- after.Substring(0, rest.Index) + moved
+
+                    if not (rest.Value.Contains "}") then
+                        blocks.Push(indent, isClient, ref None)
+                elif two.Success then
+                    blocks.Push(indent, clientBase.IsMatch(two.Groups["base"].Value.Trim()), ref None)
 
                 after <-
                     clientRead.Replace(

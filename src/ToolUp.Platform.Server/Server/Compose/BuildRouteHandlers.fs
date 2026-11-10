@@ -541,7 +541,7 @@ let buildRouteHandlers
     // default `FeatureMode.Disabled` produces an empty list so the path
     // 404s from the Giraffe terminal middleware and an existing
     // deployment is byte-for-byte unchanged (GP 11). When enabled, a
-    // client on `ClientConfig.Auth.HttpOnlySession = FeatureMode.Enabled`
+    // client on `AuthConfig.HttpOnlySession = FeatureMode.Enabled`
     // posts its freshly-acquired JWT here once; the handler validates it
     // via the registered `IAuthProvider` and reflects it into an
     // `HttpOnly; Secure; SameSite=Strict` cookie so the bearer never

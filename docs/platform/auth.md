@@ -128,7 +128,7 @@ Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
         Surfaces = Surfaces.individual
-        Auth.AuthUI = OidcAuthUI oidcConfig
+        Auth = { ClientConfig.defaults.Auth with AuthUI = OidcAuthUI oidcConfig }
         Composition.Handlers =
             { ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ OidcRegister.handler ]
@@ -160,7 +160,7 @@ Wraps Clerk's React components and surfaces them through the `AuthUIProvider` re
 open ToolUp.AuthProviders
 
 { ClientConfig.defaults with
-    Auth.AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
+    Auth = { ClientConfig.defaults.Auth with AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey } }
     Composition.Handlers =
         { ClientHandlerRegistry.empty with
             AuthUIHandlers = [ ClerkRegister.handler ] } }

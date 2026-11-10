@@ -100,7 +100,7 @@ type private SubjectAndBridgeState = {
     /// Phase 4b dev convenience — when set, `getUserId` seeds an empty
     /// `toolup-user-id` localStorage entry with this value instead of
     /// an auto-generated GUID. Set by `SDK.Client.run` from
-    /// `ClientConfig.Auth.DevDefaultUserId`. Stays `None` in production.
+    /// `AuthConfig.DevDefaultUserId`. Stays `None` in production.
     DevDefaultUserId: string option
     /// Phase 6k Workstream A — optional bridge to a deployment-chosen
     /// identity SDK (Clerk, Microsoft Entra via MSAL, Auth0, WorkOS).
@@ -144,12 +144,12 @@ let mutable private session = {
 
 /// Bearer-credential storage state — which storage strategy the
 /// deployment configured, plus the transient in-memory token the
-/// `Auth.HttpOnlySession` path holds. Phase 496 consolidated the
+/// `AuthConfig.HttpOnlySession` path holds. Phase 496 consolidated the
 /// two token-storage mutables into this record.
 type private TokenStorageState = {
     /// Phase 133 — where the bearer JWT lives once acquired. Set once
     /// during client initialisation by `SDK.Client.run` from
-    /// `ClientConfig.Auth.HttpOnlySession`.
+    /// `AuthConfig.HttpOnlySession`.
     ///
     /// `FeatureMode.Disabled` (default): `setAuthToken` writes
     /// the JWT to `localStorage` + a JS-readable `document.cookie` —
@@ -162,7 +162,7 @@ type private TokenStorageState = {
     /// in a JS-readable cookie. Requires
     /// `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled`.
     HttpOnlySession: FeatureMode
-    /// In-memory bearer token for the `Auth.HttpOnlySession` path.
+    /// In-memory bearer token for the `AuthConfig.HttpOnlySession` path.
     /// Lost on reload (the durable credential is the HttpOnly cookie;
     /// the bridge re-populates this on boot). Never persisted.
     ServerCookieToken: string option
@@ -345,7 +345,7 @@ let private decodeJwtIdentity (token: string) : DecodedIdentity option =
 /// handshake path, or for a SPA that accepts the XSS exposure and ships
 /// a strict CSP (Phase 9j / Phase 129 header baseline) as the
 /// mitigation. The production-shape alternative is
-/// `Auth.HttpOnlySession = FeatureMode.Enabled`, where the server sets
+/// `AuthConfig.HttpOnlySession = FeatureMode.Enabled`, where the server sets
 /// an `HttpOnly` cookie and the JWT never enters JS-readable storage
 /// (Phase 133).
 [<Emit("(typeof document === 'undefined' ? null : document.cookie)")>]
@@ -385,7 +385,7 @@ let private clearAuthCookie () =
 
 // ─── Phase 133 — server-set HttpOnly cookie path ───────────────────
 //
-// On the `Auth.HttpOnlySession` path the JWT is never written to
+// On the `AuthConfig.HttpOnlySession` path the JWT is never written to
 // `localStorage` or `document.cookie`. It is held only in transient
 // in-memory state (`tokenState.ServerCookieToken`) and reflected into a
 // server-set `HttpOnly; Secure; SameSite=Strict` cookie via
@@ -466,7 +466,7 @@ let getUserId () =
         | null
         | "" ->
             // Phase 4b — dev composition roots can opt in to a stable
-            // seed via `ClientConfig.Auth.DevDefaultUserId` so the local-run
+            // seed via `AuthConfig.DevDefaultUserId` so the local-run
             // `X-User-Id` matches `ServerConfig.AutoBootstrapDevAdmin`
             // end-to-end. Production leaves it `None` and gets a fresh
             // GUID per first-visit (existing localStorage values are
@@ -488,7 +488,7 @@ let getUserId () =
 /// subsequent calls so SSE `?userId=` matches the server-side
 /// auth-resolved userId.
 ///
-/// Phase 6k Workstream A: on the default (`Auth.HttpOnlySession` off)
+/// Phase 6k Workstream A: on the default (`AuthConfig.HttpOnlySession` off)
 /// path also writes the token to `localStorage` + `document.cookie` so
 /// EventSource handshakes can authenticate when
 /// `ServerConfig.SecurityPosture.SseAuthMode = CookieRequired`. The cookie path is
@@ -497,7 +497,7 @@ let getUserId () =
 /// (a server-written `HttpOnly` cookie holds the name), the token is sent
 /// to `POST /api/auth/session` so the server replaces its cookie.
 ///
-/// Phase 133: on the `Auth.HttpOnlySession` path the JWT is held only
+/// Phase 133: on the `AuthConfig.HttpOnlySession` path the JWT is held only
 /// in transient in-memory state and reflected to `POST /api/auth/session`
 /// (the server sets the durable `HttpOnly` cookie). It is NOT written to
 /// `localStorage` or `document.cookie`, so an XSS cannot dump it from
@@ -568,7 +568,7 @@ let setAuthToken (token: string) =
 /// Clear the auth token (called on sign-out). Also clears the
 /// token-derived userId, display name, email, the in-memory token, AND
 /// the auth cookie — both the JS-readable cookie and (on the
-/// `Auth.HttpOnlySession` path) the server-set `HttpOnly` cookie via
+/// `AuthConfig.HttpOnlySession` path) the server-set `HttpOnly` cookie via
 /// `DELETE /api/auth/session` — so the next sign-in resolves a fresh
 /// subject and no usable token survives in either store. Phase 1047: on the
 /// default path too, when the held token is not in `document.cookie` — a
@@ -630,7 +630,7 @@ let getEmail () : string option =
 
 /// Get the current auth token, if any.
 ///
-/// Phase 133: on the `Auth.HttpOnlySession` path the token is never
+/// Phase 133: on the `AuthConfig.HttpOnlySession` path the token is never
 /// in `localStorage`, so this reads the transient in-memory value. Keeps
 /// the OIDC `exp` reader, `onAuthTokenChange`, and the bridge-dedup
 /// working identically on both paths without the token ever touching
@@ -803,7 +803,7 @@ let private setInterval (cb: unit -> unit) (ms: int) : int = jsNative
 let private clearInterval (handle: int) : unit = jsNative
 
 /// Install a deployment-specific auth bridge. Called once during
-/// `SDK.Client.run` if `ClientConfig.Auth.AuthBridge` is `Some`. Kicks off
+/// `SDK.Client.run` if `AuthConfig.AuthBridge` is `Some`. Kicks off
 /// an immediate JWT fetch + a periodic refresh loop. Idempotent — a
 /// re-install replaces the previous bridge AND stops the previous
 /// refresh interval (pre-121 the old interval leaked and kept polling

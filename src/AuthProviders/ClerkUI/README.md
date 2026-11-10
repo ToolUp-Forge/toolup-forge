@@ -4,7 +4,7 @@ Client-side Clerk sign-in UI for `ToolUp.Platform`. Wraps Clerk's React componen
 
 ```fsharp skip=fragment
 { ClientConfig.defaults with
-    Auth.AuthUI = ClerkRegister.authUI { PublishableKey = key }   // ProviderAuthUI ("clerk", …)
+    Auth = { ClientConfig.defaults.Auth with AuthUI = ClerkRegister.authUI { PublishableKey = key } }   // ProviderAuthUI ("clerk", …)
     Composition.Handlers =
         { ClientHandlerRegistry.empty with
             AuthUIHandlers = [ ClerkRegister.handler ] } }

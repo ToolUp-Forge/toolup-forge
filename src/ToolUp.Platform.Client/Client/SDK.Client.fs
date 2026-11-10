@@ -150,7 +150,7 @@ module Client =
         /// switch.
         ActiveTeamRole: TeamRole option
         /// Phase 567 — which navigation area the sidebar is currently
-        /// showing under `ClientConfig.Chrome.AdminArea = ChromeFill.On()`. Ignored
+        /// showing under `ShellChrome.AdminArea = ChromeFill.On()`. Ignored
         /// under the default inline groups. Flipped by the area switcher
         /// (reserved sidebar ids) and by deep-linking to an admin-area route.
         CurrentArea: ModuleArea
@@ -1632,7 +1632,7 @@ module Client =
                 // only re-pointed the rail, leaving the content pane on
                 // whichever module was already open (a product module, as
                 // often as not). The landing module is registered only
-                // under `Chrome.AdminArea = ChromeFill.On()`, so this is a
+                // under `ShellChrome.AdminArea = ChromeFill.On()`, so this is a
                 // guarded follow-up rather than an assumption: with no
                 // landing registered the flip behaves exactly as it did
                 // pre-573.

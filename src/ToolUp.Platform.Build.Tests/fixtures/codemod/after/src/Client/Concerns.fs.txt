@@ -21,6 +21,7 @@ let config =
             Chrome.DatadogReadback = NoDatadogReadback
             Locale.Mode = TeamDefault "en"
             Composition.ModuleFilter = None
+            Composition.Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
             NoActiveTeamLandingModuleId = Some "welcome"
             Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)
     }

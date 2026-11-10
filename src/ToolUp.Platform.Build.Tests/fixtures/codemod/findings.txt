@@ -19,15 +19,15 @@ Codemod: 123 site(s) in 22 file(s) need human review (not rewritten):
       -> Phase 1074: if this is a `ClientConfig` field, it is `Chrome.DatadogReadback = ChromeFill.On cfg` (or `ChromeFill.Off`) — the same `DatadogReadbackConfig` the server's `EnabledDatadogReadback` carries; `ServerConfig.Observability.DatadogReadback` keeps its mode
     L22 [66-mode-read] Locale.Mode = TeamDefault "en"
       -> Phase 66: a `.Mode` read: on `ServerConfig` / `ClientConfig` it is now `.Surfaces` (a list), on `AccessContext` it is `.Subject` — an equality test against a `PlatformMode` case becomes the matching `AccessContext.is*` predicate (§4); a consumer-owned `Mode` field is a false positive here
-    L24 [1074-no-active-team-landing] NoActiveTeamLandingModuleId = Some "welcome"
+    L25 [1074-no-active-team-landing] NoActiveTeamLandingModuleId = Some "welcome"
       -> Phase 1074: the two no-active-team inputs are one chrome row: `NoActiveTeamLandingModuleId = Some id` is `Chrome.NoActiveTeamLanding = ChromeFill.On(NoActiveTeamLandingFill.Module id)` and `NoActiveTeamLanding = Some cfg` is `Chrome.NoActiveTeamLanding = ChromeFill.On(NoActiveTeamLandingFill.BuiltIn cfg)` (when both were set the module won — keep `Module`)
-    L37 [1074-shared-field-read] let filtered = config.ModuleFilter
+    L38 [1074-shared-field-read] let filtered = config.ModuleFilter
       -> Phase 1074: if this reads a `ClientConfig`, the field moved into a concern record: `.Chrome.Observability` / `.Chrome.DatadogReadback` / `.Chrome.PlatformUsers`, `.Shell.Presence` / `.Shell.Offline`, `.Composition.ModuleFilter` / `.Composition.ExpectedModules` / `.Composition.Handlers`, `.Locale.Mode` — a `ServerConfig` read of the same name is unchanged
-    L45 [1074-ai-family-append] let plain = AIClientConfig.appendAssistantModule AISlotFills.empty modules
+    L46 [1074-ai-family-append] let plain = AIClientConfig.appendAssistantModule AISlotFills.empty modules
       -> Phase 1074: `appendAssistantModule` is gone: the assistant family is three slots — pass `AISlotFills` to `AIClientConfig.run` / `program`, or fill them on a config with `AIClientConfig.withAISlots`
-    L49 [1074-data-manager-label] let upload = DataManagerChoice.FileUpload { Name = "Uploads"; Icon = icon; Group = None }
+    L50 [1074-data-manager-label] let upload = DataManagerChoice.FileUpload { Name = "Uploads"; Icon = icon; Group = None }
       -> Phase 1074: a data manager's configuration is `{ Label = Some { Name = …; Icon = … }; Group = … }` now (`Label = None` keeps the manager's own), the same for both managers; `ColumnMapping (Some cfg)` drops the `Some`
-    L53 [1074-clerk-auth-ui-pattern] | ClerkAuthUI _ -> "clerk"
+    L54 [1074-clerk-auth-ui-pattern] | ClerkAuthUI _ -> "clerk"
       -> Phase 1074: the `ClerkAuthUI` case is removed: a Clerk deployment is `ProviderAuthUI ("clerk", cfg)` — match that case instead
   src/Client/Grid.fs
     L10 [815-aggrid-theme-class] prop.className ThemeClass.Balham
