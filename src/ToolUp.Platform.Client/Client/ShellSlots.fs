@@ -414,7 +414,7 @@ module ShellSlots =
         chrome _.TenantLifecycle TenantLifecycleAdminUI.create
 
     let private platformUsers =
-        chrome _.PlatformUsers (fun () -> PlatformUsersUI.create None)
+        chrome _.PlatformUsers (fun () -> builtIn PlatformUsersUI.builtIn None)
 
     /// The composed order. Within `Trailing`, every "Team Management"
     /// module is listed before every "Platform Management" one, so the
