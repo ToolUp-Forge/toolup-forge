@@ -4121,7 +4121,7 @@ ToolUp.Platform.LoadingIndicatorMode+Tags.SpinnerLoader : System.Int32 (literal)
 ToolUp.Platform.LocaleConfig (class)
 ToolUp.Platform.LocaleConfig..ctor(ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]])
 ToolUp.Platform.LocaleConfig.MessageCatalogOverride : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]] { get }
-ToolUp.Platform.LocaleConfig.Mode : ToolUp.Platform.LocaleMode { get }
+ToolUp.Platform.LocaleConfig.Resolution : ToolUp.Platform.LocaleMode { get }
 ToolUp.Platform.LocaleConfigModule (class)
 ToolUp.Platform.LocaleConfigModule.defaults : ToolUp.Platform.LocaleConfig { get }
 ToolUp.Platform.Logger (class)

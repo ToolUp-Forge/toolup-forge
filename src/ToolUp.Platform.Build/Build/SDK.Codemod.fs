@@ -1856,8 +1856,8 @@ module Codemod =
             "1074-shared-field-read"
             CodemodMigration.ClientConfigByConcern
             CodemodFileClass.Source
-            @"(?<![\w.])(?:clientConfig|config|cfg|ctx\.Config)\.(?:Observability|DatadogReadback|PlatformUsers|Presence|ModuleFilter|ExpectedModules|Locale|Handlers|Offline)\b(?!\.(?:Mode|MessageCatalogOverride)\b)"
-            "if this reads a `ClientConfig`, the field moved into a concern record: `.Chrome.Observability` / `.Chrome.DatadogReadback` / `.Chrome.PlatformUsers`, `.Shell.Presence` / `.Shell.Offline`, `.Composition.ModuleFilter` / `.Composition.ExpectedModules` / `.Composition.Handlers`, `.Locale.Mode` — a `ServerConfig` read of the same name is unchanged"
+            @"(?<![\w.])(?:clientConfig|config|cfg|ctx\.Config)\.(?:Observability|DatadogReadback|PlatformUsers|Presence|ModuleFilter|ExpectedModules|Locale|Handlers|Offline)\b(?!\.(?:Resolution|MessageCatalogOverride)\b)"
+            "if this reads a `ClientConfig`, the field moved into a concern record: `.Chrome.Observability` / `.Chrome.DatadogReadback` / `.Chrome.PlatformUsers`, `.Shell.Presence` / `.Shell.Offline`, `.Composition.ModuleFilter` / `.Composition.ExpectedModules` / `.Composition.Handlers`, `.Locale.Resolution` — a `ServerConfig` read of the same name is unchanged"
         review
             "1074-ai-family-append"
             CodemodMigration.ClientConfigByConcern
@@ -2625,7 +2625,7 @@ module Codemod =
         Map [
             "AdminSurface", "AdminArea"
             "AuthTokenStorage", "HttpOnlySession"
-            "Locale", "Mode"
+            "Locale", "Resolution"
         ]
 
     /// Field → its qualified path under the concern record.

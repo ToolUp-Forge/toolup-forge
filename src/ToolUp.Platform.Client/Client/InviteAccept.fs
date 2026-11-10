@@ -305,7 +305,7 @@ let renderWith (config: ClientConfig) : unit =
         CsrfClient.prefetch ()
 
         let locale =
-            MessageCatalog.resolveLocale config.Locale.Mode None (MessageCatalogProvider.browserLocale ())
+            MessageCatalog.resolveLocale config.Locale.Resolution None (MessageCatalogProvider.browserLocale ())
 
         let catalog = MessageCatalog.resolve locale config.Locale.MessageCatalogOverride
 

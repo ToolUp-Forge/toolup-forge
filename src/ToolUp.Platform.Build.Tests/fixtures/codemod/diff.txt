@@ -93,7 +93,7 @@
 +            Chrome.DatadogReadback = NoDatadogReadback
 @@ L22 [1074-client-config-field]
 -            Locale = TeamDefault "en"
-+            Locale.Mode = TeamDefault "en"
++            Locale.Resolution = TeamDefault "en"
 @@ L23 [1074-client-config-field]
 -            ModuleFilter = None
 +            Composition.ModuleFilter = None

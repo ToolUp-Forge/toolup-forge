@@ -56,7 +56,7 @@ reported as `1074-shared-field-read`.
 | `AuthUI`, `AuthBridge`, `DevDefaultUserId` | `Auth.<same>` |
 | `AuthTokenStorage: AuthTokenStorage` | `Auth.HttpOnlySession: FeatureMode` (`ClientCookieAndLocalStorage` → `Disabled`, `ServerSetHttpOnlyCookie` → `Enabled`) — the client twin of the server's `SecurityPosture.AuthCookieIssuance` |
 | `PrerenderRoutes`, `ConsentProvider`, `AdPanel`, `PremiumModel`, `PlatformAdminProfile` | `PublicUtility.<same>` |
-| `Locale: LocaleMode` | `Locale.Mode` |
+| `Locale: LocaleMode` | `Locale.Resolution` |
 | `MessageCatalogOverride` | `Locale.MessageCatalogOverride` |
 | `Handlers`, `RequestSeam`, `ModuleFilter`, `ShowDebugOnlyModules`, `ExpectedModules`, `PublicEntryDispatchers`, `OnError`, `EnableElmishConsoleTrace`, `OnElmishError` | `Composition.<same>` |
 | `AdminSurface: AdminSurfaceMode` | `Chrome.AdminArea: ChromeFill<unit>` (`InlineGroups` → `Off`, `SeparateArea` → `On ()`) |

@@ -18,7 +18,7 @@ compiler names.
 
 ```fsharp skip=fragment
 { ClientConfig.create handlers with
-    Locale.Mode = TeamDefault "en"
+    Locale.Resolution = TeamDefault "en"
     Locale.MessageCatalogOverride = Some catalog }
 ```
 
@@ -168,7 +168,7 @@ bracketed version of itself — `Save changes` renders as
 
 ```fsharp skip=fragment
 { ClientConfig.defaults with
-    Locale.Mode = FixedLocale PseudoLocaleCatalog.Tag        // "qps-ploc"
+    Locale.Resolution = FixedLocale PseudoLocaleCatalog.Tag        // "qps-ploc"
     Locale.MessageCatalogOverride = Some PseudoLocaleCatalog.overrideFor }
 ```
 

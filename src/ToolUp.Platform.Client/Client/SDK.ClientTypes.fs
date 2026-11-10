@@ -2093,7 +2093,7 @@ type LocaleConfig = {
     /// Setting this alone changes nothing visible: `MessageCatalogOverride`
     /// supplies the translation, and this field decides which one it is
     /// asked for.
-    Mode: LocaleMode
+    Resolution: LocaleMode
     /// Phase 444 — the deployment's translation of the SDK's shell +
     /// built-in-module strings. Handed `MessageCatalog.english` stamped
     /// with the resolved locale (`catalog.Locale`), it returns the catalog
@@ -2118,7 +2118,7 @@ type LocaleConfig = {
     ///     if c.Locale.StartsWith "fr" then french c else c
     ///
     /// { ClientConfig.create handlers with
-    ///     Locale = { Mode = TeamDefault "en"; MessageCatalogOverride = Some catalog } }
+    ///     Locale = { Resolution = TeamDefault "en"; MessageCatalogOverride = Some catalog } }
     /// ```
     ///
     /// Returning the argument unchanged for a language the deployment
@@ -2133,7 +2133,7 @@ module LocaleConfig =
     /// One fixed locale, the built-in English catalog, no browser or
     /// team-config read — byte-for-byte the pre-444 shell.
     let defaults: LocaleConfig = {
-        Mode = FixedLocale MessageCatalog.BuiltInLocale
+        Resolution = FixedLocale MessageCatalog.BuiltInLocale
         MessageCatalogOverride = None
     }
 

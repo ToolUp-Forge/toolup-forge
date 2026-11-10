@@ -742,16 +742,16 @@ module Client =
             match localeOverride with
             | Some chosen -> chosen
             | None ->
-                match config.Locale.Mode with
+                match config.Locale.Resolution with
                 | FixedLocale _ ->
                     // The fixed arm consults neither ambient source, so
                     // resolve it without paying for either.
-                    MessageCatalog.resolveLocale config.Locale.Mode None None
+                    MessageCatalog.resolveLocale config.Locale.Resolution None None
                 | BrowserLocale _ ->
-                    MessageCatalog.resolveLocale config.Locale.Mode None (MessageCatalogProvider.browserLocale ())
+                    MessageCatalog.resolveLocale config.Locale.Resolution None (MessageCatalogProvider.browserLocale ())
                 | TeamDefault _ ->
                     MessageCatalog.resolveLocale
-                        config.Locale.Mode
+                        config.Locale.Resolution
                         (MessageCatalog.teamLocaleOf platformConfig)
                         (MessageCatalogProvider.browserLocale ())
 
