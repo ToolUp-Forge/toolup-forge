@@ -21,7 +21,7 @@ open ToolUp.Platform.DataProp
 // `AdPanelConfig.ConsentCategoriesRequired` — slot renders an empty
 // fragment until the user grants the required categories.
 //
-// `AdPanelMode = NoAdPanel` (default `ClientConfig.AdPanel`) skips
+// `AdPanelMode = NoAdPanel` (default `ClientConfig.PublicUtility.AdPanel`) skips
 // the render path entirely — `AdSlot` returns `Html.none` and the
 // AdSense script never loads.
 
@@ -60,7 +60,7 @@ module AdAnalytics =
 
 [<ReactComponent>]
 let AdSlot (config: ClientConfig) (slot: AdSlotConfig) : ReactElement =
-    match config.AdPanel with
+    match config.PublicUtility.AdPanel with
     | NoAdPanel -> Html.none
     | EnabledAdPanel panelConfig ->
         let insRef = React.useElementRef ()

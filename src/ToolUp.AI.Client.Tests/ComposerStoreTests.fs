@@ -568,12 +568,12 @@ let private runAIShell (report: CallbackRun -> unit) : unit =
     let config = {
         ClientConfig.defaults with
             Surfaces = Surfaces.team
-            ActiveModule = Some "_scope931.probe"
-            ToastCentre = NoToastCentre
-            EnableElmishConsoleTrace = true
+            Shell.ActiveModule = Some "_scope931.probe"
+            Shell.ToastCentre = NoToastCentre
+            Composition.EnableElmishConsoleTrace = true
     }
 
-    AIClientConfig.run NoAIAssistant config [ probe ]
+    AIClientConfig.run ToolUp.AI.AISlotFills.empty config [ probe ]
 
     let invokeBoth () =
         match context with

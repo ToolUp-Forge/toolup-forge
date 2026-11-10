@@ -1,0 +1,55 @@
+module Consumer.Client.Concerns
+
+// Phase 1074 fixture — a client root on the flat `ClientConfig`.
+
+open ToolUp.Platform
+open ToolUp.AI
+open ToolUp.AI.Client
+
+let config =
+    {
+        ClientConfig.create handlers with
+            AppName = "Acme"
+            ActiveModule = Some "reports"
+            AuthUI = ClerkAuthUI { PublishableKey = "pk_test" }
+            AuthTokenStorage = ServerSetHttpOnlyCookie
+            CommandPalette = DefaultCommandPalette
+            BrowserHistory = HashHistory
+            AdminSurface = SeparateArea
+            Observability = DefaultObservabilityModule
+            PlatformUsers = NoPlatformUsers
+            DatadogReadback = NoDatadogReadback
+            Locale = TeamDefault "en"
+            ModuleFilter = None
+            Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
+            NoActiveTeamLandingModuleId = Some "welcome"
+            Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping None)
+    }
+
+let overrides = {
+    ClientConfigOverrides.empty with
+        ActiveModule = Some "reports"
+}
+
+let palette: CommandPaletteMode = NoCommandPalette
+
+let surface: AdminSurfaceMode = InlineGroups
+
+let filtered = config.ModuleFilter
+
+let name = config.AuthUI
+
+let aiSlots = ConfiguredAIAssistant { Name = "Claude"; Icon = icon; ShowSidePanel = true }
+
+let run () = AIClientConfig.run DefaultAIAssistant config modules
+
+let plain = AIClientConfig.appendAssistantModule NoAIAssistant modules
+
+let off: AIAssistantMode = NoAIAssistant
+
+let upload = DataManagerChoice.FileUpload { Name = "Uploads"; Icon = icon; Group = None }
+
+let describe (mode: AuthUIMode) =
+    match mode with
+    | ClerkAuthUI _ -> "clerk"
+    | _ -> "other"

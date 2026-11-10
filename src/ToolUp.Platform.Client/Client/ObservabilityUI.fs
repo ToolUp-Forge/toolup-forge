@@ -979,7 +979,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Observa
 
 /// Create the self-hosted observability admin as an `ErasedModule`. The
 /// shell's `prepareModules` injects it when
-/// `ClientConfig.Observability = DefaultObservabilityModule`.
+/// `ClientConfig.Chrome.Observability = DefaultObservabilityModule`.
 ///
 /// **Gating.** `NavRole.PlatformAdminOnly` — logs, metric history and
 /// alert state are deployment-wide data, and the endpoints enforce the

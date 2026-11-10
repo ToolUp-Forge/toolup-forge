@@ -1081,9 +1081,21 @@ let reflectedSurface () : Surface = {
         ]
 
         fields typeof<ServerConfig>
-    ClientFields = [
-        for f in FSharpType.GetRecordFields typeof<ClientConfig> -> f.Name, f.PropertyType
-    ]
+    // A client field by its path from `ClientConfig`: a concern record's
+    // fields are `Concern.Field` (Phase 1074 nests the configuration).
+    ClientFields =
+        let rec fields (prefix: string) (record: Type) = [
+            for f in FSharpType.GetRecordFields record do
+                yield prefix + f.Name, f.PropertyType
+
+                if
+                    FSharpType.IsRecord f.PropertyType
+                    && f.PropertyType.Namespace = "ToolUp.Platform"
+                then
+                    yield! fields (prefix + f.Name + ".") f.PropertyType
+        ]
+
+        fields "" typeof<ClientConfig>
 }
 
 /// The values a setting's field admits: the knob tokens for a `FeatureMode`

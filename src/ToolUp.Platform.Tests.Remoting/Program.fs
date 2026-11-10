@@ -93,6 +93,7 @@ let private registeredTests =
         SidebarVisibilityContractTests.accessibleNameTests
         SidebarVisibilityContractTests.placementTests
         SidebarVisibilityContractTests.keyboardNavigationTests
+        SidebarVisibilityContractTests.chromeRowTests
         RouteGuardContractTests.routeGuardTests
         RouteGuardContractTests.sharedPredicateTests
         CommandPaletteContractTests.paletteVisibilityTests

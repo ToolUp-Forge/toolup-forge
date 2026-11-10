@@ -34,7 +34,7 @@ the negative controls are the part a later reader will want.
 ## AT-1 — Cross-provider OIDC sign-in with cookie-authenticated SSE
 
 **Covers:** Phase 6k.A (provider-agnostic JWT auth scaffolding:
-`IAuthBridge`, `ClientConfig.AuthBridge`, the JWT-as-cookie write, and
+`IAuthBridge`, `ClientConfig.Auth.AuthBridge`, the JWT-as-cookie write, and
 `ServerConfig.SecurityPosture.SseAuthMode`), against the generic OIDC shell of
 [Phases 744–748](docs/companions/auth-providers.md#oidc-presets).
 
@@ -106,7 +106,7 @@ wrong — not the code.
    flag on anything that is not plain-http dev, and a mixed setup will
    fail in a way that looks like an auth bug.
 3. **An `IAuthBridge` implementation** installed via
-   `ClientConfig.AuthBridge`, returning the issuer's JWT from whichever
+   `ClientConfig.Auth.AuthBridge`, returning the issuer's JWT from whichever
    client SDK the deployment loads. The SDK ships the seam, not a
    vendor binding — see the note under Phase 6k.A.
 4. **A browser with devtools**, and the ability to clear one cookie

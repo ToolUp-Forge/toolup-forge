@@ -7,7 +7,7 @@ namespace ToolUp.Platform
 //
 // Types describing the routes the build-time prerender pass should
 // emit indexable HTML for. Lives in Core so both the Fable-compiled
-// Client (which consumes them via `ClientConfig.PrerenderRoutes` +
+// Client (which consumes them via `ClientConfig.PublicUtility.PrerenderRoutes` +
 // the per-route metadata hook) AND the .NET-compiled
 // `ToolUp.Platform.Build` (which consumes them via the FAKE
 // `Prerender` target factory) can reference the same shape. Before

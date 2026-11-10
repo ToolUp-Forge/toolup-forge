@@ -14,7 +14,7 @@ open ToolUp.Platform
 // `SDK.ClientTypes.fs`), whose concrete implementation is supplied
 // by the KnowledgeBase companion package via
 // `KnowledgeBaseView.narrativeCommitHandler` and added to
-// `ClientConfig.Handlers.NarrativeCommitHandler`.
+// `ClientConfig.Composition.Handlers.NarrativeCommitHandler`.
 //
 // `SDK.Client.program` reads `config.Handlers.NarrativeCommitHandler`
 // at boot and calls `setHandler` here exactly once. `NarrativeRenderer`
@@ -22,7 +22,7 @@ open ToolUp.Platform
 // button appears.
 //
 // Phase 13a — replaces the legacy module-load `install` side effect.
-// Apps without a Knowledge Base leave `ClientConfig.Handlers
+// Apps without a Knowledge Base leave `ClientConfig.Composition.Handlers
 // .NarrativeCommitHandler = None` and the button hides itself.
 
 /// Per-tab cache of the config-supplied handler. Populated once by
@@ -33,7 +33,7 @@ open ToolUp.Platform
 let mutable private installed: NarrativeCommitHandler option = None
 
 /// Called once by `SDK.Client.program` with the value from
-/// `ClientConfig.Handlers.NarrativeCommitHandler`. Idempotent
+/// `ClientConfig.Composition.Handlers.NarrativeCommitHandler`. Idempotent
 /// re-installs are supported but in practice only happen if a test
 /// harness re-runs the boot sequence.
 let setHandler (handler: NarrativeCommitHandler option) : unit = installed <- handler

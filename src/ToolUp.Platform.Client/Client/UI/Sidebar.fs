@@ -217,7 +217,7 @@ let HomeId = "_sdk.home"
 /// `AdminHome.create`). Lifted into the SAME leading section as `HomeId`
 /// below, which is what makes it first in the admin rail without anyone
 /// maintaining a sort order. At most one of the two is ever in the rail
-/// set at a time: under `AdminSurface = SeparateArea` the shell renders
+/// set at a time: under `ShellChrome.AdminArea = ChromeFill.On()` the shell renders
 /// one area's modules, and this module belongs to the other one.
 [<Literal>]
 let AdminHomeId = "_sdk.admin-home"
@@ -406,9 +406,9 @@ let buildSectionsWith
     // neither can fall into `_other` or hide behind a collapsed group.
     //
     // Phase 573 — there are two landings, one per navigation area, and
-    // they share the leading section: under `AdminSurface = SeparateArea`
+    // they share the leading section: under `ShellChrome.AdminArea = ChromeFill.On()`
     // the shell hands this fold one area's modules at a time, so the list
-    // is usually a single member; under `InlineGroups` the admin landing is
+    // is usually a single member; under inline groups the admin landing is
     // never registered at all. Filtering (rather than `tryFind`-ing one
     // row) keeps that an observation about the caller rather than an
     // invariant this fold would break if it changed.

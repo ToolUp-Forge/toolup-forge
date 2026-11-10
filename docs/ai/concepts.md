@@ -216,7 +216,7 @@ Token-usage data goes to `IAIProvider.AIProviderResponse.Usage`, then into the p
 - `SecretKeyRef: string` — pointer into `ISecretStore`
 - `DisplayName: string` — user-visible label
 
-The AI Settings UI (auto-injected when `AIAssistantMode != NoAIAssistant`) lets users add / edit / delete instances. The API keys never leave `ISecretStore` — the UI passes the key value through once at setup, the store encrypts it, and from then on the factory pulls it per-call.
+The AI Settings UI (auto-injected when `AISlotFills != AISlotFills.empty`) lets users add / edit / delete instances. The API keys never leave `ISecretStore` — the UI passes the key value through once at setup, the store encrypts it, and from then on the factory pulls it per-call.
 
 ## Latency + observability
 

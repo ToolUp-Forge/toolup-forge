@@ -1878,7 +1878,7 @@ type RateLimitWidgetMessages = {
 type AdUnitWidgetMessages = {
     Title: string
     Subtitle: string
-    /// Rendered when `ClientConfig.AdPanel = NoAdPanel`.
+    /// Rendered when `ClientConfig.PublicUtility.AdPanel = NoAdPanel`.
     DisabledStub: string
     Loading: string
     /// Empty state: no ad units configured yet.
@@ -1934,7 +1934,7 @@ type PremiumUserWidgetMessages = {
 
 /// The Phase 61 public-utility PlatformAdmin widgets
 /// (`PublicUtilityWidgets`) surfaced under
-/// `ClientConfig.PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
+/// `ClientConfig.PublicUtility.PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
 type PublicUtilityWidgetsMessages = {
     /// Page heading above all four widgets.
     Heading: string
@@ -3062,7 +3062,7 @@ type JobsAdminMessages = {
 /// render. One nested record per surface; `Locale` carries the BCP 47
 /// tag the shell resolved, so a `MessageCatalogOverride` can branch on
 /// it (that is how one override function serves several languages —
-/// see `ClientConfig.MessageCatalogOverride`).
+/// see `ClientConfig.Locale.MessageCatalogOverride`).
 ///
 /// Consumer modules are NOT in scope here and never will be: a
 /// deployment localises its own module strings its own way, or through

@@ -11,7 +11,7 @@ open ToolUp.Platform.Bootstrap
 // Demonstrates the three boot-sequence touch-points a forge SPA
 // adds to opt into static prerendering:
 //
-//   1. `ClientConfig.PrerenderRoutes = SharedTypes.routes` —
+//   1. `ClientConfig.PublicUtility.PrerenderRoutes = SharedTypes.routes` —
 //      declares the routes the build-time prerender pass renders.
 //      The same list also drives `MetadataHook` so SPA navigation
 //      between prerendered routes updates `<title>` / OG tags
@@ -39,7 +39,7 @@ let private modules: ErasedModule list = []
 let private config = {
     ClientConfig.defaults with
         AppName = "Acme Calculator"
-        PrerenderRoutes = SharedTypes.routes
+        PublicUtility.PrerenderRoutes = SharedTypes.routes
 }
 
 // Boot sequence. Order is load-bearing:
@@ -63,5 +63,5 @@ let private config = {
 PrerenderExport.installEntryPoint config modules
 
 if PrerenderExport.isBrowser () then
-    MetadataHook.install config.PrerenderRoutes
+    MetadataHook.install config.PublicUtility.PrerenderRoutes
     Hydration.run config modules

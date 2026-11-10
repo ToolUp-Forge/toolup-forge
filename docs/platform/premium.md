@@ -11,13 +11,13 @@ The Platform ships an opt-in **premium-claim substrate** so consumer apps offeri
 | Paid-default SaaS (every user pays) | — | Don't use this substrate. The `IUserClaims` seam still works, but the "operator-granted" framing fits poorly; a future self-serve / billing substrate will land for that shape. |
 | Multi-tier pricing (Bronze / Silver / Gold) | — | This phase ships binary `Premium | NotPremium`. Multi-tier composes via the feature-flag substrate (see "Composition with feature flags" below) for richer cases. |
 
-The default `ClientConfig.PremiumModel = AnonymousFirst` preserves the SDK's pre-Phase-62 behaviour byte-for-byte: every user reads as `NotPremium`, `requirePremium` denies cleanly, and `usePremium` returns `NotPremium` without ever calling the server. Deployments that don't opt in pay zero overhead.
+The default `ClientConfig.PublicUtility.PremiumModel = AnonymousFirst` preserves the SDK's pre-Phase-62 behaviour byte-for-byte: every user reads as `NotPremium`, `requirePremium` denies cleanly, and `usePremium` returns `NotPremium` without ever calling the server. Deployments that don't opt in pay zero overhead.
 
 ## Substrate shape
 
 Six files participate. The minimal set:
 
-- **`Shared/Config/ConsentAdTypes.fs`** — `PremiumStatus` DU (`NotPremium | Premium of grantedAt: DateTimeOffset * grantedBy: string * reason: string option`) and `PremiumModel` DU (`AnonymousFirst`, the v1 shipping case). `ClientConfig.PremiumModel` defaults to `AnonymousFirst`.
+- **`Shared/Config/ConsentAdTypes.fs`** — `PremiumStatus` DU (`NotPremium | Premium of grantedAt: DateTimeOffset * grantedBy: string * reason: string option`) and `PremiumModel` DU (`AnonymousFirst`, the v1 shipping case). `ClientConfig.PublicUtility.PremiumModel` defaults to `AnonymousFirst`.
 - **[`Server/IUserClaims.fs`](../../src/ToolUp.Platform.Server/Server/IUserClaims.fs)** — read / write surface for per-user metadata claims. Four methods: `GetPremiumStatus`, `ListPremiumUsers`, `GrantPremium`, `RevokePremium`. Default `NoOpUserClaims` returns `NotPremium` everywhere and records grants without writing through to any provider (audit trail captures the operator's intent regardless). The six-rule portability audit lives at the top of the file; the matching contract pack is [`IUserClaimsContract`](../../src/ToolUp.Platform.Tests/Contracts/IUserClaimsContract.fs).
 - **[`Server/Premium/PremiumGate.fs`](../../src/ToolUp.Platform.Server/Server/Premium/PremiumGate.fs)** — server-side guard helpers: `requirePremium` returns `Async<Result<unit, string>>` so handlers can render a structured 402-shaped response without intercepting an exception; `ifPremium` runs a body only when premium.
 - **[`Server/Premium/GrantPremiumApiHandler.fs`](../../src/ToolUp.Platform.Server/Server/Premium/GrantPremiumApiHandler.fs)** — Giraffe routes (`POST` / `DELETE` on `/api/_platform/users/{userId}/premium`) gated by `IPlatformAdminStore.IsPlatformAdmin`. Emits `PremiumGranted` / `PremiumRevoked` audit events on the success path.
@@ -46,11 +46,11 @@ open ToolUp.Platform
 
 let clientConfig = {
     ClientConfig.defaults with
-        PremiumModel = AnonymousFirst
+        PublicUtility.PremiumModel = AnonymousFirst
 }
 ```
 
-The default `ClientConfig.PremiumModel = AnonymousFirst` is already in effect, so the explicit field assignment above is only needed when you want the doc-comment in-place to flag your intent.
+The default `ClientConfig.PublicUtility.PremiumModel = AnonymousFirst` is already in effect, so the explicit field assignment above is only needed when you want the doc-comment in-place to flag your intent.
 
 ## Gating a server-side handler
 
@@ -148,7 +148,7 @@ A representative public-utility consumer: an anonymous-first calculator app. Def
 
 Steps:
 
-1. **Wire `ClientConfig.PremiumModel = AnonymousFirst`** in the client composition root. (Default — no change needed unless you want the field to flag intent.)
+1. **Wire `ClientConfig.PublicUtility.PremiumModel = AnonymousFirst`** in the client composition root. (Default — no change needed unless you want the field to flag intent.)
 2. **Register a feature flag** declaring the comparative-analysis surface gate: `{ Key = "calculator.comparative-analysis"; DefaultValue = FlagValue.Bool true; ... }`. The `Bool true` default means "enabled for premium users by default" — flip to `Bool false` if you want to keep it dark behind an explicit per-user opt-in.
 3. **Register the key in `FeatureFlagSourceRegistry.premiumOnly`** so `FlagEvaluator.createWithSources` returns `false` for anonymous / non-premium subjects.
 4. **Gate the server-side route** that produces the comparative-analysis payload: `match! PremiumGate.requirePremium ctx with | Ok () -> ... | Error _ -> 402`.

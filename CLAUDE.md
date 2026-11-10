@@ -111,10 +111,10 @@ Pure infrastructure with zero domain knowledge. Per-tier packages:
 
 Agent loop, SSE streaming, conversation persistence, tool registry, system-prompt composition (platform + team + module layers), `AICompose.withAI`. Built on `IAIProvider` (extension point in `Platform.Core`).
 
-`AIAssistantMode` DU (in `ToolUp.AI.Core/Shared/AITypes.fs`):
-- `NoAIAssistant` — no AI module or side panel (default)
-- `DefaultAIAssistant` — built-in AI module with SDK defaults
-- `ConfiguredAIAssistant of AIAssistantBranding` — built-in AI module with custom branding
+`AISlotFills` (in `ToolUp.AI.Client/Client/AIClientTypes.fs`, Phase 1074) fills the AI companion's three shell slots — the assistant page, the AI settings page, the platform-admin keys page — each a `SlotFill` a deployment can empty or replace:
+- `AISlotFills.empty` — no AI page and no side panel
+- `AISlotFills.defaults` — the built-in family with SDK defaults
+- `AISlotFills.configured branding` — the built-in family with the assistant rebranded
 
 Apps wanting AI compose the companion onto their `ServerApp`: `app |> AICompose.withAI (AIOptions.create factory providerProfile |> AIOptions.withAIConfig …) |> ServerApp.run` (`ToolUp.AI.Server/Server/AICompose.fs`). `AIOptions` holds the AI tier's own settings; the tier is composed when the deployment resolves, so every `ServerApp` builder works on either side of `withAI`.
 

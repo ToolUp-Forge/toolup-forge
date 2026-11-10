@@ -8,7 +8,7 @@ Feliz.AgCharts 41/335
 Feliz.AgGrid 66/695
 Feliz.AgGrid.Enterprise 45/667
 InterPlatform 1371/2493
-ToolUp.AI.Client 181/796
+ToolUp.AI.Client 186/793
 ToolUp.AI.Core 454/928
 ToolUp.AI.McpHost 142/245
 ToolUp.AI.SampleClientTool.Client 1/2
@@ -115,8 +115,8 @@ ToolUp.Hosts.GoogleCloudFunctions 2/4
 ToolUp.IngestionQueues.Redis 27/39
 ToolUp.JobSchedulers.Quartz 26/35
 ToolUp.KnowledgeBase.Client 55/379
-ToolUp.KnowledgeBase.Core 192/454
-ToolUp.KnowledgeBase.Server 264/436
+ToolUp.KnowledgeBase.Core 196/467
+ToolUp.KnowledgeBase.Server 272/446
 ToolUp.Media.CloudTranscode 2/3
 ToolUp.Media.FFmpeg 4/5
 ToolUp.MediaLibrary 279/658
@@ -137,13 +137,13 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 584/1050
-ToolUp.Platform.Client 2191/5604
+ToolUp.Platform.Build 587/1057
+ToolUp.Platform.Client 2217/5614
 ToolUp.Platform.Core 8259/17157
 ToolUp.Platform.Server 3073/5525
 ToolUp.Platform.Server.Audit 376/696
 ToolUp.Platform.Server.Config 395/661
-ToolUp.Platform.Server.Infra 2196/3740
+ToolUp.Platform.Server.Infra 2232/3808
 ToolUp.Platform.Server.Jobs 921/1730
 ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 449/793

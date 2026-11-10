@@ -211,23 +211,23 @@ let fromBundleConstantValues
         ClientConfig.defaults with
             AppName = overrides.AppName |> applyOption ClientConfig.defaults.AppName
             AppLogo = overrides.AppLogo |> applyOption ClientConfig.defaults.AppLogo
-            ActiveModule = overrides.ActiveModule
+            Shell.ActiveModule = overrides.ActiveModule
             Surfaces = resolvedSurfaces
-            AuthUI = overrides.AuthUI |> applyOption ClientConfig.defaults.AuthUI
+            Auth.AuthUI = overrides.AuthUI |> applyOption ClientConfig.defaults.Auth.AuthUI
             Slots.WebhookAdmin = overrides.WebhookAdmin |> applyOption ClientConfig.defaults.Slots.WebhookAdmin
-            GridModules = overrides.GridModules |> applyOption ClientConfig.defaults.GridModules
-            ModuleFilter = normalisedFilter
-            Handlers = overrides.Handlers |> applyOption ClientConfig.defaults.Handlers
-            PublicEntryDispatchers =
+            Shell.GridModules = overrides.GridModules |> applyOption ClientConfig.defaults.Shell.GridModules
+            Composition.ModuleFilter = normalisedFilter
+            Composition.Handlers = overrides.Handlers |> applyOption ClientConfig.defaults.Composition.Handlers
+            Composition.PublicEntryDispatchers =
                 overrides.PublicEntryDispatchers
-                |> applyOption ClientConfig.defaults.PublicEntryDispatchers
-            EnableElmishConsoleTrace =
+                |> applyOption ClientConfig.defaults.Composition.PublicEntryDispatchers
+            Composition.EnableElmishConsoleTrace =
                 overrides.EnableElmishConsoleTrace
-                |> applyOption ClientConfig.defaults.EnableElmishConsoleTrace
-            ShowDebugOnlyModules =
+                |> applyOption ClientConfig.defaults.Composition.EnableElmishConsoleTrace
+            Composition.ShowDebugOnlyModules =
                 overrides.ShowDebugOnlyModules
-                |> applyOption ClientConfig.defaults.ShowDebugOnlyModules
-            DevDefaultUserId = overrides.DevDefaultUserId
+                |> applyOption ClientConfig.defaults.Composition.ShowDebugOnlyModules
+            Auth.DevDefaultUserId = overrides.DevDefaultUserId
             Slots.DataManager = overrides.DataManager |> applyOption ClientConfig.defaults.Slots.DataManager
             Slots.UsageDashboard =
                 overrides.UsageDashboard
@@ -329,19 +329,19 @@ let applyAdminModuleConstants
             Slots.DataSubjectRequestAdmin =
                 parseNoDefault dataSubjectRequestAdmin SlotFill.Empty SlotFill.Default
                 |> Option.defaultValue config.Slots.DataSubjectRequestAdmin
-            ToastCentre =
+            Shell.ToastCentre =
                 parseNoDefault toastCentre NoToastCentre DefaultToastCentre
-                |> Option.defaultValue config.ToastCentre
-            PlatformAdminProfile =
+                |> Option.defaultValue config.Shell.ToastCentre
+            PublicUtility.PlatformAdminProfile =
                 parseCaseToken platformAdminProfile [
                     "standard", StandardPlatformAdminProfile
                     "publicutility", PublicUtilityPlatformAdminProfile
                     "public-utility", PublicUtilityPlatformAdminProfile
                 ]
-                |> Option.defaultValue config.PlatformAdminProfile
-            InputsPaneWidth =
+                |> Option.defaultValue config.PublicUtility.PlatformAdminProfile
+            Shell.InputsPaneWidth =
                 parseCaseToken inputsPaneWidth [ "narrow", Narrow; "wide", Wide; "auto", Auto ]
-                |> Option.defaultValue config.InputsPaneWidth
+                |> Option.defaultValue config.Shell.InputsPaneWidth
     }
 
 /// Phase 71.A.11 — fold the hybrid client toggles onto an already-built
@@ -361,10 +361,12 @@ let applyHybridClientConstants (adPanel: string) (consentProvider: string) (conf
 
     {
         config with
-            AdPanel = parseCaseToken adPanel offTokensAdPanel |> Option.defaultValue config.AdPanel
-            ConsentProvider =
+            PublicUtility.AdPanel =
+                parseCaseToken adPanel offTokensAdPanel
+                |> Option.defaultValue config.PublicUtility.AdPanel
+            PublicUtility.ConsentProvider =
                 parseCaseToken consentProvider offTokensConsent
-                |> Option.defaultValue config.ConsentProvider
+                |> Option.defaultValue config.PublicUtility.ConsentProvider
     }
 
 /// Read the Vite-injected bundle constants via `BundleConstants`

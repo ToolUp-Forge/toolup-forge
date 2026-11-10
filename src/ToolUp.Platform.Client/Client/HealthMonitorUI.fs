@@ -773,7 +773,7 @@ let create (config: ModuleLabel option) : ErasedModule =
 /// deployment that puts its own module in the slot keeps the tile, and
 /// the tile's click-through, name and icon are the replacement's. An
 /// empty slot contributes nothing; a replacement that wires its own tile
-/// through `ClientConfig.Handlers.AdminTileContributors` keeps that one
+/// through `ClientConfig.Composition.Handlers.AdminTileContributors` keeps that one
 /// instead (`ShellSlots.adminTiles`).
 ///
 /// `Title` / `Icon` are the owning module's own, so a relabelled

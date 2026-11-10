@@ -342,7 +342,7 @@ exercise; there is no in-tree harness that drives a real service worker.
 ## 6. Composition checklist
 
 - [ ] `examples/offline-sw.js` copied to the public-asset root, `PRECACHE_URLS` adjusted for the shell.
-- [ ] `ClientConfig.Offline = EnabledOffline …`, with `CacheVersion` bumped per release.
+- [ ] `ClientConfig.Shell.Offline = EnabledOffline …`, with `CacheVersion` bumped per release.
 - [ ] `ServiceWorkerRegistration.boot config.Offline` called at app start.
 - [ ] `SyncCoordinator.start queue api offlineConfig` — and its `Stop` called on unmount.
 - [ ] `OfflineConflictResolver` mounted in the shell (it renders nothing when there are no conflicts).

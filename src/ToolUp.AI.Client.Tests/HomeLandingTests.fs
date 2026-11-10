@@ -42,7 +42,7 @@ let private appModule (id: string) (name: string) : ErasedModule =
 /// production, SDK.Client.fs ~lines 1001-1003): an explicit
 /// `ActiveModule` wins; otherwise the shell lands on `modules[0]`.
 let private landingId (config: ClientConfig) (prepared: ErasedModule list) : string =
-    match config.ActiveModule with
+    match config.Shell.ActiveModule with
     | Some id -> id
     | None -> prepared[0].Definition.Id
 
@@ -59,7 +59,7 @@ let tests =
             let config = {
                 ClientConfig.defaults with
                     Slots.HomeModule = SlotFill.Default
-                    ActiveModule = None
+                    Shell.ActiveModule = None
             }
 
             let prepared = Client.prepareModules config apps
@@ -73,7 +73,7 @@ let tests =
             let config = {
                 ClientConfig.defaults with
                     Slots.HomeModule = SlotFill.Default
-                    ActiveModule = Some "app.alpha"
+                    Shell.ActiveModule = Some "app.alpha"
             }
 
             let prepared = Client.prepareModules config apps

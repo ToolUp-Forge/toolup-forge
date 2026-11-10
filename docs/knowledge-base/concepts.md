@@ -211,7 +211,7 @@ Html.button [
 ]
 ```
 
-`Toolup.NarrativeCommit` is a registry with no compile-time dependency on KB: `current ()` returns the installed `NarrativeCommitHandler`, whose `Submit` takes a `NarrativeDocument` and an overwrite flag (`false` first; the UI re-submits `true` after confirming). `None` means nothing registered a handler, so the Save button degrades instead of failing. The handler is `KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers.NarrativeCommitHandler` at compose time (directly, or by `KnowledgeBaseClientConfig.withKnowledgeBase`).
+`Toolup.NarrativeCommit` is a registry with no compile-time dependency on KB: `current ()` returns the installed `NarrativeCommitHandler`, whose `Submit` takes a `NarrativeDocument` and an overwrite flag (`false` first; the UI re-submits `true` after confirming). `None` means nothing registered a handler, so the Save button degrades instead of failing. The handler is `KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Composition.Handlers.NarrativeCommitHandler` at compose time (directly, or by `KnowledgeBaseClientConfig.withKnowledgeBase`).
 
 The handler:
 1. Sends the narrative + title via `KnowledgeApi.IngestNarrative` (ToolUp.Remoting).

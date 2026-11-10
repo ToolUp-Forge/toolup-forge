@@ -9,7 +9,7 @@ open Toolup.UIToolkit
 
 // SDK built-in no-active-team landing module — the parameterized
 // alternative to a consumer hand-rolling a landing module and pointing
-// `ClientConfig.NoActiveTeamLandingModuleId` at it. `prepareModules`
+// `ClientConfig.Chrome.NoActiveTeamLanding` (`NoActiveTeamLandingFill.Module`) at it. `prepareModules`
 // (SDK.Client.fs) injects this when `ClientConfig.NoActiveTeamLanding` is
 // set on a team-scoped deployment with no explicit custom module id; the
 // gate (`ClientConfig.effectiveNoActiveTeamLandingId`) resolves to
@@ -180,7 +180,7 @@ let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (dispatc
 /// Registered under `NoActiveTeamLanding.moduleId` with
 /// `Visibility.visibleTo [ UserKind ]` so it disappears once a team is
 /// active. Public so a consumer can register it directly (and point
-/// `NoActiveTeamLandingModuleId` at the same id) if needed, though the
+/// `NoActiveTeamLandingFill.Module` at the same id) if needed, though the
 /// normal path is just setting `ClientConfig.NoActiveTeamLanding`.
 let create (cfg: NoActiveTeamLandingConfig) : ErasedModule =
     // `init` is `ClientModuleContext -> Model * Cmd<Msg>` (Phase 548 —

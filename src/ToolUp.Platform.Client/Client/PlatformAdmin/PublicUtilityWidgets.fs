@@ -14,7 +14,7 @@ open ToolUp.Platform
 // ─── Phase 61 — public-utility PlatformAdmin widgets ──────────────
 //
 // Four widgets surfaced inside `PlatformAdminUI` when
-// `ClientConfig.PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
+// `ClientConfig.PublicUtility.PlatformAdminProfile = PublicUtilityPlatformAdminProfile`.
 // Each widget fetches from the matching Phase 61 server endpoint
 // (`/api/_platform/admin/{rate-limits,premium-users,ad-units}`) and
 // renders a live data view. Per the phase body each widget
@@ -121,11 +121,11 @@ let inline private fetchJson<'T>
 // renders the substrate stub the original body shipped — opt-in
 // surface, no broken fetches.
 
-let trafficDashboardWith (msgs: TrafficWidgetMessages) (config: ClientConfig) : ReactElement =
+let trafficDashboardWith (msgs: TrafficWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     let body = substrateStub msgs.Stub
     widgetCard msgs.Title msgs.Subtitle body
 
-let trafficDashboard (config: ClientConfig) : ReactElement =
+let trafficDashboard (config: PublicUtilityConfig) : ReactElement =
     trafficDashboardWith MessageCatalog.english.PublicUtilityWidgets.Traffic config
 
 // ─── Widget 2 — Rate-limit event log ──────────────────────────────
@@ -312,15 +312,15 @@ let RateLimitEventLogBody () : ReactElement =
 
     Html.div [ prop.children [ controls; body ] ]
 
-let rateLimitEventLogWith (msgs: RateLimitWidgetMessages) (config: ClientConfig) : ReactElement =
+let rateLimitEventLogWith (msgs: RateLimitWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     widgetCard msgs.Title msgs.Subtitle (RateLimitEventLogBody())
 
-let rateLimitEventLog (config: ClientConfig) : ReactElement =
+let rateLimitEventLog (config: PublicUtilityConfig) : ReactElement =
     rateLimitEventLogWith MessageCatalog.english.PublicUtilityWidgets.RateLimits config
 
 // ─── Widget 3 — Ad-unit configuration ─────────────────────────────
 // CRUD over /api/_platform/admin/ad-units. Skips entirely when
-// ClientConfig.AdPanel = NoAdPanel (the server endpoint is also
+// ClientConfig.PublicUtility.AdPanel = NoAdPanel (the server endpoint is also
 // 503-mounted when EntityStore is unwired — the widget renders an
 // empty state in that case too).
 
@@ -679,13 +679,13 @@ let AdUnitConfigBody (defaultAdClientId: string) : ReactElement =
 
     Html.div [ prop.children [ listSection; formSection ] ]
 
-let adUnitConfigWith (msgs: AdUnitWidgetMessages) (config: ClientConfig) : ReactElement =
+let adUnitConfigWith (msgs: AdUnitWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     match config.AdPanel with
     | NoAdPanel -> widgetCard msgs.Title msgs.Subtitle (substrateStub msgs.DisabledStub)
     | EnabledAdPanel panelConfig ->
         widgetCard msgs.Title msgs.Subtitle (AdUnitConfigBody(panelConfig.DefaultAdClientId))
 
-let adUnitConfig (config: ClientConfig) : ReactElement =
+let adUnitConfig (config: PublicUtilityConfig) : ReactElement =
     adUnitConfigWith MessageCatalog.english.PublicUtilityWidgets.AdUnits config
 
 // ─── Widget 4 — Premium-user list ─────────────────────────────────
@@ -797,15 +797,15 @@ let PremiumUserListBody () : ReactElement =
 
     Html.div [ prop.children [ controls; body ] ]
 
-let premiumUserListWith (msgs: PremiumUserWidgetMessages) (config: ClientConfig) : ReactElement =
+let premiumUserListWith (msgs: PremiumUserWidgetMessages) (config: PublicUtilityConfig) : ReactElement =
     match config.PremiumModel with
     | AnonymousFirst -> widgetCard msgs.Title msgs.Subtitle (PremiumUserListBody())
 
-let premiumUserList (config: ClientConfig) : ReactElement =
+let premiumUserList (config: PublicUtilityConfig) : ReactElement =
     premiumUserListWith MessageCatalog.english.PublicUtilityWidgets.PremiumUsers config
 
 // ─── Composition entry ────────────────────────────────────────────
-// Render every widget that applies under the current ClientConfig +
+// Render every widget that applies under the current PublicUtilityConfig +
 // PlatformAdminProfile combination.
 
 /// Phase 751 — the composed page as a React COMPONENT, for the same
@@ -815,7 +815,7 @@ let premiumUserList (config: ClientConfig) : ReactElement =
 /// hook order and break the moment the active module changed. `render`
 /// itself keeps its existing signature and delegates here.
 [<ReactComponent>]
-let private PublicUtilityWidgetsBody (config: ClientConfig) : ReactElement =
+let private PublicUtilityWidgetsBody (config: PublicUtilityConfig) : ReactElement =
     let msgs = (MessageCatalogProvider.useMessages ()).PublicUtilityWidgets
 
     Html.div [
@@ -832,7 +832,7 @@ let private PublicUtilityWidgetsBody (config: ClientConfig) : ReactElement =
         ]
     ]
 
-let render (config: ClientConfig) : ReactElement =
+let render (config: PublicUtilityConfig) : ReactElement =
     match config.PlatformAdminProfile with
     | StandardPlatformAdminProfile -> Html.none
     | PublicUtilityPlatformAdminProfile -> PublicUtilityWidgetsBody config

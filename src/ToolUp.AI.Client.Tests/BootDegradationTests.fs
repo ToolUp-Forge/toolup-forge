@@ -228,8 +228,8 @@ let tests =
 
                 let config = {
                     ClientConfig.defaults with
-                        Handlers = {
-                            ClientConfig.defaults.Handlers with
+                        Composition.Handlers = {
+                            ClientConfig.defaults.Composition.Handlers with
                                 SignOutHandler = Some ignore
                         }
                 }

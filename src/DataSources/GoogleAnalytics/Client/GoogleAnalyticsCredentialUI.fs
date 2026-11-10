@@ -421,7 +421,7 @@ let private GoogleAnalyticsCredentialPanel
 // ─── Registration ────────────────────────────────────────────────────
 
 /// Build the `(Kind, handler)` pair for
-/// `ClientConfig.Handlers.DataSourceCredentialHandlers`.
+/// `ClientConfig.Composition.Handlers.DataSourceCredentialHandlers`.
 ///
 /// ```fsharp
 /// Handlers = {

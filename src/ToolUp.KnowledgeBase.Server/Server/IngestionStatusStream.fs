@@ -1,10 +1,11 @@
 module KnowledgeBase.ServerIngestionStatusStream
 
 open System.Collections.Generic
+open ToolUp.Platform.BlobStorage
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
 
-// ─── Phase 69c.tail D — ingestion status as a typed stream ────────
+// ─── D — ingestion status as a typed stream ────────
 //
 // The KB client learns that a document finished ingesting by asking:
 // `KnowledgeApi.GetStatus` every 2 s, per non-terminal document, until
@@ -25,7 +26,7 @@ open KnowledgeBase.ServerIndexStorage
 // keep in step for no gain. A consumer of this stream parses each chunk
 // with the parser it already has for `GetStatus`.
 //
-// **Why this is not the `JobHandle<'T>` shape (Phase 69i.I).** The forge
+// **Why this is not the `JobHandle<'T>` shape.** The forge
 // TIDY-UP carries a decision bundle asking whether `UploadDocument` /
 // `GetStatus` should move onto the typed job handle. It should not, and
 // this is not a step towards it: a `JobStatus<'T>` has five cases where
@@ -51,62 +52,61 @@ open KnowledgeBase.ServerIndexStorage
 //     StreamIngestionStatus: string -> IAsyncEnumerable<IngestionStatus>
 // }
 //
-// let knowledgeStreamingApi (_ctx: HttpContext) : KnowledgeStreamingApi = {
-//     StreamIngestionStatus = ingestionStatusStream
-// }
+// let knowledgeStreamingApi (ctx: HttpContext) : KnowledgeStreamingApi =
+//     let deps = KnowledgeApiDeps.resolve ctx
+//     { StreamIngestionStatus = ingestionStatusStream deps.Storage deps.Scope.Container }
 // ```
 //
 // The client keeps polling until it opts in; the poll is not retired by
-// this and is still the restart path (a cache miss falls back to the
-// persisted index, which a subscription cannot).
-
-/// True for an ingestion status that will not change again. The same set
-/// the KB client's poll loop treats as terminal — a stream that ended on
-/// a narrower set would hang on `UploadRejected` / `UnsupportedFormat` /
-/// `OcrUnavailable`, each of which is an end state with nothing further
-/// to report.
-let isTerminalStatus (status: IngestionStatus) =
-    match status with
-    | IngestionStatus.Complete _
-    | IngestionStatus.Failed _
-    | IngestionStatus.UploadRejected _
-    | IngestionStatus.UnsupportedFormat _
-    | IngestionStatus.OcrUnavailable _ -> true
-    | _ -> false
+// this.
 
 /// One document's ingestion status, as it changes.
 ///
 /// Cold: nothing is subscribed until the stream is enumerated, and each
 /// enumeration is an independent subscription. The first element is the
-/// status the cache holds at that moment (so a consumer that arrives
-/// mid-ingest is told where it is rather than waiting for the next
-/// transition); every later element is a transition. The stream ends on
-/// the first terminal status — including one delivered as the seed, so
-/// subscribing to an already-finished document yields exactly one element
-/// and completes.
+/// document's persisted status (its in-flight attempt's, else its index
+/// entry's), read from `storage` at subscribe time, so a consumer that
+/// arrives mid-ingest is told where it is; every later element is a
+/// transition. When a transition arrives before that read completes, the
+/// read is not emitted: it can only be older. The stream ends on the first
+/// terminal status — including one delivered as the seed, so subscribing to
+/// an already-finished document yields exactly one element and completes.
 ///
-/// A document the cache has never heard of (a bad id, or one whose status
-/// was swept) produces no seed and no elements until something writes
-/// one. That is deliberate: the cache is not the store, and answering
-/// "unknown" out of a stream would require inventing a status the wire
-/// contract does not have. A caller that needs the persisted fallback
-/// asks `GetStatus` — which is exactly what it is for — before, or
-/// instead of, subscribing.
+/// A document that is not in `container`'s index produces no seed and no
+/// elements until something writes one: answering "unknown" out of a stream
+/// would require inventing a status the wire contract does not have.
 ///
 /// The subscription is disposed when the stream is disposed, which the
-/// dispatcher does when the connection ends, so an aborted consumer
-/// leaves nothing behind.
-let ingestionStatusStream (docId: string) : IAsyncEnumerable<IngestionStatus> =
-    ToolUp.Remoting.Server.AsyncStream.fromSubscription isTerminalStatus (fun emit ->
+/// dispatcher does when the connection ends, so an aborted consumer leaves
+/// nothing behind.
+let ingestionStatusStream
+    (storage: IBlobStorage)
+    (container: string)
+    (docId: string)
+    : IAsyncEnumerable<IngestionStatus> =
+    ToolUp.Remoting.Server.AsyncStream.fromSubscription IngestionStatus.isTerminal (fun emit ->
+        let gate = obj ()
+        let mutable moved = false
+
         // Subscribe BEFORE reading the seed: the other order can drop a
         // transition that lands between the read and the subscribe, and a
-        // dropped transition is unrecoverable. This order can instead
-        // deliver the same status twice — harmless, since a status is a
-        // state rather than an increment.
-        let subscription = IngestionStatusFeed.subscribe docId emit
+        // dropped transition is unrecoverable.
+        let subscription =
+            IngestionStatusFeed.subscribe docId (fun status ->
+                lock gate (fun () ->
+                    moved <- true
+                    emit status))
 
-        match statusCache.TryGetValue docId with
-        | true, current -> emit current
-        | _ -> ()
+        async {
+            let! seed = persistedStatus storage container docId
+
+            match seed with
+            | Some status ->
+                lock gate (fun () ->
+                    if not moved then
+                        emit status)
+            | None -> ()
+        }
+        |> Async.Start
 
         subscription)

@@ -1132,7 +1132,7 @@ let private platformLibraryView (model: Model) (dispatch: Msg -> unit) : PageCon
 // ─── Module registration ──────────────────────────────────────────
 
 /// Companion-exported NarrativeCommit handler. Add to
-/// `ClientConfig.Handlers.NarrativeCommitHandler` (as `Some
+/// `ClientConfig.Composition.Handlers.NarrativeCommitHandler` (as `Some
 /// KnowledgeBaseView.narrativeCommitHandler`) to enable
 /// `NarrativeRenderer`'s "Save to Knowledge Base" button.
 ///

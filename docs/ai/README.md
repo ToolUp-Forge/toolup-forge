@@ -24,7 +24,7 @@ Three packages (cross-tier shape):
 
 | Package | What it is |
 |---|---|
-| `ToolUp.AI.Core` | Shared types: `AIAssistantMode`, `AIToolDefinition`, `AISettings`, `AILatencyTypes`. The "minimum viable consumer-of-AI" floor for downstream packages (RAG, KnowledgeBase). |
+| `ToolUp.AI.Core` | Shared types: `AISlotFills`, `AIToolDefinition`, `AISettings`, `AILatencyTypes`. The "minimum viable consumer-of-AI" floor for downstream packages (RAG, KnowledgeBase). |
 | `ToolUp.AI.Server` | Agent loop, SSE streaming, tool registry, system-prompt composition, `AICompose`. Built on `IAIProvider` from `ToolUp.Platform.Core`. |
 | `ToolUp.AI.Client` | Fable + Elmish + Feliz side-panel MVU, SSE client, conversation panel, AI assistant module UI, AI settings UI. |
 
@@ -72,15 +72,15 @@ Wire the client composition root:
 ```fsharp skip=fragment
 open ToolUp.AI.Client
 
-let aiMode =
-    ConfiguredAIAssistant {
+let aiSlots =
+    AISlotFills.configured {
         Name = "Aria"
         Icon = Icon.ofUrl "/svg/spark.svg"
         ShowSidePanel = true
     }
 
 // `run` owns the whole Elmish program — mounting included.
-AIClientConfig.run aiMode clientConfig modules
+AIClientConfig.run aiSlots clientConfig modules
 ```
 
 That's it. The agent loop, SSE endpoint, conversation persistence, and side-panel UI are now in place. See [getting-started.md](getting-started.md) for the end-to-end walkthrough.

@@ -9,7 +9,7 @@ namespace ToolUp.Platform
 // landing surface by exporting an `IHomeWidgetContributor` value
 // (`HomeWidget`/`IHomeWidgetContributor` live in `SDK.ClientTypes.fs`
 // so `ClientConfig` can reference them). Consumers add the contributor
-// to `ClientConfig.Handlers.HomeWidgetContributors`; this registry is
+// to `ClientConfig.Composition.Handlers.HomeWidgetContributors`; this registry is
 // populated once at boot by `SDK.Client.program`, and the built-in
 // `Home` module reads `widgets ()` at render time.
 //
@@ -21,7 +21,7 @@ namespace ToolUp.Platform
 // empty ⇒ Home renders byte-for-byte as Phase 171.
 
 /// Registry of module-contributed Home widgets. Populated once at boot
-/// from `ClientConfig.Handlers.HomeWidgetContributors`; `Home.fs` calls
+/// from `ClientConfig.Composition.Handlers.HomeWidgetContributors`; `Home.fs` calls
 /// `widgets ()` to render the contributed section below the built-in
 /// cards.
 module HomeWidgetRegistry =
@@ -32,7 +32,7 @@ module HomeWidgetRegistry =
     let mutable private cached: HomeWidget list = []
 
     /// Called once by `SDK.Client.program` with the value from
-    /// `ClientConfig.Handlers.HomeWidgetContributors`. Flattens each
+    /// `ClientConfig.Composition.Handlers.HomeWidgetContributors`. Flattens each
     /// contributor's `Widgets ()` and sorts by `Weight` once, so the
     /// render path is a cheap field read.
     let setContributors (contributors: IHomeWidgetContributor list) : unit =

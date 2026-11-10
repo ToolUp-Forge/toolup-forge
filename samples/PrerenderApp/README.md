@@ -1,6 +1,6 @@
 # PrerenderApp — Phase 57 worked example
 
-Minimal end-to-end demonstration of `ClientConfig.PrerenderRoutes` + the FAKE `Prerender` target. Shows how an ads-monetised public-utility SPA wires:
+Minimal end-to-end demonstration of `ClientConfig.PublicUtility.PrerenderRoutes` + the FAKE `Prerender` target. Shows how an ads-monetised public-utility SPA wires:
 
 1. **Declared prerender routes** — `/`, `/individual`, `/family`, `/company` plus five SEO landing pages.
 2. **Hydration-aware bootstrap** — `Bootstrap.Hydration.run` replacing `Client.run`, with `MetadataHook.install` for SPA navigation.

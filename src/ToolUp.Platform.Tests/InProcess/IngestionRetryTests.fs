@@ -79,20 +79,36 @@ let private reCycle =
     testList "store re-cycles Failed → Pending → Indexed on retry" [
         test "a Failed file can be re-ingested to Indexed" {
             let store = IngestionStatusStore.createInMemory ()
-            let observer = ToolUp.RAG.DataManagerIngestionObserver.create store None logger
+
+            let attempts =
+                IngestionAttemptStore.dataManager
+                    store
+                    (ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage())
+                    logger
+
+            let observer = ToolUp.RAG.IngestionObserver.create attempts None logger
+
+            let job (attempt: string) (chunk: int) = {
+                chunkJob "team-a" "f.csv" chunk with
+                    Attempt =
+                        Some {
+                            AttemptId = attempt
+                            EnqueuedChunks = 2
+                        }
+            }
 
             // First ingest fails on a chunk.
-            run (store.SetPending("team-a", "f.csv", 2))
-            run (observer.OnChunkFailed(chunkJob "team-a" "f.csv" 0, "boom"))
+            run (attempts.Begin("team-a", "f.csv", "first", 2))
+            run (observer.OnChunkFailed(job "first" 0, "boom"))
             Expect.equal (run (store.Get("team-a", "f.csv"))) (Some(Failed "boom")) "Failed after the first attempt"
             Expect.isTrue (FileIngestionStatus.isRetryable (run (store.Get("team-a", "f.csv")))) "now retryable"
 
-            // Retry re-marks Pending (what the post-save hook does on re-fire),
-            // then both chunks index ⇒ Indexed.
-            run (store.SetPending("team-a", "f.csv", 2))
+            // The retry is a new attempt (what the post-save hook does on
+            // re-fire): Pending again, then both chunks index ⇒ Indexed.
+            run (attempts.Begin("team-a", "f.csv", "retry", 2))
             Expect.equal (run (store.Get("team-a", "f.csv"))) (Some Pending) "back to Pending on retry"
-            run (observer.OnChunkIndexed(chunkJob "team-a" "f.csv" 0))
-            run (observer.OnChunkIndexed(chunkJob "team-a" "f.csv" 1))
+            run (observer.OnChunkIndexed(job "retry" 0))
+            run (observer.OnChunkIndexed(job "retry" 1))
             Expect.equal (run (store.Get("team-a", "f.csv"))) (Some Indexed) "Indexed after the retry completes"
         }
     ]

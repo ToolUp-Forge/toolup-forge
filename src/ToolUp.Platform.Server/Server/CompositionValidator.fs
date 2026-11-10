@@ -244,7 +244,7 @@ type ModuleGraphReferences = {
     /// Enumerable data-type needs declared by composed registrations.
     DataNeeds: ModuleDataNeed list
     /// Phase 583 — the consumer's declared expected-module list
-    /// (`ServerConfig.ExpectedModules` / `ClientConfig.ExpectedModules`).
+    /// (`ServerConfig.ExpectedModules` / `ClientConfig.Composition.ExpectedModules`).
     /// `None` — the default — leaves `client-server-module-parity`
     /// dormant, and is why the rule costs an undeclared deployment
     /// nothing (GP 13). `Some []` is a real declaration ("this
@@ -700,7 +700,7 @@ module CompositionValidator =
     /// unit the server tier does not (and must not) reference. So parity
     /// is established transitively: BOTH roots declare the same expected
     /// list — `ServerConfig.ExpectedModules` here,
-    /// `ClientConfig.ExpectedModules` checked by
+    /// `ClientConfig.Composition.ExpectedModules` checked by
     /// `ModuleParityValidator` at client boot — and each is measured
     /// against it. Two sets equal to the same set are equal to each
     /// other. The comparison is sound across the tier boundary because

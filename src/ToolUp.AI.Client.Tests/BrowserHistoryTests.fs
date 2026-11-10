@@ -110,7 +110,7 @@ let private bus = Unchecked.defaultof<IModuleQueryBus>
 
 let private on = {
     ClientConfig.defaults with
-        BrowserHistory = HashHistory
+        Shell.BrowserHistory = HashHistory
 }
 
 let private singlePage (id: string) (inits: ResizeArray<string>) =
@@ -486,7 +486,7 @@ let tests =
             let gated = {
                 on with
                     Surfaces = Surfaces.team
-                    NoActiveTeamLandingModuleId = Some "landing"
+                    Chrome.NoActiveTeamLanding = ChromeFill.On(NoActiveTeamLandingFill.Module "landing")
             }
 
             let gatedModules () =
@@ -830,7 +830,7 @@ let tests =
                         Client.init
                             {
                                 config with
-                                    BrowserHistory = HashHistory
+                                    Shell.BrowserHistory = HashHistory
                             }
                             bus
                             modules

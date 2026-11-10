@@ -89,11 +89,11 @@ For AI, run the shell through `AIClientConfig.run` instead of `Client.run`:
 open ToolUp.AI
 open ToolUp.AI.Client
 
-let aiMode = ConfiguredAIAssistant { Name = "Aria"; Icon = sparkIcon; ShowSidePanel = true }
-AIClientConfig.run aiMode { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual } modules
+let aiSlots = AISlotFills.configured { Name = "Aria"; Icon = sparkIcon; ShowSidePanel = true }
+AIClientConfig.run aiSlots { ClientConfig.defaults with AppName = "MyApp"; Surfaces = Surfaces.individual } modules
 ```
 
-`ConfiguredAIAssistant` carries the **client-side** branding record
+`AISlotFills.configured` carries the **client-side** branding record
 (`AIAssistantClientBranding`), whose `Icon` is a typed `ReactElement` — a
 `vite-plugin-svgr` component import (`sparkIcon` above) drops straight in and
 inherits `currentColor` from the sidebar. The server-side
@@ -125,7 +125,7 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 - Built-in `Data Manager` module (file upload + per-data-type management) — auto-injected when modules declare data types
 - Built-in `Team Manager` module — auto-injected when `ClientConfig.Surfaces` includes a `Team` profile
 - Built-in `Platform Admin` sidebar group with role-management, health monitoring, and Platform KB administration modules (gated by `PlatformRole`)
-- Built-in `Users` admin module — **opt-in** (default off). Set `ClientConfig.PlatformUsers = DefaultPlatformUsers` to add it to the Platform-Admin sidebar group. It lists every principal the substrate has evidence for (`IPlatformTenantApi.ListPrincipals` — a derived, read-only projection over memberships, `user-*` scopes, and sign-in audit), flags team-less accounts via a filter toggle, and drives the tenant-lifecycle offboard flow (preview → confirm → summary, honouring the offboard-confirmation-token mode) per user against the `user-<id>` scope. The default `NoPlatformUsers` omits it entirely, so an existing deployment is byte-for-byte unchanged; pair with `ServerConfig.TenantLifecycle = FeatureMode.Enabled` server-side for the per-row offboard actions (the list still renders without it — the actions degrade to an error banner).
+- Built-in `Users` admin module — **opt-in** (default off). Set `ClientConfig.Chrome.PlatformUsers = ChromeFill.On()` to add it to the Platform-Admin sidebar group. It lists every principal the substrate has evidence for (`IPlatformTenantApi.ListPrincipals` — a derived, read-only projection over memberships, `user-*` scopes, and sign-in audit), flags team-less accounts via a filter toggle, and drives the tenant-lifecycle offboard flow (preview → confirm → summary, honouring the offboard-confirmation-token mode) per user against the `user-<id>` scope. The default `ChromeFill.Off` omits it entirely, so an existing deployment is byte-for-byte unchanged; pair with `ServerConfig.TenantLifecycle = FeatureMode.Enabled` server-side for the per-row offboard actions (the list still renders without it — the actions degrade to an error banner).
 - Built-in `Audit Trail` module — fills the `AuditViewer` shell slot, admitted in any non-Anonymous mode (`ClientConfig.Slots.AuditViewer`; `SlotFill.Empty` removes it). Owner/Admin read surface over the deployment's own audit rows: filter bar, paged table, per-event payload detail, CSV export. Pair with `ServerConfig.AuditLog = FeatureMode.Enabled` — it renders its "no audit events" state under the default `FeatureMode.Disabled`. See [Reading the trail in-app](#reading-the-trail-in-app--auditlogui).
 - Built-in `Composition` module — fills the `CompositionInspector` shell slot, admitted in any non-Anonymous mode (`ClientConfig.Slots.CompositionInspector`; `SlotFill.Empty` removes it). Owner/Admin read surface over what this deployment declared at compose time: five pages (composition manifest / surface descriptors / invariant rules with their preflight verdict / grounding + disclosure envelope / provenance substrate), each exporting its own canonical JSON. No server-side knob to pair — the snapshot is registered by `ServerApp.run`. See [Reading the composition in-app](#reading-the-composition-in-app--compositioninspectorui).
 - Built-in `ToastCentre` — fixed-position toast renderer subscribing to `NotificationClient`

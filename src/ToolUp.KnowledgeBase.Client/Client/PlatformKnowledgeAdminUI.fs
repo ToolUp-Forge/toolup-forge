@@ -311,7 +311,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 /// registration shape stays consistent by moving together. The append is
 /// unconditional because the sidebar entry is role-gated at render time
 /// by its "Platform Management" group — the same argument
-/// `AIClientConfig.appendAssistantModule` makes for `PlatformAIKeysAdminUI`.
+/// the AI slots (`AIClientConfig.slotExtensions`) makes for `PlatformAIKeysAdminUI`.
 ///
 /// Reserved Id `_sdk.PlatformKnowledgeAdmin`. Group "Platform Admin".
 /// The shell-level role gate (commit 4f.2) hides the sidebar entry

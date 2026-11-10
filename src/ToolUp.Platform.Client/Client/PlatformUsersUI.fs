@@ -39,7 +39,7 @@ open ToolUp.Platform
 // error banner, never a silent read (GP 4).
 //
 // **Opt-in / zero-cost (GP 11/13).** Injected only when
-// `ClientConfig.PlatformUsers = DefaultPlatformUsers`; the default
+// `ClientConfig.Chrome.PlatformUsers = DefaultPlatformUsers`; the default
 // `NoPlatformUsers` omits it entirely. On a `FeatureMode.Disabled` deployment
 // the offboard endpoints 404, so the per-row actions surface an error
 // banner rather than a blank page — the list itself still renders.
@@ -884,7 +884,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Platfor
 /// sidebar group; the shell's role filter hides the group from non-admin
 /// callers, and every `IPlatformTenantApi` method is Platform-Admin gated
 /// server-side regardless (GP 4). Injected only when
-/// `ClientConfig.PlatformUsers = DefaultPlatformUsers` (GP 11/13).
+/// `ClientConfig.Chrome.PlatformUsers = DefaultPlatformUsers` (GP 11/13).
 let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Users"
 

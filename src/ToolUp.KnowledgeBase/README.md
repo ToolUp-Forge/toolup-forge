@@ -38,7 +38,7 @@ No cycles. RAG knows nothing about KB; KB depends on RAG (today). KB's server re
 - `standingContextBuilder : IBlobStorage -> ILogger option -> SystemPromptBuilder` — opt-in AI prompt builder that reads the team's standing context per outer turn. Composed by the deployment in `composeWithAI`'s prompt list — KB never auto-injects it (AI doesn't depend on KB; the deployment's composition root is the only place that sees both).
 
 **Client** (`module KnowledgeBase`):
-- `KnowledgeBaseView.narrativeCommitHandler : NarrativeCommitHandler` — the "Save to Knowledge Base" broker. Set on `ClientConfig.Handlers.NarrativeCommitHandler` so other modules' Save buttons resolve (Phase 13a replaced the legacy `installNarrativeCommit ()` module-load side effect with this value).
+- `KnowledgeBaseView.narrativeCommitHandler : NarrativeCommitHandler` — the "Save to Knowledge Base" broker. Set on `ClientConfig.Composition.Handlers.NarrativeCommitHandler` so other modules' Save buttons resolve (Phase 13a replaced the legacy `installNarrativeCommit ()` module-load side effect with this value).
 - `KnowledgeBaseView.register ()` — returns the `ErasedModule` for SDK registration. Multi-page module with `/documents`, `/notes`, `/platform-library`, `/ai-context` pages.
 - `KnowledgeBaseView.create : KnowledgeBaseConfig option -> ErasedModule` — the parameterised form behind `ConfiguredKnowledgeBase`; `create None` is `register ()`.
 - `KnowledgeBaseMode` / `KnowledgeBaseConfig` (namespace `ToolUp.KnowledgeBase`) + `KnowledgeBaseClientConfig.withKnowledgeBase` (`ToolUp.KnowledgeBase.Client`) — the four-case override mode; see [below](#knowledgebasemode--swapping-the-kb-module-without-removing-imports).
@@ -123,7 +123,7 @@ open ToolUp.KnowledgeBase.Client   // KnowledgeBaseClientConfig
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
 
-Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConfig modules
+Client.run clientConfig modules      // or: AIClientConfig.run aiSlots clientConfig modules
 ```
 
 | Case | Sidebar module | `Handlers.NarrativeCommitHandler` |
@@ -133,7 +133,7 @@ Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConf
 | `ConfiguredKnowledgeBase cfg` | built-in KB, re-branded (`Name` / `Icon` / `Group`) + the content admin | as above |
 | `ExternalKnowledgeBase m` | `m`, and nothing else | untouched — the external KB wires its own |
 
-The DU lives in the companion's client tier, not on `ClientConfig`: `ToolUp.Platform.Client` takes no dependency on a companion, and `DefaultKnowledgeBase` has to construct the companion's own module — the same reason `AIAssistantMode` lives in `ToolUp.AI.Client`. The transform is therefore a companion-owned `ClientConfig * ErasedModule list` function that composes under either entry point.
+The DU lives in the companion's client tier, not on `ClientConfig`: `ToolUp.Platform.Client` takes no dependency on a companion, and `DefaultKnowledgeBase` has to construct the companion's own module — the same reason `AISlotFills` lives in `ToolUp.AI.Client`. The transform is therefore a companion-owned `ClientConfig * ErasedModule list` function that composes under either entry point.
 
 The mode governs *client* auto-injection only. Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring the data-manager shell slot's relationship to `fileManagementApi`.
 

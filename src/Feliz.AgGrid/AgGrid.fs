@@ -113,7 +113,7 @@ let agGrid: obj = jsNative
 // Sanctioned module-level mutable: boot-time configuration, one writer.
 let mutable private configuredModules: AgGridModuleConfig option = None
 
-/// What the SDK shell does with `ClientConfig.GridModules`: every grid in the
+/// What the SDK shell does with `ClientConfig.Shell.GridModules`: every grid in the
 /// program takes its modules and licence key from this configuration, through
 /// `AgGridProvider`, when the grid chunk loads.
 let configure (config: AgGridModuleConfig) = configuredModules <- Some config

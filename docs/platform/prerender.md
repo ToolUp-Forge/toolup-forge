@@ -5,7 +5,7 @@ ToolUp Platform supports two distinct surfaces for indexable, crawlable content:
 | Surface | Use when | First paint | Hydration |
 |---|---|---|---|
 | **`IPublicContentApi` SSR** (the `ToolUp.PublicRendering` companion) | Marketing site, docs site, blog — content is markdown-driven, no SPA shell on the page | Server-rendered per request via Giraffe.ViewEngine | None — there is no SPA on the page |
-| **`ClientConfig.PrerenderRoutes`** (build-time static prerender) | Public-utility app with an SPA shell — home page + landing pages need to be indexable, but the rest of the app stays SPA | Build-time prerender of declared routes (static `dist/*.html`) | React `hydrateRoot` mounts the SPA on top of the prerendered DOM |
+| **`ClientConfig.PublicUtility.PrerenderRoutes`** (build-time static prerender) | Public-utility app with an SPA shell — home page + landing pages need to be indexable, but the rest of the app stays SPA | Build-time prerender of declared routes (static `dist/*.html`) | React `hydrateRoot` mounts the SPA on top of the prerendered DOM |
 
 Both surfaces are opt-in. SPA-only deployments (most internal / tenant-shaped apps) stay byte-for-byte unchanged.
 
@@ -25,7 +25,7 @@ build time                                         runtime
 
 src/Client/Client.fs                                Browser GET /individual
     │                                                 │
-    │  ClientConfig.PrerenderRoutes = [ ... ]          ▼
+    │  ClientConfig.PublicUtility.PrerenderRoutes = [ ... ]          ▼
     │                                              ┌─────────────────────────────────┐
     ▼                                              │ PrerenderedRoutesMiddleware     │
 dotnet run -- Prerender                            │ — maps /individual              │
@@ -97,7 +97,7 @@ The list is opt-in per `ClientConfig` field; an empty list (default) preserves S
 
 **4. Metadata is per-route, not global.** Avoid factoring metadata to a single `defaults` record everyone shares. AdSense, Twitter, Facebook all crawl per-page metadata; the SEO win evaporates if every page declares the same title.
 
-**5. Don't prerender token-gated routes.** Routes registered via `ClientConfig.PublicEntryDispatchers` (e.g. `/r/{token}` for publishable form embeds) are token-specific and should not appear in `PrerenderRoutes`. The hydration bootstrap skips dispatcher routes on the prerender branch by design.
+**5. Don't prerender token-gated routes.** Routes registered via `ClientConfig.Composition.PublicEntryDispatchers` (e.g. `/r/{token}` for publishable form embeds) are token-specific and should not appear in `PrerenderRoutes`. The hydration bootstrap skips dispatcher routes on the prerender branch by design.
 
 ## FAKE seam vs Vite seam
 
@@ -169,7 +169,7 @@ app.UseStaticFiles(...)  // standard SDK pipeline — keep as is
 ToolUp.Platform.Bootstrap.Hydration.run config modules
 
 // Optional but recommended for ads-monetised deployments:
-ToolUp.Platform.Bootstrap.MetadataHook.install config.PrerenderRoutes
+ToolUp.Platform.Bootstrap.MetadataHook.install config.PublicUtility.PrerenderRoutes
 ```
 
 `Bootstrap.Hydration.run` is a drop-in replacement for `Client.run`: it delegates directly when the prerender marker is absent (most routes for most deployments), and mounts via `hydrateRoot` only when the marker is present. `MetadataHook.install` is idempotent and a no-op when `PrerenderRoutes = []`.

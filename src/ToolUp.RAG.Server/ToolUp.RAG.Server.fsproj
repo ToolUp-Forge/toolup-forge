@@ -57,9 +57,8 @@
         <Compile Include="Server\RAGCitationDevEndpoint.fs" />
         <Compile Include="Server\RagHealthHandler.fs" />
         <Compile Include="Server\RagConfigValidator.fs" />
-        <!-- Phase 173 — Data Manager ingestion-status observer (drives the
-             platform-tier IIngestionStatusStore from chunk-completion events). -->
-        <Compile Include="Server\DataManagerIngestionObserver.fs" />
+        <!-- The ingestion-status observer over an IIngestionAttemptStore. -->
+        <Compile Include="Server\IngestionObserver.fs" />
         <!-- Phase 54d — RAG vector-store offboard purge hook. Before
              RAGCompose, which registers it under EnabledTenantLifecycle. -->
         <Compile Include="Server\RagVectorStoreLifecycle.fs" />

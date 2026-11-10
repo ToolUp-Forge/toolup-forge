@@ -512,7 +512,7 @@ let ObservabilityGroup = ToolUp.Platform.SidebarVisibility.ObservabilitySidebarG
 
 /// Create the Datadog readback admin as an `ErasedModule`. The shell's
 /// `prepareModules` injects it when
-/// `ClientConfig.DatadogReadback = EnabledDatadogReadback cfg`.
+/// `ClientConfig.Chrome.DatadogReadback = EnabledDatadogReadback cfg`.
 ///
 /// **Gating.** `NavRole.PlatformAdminOnly` is the gate (Phase 568's
 /// typed field, not the deprecated group-name fallback) — monitor state

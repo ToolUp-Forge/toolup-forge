@@ -99,7 +99,7 @@ See [`surfaces.md`](surfaces.md) for the Subject / `SurfaceProfile` / `SurfaceRe
 - [`client-localization.md`](client-localization.md) — shipping the client shell in another language: the typed `MessageCatalog` record (a missing translation is a compile error, not a runtime fallback), the three `ClientConfig.Locale` modes and their resolution order, the `MessageCatalogOverride` hook with a worked second language, in-session switching, and `Intl` for dates and numbers.
 - [`portability-rules.md`](portability-rules.md) — six rules every distributed-implementation-friendly interface satisfies.
 - [`auth.md`](auth.md) — auth providers and how to write one.
-- [`auth-ui-vendor-neutrality.md`](auth-ui-vendor-neutrality.md) — the vendor-neutral `ProviderAuthUI` config case, why its payload is `obj`, and the companion smart-constructor convention (`ClerkAuthUI` is deprecated).
+- [`auth-ui-vendor-neutrality.md`](auth-ui-vendor-neutrality.md) — the vendor-neutral `ProviderAuthUI` config case, why its payload is `obj`, and the companion smart-constructor convention (the vendor-named `ClerkAuthUI` case was removed in Phase 1074).
 - [`storage.md`](storage.md) — `IBlobStorage` companions and the encryption-at-rest decorator.
 - [`edge-serving.md`](edge-serving.md) — origin vs CDN topology: the purge-only `IEdgeCache` seam and its fire-and-forget fan-out on publish / delete, per-response-class `Cache-Control` declaration on the media routes (and the two postures the preflight refuses because they leak), the HLS key route's unconfigurable `no-store`, and delegated URL signing for a viewer the origin never sees.
 - [`events.md`](events.md) — event store, audit log, audit-sink replication.

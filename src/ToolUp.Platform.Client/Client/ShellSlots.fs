@@ -30,7 +30,9 @@ namespace ToolUp.Platform
 // no-active-team landing). They are NOT slots — none accepts a
 // deployment's own module, and nothing here pretends otherwise — but
 // they interleave with the slots in the sidebar's order, and one table
-// is the only way to state that order once.
+// is the only way to state that order once. Phase 1074 gave them one
+// shape, `ClientConfig.Chrome` of `ChromeFill.Off | On cfg`, where each
+// used to be gated by its own `ClientConfig` field and mode type.
 //
 // ORDER IS LOAD-BEARING. The sidebar renders groups in first-occurrence
 // order across the composed list, so the order of the rows below is the
@@ -43,7 +45,7 @@ namespace ToolUp.Platform
 [<RequireQualifiedAccess>]
 type ShellSlotPosition =
     /// At the very head. The shell lands on the first module when
-    /// `ClientConfig.ActiveModule` names none, so a module here is the
+    /// `ClientConfig.Shell.ActiveModule` names none, so a module here is the
     /// default start surface.
     | Home
     /// Ahead of the app's own modules.
@@ -175,7 +177,7 @@ module ShellSlots =
             ShellSlotGate.Always
             _.HomeModule
             Home.moduleId
-            (fun ctx label -> Home.create ctx.Config.HomeRecents label)
+            (fun ctx label -> Home.create ctx.Config.Shell.HomeRecents label)
             None
 
     /// The data-manager slot — the one the shell reads for the boot-time
@@ -192,9 +194,9 @@ module ShellSlots =
             | None -> FileManagerUI.moduleId)
             (fun ctx choice ->
                 match choice with
-                | None -> FileManagerUI.create ctx.DataTypes None
-                | Some(DataManagerChoice.FileUpload label) -> FileManagerUI.create ctx.DataTypes (Some label)
-                | Some(DataManagerChoice.ColumnMapping label) -> MappingDataManagerUI.create ctx.DataTypes label)
+                | None -> FileManagerUI.create ctx.DataTypes DataManagerConfig.unlabelled
+                | Some(DataManagerChoice.FileUpload cfg) -> FileManagerUI.create ctx.DataTypes cfg
+                | Some(DataManagerChoice.ColumnMapping cfg) -> MappingDataManagerUI.create ctx.DataTypes cfg)
             None
 
     let private teamManager =
@@ -295,7 +297,7 @@ module ShellSlots =
         everywhereAdmin
             _.PlatformAdmin
             PlatformAdminUI.moduleId
-            (fun ctx label -> PlatformAdminUI.create label ctx.Config)
+            (fun ctx label -> PlatformAdminUI.create label ctx.Config.PublicUtility)
             None
             "PlatformAdmin"
 
@@ -337,52 +339,44 @@ module ShellSlots =
     // ── The composition table ─────────────────────────────────────────
 
     /// One row of the composition table: a slot, or a built-in that is
-    /// shell chrome (registered by its own `ClientConfig` setting, never
-    /// by a deployment's module).
+    /// shell chrome (filled through `ClientConfig.Chrome`, never by a
+    /// deployment's module).
     [<RequireQualifiedAccess>]
     type private Row =
         | Slot of ShellSlot
         | Chrome of ShellSlotPosition * (ShellSlotContext -> ErasedModule list)
 
+    /// Phase 1074 — a chrome row: the built-in composed while the row is
+    /// `On`, nothing while it is `Off`.
+    let private chrome (fillOf: ShellChrome -> ChromeFill<'cfg>) (build: 'cfg -> ErasedModule) (ctx: ShellSlotContext) =
+        match fillOf ctx.Config.Chrome with
+        | ChromeFill.Off -> []
+        | ChromeFill.On cfg -> [ build cfg ]
+
     /// The parameterised no-active-team landing: only on a `Team`
-    /// surface, only when the deployment set its copy
-    /// (`ClientConfig.NoActiveTeamLanding`), and only when it did NOT
-    /// name a module of its own (`NoActiveTeamLandingModuleId` wins).
+    /// surface, and only for the SDK's built-in landing (a deployment's
+    /// own landing module is one of its own modules).
     let private noActiveTeamLanding (ctx: ShellSlotContext) =
-        match
-            ClientConfig.hasTeamScope ctx.Config, ctx.Config.NoActiveTeamLandingModuleId, ctx.Config.NoActiveTeamLanding
-        with
-        | true, None, Some landing -> [ NoActiveTeamLandingUI.create landing ]
+        match ClientConfig.hasTeamScope ctx.Config, ctx.Config.Chrome.NoActiveTeamLanding with
+        | true, ChromeFill.On(NoActiveTeamLandingFill.BuiltIn landing) -> [ NoActiveTeamLandingUI.create landing ]
         | _ -> []
 
     /// Phase 573 — the administration landing leads the admin partition,
-    /// and exists only under `AdminSurface = SeparateArea` (under the
-    /// default `InlineGroups` there is no area to land on).
-    let private adminHome (ctx: ShellSlotContext) =
-        match ctx.Config.AdminSurface with
-        | InlineGroups -> []
-        | SeparateArea -> [ AdminHome.create () ]
+    /// and exists only while the Administration area is on.
+    let private adminHome = chrome _.AdminArea AdminHome.create
 
-    let private datadogReadback (ctx: ShellSlotContext) =
-        match ctx.Config.DatadogReadback with
-        | NoDatadogReadback -> []
-        | EnabledDatadogReadback readback -> [ DatadogReadbackUI.create readback ]
+    let private datadogReadback = chrome _.DatadogReadback DatadogReadbackUI.create
 
-    let private observability (ctx: ShellSlotContext) =
-        match ctx.Config.Observability with
-        | NoObservabilityModule -> []
-        | DefaultObservabilityModule -> [ ObservabilityUI.create () ]
+    let private observability = chrome _.Observability ObservabilityUI.create
 
-    /// Phase 54e — registered unconditionally; the "Platform Management"
-    /// group's role gate hides it from non-admins, and on
-    /// `FeatureMode.Disabled` its API 404s and the panel shows its empty
-    /// state (GP 13).
-    let private tenantLifecycleAdmin (_: ShellSlotContext) = [ TenantLifecycleAdminUI.create () ]
+    /// Phase 54e — on by default; the "Platform Management" group's role
+    /// gate hides it from non-admins, and on `FeatureMode.Disabled` its
+    /// API 404s and the panel shows its empty state (GP 13).
+    let private tenantLifecycleAdmin =
+        chrome _.TenantLifecycle TenantLifecycleAdminUI.create
 
-    let private platformUsers (ctx: ShellSlotContext) =
-        match ctx.Config.PlatformUsers with
-        | NoPlatformUsers -> []
-        | DefaultPlatformUsers -> [ PlatformUsersUI.create None ]
+    let private platformUsers =
+        chrome _.PlatformUsers (fun () -> PlatformUsersUI.create None)
 
     /// The composed order. Within `Trailing`, every "Team Management"
     /// module is listed before every "Platform Management" one, so the
@@ -462,7 +456,7 @@ module ShellSlots =
     /// module filling it, in which case that tile is the module's own
     /// and the slot's steps aside (one tile per module). `supplied` is
     /// every tile the deployment wires through
-    /// `ClientConfig.Handlers.AdminTileContributors`.
+    /// `ClientConfig.Composition.Handlers.AdminTileContributors`.
     ///
     /// The slot's gate is deliberately NOT consulted, exactly as before
     /// the slots existed: the landing distinguishes "nothing was

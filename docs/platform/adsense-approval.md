@@ -1,6 +1,6 @@
 # AdSense approval gotchas
 
-Wiring `ClientConfig.AdPanel = EnabledAdPanel ...` and dropping `<AdSlot>` into a Feliz view is the easy part. Getting Google AdSense to actually serve ads against your site requires passing AdSense's site-approval process, which has a number of non-obvious requirements. This page is the operator-facing checklist — when the substrate compiles, slots render the `<ins class="adsbygoogle">` element, but AdSense returns `data-ad-status="unfilled"` for every impression, work through the items below before raising it as a substrate defect.
+Wiring `ClientConfig.PublicUtility.AdPanel = EnabledAdPanel ...` and dropping `<AdSlot>` into a Feliz view is the easy part. Getting Google AdSense to actually serve ads against your site requires passing AdSense's site-approval process, which has a number of non-obvious requirements. This page is the operator-facing checklist — when the substrate compiles, slots render the `<ins class="adsbygoogle">` element, but AdSense returns `data-ad-status="unfilled"` for every impression, work through the items below before raising it as a substrate defect.
 
 This guide is not authoritative — AdSense policies change. Treat it as a "things to verify first" list; the canonical reference is Google's published AdSense Program Policies and Help Center.
 
@@ -77,7 +77,7 @@ When approval lands, the AdSense console flips the site's status to "Ready". At 
 If approval lands but slots stay `unfilled` indefinitely after the first 48 hours of public traffic, check:
 
 - The site's domain in the AdSense console exactly matches the production domain (no typos, no missing subdomain).
-- `AdClientId` in `ClientConfig.AdPanel` matches the AdSense publisher account `ca-pub-XXXXXXXXXXXXXXXX`.
+- `AdClientId` in `ClientConfig.PublicUtility.AdPanel` matches the AdSense publisher account `ca-pub-XXXXXXXXXXXXXXXX`.
 - `SlotId` on each `<AdSlot>` matches a slot the AdSense console minted (not a placeholder like `1234567890`).
 - The page is fully indexable (no `noindex` meta, no `robots.txt` disallow on the path).
 - No ad blocker is active in the test browser — even on the developer's machine, an extension like uBlock Origin will block AdSense's bundle and prevent fills.

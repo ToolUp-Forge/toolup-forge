@@ -9,7 +9,7 @@ open ToolUp.Platform
 //
 // Single source of truth for the routes the build-time prerender
 // pass emits indexable HTML for. Consumed by:
-//   - `Client.fs` via `ClientConfig.PrerenderRoutes = routes` (the
+//   - `Client.fs` via `ClientConfig.PublicUtility.PrerenderRoutes = routes` (the
 //     hydration bootstrap reads the per-route metadata from here
 //     when navigating between SPA routes).
 //   - `Build.fs` via `Prerender.registerTarget config options routes`

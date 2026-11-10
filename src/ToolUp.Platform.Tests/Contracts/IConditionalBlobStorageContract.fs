@@ -239,7 +239,7 @@ let private kbDoc (docId: string) : SharedTypes.KnowledgeDocument = {
 
 /// The knowledge-base request dependencies over one storage instance — one
 /// replica's view of the shared backend. Built by the production resolver,
-/// so `MarkIngestionFailed` is the closure the upload path calls.
+/// so `KnowledgeIngest.settle` over them is what the upload path calls.
 let private kbDeps (storage: IBlobStorage) (container: string) =
     let services = ServiceCollection()
     services.AddSingleton<IBlobStorage>(storage) |> ignore
@@ -689,7 +689,7 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
 
         // ── The knowledge-base index writers (Phase 959) ────────────
 
-        testCaseAsync "KB index: a concurrent MarkIngestionFailed and upsertIndexEntry both land"
+        testCaseAsync "KB index: a concurrent settle and upsertIndexEntry both land"
         <| async {
             let storage = ScriptedStorage(factory ())
             let raw = storage :> IBlobStorage
@@ -699,14 +699,21 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             do! KnowledgeBase.ServerIndexStorage.upsertIndexEntry raw kbContainer failing
             let deps = kbDeps raw kbContainer
 
-            // MarkIngestionFailed reads first; upsertIndexEntry then reads the
-            // same index and writes; MarkIngestionFailed writes last.
+            // The settle reads first; upsertIndexEntry then reads the same
+            // index and writes; the settle writes last.
             storage.HoldPlainWritesUntilConditionalWrite(kbContainer, KnowledgeBase.ServerIndexStorage.indexBlobName)
 
             let markRead =
                 storage.NextReadOf(kbContainer, KnowledgeBase.ServerIndexStorage.indexBlobName)
 
-            let! marking = Async.StartChild(deps.MarkIngestionFailed failing.Id failing.FileName "scripted failure")
+            let! marking =
+                Async.StartChild(
+                    KnowledgeBase.ServerApiDeps.KnowledgeIngest.settle
+                        deps
+                        failing.Id
+                        (SharedTypes.IngestionStatus.Failed "scripted failure")
+                )
+
             do! Async.AwaitTask markRead
             do! KnowledgeBase.ServerIndexStorage.upsertIndexEntry raw kbContainer added
             do! marking

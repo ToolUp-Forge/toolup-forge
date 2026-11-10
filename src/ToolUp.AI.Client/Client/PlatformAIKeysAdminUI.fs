@@ -472,7 +472,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 // ─── Module registration ────────────────────────────────────────
 
 /// Create the Platform Admin AI keys module as an ErasedModule.
-/// Auto-appended by `AIClientConfig.appendAssistantModule` alongside
+/// Auto-appended by the AI slots (`AIClientConfig.slotExtensions`) alongside
 /// the assistant + settings modules; the sidebar role gate hides it
 /// from non-admin callers.
 let create () : ErasedModule =

@@ -53,7 +53,7 @@ Compiled into `ToolUp.AI.dll`. Referenced by both server and client.
 | Type | Purpose |
 |---|---|
 | `AIAssistantBranding` | Client-visible name, icon, side-panel toggle |
-| `AIAssistantMode` | `NoAIAssistant \| DefaultAIAssistant \| ConfiguredAIAssistant of Branding` |
+| `AISlotFills` | `{ AIAssistant; AISettings; PlatformAIKeys }`, each a `SlotFill` — `AISlotFills.empty` / `.defaults` / `.configured branding` |
 | `AIMessageRequest` | Record on the `SubmitMessage` API — carries `ConversationId`, `Content`, and the user's `ActiveModule` |
 | `ModuleAIContext` | `{ ModuleName; SystemPrompt }` — a module's private domain-expert prompt, registered at compose time |
 | `AIAssistantApi` | ToolUp.Remoting API: `SubmitMessage`, `GetConversation`, `ListConversations`, `GetAvailableTools`, `GetTaskStatus`, `DeleteConversation` |
@@ -83,7 +83,7 @@ Injected into the consuming client project via `ToolUp.AI.Client.props`. The Pla
 | `SSEClient.fs` | EventSource wrapper with mode-aware query parameter |
 | `ConversationPanel.fs` | Reusable chat panel component |
 | `AIAssistantUI.fs` | Built-in AI assistant module page (full conversation view) |
-| `AIClientConfig.fs` | `SidePanelModel` / `SidePanelMsg` / `sidePanelUpdate`, `OuterModel`/`OuterMsg`, `appendAssistantModule`, `withSidePanel`, `withAIAssistant` — the outer-program composition that wraps the shell's Elmish program |
+| `AIClientConfig.fs` | `SidePanelModel` / `SidePanelMsg` / `sidePanelUpdate`, `OuterModel`/`OuterMsg`, `slotExtensions` / `withAISlots`, `withSidePanel`, `withAIAssistant` — the outer-program composition that wraps the shell's Elmish program |
 
 ## How to enable AI in a deployment
 
@@ -157,8 +157,8 @@ open ToolUp.Elmish
 open ToolUp.Elmish.React
 open ToolUp.Platform
 
-let aiMode =
-    ConfiguredAIAssistant {
+let aiSlots =
+    AISlotFills.configured {
         Name = "Claude"
         Icon = Icon.ofUrl "/svg/claude.svg"
         ShowSidePanel = true
@@ -167,7 +167,7 @@ let aiMode =
 let config = { ClientConfig.defaults with (* ... *) }
 let modules = [ (* module registrations *) ]
 
-AIClientConfig.run aiMode config modules
+AIClientConfig.run aiSlots config modules
 ```
 
 Apps without AI drop the `ToolUp.AI.Client.props` import (step 1) and call `Client.run config modules` instead — zero AI surface, zero AI types leaked into shell state.

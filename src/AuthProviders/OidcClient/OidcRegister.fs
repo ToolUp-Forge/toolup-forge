@@ -29,7 +29,7 @@ let private oidcHandler (payload: obj) (shell: ReactElement) : ReactElement =
     OidcAuthUI.OidcShell cfg shell
 
 /// Companion-exported AuthUI handler. Add to
-/// `ClientConfig.Handlers.AuthUIHandlers` to enable OIDC sign-in.
+/// `ClientConfig.Composition.Handlers.AuthUIHandlers` to enable OIDC sign-in.
 let handler: string * AuthUIHandler = "oidc", oidcHandler
 
 /// 0.5.7 — Companion-exported sign-out handler. The consumer pairs

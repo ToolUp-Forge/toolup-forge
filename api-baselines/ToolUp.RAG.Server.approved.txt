@@ -91,8 +91,6 @@ ToolUp.RAG.CitationNormaliser+RagCitationPolicy+Tags (class)
 ToolUp.RAG.CitationNormaliser+RagCitationPolicy+Tags.LenientNormalise : System.Int32 (literal)
 ToolUp.RAG.CitationNormaliser+RagCitationPolicy+Tags.Off : System.Int32 (literal)
 ToolUp.RAG.CitationNormaliser+RagCitationPolicy+Tags.Strict : System.Int32 (literal)
-ToolUp.RAG.DataManagerIngestionObserver (class)
-ToolUp.RAG.DataManagerIngestionObserver.create(ToolUp.Platform.Infra.IIngestionStatusStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.RAG.IngestionTypes+IIngestionStatusObserver
 ToolUp.RAG.InMemoryBM25Index (class)
 ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index (class)
 ToolUp.RAG.InMemoryBM25Index+InMemoryBM25Index..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.SparseAnalysis+ISparseAnalyzer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.CorruptPolicy])
@@ -113,6 +111,8 @@ ToolUp.RAG.InMemoryVectorStore+IndexEntry.Content : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Metadata : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.ScopeTag : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Vector : System.Single[] { get; set }
+ToolUp.RAG.IngestionObserver (class)
+ToolUp.RAG.IngestionObserver.create(ToolUp.Platform.Infra.IIngestionAttemptStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.RAG.IngestionTypes+IIngestionStatusObserver
 ToolUp.RAG.IngestionRetryJobHandler (class)
 ToolUp.RAG.IngestionRetryJobHandler.create(ToolUp.RAG.IngestionService+IngestionRetryDeps) : ToolUp.Platform.Jobs.IJobHandler
 ToolUp.RAG.IngestionRetryJobHandler+IngestionRetryJobHandler (class)

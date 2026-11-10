@@ -11,7 +11,7 @@ let brandedHealth: ModuleLabel = { Name = "Health"; Icon = Html.none }
 let config = {
     ClientConfig.defaults with
         Slots.HomeModule = SlotFill.Default
-        Slots.DataManager = (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+        Slots.DataManager = (SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled))
         Slots.TeamManager = SlotFill.External myTeams
         Slots.UsageDashboard = SlotFill.Empty
         Slots.HealthMonitor = SlotFill.Configured brandedHealth
@@ -31,7 +31,7 @@ let uploads = {
 
 let overrides = {
     ClientConfigOverrides.empty with
-        DataManager = Some (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+        DataManager = Some (SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled))
         WebhookAdmin = Some SlotFill.Default
 }
 

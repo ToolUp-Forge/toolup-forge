@@ -863,14 +863,10 @@ type AIAssistantBranding = {
     ShowSidePanel: bool
 }
 
-// `AIAssistantMode` previously lived here. It moved to
-// `Client/AIClientTypes.fs` (still under `namespace ToolUp.AI`) when
-// the `ConfiguredAIAssistant` case switched from carrying the shared
-// `AIAssistantBranding` (Icon: string) to the new client-only
-// `AIAssistantClientBranding` (Icon: ReactElement). `ReactElement` is
-// Fable-only so the DU can no longer live in shared types. Server-side
-// AI configuration uses `AIAssistantServerConfig.Branding` directly
-// (still typed as the shared `AIAssistantBranding`).
+// The client's AI slot fills (`AISlotFills`, with the client-only
+// `AIAssistantClientBranding`) live in `ToolUp.AI.Client`: their icon is a
+// Fable-only `ReactElement`. Server-side AI configuration uses
+// `AIAssistantServerConfig.Branding` (the shared `AIAssistantBranding`).
 
 // ─── Module AI context ────────────────────────────────────────────
 

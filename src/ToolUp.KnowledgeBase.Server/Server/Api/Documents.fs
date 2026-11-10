@@ -613,10 +613,9 @@ let private persistAndIngest
                     Status = UploadRejected(sprintf "The document could not be stored: %s" reason)
             }
         | Ok() ->
-            // Atomic index RMW so a concurrent upload to the same
-            // container can't clobber this entry (or vice versa). Released before
-            // the background extraction below, which re-acquires the same
-            // container lock via `updateIndexStatus`.
+            // Atomic index RMW so a concurrent upload to the same container
+            // can't clobber this entry (or vice versa). Released before the
+            // background extraction below, which takes the same lock.
             do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
             // A superseded version's hash ref no longer describes
@@ -641,49 +640,38 @@ let private persistAndIngest
             | Some hash -> do! (contentHashIndex deps).Add hash docId None
             | None -> ()
 
-            // Seed initial cache state. The background extractor flips this to
-            // ExtractingText as soon as it starts running.
-            setStatus docId Queued
-
-            // Spawn extraction off the request path. UploadDocument returns
-            // within the time it takes to persist the raw blob (~hundreds of
-            // ms), not the time it takes to OCR a PDF (~10s). Status flow
-            // mirrors the synchronous predecessor:
-            //   Queued → ExtractingText → Embedding(0, n) → Complete(n) | Failed reason
-            // Errors are caught and routed through `deps.MarkIngestionFailed`
-            // so the user sees a Failed badge rather than a doc stuck in
-            // ExtractingText. Async.Start swallows otherwise-unobserved
-            // exceptions, so the try/with is non-negotiable.
+            // Extraction runs off the request path: `UploadDocument` returns
+            // once the raw blob is persisted (~hundreds of ms), not once a PDF
+            // has been through OCR (~10s). The persisted status flow is
+            //   Queued -> Embedding(0, n) -> Complete(n) | Failed reason
+            // with `ExtractingText` announced to stream subscribers only. An
+            // error is caught and settles the document `Failed`, so the user
+            // sees a Failed badge rather than a document stuck in flight:
+            // `Async.Start` swallows otherwise-unobserved exceptions, so the
+            // try/with is non-negotiable.
             let extractAndEnqueue = async {
                 try
-                    let extractingStatus = ExtractingText
-
-                    setStatus docId extractingStatus
-
-                    do! updateIndexStatus deps.Storage deps.Scope.Container docId extractingStatus
+                    IngestionStatusFeed.publish docId ExtractingText
 
                     let! parts, extracted =
                         extract (ExtractDeps.composed deps.OcrProvider deps.TableExtractor) docId safeName bytes
 
-                    // Stamp the structured original-document ref
-                    // (+ Phase 106 neutral locator) into each chunk so retrieval
-                    // surfaces `RetrievedSource.OriginalRef` without rebuilding
-                    // the blob-name convention.
-                    // And the document's tags, so a tagged
-                    // lineage's new version is filterable the moment it is
-                    // indexed rather than only after a manual re-tag.
+                    // Stamp the structured original-document ref (and its
+                    // neutral locator) into each chunk so retrieval surfaces
+                    // `RetrievedSource.OriginalRef` without rebuilding the
+                    // blob-name convention, and the document's tags, so a
+                    // tagged lineage's new version is filterable the moment it
+                    // is indexed.
                     let chunks =
                         stampOriginalRefs docId safeName ext (int64 bytes.Length) extracted
                         |> stampTags doc.Tags
 
-                    if box deps.Queue <> null && not chunks.IsEmpty then
-                        // Incremental re-index. On a supersede,
-                        // compare each new chunk's content hash against the
-                        // previous version's manifest and enqueue only the
-                        // positions that actually changed. On a first ingest
-                        // there is no manifest, `changed` is every index, and
-                        // the enqueued set is byte-for-byte what pre-510
-                        // enqueued.
+                    if not chunks.IsEmpty then
+                        // Incremental re-index. On a supersede, compare each new
+                        // chunk's content hash against the previous version's
+                        // manifest and enqueue only the positions that changed.
+                        // On a first ingest there is no manifest and every
+                        // position is enqueued.
                         let newHashes = chunks |> List.map (fst >> chunkContentHash)
 
                         let! previousHashes =
@@ -700,210 +688,98 @@ let private persistAndIngest
                             |> List.filter (fun (i, _) -> changed.Contains i)
                             |> List.map snd
 
-                        // The shorter-re-upload orphan tail. Run
-                        // BEFORE the enqueue so the stale ids are gone from
-                        // every index even if the queue then refuses the job
-                        // (a refused ingestion leaves the document `Failed` and
-                        // retryable, whereas a surviving tail would keep being
-                        // served as live content with nothing to signal it) —
-                        // and BEFORE the index writes below, so that by the
-                        // time the index reports this document past extraction
-                        // the previous version's tail is already unreachable.
-                        // Ordering, not just hygiene: everything Phase 510
-                        // derives sits ABOVE the status write, keeping that
-                        // write adjacent to the enqueue exactly as pre-510 —
-                        // an observer that sees `Embedding` must never find
-                        // the supersede's cleanup still pending.
+                        // The shorter-re-upload orphan tail. Run BEFORE the
+                        // enqueue so the stale ids are gone from every index
+                        // even if the queue then refuses the job (a refused
+                        // ingestion leaves the document `Failed` and retryable,
+                        // whereas a surviving tail would keep being served as
+                        // live content), and before the attempt begins, so an
+                        // observer that sees `Embedding` never finds the
+                        // supersede's cleanup still pending.
                         match predecessor with
                         | Some prior -> do! deleteOrphanTail deps docId chunks.Length prior.ChunkCount
                         | None -> ()
 
-                        // Stamp ChunkCount BEFORE enqueue: it is the
-                        // document's FULL chunk count, the figure `Complete`
-                        // reports, and the first chunk callback can fire
-                        // before this method returns.
-                        do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
+                        // The attempt completes against what it ENQUEUED, which
+                        // an incremental re-index makes a strict subset of
+                        // `chunks`; the document's chunk count is the FULL
+                        // count, the figure `Complete` reports.
+                        let! enqueued = KnowledgeIngest.enqueue deps { doc with ChunkCount = chunks.Length } chunkPairs
 
-                        // The attempt completes against what it
-                        // ENQUEUED, which an incremental re-index makes a
-                        // strict subset of `chunks`. Counting against the full
-                        // chunk count left such a re-upload at
-                        // `Embedding(k, n)` for good.
-                        let! attempt =
-                            if List.isEmpty chunkPairs then
-                                async.Return None
-                            else
-                                async {
-                                    let initialStatus = Embedding(0, chunkPairs.Length)
-
-                                    // Seed the cache; the observer's `AddOrUpdate` won't
-                                    // overwrite a fresher value (e.g. one already advanced
-                                    // to Embedding(1, n) by a racing callback).
-                                    updateStatus docId initialStatus (fun existing ->
-                                        match existing with
-                                        | Queued
-                                        | ExtractingText -> initialStatus
-                                        | other -> other)
-
-                                    let! attempt =
-                                        beginIngestionAttempt
-                                            deps.Storage
-                                            deps.Logger
-                                            deps.Scope.Container
-                                            docId
-                                            chunkPairs.Length
-
-                                    return Some attempt
-                                }
-
-                        let job: DocumentIngestionJob = {
-                            DocumentId = docId
-                            DocumentName = safeName
-                            Chunks = chunkPairs
-                            Scope = deps.VectorScope
-                            ScopeId = deps.Scope.ScopeId
-                            Container = deps.Scope.Container
-                            OriginatingUserId = Some deps.UserId
-                            Attempt = attempt
-                        }
-
-                        // An unchanged re-upload can leave nothing to
-                        // enqueue at all. That is a legitimate terminal
-                        // outcome, not an empty job to push through the
-                        // queue: the document is already fully indexed at
-                        // this content.
-                        // `EnqueueAsync`, not `Enqueue`. On the
-                        // in-memory default the two are the same lock-free
-                        // channel write; on a queue backed by an
-                        // `IIngestionQueueStore` the sync form is
-                        // `Async.RunSynchronously` over a store round-trip
-                        // taken on the request thread. Awaiting it costs
-                        // nothing on the default arm and stops occupying a
-                        // thread-pool thread on the durable one.
-                        let! accepted =
-                            if List.isEmpty chunkPairs then
-                                async { return true }
-                            else
-                                deps.Queue.EnqueueAsync(job)
-
-                        if not (List.isEmpty chunkPairs) then
-                            deps.RecordEnqueue accepted
-
-                        // Written after the tail delete + enqueue decision so
-                        // the manifest never claims content the indexes do
-                        // not hold (see `saveChunkHashes`).
-                        if accepted then
+                        match enqueued with
+                        | Error _ -> ()
+                        | Ok attempt ->
+                            // Written after the tail delete + enqueue so the
+                            // manifest never claims content the indexes do not
+                            // hold (see `saveChunkHashes`).
                             do! saveChunkHashes deps.Storage deps.Scope.Container docId newHashes
 
-                        if accepted && List.isEmpty chunkPairs then
-                            // Nothing changed — the observer will never fire,
-                            // so settle the terminal status here rather than
-                            // leaving the document at an in-flight status.
-                            let terminal = Complete chunks.Length
-                            setStatus docId terminal
-                            do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
+                            if List.isEmpty chunkPairs then
+                                // An unchanged re-upload: nothing to enqueue, so
+                                // no chunk callback will settle the document. It
+                                // is already fully indexed at this content.
+                                do! KnowledgeIngest.settle deps docId (Complete chunks.Length)
 
-                            do!
-                                publishTerminalStatus
-                                    deps.Notifications
-                                    deps.Logger
-                                    docId
-                                    safeName
-                                    deps.UserId.Value
-                                    terminal
-
-                            deps.Logger.Info(
-                                sprintf
-                                    "[KnowledgeBase] Re-upload of '%s' (docId=%s v%d) changed no chunk content; %d chunk(s) reused, nothing re-embedded."
-                                    safeName
-                                    docId
-                                    doc.Version
-                                    chunks.Length
-                            )
-                        elif accepted && chunkPairs.Length < chunks.Length then
-                            deps.Logger.Info(
-                                sprintf
-                                    "[KnowledgeBase] Incremental re-index of '%s' (docId=%s v%d): %d of %d chunk(s) changed and were re-embedded; %d reused."
-                                    safeName
-                                    docId
-                                    doc.Version
-                                    chunkPairs.Length
-                                    chunks.Length
-                                    (chunks.Length - chunkPairs.Length)
-                            )
-
-                        if not accepted then
-                            let reason =
-                                sprintf
-                                    "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                    deps.Queue.Count
-                                    deps.Queue.Capacity
-
-                            do! deps.MarkIngestionFailed docId safeName reason
-                    elif chunks.IsEmpty then
-                        // The degenerate orphan tail. An empty new
-                        // version (a recognised-but-empty file, an unsupported
-                        // format, a scan with no OCR composed) skips the
-                        // extract-and-enqueue branch above — and with it the
-                        // shorter-tail deletion — so on a supersede the ENTIRE
-                        // previous version's namespace (`{docId}:chunk:0 ..
-                        // oldCount-1`) would survive in the vector store and
-                        // the sparse index under the live document id, exactly
-                        // the leak `deleteOrphanTail` closes for the shorter-
-                        // tail case, in the all-chunks-are-tail form. Same
-                        // ordering discipline as that path: the deletion (and
-                        // the manifest reset below) completes BEFORE the
-                        // terminal status lands in the index, so an observer
-                        // that sees the document settle never finds the
-                        // supersede's cleanup still pending.
+                                deps.Logger.Info(
+                                    sprintf
+                                        "[KnowledgeBase] Re-upload of '%s' (docId=%s v%d) changed no chunk content; %d chunk(s) reused, nothing re-embedded."
+                                        safeName
+                                        docId
+                                        doc.Version
+                                        chunks.Length
+                                )
+                            elif attempt.IsSome && chunkPairs.Length < chunks.Length then
+                                deps.Logger.Info(
+                                    sprintf
+                                        "[KnowledgeBase] Incremental re-index of '%s' (docId=%s v%d): %d of %d chunk(s) changed and were re-embedded; %d reused."
+                                        safeName
+                                        docId
+                                        doc.Version
+                                        chunkPairs.Length
+                                        chunks.Length
+                                        (chunks.Length - chunkPairs.Length)
+                                )
+                    else
+                        // The degenerate orphan tail. An empty new version (a
+                        // recognised-but-empty file, an unsupported format, a
+                        // scan with no OCR composed) enqueues nothing, so on a
+                        // supersede the ENTIRE previous version's chunk namespace
+                        // would survive in the vector store and the sparse index
+                        // under the live document id. The deletion (and the
+                        // manifest reset below) completes BEFORE the terminal
+                        // status lands, so an observer that sees the document
+                        // settle never finds the cleanup still pending.
                         match predecessor with
                         | Some prior ->
                             do! deleteOrphanTail deps docId 0 prior.ChunkCount
 
-                            // The chunk-hash manifest must not keep describing
-                            // the chunks just deleted: a later version whose
-                            // content matched them would diff as "unchanged"
-                            // and skip re-embedding positions the indexes no
-                            // longer hold — silently missing content, not the
-                            // harmless redundant re-embed `saveChunkHashes`'s
-                            // crash-ordering argument tolerates.
+                            // The chunk-hash manifest must not keep describing the
+                            // chunks just deleted: a later version whose content
+                            // matched them would diff as "unchanged" and skip
+                            // re-embedding positions the indexes no longer hold.
                             do! saveChunkHashes deps.Storage deps.Scope.Container docId []
                         | None -> ()
 
-                        // An upload that yields no chunk is one of three things,
-                        // and reporting each as `Complete 0` would read as a
-                        // successful index of an empty document: a format no
-                        // extractor reads (stored, never searchable), a recognised
-                        // but empty file, or content only OCR could read with no
-                        // OCR composed. The parts the extractor reported decide.
-                        let terminal = emptyExtractionStatus safeName parts
-
-                        setStatus docId terminal
-                        do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
-
-                        do!
-                            publishTerminalStatus
-                                deps.Notifications
-                                deps.Logger
-                                docId
-                                safeName
-                                deps.UserId.Value
-                                terminal
+                        // An upload that yields no chunk is a format no extractor
+                        // reads (stored, never searchable), a recognised but
+                        // empty file, or content only OCR could read with no OCR
+                        // composed. The parts the extractor reported decide.
+                        do! KnowledgeIngest.settle deps docId (emptyExtractionStatus safeName parts)
 
                     do! deps.PublishInventory()
                 with ex ->
                     deps.Logger.Error(sprintf "[KnowledgeBase] Extraction failed for %s/%s" docId safeName, Some ex)
 
-                    let reason = classify safeName ex
-                    // The failure record can itself be refused by storage;
-                    // this handler is the last stop before `Async.Start`, so it logs
-                    // that instead of letting it escape the background computation.
+                    // The failure record can itself be refused by storage; this
+                    // handler is the last stop before `Async.Start`, so it logs
+                    // that instead of letting it escape the background
+                    // computation.
                     try
-                        do! deps.MarkIngestionFailed docId safeName reason
-                    with markEx ->
+                        do! KnowledgeIngest.settle deps docId (Failed(classify safeName ex))
+                    with settleEx ->
                         deps.Logger.Error(
                             sprintf "[KnowledgeBase] Could not record the extraction failure for %s/%s" docId safeName,
-                            Some markEx
+                            Some settleEx
                         )
 
                     do! deps.PublishInventory()
@@ -1374,7 +1250,7 @@ type private BatchInventoryGate(publish: unit -> Async<unit>) =
 /// surviving item through the single-item upload path, and returns one
 /// report plus one completion notification.
 ///
-/// **Phase 725.A — inventory publication is batch-scoped.** Every item
+/// **inventory publication is batch-scoped.** Every item
 /// runs against a `deps` whose `PublishInventory` is the batch's
 /// `BatchInventoryGate`, so the ~2N snapshots a corpus-scale import used
 /// to emit collapse to one at the end. The substitution is a
@@ -1833,61 +1709,18 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
                             // and the new metadata would never be
                             // written. Content-hash-keyed embeddings mean
                             // the cost is upserts, not embedding calls.
-                            if box deps.Queue <> null && not (List.isEmpty chunkPairs) then
-                                let initialStatus = Embedding(0, chunkPairs.Length)
-
-                                setStatus doc.Id initialStatus
-
-                                // A new attempt: seeds the
-                                // persisted status and retires any attempt
-                                // still reporting for this document.
-                                let! attempt =
-                                    beginIngestionAttempt
-                                        deps.Storage
-                                        deps.Logger
-                                        deps.Scope.Container
+                            match! KnowledgeIngest.enqueue deps updated chunkPairs with
+                            | Error refused -> return Error(EnqueueRefused.describe refused)
+                            | Ok _ ->
+                                deps.Logger.Info(
+                                    sprintf
+                                        "[KnowledgeBase] Tags on '%s' (docId=%s) set to [%s]; %d chunk(s) re-stamped."
+                                        doc.FileName
                                         doc.Id
+                                        (String.concat "; " normalised)
                                         chunkPairs.Length
+                                )
 
-                                let job: DocumentIngestionJob = {
-                                    DocumentId = doc.Id
-                                    DocumentName = doc.FileName
-                                    Chunks = chunkPairs
-                                    Scope = deps.VectorScope
-                                    ScopeId = deps.Scope.ScopeId
-                                    Container = deps.Scope.Container
-                                    OriginatingUserId = Some deps.UserId
-                                    Attempt = Some attempt
-                                }
-
-                                // Async enqueue; see the
-                                // `uploadDocument` call site.
-                                let! accepted = deps.Queue.EnqueueAsync(job)
-                                deps.RecordEnqueue accepted
-
-                                if not accepted then
-                                    let reason =
-                                        sprintf
-                                            "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                            deps.Queue.Count
-                                            deps.Queue.Capacity
-
-                                    do! deps.MarkIngestionFailed doc.Id doc.FileName reason
-
-                                    return Error reason
-                                else
-                                    deps.Logger.Info(
-                                        sprintf
-                                            "[KnowledgeBase] Tags on '%s' (docId=%s) set to [%s]; %d chunk(s) re-stamped."
-                                            doc.FileName
-                                            doc.Id
-                                            (String.concat "; " normalised)
-                                            chunkPairs.Length
-                                    )
-
-                                    do! deps.PublishInventory()
-                                    return Ok updated
-                            else
                                 do! deps.PublishInventory()
                                 return Ok updated
 }
@@ -2221,20 +2054,12 @@ let getOriginalDeliveryRedacted
             return inlineResult |> Result.map PreviewContent.Inline
     }
 
+/// A document's ingestion status: its attempt's while one is in flight,
+/// else the index entry's. Read from storage on every call, so every replica
+/// answers the same.
 let getStatus (deps: KnowledgeApiDeps) (docId: string) : Async<IngestionStatus> = async {
-    match statusCache.TryGetValue(docId) with
-    | true, status -> return status
-    | _ ->
-        // Cache miss — process restarted, or no observer touched this doc
-        // yet. Fall back to the persisted index so the client can still see
-        // the last known terminal status (Complete/Failed) survive a reboot.
-        let! index = loadIndex deps.Storage deps.Scope.Container
-
-        return
-            index
-            |> List.tryFind (fun d -> d.Id = docId)
-            |> Option.map _.Status
-            |> Option.defaultValue (Failed "Document not found")
+    let! status = persistedStatus deps.Storage deps.Scope.Container docId
+    return status |> Option.defaultValue (Failed "Document not found")
 }
 
 let getSuggestedQuestions (deps: KnowledgeApiDeps) (activeModule: string option) : Async<string list> = async {

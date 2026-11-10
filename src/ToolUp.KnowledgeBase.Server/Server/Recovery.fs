@@ -28,7 +28,7 @@ open ToolUp.Platform.Compose
 // the user gets no signal beyond their own observation that "this doc
 // has been ingesting for an hour".
 //
-// **Phase 723 — this is no longer a second sweep.** The traversal, the
+// **this is no longer a second sweep.** The traversal, the
 // per-scope error isolation, the reason string and the logging shape now
 // live once in `ToolUp.Platform.IngestionRecoverySweep`, shared with the
 // RAG / Data-Manager status sweep that used to duplicate them. What
@@ -64,30 +64,7 @@ open ToolUp.Platform.Compose
 // that have since been re-uploaded carry a fresh non-Failed status and
 // are passed through unchanged.
 
-/// Is this a status a dead process could have abandoned mid-ingestion?
-///
-/// Kept a named function rather than inlined into the surface, because
-/// which statuses are terminal is the one KB-specific judgement in the
-/// whole sweep and every future status case has to be classified here.
-let private isNonTerminal (s: IngestionStatus) =
-    match s with
-    | Queued
-    | ExtractingText
-    | Embedding _ -> true
-    | Complete _
-    | Failed _
-    // Phase 119 — both terminal: `UnsupportedFormat` is a stored
-    // end-state, `UploadRejected` is never persisted (so never seen
-    // here), but neither is a restart-stuck document to re-fail.
-    | UploadRejected _
-    | UnsupportedFormat _
-    // Phase 500 — also terminal: the document was stored and its
-    // content needs an OCR companion this deployment does not have.
-    // Re-failing it on restart would replace an accurate, actionable
-    // status with a generic one.
-    | OcrUnavailable _ -> false
-
-/// Phase 723 — the KB document index as an `IIngestionRecoverySurface`,
+/// the KB document index as an `IIngestionRecoverySurface`,
 /// so the shared `IngestionRecoverySweep` can visit it alongside the
 /// RAG per-file status store.
 let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
@@ -97,7 +74,10 @@ let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
         member _.ListInterrupted(scope) = async {
             let! docs = loadIndex storage scope
 
-            return docs |> List.filter (fun d -> isNonTerminal d.Status) |> List.map _.Id
+            return
+                docs
+                |> List.filter (fun d -> not (IngestionStatus.isTerminal d.Status))
+                |> List.map _.Id
         }
 
         member _.MarkInterrupted(scope, documentId, reason) =
@@ -114,14 +94,14 @@ let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
 /// Per-container errors are logged and skipped — one bad container's
 /// index doesn't block scanning the rest.
 ///
-/// Phase 723 — kept as the explicit, operator-callable form; a
+/// kept as the explicit, operator-callable form; a
 /// deployment that composes `KnowledgeBaseServerApp.withIngestionRecovery`
 /// plus a scope enumerator gets the same sweep run automatically at
 /// startup over enumerated scopes, and does not call this at all.
 let recoverStuckDocumentsAtStartup (storage: IBlobStorage) (containers: string list) (logger: ILogger) : Async<int> =
     IngestionRecoverySweep.run [ documentIndexSurface storage ] containers logger
 
-/// Phase 723 — enrol the KB document index in the startup
+/// enrol the KB document index in the startup
 /// restart-recovery sweep.
 ///
 /// Registers the `IIngestionRecoverySurface` adapter as a DI singleton.

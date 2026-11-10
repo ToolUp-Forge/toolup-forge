@@ -2084,15 +2084,17 @@ let moduleId = "_sdk.MappingDataManager"
 
 /// Create the mapping-aware Data Manager as an `ErasedModule`. `displays`
 /// supplies the registered data types (and their schemas) the wizard maps
-/// into — same list the built-in `FileManagerUI` receives. Optional
+/// into — same list the built-in `FileManagerUI` receives. The
 /// `DataManagerConfig` overrides the name / icon / sidebar group.
-let create (displays: DataTypeDisplay list) (config: DataManagerConfig option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Import & Map"
+let create (displays: DataTypeDisplay list) (config: DataManagerConfig) : ErasedModule =
+    let name = config.Label |> Option.map _.Name |> Option.defaultValue "Import & Map"
 
     let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.upload
+        config.Label
+        |> Option.map _.Icon
+        |> Option.defaultValue ToolUp.Platform.Icons.upload
 
-    let group = config |> Option.bind _.Group |> Option.defaultValue "Data Management"
+    let group = config.Group |> Option.defaultValue "Data Management"
 
     ToolUp.Platform.ClientModule.create {
         Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty

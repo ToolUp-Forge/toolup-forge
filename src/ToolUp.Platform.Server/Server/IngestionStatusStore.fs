@@ -7,16 +7,18 @@ open System.Collections.Concurrent
 open ToolUp.Platform
 open DataManagementTypes
 
-// ─── Per-file ingestion-status store (Phase 173) ─────────────────
+// ─── Per-file ingestion-status store ──────────────────────────────
 //
 // Surfaces RAG ingestion status (`NotIngested` / `Pending` / `Indexed`
 // / `Failed reason`) per Data Manager file. The store interface lives
 // in `ToolUp.Platform.Server` — not in the RAG companion — because
 // `FileManagement` (Platform.Server) resolves it to join status onto
 // the file-list read, and a lower layer can't depend on the RAG
-// companion above it. RAG owns the *writes* (the post-save hook marks
-// `Pending` / `Failed`, the ingestion observer marks `Indexed`); the
-// SDK core owns the seam + the default `IDataObjectStore`-backed
+// companion above it. The Data Manager's ingestion attempts
+// (`IngestionAttemptStore.dataManager`) own the *writes*: `Pending` with
+// its chunk total when an attempt begins, `Indexed` / `Failed` when it
+// settles; the post-save hook writes `Failed` on its skip / reject / drop
+// arms. The SDK core owns the seam + the default `IDataObjectStore`-backed
 // implementation, mirroring the `ProcessedEntryStore` /
 // `ColumnMappingStore` sidecar precedent.
 //
@@ -35,9 +37,7 @@ open DataManagementTypes
 /// joins onto `FileListSnapshot.Files` by name directly.
 type IIngestionStatusStore =
     /// Record a document as `Pending` with its expected chunk total
-    /// (called by the post-save hook at enqueue time). The total drives
-    /// the observer's completion detection — `Indexed` fires when the
-    /// indexed-chunk count reaches it.
+    /// (called when the Data Manager's attempt begins, before the enqueue).
     abstract SetPending: scopeId: string * documentId: string * totalChunks: int -> Async<unit>
 
     /// Set an explicit / terminal status (`Indexed` / `Failed` /
@@ -49,7 +49,6 @@ type IIngestionStatusStore =
     abstract Get: scopeId: string * documentId: string -> Async<FileIngestionStatus option>
 
     /// Recorded chunk total for a document (0 when unknown / no entry).
-    /// Used by the ingestion observer to detect the last chunk.
     abstract GetTotal: scopeId: string * documentId: string -> Async<int>
 
     /// Every `(documentId, status)` pair in a scope — the file-list join.
@@ -75,9 +74,7 @@ module IngestionStatusStore =
 
     let private jsonOptions = PlatformJson.options
 
-    /// Persisted shape — the status plus the expected chunk total so the
-    /// observer can detect completion after a process restart (the
-    /// total would otherwise be lost with the in-memory enqueue state).
+    /// Persisted shape — the status plus the expected chunk total.
     type private Entry = {
         Status: FileIngestionStatus
         TotalChunks: int

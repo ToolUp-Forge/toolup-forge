@@ -86,7 +86,7 @@ let private setUp () =
     installXhrStubJs ()
     ReadPolicies.registerFor<ReadCatalogApi> declarations
     // The token path that needs no server round-trip, on every case.
-    UserSession.configureAuthTokenStorage ClientCookieAndLocalStorage
+    UserSession.configureAuthTokenStorage FeatureMode.Disabled
     ReadPolicies.clear ()
     scriptResponse 200 "1"
 
@@ -261,10 +261,10 @@ let tests =
                 "storage-moved"
                 ignore
                 (fun () ->
-                    UserSession.configureAuthTokenStorage ServerSetHttpOnlyCookie
+                    UserSession.configureAuthTokenStorage FeatureMode.Enabled
                     // Restored at once (after the change was observed by the
                     // cache) so no later case reflects a token to a server.
-                    UserSession.configureAuthTokenStorage ClientCookieAndLocalStorage)
+                    UserSession.configureAuthTokenStorage FeatureMode.Disabled)
                 notServed
                 "a different token-storage strategy: not served"
         ]

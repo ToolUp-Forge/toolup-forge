@@ -197,7 +197,7 @@ team manager, the Home landing and the administration built-ins — each fill a 
 |---|---|
 | `SlotFill.Empty` | Nothing: no module, no sidebar entry, no tile, no calls (GP 13). |
 | `SlotFill.Default` | The SDK's module under its own name and icon. |
-| `SlotFill.Configured cfg` | The SDK's module configured: a `ModuleLabel` relabels it; for the data manager, a `DataManagerChoice` picks the file-upload or the column-mapping manager. |
+| `SlotFill.Configured cfg` | The SDK's module configured: a `ModuleLabel` relabels it; for the data manager, a `DataManagerChoice` picks the file-upload or the column-mapping manager, each with the same `DataManagerConfig` (an optional label and a sidebar group; `DataManagerConfig.unlabelled` keeps the manager's own). |
 | `SlotFill.External myModule` | Your module, in place of the SDK's. |
 
 ```fsharp
@@ -252,7 +252,7 @@ replacement to carry its own id.
    built-in's.
 3. **Use your own module id**, never `_sdk.*`. The slot's tile, and the shell's lookups, follow the id
    of whatever fills the slot. To give your module its own tile rather than the slot's, contribute a
-   tile whose `OwnerModuleId` is your module's id through `ClientConfig.Handlers.AdminTileContributors`;
+   tile whose `OwnerModuleId` is your module's id through `ClientConfig.Composition.Handlers.AdminTileContributors`;
    the slot then adds none.
 4. **The data-manager slot is the boot-time data source.** When it is filled, the shell prefetches
    the file snapshot at boot and serves it to data modules until the filling module mounts; from then
@@ -290,9 +290,48 @@ push — see the template's `ClientView.fs` for what "meeting it" looks like in 
    fills the slot without meeting the checklist above — the SDK holds its own template to it because
    the template is the SDK's contract to keep, not a deployment's.
 
-Shell chrome — the toast centre, auth UI, loading indicator, not-authorised view, command palette,
-admin surface, offline mode, observability module and platform users — is not a slot and keeps its
-own `ClientConfig` setting.
+### Companion slots — the AI assistant family
+
+A companion package declares slots of its own beside the shell's through
+`ShellSlotFills.Extensions` (a `SlotExtension` list). The AI companion's assistant family is three:
+the assistant page, the AI settings page and the platform-admin keys page, filled by `AISlotFills`
+(`ToolUp.AI.Client`) and composed by `AIClientConfig.run` / `program`. Each takes the same four fills
+as a built-in slot, so a deployment empties or replaces any of them:
+
+```fsharp skip=fragment
+let aiSlots = {
+    AISlotFills.defaults with
+        AIAssistant = SlotFill.External myAssistant
+        PlatformAIKeys = SlotFill.Empty
+}
+
+AIClientConfig.run aiSlots config modules
+```
+
+`AISlotFills.defaults` is the whole built-in family, `AISlotFills.empty` none of it (and no side
+panel), and `AISlotFills.configured branding` the built-in family with the assistant rebranded. A
+companion slot's module sits after your application's own modules and ahead of the administration
+built-ins, where the AI pages always sat; the boot validators count it with your modules.
+
+### Shell chrome — `ClientConfig.Chrome`
+
+Six built-ins are shell chrome rather than slots: none accepts your module. They interleave with the
+slots in the sidebar's order, and each is filled through `ClientConfig.Chrome` as
+`ChromeFill.Off` or `ChromeFill.On cfg`:
+
+| Row | Payload | Default |
+|---|---|---|
+| `AdminArea` — the Administration area and its landing | `unit` | `Off` (inline admin groups) |
+| `NoActiveTeamLanding` — where a team-less caller lands | `NoActiveTeamLandingFill.BuiltIn copy` or `.Module id` | `Off` |
+| `DatadogReadback` | the server's `DatadogReadbackConfig` | `Off` |
+| `Observability` | `unit` | `Off` |
+| `PlatformUsers` | `unit` | `Off` |
+| `TenantLifecycle` | `unit` | `On ()` |
+
+The rest of the shell's own settings — the toast centre, loading indicator, not-authorised view,
+command palette, browser history, offline mode — sit on `ClientConfig.Shell`, sign-in on
+`ClientConfig.Auth`, and an on/off setting is a `FeatureMode` (Phase 1074; the field map is in
+[`docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md`](../migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md)).
 
 ## Modules vs pages
 
@@ -358,7 +397,7 @@ state.
   it only if its configs, flags or surface changed. `ResetModule` (the error boundary's Reload)
   re-initialises one module and advances its host's `Generation`, which remounts the boundary.
 
-An `Init` that throws leaves the module with no host and is reported through `ClientConfig.OnError`.
+An `Init` that throws leaves the module with no host and is reported through `ClientConfig.Composition.OnError`.
 
 **Where your `Cmd` goes.** Every command your `Init` or `Update` returns, and every dispatch from
 your view, is addressed to your module by id (`Client.ModuleMsg(moduleId, message)`) and reaches

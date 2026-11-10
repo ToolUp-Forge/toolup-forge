@@ -12,7 +12,7 @@ open ToolUp.AuthProviders.GoogleIdentity.GoogleIdentityConfig
 //
 // The value-export registration model: the consumer adds
 // `GoogleIdentityRegister.handler` to
-// `ClientConfig.Handlers.AuthUIHandlers`, and the value reference
+// `ClientConfig.Composition.Handlers.AuthUIHandlers`, and the value reference
 // pulls this module into the Fable import graph — no module-load side
 // effect and no `init ()` anchor. `AuthUIProvider.gate` dispatches the
 // vendor-neutral `ProviderAuthUI (tag, payload)` case on the tag, and
@@ -29,17 +29,17 @@ let private googleIdentityHandler (payload: obj) (shell: ReactElement) : ReactEl
     GoogleIdentityAuthUI.GoogleIdentityShell config shell
 
 /// The tag this companion registers under in
-/// `ClientConfig.Handlers.AuthUIHandlers` — the same key
+/// `ClientConfig.Composition.Handlers.AuthUIHandlers` — the same key
 /// `ProviderAuthUI` dispatches on.
 [<Literal>]
 let Tag = "google-identity"
 
 /// Companion-exported AuthUI handler. Add to
-/// `ClientConfig.Handlers.AuthUIHandlers` to enable the Google
+/// `ClientConfig.Composition.Handlers.AuthUIHandlers` to enable the Google
 /// Identity Services sign-in surface.
 let handler: string * AuthUIHandler = Tag, googleIdentityHandler
 
-/// Typed smart constructor for the vendor-neutral `ClientConfig.AuthUI`
+/// Typed smart constructor for the vendor-neutral `AuthConfig.AuthUI`
 /// case:
 ///
 ///   AuthUI = GoogleIdentityRegister.authUI (GoogleIdentityUIConfig.create clientId)

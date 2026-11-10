@@ -43,7 +43,7 @@ open ToolUp.Remoting.Json.SystemTextJson
 //
 // Phase 622 also mounts a batteries-included `IPresenceApi` over this
 // tracker at `/api/IPresenceApi/*` under the same flag, and the shell
-// auto-mounts the client half under `ClientConfig.Presence`. That is
+// auto-mounts the client half under `ClientConfig.Shell.Presence`. That is
 // purely additive: the pre-622 contract — SDK registers the substrate, a
 // deployment exposes its own module-owned API over the resolved tracker
 // and mounts `PresenceContext.provider` itself — remains supported, which

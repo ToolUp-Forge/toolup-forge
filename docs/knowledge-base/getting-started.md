@@ -72,7 +72,7 @@ let modules = [
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
 
-AIClientConfig.program aiMode clientConfig modules
+AIClientConfig.program aiSlots clientConfig modules
 |> Program.withReactSynchronous "elmish-app"
 |> Program.run
 ```
@@ -146,7 +146,7 @@ Html.button [
 ]
 ```
 
-The broker takes a `NarrativeDocument` plus an overwrite flag — `false` first, then `true` after the UI has confirmed an overwrite — not a title/body/module triple. `Toolup.NarrativeCommit.current ()` returns `None` when nothing registered a handler, so a module's Save button degrades rather than failing. The handler (`KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Handlers` by `withKnowledgeBase`) persists the narrative and indexes its chunks; it appears in the Documents list with `KnowledgeSource.FromNarrative`.
+The broker takes a `NarrativeDocument` plus an overwrite flag — `false` first, then `true` after the UI has confirmed an overwrite — not a title/body/module triple. `Toolup.NarrativeCommit.current ()` returns `None` when nothing registered a handler, so a module's Save button degrades rather than failing. The handler (`KnowledgeBaseView.narrativeCommitHandler`, wired onto `ClientConfig.Composition.Handlers` by `withKnowledgeBase`) persists the narrative and indexes its chunks; it appears in the Documents list with `KnowledgeSource.FromNarrative`.
 
 ## 9. Notes
 

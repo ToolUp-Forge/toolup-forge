@@ -943,7 +943,7 @@ Apps that want RAG compose `RAGCompose.withRAG` instead, which composes the AI t
 
 ```fsharp skip=signature
 AIClientConfig.withAIAssistant
-    (mode: AIAssistantMode)
+    (mode: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
     : Program<unit, OuterModel, OuterMsg, ReactElement>
@@ -951,7 +951,7 @@ AIClientConfig.withAIAssistant
 
 Under the hood, `withAIAssistant`:
 
-1. **Prepends the AI assistant module page** to the module list via `appendAssistantModule` — `AIAssistantUI.create branding` shows up as a sidebar entry when mode ≠ `NoAIAssistant`.
+1. **Fills the AI slots** (`withAISlots`, Phase 1074) — the assistant, AI settings and platform-keys pages compose through `ShellSlotFills.Extensions` after the app's modules, each `Empty`, `Default`, `Configured` or `External` per `AISlotFills`.
 2. **Builds an outer Elmish Program** parameterised over `OuterModel = { Shell: Client.Model; SidePanel: SidePanelModel }` and `OuterMsg = ShellMsg of Client.Msg | SidePanelMsg of SidePanelMsg`.
 3. **Stitches the shell's init/update/view into the outer program** — ShellMsg dispatches to `Client.update`, SidePanelMsg dispatches to `sidePanelUpdate`, and outer `view` calls `Client.view` with an `ExtraChrome` record built from the side-panel state.
 4. **Attaches the SSE subscription** as a `Cmd.ofEffect` in outer init, wiring `AIStreamEvent` deltas into `SidePanelMsg.SSEEvent`.
@@ -964,7 +964,7 @@ open ToolUp.Elmish
 open ToolUp.Elmish.React
 open ToolUp.Platform
 
-AIClientConfig.run aiMode config modules
+AIClientConfig.run aiSlots config modules
 ```
 
 (The in-tree Elmish fork ships under `namespace ToolUp.Elmish` / `ToolUp.Elmish.React` inside `ToolUp.Platform.Client` — same classical Elm Architecture surface, distinct namespace, so a consumer can hold upstream `Elmish` alongside it.)
@@ -984,7 +984,7 @@ The outer view reads `Client.activeModuleName model.Shell` and passes it to `sid
 do ToolUp.AI.Client.SidePanelExtensions.registerStreamingAction (fun () -> MyButton())
 ```
 
-Sanctioned mutable global, same precedent as `ClientToolRuntime.registry`. No deployment-side wiring — the registration runs at JS module load when whatever file holds the `do` block is imported (companions typically piggyback on a file that's already pulled by `ClientConfig.GlobalOverlays`).
+Sanctioned mutable global, same precedent as `ClientToolRuntime.registry`. No deployment-side wiring — the registration runs at JS module load when whatever file holds the `do` block is imported (companions typically piggyback on a file that's already pulled by `ClientConfig.Shell.GlobalOverlays`).
 
 ## ToolUp.Remoting unit-body normalisation
 

@@ -12,7 +12,7 @@ open ToolUp.Platform
 let clientConfig = {
     ClientConfig.defaults with
         AppName = "Acme Analytics"
-        CommandPalette = DefaultCommandPalette
+        Shell.CommandPalette = FeatureMode.Enabled
 }
 ```
 
@@ -20,8 +20,8 @@ let clientConfig = {
 
 | Case | Effect |
 |---|---|
-| `NoCommandPalette` | **Default.** No keyboard listener is registered, no overlay enters the React tree. Byte-identical to a build without the feature. |
-| `DefaultCommandPalette` | Mounts the SDK palette. |
+| `FeatureMode.Disabled` | **Default.** No keyboard listener is registered, no overlay enters the React tree. Byte-identical to a build without the feature. |
+| `FeatureMode.Enabled` | Mounts the SDK palette. |
 
 There is no `CustomCommandPalette` arm, unlike `ToastCentreMode` or `NotAuthorisedMode`. That is deliberate — see [Why entries cannot be customised](#why-entries-cannot-be-customised).
 
@@ -55,7 +55,7 @@ One entry per **destination**, in sidebar order:
 
 A module registered with `withPages` but declaring only *one* page is a leaf in the sidebar, so it is a single entry here too. The multi-page parent row is not listed separately: in the narrow rail it navigates to the module's first page, which is already the first entry.
 
-Each row shows the icon the sidebar would have rendered for the same destination, and a context label on the right — the module's `withGroup` label, or (under `AdminSurface = SeparateArea`) its navigation area.
+Each row shows the icon the sidebar would have rendered for the same destination, and a context label on the right — the module's `withGroup` label, or (under `Chrome.AdminArea = ChromeFill.On()`) its navigation area.
 
 Selecting an entry dispatches the same navigation the sidebar does, so switching between pages of the module you are already in preserves that module's state exactly as a sidebar click would.
 
@@ -110,7 +110,7 @@ The panel is a `role="dialog"` with `aria-modal`, the result list is a `role="li
 
 ## Cost when disabled
 
-Under the default `NoCommandPalette` the shell renders `Html.none` in the palette's slot: the component is never mounted, so no `keydown` listener is registered, no candidate list is derived, and Ctrl+K keeps whatever meaning the browser gave it (GP 13).
+Under the default `FeatureMode.Disabled` the shell renders `Html.none` in the palette's slot: the component is never mounted, so no `keydown` listener is registered, no candidate list is derived, and Ctrl+K keeps whatever meaning the browser gave it (GP 13).
 
 ## See also
 

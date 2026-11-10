@@ -21,7 +21,7 @@ open Fable.Core.JsInterop
 // over `history.pushState` / `history.replaceState`, so the
 // metadata updates on both Back/Forward navigation and on
 // in-app `pushState` calls. Route lookup against
-// `ClientConfig.PrerenderRoutes` is exact-match on path; routes
+// `ClientConfig.PublicUtility.PrerenderRoutes` is exact-match on path; routes
 // not declared as prerender targets leave the existing metadata
 // untouched.
 
@@ -86,7 +86,7 @@ let private wrapHistoryMethods (cb: unit -> unit) : unit = jsNative
 /// Install the per-route metadata updater. Idempotent — second
 /// and subsequent calls are no-ops. Call once during application
 /// boot after `ClientConfig` is built, or skip when
-/// `ClientConfig.PrerenderRoutes = []` (the empty-route case is
+/// `ClientConfig.PublicUtility.PrerenderRoutes = []` (the empty-route case is
 /// also a no-op, so calling unconditionally is safe).
 let install (routes: PrerenderRoute list) : unit =
     if installed || not (hasWindow ()) || List.isEmpty routes then

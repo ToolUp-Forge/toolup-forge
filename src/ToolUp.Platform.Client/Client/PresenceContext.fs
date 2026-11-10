@@ -17,7 +17,7 @@ open ToolUp.Platform
 // state through props.
 //
 // **Two ways `provider` gets mounted, and both are supported:**
-//   * **Phase 622 (batteries-included).** `ClientConfig.Presence =
+//   * **Phase 622 (batteries-included).** `ClientConfig.Shell.Presence =
 //     FeatureMode.Enabled` makes the SDK shell mount it — `PresenceMount`
 //     owns the heartbeat, the roster refresh and the `_platform.*` fold.
 //     No deployment wiring at all.

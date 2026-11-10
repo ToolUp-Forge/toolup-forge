@@ -32,6 +32,9 @@
 @@ L13 [66-mode-field]
 -        Mode = PlatformMode.Individual
 +        Surfaces = Surfaces.individual
+@@ L14 [1074-client-config-field]
+-        DevDefaultUserId = "dev-admin"
++        Auth.DevDefaultUserId = "dev-admin"
 @@ L17 [66-user-session-get-mode]
 -let mode = UserSession.getMode ()
 +let mode = UserSession.getSubjectKind ()
@@ -44,6 +47,95 @@
 @@ L28 [73-elmish-qualified]
 -Elmish.React.Program.withReactSynchronous "app" program |> Program.run
 +ToolUp.Elmish.React.Program.withReactSynchronous "app" program |> Program.run
+--- a/src/Client/Concerns.fs
++++ b/src/Client/Concerns.fs
+@@ L13 [1074-client-config-field]
+-            ActiveModule = Some "reports"
++            Shell.ActiveModule = Some "reports"
+@@ L14 [1074-clerk-auth-ui]
+-            AuthUI = ClerkAuthUI { PublishableKey = "pk_test" }
++            AuthUI = ToolUp.AuthProviders.ClerkRegister.authUI { PublishableKey = "pk_test" }
+@@ L14 [1074-client-config-field]
+-            AuthUI = ToolUp.AuthProviders.ClerkRegister.authUI { PublishableKey = "pk_test" }
++            Auth.AuthUI = ToolUp.AuthProviders.ClerkRegister.authUI { PublishableKey = "pk_test" }
+@@ L15 [1074-feature-mode-on]
+-            AuthTokenStorage = ServerSetHttpOnlyCookie
++            AuthTokenStorage = FeatureMode.Enabled
+@@ L15 [1074-client-config-field]
+-            AuthTokenStorage = FeatureMode.Enabled
++            Auth.HttpOnlySession = FeatureMode.Enabled
+@@ L16 [1074-feature-mode-on]
+-            CommandPalette = DefaultCommandPalette
++            CommandPalette = FeatureMode.Enabled
+@@ L16 [1074-client-config-field]
+-            CommandPalette = FeatureMode.Enabled
++            Shell.CommandPalette = FeatureMode.Enabled
+@@ L17 [1074-client-config-field]
+-            BrowserHistory = HashHistory
++            Shell.BrowserHistory = HashHistory
+@@ L18 [1074-chrome-on]
+-            AdminSurface = SeparateArea
++            AdminSurface = ChromeFill.On()
+@@ L18 [1074-client-config-field]
+-            AdminSurface = ChromeFill.On()
++            Chrome.AdminArea = ChromeFill.On()
+@@ L19 [1074-chrome-on]
+-            Observability = DefaultObservabilityModule
++            Observability = ChromeFill.On()
+@@ L19 [1074-client-config-field]
+-            Observability = ChromeFill.On()
++            Chrome.Observability = ChromeFill.On()
+@@ L20 [1074-chrome-off]
+-            PlatformUsers = NoPlatformUsers
++            PlatformUsers = ChromeFill.Off
+@@ L20 [1074-client-config-field]
+-            PlatformUsers = ChromeFill.Off
++            Chrome.PlatformUsers = ChromeFill.Off
+@@ L21 [1074-client-config-field]
+-            DatadogReadback = NoDatadogReadback
++            Chrome.DatadogReadback = NoDatadogReadback
+@@ L22 [1074-client-config-field]
+-            Locale = TeamDefault "en"
++            Locale.Resolution = TeamDefault "en"
+@@ L23 [1074-client-config-field]
+-            ModuleFilter = None
++            Composition.ModuleFilter = None
+@@ L24 [1074-client-config-field]
+-            Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
++            Composition.Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
+@@ L26 [1074-column-mapping-unlabelled]
+-            Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping None)
++            Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)
+@@ L34 [1074-feature-mode-off]
+-let palette: CommandPaletteMode = NoCommandPalette
++let palette: CommandPaletteMode = FeatureMode.Disabled
+@@ L34 [1074-feature-mode-type]
+-let palette: CommandPaletteMode = FeatureMode.Disabled
++let palette: FeatureMode = FeatureMode.Disabled
+@@ L36 [1074-chrome-off]
+-let surface: AdminSurfaceMode = InlineGroups
++let surface: AdminSurfaceMode = ChromeFill.Off
+@@ L36 [1074-chrome-type]
+-let surface: AdminSurfaceMode = ChromeFill.Off
++let surface: ChromeFill<unit> = ChromeFill.Off
+@@ L40 [1074-client-config-field]
+-let name = config.AuthUI
++let name = config.Auth.AuthUI
+@@ L42 [1074-ai-assistant-configured]
+-let aiSlots = ConfiguredAIAssistant { Name = "Claude"; Icon = icon; ShowSidePanel = true }
++let aiSlots = AISlotFills.configured { Name = "Claude"; Icon = icon; ShowSidePanel = true }
+@@ L44 [1074-ai-assistant-default]
+-let run () = AIClientConfig.run DefaultAIAssistant config modules
++let run () = AIClientConfig.run AISlotFills.defaults config modules
+@@ L46 [1074-ai-assistant-none]
+-let plain = AIClientConfig.appendAssistantModule NoAIAssistant modules
++let plain = AIClientConfig.appendAssistantModule AISlotFills.empty modules
+@@ L48 [1074-ai-assistant-none]
+-let off: AIAssistantMode = NoAIAssistant
++let off: AIAssistantMode = AISlotFills.empty
+@@ L48 [1074-ai-assistant-type]
+-let off: AIAssistantMode = AISlotFills.empty
++let off: AISlotFills = AISlotFills.empty
 --- a/src/Client/Grid.fs
 +++ b/src/Client/Grid.fs
 @@ L5 [815-aggrid-compat-module]
@@ -86,6 +178,9 @@
 @@ L14 [879-column-mapping]
 -        Slots.DataManager = MappingDataManager
 +        Slots.DataManager = (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+@@ L14 [1074-column-mapping-unlabelled]
+-        Slots.DataManager = (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
++        Slots.DataManager = (SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled))
 @@ L15 [879-slot-field]
 -        TeamManager = ExternalTeamManager myTeams
 +        Slots.TeamManager = ExternalTeamManager myTeams
@@ -119,6 +214,9 @@
 @@ L34 [879-column-mapping]
 -        DataManager = Some MappingDataManager
 +        DataManager = Some (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+@@ L34 [1074-column-mapping-unlabelled]
+-        DataManager = Some (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
++        DataManager = Some (SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled))
 @@ L35 [879-slot-case-nullary]
 -        WebhookAdmin = Some DefaultWebhookAdmin
 +        WebhookAdmin = Some SlotFill.Default
@@ -324,6 +422,14 @@
 @@ L73 [882-entity-principal]
 -let actor (access: AccessContext) = EntityPrincipal.ofPrincipal access.UserId
 +let actor (access: AccessContext) = AccessContext.entityPrincipal access
+--- a/src/Server/Ingestion.fs
++++ b/src/Server/Ingestion.fs
+@@ L3 [1085-is-terminal-status]
+-let terminal status = KnowledgeBase.ServerIngestionStatusStream.isTerminalStatus status
++let terminal status = IngestionStatus.isTerminal status
+@@ L7 [1085-mark-ingestion-failed-stub]
+-    MarkIngestionFailed = fun _ _ _ -> async.Return()
++
 --- a/src/Server/Jobs.fs
 +++ b/src/Server/Jobs.fs
 @@ L6 [1066-schedule-result-type]
@@ -436,4 +542,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 112 rewrite(s) across 19 file(s) pending.
+Codemod: 146 rewrite(s) across 21 file(s) pending.

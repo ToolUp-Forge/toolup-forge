@@ -104,6 +104,16 @@ SharedTypes+BulkItemOutcome+Tags.Admitted : System.Int32 (literal)
 SharedTypes+BulkItemOutcome+Tags.Refused : System.Int32 (literal)
 SharedTypes+BulkItemOutcomeModule (class)
 SharedTypes+BulkItemOutcomeModule.isImported(SharedTypes+BulkItemOutcome) : System.Boolean
+SharedTypes+ChunkOutcome (class)
+SharedTypes+ChunkOutcome.ChunkIndexed : SharedTypes+ChunkOutcome { get }
+SharedTypes+ChunkOutcome.IsChunkFailed : System.Boolean { get }
+SharedTypes+ChunkOutcome.IsChunkIndexed : System.Boolean { get }
+SharedTypes+ChunkOutcome.Tag : System.Int32 { get }
+SharedTypes+ChunkOutcome+ChunkFailed (class)
+SharedTypes+ChunkOutcome+ChunkFailed.reason : System.String { get }
+SharedTypes+ChunkOutcome+Tags (class)
+SharedTypes+ChunkOutcome+Tags.ChunkFailed : System.Int32 (literal)
+SharedTypes+ChunkOutcome+Tags.ChunkIndexed : System.Int32 (literal)
 SharedTypes+IngestNarrativeError (class)
 SharedTypes+IngestNarrativeError.IsDuplicateExists : System.Boolean { get }
 SharedTypes+IngestNarrativeError.IsIngestFailed : System.Boolean { get }
@@ -156,6 +166,9 @@ SharedTypes+IngestionStatus+UnsupportedFormat (class)
 SharedTypes+IngestionStatus+UnsupportedFormat.detail : System.String { get }
 SharedTypes+IngestionStatus+UploadRejected (class)
 SharedTypes+IngestionStatus+UploadRejected.reason : System.String { get }
+SharedTypes+IngestionStatusModule (class)
+SharedTypes+IngestionStatusModule.isTerminal(SharedTypes+IngestionStatus) : System.Boolean
+SharedTypes+IngestionStatusModule.step(System.Int32, SharedTypes+IngestionStatus, SharedTypes+ChunkOutcome) : Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+IngestionStatus]
 SharedTypes+IngestionStatusUpdate (class)
 SharedTypes+IngestionStatusUpdate..ctor(System.String, System.String, System.String, System.Int32, System.String, System.String)
 SharedTypes+IngestionStatusUpdate.ChunkCount : System.Int32 { get }

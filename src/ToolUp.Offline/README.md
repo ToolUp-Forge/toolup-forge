@@ -17,7 +17,7 @@ Three packages, composed independently:
 
 ## Off by default
 
-`ClientConfig.Offline` defaults to `NoOffline`. Under that value nothing happens: no service worker
+`ClientConfig.Shell.Offline` defaults to `NoOffline`. Under that value nothing happens: no service worker
 is registered, no IndexedDB database is opened, no manifest is linked, no install prompt appears, no
 badge is mounted. A deployment that upgrades and does not opt in is byte-for-byte unchanged
 (GP 11 + GP 13).
@@ -102,7 +102,7 @@ can claim the whole origin. It is a template — read it and adjust `PRECACHE_UR
 
 ```fsharp skip=fragment
 { ClientConfig.create handlers with
-    Offline =
+    Shell.Offline =
         EnabledOffline {
             OfflineConfig.defaults with
                 CacheVersion = "2026-08-31"  // bump per release to evict old caches

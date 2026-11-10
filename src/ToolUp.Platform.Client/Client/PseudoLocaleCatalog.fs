@@ -376,7 +376,7 @@ module PseudoLocaleCatalog =
     /// resolve to a different language entirely.
     let catalog () : MessageCatalog = derived.Force()
 
-    /// A `ClientConfig.MessageCatalogOverride` that serves the
+    /// A `ClientConfig.Locale.MessageCatalogOverride` that serves the
     /// pseudo-locale and passes every other language through untouched.
     ///
     /// Written in exactly the shape the guide teaches for a real

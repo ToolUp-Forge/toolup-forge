@@ -1,0 +1,55 @@
+module Consumer.Client.Concerns
+
+// Phase 1074 fixture — a client root on the flat `ClientConfig`.
+
+open ToolUp.Platform
+open ToolUp.AI
+open ToolUp.AI.Client
+
+let config =
+    {
+        ClientConfig.create handlers with
+            AppName = "Acme"
+            Shell.ActiveModule = Some "reports"
+            Auth.AuthUI = ToolUp.AuthProviders.ClerkRegister.authUI { PublishableKey = "pk_test" }
+            Auth.HttpOnlySession = FeatureMode.Enabled
+            Shell.CommandPalette = FeatureMode.Enabled
+            Shell.BrowserHistory = HashHistory
+            Chrome.AdminArea = ChromeFill.On()
+            Chrome.Observability = ChromeFill.On()
+            Chrome.PlatformUsers = ChromeFill.Off
+            Chrome.DatadogReadback = NoDatadogReadback
+            Locale.Resolution = TeamDefault "en"
+            Composition.ModuleFilter = None
+            Composition.Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ handler ] }
+            NoActiveTeamLandingModuleId = Some "welcome"
+            Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)
+    }
+
+let overrides = {
+    ClientConfigOverrides.empty with
+        ActiveModule = Some "reports"
+}
+
+let palette: FeatureMode = FeatureMode.Disabled
+
+let surface: ChromeFill<unit> = ChromeFill.Off
+
+let filtered = config.ModuleFilter
+
+let name = config.Auth.AuthUI
+
+let aiSlots = AISlotFills.configured { Name = "Claude"; Icon = icon; ShowSidePanel = true }
+
+let run () = AIClientConfig.run AISlotFills.defaults config modules
+
+let plain = AIClientConfig.appendAssistantModule AISlotFills.empty modules
+
+let off: AISlotFills = AISlotFills.empty
+
+let upload = DataManagerChoice.FileUpload { Name = "Uploads"; Icon = icon; Group = None }
+
+let describe (mode: AuthUIMode) =
+    match mode with
+    | ClerkAuthUI _ -> "clerk"
+    | _ -> "other"

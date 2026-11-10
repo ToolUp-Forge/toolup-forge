@@ -6,18 +6,21 @@ Public surface of `ToolUp.AI`. Types are listed by package; method signatures ar
 
 Shared types — referenced by both `Server` and `Client`. Source ships under `fable/` in the nupkg for Fable consumers.
 
-### `AIAssistantMode`
+### `AISlotFills`
+
+The AI companion's three shell slots (`ToolUp.AI.Client`, Phase 1074): `AIAssistant:
+SlotFill<AIAssistantClientBranding>` (a `Name`, a typed `Icon: ReactElement`, `ShowSidePanel`),
+`AISettings: SlotFill<ModuleLabel>` and `PlatformAIKeys: SlotFill<ModuleLabel>`.
+`AISlotFills.defaults` is the built-in family, `AISlotFills.empty` none of it, and
+`AISlotFills.configured branding` the family with the assistant rebranded.
 
 ```fsharp
-type AIAssistantMode =
-    | NoAIAssistant
-    | DefaultAIAssistant
-    | ConfiguredAIAssistant of AIAssistantBranding
+open ToolUp.Platform
+open ToolUp.AI
 
-and AIAssistantBranding = {
-    Name: string
-    Icon: string         // SVG path, served from /svg/
-    ShowSidePanel: bool
+let fills: AISlotFills = {
+    AISlotFills.defaults with
+        PlatformAIKeys = SlotFill.Empty
 }
 ```
 
@@ -506,7 +509,7 @@ The function is the agent's heart. Most apps don't call it directly — `AICompo
 ```fsharp skip=signature
 module AIClientConfig =
     val withAIAssistant:
-        mode: AIAssistantMode ->
+        mode: AISlotFills ->
         config: ClientConfig ->
         modules: ErasedModule list ->
         Program<unit, OuterModel, OuterMsg, ReactElement>
@@ -514,7 +517,7 @@ module AIClientConfig =
 
 Wraps the shell's Elmish `Program`. Adds the AI side-panel MVU + chrome around the base shell. The returned `Program` is fed into `Program.withReactSynchronous "elmish-app" |> Program.run`.
 
-For deployments wanting just the side panel but not the full-page module, pass `ConfiguredAIAssistant { ... ShowSidePanel = true }` with `Branding.Name = ""` to suppress the sidebar entry.
+For deployments wanting just the side panel but not the full-page module, pass `AISlotFills.configured { ... ShowSidePanel = true }` with `Branding.Name = ""` to suppress the sidebar entry.
 
 ### `SidePanelModel` / `OuterModel` / `OuterMsg`
 

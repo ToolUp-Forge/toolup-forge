@@ -1,10 +1,10 @@
-# Vendor-neutral `ClientConfig.AuthUI` — the `ProviderAuthUI` case (Phase 494)
+# Vendor-neutral `ClientConfig.Auth.AuthUI` — the `ProviderAuthUI` case (Phase 494)
 
 ## The problem
 
 The auth-UI *behaviour* has been properly seamed since Phase 13a: sign-in UI companions export
 `(tag, handler)` values (`AuthUIHandler = obj -> ReactElement -> ReactElement`), consumers add them
-to `ClientConfig.Handlers.AuthUIHandlers`, and `AuthUIProvider.gate` dispatches on the tag at
+to `ClientConfig.Composition.Handlers.AuthUIHandlers`, and `AuthUIProvider.gate` dispatches on the tag at
 render time. Missing handlers fail loud at `Client.run`. The registry never names a vendor — it is
 a `Map<string, AuthUIHandler>`.
 
@@ -64,8 +64,8 @@ so a Clerk deployment writes:
 open ToolUp.AuthProviders
 
 { ClientConfig.defaults with
-    AuthUI = ClerkRegister.authUI { PublishableKey = key }
-    Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ ClerkRegister.handler ] } }
+    Auth.AuthUI = ClerkRegister.authUI { PublishableKey = key }
+    Composition.Handlers = { ClientHandlerRegistry.empty with AuthUIHandlers = [ ClerkRegister.handler ] } }
 ```
 
 The type safety lives at the companion seam (the constructor and the handler agree on the concrete

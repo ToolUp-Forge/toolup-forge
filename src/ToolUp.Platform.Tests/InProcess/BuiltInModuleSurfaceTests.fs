@@ -280,7 +280,7 @@ let visibilityTests =
     testList "Phase 66 Stream B.4 — SDK built-in client-side Visibility" [
 
         test "PlatformAdminUI declares visibleToAuthenticated" {
-            let m = PlatformAdminUI.create None ClientConfig.defaults
+            let m = PlatformAdminUI.create None PublicUtilityConfig.defaults
             assertVisibleToAuthenticated "PlatformAdminUI" m
         }
 
@@ -338,7 +338,7 @@ let visibilityTests =
             // FileManagerUI is the SDK's `_sdk.DataManager` built-in.
             // Empty `displays` is fine here — `create` only stores the
             // list; the view function is never invoked.
-            let m = FileManagerUI.create [] None
+            let m = FileManagerUI.create [] DataManagerConfig.unlabelled
             assertVisibleToAuthenticated "FileManagerUI" m
         }
 
@@ -354,7 +354,7 @@ let visibilityTests =
             // sidebar shape. Pinning the set here means a future addition
             // is a deliberate edit.
             let builtIns: (string * ErasedModule) list = [
-                "PlatformAdminUI", PlatformAdminUI.create None ClientConfig.defaults
+                "PlatformAdminUI", PlatformAdminUI.create None PublicUtilityConfig.defaults
                 "TeamManagerUI", TeamManagerUI.create None
                 "HealthMonitorUI", HealthMonitorUI.create None
                 "UsageDashboard", UsageDashboard.create None
@@ -363,7 +363,7 @@ let visibilityTests =
                 "DataIngestionUI", DataIngestionUI.create None
                 "WebhookAdminUI", WebhookAdminUI.create None
                 "TeamConfigUI", TeamConfigUI.create None
-                "FileManagerUI", FileManagerUI.create [] None
+                "FileManagerUI", FileManagerUI.create [] DataManagerConfig.unlabelled
                 "DataSubjectRequestAdminUI", DataSubjectRequestAdminUI.create None
                 "NotificationPreferencesUI", NotificationPreferencesUI.create None
             ]

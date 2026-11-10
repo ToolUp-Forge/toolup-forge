@@ -9,7 +9,7 @@ open ToolUp.Platform.RegisteredModules
 // ─── Phase 1240 — a view's URL ─────────────────────────────────────────
 //
 // The shell's active view lives in the Elmish model. This is the URL half,
-// used only under `ClientConfig.BrowserHistory = HashHistory`: a view's URL
+// used only under `ClientConfig.Shell.BrowserHistory = HashHistory`: a view's URL
 // is the fragment `#/{sidebarId}`, where the sidebar id is the
 // `{moduleId}{pageRoute}` a sidebar click already sends.
 //

@@ -193,6 +193,7 @@ let private everyDefault (config: ClientConfig) = {
             MigrationAdmin = SlotFill.Default
             DataSubjectRequestAdmin = SlotFill.Default
             JobsAdmin = SlotFill.Default
+            Extensions = []
         }
 }
 
@@ -203,8 +204,7 @@ let private everyConfigured (config: ClientConfig) = {
             DataManager =
                 SlotFill.Configured(
                     DataManagerChoice.FileUpload {
-                        Name = "My uploads"
-                        Icon = Html.none
+                        Label = Some(label "My uploads")
                         Group = Some "My data"
                     }
                 )
@@ -227,6 +227,7 @@ let private everyConfigured (config: ClientConfig) = {
             MigrationAdmin = SlotFill.Configured(label "My migrations")
             DataSubjectRequestAdmin = SlotFill.Configured(label "My DSRs")
             JobsAdmin = SlotFill.Configured(label "My jobs")
+            Extensions = []
         }
 }
 
@@ -254,6 +255,7 @@ let private everyExternal (config: ClientConfig) = {
             MigrationAdmin = SlotFill.External(replacement "migrationAdmin")
             DataSubjectRequestAdmin = SlotFill.External(replacement "dataSubjectRequestAdmin")
             JobsAdmin = SlotFill.External(replacement "jobsAdmin")
+            Extensions = []
         }
 }
 
@@ -281,25 +283,23 @@ let private everyEmpty (config: ClientConfig) = {
             MigrationAdmin = SlotFill.Empty
             DataSubjectRequestAdmin = SlotFill.Empty
             JobsAdmin = SlotFill.Empty
+            Extensions = []
         }
 }
 
 let private columnMapping (config: ClientConfig) = {
     config with
-        Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping None)
+        Slots.DataManager = SlotFill.Configured(DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)
 }
 
 let private configuredColumnMapping (config: ClientConfig) = {
     config with
         Slots.DataManager =
             SlotFill.Configured(
-                DataManagerChoice.ColumnMapping(
-                    Some {
-                        Name = "My mapping"
-                        Icon = Html.none
-                        Group = Some "My data"
-                    }
-                )
+                DataManagerChoice.ColumnMapping {
+                    Label = Some(label "My mapping")
+                    Group = Some "My data"
+                }
             )
 }
 
@@ -334,7 +334,7 @@ let private referenceConfigurations: (string * ClientConfig) list = [
     "team-separate-admin-area",
     {
         everyDefault team with
-            AdminSurface = SeparateArea
+            Chrome.AdminArea = ChromeFill.On()
     }
 ]
 

@@ -223,13 +223,13 @@ let private composition (counters: Counters) =
 
     let config = {
         ClientConfig.defaults with
-            ToastCentre = NoToastCentre
-            GlobalOverlays = [
+            Shell.ToastCentre = NoToastCentre
+            Shell.GlobalOverlays = [
                 fun () ->
                     counters.Chrome <- counters.Chrome + 1
                     Html.none
             ]
-            MessageCatalogOverride =
+            Locale.MessageCatalogOverride =
                 Some(fun catalog -> {
                     catalog with
                         Sidebar = {
@@ -301,7 +301,7 @@ let run (route: Route) (report: Run -> unit) : unit =
         let update = AIClientConfig.composerUpdate config bus modules
 
         let capture shellView =
-            let view = AIClientConfig.composerView NoAIAssistant modules shellView
+            let view = AIClientConfig.composerView ToolUp.AI.AISlotFills.empty modules shellView
 
             fun model (dispatchers: AIClientConfig.ComposerDispatchers) ->
                 send <- Some(fun i -> dispatchers.Dispatch messages[i])

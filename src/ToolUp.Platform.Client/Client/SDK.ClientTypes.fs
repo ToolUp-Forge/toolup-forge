@@ -13,7 +13,7 @@ open Fable.SimpleJson
 // `ToolUp.Platform.Core/Shared/Types/PrerenderTypes.fs` so the
 // `ToolUp.Platform.Build` FAKE Prerender target factory can
 // consume them without a Build → Client dep. The
-// `ClientConfig.PrerenderRoutes` field below references the lifted
+// `ClientConfig.PublicUtility.PrerenderRoutes` field below references the lifted
 // types directly via the shared `ToolUp.Platform` namespace.
 
 // ─── Data type display ────────────────────────────────────────────
@@ -209,15 +209,15 @@ type ModuleDefinition = {
 
 // ─── Navigation area (Phase 567) ──────────────────────────────────
 
-/// The sidebar navigation area a module belongs to. Under
-/// `ClientConfig.AdminSurface = SeparateArea` the sidebar renders one
-/// area at a time (product modules vs admin modules) with a switcher;
-/// under the default `InlineGroups` it is ignored (today's inline
-/// groups). A module's *effective* area is `Administration` if it
-/// either declares `Area = Administration` (via `ClientModule.withArea`)
-/// OR sits in an admin sidebar group (`ClientConfig.isAdminSidebarGroup`
-/// — how SDK admin built-ins derive it without changing registration,
-/// GP 9); otherwise `Product`. See `ClientConfig.effectiveArea`.
+/// The sidebar navigation area a module belongs to. With
+/// `ShellChrome.AdminArea` on, the sidebar renders one area at a
+/// time (product modules vs admin modules) with a switcher; with it off
+/// (the default) the area is ignored (inline groups). A module's
+/// *effective* area is `Administration` if it either declares
+/// `Area = Administration` (via `ClientModule.withArea`) OR sits in an
+/// admin sidebar group (`SidebarVisibility.isAdminSidebarGroup` — how SDK
+/// admin built-ins derive it without changing registration, GP 9);
+/// otherwise `Product`. See `ClientConfig.effectiveArea`.
 type ModuleArea =
     | Product
     | Administration
@@ -397,7 +397,7 @@ type ErasedModule = {
     NavRole: NavRole option
     /// Phase 567 — declared navigation area. Default `Product`; set to
     /// `Administration` via `ClientModule.withArea` to place a consumer
-    /// module in the admin area under `AdminSurface = SeparateArea`. SDK
+    /// module in the admin area when `ShellChrome.AdminArea` is on. SDK
     /// admin built-ins leave this `Product` and are derived into the admin
     /// area from their group (`ClientConfig.effectiveArea`).
     Area: ModuleArea
@@ -711,38 +711,84 @@ type SlotFill<'cfg> =
     /// contract a replacement honours.
     | External of ErasedModule
 
-/// Name, icon and sidebar group for the SDK data manager. The data slot's
-/// label: unlike `ModuleLabel` it can also move the entry to another
-/// sidebar group.
+/// Phase 1074 — a slot a companion package declares beside the shell's
+/// own (`ShellSlotFills.Extensions`). The AI companion declares its
+/// assistant family this way (`ToolUp.AI.Client`'s `AISlotFills`), so it
+/// can be emptied or replaced exactly as a built-in slot can.
+///
+/// An extension's module sits where a companion's modules always sat:
+/// after the app's own modules and ahead of the administration built-ins,
+/// counted with the app's modules by the module filter and by the boot
+/// validators (the grouping check and the Phase 583 parity check).
+type SlotExtension = {
+    /// Stable id — the companion's slot name (`"AIAssistant"`, …).
+    Id: string
+    /// The module filling the slot, `None` when it is `SlotFill.Empty`.
+    Module: ErasedModule option
+}
+
+/// Building a `SlotExtension` from a companion's fill.
+module SlotExtension =
+    /// The extension `id` filled by `fill`: nothing for `Empty`, the
+    /// companion's built-in for `Default` / `Configured` (`builtIn None` /
+    /// `builtIn (Some cfg)`), the deployment's module for `External`.
+    let ofFill (id: string) (builtIn: 'cfg option -> ErasedModule) (fill: SlotFill<'cfg>) : SlotExtension = {
+        Id = id
+        Module =
+            match fill with
+            | SlotFill.Empty -> None
+            | SlotFill.Default -> Some(builtIn None)
+            | SlotFill.Configured cfg -> Some(builtIn (Some cfg))
+            | SlotFill.External replacement -> Some replacement
+    }
+
+    /// A built-in module under a slot's label: the sidebar entry's name
+    /// and icon are the label's.
+    let relabel (label: ModuleLabel) (m: ErasedModule) : ErasedModule = {
+        m with
+            Definition = {
+                m.Definition with
+                    Name = label.Name
+                    Icon = label.Icon
+            }
+    }
+
+/// The SDK data manager's label and sidebar group — the data slot's
+/// configuration, the same for both managers (Phase 1074 made the two
+/// symmetric). Unlike a plain `ModuleLabel` it can also move the entry to
+/// another sidebar group.
 type DataManagerConfig = {
-    /// Display name shown in the sidebar (default: "File Upload" for the
-    /// file-upload manager, "Import & Map" for the column-mapping one)
-    Name: string
-    /// Icon shown in the sidebar — typically `Icons.upload` or any
-    /// other typed `ReactElement`. Default: `ToolUp.Platform.Icons.upload`.
-    Icon: ReactElement
+    /// Display name and icon. `None` keeps the manager's own ("File
+    /// Upload" / "Import & Map", `ToolUp.Platform.Icons.upload`).
+    Label: ModuleLabel option
     /// Sidebar group the module appears under. `None` keeps the SDK
-    /// default ("Data Management"); `Some g` overrides it (e.g. to
-    /// merge file upload into a deployment-specific group).
+    /// default ("Data Management"); `Some g` overrides it (e.g. to merge
+    /// file upload into a deployment-specific group).
     Group: string option
 }
 
+/// Phase 1074 — the data manager's configuration values.
+module DataManagerConfig =
+    /// The manager's own label, in its own group.
+    let unlabelled: DataManagerConfig = { Label = None; Group = None }
+
 /// Phase 879 — which SDK data manager fills the data slot when it is
 /// `SlotFill.Configured`. (`SlotFill.Default` is the file-upload manager
-/// under its own label.)
+/// under its own label.) Both cases carry the same `DataManagerConfig`
+/// (Phase 1074); `DataManagerConfig.unlabelled` keeps the manager's own
+/// label.
 [<RequireQualifiedAccess>]
 type DataManagerChoice =
-    /// The file-upload manager, relabelled.
+    /// The file-upload manager.
     | FileUpload of DataManagerConfig
     /// The mapping-aware data manager: upload an arbitrary CSV, pick a
     /// registered (schema-bearing) target type, and map the schema's
     /// fields to the CSV's columns with smart auto-suggestion and
     /// per-field override. The confirmed map is persisted per scope,
     /// keyed by the CSV's column structure, and reused on later uploads.
-    /// `None` keeps its own label. Requires
-    /// `ServerConfig.ColumnMapping = FeatureMode.Enabled` to back the
-    /// mapping store.
-    | ColumnMapping of DataManagerConfig option
+    /// Requires `ServerConfig.ColumnMapping = FeatureMode.Enabled` to back
+    /// the mapping store.
+    | ColumnMapping of DataManagerConfig
 
 /// Controls the built-in real-time toast notification renderer that
 /// subscribes to `/api/notifications` and pops transient messages for
@@ -765,7 +811,7 @@ type ToastCentreMode =
 // ─── Auth UI configuration ────────────────────────────────────────
 
 /// Configuration for the OIDC Authorization Code + PKCE flow, used
-/// when `ClientConfig.AuthUI = OidcAuthUI _`. The OidcClient companion
+/// when `AuthConfig.AuthUI = OidcAuthUI _`. The OidcClient companion
 /// reads this to orchestrate sign-in against an OIDC-compliant issuer.
 /// Which of the two tokens an OIDC sign-in returns is stored and sent
 /// as the session's HTTP `Authorization: Bearer` credential.
@@ -1047,8 +1093,8 @@ module OidcUIConfig =
         OidcRefreshPolicy.resolve cfg.RefreshPolicy
 
 /// Configuration for the Clerk sign-in flow, used when
-/// `ClientConfig.AuthUI = ProviderAuthUI ("clerk", box clerkUIConfig)`
-/// (or the deprecated `ClerkAuthUI _` alias). The ClerkUI companion
+/// `AuthConfig.AuthUI = ProviderAuthUI ("clerk", box clerkUIConfig)`.
+/// The ClerkUI companion
 /// reads this to configure the Clerk React provider; its
 /// `ClerkRegister.authUI` smart constructor builds the neutral case
 /// from this record without the consumer boxing by hand.
@@ -1064,7 +1110,7 @@ type ClerkUIConfig = {
 type CustomAuthUI = { Wrap: ReactElement -> ReactElement }
 
 /// Phase 443 — configuration for the WebAuthn / passkey sign-in flow,
-/// used when `ClientConfig.AuthUI = PasskeyAuthUI _`. The PasskeyClient
+/// used when `AuthConfig.AuthUI = PasskeyAuthUI _`. The PasskeyClient
 /// companion reads this to orchestrate the `navigator.credentials`
 /// ceremonies against the server-side passkey companion's endpoints.
 /// The relying-party id + origin allow-list live server-side (the
@@ -1092,7 +1138,7 @@ module PasskeyUIConfig =
 /// How the shell handles sign-in UI in authenticated modes. Ignored
 /// in `Anonymous` mode (there is nothing to sign in to). The actual
 /// sign-in provider code lives in companion packages whose exported
-/// handler values are added to `ClientConfig.Handlers.AuthUIHandlers`
+/// handler values are added to `ClientConfig.Composition.Handlers.AuthUIHandlers`
 /// (tag-keyed — see `AuthUIProvider`).
 type AuthUIMode =
     /// No SDK-provided sign-in UI. The shell runs as-is; the app is
@@ -1109,23 +1155,17 @@ type AuthUIMode =
     /// WebAuthn is a protocol, not a vendor — this case stays alongside
     /// `OidcAuthUI` rather than folding into `ProviderAuthUI`. Requires
     /// `ToolUp.AuthProviders.PasskeyRegister.handler` in
-    /// `ClientConfig.Handlers.AuthUIHandlers`. Additive DU case (pre-1.0
+    /// `ClientConfig.Composition.Handlers.AuthUIHandlers`. Additive DU case (pre-1.0
     /// window) — consumers pattern-matching `AuthUIMode` exhaustively get
     /// a compile-time prompt; see `docs/migrations/443-passkey-companion.md`.
     | PasskeyAuthUI of PasskeyUIConfig
-    /// Deprecated vendor-named alias for
-    /// `ProviderAuthUI ("clerk", box clerkUIConfig)` — Phase 494. Kept
-    /// compiling for source compat; removal is a later major-version
-    /// act. See `docs/migrations/494-vendor-neutral-auth-ui.md`.
-    | [<System.Obsolete("Vendor-named case — use ProviderAuthUI (\"clerk\", box clerkUIConfig) (or ToolUp.AuthProviders.ClerkRegister.authUI from the ClerkUI companion) instead. See docs/migrations/494-vendor-neutral-auth-ui.md. ClerkAuthUI will be removed in a future major version.")>] ClerkAuthUI of
-        ClerkUIConfig
     /// App-supplied wrapper. Bypasses the companion indirection —
     /// useful for deployments that have a custom sign-in flow the
     /// SDK shouldn't know about.
     | CustomAuthUI of CustomAuthUI
     /// Vendor-neutral companion-backed sign-in flow (Phase 494). `tag`
     /// names the handler entry in
-    /// `ClientConfig.Handlers.AuthUIHandlers` (the same key the
+    /// `ClientConfig.Composition.Handlers.AuthUIHandlers` (the same key the
     /// `AuthUIProvider` registry dispatches on — e.g. `"clerk"`,
     /// `"oidc"`, or any third-party companion's tag); `config` is the
     /// provider-specific config payload, type-erased at this sanctioned
@@ -1135,86 +1175,13 @@ type AuthUIMode =
     /// `ClerkRegister.authUI`) so consumers never box by hand.
     | ProviderAuthUI of tag: string * config: obj
 
-/// Phase 133 — where the client keeps the bearer JWT once acquired.
-///
-/// `ClientCookieAndLocalStorage` (default): the legacy behaviour. The
-/// client writes the JWT to `localStorage` AND mirrors it into a
-/// JS-readable `document.cookie` (which structurally cannot be
-/// `HttpOnly` — only a server `Set-Cookie` can be). Both stores are
-/// reachable by any injected script, so an XSS can exfiltrate a usable
-/// `Authorization: Bearer` token. Acceptable only for dev / the
-/// EventSource-handshake path where no server callback exists, OR for a
-/// SPA-without-server-session that accepts the XSS exposure and ships a
-/// strict CSP (Phase 9j / Phase 129 header baseline) as the mitigation.
-/// Phase 1047: the server-rendered sign-in (`OidcSsrSignIn`) writes the same
-/// cookie name `HttpOnly`, which a browser never lets script overwrite. When
-/// the client's write does not land, it sends the token to
-/// `POST /api/auth/session` instead (mounted by that sign-in), so the event
-/// streams authenticate on the client's token rather than on a server token
-/// that expires first. This path therefore needs no change beside that sign-in.
-///
-/// `ServerSetHttpOnlyCookie`: the production-shape BFF path. On token
-/// acquisition the client POSTs the JWT once to the server's
-/// `POST /api/auth/session` endpoint, which validates it and reflects it
-/// into an `HttpOnly; Secure; SameSite=Strict` cookie. The JWT never
-/// enters `localStorage` or a JS-readable cookie; it lives only in
-/// transient in-memory JS state (lost on reload, re-acquired via the
-/// bridge), and the durable session credential is the HttpOnly cookie
-/// the browser sends automatically for SSE + same-origin XHR. Requires
-/// `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` (or the
-/// server-rendered sign-in, which mounts the same endpoint; Phase 1047) and an
-/// `IAuthProvider` configured `TokenLocation = BearerOrCookie
-/// "toolup-auth-token"`. Pairs with the `IAuthBridge` refresh model
-/// (Clerk / MSAL / Auth0); the localStorage-based OidcClient PKCE
-/// refresh timer is not compatible with this mode (see the Phase 133
-/// migration doc).
-type AuthTokenStorage =
-    | ClientCookieAndLocalStorage
-    | ServerSetHttpOnlyCookie
-
-/// Controls the built-in self-hosted observability admin (Phase 9x):
-/// Logs / Metrics / Alerts tabs over the Phase 828 log store, the Phase
-/// 829 metrics history and the Phase 178 alert engine. **Opt-in** —
-/// default `NoObservabilityModule`, so an existing deployment's sidebar
-/// is unchanged until it asks for the module (GP 11 / GP 13).
-///
-/// The client cannot see which of the three sources the server composed,
-/// so the module asks: it reads `/api/observability/sources` on open and
-/// renders only the tabs that answered. Pair it with at least one of
-/// `ServerConfig.Observability.LogStore`, `ServerConfig.Observability.MetricsHistory` or
-/// `ServerConfig.Observability.AlertRules` — with none of them on, the endpoints are
-/// not mounted and the module says so rather than rendering empty tabs.
-type ObservabilityModuleMode =
-    /// No observability module in the sidebar (default — opt-in).
-    | NoObservabilityModule
-    /// SDK built-in observability module.
-    | DefaultObservabilityModule
-
-/// Controls the built-in platform-users admin (Phase 544). The module
-/// lists every principal the substrate has evidence for
-/// (`IPlatformTenantApi.ListPrincipals`, Phase 543), flags team-less
-/// ones, and drives the existing Phase 54-family offboard flow
-/// (preview → confirm → summary) per row against the `user-<id>` scope.
-/// **Default `NoPlatformUsers`** — off unless a deployment opts in, so an
-/// existing app is byte-for-byte unchanged (GP 11/13). Platform-Admin
-/// gated client-side by the "Platform Management" sidebar group; the
-/// underlying `IPlatformTenantApi` is admin-gated server-side regardless.
-/// Zero-cost on `FeatureMode.Disabled` deployments (GP 13): the offboard
-/// surface 404s and the panel's per-row actions degrade to the empty
-/// state.
-type PlatformUsersMode =
-    /// No platform-users module in the sidebar (default — opt-in).
-    | NoPlatformUsers
-    /// SDK built-in platform-users admin.
-    | DefaultPlatformUsers
-
 // ─── Module-contributed home widgets (Phase 217) ─────────────────
 //
 // A module can surface a custom widget (a chart, a recents list, a
 // call-to-action) on the Home / Overview landing surface (Phase 171)
 // without `Platform.Client` ever naming it (GP 9). It exports an
 // `IHomeWidgetContributor` value; the consumer adds it to
-// `ClientConfig.Handlers.HomeWidgetContributors`. The built-in `Home`
+// `ClientConfig.Composition.Handlers.HomeWidgetContributors`. The built-in `Home`
 // module collects every contributor's widgets, sorts by `Weight`, and
 // renders them below the built-in tool / Active-AI / deployment cards.
 // Click-through reuses `NavigationRequest.request` (Phase 6g.C) — a
@@ -1256,7 +1223,7 @@ type HomeWidget = {
 /// this type declaring the widgets it contributes to Home; the SDK
 /// never names the contributing module. Mirrors the value-handler
 /// registration pattern used for auth / data-source UIs — consumers
-/// add contributors to `ClientConfig.Handlers.HomeWidgetContributors`
+/// add contributors to `ClientConfig.Composition.Handlers.HomeWidgetContributors`
 /// at compose time (no module-load side effects).
 type IHomeWidgetContributor =
     /// The widgets this contributor surfaces on Home. Called once at
@@ -1284,7 +1251,7 @@ type IHomeWidgetContributor =
 //
 // Default-off by absence (GP 13): no contributor and no tile-
 // contributing built-in ⇒ the landing surface renders its designed
-// empty state, and under the default `AdminSurface = InlineGroups`
+// empty state, and with the default `ShellChrome.AdminArea = ChromeFill.Off`
 // there is no landing surface at all.
 
 /// One module-contributed administration-landing tile. `Widget` is the
@@ -1306,14 +1273,14 @@ type AdminTile = {
 /// the `IHomeWidgetContributor` twin. A module (or an SDK built-in)
 /// exports a value of this type declaring the tiles it contributes to
 /// the administration landing surface; consumers add contributors to
-/// `ClientConfig.Handlers.AdminTileContributors` at compose time.
+/// `ClientConfig.Composition.Handlers.AdminTileContributors` at compose time.
 type IAdminTileContributor =
     /// The tiles this contributor surfaces on the administration
     /// landing. Called once at boot; the result is flattened across
     /// contributors and ordered by `Widget.Weight`.
     abstract Tiles: unit -> AdminTile list
 
-/// Phase 12c — payload delivered to `ClientConfig.OnError` when a module's
+/// Phase 12c — payload delivered to `ClientConfig.Composition.OnError` when a module's
 /// view tree throws. `ComponentStack` carries the React component-stack
 /// captured by the boundary's `componentDidCatch` (empty string when React
 /// did not provide one). Telemetry consumers can forward this to a server
@@ -1330,7 +1297,7 @@ type ModuleErrorReport = {
 // data-on-`ClientConfig` shape that replaces the legacy module-load
 // `register()` pattern. Companion packages (OidcClient, ClerkUI,
 // KnowledgeBase, data-source credential UIs) export handler values;
-// consumers add them to the matching field on `ClientConfig.Handlers`.
+// consumers add them to the matching field on `ClientConfig.Composition.Handlers`.
 // The SDK validates the registry at `Client.run` (fail-loud naming
 // the missing import) and reads `RequestSeam` thunks at request-send
 // time so values populated post-init (async CSRF prefetch, auth-bridge
@@ -1437,11 +1404,11 @@ module ClientRequestSeam =
 /// `KnowledgeBaseView.narrativeCommitHandler : NarrativeCommitHandler`,
 /// etc.) that consumers add to the matching field at compose time.
 /// No module-load side effects; missing handlers for a declared
-/// `ClientConfig.AuthUI` mode or `DataSource.Kind` fail loud at
+/// `AuthConfig.AuthUI` mode or `DataSource.Kind` fail loud at
 /// `Client.run` naming the missing import.
 type ClientHandlerRegistry = {
     /// Sign-in UI handlers keyed by `AuthUIMode` tag. The SDK looks
-    /// up the handler matching `ClientConfig.AuthUI` and wraps the
+    /// up the handler matching `AuthConfig.AuthUI` and wraps the
     /// shell. Default: empty (compatible with `AuthUI = NoAuthUI`).
     AuthUIHandlers: (string * AuthUIHandler) list
 
@@ -1467,7 +1434,7 @@ type ClientHandlerRegistry = {
     /// owned by the module filling such a slot replaces the slot's.
     /// Default: empty —
     /// with no contributor the landing renders its designed empty
-    /// state, and under `AdminSurface = InlineGroups` there is no
+    /// state, and with `ShellChrome.AdminArea` off there is no
     /// landing surface at all (GP 13).
     AdminTileContributors: IAdminTileContributor list
 
@@ -1496,7 +1463,7 @@ type ClientHandlerRegistry = {
 
 module ClientHandlerRegistry =
     /// No companion handlers wired in. Compatible with apps that
-    /// declare `ClientConfig.AuthUI = NoAuthUI`, don't use the
+    /// declare `AuthConfig.AuthUI = NoAuthUI`, don't use the
     /// data-ingestion admin, and don't ship a Knowledge Base.
     let empty: ClientHandlerRegistry = {
         AuthUIHandlers = []
@@ -1580,44 +1547,12 @@ type NotAuthorisedMode =
     /// `NotAuthorisedContext`; replaces the default entirely.
     | CustomNotAuthorised of (NotAuthorisedContext -> ReactElement)
 
-/// Phase 571 — the Ctrl+K / Cmd+K command palette.
-///
-/// **Off by default (GP 13).** `NoCommandPalette` registers no keyboard
-/// listener, mounts no overlay, and adds no element to the React tree —
-/// a deployment that does not opt in renders byte-identically to
-/// pre-571. The palette is a discovery affordance for deployments with
-/// enough surface to need one (nested multi-page modules, the Phase 567
-/// administration area); a three-module app is better served by its
-/// rail.
-///
-/// There is no `Custom` arm, and that asymmetry with `ToastCentreMode` /
-/// `NotAuthorisedMode` is deliberate: the palette's whole safety
-/// property is that its entries come from the same visibility fold as
-/// the sidebar (`SidebarVisibility.canNavigateTo`). A
-/// deployment-supplied renderer taking a raw module list would be the
-/// one place that property could be lost, and losing it means a hidden
-/// admin page two keystrokes from a Member. Theming hooks (the
-/// `data-toolup-palette` attributes on every rendered part) are the
-/// supported customisation instead.
-type CommandPaletteMode =
-    /// The default — no keybinding, no overlay, no cost.
-    | NoCommandPalette
-    /// Mount the SDK's palette: Ctrl+K / Cmd+K opens an overlay over
-    /// the caller's sidebar-visible pages.
-    | DefaultCommandPalette
-
-/// Phase 567 — how the sidebar presents the SDK's admin built-ins.
-type AdminSurfaceMode =
-    /// The default — admin modules render as inline sidebar groups
-    /// ("Platform Management" / "Team Management") alongside product
-    /// modules, exactly as before Phase 567. Byte-identical to pre-567.
-    | InlineGroups
-    /// Split the sidebar into a Product area and an Administration area,
-    /// rendering one at a time with a role-gated switcher. Admin modules
-    /// (derived via `ClientConfig.effectiveArea`) move to the admin area.
-    | SeparateArea
-
 /// Phase 1240 — whether the shell's views have browser history and a URL.
+///
+/// Kept as its own union by Phase 1074: the public composition profile
+/// binds it (`spec/surface-binding.json`, `clientShell.browserHistory`,
+/// the field `Shell.BrowserHistory`) — one case per profile token and one
+/// for the absent member — so retyping it is a profile change.
 type BrowserHistoryMode =
     /// The default — the active view lives in the model alone: no history
     /// entry is written, and the URL is neither read nor changed.
@@ -1770,7 +1705,7 @@ type OfflineMode =
 /// showing the page to every visitor would be a reconnaissance gift).
 type ShellSlotFills = {
     /// The Home / Overview landing module (Phase 171) — injected at the
-    /// very top of the sidebar and, unless `ClientConfig.ActiveModule`
+    /// very top of the sidebar and, unless `ClientConfig.Shell.ActiveModule`
     /// names a module, the surface the shell lands on. It summarises the
     /// deployment through `IHomeOverviewApi` (auto-mounted server-side,
     /// never called unless the module is on). **Default `Empty`** — off,
@@ -1780,8 +1715,8 @@ type ShellSlotFills = {
     /// "where you add data" entry, and the source of the boot-time file
     /// snapshot that lets data modules see uploaded data before the page
     /// is first opened. **Default `Default`** (the file-upload manager).
-    /// `Configured (DataManagerChoice.ColumnMapping None)` selects the
-    /// mapping-aware manager.
+    /// `Configured (DataManagerChoice.ColumnMapping DataManagerConfig.unlabelled)`
+    /// selects the mapping-aware manager.
     DataManager: SlotFill<DataManagerChoice>
     /// The team manager (create / join / settings / members). Admitted
     /// on any `Team` surface — single-team and multi-team alike (a fresh
@@ -1889,6 +1824,11 @@ type ShellSlotFills = {
     /// configuration that mounts `JobApi`. Carries the "Background jobs"
     /// administration tile.
     JobsAdmin: SlotFill<ModuleLabel>
+    /// Phase 1074 — the slots companion packages declare
+    /// (`SlotExtension`), in the order their modules compose. **Default
+    /// `[]`.** A companion's own composer adds its slots here (the AI
+    /// companion's `AIClientConfig.run` adds the assistant family's).
+    Extensions: SlotExtension list
 }
 
 /// Phase 879 — the slot map's defaults.
@@ -1920,130 +1860,125 @@ module ShellSlotFills =
         MigrationAdmin = SlotFill.Empty
         CompositionInspector = SlotFill.Default
         JobsAdmin = SlotFill.Empty
+        Extensions = []
     }
 
-type ClientConfig = {
-    AppName: string
-    AppLogo: string
-    /// Selects the shell's loading indicator (rendered in the content
-    /// area during the `Prefetching` lifecycle phase). Default
-    /// `SkeletonLoader` — the gray-pulse content skeleton, unchanged from
-    /// 0.5.16. Switch to `BrandMarkLoader` for the animated ToolUp mark
-    /// or `SpinnerLoader` for a neutral theme-tinted spinner.
-    LoadingIndicator: LoadingIndicatorMode
-    /// Name of the module to show on startup. Falls back to the first module if None or not found.
-    ActiveModule: string option
-    /// Phase 879 — what fills each shell slot: the data manager, the team
-    /// manager, the Home landing and the admin built-ins a deployment can
-    /// replace. One field in place of the twenty per-built-in mode fields
-    /// it replaces. Default `ShellSlotFills.defaults`; set a slot with a
-    /// nested copy-and-update (`{ c with Slots.TeamManager = SlotFill.Empty }`).
-    /// See `ShellSlotFills` for each slot, and `ShellSlots.all` for where
-    /// each sits, what gates it and which carry an administration tile.
-    Slots: ShellSlotFills
-    /// Controls the built-in Datadog readback module (Phase 9w).
-    /// **Opt-in** — default `NoDatadogReadback`, so an existing
-    /// deployment's sidebar is unchanged until it sets
-    /// `EnabledDatadogReadback cfg` (GP 11 / GP 13).
-    ///
-    /// The SAME `DatadogReadbackMode` the server side takes: pass the
-    /// one config value to both, and the window and page-size defaults
-    /// the panel shows cannot drift from the ones the endpoints apply.
-    /// Pair it with `ServerConfig.Observability.DatadogReadback` — with the endpoints
-    /// unmounted the module renders its degraded state on every tab,
-    /// which is honest but not useful.
-    DatadogReadback: DatadogReadbackMode
-    /// Controls the built-in self-hosted observability module (Phase 9x).
-    /// **Opt-in** — default `NoObservabilityModule`. See
-    /// `ObservabilityModuleMode`.
-    Observability: ObservabilityModuleMode
-    /// Controls the platform-users admin (Phase 544). **Opt-in** — default
-    /// `NoPlatformUsers`, so an existing deployment's sidebar is unchanged
-    /// until it sets `DefaultPlatformUsers` (GP 11/13). When enabled, the
-    /// module lists every principal (Phase 543 `ListPrincipals`), flags
-    /// team-less ones, and drives the Phase 54-family offboard flow per
-    /// row. Platform-Admin gated by the "Platform Management" sidebar
-    /// group; pair with `ServerConfig.TenantLifecycle = FeatureMode.Enabled`
-    /// server-side for the offboard actions (the list still renders under
-    /// `FeatureMode.Disabled`, the per-row offboard degrades gracefully).
-    PlatformUsers: PlatformUsersMode
-    /// Phase 567 — how the admin built-ins are presented in the sidebar.
-    /// **Default `InlineGroups`** (byte-identical to pre-567: admin modules
-    /// render as inline "Platform/Team Management" groups). `SeparateArea`
-    /// splits the sidebar into Product and Administration areas with a
-    /// role-gated switcher.
-    AdminSurface: AdminSurfaceMode
-    /// Phase 1240 — browser history and a URL per view. **Default
-    /// `NoBrowserHistory`** (the URL is neither read nor written, as before
-    /// this field). `HashHistory` makes Back, Forward and reload work.
-    BrowserHistory: BrowserHistoryMode
-    /// Phase 569 — the view rendered when the route guard refuses a
-    /// deep-linked module (the caller could not have reached it from the
-    /// sidebar either). **Default `DefaultNotAuthorised`** — the SDK's
-    /// reason-aware surface. The guard itself is not configurable: a
-    /// route the sidebar hides is not reachable by URL, which is the
-    /// coherence the phase exists to restore. Permitted callers never
-    /// see this and are byte-identical to pre-569 (GP 11).
-    NotAuthorisedView: NotAuthorisedMode
-    /// Phase 571 — the Ctrl+K / Cmd+K command palette. **Default
-    /// `NoCommandPalette`** — off, so no keybinding is registered and no
-    /// overlay enters the tree (GP 13). `DefaultCommandPalette` mounts
-    /// the SDK palette over the caller's sidebar-visible pages; its
-    /// entries are derived from the same `SidebarVisibility` fold as the
-    /// rail, so enabling it can never widen what a caller can reach.
-    CommandPalette: CommandPaletteMode
-    /// Phase 217 — opt in to the built-in "Pinned / Recent" widget on the
-    /// Home surface (a small per-user store of recently-visited + pinned
-    /// tools, persisted through the per-user config store). **Default:
-    /// `false`** — off, so a Home deployment that doesn't opt in renders
-    /// byte-for-byte as Phase 171 (GP 13). Only meaningful when
-    /// `HomeModule` is enabled; ignored otherwise.
-    HomeRecents: bool
-    /// Opt-in no-active-team gate. When `Some moduleId` AND the deployment
+    /// Phase 1074 — the modules the companion slots compose, in order.
+    let extensionModules (fills: ShellSlotFills) : ErasedModule list =
+        fills.Extensions |> List.choose _.Module
+
+// ─── Phase 1074 — `ClientConfig` by concern ───────────────────────
+//
+// The client twin of 877's `ServerConfig` nesting. `ClientConfig` is a
+// small record of concern records — what fills each slot (`Slots`), which
+// chrome rows the shell composes (`Chrome`), sign-in (`Auth`), the
+// public-utility substrate (`PublicUtility`), the locale (`Locale`), the
+// shell's own presentation (`Shell`) and how the program is composed and
+// observed (`Composition`) — beside the three identity fields. A new client
+// toggle is a field on the concern record it belongs to, never a new
+// `ClientConfig` field, and an on/off toggle is 877's `FeatureMode`.
+
+/// Phase 1074 — how one of the shell's CHROME rows is filled. A chrome row
+/// is a built-in the shell composes from its own table but which never
+/// takes a deployment's module (the administration area, the
+/// no-active-team landing, the Datadog and observability panels, platform
+/// users, tenant lifecycle); `SlotFill` is the replaceable rows' shape.
+[<RequireQualifiedAccess>]
+type ChromeFill<'cfg> =
+    /// The row composes nothing: no module, no sidebar entry, no cost (GP 13).
+    | Off
+    /// The row composes its built-in, configured by the payload.
+    | On of 'cfg
+
+/// Phase 1074 — what the no-active-team gate lands a team-less caller on.
+/// One choice where there used to be two fields and a precedence rule
+/// between them (`NoActiveTeamLandingFill.Module` won over `NoActiveTeamLanding`).
+[<RequireQualifiedAccess>]
+type NoActiveTeamLandingFill =
+    /// The SDK's built-in landing (stable id `NoActiveTeamLanding.moduleId`),
+    /// from the deployment's copy: the lightweight path — a few strings
+    /// instead of a hand-rolled Elmish module.
+    | BuiltIn of NoActiveTeamLandingConfig
+    /// The deployment's own module, by id: its "you have no team yet"
+    /// surface. It should declare `Visibility.visibleTo [ UserKind ]` so it
+    /// disappears once an active team upgrades the subject to
+    /// `TeamMemberKind`.
+    | Module of moduleId: string
+
+/// Phase 1074 — the six chrome rows. Each is `ChromeFill.Off` or
+/// `ChromeFill.On cfg`; every row but tenant lifecycle is off by default.
+type ShellChrome = {
+    /// Phase 567 / 573 — the Administration area: the sidebar split into
+    /// a Product area and an Administration area with a role-gated
+    /// switcher, the admin built-ins (`ClientConfig.effectiveArea`) moved
+    /// to the second, led by the administration landing. **Default `Off`**
+    /// — admin modules render as inline "Platform/Team Management" groups,
+    /// byte-identical to pre-567.
+    AdminArea: ChromeFill<unit>
+    /// The opt-in no-active-team gate. When `On` AND the deployment
     /// declares a `Team` surface AND the caller has no active team
     /// (`ActiveTeamId = None`, i.e. the resolved `SubjectKind` is
     /// `UserKind` in the post-sign-in / pre-team-pick window), the shell
-    /// hides every sidebar module EXCEPT the named landing module — and,
-    /// for `PlatformRole.PlatformAdmin` callers, the admin / management
-    /// sidebar groups (`ClientConfig.isAdminSidebarGroup`) so an admin can
-    /// still reach the team-assignment tools. The named module is the
-    /// deployment's "you have no team yet" surface; it should declare
-    /// `Visibility.visibleTo [ UserKind ]` so it disappears once an active
-    /// team upgrades the subject to `TeamMemberKind`.
+    /// hides every sidebar module EXCEPT the landing — and, for
+    /// `PlatformRole.PlatformAdmin` callers, the admin / management
+    /// sidebar groups (`SidebarVisibility.noActiveTeamAdmits`) so an admin
+    /// can still reach the team-assignment tools.
     ///
     /// Why a deployment-wide gate and not per-module `Visibility`:
     /// SDK-injected built-ins (the Data Manager, Team Manager, Settings)
     /// ship `Visibility.visibleToAuthenticated`, which admits `UserKind`,
     /// so a consumer cannot hide them from a no-team caller by editing its
-    /// own modules. This restores a refined form of the Phase 55
-    /// team-mode-no-active-team blanket-hide, opt-in and admin-aware.
+    /// own modules.
     ///
-    /// **Default `None`** — no gate; behaviour is byte-identical for every
-    /// deployment that doesn't opt in (GP 13). Inert on non-team surfaces
-    /// (the `hasTeamScope` guard) even when set.
-    ///
-    /// GP 12 — this is UI shape only; the server-side `[<TenantScoped>]`
-    /// classifier + `SurfaceEnforcementMiddleware` remain the authoritative
-    /// gate (a no-team caller's tenant-scoped API calls 401 regardless).
-    NoActiveTeamLandingModuleId: string option
-    /// Opt-in parameterized no-active-team landing surface — the lightweight
-    /// path that pairs with the same gate as `NoActiveTeamLandingModuleId`.
-    /// When `Some cfg` AND the deployment declares a `Team` surface AND no
-    /// explicit `NoActiveTeamLandingModuleId` is set, the SDK registers a
-    /// built-in landing module (stable id `NoActiveTeamLanding.moduleId`)
-    /// from `cfg`'s copy and wires the no-team gate to it — the consumer
-    /// supplies a few strings instead of hand-rolling an Elmish module.
-    ///
-    /// **Precedence:** `NoActiveTeamLandingModuleId` wins. If a consumer
-    /// sets both, the explicit custom module is used and this built-in is
-    /// NOT injected (the consumer fully owns the landing). Resolved by
-    /// `ClientConfig.effectiveNoActiveTeamLandingId`.
-    ///
-    /// **Default `None`** — no built-in landing (GP 13). Inert on non-team
-    /// surfaces even when set.
-    NoActiveTeamLanding: NoActiveTeamLandingConfig option
-    /// Controls the real-time toast renderer. Default: SDK built-in.
-    ToastCentre: ToastCentreMode
+    /// **Default `Off`** — no gate (GP 13). Inert on non-team surfaces
+    /// even when set. GP 12 — this is UI shape only; the server-side
+    /// `[<TenantScoped>]` classifier + `SurfaceEnforcementMiddleware`
+    /// remain the authoritative gate.
+    NoActiveTeamLanding: ChromeFill<NoActiveTeamLandingFill>
+    /// Phase 9w — the built-in Datadog readback module. **Default `Off`.**
+    /// The configuration is the SAME `DatadogReadbackConfig` the server's
+    /// `EnabledDatadogReadback` carries: pass one value to both, and the
+    /// window and page-size defaults the panel shows cannot drift from the
+    /// ones the endpoints apply. With the endpoints unmounted the module
+    /// renders its degraded state on every tab.
+    DatadogReadback: ChromeFill<DatadogReadbackConfig>
+    /// Phase 9x — the built-in self-hosted observability admin (Logs /
+    /// Metrics / Alerts over the Phase 828 log store, the Phase 829
+    /// metrics history and the Phase 178 alert engine). **Default `Off`.**
+    /// The module reads `/api/observability/sources` on open and renders
+    /// only the tabs that answered; pair it with at least one of
+    /// `ServerConfig.Observability.LogStore`, `.MetricsHistory` or
+    /// `.AlertRules`.
+    Observability: ChromeFill<unit>
+    /// Phase 544 — the platform-users admin: every principal
+    /// (`ListPrincipals`), team-less ones flagged, the Phase 54-family
+    /// offboard flow per row. **Default `Off`.** Platform-Admin gated by
+    /// the "Platform Management" sidebar group; pair with
+    /// `ServerConfig.TenantLifecycle = FeatureMode.Enabled` for the
+    /// offboard actions (the list still renders without it).
+    PlatformUsers: ChromeFill<unit>
+    /// Phase 54e — the tenant-lifecycle admin. **Default `On ()`**: the
+    /// "Platform Management" group's role gate hides it from non-admins,
+    /// and on `ServerConfig.TenantLifecycle = FeatureMode.Disabled` its API
+    /// 404s and the panel shows its empty state (GP 13).
+    TenantLifecycle: ChromeFill<unit>
+}
+
+/// Phase 1074 — the chrome rows' defaults.
+module ShellChrome =
+    /// Every row off except tenant lifecycle — the composition every
+    /// deployment had before the rows were configurable as one record.
+    let defaults: ShellChrome = {
+        AdminArea = ChromeFill.Off
+        NoActiveTeamLanding = ChromeFill.Off
+        DatadogReadback = ChromeFill.Off
+        Observability = ChromeFill.Off
+        PlatformUsers = ChromeFill.Off
+        TenantLifecycle = ChromeFill.On()
+    }
+
+/// Phase 1074 — sign-in and the bearer token.
+type AuthConfig = {
     /// Sign-in / sign-out UI. Companion-delegated:
     /// `ProviderAuthUI (tag, config)` needs the matching companion's
     /// handler in `Handlers.AuthUIHandlers` (e.g. the ClerkUI
@@ -2051,273 +1986,120 @@ type ClientConfig = {
     /// Default `NoAuthUI` — no SDK-provided sign-in flow, the app
     /// takes responsibility for obtaining tokens.
     AuthUI: AuthUIMode
-    /// Phase 133 — where the client keeps the bearer JWT.
-    /// `ClientCookieAndLocalStorage` (default) preserves the legacy
-    /// `localStorage` + JS-readable `document.cookie` writes;
-    /// `ServerSetHttpOnlyCookie` moves the JWT out of JS-readable storage
-    /// into a server-set `HttpOnly; Secure; SameSite=Strict` cookie via
-    /// `POST /api/auth/session`. Pairs with
-    /// `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled`.
-    AuthTokenStorage: AuthTokenStorage
-    /// Declared subject shapes this deployment supports. Mirrors
-    /// `ServerConfig.Surfaces` (the server-side non-empty list of
-    /// `SurfaceProfile`). Single-shape deployments declare one entry
-    /// (e.g. `Surfaces.individual`); mixed-mode deployments declare
-    /// two or more (e.g. `Surfaces.anonymousAndIndividual`). The
-    /// client derives the active `SubjectKind` per render from the
-    /// list + auth state + active team scope (see
-    /// `ClientConfig.resolveSubjectKind`).
-    Surfaces: SurfaceProfile list
-    /// AG Grid module configuration for the AgGridProvider (Variant B).
-    /// When set, the SDK wraps the app in AgGridProvider with these modules.
-    /// Default: Community modules (no license key required).
-    GridModules: Feliz.AgGrid.AgGridModuleConfig
-    /// Optional case-insensitive substring filter over
-    /// `ErasedModule.Definition.Name` — modules whose name doesn't
-    /// contain the filter as a substring (whitespace ignored) are
-    /// dropped before the shell builds its sidebar. Populated from the
-    /// Vite-defined `__TOOLUP_MODULE__` constant in the reference app;
-    /// `None` / empty keeps every module registered. Mirrors
-    /// `ServerConfig.ModuleFilter` so single-module dev runs behave
-    /// consistently across the stack.
-    ModuleFilter: string option
-    /// Phase 6g.D: thunks the SDK shell renders at the top level
-    /// alongside `ToastCentre`. Companion packages expose components
-    /// that need to mount globally without the deployment touching
-    /// the React tree directly — e.g. a floating banner / status
-    /// indicator owned by the companion. Each thunk is invoked once
-    /// per shell render, so the components' hooks register correctly.
-    /// Default `[]` — apps that don't use overlays pay nothing.
+    /// Phase 133 — whether the bearer JWT lives in a server-set
+    /// `HttpOnly` cookie. **Default `FeatureMode.Disabled`**: the client
+    /// writes the JWT to `localStorage` AND mirrors it into a JS-readable
+    /// `document.cookie` (which structurally cannot be `HttpOnly`); both
+    /// are reachable by an injected script, acceptable for dev or for a
+    /// SPA that ships a strict CSP as the mitigation. Phase 1047: when the
+    /// server-rendered sign-in (`OidcSsrSignIn`) wrote the same cookie
+    /// name `HttpOnly`, the client's write does not land and it sends the
+    /// token to `POST /api/auth/session` instead.
     ///
-    /// Same shape as `ToastCentreMode` but generalised: any
-    /// companion can contribute, the deployment opts in by listing
-    /// the thunks here. ToastCentre stays a separate slot because
-    /// its three modes (`No` / `Default` / `Custom`) are richer
-    /// than a free list.
-    GlobalOverlays: (unit -> ReactElement) list
-    /// Phase 12c — telemetry hook fired when a module's view tree throws.
-    /// The SDK's per-module `Components.ModuleBoundary` catches the exception,
-    /// shows a localised "this module crashed — reload?" panel for the
-    /// affected sidebar entry, and (if set) calls this with the report.
-    /// Default `None` — the boundary still works and falls back to a single
-    /// `console.error` for dev diagnostics. Deployments that wire telemetry
-    /// (e.g. forwarding to a server-side activity sink) own logging entirely
-    /// when this is `Some`; the SDK does not also `console.error` to avoid
-    /// double-logging.
-    OnError: (ModuleErrorReport -> unit) option
-
+    /// `FeatureMode.Enabled` is the production-shape BFF path: on token
+    /// acquisition the client POSTs the JWT once to
+    /// `POST /api/auth/session`, which reflects it into an `HttpOnly;
+    /// Secure; SameSite=Strict` cookie; the JWT never enters
+    /// `localStorage` or a JS-readable cookie. Requires
+    /// `ServerConfig.SecurityPosture.AuthCookieIssuance =
+    /// FeatureMode.Enabled` (or the server-rendered sign-in) and an
+    /// `IAuthProvider` configured `TokenLocation = BearerOrCookie
+    /// "toolup-auth-token"`; pairs with the `IAuthBridge` refresh model.
+    /// The localStorage-based OidcClient PKCE refresh timer is not
+    /// compatible with it (see the Phase 133 migration doc).
+    HttpOnlySession: FeatureMode
     /// Phase 6k Workstream A. Optional client-side bridge to a
     /// deployment-chosen identity SDK (Clerk, Microsoft Entra via
     /// MSAL, Auth0, WorkOS). When `Some`, the SDK calls
     /// `UserSession.installBridge` during startup; the bridge then
     /// drives JWT refresh into both the `Authorization: Bearer ...`
     /// header (POST path) and the `toolup-auth-token` cookie (SSE
-    /// handshake path). Default `None` — deployments without server-
-    /// validated JWTs use the existing X-User-Id / ?userId= flow.
+    /// handshake path). Default `None`.
     AuthBridge: IAuthBridge option
-    /// Dev-tooling: when `true`, the SDK logs every Elmish model-update
-    /// transition to the browser console via `Logger.forCategory
-    /// "client.elmish.trace"`. Default `false` — production deployments
-    /// leave it off; App composition roots flip it on for development.
-    /// Replaces the previous compile-time `#if DEBUG`-only behaviour
-    /// with explicit operator opt-in.
-    ///
-    /// 0.4.1 — implemented via a tiny `update` interceptor + the
-    /// structured `Program.withErrorReporter`, replacing the upstream-shape
-    /// `withConsoleTrace` shim (removed in Phase 815). Trace records carry
-    /// the same `(initial state, msg, updated state, sub-ids)` shape as
-    /// before.
-    EnableElmishConsoleTrace: bool
-    /// 0.4.1 — structured Elmish error reporter. When `Some`, every
-    /// Elmish runtime exception (Init / Update / View / Subscription /
-    /// Termination phases) is delivered as an `ErrorContext` record
-    /// carrying the phase, optional module id, optional correlation id,
-    /// human-readable message, and raw exception. Use to forward to a
-    /// server-side activity sink or a structured-log forwarder.
-    ///
-    /// Default `None` — the SDK falls back to logging via
-    /// `Logger.forCategory "client.elmish"`. Consumers wiring this MUST
-    /// not also install their own `withErrorReporter` on the program
-    /// (the SDK installs it as the one structured path; the runtime's
-    /// upstream-shape `onError` routes through it).
-    OnElmishError: (ErrorContext -> unit) option
-    /// Dev-tooling: when `true`, modules registered with
-    /// `ModuleAvailability = DebugOnly` are surfaced in the sidebar.
-    /// Default `false` — DebugOnly modules are filtered out (the JS still
-    /// ships in the bundle; the goal is hiding under-development modules,
-    /// not reducing bundle size). App composition roots flip it on for
-    /// development. Replaces the previous compile-time `#if DEBUG`-only
-    /// behaviour with explicit operator opt-in.
-    ShowDebugOnlyModules: bool
     /// Phase 4b dev convenience — when `Some userId`, the SDK uses this
     /// value as the `toolup-user-id` localStorage seed when no value is
     /// already stored (replacing the auto-generated GUID). Pairs with
-    /// `ServerConfig.AutoBootstrapDevAdmin` so dev composition roots can
-    /// run with a stable, predictable user-id end-to-end (`X-User-Id`
-    /// header → server-side `AccessContext.UserId` → bootstrap target).
-    /// Production deployments MUST leave this `None`; deterministic
-    /// user-ids defeat per-user isolation in any multi-user setting.
-    /// Existing localStorage values are preserved — only the first-visit
-    /// generation path is overridden.
+    /// `ServerConfig.AutoBootstrapDevAdmin`. Production deployments MUST
+    /// leave this `None`; deterministic user-ids defeat per-user
+    /// isolation in any multi-user setting.
     DevDefaultUserId: string option
-    /// First-chance entry-point dispatchers. Each is invoked once during
-    /// `Client.run` *before* the full authenticated shell is bootstrapped;
-    /// the first dispatcher whose `Tries (ClientConfig) → bool` returns
-    /// `true` short-circuits the shell (the dispatcher is responsible for
-    /// rendering its own Elmish program against `"elmish-app"`).
-    ///
-    /// Use for surfaces that need to render an anonymous, modules-less
-    /// page on a specific URL pattern — e.g. `ToolUp.Forms.PublicEmbed`
-    /// on `/r/{token}`. Each dispatcher reads `window.location` itself
-    /// so it can shape its own URL-matching predicate. Default `[]` —
-    /// the full shell bootstraps unconditionally.
-    ///
-    /// Dispatchers run in list order. Returning `false` lets the next
-    /// dispatcher try; if every dispatcher declines, the shell
-    /// bootstraps as normal.
-    PublicEntryDispatchers: (ClientConfig -> bool) list
+}
 
-    /// Phase 13a — explicit companion handler registry. Companion
-    /// packages export `Handler` values (e.g.
-    /// `OidcClient.handler : string * AuthUIHandler`,
-    /// `KnowledgeBaseView.narrativeCommitHandler : NarrativeCommitHandler`)
-    /// which the consumer adds to the matching field here. Default
-    /// `ClientHandlerRegistry.empty` is compatible with apps that
-    /// declare `AuthUI = NoAuthUI`, don't use the data-ingestion
-    /// admin, and don't ship a Knowledge Base. The SDK validates the
-    /// registry at `Client.run` and fails loud when a declared
-    /// `AuthUI` mode or `DataSource.Kind` references a handler the
-    /// consumer didn't add (naming the missing companion + import).
-    Handlers: ClientHandlerRegistry
+/// Phase 1074 — sign-in defaults.
+module AuthConfig =
+    /// No SDK sign-in UI, the legacy token storage, no bridge, no seed.
+    let defaults: AuthConfig = {
+        AuthUI = NoAuthUI
+        HttpOnlySession = FeatureMode.Disabled
+        AuthBridge = None
+        DevDefaultUserId = None
+    }
 
-    /// Phase 13a — read-per-call request-attachment seam. Consumer-
-    /// supplied per-request header providers (tenant id, audit
-    /// context, feature-flag override) plus optional cross-origin API
-    /// root. The SDK injects its own identity headers + CSRF token
-    /// alongside; this slot is for *extra* providers beyond those.
-    /// Default `ClientRequestSeam.empty` — same-origin only, no extra
-    /// headers.
-    RequestSeam: ClientRequestSeam
-
+/// Phase 1074 — the public-utility substrate: prerendered routes, consent,
+/// ads, premium and the PlatformAdmin profile that surfaces their widgets.
+type PublicUtilityConfig = {
     /// Phase 57 — static-prerender routes. Each entry declares a
     /// route the build-time FAKE `Prerender` target renders to an
-    /// indexable `dist/{slug}.html`. The SPA hydrates on top via
-    /// React's `hydrateRoot`. Default `[]` — opt-in per GP 13;
-    /// stock deployments stay pure-SPA byte-for-byte. Required for
-    /// ads-monetised public-utility deployments whose SEO depends on
-    /// an indexable first paint.
+    /// indexable `dist/{slug}.html`; the SPA hydrates on top via
+    /// React's `hydrateRoot`. Default `[]` — stock deployments stay
+    /// pure-SPA byte-for-byte (GP 13).
     PrerenderRoutes: PrerenderRoute list
-
     /// Phase 59 — consent-provider selection. Default
-    /// `NoConsentProvider` (the no-op provider — `Necessary` always
-    /// granted, everything else `NotYetDecided`). Set to
-    /// `FundingChoicesConsent adClientId` to wire Google Funding
-    /// Choices (CMP-blessed by AdSense). `CustomConsentProvider`
-    /// reserves the seam for sub-companion CMP packages
-    /// (Quantcast / Cookiebot / OneTrust).
+    /// `NoConsentProvider` (`Necessary` always granted, everything else
+    /// `NotYetDecided`). `FundingChoicesConsent adClientId` wires Google
+    /// Funding Choices; `CustomConsentProvider` reserves the seam for
+    /// sub-companion CMP packages.
     ConsentProvider: ConsentProviderMode
-
-    /// Phase 60 — AdSense AdPanel mode. Default `NoAdPanel`
-    /// strips every `<AdSlot>` render path — slots produce empty
-    /// fragments without loading AdSense JS. `EnabledAdPanel
-    /// config` activates the substrate; slots load AdSense
-    /// (gated through the configured `ConsentProvider`) and
-    /// emit impressions when `ServerConfig.AdAnalytics` is on.
+    /// Phase 60 — AdSense AdPanel mode. Default `NoAdPanel` strips every
+    /// `<AdSlot>` render path. `EnabledAdPanel config` activates the
+    /// substrate; slots load AdSense (gated through the configured
+    /// `ConsentProvider`) and emit impressions when
+    /// `ServerConfig.AdAnalytics` is on.
     AdPanel: AdPanelMode
-
-    /// Phase 62 — premium-claim model. Default `AnonymousFirst`
-    /// — anonymous-by-default with operator-granted premium
-    /// recognised via the active `IAuthProvider`'s
-    /// user-metadata. Modules consume the resulting
-    /// `PremiumStatus` via the `usePremium` hook (companion-
-    /// ships with the AI / RAG client packs when wired).
+    /// Phase 62 — premium-claim model. Default `AnonymousFirst` —
+    /// anonymous-by-default with operator-granted premium recognised via
+    /// the active `IAuthProvider`'s user-metadata.
     PremiumModel: PremiumModel
-
     /// Phase 61 — PlatformAdmin profile. `StandardPlatformAdminProfile`
-    /// (default) renders today's widget set (HealthMonitor /
-    /// TeamAdmin / etc.). `PublicUtilityPlatformAdminProfile`
+    /// (default) renders today's widget set; `PublicUtilityPlatformAdminProfile`
     /// adds the public-utility widgets (TrafficDashboard /
-    /// RateLimitEventLog / AdUnitConfig / PremiumUserList) when
-    /// their substrate dependencies are wired.
+    /// RateLimitEventLog / AdUnitConfig / PremiumUserList) when their
+    /// substrate dependencies are wired.
     PlatformAdminProfile: PlatformAdminProfile
+}
 
-    /// Width constraint applied to the inputs (left) child of a
-    /// `PageContent.SplitPanel` render. Default `Narrow` enforces the
-    /// "narrow sidebar + wide results" design intent shell-side so
-    /// presentation-only modules (descriptive text + Terms toggle, no
-    /// form fields) don't expand across the row and squeeze the
-    /// results pane to a narrow strip. Consumers that genuinely want a
-    /// balanced split set `Wide`; consumers wanting today's natural-
-    /// content-width behaviour byte-for-byte set `Auto`.
-    InputsPaneWidth: InputsPaneWidth
+/// Phase 1074 — public-utility defaults.
+module PublicUtilityConfig =
+    /// Pure SPA, no consent provider, no ads, anonymous-first premium,
+    /// the standard admin profile.
+    let defaults: PublicUtilityConfig = {
+        PrerenderRoutes = []
+        ConsentProvider = NoConsentProvider
+        AdPanel = NoAdPanel
+        PremiumModel = AnonymousFirst
+        PlatformAdminProfile = StandardPlatformAdminProfile
+    }
 
-    /// Phase 583 — the module set this deployment expects to compose, as
-    /// the consumer declares it. The client-tier mirror of
-    /// `ServerConfig.ExpectedModules`: declare the SAME list on both and
-    /// each root is measured against it, so the two roots are shown to
-    /// compose the same modules without either tier referencing the
-    /// other. Entries are the cross-tier identity token — the client's
-    /// `ModuleDefinition.Id`, which is also the server's
-    /// `ServerModule.Name` (the identity law on
-    /// `ModuleIdentity.componentIdOf`), not the display `Name`.
-    ///
-    /// `None` (the default) leaves `ModuleParityValidator` dormant: boot
-    /// evaluates one `match` and continues, byte-for-byte the pre-583
-    /// path (GP 11 + GP 13). `Some ids` makes a mismatch a loud boot
-    /// failure naming both directions, in the same shape as the server
-    /// side's `client-server-module-parity` preflight defect.
-    ExpectedModules: string list option
-
-    /// Phase 622 — shell auto-mount of the presence + soft-lock context.
-    /// `FeatureMode.Enabled` makes the shell wrap the view tree in a live
-    /// `PresenceContext` provider: a heartbeat announcing the active
-    /// module as this peer's location, a roster refreshed off the
-    /// reserved `_platform.presence` fan-out, and a lease map folded from
-    /// `_platform.lock` — so module views get `Presence.usePeers` /
-    /// `Presence.useLock` / `useEntityLock` with no deployment wiring.
-    ///
-    /// Pair it with `ServerConfig.Presence = FeatureMode.Enabled`, which
-    /// registers the substrate and mounts the `IPresenceApi` this reads.
-    ///
-    /// `FeatureMode.Disabled` (the default) mounts nothing and starts no timer, so
-    /// an existing deployment renders byte-for-byte as before (GP 11 +
-    /// GP 13). The flag is deliberately separate from the server's: a
-    /// deployment already on the Phase 442 hand-mounted path must not
-    /// acquire a second heartbeat in every browser tab merely by
-    /// upgrading the SDK. That path stays supported — a self-mounted
-    /// `PresenceContext.provider` nested inside the shell's takes
-    /// precedence for the views below it.
-    Presence: FeatureMode
-
-    /// Phase 444 — how the shell resolves the active locale for its own
-    /// chrome and the SDK's built-in modules.
-    ///
-    /// Default `FixedLocale "en"`, which is why a deployment that never
-    /// touches this field renders byte-for-byte as it did before Phase
-    /// 444: the resolution collapses to the constant `"en"`, no browser
-    /// preference or `_platform.locale` read happens, and
-    /// `MessageCatalog.english` is returned unmodified (GP 11 / GP 13).
-    ///
+/// Phase 1074 — the locale the shell's chrome and built-ins render in, and
+/// the deployment's translation.
+type LocaleConfig = {
+    /// Phase 444 — how the shell resolves the active locale. Default
+    /// `FixedLocale "en"`: the resolution collapses to the constant
+    /// `"en"`, no browser preference or `_platform.locale` read happens,
+    /// and `MessageCatalog.english` is returned unmodified (GP 11 / GP 13).
     /// `BrowserLocale fb` reads `navigator.language`; `TeamDefault fb`
-    /// prefers the active team's `_platform.locale` — the same key the
-    /// server-side `LocaleResolver` reads, so one team setting drives
-    /// both tiers — then the browser, then `fb`.
-    ///
-    /// Setting this alone changes nothing visible: the built-in catalog
-    /// is English at every locale. It is `MessageCatalogOverride` that
-    /// supplies the translation, and this field that decides which one
-    /// the override is asked for.
-    Locale: LocaleMode
-
+    /// prefers the active team's `_platform.locale` (the key the
+    /// server-side `LocaleResolver` reads), then the browser, then `fb`.
+    /// Setting this alone changes nothing visible: `MessageCatalogOverride`
+    /// supplies the translation, and this field decides which one it is
+    /// asked for.
+    Resolution: LocaleMode
     /// Phase 444 — the deployment's translation of the SDK's shell +
-    /// built-in-module strings.
-    ///
-    /// The function is handed `MessageCatalog.english` stamped with the
-    /// resolved locale (`catalog.Locale`) and returns the catalog to
-    /// render. Because `MessageCatalog` is a record, a partial
-    /// translation is ordinary record-update syntax, and a string the
-    /// translation forgot is a compile error rather than a silently
-    /// English cell:
+    /// built-in-module strings. Handed `MessageCatalog.english` stamped
+    /// with the resolved locale (`catalog.Locale`), it returns the catalog
+    /// to render. `MessageCatalog` is a record, so a partial translation
+    /// is ordinary record-update syntax and a forgotten string is a
+    /// compile error rather than a silently English cell:
     ///
     /// ```fsharp
     /// let private french (c: MessageCatalog) = {
@@ -2336,123 +2118,246 @@ type ClientConfig = {
     ///     if c.Locale.StartsWith "fr" then french c else c
     ///
     /// { ClientConfig.create handlers with
-    ///     Locale = TeamDefault "en"
-    ///     MessageCatalogOverride = Some catalog }
+    ///     Locale = { Resolution = TeamDefault "en"; MessageCatalogOverride = Some catalog } }
     /// ```
     ///
     /// Returning the argument unchanged for a language the deployment
-    /// does not cover IS the fallback to English — the chain is the
-    /// identity function, not a per-field lookup, which is what keeps
-    /// the whole surface total.
-    ///
-    /// `None` (the default) skips the call entirely. An override that
-    /// raises is swallowed back to the English catalog: a translation
-    /// bug degrades the shell's language, never its availability.
+    /// does not cover IS the fallback to English. `None` (the default)
+    /// skips the call entirely; an override that raises is swallowed back
+    /// to the English catalog.
     MessageCatalogOverride: (MessageCatalog -> MessageCatalog) option
+}
 
-    /// Phase 24 — offline-first / PWA support. `NoOffline` (the
-    /// default) costs nothing: no service worker, no IndexedDB, no
-    /// manifest link, no badge.
-    ///
-    /// Read by the `ToolUp.Offline` companion, which the deployment
-    /// composes separately — setting this field alone does not pull the
-    /// companion in, because the SDK core must not depend on it (GP 1).
+/// Phase 1074 — locale defaults.
+module LocaleConfig =
+    /// One fixed locale, the built-in English catalog, no browser or
+    /// team-config read — byte-for-byte the pre-444 shell.
+    let defaults: LocaleConfig = {
+        Resolution = FixedLocale MessageCatalog.BuiltInLocale
+        MessageCatalogOverride = None
+    }
+
+/// Phase 1074 — the shell's own presentation: what it lands on, how it
+/// loads, navigates, denies, notifies and lays a page out.
+type ShellConfig = {
+    /// Selects the shell's loading indicator (rendered in the content
+    /// area during the `Prefetching` lifecycle phase). Default
+    /// `SkeletonLoader`; `BrandMarkLoader` for the animated ToolUp mark,
+    /// `SpinnerLoader` for a neutral theme-tinted spinner.
+    LoadingIndicator: LoadingIndicatorMode
+    /// Name of the module to show on startup. Falls back to the first
+    /// module if None or not found.
+    ActiveModule: string option
+    /// Phase 1240 — browser history and a URL per view. **Default
+    /// `NoBrowserHistory`** (the URL is neither read nor written).
+    /// `HashHistory` gives each view the URL `#/{moduleId}{pageRoute}`: a
+    /// navigation adds a history entry, Back and Forward move between
+    /// views, and a reload restores the view through the route guard
+    /// (Phase 569).
+    BrowserHistory: BrowserHistoryMode
+    /// Phase 569 — the view rendered when the route guard refuses a
+    /// deep-linked module. **Default `DefaultNotAuthorised`** — the SDK's
+    /// reason-aware surface. The guard itself is not configurable: a
+    /// route the sidebar hides is not reachable by URL.
+    NotAuthorisedView: NotAuthorisedMode
+    /// Phase 571 — the Ctrl+K / Cmd+K command palette. **Default
+    /// `FeatureMode.Disabled`** — no keybinding, no overlay (GP 13).
+    /// `FeatureMode.Enabled` mounts the SDK palette over the caller's
+    /// sidebar-visible pages; its entries come from the same
+    /// `SidebarVisibility` fold as the rail, so enabling it can never
+    /// widen what a caller can reach. The renderer is deliberately not
+    /// replaceable: theming hooks (`data-toolup-palette`) are the
+    /// supported customisation.
+    CommandPalette: FeatureMode
+    /// Phase 217 — the built-in "Pinned / Recent" widget on the Home
+    /// surface. **Default `false`.** Only meaningful when the Home slot
+    /// is filled.
+    HomeRecents: bool
+    /// Controls the real-time toast renderer. Default: SDK built-in.
+    ToastCentre: ToastCentreMode
+    /// Phase 6g.D — thunks the shell renders at the top level alongside
+    /// `ToastCentre`, so a companion's global component (a floating
+    /// banner, a status indicator) mounts without the deployment touching
+    /// the React tree. Each thunk is invoked once per shell render.
+    /// Default `[]`.
+    GlobalOverlays: (unit -> ReactElement) list
+    /// Width constraint applied to the inputs (left) child of a
+    /// `PageContent.SplitPanel` render. Default `Narrow`; `Wide` for a
+    /// balanced split; `Auto` for the natural content width.
+    InputsPaneWidth: InputsPaneWidth
+    /// AG Grid module configuration for the AgGridProvider. Default:
+    /// Community modules (no license key required).
+    GridModules: Feliz.AgGrid.AgGridModuleConfig
+    /// Phase 622 — shell auto-mount of the presence + soft-lock context.
+    /// `FeatureMode.Enabled` wraps the view tree in a live
+    /// `PresenceContext` provider (a heartbeat announcing the active
+    /// module, a roster off `_platform.presence`, a lease map folded from
+    /// `_platform.lock`). Pair it with `ServerConfig.Presence =
+    /// FeatureMode.Enabled`. **Default `FeatureMode.Disabled`** — no
+    /// mount, no timer. Deliberately separate from the server's flag: a
+    /// deployment on the Phase 442 hand-mounted path must not acquire a
+    /// second heartbeat by upgrading the SDK.
+    Presence: FeatureMode
+    /// Phase 24 — offline-first / PWA support. `NoOffline` (the default)
+    /// costs nothing: no service worker, no IndexedDB, no manifest link,
+    /// no badge. Read by the `ToolUp.Offline` companion, which the
+    /// deployment composes separately (GP 1).
     Offline: OfflineMode
 }
 
-module ClientConfig =
-    /// Phase 11.C.5 Tier 3 — preferred constructor with explicit
-    /// `ClientHandlerRegistry`. Promotes `Handlers` from the silently-
-    /// empty default on `ClientConfig.defaults` to a required
-    /// positional parameter, so a deployment that forgets to wire
-    /// (e.g.) `OidcRegister.handler` fails to compile rather than
-    /// failing with a runtime "no handler registered" on the first
-    /// sign-in attempt. Consumers with no companion handlers pass
-    /// `ClientHandlerRegistry.empty` explicitly — the no-op stays
-    /// available, but the omission is now visible at the call site.
-    ///
-    /// All other fields are populated from the existing
-    /// `ClientConfig.defaults` shape; callers customise via the
-    /// standard `{ ClientConfig.create handlers with X = … }` record-
-    /// update syntax.
-    let create (handlers: ClientHandlerRegistry) : ClientConfig = {
-        AppName = "My App"
-        AppLogo = "favicon.png"
+/// Phase 1074 — shell presentation defaults.
+module ShellConfig =
+    /// The skeleton loader, the first module, no URL history, the SDK's
+    /// denial surface, no palette, no recents, the built-in toasts, no
+    /// overlays, a narrow inputs pane, Community grid modules, no
+    /// presence mount, online-only.
+    let defaults: ShellConfig = {
         LoadingIndicator = SkeletonLoader
         ActiveModule = None
-        Slots = ShellSlotFills.defaults
-        // Phase 9w — opt-in (GP 11/13): no Datadog readback module until
-        // a deployment names a region and a tag filter.
-        DatadogReadback = NoDatadogReadback
-        // Phase 9x — opt-in (GP 11/13): no self-hosted observability
-        // module until a deployment asks for it.
-        Observability = NoObservabilityModule
-        // Phase 544 — opt-in (GP 11/13); existing deployments keep no
-        // platform-users module until they set DefaultPlatformUsers.
-        PlatformUsers = NoPlatformUsers
-        // Phase 567 — inline admin groups by default (byte-identical to
-        // pre-567); SeparateArea is the opt-in two-area sidebar.
-        AdminSurface = InlineGroups
-        // Phase 1240 — opt-in (GP 11): the URL is untouched until asked for.
         BrowserHistory = NoBrowserHistory
-        // Phase 569 — the SDK's reason-aware denial surface; a deployment
-        // swaps in its own with `CustomNotAuthorised`.
         NotAuthorisedView = DefaultNotAuthorised
-        // Phase 571 — no palette, no keybinding, no overlay (GP 13).
-        CommandPalette = NoCommandPalette
-        // Phase 217 — recents/pinning off by default (GP 13).
+        CommandPalette = FeatureMode.Disabled
         HomeRecents = false
-        // Opt-in; off by default so the no-team gate never changes an
-        // existing deployment's sidebar (GP 13).
-        NoActiveTeamLandingModuleId = None
-        // Opt-in parameterized landing; off by default (GP 13).
-        NoActiveTeamLanding = None
         ToastCentre = DefaultToastCentre
-        AuthUI = NoAuthUI
-        AuthTokenStorage = ClientCookieAndLocalStorage
-        Surfaces = Surfaces.anonymous
-        GridModules = Feliz.AgGrid.AgGridModuleConfig.community
-        ModuleFilter = None
         GlobalOverlays = []
-        OnError = None
-        AuthBridge = None
-        EnableElmishConsoleTrace = false
-        OnElmishError = None
-        ShowDebugOnlyModules = false
-        DevDefaultUserId = None
-        PublicEntryDispatchers = []
-        Handlers = handlers
-        RequestSeam = ClientRequestSeam.empty
-        PrerenderRoutes = []
-        ConsentProvider = NoConsentProvider
-        AdPanel = NoAdPanel
-        PremiumModel = AnonymousFirst
-        PlatformAdminProfile = StandardPlatformAdminProfile
         InputsPaneWidth = Narrow
-        // Phase 583 — parity check dormant until the consumer declares
-        // an expected-module list on BOTH roots (GP 13).
-        ExpectedModules = None
-        // Phase 622 — no shell presence mount, no heartbeat, no SSE
-        // subscription until the deployment opts in (GP 11 + GP 13).
+        GridModules = Feliz.AgGrid.AgGridModuleConfig.community
         Presence = FeatureMode.Disabled
-        // Phase 444 — one fixed locale, the built-in English catalog, no
-        // browser or team-config read. Byte-for-byte the pre-444 shell
-        // (GP 11 + GP 13).
-        Locale = FixedLocale MessageCatalog.BuiltInLocale
-        MessageCatalogOverride = None
-        // Phase 24 — online-only: no service worker registered, no
-        // IndexedDB opened, no PWA manifest linked, no install prompt
-        // (GP 11 + GP 13).
         Offline = NoOffline
     }
 
-    /// Back-compat: `ClientConfig` with every field at the SDK default
-    /// AND `Handlers = ClientHandlerRegistry.empty`. Equivalent to
+/// The client shell's configuration — see the Phase 1074 note above.
+type ClientConfig = {
+    /// The application's name, shown in the header and the page title.
+    AppName: string
+    /// The application's logo (a path the page can load).
+    AppLogo: string
+    /// Declared subject shapes this deployment supports. Mirrors
+    /// `ServerConfig.Surfaces` (the server-side non-empty list of
+    /// `SurfaceProfile`). Single-shape deployments declare one entry
+    /// (e.g. `Surfaces.individual`); mixed-mode deployments declare two
+    /// or more (e.g. `Surfaces.anonymousAndIndividual`). The client
+    /// derives the active `SubjectKind` per render from the list + auth
+    /// state + active team scope (`ClientConfig.resolveSubjectKind`).
+    Surfaces: SurfaceProfile list
+    /// Phase 879 — what fills each shell slot: the data manager, the team
+    /// manager, the Home landing and the admin built-ins a deployment can
+    /// replace. Default `ShellSlotFills.defaults`; set a slot with a
+    /// nested copy-and-update (`{ c with Slots.TeamManager = SlotFill.Empty }`).
+    Slots: ShellSlotFills
+    /// Phase 1074 — the six chrome rows (`ShellChrome`). Default
+    /// `ShellChrome.defaults`.
+    Chrome: ShellChrome
+    /// Phase 1074 — sign-in and the bearer token (`AuthConfig`).
+    Auth: AuthConfig
+    /// Phase 1074 — the public-utility substrate (`PublicUtilityConfig`).
+    PublicUtility: PublicUtilityConfig
+    /// Phase 1074 — the locale and the translation (`LocaleConfig`).
+    Locale: LocaleConfig
+    /// Phase 1074 — the shell's own presentation (`ShellConfig`).
+    Shell: ShellConfig
+    /// Phase 1074 — how the program is composed and observed
+    /// (`CompositionConfig`): the companion handlers, the request seam,
+    /// the module filters, the public entry points and the diagnostics
+    /// hooks.
+    Composition: CompositionConfig
+}
+
+/// Phase 1074 — how the shell's program is composed and observed.
+and CompositionConfig = {
+    /// Phase 13a — explicit companion handler registry. Companion
+    /// packages export `Handler` values (e.g.
+    /// `OidcClient.handler : string * AuthUIHandler`) which the consumer
+    /// adds to the matching field here. The SDK validates the registry at
+    /// `Client.run` and fails loud when a declared `AuthUI` mode or
+    /// `DataSource.Kind` references a handler the consumer didn't add.
+    Handlers: ClientHandlerRegistry
+    /// Phase 13a — read-per-call request-attachment seam: per-request
+    /// header providers beyond the SDK's own identity + CSRF headers, and
+    /// an optional cross-origin API root. Default
+    /// `ClientRequestSeam.empty`.
+    RequestSeam: ClientRequestSeam
+    /// Optional case-insensitive substring filter over
+    /// `ErasedModule.Definition.Name` — app modules whose name doesn't
+    /// contain it (whitespace ignored) are dropped before the shell builds
+    /// its sidebar; built-ins never are. Mirrors `ServerConfig.ModuleFilter`.
+    ModuleFilter: string option
+    /// Dev-tooling: when `true`, modules registered with
+    /// `ModuleAvailability = DebugOnly` are surfaced in the sidebar.
+    /// Default `false` (the JS still ships; the goal is hiding
+    /// under-development modules, not reducing bundle size).
+    ShowDebugOnlyModules: bool
+    /// Phase 583 — the module set this deployment expects to compose,
+    /// the client-tier mirror of `ServerConfig.ExpectedModules`: declare
+    /// the SAME list on both and each root is measured against it. Entries
+    /// are `ModuleDefinition.Id` (the server's `ServerModule.Name`). `None`
+    /// (the default) leaves `ModuleParityValidator` dormant.
+    ExpectedModules: string list option
+    /// First-chance entry-point dispatchers. Each is invoked once during
+    /// `Client.run` *before* the full shell is bootstrapped; the first
+    /// whose predicate returns `true` short-circuits the shell (it renders
+    /// its own Elmish program against `"elmish-app"`). For anonymous,
+    /// modules-less pages on a URL pattern — e.g.
+    /// `ToolUp.Forms.PublicEmbed` on `/r/{token}`. Run in list order.
+    /// Default `[]`.
+    PublicEntryDispatchers: (ClientConfig -> bool) list
+    /// Phase 12c — telemetry hook fired when a module's view tree throws
+    /// (`Components.ModuleBoundary` catches it and shows its panel).
+    /// Default `None` — the boundary falls back to one `console.error`.
+    OnError: (ModuleErrorReport -> unit) option
+    /// Dev-tooling: when `true`, the SDK logs every Elmish model-update
+    /// transition via `Logger.forCategory "client.elmish.trace"`.
+    /// Default `false`.
+    EnableElmishConsoleTrace: bool
+    /// 0.4.1 — structured Elmish error reporter: every runtime exception
+    /// (Init / Update / View / Subscription / Termination) as an
+    /// `ErrorContext`. Default `None` — the SDK logs via
+    /// `Logger.forCategory "client.elmish"`. Consumers wiring this MUST
+    /// NOT also install their own `withErrorReporter`.
+    OnElmishError: (ErrorContext -> unit) option
+}
+
+/// Phase 1074 — composition defaults.
+module CompositionConfig =
+    /// The given handler registry, no extra request attachment, no
+    /// filters, no parity check, no public entry points, no diagnostics
+    /// hooks.
+    let create (handlers: ClientHandlerRegistry) : CompositionConfig = {
+        Handlers = handlers
+        RequestSeam = ClientRequestSeam.empty
+        ModuleFilter = None
+        ShowDebugOnlyModules = false
+        ExpectedModules = None
+        PublicEntryDispatchers = []
+        OnError = None
+        EnableElmishConsoleTrace = false
+        OnElmishError = None
+    }
+
+module ClientConfig =
+    /// Phase 11.C.5 Tier 3 — the preferred constructor, with an explicit
+    /// `ClientHandlerRegistry`, so a deployment that forgets to wire
+    /// (e.g.) `OidcRegister.handler` fails to compile rather than failing
+    /// at the first sign-in. Consumers with no companion handlers pass
+    /// `ClientHandlerRegistry.empty` explicitly. Every concern record is
+    /// at its own `defaults`; customise with a nested copy-and-update
+    /// (`{ ClientConfig.create handlers with Shell.CommandPalette = FeatureMode.Enabled }`).
+    let create (handlers: ClientHandlerRegistry) : ClientConfig = {
+        AppName = "My App"
+        AppLogo = "favicon.png"
+        Surfaces = Surfaces.anonymous
+        Slots = ShellSlotFills.defaults
+        Chrome = ShellChrome.defaults
+        Auth = AuthConfig.defaults
+        PublicUtility = PublicUtilityConfig.defaults
+        Locale = LocaleConfig.defaults
+        Shell = ShellConfig.defaults
+        Composition = CompositionConfig.create handlers
+    }
+
     /// `create ClientHandlerRegistry.empty`. Deployments that wire
-    /// companion handlers (OidcClient.handler, NarrativeCommit,
-    /// IngestionStatus, …) SHOULD prefer `create handlers` so the
-    /// omission of a required handler is caught at compile time
-    /// (Phase 11.C.5 Tier 3).
+    /// companion handlers SHOULD prefer `create handlers` so the omission
+    /// of a required handler is caught at compile time.
     let defaults: ClientConfig = create ClientHandlerRegistry.empty
 
     /// Phase 66 Stream B.8 — true iff any declared surface admits
@@ -2480,55 +2385,42 @@ module ClientConfig =
             | SurfaceProfile.Team _ -> true
             | _ -> false)
 
-    /// True iff the (optional) sidebar group is platform-scoped — i.e.
-    /// its entries should render only for `PlatformRole.PlatformAdmin`
-    /// callers (Phase 4b, commit 4f.2).
-    ///
-    /// Phase 570 — the group sets and the decision now live in
-    /// `SidebarVisibility`, beside the fold that consumes them and ahead
-    /// of this file's Fable-only startup dependencies; this stays as the
-    /// established call-site name and is behaviour-identical.
-    ///
-    /// Phase 568 — no longer the gate. Stage 2 of the fold evaluates the
-    /// module's typed `NavRole`; this predicate is what the DEPRECATED
-    /// group-name fallback consults for a module that declares none, and
-    /// it still drives the Phase 567 area derivation
-    /// (`effectiveArea`), which is presentation and stays group-keyed.
-    let isPlatformAdminSidebarGroup (group: string option) : bool =
-        SidebarVisibility.isPlatformAdminSidebarGroup group
-
-    /// True iff the (optional) sidebar group is an admin / management
-    /// group (platform- OR team-scoped) kept visible to a team-less
-    /// platform admin under the no-team gate. See
-    /// `SidebarVisibility.isAdminSidebarGroup` and
-    /// `NoActiveTeamLandingModuleId`.
-    let isAdminSidebarGroup (group: string option) : bool =
-        SidebarVisibility.isAdminSidebarGroup group
-
     /// Phase 567 — a module's *effective* navigation area. A module is in
     /// the `Administration` area if it declares it (`ClientModule.withArea
-    /// Administration`) OR sits in an admin sidebar group (so SDK admin
-    /// built-ins land in the admin area with no registration change, GP 9);
-    /// otherwise `Product`. Consulted only under `AdminSurface = SeparateArea`.
+    /// Administration`) OR sits in an admin sidebar group
+    /// (`SidebarVisibility.isAdminSidebarGroup`, so SDK admin built-ins
+    /// land in the admin area with no registration change, GP 9);
+    /// otherwise `Product`. Consulted only when `ShellChrome.AdminArea` is on.
     let effectiveArea (area: ModuleArea) (group: string option) : ModuleArea =
         match area with
         | Administration -> Administration
         | Product ->
-            if isAdminSidebarGroup group then
+            if SidebarVisibility.isAdminSidebarGroup group then
                 Administration
             else
                 Product
 
-    /// The effective module id the no-active-team gate targets, unifying
-    /// the two opt-in paths: an explicit consumer-supplied
-    /// `NoActiveTeamLandingModuleId` (a full custom module) takes
-    /// precedence; otherwise the parameterized `NoActiveTeamLanding` config
-    /// resolves to the SDK built-in landing module's stable id
-    /// (`NoActiveTeamLanding.moduleId`). `None` when neither path is set —
-    /// the gate is then inert. Scope (`hasTeamScope`) is checked at the call
-    /// sites, not here, mirroring the prior direct-field reads.
+    /// The module id the no-active-team gate targets: the SDK built-in
+    /// landing's stable id (`NoActiveTeamLanding.moduleId`) for
+    /// `BuiltIn`, the deployment's module for `Module`, `None` when the
+    /// row is off — the gate is then inert. Scope (`hasTeamScope`) is
+    /// checked at the call sites, not here.
     let effectiveNoActiveTeamLandingId (config: ClientConfig) : string option =
-        NoActiveTeamLanding.resolveLandingId config.NoActiveTeamLandingModuleId config.NoActiveTeamLanding
+        match config.Chrome.NoActiveTeamLanding with
+        | ChromeFill.Off -> None
+        | ChromeFill.On(NoActiveTeamLandingFill.BuiltIn _) -> Some NoActiveTeamLanding.moduleId
+        | ChromeFill.On(NoActiveTeamLandingFill.Module moduleId) -> Some moduleId
+
+    /// The deployment's OWN no-active-team landing module, when the row
+    /// names one (`NoActiveTeamLandingFill.Module`) — `None` for the SDK's
+    /// built-in landing and for the row off. The shell boots a team-less
+    /// caller straight onto an own module, and renders its onboarding
+    /// surface only when the deployment named none.
+    let ownNoActiveTeamLandingModuleId (config: ClientConfig) : string option =
+        match config.Chrome.NoActiveTeamLanding with
+        | ChromeFill.On(NoActiveTeamLandingFill.Module moduleId) -> Some moduleId
+        | ChromeFill.On(NoActiveTeamLandingFill.BuiltIn _)
+        | ChromeFill.Off -> None
 
     /// Phase 66 Stream B.8 — true iff any declared `Team` surface
     /// requests the header team-switcher UX (the retiring `MultiTeam`
@@ -3088,8 +2980,8 @@ module ClientModule =
     }
 
     /// Phase 567 — place this module in the given navigation `area`. Only
-    /// consulted under `ClientConfig.AdminSurface = SeparateArea`; the
-    /// default `Product` (and the default `InlineGroups` surface) leaves
+    /// consulted when `ShellChrome.AdminArea` is on; the
+    /// default `Product` (and the default inline groups) leaves
     /// behaviour unchanged. SDK admin built-ins do NOT call this — they are
     /// derived into `Administration` from their sidebar group
     /// (`ClientConfig.effectiveArea`), so no built-in registration changes.

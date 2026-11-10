@@ -33,7 +33,7 @@ open ToolUp.Platform.DataProp
 // switch that does not re-run `Init`).
 //
 // **Zero weight when off (GP 13).** The shell renders `Html.none` for
-// `NoCommandPalette` — this component is never mounted, so the document
+// `FeatureMode.Disabled` — this component is never mounted, so the document
 // keydown listener below is never registered and Ctrl+K keeps whatever
 // meaning the browser gave it.
 //
@@ -53,7 +53,7 @@ type CommandPaletteEntry = {
     ModuleName: string
     /// `Some title` for a page of a multi-page module; `None` for a leaf.
     PageTitle: string option
-    /// Group (or, under `SeparateArea`, the area) label rendered as the
+    /// Group (or, under the Administration area, the area) label rendered as the
     /// row's context.
     Group: string option
     Icon: ReactElement

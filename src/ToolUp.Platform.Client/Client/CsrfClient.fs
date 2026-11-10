@@ -208,7 +208,7 @@ let private ensureTokenForGuard () : JS.Promise<string> =
     // Phase 69b.D) can stitch client -> server traces. Each call to
     // getCorrId() returns a fresh value (the SDK default generates a
     // GUID per request; consumers can override via
-    // ClientConfig.RequestSeam.CorrelationIdProvider).
+    // ClientConfig.Composition.RequestSeam.CorrelationIdProvider).
     if (!hasHeader('x-correlation-id')) {
       var corrId = '';
       try { corrId = getCorrId() || ''; } catch(e){}

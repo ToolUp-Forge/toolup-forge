@@ -8,19 +8,15 @@ ToolUp.AI.AIAssistantClientBranding..ctor(System.String, Fable.React.ReactElemen
 ToolUp.AI.AIAssistantClientBranding.Icon : Fable.React.ReactElement { get }
 ToolUp.AI.AIAssistantClientBranding.Name : System.String { get }
 ToolUp.AI.AIAssistantClientBranding.ShowSidePanel : System.Boolean { get }
-ToolUp.AI.AIAssistantMode (class)
-ToolUp.AI.AIAssistantMode.DefaultAIAssistant : ToolUp.AI.AIAssistantMode { get }
-ToolUp.AI.AIAssistantMode.IsConfiguredAIAssistant : System.Boolean { get }
-ToolUp.AI.AIAssistantMode.IsDefaultAIAssistant : System.Boolean { get }
-ToolUp.AI.AIAssistantMode.IsNoAIAssistant : System.Boolean { get }
-ToolUp.AI.AIAssistantMode.NoAIAssistant : ToolUp.AI.AIAssistantMode { get }
-ToolUp.AI.AIAssistantMode.Tag : System.Int32 { get }
-ToolUp.AI.AIAssistantMode+ConfiguredAIAssistant (class)
-ToolUp.AI.AIAssistantMode+ConfiguredAIAssistant.Item : ToolUp.AI.AIAssistantClientBranding { get }
-ToolUp.AI.AIAssistantMode+Tags (class)
-ToolUp.AI.AIAssistantMode+Tags.ConfiguredAIAssistant : System.Int32 (literal)
-ToolUp.AI.AIAssistantMode+Tags.DefaultAIAssistant : System.Int32 (literal)
-ToolUp.AI.AIAssistantMode+Tags.NoAIAssistant : System.Int32 (literal)
+ToolUp.AI.AISlotFills (class)
+ToolUp.AI.AISlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.AI.AIAssistantClientBranding], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])
+ToolUp.AI.AISlotFills.AIAssistant : ToolUp.Platform.SlotFill`1[ToolUp.AI.AIAssistantClientBranding] { get }
+ToolUp.AI.AISlotFills.AISettings : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.AI.AISlotFills.PlatformAIKeys : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.AI.AISlotFillsModule (class)
+ToolUp.AI.AISlotFillsModule.configured(ToolUp.AI.AIAssistantClientBranding) : ToolUp.AI.AISlotFills
+ToolUp.AI.AISlotFillsModule.defaults : ToolUp.AI.AISlotFills { get }
+ToolUp.AI.AISlotFillsModule.empty : ToolUp.AI.AISlotFills { get }
 ToolUp.AI.Client.AIAssistantUI (class)
 ToolUp.AI.Client.AIAssistantUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAssistantClientBranding]) : ToolUp.Platform.ErasedModule
 ToolUp.AI.Client.AIAssistantUI.init() : System.Tuple`2[ToolUp.AI.Client.AIAssistantUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.AIAssistantUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -146,11 +142,12 @@ ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.MessageId : System.Guid { get 
 ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.Timestamp : System.DateTime { get }
 ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.WatchdogId : System.Guid { get }
 ToolUp.AI.Client.AIClientConfig (class)
-ToolUp.AI.Client.AIClientConfig.appendAssistantModule(ToolUp.AI.AIAssistantMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
-ToolUp.AI.Client.AIClientConfig.program(ToolUp.AI.AIAssistantMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.AI.Client.AIClientConfig+OuterModel, ToolUp.AI.Client.AIClientConfig+OuterMsg, Fable.React.ReactElement]
+ToolUp.AI.Client.AIClientConfig.program(ToolUp.AI.AISlotFills, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.AI.Client.AIClientConfig+OuterModel, ToolUp.AI.Client.AIClientConfig+OuterMsg, Fable.React.ReactElement]
 ToolUp.AI.Client.AIClientConfig.registerBlockSeriesResolver(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]]) : System.Void
-ToolUp.AI.Client.AIClientConfig.run(ToolUp.AI.AIAssistantMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
-ToolUp.AI.Client.AIClientConfig.withSidePanel(ToolUp.AI.AIAssistantMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.AI.Client.AIClientConfig+OuterModel, ToolUp.AI.Client.AIClientConfig+OuterMsg, Fable.React.ReactElement]
+ToolUp.AI.Client.AIClientConfig.run(ToolUp.AI.AISlotFills, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
+ToolUp.AI.Client.AIClientConfig.slotExtensions(ToolUp.AI.AISlotFills) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SlotExtension]
+ToolUp.AI.Client.AIClientConfig.withAISlots(ToolUp.AI.AISlotFills, ToolUp.Platform.ClientConfig) : ToolUp.Platform.ClientConfig
+ToolUp.AI.Client.AIClientConfig.withSidePanel(ToolUp.AI.AISlotFills, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.AI.Client.AIClientConfig+OuterModel, ToolUp.AI.Client.AIClientConfig+OuterMsg, Fable.React.ReactElement]
 ToolUp.AI.Client.AIClientConfig+OuterModel (class)
 ToolUp.AI.Client.AIClientConfig+OuterModel..ctor(ToolUp.Platform.Client+Model, ToolUp.AI.Client.AIClientConfig+SidePanelModel)
 ToolUp.AI.Client.AIClientConfig+OuterModel.Shell : ToolUp.Platform.Client+Model { get }

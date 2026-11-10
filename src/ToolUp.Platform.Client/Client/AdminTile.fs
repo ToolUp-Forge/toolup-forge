@@ -34,7 +34,7 @@ open Feliz
 /// Registry of module-contributed administration tiles. Populated once
 /// at boot from the shell slots' tiles (`ShellSlots.adminTiles` — one
 /// per filled tile-bearing slot, pointed at whatever fills it) plus
-/// `ClientConfig.Handlers.AdminTileContributors`. The landing module
+/// `ClientConfig.Composition.Handlers.AdminTileContributors`. The landing module
 /// reads `tiles ()` for the contributed total; the shell reads it for
 /// the set it filters and publishes.
 module AdminTileRegistry =
@@ -54,7 +54,7 @@ module AdminTileRegistry =
 
     /// Called once by `SDK.Client.boot` with one contributor yielding the
     /// shell slots' tiles followed by those of
-    /// `ClientConfig.Handlers.AdminTileContributors`. Flattens and
+    /// `ClientConfig.Composition.Handlers.AdminTileContributors`. Flattens and
     /// orders once, so the render path is a field read.
     let setContributors (contributors: IAdminTileContributor list) : unit =
         cached <- contributors |> List.collect (fun c -> c.Tiles()) |> AdminTiles.ordered facts

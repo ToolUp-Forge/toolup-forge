@@ -77,60 +77,23 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
             match! deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body) with
             | Error storageError -> return Error(sprintf "The note could not be saved: %s" storageError)
             | Ok _ ->
-                // Atomic index RMW (see `upsertIndexEntry`).
-                // Released before the enqueue block below, which can route
-                // through `MarkIngestionFailed` → `updateIndexStatus` and
-                // re-acquire the same container lock.
+                // Atomic index RMW (see `upsertIndexEntry`), released before
+                // the enqueue, which takes the same container lock.
                 do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
-                let mutable returnedDoc = doc
+                let chunkPairs =
+                    chunks
+                    |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
 
-                if box deps.Queue <> null && not chunks.IsEmpty then
-                    let initialStatus = Embedding(0, chunks.Length)
+                let! enqueued = KnowledgeIngest.enqueue deps doc chunkPairs
 
-                    updateStatus docId initialStatus (fun existing ->
-                        match existing with
-                        | Queued -> initialStatus
-                        | other -> other)
-
-                    let chunkPairs =
-                        chunks
-                        |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
-
-                    // Record the attempt before the enqueue.
-                    let! attempt =
-                        beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
-
-                    let job: DocumentIngestionJob = {
-                        DocumentId = docId
-                        DocumentName = fileName
-                        Chunks = chunkPairs
-                        Scope = deps.VectorScope
-                        ScopeId = deps.Scope.ScopeId
-                        Container = deps.Scope.Container
-                        OriginatingUserId = Some deps.UserId
-                        Attempt = Some attempt
-                    }
-
-                    // Async enqueue: the sync form is a blocking
-                    // store round-trip on the request thread once a
-                    // deployment composes a durable queue.
-                    let! accepted = deps.Queue.EnqueueAsync(job)
-                    deps.RecordEnqueue accepted
-
-                    if not accepted then
-                        let reason =
-                            sprintf
-                                "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                deps.Queue.Count
-                                deps.Queue.Capacity
-
-                        do! deps.MarkIngestionFailed docId fileName reason
-
-                        returnedDoc <- {
-                            doc with
-                                Status = IngestionStatus.Failed reason
-                        }
+                let returnedDoc =
+                    match enqueued with
+                    | Ok _ -> doc
+                    | Error refused -> {
+                        doc with
+                            Status = IngestionStatus.Failed(EnqueueRefused.describe refused)
+                      }
 
                 do! deps.Notifications.Publish(deps.UserId.Value, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
                 do! deps.PublishInventory()
@@ -213,57 +176,21 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                         // the cross-document loss the lock prevents.
                         do! upsertIndexEntry deps.Storage deps.Scope.Container updatedDoc
 
-                        let mutable returnedDoc = updatedDoc
+                        let chunkPairs =
+                            chunks
+                            |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = req.DocId; Ordinal = i }, chunk)
 
-                        if box deps.Queue <> null && not chunks.IsEmpty then
-                            let initialStatus = Embedding(0, chunks.Length)
+                        // A re-save is a new attempt: it re-seeds the persisted
+                        // status and retires the previous save's late callbacks.
+                        let! enqueued = KnowledgeIngest.enqueue deps updatedDoc chunkPairs
 
-                            setStatus req.DocId initialStatus
-
-                            let chunkPairs =
-                                chunks
-                                |> List.mapi (fun i chunk ->
-                                    ChunkId.render { DocumentId = req.DocId; Ordinal = i }, chunk)
-
-                            // A re-save is a new attempt: it
-                            // re-seeds the persisted status and retires the
-                            // previous save's late callbacks.
-                            let! attempt =
-                                beginIngestionAttempt
-                                    deps.Storage
-                                    deps.Logger
-                                    deps.Scope.Container
-                                    req.DocId
-                                    chunkPairs.Length
-
-                            let job: DocumentIngestionJob = {
-                                DocumentId = req.DocId
-                                DocumentName = fileName
-                                Chunks = chunkPairs
-                                Scope = deps.VectorScope
-                                ScopeId = deps.Scope.ScopeId
-                                Container = deps.Scope.Container
-                                OriginatingUserId = Some deps.UserId
-                                Attempt = Some attempt
-                            }
-
-                            // Async enqueue; see `addNote`.
-                            let! accepted = deps.Queue.EnqueueAsync(job)
-                            deps.RecordEnqueue accepted
-
-                            if not accepted then
-                                let reason =
-                                    sprintf
-                                        "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                        deps.Queue.Count
-                                        deps.Queue.Capacity
-
-                                do! deps.MarkIngestionFailed req.DocId fileName reason
-
-                                returnedDoc <- {
-                                    updatedDoc with
-                                        Status = IngestionStatus.Failed reason
-                                }
+                        let returnedDoc =
+                            match enqueued with
+                            | Ok _ -> updatedDoc
+                            | Error refused -> {
+                                updatedDoc with
+                                    Status = IngestionStatus.Failed(EnqueueRefused.describe refused)
+                              }
 
                         do!
                             deps.Notifications.Publish(

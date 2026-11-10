@@ -3,11 +3,6 @@
 
 namespace ToolUp.Platform
 
-// Phase 494 — validateHandlers + bootSummary must keep handling the
-// deprecated `ClerkAuthUI` case (an [<Obsolete>] alias for
-// `ProviderAuthUI ("clerk", _)`) until its major-version removal.
-#nowarn "44"
-
 open ToolUp.Elmish
 open ToolUp.Elmish.React
 open Feliz
@@ -155,8 +150,8 @@ module Client =
         /// switch.
         ActiveTeamRole: TeamRole option
         /// Phase 567 — which navigation area the sidebar is currently
-        /// showing under `ClientConfig.AdminSurface = SeparateArea`. Ignored
-        /// under the default `InlineGroups`. Flipped by the area switcher
+        /// showing under `ShellChrome.AdminArea = ChromeFill.On()`. Ignored
+        /// under the default inline groups. Flipped by the area switcher
         /// (reserved sidebar ids) and by deep-linking to an admin-area route.
         CurrentArea: ModuleArea
         /// Phase 245 — platform-admin "show all modules" escape. With
@@ -202,7 +197,7 @@ module Client =
         /// Elmish-native: every transition is a message `update` can see,
         /// and selection reduces to the same `ModuleSelected` a sidebar
         /// click sends. `CommandPaletteNav.closed` for every deployment
-        /// that leaves `ClientConfig.CommandPalette = NoCommandPalette`
+        /// that leaves `ClientConfig.Shell.CommandPalette = FeatureMode.Disabled`
         /// (the default) — the field is inert, the component unmounted.
         CommandPalette: CommandPaletteNav.PaletteState
         /// Phase 444 — a locale the user (or a consumer module, via
@@ -747,20 +742,20 @@ module Client =
             match localeOverride with
             | Some chosen -> chosen
             | None ->
-                match config.Locale with
+                match config.Locale.Resolution with
                 | FixedLocale _ ->
                     // The fixed arm consults neither ambient source, so
                     // resolve it without paying for either.
-                    MessageCatalog.resolveLocale config.Locale None None
+                    MessageCatalog.resolveLocale config.Locale.Resolution None None
                 | BrowserLocale _ ->
-                    MessageCatalog.resolveLocale config.Locale None (MessageCatalogProvider.browserLocale ())
+                    MessageCatalog.resolveLocale config.Locale.Resolution None (MessageCatalogProvider.browserLocale ())
                 | TeamDefault _ ->
                     MessageCatalog.resolveLocale
-                        config.Locale
+                        config.Locale.Resolution
                         (MessageCatalog.teamLocaleOf platformConfig)
                         (MessageCatalogProvider.browserLocale ())
 
-        catalogFor (locale, config.MessageCatalogOverride)
+        catalogFor (locale, config.Locale.MessageCatalogOverride)
 
     let private degradationEntry (source: string) (error: string) : BootDegradation.BootDegradation = {
         Source = source
@@ -877,11 +872,11 @@ module Client =
         | None -> None
 
     /// Phase 1240 — the page a first mount or a re-init lands on. Those paths
-    /// reset to the first page, which under `HashHistory` would discard the
+    /// reset to the first page, which under browser history would discard the
     /// page the URL just restored, so the current page stands while the module
     /// has not changed. Everything else resets as it always has.
     let private settledPageRoute (config: ClientConfig) (model: Model) (moduleImpl: ErasedModule) =
-        match config.BrowserHistory, model.ActivePageRoute with
+        match config.Shell.BrowserHistory, model.ActivePageRoute with
         | HashHistory, Some route when model.ActiveModuleId = moduleImpl.Definition.Id -> Some route
         | _ -> defaultPageRoute moduleImpl
 
@@ -1027,11 +1022,11 @@ module Client =
 
     /// The deployment's default landing surface id — the module the
     /// shell lands on when nothing else is selected:
-    /// `ClientConfig.ActiveModule` when set, else the first registered
+    /// `ClientConfig.Shell.ActiveModule` when set, else the first registered
     /// module (Home when the Home module is enabled, since it's injected
     /// at the head). Empty string only for the degenerate no-modules case.
     let private bootDefaultModuleId (config: ClientConfig) (modules: ErasedModule list) : string =
-        match config.ActiveModule with
+        match config.Shell.ActiveModule with
         | Some id -> id
         | None ->
             modules
@@ -1050,7 +1045,7 @@ module Client =
         | _ -> bootDefaultModuleId config modules
 
     /// Resolve the active *content* surface accounting for the
-    /// no-active-team gate (`ClientConfig.NoActiveTeamLandingModuleId`).
+    /// no-active-team gate (`ClientConfig.Chrome.NoActiveTeamLanding` (`NoActiveTeamLandingFill.Module`)).
     /// The sidebar filter hides the work modules while a gated, team-
     /// scoped deployment has no active team, but the active module (the
     /// content area) is tracked separately — without this a no-team user
@@ -1077,7 +1072,7 @@ module Client =
                     bootDefaultModuleId config modules
                 else
                     model.ActiveModuleId
-            elif config.BrowserHistory = HashHistory && not model.ActiveTeamLoadCompleted then
+            elif config.Shell.BrowserHistory = HashHistory && not model.ActiveTeamLoadCompleted then
                 // Phase 1240 — "no team" is not known yet, only "no team
                 // loaded". Forcing the landing here would lose a view the URL
                 // restored, since a team arriving moves a caller on the landing
@@ -1110,7 +1105,7 @@ module Client =
     /// Report a module whose `Init` threw, as a command.
     let private reportInitFailure (config: ClientConfig) (moduleId: string) (ex: exn) : Cmd<Msg> =
         Cmd.ofEffect (fun _ ->
-            match config.OnError with
+            match config.Composition.OnError with
             | Some report ->
                 report {
                     ModuleId = moduleId
@@ -1127,7 +1122,7 @@ module Client =
     /// back as 403s; a guard input still loading reads as refused, and the
     /// arm that receives it initialises the module then. Its command is
     /// addressed to it. An `Init` that throws leaves the module with no host
-    /// and is reported through `ClientConfig.OnError`.
+    /// and is reported through `ClientConfig.Composition.OnError`.
     let private initModule
         (config: ClientConfig)
         (queryBus: IModuleQueryBus)
@@ -1304,13 +1299,13 @@ module Client =
     /// header-auth-accepting server even with no JWT. That identity counts like
     /// a token: without it a no-JWT dev build skips the team / role / config
     /// loaders entirely, so the shell never learns the caller's active team —
-    /// and the no-team gate (`NoActiveTeamLandingModuleId`) would then
+    /// and the no-team gate (`NoActiveTeamLandingFill.Module`) would then
     /// mis-classify every dev user as teamless. Production (real OIDC) always
     /// has a token, so this only changes the no-JWT dev path.
     let private isSignedOut (config: ClientConfig) : bool =
         ClientConfig.requiresAnyAuth config
         && UserSession.getAuthToken () |> Option.isNone
-        && config.DevDefaultUserId |> Option.isNone
+        && config.Auth.DevDefaultUserId |> Option.isNone
 
     let init (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) () =
         // Phase 6g.C: publish the registered module list so companion
@@ -1338,7 +1333,7 @@ module Client =
         // Phase 1241 — signed in with no view in the URL, the view kept across
         // sign-in stands in for it, under those same decisions.
         let restoredView =
-            match _config.BrowserHistory with
+            match _config.Shell.BrowserHistory with
             | NoBrowserHistory -> None
             | HashHistory ->
                 let entries = RegisteredModules.snapshot ()
@@ -1354,11 +1349,11 @@ module Client =
             // active-team fetch reconciles the surface via `ActiveTeamLoaded`
             // once it resolves (team → default; still no team → landing).
             let initialId =
-                match restoredView, _config.NoActiveTeamLandingModuleId with
+                match restoredView, ClientConfig.ownNoActiveTeamLandingModuleId _config with
                 | Some(id, _), _ -> id
                 | None, Some landingId when ClientConfig.hasTeamScope _config -> landingId
                 | None, _ ->
-                    match _config.ActiveModule with
+                    match _config.Shell.ActiveModule with
                     | Some id -> id
                     | None -> modules[0].Definition.Id
 
@@ -1453,7 +1448,7 @@ module Client =
         // out with no fragment, on its way to reloading `/`, and the default view
         // it shows meanwhile must not overwrite the view being carried.
         let firstEntryCmd =
-            match _config.BrowserHistory with
+            match _config.Shell.BrowserHistory with
             | NoBrowserHistory -> []
             | HashHistory ->
                 let view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute
@@ -1631,13 +1626,13 @@ module Client =
             // Phase 567 — the two-surface area switcher fires through the
             // same onSelect as modules; its reserved ids flip the rendered
             // navigation area rather than navigating. Inert under the default
-            // AdminSurface = InlineGroups (no switcher is ever rendered).
+            // Chrome.AdminArea = ChromeFill.Off (no switcher is ever rendered).
             | ModuleSelected sidebarId when sidebarId = Toolup.Sidebar.AdminAreaId ->
                 // Phase 573.A — the flip LANDS somewhere. Before this it
                 // only re-pointed the rail, leaving the content pane on
                 // whichever module was already open (a product module, as
                 // often as not). The landing module is registered only
-                // under `AdminSurface = SeparateArea`, so this is a
+                // under `ShellChrome.AdminArea = ChromeFill.On()`, so this is a
                 // guarded follow-up rather than an assumption: with no
                 // landing registered the flip behaves exactly as it did
                 // pre-573.
@@ -2126,7 +2121,7 @@ module Client =
 
         finalModel, Cmd.batch [ cmd; processedDataResetCmds ]
 
-    /// The shell's `update`. Phase 1240 — under `HashHistory`, a message that
+    /// The shell's `update`. Phase 1240 — under browser history, a message that
     /// moved the view also writes the URL, as a command (`update` performs no
     /// side effect, Phase 1069), and at this one site so every composer over
     /// `update` writes it too. A navigation adds a history entry. Anything else
@@ -2142,7 +2137,7 @@ module Client =
     let update (config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
         let next, cmd = updateShell config queryBus modules msg model
 
-        match config.BrowserHistory with
+        match config.Shell.BrowserHistory with
         | NoBrowserHistory -> next, cmd
         | HashHistory ->
             let view = BrowserHistory.viewId next.ActiveModuleId next.ActivePageRoute
@@ -2337,10 +2332,10 @@ module Client =
 
     /// Built-in no-active-team onboarding surface. Rendered in the content
     /// area when a team-scoped deployment has an authenticated user whose
-    /// active-team fetch resolved to none AND no `NoActiveTeamLandingModuleId`
+    /// active-team fetch resolved to none AND no `NoActiveTeamLandingFill.Module`
     /// is configured — replacing the wall of `401 missing-tenant` that every
     /// `TenantScoped` module would otherwise produce. Consumers wanting a
-    /// bespoke landing keep setting `NoActiveTeamLandingModuleId`; this is the
+    /// bespoke landing keep setting `NoActiveTeamLandingFill.Module`; this is the
     /// sane default when they don't. Adapts to membership: create a team when
     /// the user has none, or pick one when they have teams but none active.
     [<ReactComponent>]
@@ -2597,9 +2592,9 @@ module Client =
             boundaryMsgs
             moduleId
             resetKey
-            config.OnError
+            config.Composition.OnError
             (fun () -> dispatch (ResetModule moduleId))
-            config.InputsPaneWidth
+            config.Shell.InputsPaneWidth
             renderInner
 
     // ─── Phase 852 — the sliced shell (store-bound `Client.run` only) ────
@@ -2707,7 +2702,7 @@ module Client =
         // chrome, because the host's arrival is a `Hosts` change — which is
         // exactly what the chrome's comparison does not see.
         if isNull host then
-            Toolup.UIToolkit.Layout.loadingIndicator p.Config.LoadingIndicator
+            Toolup.UIToolkit.Layout.loadingIndicator p.Config.Shell.LoadingIndicator
         else
             let host = unbox<ModuleHost> host
 
@@ -2806,13 +2801,13 @@ module Client =
         // stale data while new prefetches refresh.
         let content: PageContent =
             match model.InitPhase with
-            | Prefetching -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
+            | Prefetching -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.Shell.LoadingIndicator)
             | Ready
             | Reprefetching when
                 ClientConfig.hasTeamScope config
                 && model.ActiveTeamLoadCompleted
                 && model.ActiveTeamId.IsNone
-                && config.NoActiveTeamLandingModuleId.IsNone
+                && (ClientConfig.ownNoActiveTeamLandingModuleId config).IsNone
                 ->
                 // No active team in a team-scoped deployment, the active-team
                 // fetch has resolved (no flash before teams load), and the
@@ -2838,7 +2833,7 @@ module Client =
                 with
                 | Some(moduleImpl, SidebarVisibility.NavigationDecision.Denied reason) ->
                     Custom(
-                        Components.NotAuthorised.render config.NotAuthorisedView {
+                        Components.NotAuthorised.render config.Shell.NotAuthorisedView {
                             ModuleId = moduleImpl.Definition.Id
                             ModuleName = moduleImpl.Definition.Name
                             Denial = reason
@@ -2875,7 +2870,7 @@ module Client =
                         Custom(ReactLegacy.createElement (unbox<ReactElement> activeModuleHost, box props))
                     | ModuleSlot.Inline ->
                         match model.Hosts |> Map.tryFind model.ActiveModuleId with
-                        | None -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.LoadingIndicator)
+                        | None -> Custom(Toolup.UIToolkit.Layout.loadingIndicator config.Shell.LoadingIndicator)
                         | Some host ->
                             Custom(
                                 moduleBoundary
@@ -2960,9 +2955,9 @@ module Client =
             // `selectedSidebarId` below for the active-border highlight —
             // routing and deep-linking are unchanged by the nesting; only
             // the presentation groups the pages under their module.
-            // Phase 567 — under AdminSurface = SeparateArea, render one
+            // Phase 567 — under Chrome.AdminArea = ChromeFill.On(), render one
             // navigation area at a time plus a role-gated switcher entry; the
-            // default InlineGroups leaves visibleModules and the switcher list
+            // default inline groups leaves visibleModules and the switcher list
             // untouched (byte-identical to pre-567).
             //
             // 567.E compose-order: the area split runs LAST, over
@@ -2977,9 +2972,9 @@ module Client =
             // applied. No double-hiding: the split re-buckets an
             // already-authorised set, it does not re-filter.
             let areaFilteredModules, switcherViews =
-                match config.AdminSurface with
-                | InlineGroups -> visibleModules, []
-                | SeparateArea ->
+                match config.Chrome.AdminArea with
+                | ChromeFill.Off -> visibleModules, []
+                | ChromeFill.On() ->
                     let adminModules, productModules =
                         visibleModules
                         |> List.partition (fun m ->
@@ -3138,7 +3133,7 @@ module Client =
                 None
 
         // 0.5.7 — sign-out affordance. Rendered in the page header
-        // when `ClientConfig.Handlers.SignOutHandler` is `Some _`
+        // when `ClientConfig.Composition.Handlers.SignOutHandler` is `Some _`
         // (typically wired by the OIDC / Clerk companion at compose
         // time). Mirrors the existing `OidcAuthUI.UserMenu`
         // contract; the SDK no longer requires the consumer to
@@ -3148,7 +3143,7 @@ module Client =
         // their own affordance via `ExtraChrome.HeaderAction` /
         // `ExtraChrome` — wiring both is harmless but renders two.
         let signOutAction =
-            match config.Handlers.SignOutHandler with
+            match config.Composition.Handlers.SignOutHandler with
             | None -> None
             | Some signOut ->
                 Some(
@@ -3273,7 +3268,7 @@ module Client =
                 content
                 chrome.SidePanel
                 combinedHeaderAction
-                config.InputsPaneWidth
+                config.Shell.InputsPaneWidth
 
         // Render the toast renderer alongside the shell. Fixed-positioned
         // containers sit on top of everything else via z-index; the
@@ -3283,13 +3278,13 @@ module Client =
         // subscription; apps that don't want toasts at all pass
         // `NoToastCentre`.
         let toastCentre =
-            match config.ToastCentre with
+            match config.Shell.ToastCentre with
             | NoToastCentre -> Html.none
             | DefaultToastCentre -> Components.ToastCentre.ToastCentre()
             | CustomToastCentre element -> element
 
         // Phase 571 — the Ctrl+K command palette. `Html.none` under the
-        // default `NoCommandPalette`, so no element enters the tree and
+        // default `FeatureMode.Disabled`, so no element enters the tree and
         // the component's document keydown listener is never registered
         // (GP 13): a deployment that does not opt in is byte-identical
         // to pre-571.
@@ -3302,9 +3297,9 @@ module Client =
         // out of step with the sidebar's, because there is no
         // palette-side filter.
         let commandPalette =
-            match config.CommandPalette with
-            | NoCommandPalette -> Html.none
-            | DefaultCommandPalette ->
+            match config.Shell.CommandPalette with
+            | FeatureMode.Disabled -> Html.none
+            | FeatureMode.Enabled ->
                 // Icons cannot live on the pure candidate (a
                 // `ReactElement` is unbuildable outside Fable, which is
                 // what keeps the derivation .NET-testable), so they are
@@ -3320,17 +3315,17 @@ module Client =
                         | _ -> [ m.Definition.Id, singlePageIcon m.Definition ])
                     |> Map.ofList
 
-                // Under `SeparateArea` a module with no group still
+                // Under the Administration area a module with no group still
                 // belongs to an area, and the area is often the only
                 // thing distinguishing two similarly-named pages — so
                 // fall back to the area name rather than showing
-                // nothing. Inert under `InlineGroups`, where areas are
+                // nothing. Inert under inline groups, where areas are
                 // not a user-visible concept.
                 let contextLabel (candidate: CommandPaletteNav.PaletteCandidate) =
-                    match candidate.Group, config.AdminSurface with
+                    match candidate.Group, config.Chrome.AdminArea with
                     | Some group, _ -> Some group
-                    | None, InlineGroups -> None
-                    | None, SeparateArea ->
+                    | None, ChromeFill.Off -> None
+                    | None, ChromeFill.On() ->
                         modules
                         |> List.tryFind (fun m -> m.Definition.Id = candidate.ModuleId)
                         |> Option.map (fun m ->
@@ -3369,7 +3364,7 @@ module Client =
         // Each thunk is invoked here on every shell render so its
         // hooks register correctly. Typical consumers are floating
         // banners / status indicators owned by a companion.
-        let globalOverlays = config.GlobalOverlays |> List.map (fun thunk -> thunk ())
+        let globalOverlays = config.Shell.GlobalOverlays |> List.map (fun thunk -> thunk ())
 
         // Wrap in FeatureFlags provider so deeply-nested views can read
         // the resolved flag map via the `flag` / `variant` hooks without
@@ -3437,18 +3432,18 @@ module Client =
             AdminTileContext.Context.Provider(tiles, withProcessedData)
 
         // Wrap in the loading-indicator provider — surfaces the configured
-        // `ClientConfig.LoadingIndicator` to module views (e.g. the
+        // `ClientConfig.Shell.LoadingIndicator` to module views (e.g. the
         // built-in Data Manager renders it while its file list loads) via
         // the `LoadingIndicatorContext.useIndicator` hook.
         let withLoadingIndicator =
-            LoadingIndicatorContext.provider config.LoadingIndicator withAdminTiles
+            LoadingIndicatorContext.provider config.Shell.LoadingIndicator withAdminTiles
 
         // Phase 1168 — the grid modules and license key reach every grid from
         // its own chunk, so the shell names them and holds no AG Grid. The
         // chunk puts them in AgGridProvider around the grid. Set here, above
         // every grid in the tree, because this is the one path both the
         // mounted shell and the prerender pass take; the write is idempotent.
-        Feliz.AgGrid.configure config.GridModules
+        Feliz.AgGrid.configure config.Shell.GridModules
 
         // Phase 622 — wrap in the presence + soft-lock provider so module
         // views can read "who else is here" / "is this entity locked" via
@@ -3456,12 +3451,12 @@ module Client =
         // id is passed through as the peer's location descriptor, so the
         // roster shows *where* each collaborator is.
         //
-        // Gated on `ClientConfig.Presence`, default `FeatureMode.Disabled`: an
+        // Gated on `ClientConfig.Shell.Presence`, default `FeatureMode.Disabled`: an
         // unconfigured deployment evaluates one `match` and renders
         // `withLoadingIndicator` unchanged — no provider, no heartbeat timer, no SSE
         // subscription (GP 11 + GP 13).
         let withPresence =
-            match config.Presence with
+            match config.Shell.Presence with
             | FeatureMode.Disabled -> withLoadingIndicator
             | FeatureMode.Enabled -> PresenceMount.mount model.ActiveModuleId withLoadingIndicator
 
@@ -3501,7 +3496,7 @@ module Client =
             let catalog = resolveCatalog config model.LocaleOverride model.PlatformConfig
 
             let signOut =
-                config.Handlers.SignOutHandler
+                config.Composition.Handlers.SignOutHandler
                 |> Option.map (fun signOut -> catalog.Shell.SignOut, signOut)
 
             Components.NotAuthorised.AppAccessRefusedView signOut
@@ -3532,7 +3527,7 @@ module Client =
         let resolvedSubjectKind = ClientConfig.resolveSubjectKind model.ActiveTeamId config
 
         viewWith slot config modules chrome model dispatchers
-        |> AuthUIProvider.gate config.AuthUI resolvedSubjectKind
+        |> AuthUIProvider.gate config.Auth.AuthUI resolvedSubjectKind
         // Phase 751 — the catalog provider is mounted OUTSIDE the auth
         // gate as well as inside `view`, because the gate WRAPS the
         // shell: a signed-out visitor sees the companion's sign-in
@@ -3720,14 +3715,18 @@ module Client =
     /// so single-module dev runs still get the data manager in the
     /// sidebar.
     let prepareModules (config: ClientConfig) (modules: ErasedModule list) =
-        let modules = modules |> ModuleFilter.apply config.ModuleFilter _.Definition.Name
+        // Phase 1074 — a companion's slots (`Slots.Extensions`) compose
+        // after the app's own modules, filtered with them.
+        let modules =
+            modules @ ShellSlotFills.extensionModules config.Slots
+            |> ModuleFilter.apply config.Composition.ModuleFilter _.Definition.Name
 
         // DebugOnly modules are filtered out of the sidebar unless the
-        // deployment opts in via `ClientConfig.ShowDebugOnlyModules`. The
+        // deployment opts in via `ClientConfig.Composition.ShowDebugOnlyModules`. The
         // JS still ships — goal is hiding under-development modules, not
         // reducing bundle size.
         let modules =
-            if config.ShowDebugOnlyModules then
+            if config.Composition.ShowDebugOnlyModules then
                 modules
             else
                 modules |> List.filter (fun m -> m.Availability = Always)
@@ -3774,7 +3773,7 @@ module Client =
     /// Phase 879 — every administration tile the shell registers: the
     /// slots' tiles, each built for whichever module fills its slot
     /// (`ShellSlots.adminTiles`), then the deployment's own
-    /// (`ClientConfig.Handlers.AdminTileContributors`). A slot tile steps
+    /// (`ClientConfig.Composition.Handlers.AdminTileContributors`). A slot tile steps
     /// aside for a module that supplies its own tile, so a replacement
     /// that wires one keeps it and a replacement that does not still has
     /// the slot's. Each consumer contributor is called exactly once.
@@ -3788,7 +3787,7 @@ module Client =
         { new IAdminTileContributor with
             member _.Tiles() =
                 let supplied =
-                    config.Handlers.AdminTileContributors
+                    config.Composition.Handlers.AdminTileContributors
                     |> List.collect (fun contributor -> contributor.Tiles())
 
                 ShellSlots.adminTiles config supplied @ supplied
@@ -3823,21 +3822,21 @@ module Client =
     /// the same tag. Called once during `program` boot.
     let private validateHandlers (config: ClientConfig) : unit =
         let authUITag =
-            match config.AuthUI with
+            match config.Auth.AuthUI with
             // Phase 494 — the vendor-neutral case validates on its
             // caller-supplied tag; the hint names the companion-export
             // convention rather than a specific vendor.
             | ProviderAuthUI(tag, _) -> Some(tag, sprintf "the companion-exported handler value for tag \"%s\"" tag)
             | OidcAuthUI _ -> Some("oidc", "ToolUp.AuthProviders.OidcRegister.handler")
             | PasskeyAuthUI _ -> Some("passkey", "ToolUp.AuthProviders.PasskeyRegister.handler")
-            | ClerkAuthUI _ -> Some("clerk", "ToolUp.AuthProviders.ClerkRegister.handler")
             | NoAuthUI
             | CustomAuthUI _ -> None
 
         match authUITag with
         | Some(tag, companion) ->
             let hasHandler =
-                config.Handlers.AuthUIHandlers |> List.exists (fun (k, _) -> k = tag)
+                config.Composition.Handlers.AuthUIHandlers
+                |> List.exists (fun (k, _) -> k = tag)
 
             if not hasHandler then
                 failwithf
@@ -3852,14 +3851,14 @@ module Client =
             |> List.filter (fun (_, xs) -> List.length xs > 1)
             |> List.map fst
 
-        let authUIDupes = dupes config.Handlers.AuthUIHandlers
+        let authUIDupes = dupes config.Composition.Handlers.AuthUIHandlers
 
         if not (List.isEmpty authUIDupes) then
             failwithf
                 "ClientConfig.Handlers.AuthUIHandlers contains duplicate tag(s): %A. Each tag must be unique."
                 authUIDupes
 
-        let credDupes = dupes config.Handlers.DataSourceCredentialHandlers
+        let credDupes = dupes config.Composition.Handlers.DataSourceCredentialHandlers
 
         if not (List.isEmpty credDupes) then
             failwithf
@@ -3870,7 +3869,7 @@ module Client =
         // across every contributor (the id is the React key + the
         // namespace prefix for `HomeWidgetContext.Data`).
         let widgetIdDupes =
-            config.Handlers.HomeWidgetContributors
+            config.Composition.Handlers.HomeWidgetContributors
             |> List.collect (fun c -> c.Widgets() |> List.map (fun w -> (w.Id, ())))
             |> dupes
 
@@ -3926,7 +3925,7 @@ module Client =
             let sdkPairs = UserSession.identityHeaderPairs ()
 
             let consumerPairs =
-                config.RequestSeam.HeaderProviders
+                config.Composition.RequestSeam.HeaderProviders
                 |> List.collect (fun p ->
                     try
                         p () |> Array.toList
@@ -3937,7 +3936,7 @@ module Client =
 
     let private composeApiOriginGetter (config: ClientConfig) : unit -> string =
         fun () ->
-            match config.RequestSeam.ApiOrigin() with
+            match config.Composition.RequestSeam.ApiOrigin() with
             | Some s -> s
             | None -> ""
 
@@ -3977,11 +3976,10 @@ module Client =
     /// composition shape without opening dev tools.
     let private bootSummary (config: ClientConfig) (modules: ErasedModule list) : string =
         let authUI =
-            match config.AuthUI with
+            match config.Auth.AuthUI with
             | NoAuthUI -> "none"
             | OidcAuthUI _ -> "oidc"
             | PasskeyAuthUI _ -> "passkey"
-            | ClerkAuthUI _ -> "clerk"
             | CustomAuthUI _ -> "custom"
             // Phase 494 — the neutral case reports its own tag, so a
             // Clerk deployment on the neutral form still logs "clerk".
@@ -4004,7 +4002,8 @@ module Client =
 
             config.Surfaces |> List.map labelOne |> String.concat " + "
 
-        let credKinds = config.Handlers.DataSourceCredentialHandlers |> List.map fst
+        let credKinds =
+            config.Composition.Handlers.DataSourceCredentialHandlers |> List.map fst
 
         let credKindsStr =
             if List.isEmpty credKinds then
@@ -4012,11 +4011,11 @@ module Client =
             else
                 String.concat "," credKinds
 
-        let providers = config.RequestSeam.HeaderProviders |> List.length
-        let bridge = if config.AuthBridge.IsSome then "yes" else "no"
+        let providers = config.Composition.RequestSeam.HeaderProviders |> List.length
+        let bridge = if config.Auth.AuthBridge.IsSome then "yes" else "no"
 
         let kb =
-            if config.Handlers.NarrativeCommitHandler.IsSome then
+            if config.Composition.Handlers.NarrativeCommitHandler.IsSome then
                 "yes"
             else
                 "no"
@@ -4077,13 +4076,13 @@ module Client =
         // first-visit seed becomes a stable value instead of a GUID, so
         // the local-run X-User-Id matches ServerConfig.AutoBootstrapDevAdmin
         // end-to-end. Existing localStorage values are preserved.
-        UserSession.configureDevDefault config.DevDefaultUserId
+        UserSession.configureDevDefault config.Auth.DevDefaultUserId
         // Phase 133 — auth-token storage strategy. `ServerSetHttpOnlyCookie`
         // moves the JWT out of JS-readable storage (localStorage + JS
         // cookie) into a server-set HttpOnly cookie via
         // `POST /api/auth/session`; `ClientCookieAndLocalStorage` (default)
         // preserves the legacy behaviour.
-        UserSession.configureAuthTokenStorage config.AuthTokenStorage
+        UserSession.configureAuthTokenStorage config.Auth.HttpOnlySession
 
         // Phase 13a — install the per-request guard with explicit
         // seam thunks (replaces the legacy module-load do block in
@@ -4096,11 +4095,11 @@ module Client =
         // `Guid.NewGuid().ToString("N")` per call. Consumers with an
         // existing logical trace id (an OIDC session correlation, a
         // per-tab span id) override via
-        // `ClientConfig.RequestSeam.CorrelationIdProvider`. The header
+        // `ClientConfig.Composition.RequestSeam.CorrelationIdProvider`. The header
         // is read by the Giraffe dispatcher's `CallContext.beginRequest`
         // per Phase 69b.D and stamped back on the response.
         let correlationGetter: unit -> string =
-            match config.RequestSeam.CorrelationIdProvider with
+            match config.Composition.RequestSeam.CorrelationIdProvider with
             | Some provider -> provider
             | None -> fun () -> System.Guid.NewGuid().ToString("N")
 
@@ -4161,37 +4160,41 @@ module Client =
         // Phase 13a — populate per-tab handler caches from explicit
         // config (replaces companion module-load register() side
         // effects).
-        AuthUIProvider.setHandlers config.Handlers.AuthUIHandlers
-        DataSourceCredentialUIRegistry.setHandlers config.Handlers.DataSourceCredentialHandlers
+        AuthUIProvider.setHandlers config.Composition.Handlers.AuthUIHandlers
+        DataSourceCredentialUIRegistry.setHandlers config.Composition.Handlers.DataSourceCredentialHandlers
         // Phase 217 — collect module-contributed Home widgets once.
-        HomeWidgetRegistry.setContributors config.Handlers.HomeWidgetContributors
+        HomeWidgetRegistry.setContributors config.Composition.Handlers.HomeWidgetContributors
         // Phase 573 — the same, for administration-landing tiles: the
         // shell slots' tiles first (so they lead the grid at equal
         // weight), then whatever the consumer wired (Phase 879 — one
         // contributor, so a slot tile can step aside for a module's own).
         AdminTileRegistry.setContributors [ shellAdminTileContributor config ]
-        Toolup.NarrativeCommit.setHandler config.Handlers.NarrativeCommitHandler
+        Toolup.NarrativeCommit.setHandler config.Composition.Handlers.NarrativeCommitHandler
 
         // Phase 13a — validate explicit composition against declared
         // modes. Fails loud naming the missing companion / import.
         validateHandlers config
-        validateRequestSeam config.RequestSeam
+        validateRequestSeam config.Composition.RequestSeam
 
         // Phase 55 — refuse deployments where every consumer module is
         // ungrouped. The sidebar's reserved `_other` bucket collapses
         // title-less when no other declared group is present, so the
         // operator sees an empty sidebar even though every module is
         // registered and accessible. See `ModuleGroupingValidator.fs`.
-        ModuleGroupingValidator.validate modules
+        // Phase 1074 — a companion's slot modules count with the app's own,
+        // as they did when the companion appended them to the list.
+        let consumerModules = modules @ ShellSlotFills.extensionModules config.Slots
+
+        ModuleGroupingValidator.validate consumerModules
 
         // Phase 583 — client half of `client-server-module-parity`. When
-        // the consumer declares `ClientConfig.ExpectedModules` (the same
+        // the consumer declares `ClientConfig.Composition.ExpectedModules` (the same
         // list it declares on `ServerConfig.ExpectedModules`), refuse a
         // boot whose consumer module set does not match it exactly — the
         // server root refuses the mirror-image mismatch at preflight, so
         // one declaration makes both roots agree. Dormant (a single
         // `match`) when undeclared. See `ModuleParityValidator.fs`.
-        ModuleParityValidator.validate config.ExpectedModules modules
+        ModuleParityValidator.validate config.Composition.ExpectedModules consumerModules
 
         // Phase 13a — install the request seam if not already installed
         // (idempotent). Covers outer composers that bypass `Client.run`
@@ -4209,7 +4212,7 @@ module Client =
         // error. Distinguishing a bridge defect from a generic init
         // defect was previously manual log triage; now the operator
         // grep `bridge-install-failed` in the auth tracer output.
-        match config.AuthBridge with
+        match config.Auth.AuthBridge with
         | Some bridge ->
             try
                 UserSession.installBridge bridge
@@ -4510,10 +4513,10 @@ module Client =
 
         // Phase 1240 — Back and Forward reach the shell as the ordinary
         // `ModuleSelected`, so the route guard, the area flip and the lazy
-        // `Init` all apply. Attached only under `HashHistory`: by default the
+        // `Init` all apply. Attached only under browser history: by default the
         // shell does not listen, and this list is what it was.
         let browserHistoryEffects =
-            match config.BrowserHistory with
+            match config.Shell.BrowserHistory with
             | NoBrowserHistory -> []
             | HashHistory -> [
                 EffectHandle.programLifetime "browser-history" (fun dispatch ->
@@ -4570,7 +4573,7 @@ module Client =
 
     /// The program builder every shell-hosting program shares — the shell's
     /// own and any composer that embeds the shell in a model of its own.
-    /// Runtime errors go to `ClientConfig.OnElmishError` (else the
+    /// Runtime errors go to `ClientConfig.Composition.OnElmishError` (else the
     /// `client.elmish` logger), each update is traced through the
     /// `client.elmish.trace` logger when `EnableElmishConsoleTrace` is set,
     /// and the view receives the loop's wrapper set, built once per loop
@@ -4585,7 +4588,7 @@ module Client =
         let elmishLog = Logger.forCategory "client.elmish"
 
         let elmishReporter (ctx: ErrorContext) =
-            match config.OnElmishError with
+            match config.Composition.OnElmishError with
             | Some sink ->
                 try
                     sink ctx
@@ -4609,7 +4612,7 @@ module Client =
         // needs a placeholder for it.
         Program.mkProgram
             init
-            (if config.EnableElmishConsoleTrace then
+            (if config.Composition.EnableElmishConsoleTrace then
                  traceUpdate
              else
                  update)
@@ -4628,7 +4631,7 @@ module Client =
         let allModules = prepareModules config modules
         let queryBus = buildQueryBus allModules
 
-        // AuthUI gating is driven by ClientConfig.AuthUI — default
+        // AuthUI gating is driven by ClientConfig.Auth.AuthUI — default
         // NoAuthUI is pass-through, so DEBUG and RELEASE behave the
         // same unless the app opts into a sign-in mode.
         programOver
@@ -4661,7 +4664,8 @@ module Client =
     /// `IDispatcher` dispatched here is per-dispatcher-program — the
     /// shell's `shellDispatcher` does not bleed across.
     let tryDispatchPublicEntry (config: ClientConfig) : bool =
-        config.PublicEntryDispatchers |> List.exists (fun dispatch -> dispatch config)
+        config.Composition.PublicEntryDispatchers
+        |> List.exists (fun dispatch -> dispatch config)
 
     /// Phase 852 / 910 — mount the store-bound shell at `"elmish-app"`: the
     /// chrome and the active module are separate boundaries over one model
@@ -4688,7 +4692,7 @@ module Client =
     /// layer a companion wrapper (e.g. ToolUp.AI's withAIAssistant) should
     /// call `program` directly, wrap, then run.
     ///
-    /// Consults `ClientConfig.PublicEntryDispatchers` first; any dispatcher
+    /// Consults `ClientConfig.Composition.PublicEntryDispatchers` first; any dispatcher
     /// that returns `true` (e.g. matching a `/r/{token}` survey URL) has
     /// rendered its own minimal Elmish program and the full shell is skipped.
     let run (config: ClientConfig) (modules: ErasedModule list) =

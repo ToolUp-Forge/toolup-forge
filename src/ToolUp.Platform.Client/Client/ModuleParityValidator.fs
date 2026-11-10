@@ -15,7 +15,7 @@ open ToolUp.Platform
 // consumer-declared list, and two sets equal to one set are equal to each
 // other.
 //
-// This file is that second comparison. `ClientConfig.ExpectedModules`
+// This file is that second comparison. `ClientConfig.Composition.ExpectedModules`
 // carries the same declaration `ServerConfig.ExpectedModules` carries; the
 // server side checks it at preflight through the Phase 9m aggregator, and
 // this checks it at client boot, in the same shape as the Phase 55

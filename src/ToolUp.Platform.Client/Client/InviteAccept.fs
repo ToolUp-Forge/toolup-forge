@@ -68,7 +68,7 @@ let extractToken (path: string) : string option =
     else
         None
 
-/// Predicate the consumer passes to `ClientConfig.PublicEntryDispatchers`
+/// Predicate the consumer passes to `ClientConfig.Composition.PublicEntryDispatchers`
 /// to short-circuit the shell on `/invite/{token}`. Returns `true`
 /// when the current path matches; the dispatcher renders the accept
 /// component in place of the shell.
@@ -305,8 +305,8 @@ let renderWith (config: ClientConfig) : unit =
         CsrfClient.prefetch ()
 
         let locale =
-            MessageCatalog.resolveLocale config.Locale None (MessageCatalogProvider.browserLocale ())
+            MessageCatalog.resolveLocale config.Locale.Resolution None (MessageCatalogProvider.browserLocale ())
 
-        let catalog = MessageCatalog.resolve locale config.MessageCatalogOverride
+        let catalog = MessageCatalog.resolve locale config.Locale.MessageCatalogOverride
 
         ReactDOM.createRoot(root).render (MessageCatalogProvider.provider catalog (InviteAccept()))

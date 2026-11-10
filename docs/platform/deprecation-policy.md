@@ -116,7 +116,7 @@ renderer does not emit at all — that omission predates this policy and applies
 SDK. Making the factory renderable would widen ~every DU's baseline at once, which is a large
 unrelated regen, so it was left alone.
 
-`AuthUIMode.ClerkAuthUI` is the one live instance, and its notice already names both halves. Mark a
+There is no live instance: the last one, `AuthUIMode.ClerkAuthUI`, was removed by Phase 1074. Mark a
 retiring case as usual — the compiler warning, which is what a consumer actually reads, works
 exactly the same — but know that the gate is not watching this one, and write the notice as if it
 were.
