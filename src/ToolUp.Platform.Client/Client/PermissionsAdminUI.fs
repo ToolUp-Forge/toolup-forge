@@ -1038,17 +1038,8 @@ let private errorPane (msgs: PermissionsAdminMessages) (msg: string) (dispatch: 
         ]
     ]
 
-/// The module body as a React COMPONENT rather than a plain
-/// render function, so it has a hook site from which to read the resolved
-/// catalog. A module's `view` is invoked inline by the shell's own render,
-/// where a hook would join the shell's hook order and break the moment the
-/// active module changed; a component of its own has a stable identity and
-/// its own. Same distinction `HealthMonitorUI.HealthMonitorBody` documents,
-/// applied here because every tab under it renders catalog strings.
-[<ReactComponent>]
-let private PermissionsAdminBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).PermissionsAdmin
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: PermissionsAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.Snapshot with
         | Remote.NotAsked
@@ -1082,16 +1073,17 @@ let private PermissionsAdminBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = PermissionsAdminBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.PermissionsAdmin model ctx.Dispatch)
 
 // ─── Module registration ─────────────────────────────────────────────
 
 /// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.PermissionsAdmin"
 
-/// Create the built-in permissions admin as an `ErasedModule`. The
+/// The built-in permissions admin (`ShellSlots.builtIn` builds its module). The
 /// module fills the `PermissionsAdmin` shell slot, admitted on any
 /// authenticated surface — Anonymous mode has
 /// no role concept so the gate is suppressed by construction.
@@ -1100,26 +1092,18 @@ let moduleId = "_sdk.PermissionsAdmin"
 /// `WebhookAdminUI`, `DataIngestionUI`. Owner/Admin gating on the
 /// write paths is enforced server-side via `PermissionApi`'s docstring
 /// contract; the client surfaces the gating message as a banner.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Permissions"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.lock
-
-    // `init` is `ClientModuleContext -> Model * Cmd<Msg>` (it reads
-    // `OnAccessibleModulesChanged`); seed `create` with the
-    // empty context, then override with the real context-aware init via
-    // `withContextInit`, the same wiring `TeamManagerUI` uses.
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Permissions"
+        Icon = ToolUp.Platform.Icons.lock
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

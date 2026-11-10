@@ -315,7 +315,7 @@ let visibilityTests =
         }
 
         test "PermissionsAdminUI declares visibleToAuthenticated" {
-            let m = PermissionsAdminUI.create None
+            let m = ShellSlots.builtIn PermissionsAdminUI.builtIn None
             assertVisibleToAuthenticated "PermissionsAdminUI" m
         }
 
@@ -359,7 +359,7 @@ let visibilityTests =
                 "HealthMonitorUI", ShellSlots.builtIn HealthMonitorUI.builtIn None
                 "UsageDashboard", UsageDashboard.create None
                 "ServiceStatusBoardUI", ServiceStatusBoardUI.create None
-                "PermissionsAdminUI", PermissionsAdminUI.create None
+                "PermissionsAdminUI", ShellSlots.builtIn PermissionsAdminUI.builtIn None
                 "DataIngestionUI", ShellSlots.builtIn DataIngestionUI.builtIn None
                 "WebhookAdminUI", WebhookAdminUI.create None
                 "TeamConfigUI", TeamConfigUI.create None

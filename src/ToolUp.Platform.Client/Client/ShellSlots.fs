@@ -305,7 +305,7 @@ module ShellSlots =
         authenticatedAdmin
             _.PermissionsAdmin
             PermissionsAdminUI.moduleId
-            PermissionsAdminUI.create
+            (builtIn PermissionsAdminUI.builtIn)
             None
             "PermissionsAdmin"
 
