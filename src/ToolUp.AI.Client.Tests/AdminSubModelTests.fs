@@ -63,7 +63,119 @@ let private userDirectoryTests =
 
 // ── TeamManagerUI ──────────────────────────────────────────────────────
 
-let private teamManagerTests = testList "TeamManagerUI" []
+let private teamManagerTests =
+    testList "TeamManagerUI" [
+        testCase "TransferOwnership.update picks, steps back and closes with no TeamManager model"
+        <| fun () ->
+            let picked, _, outcome =
+                TeamManagerUI.TransferOwnership.update
+                    (TeamManagerUI.TransferOwnership.SelectCandidate "u2")
+                    (TeamManagerUI.TransferOwnership.init "t1")
+
+            Expect.equal picked.SelectedUserId (Some "u2") "the candidate is held"
+
+            Expect.equal
+                picked.Step
+                TeamManagerUI.TransferOwnership.ConfirmTransfer
+                "picking advances to the confirmation"
+
+            Expect.equal outcome TeamManagerUI.TransferOwnership.Stay "the modal stays open"
+
+            let back, _, _ =
+                TeamManagerUI.TransferOwnership.update TeamManagerUI.TransferOwnership.BackToPick picked
+
+            Expect.equal back.Step TeamManagerUI.TransferOwnership.PickNewOwner "back returns to the pick step"
+
+            let _, _, closed =
+                TeamManagerUI.TransferOwnership.update (TeamManagerUI.TransferOwnership.Done(Ok())) picked
+
+            Expect.equal
+                closed
+                (TeamManagerUI.TransferOwnership.Transferred "t1")
+                "a done transfer tells the parent which team to reload"
+
+        testCase "a TransferMsg routed through TeamManagerUI.update reaches the transfer sub-model"
+        <| fun () ->
+            let parent, _ = TeamManagerUI.init ClientModuleContext.empty
+
+            let opened, _ =
+                TeamManagerUI.update (TeamManagerUI.OpenTransferOwnership "t1") parent
+
+            let routed, _ =
+                TeamManagerUI.update
+                    (TeamManagerUI.TransferMsg(TeamManagerUI.TransferOwnership.SelectCandidate "u2"))
+                    opened
+
+            Expect.equal
+                (routed.Transfer |> Option.bind _.SelectedUserId)
+                (Some "u2")
+                "the parent's transfer sub-model took the pick"
+
+            let closed, _ =
+                TeamManagerUI.update (TeamManagerUI.TransferMsg TeamManagerUI.TransferOwnership.Close) routed
+
+            Expect.isNone closed.Transfer "the Closed outcome closes the modal"
+
+        testCase "IssueByEmail.update validates, clamps and reports with no TeamManager model"
+        <| fun () ->
+            let start = TeamManagerUI.IssueByEmail.init "t1" "email required"
+
+            let blank, _, _ =
+                TeamManagerUI.IssueByEmail.update TeamManagerUI.IssueByEmail.Submit start
+
+            Expect.equal blank.SubmitError (Some "email required") "a blank email is refused in the modal"
+            Expect.isFalse blank.Submitting "nothing is sent"
+
+            let clamped, _, _ =
+                TeamManagerUI.IssueByEmail.update (TeamManagerUI.IssueByEmail.SetExpiresInDays 0) start
+
+            Expect.equal clamped.ExpiresInDays 1 "the lifetime is at least a day"
+
+            let sending, _, _ =
+                TeamManagerUI.IssueByEmail.update TeamManagerUI.IssueByEmail.Submit { start with Email = " a@x.test " }
+
+            Expect.isTrue sending.Submitting "a valid email is sent"
+
+            let failed, _, stay =
+                TeamManagerUI.IssueByEmail.update (TeamManagerUI.IssueByEmail.Submitted(Error "boom")) sending
+
+            Expect.equal failed.SubmitError (Some "boom") "the handler's error stays in the modal"
+            Expect.equal stay TeamManagerUI.IssueByEmail.Stay "the modal stays open for a retry"
+
+            let _, _, issued =
+                TeamManagerUI.IssueByEmail.update (TeamManagerUI.IssueByEmail.Submitted(Ok())) sending
+
+            Expect.equal issued (TeamManagerUI.IssueByEmail.Issued "t1") "an issued invite tells the parent"
+
+        testCase "RevokeByEmail.update confirms once and reports with no TeamManager model"
+        <| fun () ->
+            let start = TeamManagerUI.RevokeByEmail.init "t1" "a@x.test"
+
+            let busy, _, _ =
+                TeamManagerUI.RevokeByEmail.update TeamManagerUI.RevokeByEmail.Confirm start
+
+            Expect.isTrue busy.Submitting "confirming sends the revoke"
+
+            let again, _, _ =
+                TeamManagerUI.RevokeByEmail.update TeamManagerUI.RevokeByEmail.Confirm busy
+
+            Expect.equal again busy "a second confirm while in flight changes nothing"
+
+            let _, _, revoked =
+                TeamManagerUI.RevokeByEmail.update (TeamManagerUI.RevokeByEmail.Done(Ok())) busy
+
+            Expect.equal revoked (TeamManagerUI.RevokeByEmail.Revoked "t1") "a revoke tells the parent"
+
+            let _, _, failed =
+                TeamManagerUI.RevokeByEmail.update (TeamManagerUI.RevokeByEmail.Done(Error "boom")) busy
+
+            Expect.equal failed (TeamManagerUI.RevokeByEmail.Failed "boom") "a failure is handed to the parent"
+
+            let _, _, cancelled =
+                TeamManagerUI.RevokeByEmail.update TeamManagerUI.RevokeByEmail.Cancel start
+
+            Expect.equal cancelled TeamManagerUI.RevokeByEmail.Closed "cancel closes"
+    ]
 
 // ── PlatformAdminUI ────────────────────────────────────────────────────
 
