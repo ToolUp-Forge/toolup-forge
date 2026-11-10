@@ -420,7 +420,8 @@ module ShellSlots =
 
     let private datadogReadback = chrome _.DatadogReadback DatadogReadbackUI.create
 
-    let private observability = chrome _.Observability ObservabilityUI.create
+    let private observability =
+        chrome _.Observability (fun () -> builtIn ObservabilityUI.builtIn None)
 
     /// Phase 54e — on by default; the "Platform Management" group's role
     /// gate hides it from non-admins, and on `FeatureMode.Disabled` its
