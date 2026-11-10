@@ -69,11 +69,24 @@ let private permissionStore (fault: Fault option) =
 
 /// Run the real middleware for a valid team member against `store`. Returns
 /// the response status, whether M's handler was reached, and the audit rows.
-let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) = async {
+let private runWithAdmin (store: IPermissionStore) (adminFault: exn option) (onReached: HttpContext -> unit) = async {
     let rows = ConcurrentQueue<string * AuditEvent>()
     let services = ServiceCollection()
     services.AddMemoryCache() |> ignore
     services.AddSingleton<IPermissionStore>(store) |> ignore
+
+    match adminFault with
+    | Some ex ->
+        services.AddSingleton<IPlatformAdminStore>(
+            { new IPlatformAdminStore with
+                member _.IsPlatformAdmin _ = async { return raise ex }
+                member _.AssignPlatformAdmin(_, _) = async { return Ok() }
+                member _.RevokePlatformAdmin(_, _) = async { return Ok() }
+                member _.ListPlatformAdmins() = async { return [] }
+            }
+        )
+        |> ignore
+    | None -> ()
 
     services.AddSingleton<IAuditLog>(
         { new IAuditLog with
@@ -130,6 +143,8 @@ let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) =
     do! middleware.InvokeAsync ctx |> Async.AwaitTask
     return ctx.Response.StatusCode, reached.Value, rows
 }
+
+let private runWith (store: IPermissionStore) (onReached: HttpContext -> unit) = runWithAdmin store None onReached
 
 let private run (store: IPermissionStore) = runWith store ignore
 
@@ -204,5 +219,14 @@ let tests =
                 Expect.equal id memberUser.UserId.Value "readers match the item with `:? string`"
                 Expect.equal user.UserId memberUser.UserId "the typed id is on the user record"
             | other -> failtestf "expected a string item and an AuthenticatedUser item, got %A" other
+        }
+
+        testCaseAsync "Phase 882 — a fault after the subject is stamped refuses the request, whichever read faulted"
+        <| async {
+            let! status, reached, _ =
+                runWithAdmin (permissionStore None) (Some(InvalidOperationException "admin store down")) ignore
+
+            Expect.isFalse reached "a request whose principal was interrupted must not reach a handler"
+            Expect.equal status 503 "refused"
         }
     ]

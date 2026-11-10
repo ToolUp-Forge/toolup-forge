@@ -110,4 +110,32 @@ let tests =
             let access = ComposeScopeResolver.accessContextOf ctx
             Expect.equal access.TeamId None "a container prefix is not evidence of team membership"
         }
+
+        // Phase 882 — pinned red on the unchanged tree.
+        test "Phase 882 — a stamped subject with no permission stamp is denied a module the team restricts" {
+            let user = {
+                AuthenticatedUser.anonymous with
+                    UserId = UserId "u-882"
+                    DisplayName = "Member"
+            }
+
+            let ctx =
+                stamped user (TeamMember("u-882", "acme")) {
+                    ScopeId = "acme"
+                    Container = "team-acme"
+                    Persist = true
+                }
+
+            let access = ComposeScopeResolver.accessContextOf ctx
+            Expect.isFalse (AccessContext.canAccessModule "Reports" access) "no permission stamp grants nothing"
+        }
+
+        test "Phase 882 — an empty permission map does not read as unrestricted" {
+            let access = {
+                AccessContext.unrestricted (TeamMember("u-882", "acme")) with
+                    ModulePermissions = Map.empty
+            }
+
+            Expect.isFalse (AccessContext.canAccessModule "Reports" access) "an empty map grants nothing"
+        }
     ]
