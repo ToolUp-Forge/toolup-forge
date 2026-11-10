@@ -299,7 +299,12 @@ module ShellSlots =
             "ModuleVisibilityAdmin"
 
     let private sessionSecurity =
-        authenticatedAdmin _.SessionSecurity SessionSecurityUI.moduleId SessionSecurityUI.create None "SessionSecurity"
+        authenticatedAdmin
+            _.SessionSecurity
+            SessionSecurityUI.moduleId
+            (builtIn SessionSecurityUI.builtIn)
+            None
+            "SessionSecurity"
 
     let private permissionsAdmin =
         authenticatedAdmin
