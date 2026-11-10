@@ -171,14 +171,15 @@ type AccessContext = {
     UserId: string
     TeamId: string option
     Subject: Subject
-    ModulePermissions: Map<string, ModulePermission list>
+    ModulePermissions: ModulePermissions // Unrestricted | Restricted of Map<string, ModulePermission list>
     PlatformRole: PlatformRole option
+    StorageScope: StorageScope option
 }
 ```
 
 `AccessContext.UserId` carries the session id for `AnonymousSession`, the user id for `AuthenticatedUser` / `TeamMember`, and the claim's `AttributedHandle` (or a synthetic `claim:{tokenId}` when unset) for `ClaimBearer`. Handlers that need team scope match on `match ctx.Subject with TeamMember (uid, tid) -> …` — the compiler refuses the three other cases, so team-scoped code structurally cannot forget to check for membership.
 
-Currently the SDK does not enforce per-module permissions beyond the user's choice via `IPermissionStore`. Module APIs composed via `ServerModule.withGuardedApi` are wrapped in a gate that checks `ModulePermissions` before each call. Empty map = unrestricted. `PlatformRole.PlatformAdmin` is the deployment-wide admin role.
+Currently the SDK does not enforce per-module permissions beyond the user's choice via `IPermissionStore`. Module APIs composed via `ServerModule.withGuardedApi` are wrapped in a gate that checks `ModulePermissions` before each call. `Unrestricted` is stated where module RBAC does not apply (a team that never configured permissions, a subject in no team); `Restricted Map.empty` grants nothing. The request's principal is ONE item (`AccessContext.ItemsKey`), read with `AccessContext.ofItems`; a request without one is served under `AccessContext.unresolved`, which grants nothing. `PlatformRole.PlatformAdmin` is the deployment-wide admin role.
 
 ## Notifications
 
