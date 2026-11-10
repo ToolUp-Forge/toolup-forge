@@ -348,14 +348,6 @@ type RagOptions = {
     /// 240-char preview); operators tune via `withRetrievalDefaults` /
     /// targeted setters without recompiling.
     RetrievalDefaults: RetrievalDefaults
-    /// Feature flag enabling conversation-history indexing. Off by default
-    /// (deferred — see WS3.4 in the RAG uplift plan). When `true`, completed
-    /// AI conversations are vectorised and committed under
-    /// `ChunkOrigin.Conversation` so retrieval can surface "what we
-    /// discussed last week". Reading the flag is enough to pre-allocate
-    /// the data-model surface; the actual ingestion handler lands in a
-    /// follow-up phase.
-    IndexConversations: bool
     /// Grounding stance — `Permissive` (default, model uses KB + training
     /// data freely), `Preferred` (KB authoritative on conflict), or
     /// `StrictlyGrounded` (refuse to answer without a retrieval hit).
@@ -1844,7 +1836,6 @@ module RagOptions =
             IngestionRetryPolicy = IngestionRetryPolicy.defaults
             Telemetry = None
             RetrievalDefaults = RetrievalDefaults.defaults
-            IndexConversations = false
             GroundingMode = Preferred
             FactClausePlan = FactClausePlanOptions.defaults
             EnableDocumentSummaries = true
@@ -2338,16 +2329,6 @@ module RagOptions =
                 options.RetrievalDefaults with
                     Filters = filters
             }
-    }
-
-    /// Enable conversation-history indexing (WS3.4 — scaffolded only,
-    /// implementation lands in a follow-up phase). When `true`, completed
-    /// AI conversations will be vectorised under
-    /// `ChunkOrigin.Conversation`. Off by default; flipping the flag
-    /// today is a no-op until the ingestion handler is wired.
-    let withIndexConversations (enabled: bool) (options: RagOptions) : RagOptions = {
-        options with
-            IndexConversations = enabled
     }
 
     /// Set the grounding stance — `Permissive` (model uses KB + training
