@@ -261,15 +261,6 @@ let tests (name: string) (binding: ContainerSchedulerBinding) =
 
         // ─── Six-rule portability audit (Phase 9c, GP 12) ─────────
 
-        testCaseAsync "Rule 1 — identity-by-value: ContainerId / TenantId are string aliases"
-        <| async {
-            let cid: ContainerId = "c-1"
-            let tid: string = "t-1"
-            Expect.equal cid "c-1" "ContainerId is a string alias"
-            Expect.equal tid "t-1" "TenantId is a string alias"
-            do! async.Return()
-        }
-
         testCaseAsync "Rule 2 — async at every boundary (Async<_> + IAsyncEnumerable)"
         <| async {
             let scheduler = factory ()

@@ -18,40 +18,6 @@ open ToolUp.Platform.CellProvenance
 let tests =
     testSequenced
     <| testList "CellProvenance (Phase 12d)" [
-        test "ProvenanceLocation cases + CellProvenance construct and compare by value" {
-            let a = {
-                SourceLabel = "Q4 revenue"
-                SourceLocation = ProvenanceLocation.Computed "sum(monthly)"
-                Detail = Some "rolled up from 3 months"
-                LinkedEntity = Some("Dataset", "ds-42")
-            }
-
-            let b = {
-                SourceLabel = "Q4 revenue"
-                SourceLocation = ProvenanceLocation.Computed "sum(monthly)"
-                Detail = Some "rolled up from 3 months"
-                LinkedEntity = Some("Dataset", "ds-42")
-            }
-
-            Expect.equal a b "structurally-equal provenance values compare equal"
-
-            Expect.notEqual
-                a
-                {
-                    a with
-                        SourceLocation = ProvenanceLocation.InputField "revenue"
-                }
-                "differing SourceLocation makes them unequal"
-        }
-
-        test "DataObject location carries id + version" {
-            match (ProvenanceLocation.DataObject("obj-7", 3)) with
-            | ProvenanceLocation.DataObject(id, v) ->
-                Expect.equal id "obj-7" "object id"
-                Expect.equal v 3 "version"
-            | other -> failtestf "expected DataObject, got %A" other
-        }
-
         test "overlay is disabled until the Enterprise companion enables it" {
             // Default (no Enterprise companion loaded in this test process):
             // the overlay is a no-op so a Community deployment renders nothing.

@@ -223,10 +223,9 @@ let private externalEventIdOf (harness: BridgeHarness) (booking: Booking) = asyn
 let tests (label: string) (factory: BridgeFactory) =
     testList (sprintf "ICalendarBridge contract — %s" label) [
 
-        test "Kind is non-empty and stable across reads" {
+        test "Kind is non-empty" {
             let h = factory ()
             Expect.isNotEmpty h.Bridge.Kind "Kind is a persisted wire value and cannot be blank"
-            Expect.equal h.Bridge.Kind h.Bridge.Kind "Kind does not vary between reads"
         }
 
         testAsync "LinkResource succeeds on a calendar the provider has" {

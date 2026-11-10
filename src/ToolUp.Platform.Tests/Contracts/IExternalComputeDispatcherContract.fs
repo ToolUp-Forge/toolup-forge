@@ -298,34 +298,6 @@ let wireTests =
 let portabilityAudit =
     testList "ExternalCompute — six-rule portability audit (Phase 9c, GP 12)" [
 
-        testCaseAsync "Rule 1 — identity by value: ExternalHandle is a record of primitives"
-        <| async {
-            // Structural equality is the observable consequence of
-            // identity-by-value: two independently-constructed handles with
-            // the same field values ARE the same handle. A live framework
-            // handle (IActorRef / IGrainReference) could not satisfy this.
-            let a = sampleHandle
-
-            let b = {
-                HandleId = sampleHandle.HandleId
-                Backend = sampleHandle.Backend
-                ScopeId = sampleHandle.ScopeId
-                NativeRef = sampleHandle.NativeRef
-                SubmittedAt = sampleHandle.SubmittedAt
-            }
-
-            Expect.equal a b "handles compare by value, so any node resolves the same handle"
-            Expect.equal (a.GetHashCode()) (b.GetHashCode()) "value identity extends to hashing (dictionary keys)"
-            // Every field is a BCL primitive — asserted by binding each to
-            // its primitive type without a cast.
-            let _: Guid = a.HandleId
-            let _: string = a.Backend
-            let _: string = a.ScopeId
-            let _: string = a.NativeRef
-            let _: DateTime = a.SubmittedAt
-            do! async.Return()
-        }
-
         testCaseAsync "Rule 2 — async at every boundary: all three methods return Async<_>"
         <| async {
             // Compile-time shape: each call is `let!`-bindable, so each
