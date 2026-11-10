@@ -12,7 +12,7 @@ Higher-level compositions (e.g. a dedicated side-panel layer that pairs the AI a
 | Anonymous-mode public utility (calculators, viewers, converters) | `NoAdPanel` | Flip on when the funnel from anonymous → paid premium needs ad revenue to fund the free tier. |
 | Mixed free / premium | `NoAdPanel` | Flip on for anonymous + free-tier traffic; pair with the premium-claim substrate to suppress slot render for paid users. |
 
-The default `ClientConfig.AdPanel = NoAdPanel` strips every `<AdSlot>` render path — the component returns `Html.none`, no AdSense script loads, no Funding Choices banner triggers. Bytes on the wire are identical to a build with no ads-related code.
+The default `ClientConfig.PublicUtility.AdPanel = NoAdPanel` strips every `<AdSlot>` render path — the component returns `Html.none`, no AdSense script loads, no Funding Choices banner triggers. Bytes on the wire are identical to a build with no ads-related code.
 
 ## Substrate shape
 
@@ -32,12 +32,12 @@ open ToolUp.Platform
 
 let clientConfig = {
     ClientConfig.defaults with
-        AdPanel = EnabledAdPanel {
+        PublicUtility.AdPanel = EnabledAdPanel {
             DefaultAdClientId = "ca-pub-XXXXXXXXXXXXXXXX"
             ConsentCategoriesRequired = [ Marketing; Personalisation ]
         }
         // Pair with the consent provider:
-        ConsentProvider = FundingChoicesConsent "ca-pub-XXXXXXXXXXXXXXXX"
+        PublicUtility.ConsentProvider = FundingChoicesConsent "ca-pub-XXXXXXXXXXXXXXXX"
 }
 ```
 
@@ -59,7 +59,7 @@ let view (model: Model) (dispatch: Msg -> unit) =
     ]
 ```
 
-The `config` parameter is the deployment's `ClientConfig` — the component branches on `config.AdPanel` so a single view source compiles against both ads-enabled and ads-disabled builds. `SlotId` is the per-unit identifier the AdSense console mints when you create an ad unit; `AdClientId` is the publisher account (`ca-pub-XXXXXXXXXXXXXXXX`).
+The `config` parameter is the deployment's `ClientConfig` — the component branches on `config.PublicUtility.AdPanel` so a single view source compiles against both ads-enabled and ads-disabled builds. `SlotId` is the per-unit identifier the AdSense console mints when you create an ad unit; `AdClientId` is the publisher account (`ca-pub-XXXXXXXXXXXXXXXX`).
 
 ### Format DU
 
@@ -89,7 +89,7 @@ type ClientConfig = {
 
 The composition sequence for a single render:
 
-1. `<AdSlot>` reads `ClientConfig.AdPanel`. If `NoAdPanel`, returns `Html.none` immediately. **No** consent check fires. **No** AdSense script loads.
+1. `<AdSlot>` reads `ClientConfig.PublicUtility.AdPanel`. If `NoAdPanel`, returns `Html.none` immediately. **No** consent check fires. **No** AdSense script loads.
 2. If `EnabledAdPanel panelConfig`, the component calls `Components.ConsentGate.render panelConfig.ConsentCategoriesRequired <child>` where `<child>` is the `<ins class="adsbygoogle">` element.
 3. `ConsentGate` queries the wired `IConsentProvider` for the required categories. If every category is `Granted`, the child renders. If any is `Denied` or `NotYetDecided`, the child is replaced with `Html.none`.
 4. On render, `AdSlot`'s `useEffectOnce` fires `(window.adsbygoogle = window.adsbygoogle || []).push({})` and (when `MutationObserver` is available) subscribes to `data-ad-status` changes, emitting `AdImpression` to the wired `IAdAnalyticsSink` when AdSense sets the attribute to `filled`.

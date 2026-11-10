@@ -24,7 +24,7 @@ Three packages (cross-tier shape):
 
 | Package | What it is |
 |---|---|
-| `ToolUp.AI.Core` | Shared types: `AIAssistantMode`, `AIToolDefinition`, `AISettings`, `AILatencyTypes`. The "minimum viable consumer-of-AI" floor for downstream packages (RAG, KnowledgeBase). |
+| `ToolUp.AI.Core` | Shared types: `AISlotFills`, `AIToolDefinition`, `AISettings`, `AILatencyTypes`. The "minimum viable consumer-of-AI" floor for downstream packages (RAG, KnowledgeBase). |
 | `ToolUp.AI.Server` | Agent loop, SSE streaming, tool registry, system-prompt composition, `AICompose`. Built on `IAIProvider` from `ToolUp.Platform.Core`. |
 | `ToolUp.AI.Client` | Fable + Elmish + Feliz side-panel MVU, SSE client, conversation panel, AI assistant module UI, AI settings UI. |
 
@@ -73,7 +73,7 @@ Wire the client composition root:
 open ToolUp.AI.Client
 
 let aiMode =
-    ConfiguredAIAssistant {
+    AISlotFills.configured {
         Name = "Aria"
         Icon = Icon.ofUrl "/svg/spark.svg"
         ShowSidePanel = true

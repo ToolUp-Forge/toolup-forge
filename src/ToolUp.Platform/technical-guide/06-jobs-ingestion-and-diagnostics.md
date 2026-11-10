@@ -379,7 +379,7 @@ The in-memory implementation is single-instance only. Multi-instance deployments
 
 ### Per-Kind credential UI registry
 
-Each connector companion (`src/DataSources/<Provider>/`) exports a Feliz form paired with its `Kind` discriminator, and the consumer adds it to `ClientConfig.Handlers` at compose time (Phase 13a — this replaced a `register`-at-module-load side effect):
+Each connector companion (`src/DataSources/<Provider>/`) exports a Feliz form paired with its `Kind` discriminator, and the consumer adds it to `ClientConfig.Composition.Handlers` at compose time (Phase 13a — this replaced a `register`-at-module-load side effect):
 
 ```fsharp
 // In the connector companion (`src/DataSources/<Provider>/`):
@@ -400,7 +400,7 @@ let handlers =
 
 The built-in `DataIngestionUI` admin module looks up the renderer at row-expansion time. No registered renderer → "No credential UI registered for kind X. Import the matching connector companion's .Client.props" hint.
 
-`DataSourceCredentialUIRegistry` is a string-keyed map populated exactly once at boot by `SDK.Client.program`, from `ClientConfig.Handlers.DataSourceCredentialHandlers`; companions never write to it, and `tryGet` / `registeredKinds` are the only read paths. Same shape as the `AuthUIHandlers` registry beside it — the SDK shell never imports any connector-specific type. Duplicate Kinds within the supplied list collapse last-wins, and `Client.run`'s validator surfaces them by name at startup rather than leaving the winner to import order.
+`DataSourceCredentialUIRegistry` is a string-keyed map populated exactly once at boot by `SDK.Client.program`, from `ClientConfig.Composition.Handlers.DataSourceCredentialHandlers`; companions never write to it, and `tryGet` / `registeredKinds` are the only read paths. Same shape as the `AuthUIHandlers` registry beside it — the SDK shell never imports any connector-specific type. Duplicate Kinds within the supplied list collapse last-wins, and `Client.run`'s validator surfaces them by name at startup rather than leaving the winner to import order.
 
 ### Credential metadata blob
 

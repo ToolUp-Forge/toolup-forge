@@ -6,17 +6,20 @@ Public surface of `ToolUp.AI`. Types are listed by package; method signatures ar
 
 Shared types — referenced by both `Server` and `Client`. Source ships under `fable/` in the nupkg for Fable consumers.
 
-### `AIAssistantMode`
+### `AISlotFills`
 
 ```fsharp
-type AIAssistantMode =
-    | NoAIAssistant
-    | DefaultAIAssistant
-    | ConfiguredAIAssistant of AIAssistantBranding
+// ToolUp.AI.Client — the AI companion's three shell slots (Phase 1074).
+type AISlotFills = {
+    AIAssistant: SlotFill<AIAssistantClientBranding>
+    AISettings: SlotFill<ModuleLabel>
+    PlatformAIKeys: SlotFill<ModuleLabel>
+}
+// AISlotFills.defaults / AISlotFills.empty / AISlotFills.configured branding
 
-and AIAssistantBranding = {
+and AIAssistantClientBranding = {
     Name: string
-    Icon: string         // SVG path, served from /svg/
+    Icon: ReactElement
     ShowSidePanel: bool
 }
 ```
@@ -506,7 +509,7 @@ The function is the agent's heart. Most apps don't call it directly — `AICompo
 ```fsharp skip=signature
 module AIClientConfig =
     val withAIAssistant:
-        mode: AIAssistantMode ->
+        mode: AISlotFills ->
         config: ClientConfig ->
         modules: ErasedModule list ->
         Program<unit, OuterModel, OuterMsg, ReactElement>
@@ -514,7 +517,7 @@ module AIClientConfig =
 
 Wraps the shell's Elmish `Program`. Adds the AI side-panel MVU + chrome around the base shell. The returned `Program` is fed into `Program.withReactSynchronous "elmish-app" |> Program.run`.
 
-For deployments wanting just the side panel but not the full-page module, pass `ConfiguredAIAssistant { ... ShowSidePanel = true }` with `Branding.Name = ""` to suppress the sidebar entry.
+For deployments wanting just the side panel but not the full-page module, pass `AISlotFills.configured { ... ShowSidePanel = true }` with `Branding.Name = ""` to suppress the sidebar entry.
 
 ### `SidePanelModel` / `OuterModel` / `OuterMsg`
 

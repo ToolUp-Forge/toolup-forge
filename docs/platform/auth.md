@@ -106,7 +106,7 @@ Configuration via environment variables:
 
 ### `ToolUp.AuthProviders.Oidc.Client` (client-side)
 
-Browser-side OIDC sign-in UI. Implements OAuth 2.0 Authorization Code + PKCE. Registers via the `AuthUIProvider` delegate registry; deployments select it through `ClientConfig.AuthUI`.
+Browser-side OIDC sign-in UI. Implements OAuth 2.0 Authorization Code + PKCE. Registers via the `AuthUIProvider` delegate registry; deployments select it through `ClientConfig.Auth.AuthUI`.
 
 ```fsharp skip=fragment
 // Client.fs
@@ -128,8 +128,8 @@ Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
         Surfaces = Surfaces.individual
-        AuthUI = OidcAuthUI oidcConfig
-        Handlers =
+        Auth.AuthUI = OidcAuthUI oidcConfig
+        Composition.Handlers =
             { ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ OidcRegister.handler ]
                 SignOutHandler = Some(OidcRegister.signOutHandler oidcConfig) } }
@@ -160,13 +160,13 @@ Wraps Clerk's React components and surfaces them through the `AuthUIProvider` re
 open ToolUp.AuthProviders
 
 { ClientConfig.defaults with
-    AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
-    Handlers =
+    Auth.AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
+    Composition.Handlers =
         { ClientHandlerRegistry.empty with
             AuthUIHandlers = [ ClerkRegister.handler ] } }
 ```
 
-(The vendor-named `ClerkAuthUI` core case is deprecated — see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../migrations/494-vendor-neutral-auth-ui.md).) The server still validates the bearer token via a separate provider (typically `StaticJwtAuthProvider` configured against Clerk's signing key, or a custom Clerk-specific impl).
+(The vendor-named `ClerkAuthUI` core case was removed in Phase 1074 — see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../migrations/494-vendor-neutral-auth-ui.md).) The server still validates the bearer token via a separate provider (typically `StaticJwtAuthProvider` configured against Clerk's signing key, or a custom Clerk-specific impl).
 
 Clerk is a commercial product with its own licence and pricing — this companion is a thin client-side integration shim, not a Clerk redistribution.
 
@@ -235,11 +235,11 @@ Server-Sent Events open a long-lived connection to `/api/notifications`. The bro
 
 | Writer | How | Lifetime |
 |---|---|---|
-| The SPA, default `ClientCookieAndLocalStorage` path | `document.cookie` from `UserSession.setAuthToken`, not `HttpOnly` | browser session |
+| The SPA, default `FeatureMode.Disabled` path | `document.cookie` from `UserSession.setAuthToken`, not `HttpOnly` | browser session |
 | `POST /api/auth/session` | server `Set-Cookie`, `HttpOnly; SameSite=Strict; Secure` on HTTPS, after validating the token | browser session; cleared by `DELETE` |
 | The server-rendered sign-in (`OidcSsrSignIn`) | server `Set-Cookie`, `HttpOnly; SameSite=Lax; Secure` on HTTPS | `Max-Age` = the token's remaining life |
 
-A browser never lets script replace an `HttpOnly` cookie of the same name. Before Phase 1047 the SPA's write was therefore dropped silently whenever the server sign-in had run first. The streams rode the server's token, and they answered `401` once it expired while REST stayed authenticated. The client now reads `document.cookie` back after it writes. When its token is not there, it sends the token to `POST /api/auth/session`, so the server replaces its own cookie and the latest sign-in wins. Before a request the client also restores a held token that is missing from `document.cookie` (a script write, no network). That covers the reverse order: the server sign-in ran in another tab, and its cookie expired. Sign-out clears a cookie the script cannot see through `DELETE /api/auth/session`. No token ever travels in a URL. Composing the server sign-in mounts the two `/api/auth/session` routes, so the SPA can always reach them. With `AuthTokenStorage = ServerSetHttpOnlyCookie` every client write already goes through the server, and the server sign-in's `Max-Age` bounds its cookie in the same way.
+A browser never lets script replace an `HttpOnly` cookie of the same name. Before Phase 1047 the SPA's write was therefore dropped silently whenever the server sign-in had run first. The streams rode the server's token, and they answered `401` once it expired while REST stayed authenticated. The client now reads `document.cookie` back after it writes. When its token is not there, it sends the token to `POST /api/auth/session`, so the server replaces its own cookie and the latest sign-in wins. Before a request the client also restores a held token that is missing from `document.cookie` (a script write, no network). That covers the reverse order: the server sign-in ran in another tab, and its cookie expired. Sign-out clears a cookie the script cannot see through `DELETE /api/auth/session`. No token ever travels in a URL. Composing the server sign-in mounts the two `/api/auth/session` routes, so the SPA can always reach them. With `AuthTokenStorage = FeatureMode.Enabled` every client write already goes through the server, and the server sign-in's `Max-Age` bounds its cookie in the same way.
 
 **Sign-in failure page (Phase 1139).** A failed server-rendered sign-in answers an HTML page, not bare text: a reason from a closed set (never IdP text), a try-again link to the sign-in route with the validated return URL, `Cache-Control: no-store`, the same status codes, and no session cookie. Name the deployment's stylesheet with `OidcSsrSignIn.SignInPage.withStylesheet "/theme.css"` and compose with `withInteractiveSignInPage`; a value that is not a local path throws at composition. With no stylesheet the page carries minimal inline styling. The setting is a separate `SignInPage` value, so `OidcSsrSignInConfig` and the existing entry points are unchanged.
 

@@ -10,7 +10,7 @@ The minimum contract for a KB replacement:
 1. Implements a ToolUp.Remoting API for document upload + list.
 2. Wires an `IIngestionStatusObserver` onto the RAG options (`RagOptions.withIngestionObserver`).
 3. Either matches the `"KnowledgeBase.IngestionStatus"` notification key (so the AI side panel surfaces ingestion progress) or accepts the AI panel won't show progress for its uploads.
-4. Optionally supplies a `ClientConfig.Handlers.NarrativeCommitHandler`, which the shell installs into the `Toolup.NarrativeCommit` broker at boot (so other modules' "Save to Knowledge Base" buttons resolve).
+4. Optionally supplies a `ClientConfig.Composition.Handlers.NarrativeCommitHandler`, which the shell installs into the `Toolup.NarrativeCommit` broker at boot (so other modules' "Save to Knowledge Base" buttons resolve).
 
 A replacement is just another module under `src/Modules/MyKnowledgeBase/`:
 
@@ -97,7 +97,7 @@ Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConf
 
 Two properties worth stating explicitly:
 
-- **The DU lives in the companion, not in `ClientConfig`.** `ToolUp.Platform.Client` cannot reference `ToolUp.KnowledgeBase.Client` (the shell takes no companion dependency), and `DefaultKnowledgeBase` has to construct the companion's own module. So the transform is a companion-owned `ClientConfig * ErasedModule list` function, exactly as `AIClientConfig.appendAssistantModule` is for `AIAssistantMode`. It composes under either entry point.
+- **The DU lives in the companion, not in `ClientConfig`.** `ToolUp.Platform.Client` cannot reference `ToolUp.KnowledgeBase.Client` (the shell takes no companion dependency), and `DefaultKnowledgeBase` has to construct the companion's own module. So the transform is a companion-owned `ClientConfig * ErasedModule list` function, exactly as the AI slots (`AIClientConfig.slotExtensions`) is for `AISlotFills`. It composes under either entry point.
 - **The mode governs the client only.** Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` onto the RAG options, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring how `DataManagerMode` governs the sidebar module while `fileManagementApi` is wired by hand.
 
 A deployment that never calls `withKnowledgeBase` is unchanged: there is no SDK-side default mode, and the direct `KnowledgeBaseView.register ()` registration keeps working.
@@ -106,7 +106,7 @@ A deployment that never calls `withKnowledgeBase` is unchanged: there is no SDK-
 
 An `ExternalKnowledgeBase` is reached by the rest of the SDK through exactly three seams. Skip one and you degrade a surface you don't own; the build stays green either way, so they are listed here rather than enforced.
 
-1. **NarrativeCommit handler.** Other modules offer "Save to Knowledge Base" by rendering `NarrativeRenderer` and letting it dispatch through the global `Toolup.NarrativeCommit` broker — no module imports KB types directly. An external KB sets its own `ClientConfig.Handlers.NarrativeCommitHandler` (a record whose `Submit` takes the `NarrativeDocument` plus an overwrite flag and returns a `NarrativeCommitResult`). Left `None`, the button hides itself.
+1. **NarrativeCommit handler.** Other modules offer "Save to Knowledge Base" by rendering `NarrativeRenderer` and letting it dispatch through the global `Toolup.NarrativeCommit` broker — no module imports KB types directly. An external KB sets its own `ClientConfig.Composition.Handlers.NarrativeCommitHandler` (a record whose `Submit` takes the `NarrativeDocument` plus an overwrite flag and returns a `NarrativeCommitResult`). Left `None`, the button hides itself.
 2. **`IIngestionStatusObserver` registration.** The composition root passes an observer (from `ToolUp.RAG.IngestionTypes`) onto the RAG options with `RagOptions.withIngestionObserver`; `OnChunkIndexed` / `OnChunkFailed` drive the per-document status index and publish the status notifications. Identity is by-value (`IngestionJob.DocumentId : string`) and both members are `Async<unit>`, per the six portability rules (GP 12).
 3. **Notification-key contract.** `"KnowledgeBase.IngestionStatus"` — exposed as `[<Literal>] SharedTypes.IngestionStatusNotificationKey` — is a *published* key, not an imported one: the AI side panel subscribes to the literal directly so AI (the more foundational companion) never depends on KB. An external KB either publishes under the same key and inherits the stock AI side-panel surface, or defines its own and accepts that the stock surface won't subscribe.
 
@@ -373,6 +373,6 @@ The broker takes a `NarrativeDocument` plus an overwrite flag; `current ()` retu
 
 - **The built-in KB module's Documents page UI** — the Documents page UI itself isn't broken up into smaller components for partial replacement. To customise the upload UX, replace the whole module.
 - **The PDF / PPTX / DOCX / XLSX extractors** — they're internal to the package. To use a different PDF extractor, replace the module.
-- **The narrative-commit dispatcher** — `Toolup.NarrativeCommit` holds exactly **one** handler, snapshotted once at boot from `ClientConfig.Handlers.NarrativeCommitHandler` (`setHandler`, read back by `current ()`). There is no additive registration and no routing: a deployment that wants fan-out composes it inside its own `Submit`.
+- **The narrative-commit dispatcher** — `Toolup.NarrativeCommit` holds exactly **one** handler, snapshotted once at boot from `ClientConfig.Composition.Handlers.NarrativeCommitHandler` (`setHandler`, read back by `current ()`). There is no additive registration and no routing: a deployment that wants fan-out composes it inside its own `Submit`.
 
 For deeper customisation than the extension points allow, the right shape is "fork the module structure into your own consumer code". Module source is fully visible (Fable companion ships `fable/` source in the nupkg) so the cost is reading existing code, not reverse-engineering.

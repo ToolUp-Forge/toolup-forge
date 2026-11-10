@@ -253,15 +253,15 @@ Custom providers implement `IAuthProvider.GetUser` (lenient — returns anonymou
 
 ### Client-side sign-in UI
 
-The server-side auth providers only validate tokens the browser hands them — they don't obtain tokens. Sign-in UI lives in client-side companion packages that register with `AuthUIProvider` (a delegate registry in the core SDK). `ClientConfig.AuthUI` selects the active flow:
+The server-side auth providers only validate tokens the browser hands them — they don't obtain tokens. Sign-in UI lives in client-side companion packages that register with `AuthUIProvider` (a delegate registry in the core SDK). `ClientConfig.Auth.AuthUI` selects the active flow:
 
 - `NoAuthUI` (default) — no SDK-provided sign-in UI; the app takes responsibility for obtaining tokens and handing them to `UserSession.setAuthToken`.
-- `ProviderAuthUI of tag: string * config: obj` — vendor-neutral companion selection. `tag` names the handler entry in `ClientConfig.Handlers.AuthUIHandlers`; `config` is the provider-specific payload the handler unboxes. Companions export typed smart constructors so consumers never box by hand — e.g. the Clerk companion's `ClerkRegister.authUI { PublishableKey = key }`. Any third-party sign-in companion is selected the same way, first-class.
+- `ProviderAuthUI of tag: string * config: obj` — vendor-neutral companion selection. `tag` names the handler entry in `ClientConfig.Composition.Handlers.AuthUIHandlers`; `config` is the provider-specific payload the handler unboxes. Companions export typed smart constructors so consumers never box by hand — e.g. the Clerk companion's `ClerkRegister.authUI { PublishableKey = key }`. Any third-party sign-in companion is selected the same way, first-class.
 - `OidcAuthUI of OidcUIConfig` — generic Authorization Code + PKCE flow via the `src/AuthProviders/OidcClient/` companion (OIDC is a protocol, not a vendor). No npm dependencies (uses browser-native fetch and WebCrypto). Works with any OIDC-compliant IdP — Auth0, Keycloak, Okta, Azure AD, Google Identity, etc.
 - `CustomAuthUI of CustomAuthUI` — caller-supplied shell wrapper; bypasses the companion registry.
-- `ClerkAuthUI of ClerkUIConfig` — **deprecated** (`[<Obsolete>]`) vendor-named alias for `ProviderAuthUI ("clerk", box clerkUIConfig)`; see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../../docs/migrations/494-vendor-neutral-auth-ui.md).
+- (`ClerkAuthUI of ClerkUIConfig`, the vendor-named alias for `ProviderAuthUI ("clerk", box clerkUIConfig)`, was removed in Phase 1074; see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../../docs/migrations/494-vendor-neutral-auth-ui.md).
 
-Companions export their handler as a `(tag, handler)` value (e.g. `ClerkRegister.handler`); consumers add it to `ClientConfig.Handlers.AuthUIHandlers` at compose time. Removing the handler entry (and the companion's import) removes all of the companion's code from the Fable bundle — the core SDK never references any companion's types.
+Companions export their handler as a `(tag, handler)` value (e.g. `ClerkRegister.handler`); consumers add it to `ClientConfig.Composition.Handlers.AuthUIHandlers` at compose time. Removing the handler entry (and the companion's import) removes all of the companion's code from the Fable bundle — the core SDK never references any companion's types.
 
 See [`TECHNICAL_GUIDE.md` — Sign-in UI companions](technical-guide/03-authentication-secrets-and-encryption.md#sign-in-ui-companions) for the full OIDC flow, refresh-token handling, and XSS / multi-tab semantics.
 

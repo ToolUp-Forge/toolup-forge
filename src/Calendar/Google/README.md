@@ -70,7 +70,7 @@ shape as a data-source credential. There is no sign-in UI in this package.
    `/callback`.
 2. The operator creates the connection as a data source of its own kind in the admin UI and
    enters the OAuth client id + secret and consents through the per-`Kind` credential form
-   registry (`ClientConfig.Handlers.DataSourceCredentialHandlers`, rendered by
+   registry (`ClientConfig.Composition.Handlers.DataSourceCredentialHandlers`, rendered by
    `DataSourceCredentialUI.fs`). The form's save path writes the client id and secret under
    `google-calendar-client-id-<connectionId>` / `google-calendar-client-secret-<connectionId>`;
    consent is `IDataIngestionApi.BeginOAuth(connectionId, "google-calendar")`. The SDK ships no

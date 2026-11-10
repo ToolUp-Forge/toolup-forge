@@ -52,7 +52,7 @@ A deployment that wires KB in (or replaces it via `ExternalKnowledgeBase` — se
 
 ### 1. NarrativeCommit handler
 
-`KnowledgeBaseView.narrativeCommitHandler` is the companion's `NarrativeCommitHandler` value; the deployment sets it on `ClientConfig.Handlers.NarrativeCommitHandler`. Other modules that want to offer a "Save to Knowledge Base" button render `NarrativeRenderer` and let the renderer dispatch through the global broker — no module imports KB types directly. An external KB sets its own handler value instead.
+`KnowledgeBaseView.narrativeCommitHandler` is the companion's `NarrativeCommitHandler` value; the deployment sets it on `ClientConfig.Composition.Handlers.NarrativeCommitHandler`. Other modules that want to offer a "Save to Knowledge Base" button render `NarrativeRenderer` and let the renderer dispatch through the global broker — no module imports KB types directly. An external KB sets its own handler value instead.
 
 The gate is `mode = DefaultKnowledgeBase | ConfiguredKnowledgeBase _`, applied by `KnowledgeBaseClientConfig.withNarrativeCommitHandler`: an `ExternalKnowledgeBase` doesn't double-register, and an explicitly-supplied handler always wins over the implicit wiring.
 

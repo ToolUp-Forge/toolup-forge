@@ -109,7 +109,7 @@ open ToolUp.AI
 open ToolUp.AI.Client
 
 let aiMode =
-    ConfiguredAIAssistant {
+    AISlotFills.configured {
         Name = "Aria"
         Icon = Icon.ofUrl "/svg/spark.svg"
         ShowSidePanel = true
@@ -124,10 +124,10 @@ AIClientConfig.run aiMode clientConfig modules
 
 `ClientConfig` carries no `Mode` field; deployment shape is expressed server-side by `ServerConfig.Surfaces`.
 
-`AIAssistantMode`:
-- `NoAIAssistant` — no AI module or side panel. Use `Client.run` directly instead.
-- `DefaultAIAssistant` — built-in module with SDK defaults (name "AI Assistant", generic icon, side panel on).
-- `ConfiguredAIAssistant of AIAssistantBranding` — custom name + icon + side panel toggle. Branding only; system-prompt content stays server-side.
+`AISlotFills`:
+- `AISlotFills.empty` — no AI module or side panel. Use `Client.run` directly instead.
+- `AISlotFills.defaults` — built-in module with SDK defaults (name "AI Assistant", generic icon, side panel on).
+- `AISlotFills.configured branding` — custom name + icon + side panel toggle. Branding only; system-prompt content stays server-side.
 
 `ShowSidePanel = true` adds a togglable side panel that floats over every page. `false` puts the AI assistant in its own full-page module accessible from the sidebar. Some apps enable both; the side panel can call any module-declared tool, the full-page module is for longer back-and-forth.
 

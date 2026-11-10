@@ -397,7 +397,7 @@ state.
   it only if its configs, flags or surface changed. `ResetModule` (the error boundary's Reload)
   re-initialises one module and advances its host's `Generation`, which remounts the boundary.
 
-An `Init` that throws leaves the module with no host and is reported through `ClientConfig.OnError`.
+An `Init` that throws leaves the module with no host and is reported through `ClientConfig.Composition.OnError`.
 
 **Where your `Cmd` goes.** Every command your `Init` or `Update` returns, and every dispatch from
 your view, is addressed to your module by id (`Client.ModuleMsg(moduleId, message)`) and reaches

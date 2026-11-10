@@ -76,7 +76,7 @@ Every cell in the serverless columns reads ❌ — `ServerlessHost = ServerlessH
 | `NotificationsAuto` (default) | ✅ — SSE delivers in real time | ❌ — adapters buffer the response body before flushing; SSE never streams |
 | `InMemoryNotifications` | ✅ | ❌ — as above; also per-instance cache, no fan-out |
 | `RedisNotifications _` | ✅ | ⚠ — substrate works (cross-instance fan-out is fine), but the client-facing `/api/notifications` SSE response is still buffered; useful only for server-side coordination (e.g. notifying a sibling worker silo of an event) |
-| `NoNotificationsExplicit` | ✅ | ✅ — required for the serverless front-door; gate AI-streaming routes off too (`AIAssistantMode = NoAIAssistant`) |
+| `NoNotificationsExplicit` | ✅ | ✅ — required for the serverless front-door; gate AI-streaming routes off too (`AISlotFills = AISlotFills.empty`) |
 
 ### Platform mode
 

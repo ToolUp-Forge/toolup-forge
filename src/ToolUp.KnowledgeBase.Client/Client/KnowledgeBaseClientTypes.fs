@@ -15,12 +15,12 @@ open ToolUp.Platform
 // the companion's props imports and project reference back out.
 //
 // The DU lives in the companion's client tier, not in
-// `ToolUp.Platform.Client`, for the same reason `AIAssistantMode`
-// lives in `ToolUp.AI.Client`: the platform shell must not take a
-// dependency on a companion, and `DefaultKnowledgeBase` has to
-// construct the companion's own module. `ToolUp.AI.Client`'s
-// the AI slots (`AIClientConfig.slotExtensions`) is the precedent — the
-// companion owns a module-list transform, the shell owns nothing.
+// `ToolUp.Platform.Client`, for the same reason `AISlotFills` lives in
+// `ToolUp.AI.Client`: the platform shell must not take a dependency on a
+// companion, and `DefaultKnowledgeBase` has to construct the companion's
+// own module. The AI family fills companion slots
+// (`ShellSlotFills.Extensions`); this module's transform predates that
+// seam.
 //
 // Server-side wiring stays explicit (the `KnowledgeApi` registration,
 // `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in

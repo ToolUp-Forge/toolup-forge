@@ -217,7 +217,7 @@ let combinedPrompt =
 val narrativeCommitHandler: NarrativeCommitHandler
 ```
 
-The companion's "Save to Knowledge Base" broker. Set it on `ClientConfig.Handlers.NarrativeCommitHandler` (or let `KnowledgeBaseClientConfig.withKnowledgeBase` do it) so other modules' Save buttons resolve. Phase 13a replaced the legacy `installNarrativeCommit ()` module-load side effect with this value.
+The companion's "Save to Knowledge Base" broker. Set it on `ClientConfig.Composition.Handlers.NarrativeCommitHandler` (or let `KnowledgeBaseClientConfig.withKnowledgeBase` do it) so other modules' Save buttons resolve. Phase 13a replaced the legacy `installNarrativeCommit ()` module-load side effect with this value.
 
 ### `KnowledgeBaseView.register` / `KnowledgeBaseView.create`
 

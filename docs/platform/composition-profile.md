@@ -20,7 +20,7 @@ bytes, that the document is inlined into or served beside (§P3.18 of the profil
 is valid at 7.1 with the same verdict. What it asks of a composition, and of an evaluator that reduces one:
 [`docs/migrations/1235-declared-content.md`](../migrations/1235-declared-content.md). 7.2 lets a client shell declare
 browser history (§P3.1, §P2.23): the optional `browserHistory` member, whose one token `hash` reduces to
-`ClientConfig.BrowserHistory = HashHistory`. It is additive too: a composition without the member encodes byte for byte
+`ClientConfig.Shell.BrowserHistory = FeatureMode.Enabled`. It is additive too: a composition without the member encodes byte for byte
 as before, and an evaluator that reduces one with it writes the setting into the client entry it generates. 7.3 lets a
 grounded narrative be triggered by a fact moving beyond a tolerance (§P3.4, §P4.24): the optional `triggers` member,
 which reduces to `FactsCompose.withToleranceTriggers`. It is additive as well: a composition without the member encodes
@@ -69,7 +69,7 @@ prefix must be the registry's, and the route by which a content security policy 
 (`ServerApp.withCspSourceMode`) must resolve.
 
 **Browser history.** Each token of `clientShell.browserHistory` is bound to a case of the union behind
-`ClientConfig.BrowserHistory`, and the binding names the case an absent member means. Every case of that union must be
+`ClientConfig.Shell.BrowserHistory`, and the binding names the case an absent member means. Every case of that union must be
 one of the two, so a new mode fails the check until the profile registers it.
 
 **The tolerance triggers.** `groundedNarrative.triggers` is bound to the builder it reduces to, and the builder must

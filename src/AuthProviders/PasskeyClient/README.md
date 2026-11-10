@@ -6,7 +6,7 @@ This is a Fable / Feliz client-tier package: it ships its `.fs` source under `fa
 
 ## What it provides
 
-- **`PasskeyRegister.handler`** — the companion-exported `AuthUIHandler` value (tag `"passkey"`). Adding it to `ClientConfig.Handlers.AuthUIHandlers` pulls the module into the Fable import graph and wires the shell's `AuthUIProvider` to dispatch passkey sign-in — a pure value export, no module-load side effect or `init ()` anchor.
+- **`PasskeyRegister.handler`** — the companion-exported `AuthUIHandler` value (tag `"passkey"`). Adding it to `ClientConfig.Composition.Handlers.AuthUIHandlers` pulls the module into the Fable import graph and wires the shell's `AuthUIProvider` to dispatch passkey sign-in — a pure value export, no module-load side effect or `init ()` anchor.
 - **`PasskeyShell`** — the shell wrapper handed to the SDK via that handler. It holds `PasskeyAuthState` (`Checking | SignedIn | SignedOut | Failed`) in React-local state (no Elmish model pollution) and renders the sign-in / register / loading / error screens. There is **no password field anywhere** — passwordless is the point.
 - **`PasskeyClient`** — the ceremony orchestration: `register`, `signIn`, `hasSession`, `signOut`, and an `isSupported ()` feature probe. On a successful ceremony the minted platform session JWT is stored via `UserSession.setAuthToken`, exactly as a bearer token obtained by any other means.
 
@@ -20,8 +20,8 @@ open ToolUp.AuthProviders
 
 let clientConfig =
     { ClientConfig.defaults with
-        AuthUI = PasskeyAuthUI PasskeyUIConfig.defaults
-        Handlers =
+        Auth.AuthUI = PasskeyAuthUI PasskeyUIConfig.defaults
+        Composition.Handlers =
             { ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ PasskeyRegister.handler ] } }
 ```

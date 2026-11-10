@@ -313,8 +313,8 @@ let oidcConfig =
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        AuthUI = OidcAuthUI oidcConfig
-        Handlers = {
+        Auth.AuthUI = OidcAuthUI oidcConfig
+        Composition.Handlers = {
             ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ OidcRegister.handler ]
                 SignOutHandler = Some(OidcRegister.signOutHandler oidcConfig)
@@ -352,8 +352,8 @@ let googleCfg: OidcAppConfig =
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        AuthUI = OidcAuthUI(OidcAppConfig.toClientConfig googleCfg)
-        Handlers = {
+        Auth.AuthUI = OidcAuthUI(OidcAppConfig.toClientConfig googleCfg)
+        Composition.Handlers = {
             ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ OidcRegister.handler ]
         } }
@@ -629,8 +629,8 @@ let googleUi =
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        AuthUI = GoogleIdentityRegister.authUI googleUi
-        Handlers = {
+        Auth.AuthUI = GoogleIdentityRegister.authUI googleUi
+        Composition.Handlers = {
             ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ GoogleIdentityRegister.handler ]
                 SignOutHandler = Some(GoogleIdentityRegister.signOutHandler googleUi)
@@ -718,14 +718,14 @@ open ToolUp.AuthProviders
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
-        Handlers =
+        Auth.AuthUI = ClerkRegister.authUI { PublishableKey = BundleConstants.clerkPublishableKey }
+        Composition.Handlers =
             { ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ ClerkRegister.handler ] } }
     modules
 ```
 
-`ClerkRegister.authUI` is the companion's typed smart constructor for the neutral case — it returns `ProviderAuthUI ("clerk", box cfg)`. (The vendor-named `ClerkAuthUI` core case is deprecated; see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../migrations/494-vendor-neutral-auth-ui.md).)
+`ClerkRegister.authUI` is the companion's typed smart constructor for the neutral case — it returns `ProviderAuthUI ("clerk", box cfg)`. (The vendor-named `ClerkAuthUI` core case was removed in Phase 1074; see [`docs/migrations/494-vendor-neutral-auth-ui.md`](../migrations/494-vendor-neutral-auth-ui.md).)
 
 Server-side, validate the bearer token via:
 - `StaticJwtAuthProvider` with Clerk's signing key.
@@ -854,16 +854,16 @@ SSE has its own auth caveat — `EventSource` can't send custom headers, so OIDC
 
 ### Where the client keeps the bearer token (Phase 133)
 
-By default (`ClientConfig.AuthTokenStorage = ClientCookieAndLocalStorage`) the client writes the JWT to `localStorage` **and** a `document.cookie`. Neither can be `HttpOnly` — only a server `Set-Cookie` can be — so both stores are reachable by any injected script, and an XSS escalates directly to bearer-token theft. This is acceptable only for dev / the EventSource-handshake path, or for a SPA that accepts the exposure and ships a strict CSP (the Phase 9j generator / Phase 129 header baseline) as the mitigation. **Do not describe the JS cookie as "equivalent to localStorage for security" — name the exposure: a JS-readable bearer is XSS-exfiltratable.**
+By default (`ClientConfig.Auth.HttpOnlySession = FeatureMode.Disabled`) the client writes the JWT to `localStorage` **and** a `document.cookie`. Neither can be `HttpOnly` — only a server `Set-Cookie` can be — so both stores are reachable by any injected script, and an XSS escalates directly to bearer-token theft. This is acceptable only for dev / the EventSource-handshake path, or for a SPA that accepts the exposure and ships a strict CSP (the Phase 9j generator / Phase 129 header baseline) as the mitigation. **Do not describe the JS cookie as "equivalent to localStorage for security" — name the exposure: a JS-readable bearer is XSS-exfiltratable.**
 
 On this default path the client checks its cookie write (Phase 1047). The server-rendered sign-in (`OidcSsrSignIn`) writes the same cookie name `HttpOnly`, and a browser drops a script write over an `HttpOnly` cookie without an error. When the token the client just wrote is not in `document.cookie`, the client sends it to `POST /api/auth/session` instead, and the server replaces its own cookie. The event streams then authenticate on the SPA's token rather than on a server token that expires first. Composing the server sign-in mounts that route, so no extra configuration is needed. See [the SSE auth caveat](../platform/auth.md#sse-auth-caveat).
 
-The production-shape alternative is the **server-set HttpOnly cookie**. Set `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` and `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie`: the client POSTs its freshly-acquired JWT once to `POST /api/auth/session`, the server validates it through the registered `IAuthProvider`, and reflects it into an `HttpOnly; Secure; SameSite=Strict` cookie. The JWT never enters `localStorage` or a JS-readable cookie; the browser sends the cookie automatically for SSE and same-origin XHR. Pair with `TokenLocation = BearerOrCookie "toolup-auth-token"` (the reflect call reads the header; every later request + SSE reads the cookie) and the `IAuthBridge` refresh model. See [`docs/migrations/133-httponly-auth-cookie.md`](../migrations/133-httponly-auth-cookie.md) for the full adoption recipe and the OidcClient-PKCE compatibility caveat.
+The production-shape alternative is the **server-set HttpOnly cookie**. Set `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` and `ClientConfig.Auth.HttpOnlySession = FeatureMode.Enabled`: the client POSTs its freshly-acquired JWT once to `POST /api/auth/session`, the server validates it through the registered `IAuthProvider`, and reflects it into an `HttpOnly; Secure; SameSite=Strict` cookie. The JWT never enters `localStorage` or a JS-readable cookie; the browser sends the cookie automatically for SSE and same-origin XHR. Pair with `TokenLocation = BearerOrCookie "toolup-auth-token"` (the reflect call reads the header; every later request + SSE reads the cookie) and the `IAuthBridge` refresh model. See [`docs/migrations/133-httponly-auth-cookie.md`](../migrations/133-httponly-auth-cookie.md) for the full adoption recipe and the OidcClient-PKCE compatibility caveat.
 
 ## Hardening checklist for production
 
 - Real auth provider (not `HeaderAuthProvider`).
-- `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` + `ClientConfig.AuthTokenStorage = ServerSetHttpOnlyCookie` + `TokenLocation = BearerOrCookie "toolup-auth-token"` — move the JWT out of JS-readable storage into a server-set HttpOnly cookie (Phase 133). For paths that must keep a JS-readable bearer, ship a strict CSP instead.
+- `ServerConfig.SecurityPosture.AuthCookieIssuance = FeatureMode.Enabled` + `ClientConfig.Auth.HttpOnlySession = FeatureMode.Enabled` + `TokenLocation = BearerOrCookie "toolup-auth-token"` — move the JWT out of JS-readable storage into a server-set HttpOnly cookie (Phase 133). For paths that must keep a JS-readable bearer, ship a strict CSP instead.
 - `ServerConfig.SecurityPosture.RequireHttps = true`.
 - `ServerConfig.SecurityPosture.TrustForwardedHeaders = true` (default; opt out with `TOOLUP_TRUST_FORWARDED_HEADERS=0` only on a direct-bind dev shell).
 - `ServerConfig.SecurityPosture.SecurityHeaders = StrictSecurityHeaders`.

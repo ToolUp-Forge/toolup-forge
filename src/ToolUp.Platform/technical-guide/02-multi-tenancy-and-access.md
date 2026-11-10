@@ -341,10 +341,10 @@ Premium grant / revoke writes use the Phase 62 endpoints (`POST` / `DELETE /api/
 // Client-side composition (Client.fs):
 let clientConfig = {
     ClientConfig.defaults with
-        AdPanel = EnabledAdPanel { DefaultAdClientId = "ca-pub-XXXXXXXX" }
-        PremiumModel = AnonymousFirst
+        PublicUtility.AdPanel = EnabledAdPanel { DefaultAdClientId = "ca-pub-XXXXXXXX" }
+        PublicUtility.PremiumModel = AnonymousFirst
         Slots.PlatformAdmin = SlotFill.Default
-        PlatformAdminProfile = PublicUtilityPlatformAdminProfile
+        PublicUtility.PlatformAdminProfile = PublicUtilityPlatformAdminProfile
 }
 
 // Server-side composition (Server.fs):

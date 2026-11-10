@@ -30,8 +30,8 @@ let googleUi =
 Client.run
     { ClientConfig.defaults with
         AppName = "MyApp"
-        AuthUI = GoogleIdentityRegister.authUI googleUi
-        Handlers = {
+        Auth.AuthUI = GoogleIdentityRegister.authUI googleUi
+        Composition.Handlers = {
             ClientHandlerRegistry.empty with
                 AuthUIHandlers = [ GoogleIdentityRegister.handler ]
                 SignOutHandler = Some(GoogleIdentityRegister.signOutHandler googleUi)

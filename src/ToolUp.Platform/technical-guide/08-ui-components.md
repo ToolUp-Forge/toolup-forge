@@ -183,7 +183,7 @@ The boundary is the SDK's only class component. `Fable.React.Types.Component<'P,
 - **Errors in shell chrome** — sidebar render, `pageHeader`, `AppShell` skeleton, side-panel, `GlobalOverlays`, `ToastCentre`. Every component above the per-module boundary is unprotected.
 - **In-flight cmd cancellation.** Stale `Cmd<obj>` from the dead module state will still fire after Reset and route through `ModuleMsg`. The new state's `Update` may not handle them; this is acceptable for an emergency reset and avoids inventing an AbortController-style scope-id pattern.
 
-### `ClientConfig.OnError` telemetry contract
+### `ClientConfig.Composition.OnError` telemetry contract
 
 ```fsharp
 type ModuleErrorReport = {
