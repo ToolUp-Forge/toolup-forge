@@ -226,7 +226,7 @@ let tests =
         testCase
             "Data Sources is filed with the data managers, and a deployment can re-file a built-in (Phase 1112)"
             (fun () ->
-                let dataSources = ShellSlots.builtIn DataIngestionUI.builtIn None
+                let dataSources = ToolUp.Platform.ShellSlots.builtIn DataIngestionUI.builtIn None
 
                 Expect.equal
                     dataSources.Group

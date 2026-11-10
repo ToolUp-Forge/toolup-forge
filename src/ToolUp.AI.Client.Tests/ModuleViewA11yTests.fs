@@ -49,6 +49,7 @@ module ToolUp.AI.Client.Tests.ModuleViewA11yTests
 
 open Feliz
 open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.Platform.Testing
 open ToolUp.Platform.Testing.ModuleHarness
 open ToolUp.Platform.Usage
@@ -97,6 +98,13 @@ let private initial () =
 /// constructs a `Model` literally — a hand-built model is a state the
 /// module might never reach, and the point of running the floor through
 /// the harness is that every state it checks is one a user can get to.
+/// The dashboard's page element under the English catalog: its view takes
+/// the shell's `RenderContext` and returns a full-width page.
+let private usageView (model: UsageDashboard.Model) (dispatch: UsageDashboard.Msg -> unit) : ReactElement =
+    match UsageDashboard.view model (RenderContext.create MessageCatalog.english dispatch) with
+    | PageContent.FullWidth element -> element
+    | other -> failwithf "UsageDashboard renders a full-width page, not %A" other
+
 let private viewStates: ViewState list = [
     {
         Name = "initial aggregate load in flight"
@@ -253,8 +261,7 @@ let tests =
                 viewStates
                 |> List.collect (fun st ->
                     let node =
-                        st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
-                        |> Accessibility.ofHtml
+                        st.Harness.RenderViewHtml(ViewMount.mount, usageView) |> Accessibility.ofHtml
 
                     let _, real = classify node (Accessibility.check Accessibility.Strict node)
                     real |> List.map (inState st.Name))
@@ -276,8 +283,7 @@ let tests =
             let missing = [
                 for st in viewStates do
                     let node =
-                        st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
-                        |> Accessibility.ofHtml
+                        st.Harness.RenderViewHtml(ViewMount.mount, usageView) |> Accessibility.ofHtml
 
                     let names = Accessibility.interactiveNames node |> List.choose snd
 
@@ -311,7 +317,7 @@ let tests =
         // exists to close.
         testCase "the mount really renders the module's markup" (fun () ->
             for st in viewStates do
-                let html = st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+                let html = st.Harness.RenderViewHtml(ViewMount.mount, usageView)
 
                 Expect.isTrue
                     (html.Contains "<button")
@@ -331,12 +337,12 @@ let tests =
             let loaded =
                 viewStates
                 |> List.find (fun s -> s.Name = "aggregate rows loaded")
-                |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+                |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, usageView)
 
             let empty =
                 viewStates
                 |> List.find (fun s -> s.Name = "no usage records for this scope")
-                |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
+                |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, usageView)
 
             Expect.isTrue (loaded.Contains "<table") "the loaded state renders the aggregate table"
             Expect.isFalse (empty.Contains "<table") "the empty state renders the empty copy, not a table")
@@ -350,8 +356,7 @@ let tests =
                     viewStates
                     |> List.exists (fun st ->
                         let node =
-                            st.Harness.RenderViewHtml(ViewMount.mount, UsageDashboard.view)
-                            |> Accessibility.ofHtml
+                            st.Harness.RenderViewHtml(ViewMount.mount, usageView) |> Accessibility.ofHtml
 
                         let pinned, _ = classify node (Accessibility.check Accessibility.Strict node)
                         not (List.isEmpty pinned))
