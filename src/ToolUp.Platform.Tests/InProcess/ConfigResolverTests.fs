@@ -9,6 +9,7 @@ open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.Config.ConfigResolver
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 696 — the deployment configuration manifest ────────────────
 //
@@ -75,18 +76,8 @@ let private parseRefusal (source: string) =
 
 /// A temporary directory that behaves as a deployment's content root.
 let private withTempRoot (body: string -> unit) =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-cfg-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-
-    try
-        body dir
-    finally
-        try
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
+    use dir = TempDir.create "cfg"
+    body dir.Path
 
 let tests =
     testList "ConfigResolver" [

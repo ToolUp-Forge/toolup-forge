@@ -16,6 +16,10 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Recording.fs" Link="Testing\Recording.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Clock.fs" Link="Testing\Clock.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Loggers.fs" Link="Testing\Loggers.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\Approval.fs" Link="Contracts\Approval.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IHealthCheckContract.fs" Link="Contracts\IHealthCheckContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IConfigValidatorContract.fs" Link="Contracts\IConfigValidatorContract.fs" />

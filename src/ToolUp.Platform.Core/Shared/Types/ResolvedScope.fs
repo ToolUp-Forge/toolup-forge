@@ -27,8 +27,8 @@ namespace ToolUp.Platform
 /// A projection of `ScopeKey`: `StorageScope.ofKey` renders
 /// `ScopeId` and `Container` from a key, so a scope minted through it can
 /// never spell its container a second way. The record stays constructible
-/// for one minor as the wire of `ScopeResolutionRequest`'s resolvers
-/// (`IStorageScopeResolver.Resolve` returns it) and of the scopes already
+/// for one minor as the projection of a resolved subject
+/// (`StorageScopeDerivation` returns it) and of the scopes already
 /// carried at rest; new code mints a `ScopeKey` and projects it.
 type StorageScope = {
     /// The shard key every scoped store partitions by: a user id, a team
@@ -134,7 +134,7 @@ type ResolvedScope =
     /// for the anonymous scope, for a claim scope, and for a resolver- or
     /// carrier-supplied shape no key renders. DERIVED from `Storage`
     /// rather than carried beside it: the mints receive a `StorageScope`
-    /// (`IStorageScopeResolver.Resolve`'s output, a carried token at rest),
+    /// (the derivation's output, a carried token at rest),
     /// so a carried key would be absent exactly where the container is in
     /// the grammar but the resolver did not say so, and could disagree
     /// with the `Storage` every store keys on. Derived, it cannot.

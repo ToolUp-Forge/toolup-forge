@@ -1,13 +1,13 @@
 module ToolUp.EmbeddingProviders.Tests.EmbeddingProviderEnvTests
 
 open System
-open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 // ─── Phase 671 — `EmbeddingProviderEnv.fromEnv` ──────────────────────
 //
@@ -98,20 +98,6 @@ let private expectThrows (why: string) (body: unit -> unit) : exn =
     | Some ex -> ex
     | None -> failtest why
 
-/// Records every line the helper logs, at every level, in order. The
-/// unset arm's guarantee is that this stays empty.
-type private RecordingLogger() =
-    let lines = ConcurrentQueue<string>()
-
-    member _.Lines = lines |> Seq.toList
-
-    interface ILogger with
-        member _.Debug msg = lines.Enqueue $"DEBUG {msg}"
-        member _.Info msg = lines.Enqueue $"INFO {msg}"
-        member _.Warn msg = lines.Enqueue $"WARN {msg}"
-
-        member _.Error(msg, _ex) = lines.Enqueue $"ERROR {msg}"
-
 /// A distinguishable stub — `ProviderId` doubles as the identity the
 /// assertions read, so a wrong arm is named in the failure rather than
 /// merely counted.
@@ -143,7 +129,7 @@ let tests =
         // ── The GP 11 arm ────────────────────────────────────────────
         test "unset cluster returns the composition root's own provider, unchanged" {
             let fallback = stubProvider "composition-root"
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let resolved =
                 withEnv ConfigKeys.Names.embeddingProvider None (fun () ->
@@ -161,7 +147,7 @@ let tests =
 
         test "unset cluster invokes no resolver" {
             let mutable resolverCalls = 0
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let counting: EmbeddingProviderEnv.EmbeddingProviderResolver = {
                 Name = "openai"
@@ -183,7 +169,7 @@ let tests =
 
         test "an empty-string value reads as unset, exactly as elsewhere in the seam" {
             let fallback = stubProvider "composition-root"
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let resolved =
                 withEnv ConfigKeys.Names.embeddingProvider (Some "") (fun () ->
@@ -197,7 +183,7 @@ let tests =
         // ── Selection ────────────────────────────────────────────────
         test "a matched resolver supplies the provider" {
             let selected = stubProvider "openai"
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let resolved =
                 withEnv ConfigKeys.Names.embeddingProvider (Some "openai") (fun () ->
@@ -212,20 +198,20 @@ let tests =
             Expect.equal resolved.ProviderId "openai" "the named resolver's provider must be the one returned"
 
             Expect.isTrue
-                (logger.Lines
-                 |> List.exists (fun l -> l.StartsWith "INFO Embedding provider: openai"))
+                (logger.MessagesAt LogSeverity.Info
+                 |> List.exists (fun l -> l.StartsWith "Embedding provider: openai"))
                 $"the selected provider must be announced; logged: %A{logger.Lines}"
         }
 
         test "the announcement names the model and dimensionality" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             withEnv ConfigKeys.Names.embeddingProvider (Some "openai") (fun () ->
                 EmbeddingProviderEnv.fromEnv logger [ resolver "openai" (Some(stubProvider "openai")) ] (fun () ->
                     stubProvider "composition-root"))
             |> ignore
 
-            let announcement = logger.Lines |> List.tryFind _.StartsWith("INFO ")
+            let announcement = logger.MessagesAt LogSeverity.Info |> List.tryHead
 
             match announcement with
             | None -> failtest $"expected an Info announcement; logged: %A{logger.Lines}"
@@ -244,7 +230,7 @@ let tests =
         // the case-insensitivity would go unmeasured — which is exactly
         // what a first draft of this test did.
         test "matching is case-insensitive on BOTH sides" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let resolved =
                 withEnv ConfigKeys.Names.embeddingProvider (Some "OpenAI") (fun () ->
@@ -260,7 +246,7 @@ let tests =
         // ── Fail-soft arms ───────────────────────────────────────────
         test "a resolver that declines falls back with a warning naming the selection" {
             let fallback = stubProvider "composition-root"
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let resolved =
                 withEnv ConfigKeys.Names.embeddingProvider (Some "openai") (fun () ->
@@ -270,7 +256,7 @@ let tests =
                 (Object.ReferenceEquals(resolved, fallback))
                 "a declining resolver must fall back rather than boot with no embedder"
 
-            let warning = logger.Lines |> List.tryFind _.StartsWith("WARN ")
+            let warning = logger.MessagesAt LogSeverity.Warn |> List.tryHead
 
             match warning with
             | None ->
@@ -281,7 +267,7 @@ let tests =
 
         test "an unrecognised value falls back and names the recognised ones" {
             let fallback = stubProvider "composition-root"
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let resolved =
                 withEnv ConfigKeys.Names.embeddingProvider (Some "cohere") (fun () ->
@@ -296,21 +282,21 @@ let tests =
             Expect.isTrue (Object.ReferenceEquals(resolved, fallback)) "an unrecognised value must fall back"
 
             let warning =
-                logger.Lines |> List.tryFind _.StartsWith("WARN ") |> Option.defaultValue ""
+                logger.MessagesAt LogSeverity.Warn |> List.tryHead |> Option.defaultValue ""
 
             Expect.stringContains warning "cohere" "the warning must quote the value that was not recognised"
             Expect.stringContains warning "local, openai" "and list what this deployment does recognise"
         }
 
         test "an unrecognised value with no resolvers wired says so rather than listing nothing" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             withEnv ConfigKeys.Names.embeddingProvider (Some "openai") (fun () ->
                 EmbeddingProviderEnv.fromEnv logger [] (fun () -> stubProvider "composition-root"))
             |> ignore
 
             let warning =
-                logger.Lines |> List.tryFind _.StartsWith("WARN ") |> Option.defaultValue ""
+                logger.MessagesAt LogSeverity.Warn |> List.tryHead |> Option.defaultValue ""
 
             Expect.stringContains
                 warning

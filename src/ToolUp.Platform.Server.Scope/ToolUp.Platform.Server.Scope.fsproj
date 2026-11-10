@@ -111,6 +111,7 @@
              type-tests the resolved store). -->
         <Compile Include="..\ToolUp.Platform.Server\Server\Teams\BlobPendingInviteStore.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Teams\PendingInviteStoreInstanceValidator.fs" />
+        <Compile Include="..\ToolUp.Platform.Server\Server\Scope\TeamAuthority.fs" />
         <Compile Include="..\ToolUp.Platform.Server\Server\Teams\TeamInvitationHandler.fs" />
         <!-- The per-team visibility policy record (both axes), its
              guarded store, the output-visibility source, startup check and API.

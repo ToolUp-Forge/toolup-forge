@@ -11,7 +11,6 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Infra.Tracing
 open ToolUp.DataSources.Common
 open ToolUp.DataSources.Csv
@@ -20,6 +19,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 1015 — a declared source's data arrives as its principal ───
 //
@@ -81,7 +81,7 @@ type private World(?connectorStorage: IBlobStorage) =
     let ingestor =
         DataIngestor.create
             configs
-            (TestFakes.InMemorySecretStore())
+            (TestSecretStore())
             (DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore)
             events
             [ csv ]
@@ -96,8 +96,20 @@ type private World(?connectorStorage: IBlobStorage) =
     let cache =
         new Microsoft.Extensions.Caching.Memory.MemoryCache(Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())
 
-    let scopeResolver =
-        new TeamScopeResolver(teams, cache, notifications) :> IStorageScopeResolver
+    // The deployment's one resolver over a team surface; a declared
+    // principal's scope is its subject's, persistent.
+    let subjects =
+        new Scope.DefaultSubjectResolver.DefaultSubjectResolver(
+            [ SurfaceProfile.team ],
+            Some(teams :> TeamManagement.ITeamStore),
+            cache,
+            notifications
+        )
+        :> ISubjectResolver
+
+    let deriveScope =
+        Middleware.StorageScopeDerivation.tryKeyFromSubject
+        >> Option.map (StorageScope.ofKey true)
 
     let deps: DeclaredDeliveryDeps = {
         Configs = configs
@@ -126,7 +138,7 @@ type private World(?connectorStorage: IBlobStorage) =
     member _.Ingestor = ingestor
     member _.Csv = csv
     member _.Deps = deps
-    member _.Resolver = DeclaredPrincipalResolver(scopeResolver.Resolve)
+    member _.Resolver = DeclaredPrincipalResolver(subjects, deriveScope)
 
     /// A principal that owns a fresh team, active on it.
     member _.TeamPrincipal(name: string) : DeclaredPrincipal =

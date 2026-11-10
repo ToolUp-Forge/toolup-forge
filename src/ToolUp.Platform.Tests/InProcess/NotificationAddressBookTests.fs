@@ -1,11 +1,11 @@
 module ToolUp.Platform.Tests.InProcess.NotificationAddressBookTests
 
-open System.IO
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 /// Bind `INotificationAddressBookContract` to the SDK-default
 /// `BlobBackedNotificationAddressBook` over a `LocalFileStorage`
@@ -18,12 +18,9 @@ open ToolUp.Platform.Jobs
 /// shared storage doesn't cross-pollute. This matches the
 /// `INotificationChannelContract` binding style.
 let tests =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-tests-addrbook-" + System.Guid.NewGuid().ToString("N"))
+    let root = TempDir.forRun "tests-addrbook"
 
-    Directory.CreateDirectory root |> ignore
-
-    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+    let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
 
     let book =
         NotificationAddressBook.BlobBackedNotificationAddressBook(storage, None) :> INotificationAddressBook

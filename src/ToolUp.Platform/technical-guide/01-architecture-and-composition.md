@@ -329,7 +329,7 @@ services
     .AddSingleton<IModuleQueryBus>(moduleQueryBus)
 |> ignore
 
-// Team-surface-only: shared TeamStore instance reused by TeamScopeResolver
+// Team-surface-only: shared TeamStore instance reused by the subject resolver
 match teamStoreOpt with
 | Some ts -> services.AddSingleton<ITeamStore>(ts :> ITeamStore) |> ignore
 | None -> ()
@@ -339,32 +339,24 @@ match extensions.ServiceConfig with
 | Some cfg -> cfg services |> ignore
 | None -> ()
 
-// The scope resolver is derived from `config.Surfaces`, not from a
-// single deployment mode: a declared Team surface wins outright,
-// otherwise the dominant AuthenticatedUser surface's `Persistence`
-// picks between the ephemeral and persistent resolvers.
-let scopeResolver: IStorageScopeResolver =
-    if DeploymentConfig.hasTeamScope config then
-        new TeamScopeResolver(
-            teamStoreOpt.Value :> ITeamStore,
-            new MemoryCache(MemoryCacheOptions()),
-            resolvedNotificationChannel,
-            resolvedLogger
-        )
-    else
-        let userPersistence =
-            config.Surfaces
-            |> List.tryPick (function
-                | SurfaceProfile.AuthenticatedUser cfg -> Some cfg.Persistence
-                | _ -> None)
+// The deployment's one resolver walks `config.Surfaces`; a request's
+// storage scope is its resolved subject projected by
+// `StorageScopeDerivation`. Its membership-change subscription is taken
+// when the host starts it, never in its constructor.
+let subjectResolver =
+    new DefaultSubjectResolver(
+        config.Surfaces,
+        teamStoreOpt |> Option.map (fun ts -> ts :> ITeamStore),
+        new MemoryCache(MemoryCacheOptions()),
+        resolvedNotificationChannel,
+        resolvedLogger
+    )
 
-        match userPersistence with
-        | Some Ephemeral -> AuthenticatedEphemeralScopeResolver()
-        | Some Persistent -> AuthenticatedScopeResolver()
-        | None -> AnonymousScopeResolver()
+Hosting.register services (BackgroundUnit.ofInstance "subject-resolver" OnceAtStart subjectResolver)
+|> ignore
 
 services
-    .AddSingleton<IStorageScopeResolver>(scopeResolver)
+    .AddSingleton<ISubjectResolver>(subjectResolver)
     .AddScoped<AccessContext>(fun sp -> accessContextFor sp)  // Per-request, reads from HttpContext.Items
     .AddHttpContextAccessor()
     .AddSession()
@@ -600,7 +592,7 @@ Phase 1g (lightweight composition profile) audits every always-on registration i
 | `IEventStore` (inner) | OptIn | `config.Stores.EventStore` | `SDK.Server.fs:973–979` |
 | `IAuthProvider` | Always | constructor arg | `SDK.Server.fs:1153` |
 | `ISecretStore` | Always | constructor arg | `SDK.Server.fs:1154` |
-| `IStorageScopeResolver` | OptIn (surface-driven) | `config.Surfaces` | `SDK.Server.fs:1373` |
+| `ISubjectResolver` | OptIn (surface-driven) | `config.Surfaces` | `ComposeScopeResolver.registerScopeResolution` |
 | `ITeamStore` | OptIn | team surface declared in `config.Surfaces` | `SDK.Server.fs:1295–1307` |
 | `INotificationChannel` + `SSEConnectionManager` + `/api/notifications` | OptIn | `config.Notifications` (auto-detected) | `SDK.Server.fs:820–831, 1155–1156` |
 | `IAuditLog` | OptIn | `config.AuditLog` | `SDK.Server.fs:1152` |

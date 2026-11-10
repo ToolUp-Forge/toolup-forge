@@ -1,10 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.FileSecretStoreTests
 
-open System
-open System.IO
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 /// Bind the `ISecretStore` contract test pack to `FileSecretStore`.
 /// Each factory call creates a unique temp directory and constructs a
@@ -12,10 +11,7 @@ open ToolUp.Platform.Config
 /// avoid cwd manipulation and run in parallel without collisions.
 let tests =
     let factory () =
-        let dir =
-            Path.Combine(Path.GetTempPath(), "toolup-secret-test-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory dir |> ignore
-        FileSecretStore.FileSecretStore(baseDir = dir) :> ISecretStore
+        let dir = TempDir.forRun "secret-test"
+        FileSecretStore.FileSecretStore(baseDir = dir.Path) :> ISecretStore
 
     ISecretStoreContract.tests "FileSecretStore" factory

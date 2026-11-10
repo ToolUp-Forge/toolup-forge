@@ -31,6 +31,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Tests.InProcess
+open ToolUp.Platform.Testing
 
 // ─── Phase 6f.C — the Meta WhatsApp Business Cloud companion ─────────
 //
@@ -132,10 +133,7 @@ let private settings: MetaWhatsAppSettings = {
 }
 
 let private freshSecrets (secrets: (string * string) list) : ISecretStore =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-tests-meta-whatsapp-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory root |> ignore
+    let root = (TempDir.forRun "tests-meta-whatsapp").Path
     let store = FileSecretStore.FileSecretStore(root) :> ISecretStore
 
     for key, value in secrets do

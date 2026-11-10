@@ -45,7 +45,6 @@ The framework enforces a strict separation of concerns:
   | `AgGrid.gridModulesRegistered` | `Feliz.AgGrid/AgGrid.fs:65` | Set-once flag preventing the Community-edition fallback when the AgGridEnterprise companion has registered Enterprise modules first | Initialisation-time guard. `AgGridEnterprise.register` flips it before `Client.run`; subsequent reads from `ensureGridModulesRegistered ()` short-circuit. The alternative (registering Community modules unconditionally then having Enterprise re-register) breaks AG Grid's module-registry invariants. |
   | `AgChart.chartsModulesRegistered` | `Feliz.AgCharts/AgChart.fs:19` | Same shape as `AgGrid.gridModulesRegistered` for AG Charts Community/Enterprise selection | Initialisation-time guard. Same precedent. |
   | `FastPathBridge.resolver` | `src/ToolUp.AI/Client/FastPathBridge.fs:43` | A downstream AI-tool-dispatch companion registers a Tier 1 fast-path resolver here at module load; `ToolUp.AI`'s chat-send path calls it before sending the request to the server. ToolUp.AI cannot import the downstream companion directly (cyclic compile order) | Initialisation-time companion-bridge mutable. Resolves the compile-order constraint. Same pattern as `NarrativeCommit.installed`. |
-  | `FileManagement.storeEvictionMinutes` | `Server/FileManagement.fs:492` | TTL knob read by the in-process eviction timer every 10 minutes. `compose` calls `configureEvictionMinutes` once with the resolved `ServerConfig.EphemeralStoreEvictionMinutes`; the next tick picks it up | Initialisation-time config knob, read on a background timer that lives outside any DI scope. Threading a runtime record into a static `System.Threading.Timer` would require dismantling the timer; the value is set-once at boot. |
   | `UserSession.currentBridge` | `Client/UserSession.fs:219` | Auth-bridge holder set once by the auth-UI companion (`OidcClient` / `ClerkUI`) at module load; read by Remoting headers and SSE establishment to attach the current bearer token | Initialisation-time companion-bridge mutable, twin of `currentMode`. Same precedent — set at boot, read per request, threading via DI breaks the at-any-call-site Remoting helper shape. |
   | `NotificationClient` SSE singleton (`connection`, `nextHandlerId`, `handlers`) | `Client/NotificationClient.fs:58-60` | Per-tab single `EventSource` that fans envelopes to multiple subscribers. The connection is opened once on first `subscribe`; handler IDs and the handler list are mutated in-tab to support `subscribe` / `unsubscribe` returning a dispose thunk | Per-tab singleton mutable state. The browser tab is the natural lifetime; subscribers come and go as views mount/unmount. The alternative (one `EventSource` per subscriber) would multiply long-lived SSE connections per request scope. |
   | `AgChart.ChartPalette.fills`/`strokes`/`accentColor`/`markerFill`/`markerStroke`/`fontFamily` | `Feliz.AgCharts/AgChart.fs:32-37` | Theme palette read at chart-construction time. `ClientConfig` chart-theme overrides flip these at boot; module views read them when building chart options | Initialisation-time theme tokens. Apps configure the palette once during `Client.run`'s setup phase; chart code reads it per-render. Threading a theme record through every `AgChart.chart` call site would balloon the API surface. |
@@ -173,9 +172,9 @@ Mixed-mode deployments list two or more profiles (`Surfaces.anonymousAndIndividu
 `team` and `multiTeam` share the server-side data model and storage layout; they differ only in client UX and deployment intent. `multiTeam` activates a header team-switcher (rendered when `ClientConfig.hasMultiTeamSwitcher` and the user has 2+ memberships) and a shell-level `TeamSwitched` reset path that swaps every module's state to the new team's data without re-auth — see the [Technical Guide](technical-guide/02-multi-tenancy-and-access.md#team-switching-reset-flow).
 
 **Server side** (`ServerApp.run` → `SDK.Server.compose`):
-1. Registers the `IStorageScopeResolver`(s) appropriate to the declared surfaces
+1. Registers the deployment's one `ISubjectResolver` (`DefaultSubjectResolver` over the declared surfaces)
 2. For team surfaces, also registers `TeamStore` (persists team metadata to `_platform` blob container)
-3. Each request resolves a `StorageScope` (`{ ScopeId; Container; Persist }`) via the scope resolver
+3. Each request resolves a `Subject` and projects its `StorageScope` (`{ ScopeId; Container; Persist }`) with `StorageScopeDerivation`
 4. `SessionFileStore` uses `scope.Persist` to decide whether to persist files to `IBlobStorage` or keep them in-memory only
 5. `AccessContext` (userId, teamId, subject, permissions) is resolved per-request via DI
 
@@ -299,7 +298,7 @@ Five ToolUp.Remoting APIs (auto-injected by `ServerApp.run`) cover the platform 
 - **`PlatformInfoApi`** — `GetPlatformInfo` returns mode + auth-required flag.
 - **`DataCatalogApi`** — `GetDataCatalog` returns every data type the platform supports + the producing modules.
 
-Role-based access (`Owner`, `Admin`, `Member`) gates mutations via `TeamRoles.canManageMembers` / `canWriteTeamConfig`. `TeamScopeResolver` validates current membership on every request — a user removed from their active team is denied immediately regardless of cache TTL. `TeamStore` refuses to remove or demote the last `Owner` of a team (prevents unmanageable team state).
+Role-based access (`Owner`, `Admin`, `Member`) gates mutations via `TeamRoles.canManageMembers` / `canWriteTeamConfig`. `DefaultSubjectResolver` validates current membership on every request — a user removed from their active team is denied immediately regardless of cache TTL. `TeamStore` refuses to remove or demote the last `Owner` of a team (prevents unmanageable team state).
 
 The built-in `TeamManagerUI` client module is auto-injected in Team mode (controlled by `ClientConfig.TeamManager`). It covers team list / create / switch and member list / add / remove / role-change with admin gating.
 
@@ -474,7 +473,7 @@ All Enterprise imports and module registration calls are at module top level in 
 | `EncryptedSecretStore.fs` | AES-GCM envelope wrapper around any `ISecretStore` + `rotateScope` helper |
 | `TeamManagement.fs` | `TeamStore` — team CRUD, membership, role change, active-team, last-Owner safeguard |
 | `PermissionStore.fs` | `IPermissionStore` + blob-backed default — per-team permission document with merge logic |
-| `StorageScopeResolver.fs` | `IStorageScopeResolver` + four per-mode implementations; membership-validating `TeamScopeResolver` |
+| `StorageScopeResolver.fs` | `SubjectScope` (a caller's scope from the one resolver) and `ScopeResolution` (the request's typed `ResolvedScope`) |
 | `FileManagement.fs` | File detection, processing, `SessionFileStore`, `fileManagementApi` |
 | `IConfigStore.fs` | Per-scope module config interface (`GetValues`, `GetValue`, `SetValues`, `ClearModule`) |
 | `ConfigStore.fs` | Blob-backed default — persists JSON under `_platform/config/{scopeId}/{moduleKey}.json` |

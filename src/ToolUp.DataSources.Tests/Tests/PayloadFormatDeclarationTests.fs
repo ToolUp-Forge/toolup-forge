@@ -21,6 +21,7 @@ open ToolUp.DataSources.Excel
 open ToolUp.DataSources.Parquet
 open ToolUp.DataSources.Tests.Support
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 834 / 1017 — every shipped connector declares what it is ───
 //
@@ -165,8 +166,9 @@ let private ingestorTests =
             let inner, config = seededInMemory ()
             let connected = ref false
             let seen = ref []
-            let store = TestFakes.InMemorySecretStore()
-            store.Put(scopeId, config.CredentialKey, "would-be-secret")
+            let secrets = TestSecretStore()
+            secrets.Seed(scopeId, config.CredentialKey, "would-be-secret")
+            let store = TestFakes.ReadCountingSecretStore(secrets)
             let connector = probing (Some CredentialNeed.NoCredential) connected seen inner
 
             match ingest store config (blobs ()) connector with
@@ -184,7 +186,7 @@ let private ingestorTests =
             let seen = ref []
             let connector = probing (Some CredentialNeed.Required) connected seen inner
 
-            match ingest (TestFakes.InMemorySecretStore()) config (blobs ()) connector with
+            match ingest (TestSecretStore()) config (blobs ()) connector with
             | Ok run ->
                 Expect.equal run.Status IngestionStatus.Failed "the run failed"
                 Expect.equal run.Error (Some(CredentialMissing config.CredentialKey)) "CredentialMissing naming the key"
@@ -197,8 +199,8 @@ let private ingestorTests =
         test "a REQUIRED connector with a blank secret fails the same way" {
             let inner, config = seededInMemory ()
             let connected = ref false
-            let store = TestFakes.InMemorySecretStore()
-            store.Put(scopeId, config.CredentialKey, "   ")
+            let store = TestSecretStore()
+            store.Seed(scopeId, config.CredentialKey, "   ")
             let connector = probing (Some CredentialNeed.Required) connected (ref []) inner
 
             match ingest store config (blobs ()) connector with
@@ -211,8 +213,8 @@ let private ingestorTests =
         test "a REQUIRED connector with its secret receives it on the context" {
             let inner, config = seededInMemory ()
             let seen = ref []
-            let store = TestFakes.InMemorySecretStore()
-            store.Put(scopeId, config.CredentialKey, "s3cret")
+            let store = TestSecretStore()
+            store.Seed(scopeId, config.CredentialKey, "s3cret")
             let connector = probing (Some CredentialNeed.Required) (ref false) seen inner
 
             match ingest store config (blobs ()) connector with
@@ -225,7 +227,7 @@ let private ingestorTests =
         test "an UNDECLARED connector keeps today's behaviour: the store is read, None permitted" {
             let inner, config = seededInMemory ()
             let seen = ref []
-            let store = TestFakes.InMemorySecretStore()
+            let store = TestFakes.ReadCountingSecretStore(TestSecretStore())
             let connector = probing None (ref false) seen inner
 
             Expect.equal (CredentialNeed.declaredBy connector) CredentialNeed.Optional "undeclared reads as Optional"
@@ -260,7 +262,7 @@ let private resolveDeclaredTests =
             let! resolved =
                 Credentials.resolveDeclared
                     (declaring CredentialNeed.Required)
-                    (Some(TestFakes.InMemorySecretStore() :> ISecretStore))
+                    (Some(TestSecretStore() :> ISecretStore))
                     ctx
 
             Expect.equal resolved (Error(CredentialMissing config.CredentialKey)) "names the key"
@@ -271,7 +273,7 @@ let private resolveDeclaredTests =
             let! resolved =
                 Credentials.resolveDeclared
                     (declaring CredentialNeed.Optional)
-                    (Some(TestFakes.InMemorySecretStore() :> ISecretStore))
+                    (Some(TestSecretStore() :> ISecretStore))
                     ctx
 
             Expect.equal resolved (Ok None) "absence is permitted"
@@ -279,8 +281,8 @@ let private resolveDeclaredTests =
 
         testCaseAsync "REQUIRED with a stored secret returns it"
         <| async {
-            let store = TestFakes.InMemorySecretStore()
-            store.Put(scopeId, config.CredentialKey, "s3cret")
+            let store = TestSecretStore()
+            store.Seed(scopeId, config.CredentialKey, "s3cret")
 
             let! resolved =
                 Credentials.resolveDeclared (declaring CredentialNeed.Required) (Some(store :> ISecretStore)) ctx

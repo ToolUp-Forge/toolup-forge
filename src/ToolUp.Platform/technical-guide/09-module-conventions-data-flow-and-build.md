@@ -28,7 +28,7 @@ The standard data flow through the platform:
 2. **Transfer:** `DataManagerModel` sends the file contents to `FileManagementApi.UploadFile` via ToolUp.Remoting.
 3. **Detection:** `FileManagement.detectFileType` iterates registered `DataType` records in priority order. First match wins; returns `"UnrecognisedData"` if none match.
 4. **Processing:** `FileManagement.processFile` finds the matching `DataType` and calls its `Process` function, which returns a type-erased result (`obj`) plus a `ProcessedFileEntry` summary.
-5. **Scope resolution:** `FileManagement.fileManagementApi` resolves the `IStorageScopeResolver` from DI, calls `resolver.Resolve(ctx)` to get the `StorageScope` for this request, then gets or creates the `SessionFileStore` for that scope.
+5. **Scope resolution:** `FileManagement.fileManagementApi` reads the `StorageScope` the scope middleware stamped on the request's principal, then resolves that scope's `SessionFileStore` through the registered `ISessionFileStores` (`SessionFileStores`), which builds and hydrates it once and has every request for the scope await that one hydration.
 6. **Persistence:** `SessionFileStore` saves the file contents in-memory. If `scope.Persist` is true, it also writes to `IBlobStorage` (default: local filesystem at `data/{container}/`).
 7. **Client update:** The upload response includes the `ProcessedFileEntry`. The DataManager module's state picks it up via its own `update`, and the shell's next `computeProcessedData` pass aggregates it into `Model.ProcessedData`. The view re-renders with the updated `ProcessedDataContext` Provider value, so any module view `[<ReactComponent>]` calling `ProcessedData.forType` sees the new entry on the next render.
 8. **Module activation:** Each module's `NeedsData` predicate is re-evaluated. Modules whose data requirements are met become active in the sidebar.
@@ -104,7 +104,7 @@ The `Bundle` target builds for production: `dotnet publish` for the server, `dot
 | **Build pipeline** | In Build.fs | SDK.Build.fs — app provides config only |
 | **Auth** | Typically hardcoded | `IAuthProvider` interface — swappable per deployment |
 | **File storage** | Not typically included | `IBlobStorage` — default LocalFileStorage, swappable |
-| **Storage scoping** | Not typically included | `IStorageScopeResolver` — mode-aware per-request scope |
+| **Storage scoping** | Not typically included | `ISubjectResolver` + `StorageScopeDerivation` — the per-request subject, projected to its scope |
 | **Team management** | Not typically included | `TeamStore` + `TeamApi` — SDK-owned CRUD |
 | **Access control** | Not typically included | `AccessContext` — per-request, ready for RBAC |
 | **Events** | Not typically included | `IEventStore` — inter-module communication |

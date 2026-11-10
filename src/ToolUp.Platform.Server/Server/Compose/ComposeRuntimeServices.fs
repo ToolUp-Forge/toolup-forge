@@ -782,4 +782,10 @@ let registerFileManagementRuntime
     )
     |> ignore
 
-    FileManagement.configureEvictionMinutes config.EphemeralStoreEvictionMinutes
+    // The process's one set of session file stores, which the container
+    // owns and disposes (its eviction timer with it).
+    services.AddSingleton<FileManagement.ISessionFileStores>(
+        System.Func<System.IServiceProvider, FileManagement.ISessionFileStores>(fun _ ->
+            new SessionFileStores.SessionFileStores(config.EphemeralStoreEvictionMinutes))
+    )
+    |> ignore

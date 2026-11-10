@@ -40,6 +40,12 @@ let private ctxFor (userId: string) (teamStore: ITeamStore) (adminStore: IPlatfo
     let ctx = DefaultHttpContext() :> HttpContext
     ctx.RequestServices <- sp
     AccessContexts.stampUserId ctx.Items (userId)
+
+    // The principal carries the platform role, as the scope middleware
+    // stamps it from the admin store once per request.
+    if adminStore.IsPlatformAdmin(UserId userId) |> Async.RunSynchronously then
+        AccessContexts.stampPlatformRole ctx.Items PlatformRole.PlatformAdmin
+
     ctx
 
 let private freshStorage () = InMemoryBlobStorage() :> IBlobStorage

@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.FileManagementTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -14,6 +13,7 @@ open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Files
+open ToolUp.Platform.Testing
 
 // Persisted-ProcessedFileEntry coverage: round-trip across a simulated
 // server restart, stale-DataType branch, loader prefix-filter, delete
@@ -93,15 +93,15 @@ type private TestRig = {
     Store: SessionFileStore
     DataObjects: IDataObjectStore
     Scope: StorageScope
-    TempDir: string
-}
+    Dir: TempDir
+} with
+
+    interface IDisposable with
+        member this.Dispose() = (this.Dir :> IDisposable).Dispose()
 
 let private mkRig (dataTypes: DataType list) : TestRig =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-fm-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+    let dir = TempDir.create "fm-test"
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
 
@@ -118,14 +118,13 @@ let private mkRig (dataTypes: DataType list) : TestRig =
         Store = store
         DataObjects = dos
         Scope = scope
-        TempDir = dir
+        Dir = dir
     }
 
 /// Reconstruct a `SessionFileStore` over the same backing
 /// `IDataObjectStore` + scope as `rig` — simulates a process restart.
-let private reopen (rig: TestRig) (dataTypes: DataType list) : SessionFileStore =
-    let runtime = FileManagementRuntime.empty
-    SessionFileStore(dataTypes, Some rig.DataObjects, rig.Scope, runtime)
+let private reopen (rig: TestRig) (dataTypes: DataType list) : Async<SessionFileStore> =
+    SessionFileStore.Open(dataTypes, Some rig.DataObjects, rig.Scope, FileManagementRuntime.empty)
 
 let private csv = "header_x,header_y\n1,2\n3,4\n"
 
@@ -135,13 +134,37 @@ let private upload fileName contents : DataFileUpload = {
     dataType = "UnrecognisedData"
 }
 
+/// A blob store whose listing waits on `gate` — a hydration that has not
+/// finished — counting how many listings were asked for.
+type private GatedListing(inner: IBlobStorage, gate: Threading.Tasks.Task) =
+    let mutable listings = 0
+    member _.Listings = listings
+
+    interface IBlobStorage with
+        member _.Upload(c, b, x) = inner.Upload(c, b, x)
+        member _.Download(c, b) = inner.Download(c, b)
+        member _.Delete(c, b) = inner.Delete(c, b)
+
+        member _.List(c, p) = async {
+            Threading.Interlocked.Increment(&listings) |> ignore
+            do! Async.AwaitTask gate
+            return! inner.List(c, p)
+        }
+
+        member _.Exists(c, b) = inner.Exists(c, b)
+        member _.GetMetadata(c, b) = inner.GetMetadata(c, b)
+        member _.DownloadRange(c, b, o, l) = inner.DownloadRange(c, b, o, l)
+        member _.CanComposeFrom = inner.CanComposeFrom
+        member _.ComposeFrom(c, t, s) = inner.ComposeFrom(c, t, s)
+        member _.Erase(c, p, policy, dryRun) = inner.Erase(c, p, policy, dryRun)
+
 let tests =
     testList "FileManagement" [
 
         testCaseAsync "round-trip: persisted entry survives reconstruction without re-running Process"
         <| async {
             let count1 = ref 0
-            let rig = mkRig [ mkDataType count1 ]
+            use rig = mkRig [ mkDataType count1 ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -152,7 +175,7 @@ let tests =
             // the entry (it still fires once to populate the in-memory
             // parsed payload, but the entry itself comes from disk).
             let count2 = ref 0
-            let store2 = reopen rig [ mkDataType count2 ]
+            let! store2 = reopen rig [ mkDataType count2 ]
 
             let entries = store2.GetProcessedData()
             Expect.hasLength entries 1 "one entry restored"
@@ -167,11 +190,11 @@ let tests =
         testCaseAsync
             "Phase 817 — the typed summary envelope survives the sidecar round trip, and decodes back on the server"
         <| async {
-            let rig = mkRig [ mkTypedDataType TestTypeId ]
+            use rig = mkRig [ mkTypedDataType TestTypeId ]
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
 
-            let store2 = reopen rig [ mkTypedDataType TestTypeId ]
+            let! store2 = reopen rig [ mkTypedDataType TestTypeId ]
             let entry = store2.GetProcessedData() |> List.exactlyOne
 
             match entry.Summary with
@@ -296,14 +319,14 @@ let tests =
         testCaseAsync "stale DataType: entry surfaces error when its type is no longer registered"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
 
             // Reopen with NO registered DataTypes — the persisted entry's
             // DataType is now stale.
-            let store2 = reopen rig []
+            let! store2 = reopen rig []
 
             let entries = store2.GetProcessedData()
             Expect.hasLength entries 1 "stale entry still listed"
@@ -319,12 +342,12 @@ let tests =
         testCaseAsync "loader filter: entry sidecars don't appear as phantom files in GetFiles"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
 
-            let store2 = reopen rig [ mkDataType (ref 0) ]
+            let! store2 = reopen rig [ mkDataType (ref 0) ]
             let files = store2.GetFiles()
 
             Expect.hasLength files 1 "exactly one file listed"
@@ -340,7 +363,7 @@ let tests =
         testCaseAsync "delete cascade: removing a file also removes its entry sidecar"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -367,7 +390,7 @@ let tests =
         testCaseAsync "ReprocessFile: re-runs Process and refreshes the entry"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "data.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -388,7 +411,7 @@ let tests =
         testCaseAsync "ReprocessFile: missing file returns Error"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! reprocessResult = rig.Store.ReprocessFile("does-not-exist.csv", "alice")
 
@@ -400,7 +423,7 @@ let tests =
         testCaseAsync "ResetDataStore: wipes every file plus its sidecar and clears in-memory state"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! r1 = rig.Store.AddFile(upload "a.csv" csv, "alice")
             let! r2 = rig.Store.AddFile(upload "b.csv" csv, "alice")
@@ -422,7 +445,7 @@ let tests =
 
         testCaseAsync "ResetDataStore: empty store returns 0 without errors"
         <| async {
-            let rig = mkRig [ mkDataType (ref 0) ]
+            use rig = mkRig [ mkDataType (ref 0) ]
             let! reset = rig.Store.ResetDataStore()
             Expect.equal reset 0 "empty reset returns 0"
         }
@@ -430,7 +453,7 @@ let tests =
         testCaseAsync "ResetDataStore: leaves unrelated namespaced objects (e.g. entity store) untouched"
         <| async {
             let count = ref 0
-            let rig = mkRig [ mkDataType count ]
+            use rig = mkRig [ mkDataType count ]
 
             let! addResult = rig.Store.AddFile(upload "a.csv" csv, "alice")
             Expect.isOk addResult "AddFile should succeed"
@@ -464,5 +487,83 @@ let tests =
                 |> List.tryFind (fun n -> n = "a.csv" || n.StartsWith "_processed_entry__")
 
             Expect.isNone phantom "no file or sidecar lingers"
+        }
+
+        testCaseAsync "a request carrying only X-User-Id is anonymous to the file API"
+        <| async {
+            let stores = new SessionFileStores.SessionFileStores(60.0) :> ISessionFileStores
+            let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<DataType list>(
+                services,
+                []
+            )
+            |> ignore
+
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<ISessionFileStores>(
+                services,
+                stores
+            )
+            |> ignore
+
+            let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+
+            ctx.RequestServices <-
+                Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+                    services
+
+            ctx.Request.Headers["X-User-Id"] <- Microsoft.Extensions.Primitives.StringValues "alice"
+
+            let! info = (fileManagementApi ctx).GetSessionInfo()
+
+            let! anonymous =
+                stores.Resolve(
+                    [],
+                    None,
+                    FileManagementRuntime.empty,
+                    StorageScope.ofKey true (ScopeKey.User(UserId "anonymous"))
+                )
+
+            let! alice =
+                stores.Resolve(
+                    [],
+                    None,
+                    FileManagementRuntime.empty,
+                    StorageScope.ofKey true (ScopeKey.User(UserId "alice"))
+                )
+
+            Expect.equal info.Epoch anonymous.Epoch "the header names no caller: the request is the anonymous caller's"
+            Expect.notEqual info.Epoch alice.Epoch "and never the user the header claims"
+        }
+
+        testCaseAsync "two requests during hydration both wait on the one hydration and neither holds a thread"
+        <| async {
+            let gate = Threading.Tasks.TaskCompletionSource()
+            use dir = TempDir.create "fm-hydration"
+            let blobs = GatedListing(LocalFileStorage.LocalFileStorage(dir.Path), gate.Task)
+            let dos = DataObjectStore(blobs) :> IDataObjectStore
+            let stores = new SessionFileStores.SessionFileStores(60.0) :> ISessionFileStores
+
+            let scope =
+                StorageScope.ofKey true (ScopeKey.User(UserId("hydration-" + Guid.NewGuid().ToString "N")))
+
+            let resolve () =
+                stores.Resolve([], Some dos, FileManagementRuntime.empty, scope)
+                |> Async.StartAsTask
+
+            // Both resolutions return a task at once: nothing runs the
+            // hydration synchronously, so no caller's thread is held.
+            let first = resolve ()
+            let second = resolve ()
+            do! Async.Sleep 100
+
+            Expect.isFalse first.IsCompleted "the first request waits for the hydration"
+            Expect.isFalse second.IsCompleted "the second request waits for the same hydration"
+            Expect.equal blobs.Listings 1 "one hydration for the scope, not one per request"
+
+            gate.SetResult()
+            let! a = Async.AwaitTask first
+            let! b = Async.AwaitTask second
+            Expect.isTrue (obj.ReferenceEquals(a, b)) "both requests get the one store"
         }
     ]

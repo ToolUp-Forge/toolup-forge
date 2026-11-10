@@ -77,6 +77,7 @@
         <!-- The server half of the ProcessedData summary envelope's codec. -->
         <Compile Include="Server\Files\ProcessedDataCodec.fs" />
         <Compile Include="Server\Files\FileManagement.fs" />
+        <Compile Include="Server\Files\SessionFileStores.fs" />
         <Compile Include="Server\ColumnMappingApiHandler.fs" />
         <Compile Include="Server\INarrativeStore.fs" />
         <Compile Include="Server\InMemoryNarrativeStore.fs" />
@@ -97,7 +98,6 @@
              describe). First in the Compose chain so every Compose helper, every
              companion and the /dev/inspect panel (DevDiagnosticsHandler.fs) use it. -->
         <Compile Include="Server\Compose\Hosting.fs" />
-        <Compile Include="Server\DevDiagnosticsHandler.fs" />
         <Compile Include="Server\HealthMonitorApiHandler.fs" />
         <!-- Home / Overview landing aggregation handler. -->
         <Compile Include="Server\HomeOverviewApiHandler.fs" />
@@ -119,8 +119,11 @@
              factory. After the report (it produces the report's EgressIntegrity) and before
              Compose/ComposeRuntimeServices.fs (which registers the named client). -->
         <Compile Include="Server\EgressPolicyHandler.fs" />
-        <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <Compile Include="Server\Middleware.fs" />
+        <!-- The dev diagnostics handlers resolve the caller through the one
+             resolver and StorageScopeDerivation, so they follow Middleware.fs. -->
+        <Compile Include="Server\DevDiagnosticsHandler.fs" />
+        <Compile Include="Server\DiagnosticBundleHandler.fs" />
         <Compile Include="Server\RemotingHelpers.fs" />
         <!-- The IProviderProfileApi handler, delegating to the
              registered IProviderProfile, plus the `routeHandlers` gate compose

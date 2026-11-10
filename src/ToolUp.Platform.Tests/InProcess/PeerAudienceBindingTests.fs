@@ -1,6 +1,5 @@
 module ToolUp.Platform.Tests.InProcess.PeerAudienceBindingTests
 
-open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
@@ -9,6 +8,7 @@ open ToolUp.Platform.Tests.InProcess.PeerTestComposition
 open ToolUp.InterPlatform.PeerCompose
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 309 — audience binding for contract hosts ─────────────────
 //
@@ -36,46 +36,6 @@ open ToolUp.Platform.Compose
 //      untouched.
 
 // ─── Fixtures ────────────────────────────────────────────────────────
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
-/// Captures `Warn` lines so the advisory can be asserted as an emitted
-/// log line, not merely as a classification.
-type private RecordingLogger() =
-    let warnings = ResizeArray<string>()
-    member _.Warnings = List.ofSeq warnings
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn message = warnings.Add message
-        member _.Error(_, _) = ()
 
 /// A served contract, so a composition can genuinely *host* something.
 /// NOT `private`: the host reflects via `FSharpType.IsRecord` without the
@@ -132,7 +92,7 @@ let private otherReceiver: PeerIdentity = {
 let private signingKey = "peer-audience-binding-shared-key-0123456789"
 
 let private secretsWithKey () =
-    let store = InMemorySecretStore() :> ISecretStore
+    let store = Fakes.TestSecretStore() :> ISecretStore
 
     store.SetSecret("_platform", $"peers/{callerId.PeerId}/signing-key", signingKey)
     |> Async.RunSynchronously
@@ -298,21 +258,21 @@ let postureTests =
         }
 
         test "enforcement logs the advisory for a contract host without LocalPeer" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             let app = hostOnlyApp () |> PeerComposition.app (ServerApp.withLogger logger)
 
             PeerCompose.enforceAudienceBinding app
 
-            Expect.equal logger.Warnings.Length 1 "exactly one advisory, on the startup path"
+            Expect.equal (logger.MessagesAt LogSeverity.Warn).Length 1 "exactly one advisory, on the startup path"
 
             Expect.stringContains
-                logger.Warnings[0]
+                (List.item 0 (logger.MessagesAt LogSeverity.Warn))
                 "withLocalPeer"
                 "the advisory must name the lever that fixes it, or it is just noise"
         }
 
         test "CONTROL — the same composition WITH LocalPeer logs nothing" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let app =
                 hostOnlyApp ()
@@ -322,12 +282,12 @@ let postureTests =
             PeerCompose.enforceAudienceBinding app
 
             Expect.isEmpty
-                logger.Warnings
+                (logger.MessagesAt LogSeverity.Warn)
                 "a correctly-composed federated deployment must stay quiet — an advisory that fires for everyone is ignored by everyone"
         }
 
         test "CONTROL — a non-federating composition logs nothing" {
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let app =
                 PeerComposition.create ()
@@ -335,7 +295,7 @@ let postureTests =
                 |> PeerComposition.app (ServerApp.withLogger logger)
 
             PeerCompose.enforceAudienceBinding app
-            Expect.isEmpty logger.Warnings "nothing hosted, nothing to warn about"
+            Expect.isEmpty (logger.MessagesAt LogSeverity.Warn) "nothing hosted, nothing to warn about"
         }
 
         test "strict mode refuses to start, naming the defect and the fix" {
@@ -356,7 +316,7 @@ let postureTests =
             // The identical strict composition, one call added. Without
             // this pair, "strict threw" would pass against a strict mode
             // that refused every composition.
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
 
             let app =
                 hostOnlyApp ()
@@ -365,17 +325,17 @@ let postureTests =
                 |> PeerComposition.app (ServerApp.withLogger logger)
 
             PeerCompose.enforceAudienceBinding app
-            Expect.isEmpty logger.Warnings "a bound receiver passes the strict gate silently"
+            Expect.isEmpty (logger.MessagesAt LogSeverity.Warn) "a bound receiver passes the strict gate silently"
         }
 
         test "CONTROL — the default is warn-not-fail (GP 11)" {
             // The same defective composition without the opt-in must not
             // throw: every existing host-only deployment keeps starting.
-            let logger = RecordingLogger()
+            let logger = Logger.recording ()
             let app = hostOnlyApp () |> PeerComposition.app (ServerApp.withLogger logger)
 
             PeerCompose.enforceAudienceBinding app
-            Expect.equal logger.Warnings.Length 1 "surfaced, but the deployment still starts"
+            Expect.equal (logger.MessagesAt LogSeverity.Warn).Length 1 "surfaced, but the deployment still starts"
         }
 
         test "strict mode is off on a freshly created composition" {

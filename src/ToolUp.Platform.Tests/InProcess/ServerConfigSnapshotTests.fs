@@ -26,14 +26,7 @@ open Microsoft.FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
+open ToolUp.Platform.Testing
 
 let private repoRoot () =
     let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
@@ -393,12 +386,12 @@ let private nestedFields () =
 
 let private cases () = [
     "no environment, empty overrides",
-    (fun () -> withEnvironment [] (fun () -> ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty))
+    (fun () -> withEnvironment [] (fun () -> ServerConfig.fromEnv Logger.silent ServerConfigOverrides.empty))
     "fixed environment, empty overrides",
     (fun () ->
-        withEnvironment fixedEnvironment (fun () -> ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty))
+        withEnvironment fixedEnvironment (fun () -> ServerConfig.fromEnv Logger.silent ServerConfigOverrides.empty))
     "no environment, reference-app overrides",
-    (fun () -> withEnvironment [] (fun () -> ServerConfig.fromEnv silentLogger ServerConfigOverrides.referenceApp))
+    (fun () -> withEnvironment [] (fun () -> ServerConfig.fromEnv Logger.silent ServerConfigOverrides.referenceApp))
 ]
 
 let private renderAll () =
@@ -439,11 +432,11 @@ let tests =
                 // would pin the default twice and the value never: assert each
                 // fixed value changed at least the case it selects.
                 let unset =
-                    withEnvironment [] (fun () -> ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty)
+                    withEnvironment [] (fun () -> ServerConfig.fromEnv Logger.silent ServerConfigOverrides.empty)
 
                 let set =
                     withEnvironment fixedEnvironment (fun () ->
-                        ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty)
+                        ServerConfig.fromEnv Logger.silent ServerConfigOverrides.empty)
 
                 Expect.notEqual set unset "the fixed environment bound nothing"
 

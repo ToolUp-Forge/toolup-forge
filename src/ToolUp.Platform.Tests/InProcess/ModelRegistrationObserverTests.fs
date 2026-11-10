@@ -4,13 +4,13 @@
 module ToolUp.Platform.Tests.InProcess.ModelRegistrationObserverTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 651 — the registration observer seam ─────────────────────────
 //
@@ -34,26 +34,6 @@ open ToolUp.Platform.Jobs
 // only that the decorator can call a function.
 
 let private t0 = DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(_: string) = ()
-        member _.Error(_: string, _: exn option) = ()
-    }
-
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 /// An evaluation runner whose one read raises — the Phase 645 "policy
 /// evaluation error" arm, reached here through registration rather than
@@ -120,17 +100,13 @@ let private scope = "team-1"
 type private Stack = {
     Registry: IModelRegistry
     DataObjects: IDataObjectStore
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
 }
 
-let private freshStack () : Stack =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-registration-observer-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+let private freshStack (dir: TempDir) : Stack =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
 
     {
         Registry = BlobModelRegistry.create dataObjects audit
@@ -140,7 +116,7 @@ let private freshStack () : Stack =
 
 let private observerDeps (stack: Stack) : ModelRegistrationObserverDeps = {
     Audit = stack.Audit
-    Logger = silentLogger
+    Logger = Logger.silent
 }
 
 let private policyDeps (stack: Stack) (evaluations: IModelEvaluationRunner option) : PromotionPolicyDeps = {
@@ -195,9 +171,9 @@ let private statusOf (stack: Stack) (keyHash: string) = async {
     | Error e -> return failwithf "get failed: %s" (ModelRegistryError.describe e)
 }
 
-let private observerFailureRows (audit: RecordingAuditLog) =
+let private observerFailureRows (audit: TestAuditLog) =
     audit.Events
-    |> List.choose (fun (_, e) ->
+    |> List.choose (fun e ->
         match e with
         | ModelRegistrationObserverFailed p -> Some p
         | _ -> None)
@@ -228,7 +204,8 @@ let tests =
         // ─── The seam itself ────────────────────────────────────────────
 
         testAsync "an arriving artifact is observed once, with the record as stored" {
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
             let observer = CapturingObserver("capture", false)
 
             let registry =
@@ -265,7 +242,8 @@ let tests =
             // through an early return that appends nothing. A seam that
             // fired there would report a new artifact every time a job
             // retried.
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
             let observer = CapturingObserver("capture", false)
 
             let registry =
@@ -288,7 +266,8 @@ let tests =
         }
 
         testAsync "an observer failure is isolated, audited, and never reaches the registrar" {
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
             let failing = CapturingObserver("explodes", true)
             let following = CapturingObserver("follows", false)
 
@@ -329,7 +308,8 @@ let tests =
             // Byte-identical behaviour for an un-composed deployment is not
             // "an equivalent wrapper" — it is the same object, with no
             // extra indirection on any call (GP 11 / GP 13).
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
 
             let decorated =
                 ModelRegistrationObservers.decorate (observerDeps stack) [] stack.Registry
@@ -344,7 +324,8 @@ let tests =
             // predating Phase 651. Weaker under concurrency than the
             // default registry's own report — and the alternative of never
             // firing would make composition silently do nothing.
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
             let opaque = OpaqueRegistry(stack.Registry) :> IModelRegistry
             let observer = CapturingObserver("capture", false)
 
@@ -362,10 +343,11 @@ let tests =
         // ─── The policy binding, end to end ─────────────────────────────
 
         testAsync "composing promotion policies auto-promotes an arriving artifact with no consumer wiring" {
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
 
             let registry, evaluator =
-                ModelPromotionPolicyObserver.compose [ tolerantPolicy ] (policyDeps stack None) silentLogger
+                ModelPromotionPolicyObserver.compose [ tolerantPolicy ] (policyDeps stack None) Logger.silent
 
             // The incumbent is registered and approved the ordinary Phase
             // 453 way; the challenger simply ARRIVES. Nothing below calls
@@ -404,10 +386,11 @@ let tests =
         }
 
         testAsync "composing promotion policies queues an arriving artifact outside tolerance" {
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
 
             let registry, evaluator =
-                ModelPromotionPolicyObserver.compose [ tolerantPolicy ] (policyDeps stack None) silentLogger
+                ModelPromotionPolicyObserver.compose [ tolerantPolicy ] (policyDeps stack None) Logger.silent
 
             let! incumbent = registerVia registry (outcomeFor 1L [ "error", 0.50; "score", 0.80 ])
             let! _ = approve stack incumbent.CompositeKey.Hash
@@ -441,7 +424,8 @@ let tests =
             // evaluator's own guard turns the raise into a queued decision,
             // so the observer never fails and nothing is isolated — the
             // artifact simply waits for a human.
-            let stack = freshStack ()
+            use dir = TempDir.create "registration-observer-test"
+            let stack = freshStack dir
 
             let policy = {
                 tolerantPolicy with
@@ -452,7 +436,7 @@ let tests =
                 policyDeps stack (Some(ThrowingEvaluationRunner() :> IModelEvaluationRunner))
 
             let registry, evaluator =
-                ModelPromotionPolicyObserver.compose [ policy ] deps silentLogger
+                ModelPromotionPolicyObserver.compose [ policy ] deps Logger.silent
 
             let! artifact = registerVia registry (outcomeFor 1L [ "error", 0.01; "score", 0.99 ])
 

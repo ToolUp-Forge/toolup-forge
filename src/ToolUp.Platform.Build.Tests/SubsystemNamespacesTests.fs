@@ -7,6 +7,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 
 // ─── Phase 1198 — a namespace names the part ──────────────────────────
 //
@@ -777,38 +778,33 @@ let tests =
 
             testCase "the Codemod reads the tree's declarations and reports dead opens as review findings"
             <| fun () ->
-                let dir =
-                    Path.Combine(Path.GetTempPath(), "codemod-1198-" + Guid.NewGuid().ToString "N")
+                use scratch = TempDir.create "codemod"
+                let dir = scratch.Path
 
-                Directory.CreateDirectory dir |> ignore
+                File.WriteAllText(
+                    Path.Combine(dir, "App.fsproj"),
+                    "<Project><ItemGroup><Compile Include=\"Modes.fs\" /><Compile Include=\"Use.fs\" /><PackageReference Include=\"ToolUp.Sdk\" /></ItemGroup></Project>"
+                )
 
-                try
-                    File.WriteAllText(
-                        Path.Combine(dir, "App.fsproj"),
-                        "<Project><ItemGroup><Compile Include=\"Modes.fs\" /><Compile Include=\"Use.fs\" /><PackageReference Include=\"ToolUp.Sdk\" /></ItemGroup></Project>"
-                    )
+                File.WriteAllText(
+                    Path.Combine(dir, "Modes.fs"),
+                    "module App.Modes\n\ntype Need =\n    | Required\n    | Optional\n"
+                )
 
-                    File.WriteAllText(
-                        Path.Combine(dir, "Modes.fs"),
-                        "module App.Modes\n\ntype Need =\n    | Required\n    | Optional\n"
-                    )
+                File.WriteAllText(
+                    Path.Combine(dir, "Use.fs"),
+                    "module App.Use\n\nopen ToolUp.Platform\nopen App.Modes\n\nlet x = Required\n"
+                )
 
-                    File.WriteAllText(
-                        Path.Combine(dir, "Use.fs"),
-                        "module App.Use\n\nopen ToolUp.Platform\nopen App.Modes\n\nlet x = Required\n"
-                    )
+                let plan = Codemod.planFor [ CodemodMigration.SubsystemNamespaces ] dir
+                let file = plan.Files |> List.find (fun f -> f.RelativePath = "Use.fs")
 
-                    let plan = Codemod.planFor [ CodemodMigration.SubsystemNamespaces ] dir
-                    let file = plan.Files |> List.find (fun f -> f.RelativePath = "Use.fs")
+                Expect.equal file.Rewritten file.Original "Required is the tree's own, so nothing is derived"
 
-                    Expect.equal file.Rewritten file.Original "Required is the tree's own, so nothing is derived"
-
-                    Expect.equal
-                        (file.Findings |> List.map (fun f -> f.RuleId, f.Line))
-                        [ "1198-likely-dead-open", 3 ]
-                        "the open that now reaches nothing is reported, and stays"
-                finally
-                    Directory.Delete(dir, true)
+                Expect.equal
+                    (file.Findings |> List.map (fun f -> f.RuleId, f.Line))
+                    [ "1198-likely-dead-open", 3 ]
+                    "the open that now reaches nothing is reported, and stays"
 
             testCase "a file whose projects do not reach the server tier is left alone"
             <| fun () ->
@@ -873,7 +869,7 @@ let tests =
                     "and its bare name derives nothing"
 
                 Expect.isTrue
-                    (has "ToolUp.Platform.Scope.StorageScopeResolver" "IStorageScopeResolver")
+                    (has "ToolUp.Platform.Scope.StorageScopeResolver" "ScopeResolution")
                     "a moved module's member"
 
             testCase "round-trips through its text form and is the table the Codemod reads"

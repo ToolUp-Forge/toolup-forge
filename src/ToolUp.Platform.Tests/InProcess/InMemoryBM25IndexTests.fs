@@ -13,6 +13,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── InMemoryBM25Index snapshot persistence ───────────────────────
 //
@@ -46,20 +47,6 @@ type private PrivateDocEntry = {
 type private PrivateSnapshot = { Docs: PrivateDocEntry array }
 
 let private jsonOptions = PlatformJson.options
-
-/// ILogger double that records Warn / Error lines for assertion.
-type private CapturingLogger() =
-    let warnings = ResizeArray<string>()
-    let errors = ResizeArray<string>()
-
-    member _.Warnings = List.ofSeq warnings
-    member _.Errors = List.ofSeq errors
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn message = warnings.Add message
-        member _.Error(message, _) = errors.Add message
 
 let private chunk content metadata : TextChunk = {
     Content = content
@@ -126,7 +113,7 @@ let tests =
 
             // Second boot over the same storage: the snapshot must load —
             // no "Corrupt index" warning, and search hits without re-ingestion.
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
 
             use index2 =
                 new InMemoryBM25Index(storage, logger = logger, flushIntervalMs = 60000)
@@ -143,7 +130,8 @@ let tests =
                 "the matching chunk must come back from the persisted snapshot"
 
             Expect.isEmpty
-                (logger.Warnings |> List.filter (fun w -> w.Contains "Corrupt index"))
+                (logger.MessagesAt LogSeverity.Warn
+                 |> List.filter (fun w -> w.Contains "Corrupt index"))
                 "loading a healthy snapshot must not be misdiagnosed as corrupt"
         }
 
@@ -163,7 +151,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let! _ = storage.Upload("_rag", deploymentBlobName, Encoding.UTF8.GetBytes "not json {{{")
 
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
 
             use index = new InMemoryBM25Index(storage, logger = logger, flushIntervalMs = 60000)
             let! results = (index :> ISparseIndex).Search [ Deployment ] "anything" 10
@@ -171,7 +159,8 @@ let tests =
             Expect.isEmpty results "corrupt snapshot must yield an empty index"
 
             Expect.isNonEmpty
-                (logger.Warnings |> List.filter (fun w -> w.Contains "Corrupt index"))
+                (logger.MessagesAt LogSeverity.Warn
+                 |> List.filter (fun w -> w.Contains "Corrupt index"))
                 "corrupt snapshot must be surfaced with the starting-empty warning"
         }
 

@@ -39,6 +39,7 @@ open System.Diagnostics
 open System.IO
 open Expecto
 open ToolUp.Platform.Tests.Contracts.PublicApiApproval
+open ToolUp.Platform.Testing
 
 let private root = repoRoot ()
 
@@ -96,47 +97,39 @@ let private run (exe: string) (args: string list) (workingDir: string) =
 let private mergeWith (mode: string) (baseText: string) (oursText: string) (theirsText: string) : Run =
     let shell = pwsh.Value |> Option.defaultWith (fun () -> failwith "pwsh not on PATH")
 
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-805-" + Guid.NewGuid().ToString "N")
+    use scratch = TempDir.create "805"
+    let dir = scratch.Path
 
-    Directory.CreateDirectory dir |> ignore
+    let write name (text: string) =
+        let p = Path.Combine(dir, name)
+        File.WriteAllText(p, text)
+        p
 
-    try
-        let write name (text: string) =
-            let p = Path.Combine(dir, name)
-            File.WriteAllText(p, text)
-            p
+    let b = write "base.txt" baseText
+    let o = write "ours.txt" oursText
+    let t = write "theirs.txt" theirsText
 
-        let b = write "base.txt" baseText
-        let o = write "ours.txt" oursText
-        let t = write "theirs.txt" theirsText
+    let exit, _, stderr =
+        run
+            shell
+            [
+                "-NoProfile"
+                "-File"
+                driverPath
+                "-Mode"
+                mode
+                b
+                o
+                t
+                "api-baselines/Fixture.approved.txt"
+            ]
+            dir
 
-        let exit, _, stderr =
-            run
-                shell
-                [
-                    "-NoProfile"
-                    "-File"
-                    driverPath
-                    "-Mode"
-                    mode
-                    b
-                    o
-                    t
-                    "api-baselines/Fixture.approved.txt"
-                ]
-                dir
-
-        {
-            Exit = exit
-            Merged = File.ReadAllText(o).Replace("\r\n", "\n")
-            Stderr = stderr
-        }
-    finally
-        try
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
+    {
+        Exit = exit
+        Merged = File.ReadAllText(o).Replace("\r\n", "\n")
+        Stderr = stderr
+    }
 
 let private conflicted (r: Run) =
     r.Merged.Contains "<<<<<<< "
@@ -641,102 +634,90 @@ let private gitMergeTest =
         test "two branches adding disjoint members merge cleanly through git" {
             let shell = pwsh.Value |> Option.defaultWith (fun () -> failwith "pwsh not on PATH")
 
-            let dir =
-                Path.Combine(Path.GetTempPath(), "toolup-805-git-" + Guid.NewGuid().ToString "N")
+            use scratch = TempDir.create "805-git"
+            let dir = scratch.Path
 
-            Directory.CreateDirectory dir |> ignore
+            let git args =
+                let exit, out, err = run "git" args dir
+                Expect.equal exit 0 (sprintf "git %s failed: %s%s" (String.concat " " args) out err)
 
-            try
-                let git args =
-                    let exit, out, err = run "git" args dir
-                    Expect.equal exit 0 (sprintf "git %s failed: %s%s" (String.concat " " args) out err)
+            let baselineFile = Path.Combine(dir, "api-baselines", "Fixture.approved.txt")
+            Directory.CreateDirectory(Path.Combine(dir, "api-baselines")) |> ignore
 
-                let baselineFile = Path.Combine(dir, "api-baselines", "Fixture.approved.txt")
-                Directory.CreateDirectory(Path.Combine(dir, "api-baselines")) |> ignore
+            git [ "init"; "-b"; "main" ]
+            git [ "config"; "user.email"; "phase805@example.invalid" ]
+            git [ "config"; "user.name"; "Phase 805" ]
 
-                git [ "init"; "-b"; "main" ]
-                git [ "config"; "user.email"; "phase805@example.invalid" ]
-                git [ "config"; "user.name"; "Phase 805" ]
+            // Exactly the two lines this phase adds to the repo's own
+            // `.gitattributes`, and exactly the registration `Setup`
+            // writes — so this case fails if either spelling drifts.
+            File.WriteAllText(
+                Path.Combine(dir, ".gitattributes"),
+                "api-baselines/*.approved.txt            merge=toolup-members\napi-baselines/doc-coverage.approved.txt merge=toolup-coverage\n"
+            )
 
-                // Exactly the two lines this phase adds to the repo's own
-                // `.gitattributes`, and exactly the registration `Setup`
-                // writes — so this case fails if either spelling drifts.
-                File.WriteAllText(
-                    Path.Combine(dir, ".gitattributes"),
-                    "api-baselines/*.approved.txt            merge=toolup-members\napi-baselines/doc-coverage.approved.txt merge=toolup-coverage\n"
-                )
+            git [
+                "config"
+                "merge.toolup-members.driver"
+                sprintf "\"%s\" -NoProfile -File \"%s\" -Mode members %%O %%A %%B %%P" shell driverPath
+            ]
 
-                git [
-                    "config"
-                    "merge.toolup-members.driver"
-                    sprintf "\"%s\" -NoProfile -File \"%s\" -Mode members %%O %%A %%B %%P" shell driverPath
+            File.WriteAllText(baselineFile, membersFixture baseBody)
+            git [ "add"; "-A" ]
+            git [ "commit"; "-m"; "base" ]
+
+            git [ "checkout"; "-b"; "theirs" ]
+
+            File.WriteAllText(
+                baselineFile,
+                membersFixture [
+                    "Demo.T (class)"
+                    "Demo.T.Aardvark() : System.Int32"
+                    "Demo.T.Alpha() : System.Int32"
+                    "Demo.U (class)"
+                    "Demo.U.Zed : System.String { get }"
                 ]
+            )
 
-                File.WriteAllText(baselineFile, membersFixture baseBody)
-                git [ "add"; "-A" ]
-                git [ "commit"; "-m"; "base" ]
+            git [ "commit"; "-am"; "theirs adds Aardvark" ]
+            git [ "checkout"; "main" ]
 
-                git [ "checkout"; "-b"; "theirs" ]
+            File.WriteAllText(
+                baselineFile,
+                membersFixture [
+                    "Demo.T (class)"
+                    "Demo.T.Alpha() : System.Int32"
+                    "Demo.T.Beta() : System.Int32"
+                    "Demo.U (class)"
+                    "Demo.U.Zed : System.String { get }"
+                ]
+            )
 
-                File.WriteAllText(
-                    baselineFile,
-                    membersFixture [
-                        "Demo.T (class)"
-                        "Demo.T.Aardvark() : System.Int32"
-                        "Demo.T.Alpha() : System.Int32"
-                        "Demo.U (class)"
-                        "Demo.U.Zed : System.String { get }"
-                    ]
-                )
+            git [ "commit"; "-am"; "ours adds Beta" ]
 
-                git [ "commit"; "-am"; "theirs adds Aardvark" ]
-                git [ "checkout"; "main" ]
+            let exit, out, err = run "git" [ "merge"; "--no-edit"; "theirs" ] dir
 
-                File.WriteAllText(
-                    baselineFile,
-                    membersFixture [
-                        "Demo.T (class)"
-                        "Demo.T.Alpha() : System.Int32"
-                        "Demo.T.Beta() : System.Int32"
-                        "Demo.U (class)"
-                        "Demo.U.Zed : System.String { get }"
-                    ]
-                )
+            Expect.equal
+                exit
+                0
+                (sprintf
+                    "the registered driver should merge two disjoint additions with no conflict — git said:\n%s%s"
+                    out
+                    err)
 
-                git [ "commit"; "-am"; "ours adds Beta" ]
+            let merged = File.ReadAllText(baselineFile).Replace("\r\n", "\n")
 
-                let exit, out, err = run "git" [ "merge"; "--no-edit"; "theirs" ] dir
-
-                Expect.equal
-                    exit
-                    0
-                    (sprintf
-                        "the registered driver should merge two disjoint additions with no conflict — git said:\n%s%s"
-                        out
-                        err)
-
-                let merged = File.ReadAllText(baselineFile).Replace("\r\n", "\n")
-
-                Expect.equal
-                    merged
-                    (membersFixture [
-                        "Demo.T (class)"
-                        "Demo.T.Aardvark() : System.Int32"
-                        "Demo.T.Alpha() : System.Int32"
-                        "Demo.T.Beta() : System.Int32"
-                        "Demo.U (class)"
-                        "Demo.U.Zed : System.String { get }"
-                    ])
-                    "both additions survive, in the order a regeneration would emit them"
-            finally
-                try
-                    // git leaves read-only objects on Windows.
-                    for f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories) do
-                        File.SetAttributes(f, FileAttributes.Normal)
-
-                    Directory.Delete(dir, true)
-                with _ ->
-                    ()
+            Expect.equal
+                merged
+                (membersFixture [
+                    "Demo.T (class)"
+                    "Demo.T.Aardvark() : System.Int32"
+                    "Demo.T.Alpha() : System.Int32"
+                    "Demo.T.Beta() : System.Int32"
+                    "Demo.U (class)"
+                    "Demo.U.Zed : System.String { get }"
+                ])
+                "both additions survive, in the order a regeneration would emit them"
         }
     ]
 
@@ -749,23 +730,11 @@ let private gitMergeTest =
 // directory, whose parent is the primary checkout. These cases pin that rule
 // end to end, and the draft-note mode beside it.
 
-/// A scratch directory under the system temp dir, deleted afterwards (git
-/// leaves read-only objects on Windows).
-let private withScratch (prefix: string) (body: string -> unit) =
-    let dir = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString "N")
-
-    Directory.CreateDirectory dir |> ignore
-
-    try
-        body dir
-    finally
-        try
-            for f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories) do
-                File.SetAttributes(f, FileAttributes.Normal)
-
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
+/// A scratch directory under the system temp dir, deleted afterwards
+/// (read-only git objects included).
+let private withScratch (family: string) (body: string -> unit) =
+    use dir = TempDir.create family
+    body dir.Path
 
 /// `git` in `cwd`, asserted to succeed.
 let private gitIn (cwd: string) (args: string list) =
@@ -816,7 +785,7 @@ let private worktreeRegistrationTest =
         test "the script resolved through the common dir outlives the worktree; the old per-checkout path does not" {
             let shell = pwsh.Value |> Option.defaultWith (fun () -> failwith "pwsh not on PATH")
 
-            withScratch "toolup-1149-wt-" (fun scratch ->
+            withScratch "1149-wt" (fun scratch ->
                 let primary = Path.Combine(scratch, "primary")
                 let worktree = Path.Combine(scratch, "setup-worktree")
                 Directory.CreateDirectory(Path.Combine(primary, "dev-scripts")) |> ignore
@@ -951,7 +920,7 @@ let private mergeNotes (registerDriver: bool) (ours: string -> string) (theirs: 
     let shell = pwsh.Value |> Option.defaultWith (fun () -> failwith "pwsh not on PATH")
     let result = ref (-1, "")
 
-    withScratch "toolup-1210-note-" (fun dir ->
+    withScratch "1210-note" (fun dir ->
         newRepo dir
         let notes = Path.Combine(dir, draftNotesFile)
         File.WriteAllText(Path.Combine(dir, ".gitattributes"), "/DRAFT-NOTES.md merge=toolup-draftnote\n")

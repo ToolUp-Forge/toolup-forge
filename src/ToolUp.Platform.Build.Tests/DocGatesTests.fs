@@ -13,6 +13,7 @@ open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Testing
 open ToolUp.Forge
 open ToolUp.Forge.DocGates
 
@@ -57,19 +58,15 @@ let private universe = Universe.ofSurfaces [ SurfaceDiff.parse baselineText ]
 
 /// A scratch tree, deleted after `body` runs.
 let private withTree (files: (string * string) list) (body: string -> unit) =
-    let root =
-        Path.Combine(Path.GetTempPath(), "docgates-" + Guid.NewGuid().ToString("N"))
+    use scratch = TempDir.create "docgates"
+    let root = scratch.Path
 
-    try
-        for rel, text in files do
-            let path = Path.Combine(root, rel)
-            Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
-            File.WriteAllText(path, text)
+    for rel, text in files do
+        let path = Path.Combine(root, rel)
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, text)
 
-        body root
-    finally
-        if Directory.Exists root then
-            Directory.Delete(root, true)
+    body root
 
 let private compiled (exit: int) (stdout: string) =
     fun (_: string) (_: string list) (_: string) -> {

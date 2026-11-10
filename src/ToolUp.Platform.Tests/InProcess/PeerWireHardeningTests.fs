@@ -6,7 +6,6 @@ module ToolUp.Platform.Tests.InProcess.PeerWireHardeningTests
 // the mis-scoped token under the pre-629 posture.
 
 open System
-open System.Collections.Concurrent
 open System.IO
 open System.Net.Http
 open System.Net.Http.Headers
@@ -30,6 +29,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 315 — peer host wire hardening ────────────────────────────
 //
@@ -61,34 +61,6 @@ open ToolUp.Platform.Compose
 // a `TestServer` the same request would only tell us the status code.
 
 // ─── Fixtures ────────────────────────────────────────────────────────
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 let private seedSigningKey (store: ISecretStore) (peerId: string) (key: string) =
     store.SetSecret("_platform", $"peers/{peerId}/signing-key", key)
@@ -262,7 +234,7 @@ let requestBodyCapTests =
             // it to be. The claim under test is a MEASUREMENT — the
             // receiver pulls a bounded number of bytes off a stream that
             // would have handed it a megabyte.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             let auth = authFor secrets
             let! token = issue auth callerId
@@ -301,7 +273,7 @@ let requestBodyCapTests =
             // needs to be pulled at all. Removing this pre-check leaves
             // the test green on status and red on the byte counter,
             // which is the point of asserting both.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             let auth = authFor secrets
             let! token = issue auth callerId
@@ -331,7 +303,7 @@ let requestBodyCapTests =
             // ceiling is the 8 MiB default, the 1 MiB payload is read
             // end to end, and the request fails on its JSON-RPC shape
             // (400) — proof that the 413s above were the cap talking.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             let auth = authFor secrets
             let! token = issue auth callerId
@@ -362,7 +334,7 @@ let requestBodyCapTests =
             // that something is enforced. Declared at 9 MiB against the
             // 8 MiB default, so the pre-check settles it and the test
             // costs nothing to run.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             let auth = authFor secrets
             let! token = issue auth callerId
@@ -389,7 +361,7 @@ let requestBodyCapTests =
             // moved above auth would hand an UNAUTHENTICATED caller a
             // 413 — a new oracle, and one that also tells them the
             // receiver's ceiling for free.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             let auth = authFor secrets
 
@@ -498,16 +470,16 @@ let pollCorrelationTests =
 
         testCaseAsync "every answer on the poll route echoes the polled jobId as its JSON-RPC Id"
         <| async {
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             seedSigningKey secrets intruderId.PeerId intruderKey
             let receiverAuth = authFor secrets
 
-            let callerSecrets = InMemorySecretStore() :> ISecretStore
+            let callerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerId.PeerId callerKey
             let callerAuth = authFor callerSecrets
 
-            let intruderSecrets = InMemorySecretStore() :> ISecretStore
+            let intruderSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey intruderSecrets intruderId.PeerId intruderKey
             let intruderAuth = authFor intruderSecrets
 
@@ -577,11 +549,11 @@ let pollCorrelationTests =
             // so they must observe no difference at all. Asserted with
             // the real `HttpPeerClient` rather than by reasoning about
             // what it reads.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             let receiverAuth = authFor secrets
 
-            let callerSecrets = InMemorySecretStore() :> ISecretStore
+            let callerSecrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey callerSecrets callerId.PeerId callerKey
             let callerAuth = authFor callerSecrets
 
@@ -608,7 +580,7 @@ let pollCorrelationTests =
             // is untouched by this phase. A genuine call is dispatched,
             // the handler runs, and the response echoes `request.Id`
             // exactly as it always has.
-            let secrets = InMemorySecretStore() :> ISecretStore
+            let secrets = Fakes.TestSecretStore() :> ISecretStore
             seedSigningKey secrets callerId.PeerId callerKey
             let auth = authFor secrets
             let! token = issue auth callerId
@@ -694,7 +666,7 @@ let private issueFor (issuer: IPeerCallScopedAuth) (boundTo: string) = async {
 /// The caller's own key material, kept separate from the receiver's so
 /// the issuing and validating providers are genuinely different objects.
 let private callerSecrets () =
-    let s = InMemorySecretStore() :> ISecretStore
+    let s = Fakes.TestSecretStore() :> ISecretStore
     seedSigningKey s callerId.PeerId callerKey
     s
 
@@ -703,7 +675,7 @@ let private callerSecrets () =
 /// many times the contract implementation was actually reached — the
 /// difference between "refused at the wire" and "ran and then failed".
 let private dispatchUnder (policy: PeerTokenPolicy) (token: string) = async {
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     seedSigningKey secrets callerId.PeerId callerKey
     let auth = receiverAuthUnder secrets policy
 

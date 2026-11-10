@@ -80,7 +80,7 @@ type ModuleApiContext = {
     /// Raises `FileNotFoundInSessionException` when the file is not
     /// present in the request's scope (classified as a 4xx user-action
     /// error by the remoting error handler).
-    member this.GetFileContents(fileName: string) : string =
+    member this.GetFileContents(fileName: string) : Async<string> =
         FileManagement.getFileContents this.HttpContext fileName
 
     /// Wrap a pure file-backed routine as an async endpoint: resolve
@@ -91,7 +91,10 @@ type ModuleApiContext = {
     /// ; return routine contents … }`) collapses to
     /// `m.FromFile(_.FileName, fun contents r -> routine contents …)`.
     member this.FromFile(fileName: 'Req -> string, routine: string -> 'Req -> 'Res) : 'Req -> Async<'Res> =
-        fun request -> async { return routine (this.GetFileContents(fileName request)) request }
+        fun request -> async {
+            let! contents = this.GetFileContents(fileName request)
+            return routine contents request
+        }
 
     /// Publish `document` with provenance under this module's id —
     /// `NarrativePublisher.publishWithProvenance` with the module id

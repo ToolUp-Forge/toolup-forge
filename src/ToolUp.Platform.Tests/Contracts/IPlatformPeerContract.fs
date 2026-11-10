@@ -11,6 +11,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── IPlatformPeerContract — Phase 18 contract pack ──────────────────
 //
@@ -243,27 +244,12 @@ type private LegacyPeerJobPayload = {
     ArgsJson: string
 }
 
-/// `IAuditLog` that keeps every recorded event in order. Reads are not
-/// exercised by the job path — the handler only writes.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-
-    member _.Recorded = recorded |> List.ofSeq
-
-    member this.PeerJobRows =
-        this.Recorded
-        |> List.choose (fun (_, e) ->
-            match e with
-            | PeerAudit(PeerJobCompleted p) -> Some p
-            | _ -> None)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async { return [] }
+/// The peer-job completion rows a recording audit log holds, in order.
+let private peerJobRows (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (function
+        | PeerAudit(PeerJobCompleted p) -> Some p
+        | _ -> None)
 
 /// `IAuditLog` whose writes always throw — the flaky-store control. The
 /// job's parked result must be unaffected.
@@ -677,7 +663,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
         <| async {
             let peer = factory ()
             let store = InMemoryResultStore()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
@@ -704,7 +690,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let! jobId, jobResult = runJobHandler handler (JsonRpc.serialize envelope)
             Expect.equal jobResult Success "capturing the terminal status succeeds"
 
-            match audit.PeerJobRows with
+            match peerJobRows audit with
             | [ row ] ->
                 Expect.equal row.ContractId "terminal" "the row names the hosted contract"
                 Expect.equal row.MethodName "Compute" "the row names the contract method whose job resolved"
@@ -719,7 +705,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
         testCaseAsync "a failed long-running job records the failing PeerError case name, not ok"
         <| async {
             let peer = factory ()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
@@ -750,7 +736,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
                 Success
                 "a peer-side refusal is a recorded Failed status, not a job failure — re-running would double-execute"
 
-            match audit.PeerJobRows with
+            match peerJobRows audit with
             | [ row ] ->
                 Expect.isFalse row.Succeeded "the trail no longer reports a failed computation as a success"
 
@@ -771,7 +757,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             // the dispatch scheduled and read the terminal row's id.
             let peer = factory ()
             let scheduler = RecordingScheduler()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let fusion: PeerJobFusion = {
                 Scheduler = scheduler
@@ -799,7 +785,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
 
             let! _ = runJobHandler handler scheduledPayload
 
-            match audit.PeerJobRows with
+            match peerJobRows audit with
             | [ row ] ->
                 Expect.equal
                     row.RootRequestId
@@ -903,7 +889,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             // null. The row must still be written — an uncorrelated
             // terminal outcome beats a lost one — and must not carry null.
             let peer = factory ()
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let fusion: PeerJobFusion = {
                 Scheduler = StubScheduler()
@@ -929,7 +915,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
             let! _, jobResult = runJobHandler handler (JsonRpc.serialize legacy)
             Expect.equal jobResult Success "an old payload still resolves"
 
-            match audit.PeerJobRows with
+            match peerJobRows audit with
             | [ row ] ->
                 Expect.equal row.CallerPeerId buyerId.PeerId "the pre-310 owner still attributes the row"
                 Expect.equal row.RootRequestId "" "the absent correlation id normalises to empty, never null"

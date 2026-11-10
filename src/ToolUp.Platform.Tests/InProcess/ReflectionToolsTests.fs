@@ -20,6 +20,7 @@ open ToolUp.AI.AICompose
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 782 — the reflection door ─────────────────────────────────
 //
@@ -74,30 +75,20 @@ let private seamAuthority (verification: SeamAuthorityVerification) : SeamAuthor
     Verification = verification
 }
 
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
+/// The reflection tools' own audit rows.
+let private reflectionRows (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (function
+        | RemotingMethodAudited p when p.Kind = ReflectionTools.AuditKind -> Some p
+        | _ -> None)
 
-    member _.Reflection =
-        recorded
-        |> Seq.choose (function
-            | _, RemotingMethodAudited p when p.Kind = ReflectionTools.AuditKind -> Some p
-            | _ -> None)
-        |> List.ofSeq
-
-    member _.Verified =
-        recorded
-        |> Seq.filter (function
-            | _, DeploymentVerified _ -> true
-            | _ -> false)
-        |> Seq.length
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            lock recorded (fun () -> recorded.Add((scopeId, audit)))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
+/// How many deployment-verification report rows were written.
+let private verifiedCount (audit: TestAuditLog) =
+    audit.Events
+    |> List.filter (function
+        | DeploymentVerified _ -> true
+        | _ -> false)
+    |> List.length
 
 let private platformAdmin: AccessContext = {
     AccessContexts.forSubject (AuthenticatedUser "ops") with
@@ -120,7 +111,7 @@ let private teamStoreWith (teamId: string) (userId: string) (role: TeamRole) : I
 
 type private Fixture = {
     Services: IServiceProvider
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
 }
 
 let private fixtureWith
@@ -128,7 +119,7 @@ let private fixtureWith
     (teamStore: ITeamStore option)
     (evidence: IDeploymentVerificationEvidence option)
     : Fixture =
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let services = ServiceCollection()
     services.AddSingleton<AccessContext>(accessContext) |> ignore
 
@@ -324,14 +315,14 @@ let private gateTests =
             for (_, exec) in ReflectionTools.tools do
                 Expect.equal (errorOf (run exec ctx "{}")) (Some "Refused") "refused"
 
-            let rows = fixture.Audit.Reflection
+            let rows = reflectionRows fixture.Audit
             Expect.equal (rows |> List.map _.MethodName) reflectionNames "one row per call, per tool"
 
             Expect.isTrue
                 (rows |> List.forall (fun r -> r.Payload["outcome"] = "refused"))
                 "each row records the refusal"
 
-            Expect.equal fixture.Audit.Verified 0 "a refused report call ran no report"
+            Expect.equal (verifiedCount fixture.Audit) 0 "a refused report call ran no report"
         }
 
         test "a team Member is refused by every tool — the inspector's role gate, verbatim" {
@@ -374,7 +365,7 @@ let private gateTests =
                 "the reach is report evidence and keeps that audience"
 
             Expect.equal
-                (fixture.Audit.Reflection |> List.map (fun r -> r.Payload["outcome"]))
+                (reflectionRows fixture.Audit |> List.map (fun r -> r.Payload["outcome"]))
                 [ "served"; "refused"; "refused" ]
                 "served and refused alike"
         }
@@ -388,7 +379,7 @@ let private gateTests =
 
             run ReflectionTools.executeVerificationReport ctx "{}" |> ignore
 
-            match fixture.Audit.Reflection with
+            match reflectionRows fixture.Audit with
             | [ describe; report ] ->
                 Expect.equal describe.MethodName ReflectionTools.DescribeCompositionTool "tool"
                 Expect.equal describe.Payload["panel"] "rules" "argument"
@@ -396,7 +387,7 @@ let private gateTests =
                 Expect.equal report.Payload["outcome"] "served" "served"
             | rows -> failtestf "expected two reflection rows, got %d" rows.Length
 
-            Expect.equal fixture.Audit.Verified 1 "the report tool's run wrote the report's own row"
+            Expect.equal (verifiedCount fixture.Audit) 1 "the report tool's run wrote the report's own row"
         }
 
         test "an invalid panel is refused with the valid set named, and audited" {
@@ -409,7 +400,7 @@ let private gateTests =
             Expect.stringContains result "disclosure" "names the panels"
 
             Expect.equal
-                (fixture.Audit.Reflection |> List.map (fun r -> r.Payload["outcome"]))
+                (reflectionRows fixture.Audit |> List.map (fun r -> r.Payload["outcome"]))
                 [ "invalidargument" ]
                 "row"
         }
@@ -569,7 +560,7 @@ let private offlineTests =
             describe fixture [ ReflectionTools.CompositionDocument ] None |> ignore
 
             Expect.equal
-                (fixture.Audit.Reflection |> List.map _.SubjectId)
+                (reflectionRows fixture.Audit |> List.map _.SubjectId)
                 [ StartupModes.CliDescribeActor ]
                 "one row, for the served read"
         }

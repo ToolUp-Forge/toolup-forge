@@ -13,6 +13,7 @@ open ToolUp.Platform.Metrics
 open ToolUp.PublicRendering
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 // ─── Phase 111 — resolved-content head-metadata tests ───────────────
 //
@@ -93,17 +94,12 @@ let private codecTests =
 
 // ─── 2. Synthesis via PublicContentApiImpl ──────────────────────────
 
-let private mkTempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-resolved-content-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
-
-let private mkApiWith (sources: IContentSource list) : IPublicContentApi =
-    let dir = mkTempDir ()
+let private mkApiWith (dir: TempDir) (sources: IContentSource list) : IPublicContentApi =
     let logger = ConsoleLogger.ConsoleLogger() :> ILogger
-    let loader = new MarkdownContentLoader(ContentRoot dir, logger, hotReload = false)
+
+    let loader =
+        new MarkdownContentLoader(ContentRoot dir.Path, logger, hotReload = false)
+
     PublicContentApiImpl.create loader None sources
 
 let private anonCtx = AccessContexts.forSubject (AnonymousSession "test")
@@ -126,7 +122,8 @@ let private synthesisTests =
 
         testCaseAsync "head Title / Description fold into the synthesised page fields"
         <| async {
-            let api = mkApiWith [ resolvedSource "report" ]
+            use dir = TempDir.create "resolved-content"
+            let api = mkApiWith dir [ resolvedSource "report" ]
             let! page = api.GetPageInContext("report", anonCtx)
 
             match page with
@@ -138,7 +135,8 @@ let private synthesisTests =
 
         testCaseAsync "head canonical / og / meta / JSON-LD land in the head:* envelope + og:image mirror"
         <| async {
-            let api = mkApiWith [ resolvedSource "report" ]
+            use dir = TempDir.create "resolved-content"
+            let api = mkApiWith dir [ resolvedSource "report" ]
             let! page = api.GetPageInContext("report", anonCtx)
 
             match page with
@@ -182,7 +180,8 @@ let private synthesisTests =
                         return None
                 })
 
-            let api = mkApiWith [ source ]
+            use dir = TempDir.create "resolved-content"
+            let api = mkApiWith dir [ source ]
             let! page = api.GetPageInContext("dated", anonCtx)
 
             Expect.equal (page |> Option.bind _.PublishedAt) (Some stamp) "PublishedAt from provenance"
@@ -195,7 +194,8 @@ let private synthesisTests =
                     return if s = "plain" then Some(Html "<p>x</p>") else None
                 })
 
-            let api = mkApiWith [ plain ]
+            use dir = TempDir.create "resolved-content"
+            let api = mkApiWith dir [ plain ]
             let! page = api.GetPageInContext("plain", anonCtx)
 
             match page with
@@ -294,7 +294,8 @@ let private injectionTests =
 
         testCase "handler serves a resolved-content page SEO-complete (uncached path)"
         <| fun _ ->
-            let api = mkApiWith [ resolvedSource "report" ]
+            use dir = TempDir.create "resolved-content"
+            let api = mkApiWith dir [ resolvedSource "report" ]
             let status, body = runHandler None RenderCacheSettings.defaults api "/report"
 
             Expect.equal status 200 "served"
@@ -321,7 +322,8 @@ let private injectionTests =
                         return None
                 })
 
-            let api = mkApiWith [ source ]
+            use dir = TempDir.create "resolved-content"
+            let api = mkApiWith dir [ source ]
             let cache = InMemoryRenderCache.create ()
 
             let settings: RenderCacheSettings = {
@@ -379,7 +381,8 @@ let private enumerationTests =
                     return Some(ResolvedContent.ofBody (Html captures["q"]))
                 })
 
-            let api = mkApiWith [ source ]
+            use dir = TempDir.create "resolved-content"
+            let api = mkApiWith dir [ source ]
             let! hit = api.GetPageInContext("reports/q3", anonCtx)
             let! miss = api.GetPageInContext("other/q3", anonCtx)
 

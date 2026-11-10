@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.DatasetStoreTests
 
 open System
-open System.IO
 open System.Text.Json
 open Expecto
 open ToolUp.Platform
@@ -13,6 +12,7 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── Phase 448 — IDatasetStore conformance ──────────────────────────────
 //
@@ -28,15 +28,10 @@ open ToolUp.Platform.Infra
 // result-for-result, and falls back to it when ranged reads are refused (the
 // encryption decorator's posture).
 
-let private freshDir () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-ds-test-" + Guid.NewGuid().ToString("N"))
+let private freshDir () = TempDir.forRun "ds-test"
 
-    Directory.CreateDirectory tempDir |> ignore
-    tempDir
-
-let private baseDataObjects () =
-    let blob = LocalFileStorage.LocalFileStorage(freshDir ()) :> IBlobStorage
+let private baseDataObjects (dir: TempDir) =
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     DataObjectStore(blob) :> IDataObjectStore
 
 // ─── Streaming test codec ────────────────────────────────────────────────
@@ -231,7 +226,8 @@ let private rangedReadTests =
     testList "Ranged-read paging (448.D #3)" [
         testCaseAsync "streamed ReadPage pages without downloading the whole content blob"
         <| async {
-            let instr = InstrumentedDataObjectStore(baseDataObjects (), false, false)
+            use dir = freshDir ()
+            let instr = InstrumentedDataObjectStore(baseDataObjects dir, false, false)
 
             let! store = seeded (fun d -> BlobDatasetStore.createWithCodec d (ChunkedJsonCodec(2))) instr
 
@@ -246,10 +242,12 @@ let private rangedReadTests =
 
         testCaseAsync "streamed ReadPage matches the whole-blob path result-for-result"
         <| async {
-            let! wholeBlob = seeded BlobDatasetStore.create (baseDataObjects ())
+            use wholeBlobDir = freshDir ()
+            use streamedDir = freshDir ()
+            let! wholeBlob = seeded BlobDatasetStore.create (baseDataObjects wholeBlobDir)
 
             let! streamed =
-                seeded (fun d -> BlobDatasetStore.createWithCodec d (ChunkedJsonCodec(2))) (baseDataObjects ())
+                seeded (fun d -> BlobDatasetStore.createWithCodec d (ChunkedJsonCodec(2))) (baseDataObjects streamedDir)
 
             let queries: DatasetPageQuery list = [
                 DatasetPageQuery.firstPage 100
@@ -316,7 +314,8 @@ let private rangedReadTests =
         <| async {
             // The EncryptedBlobStorage shape: the size probe works (ciphertext
             // metadata) but the mid-blob range read is refused.
-            let instr = InstrumentedDataObjectStore(baseDataObjects (), false, true)
+            use dir = freshDir ()
+            let instr = InstrumentedDataObjectStore(baseDataObjects dir, false, true)
 
             let! store = seeded (fun d -> BlobDatasetStore.createWithCodec d (ChunkedJsonCodec(2))) instr
 
@@ -329,7 +328,8 @@ let private rangedReadTests =
 
         testCaseAsync "a refused size probe falls back to the whole-blob path"
         <| async {
-            let instr = InstrumentedDataObjectStore(baseDataObjects (), true, true)
+            use dir = freshDir ()
+            let instr = InstrumentedDataObjectStore(baseDataObjects dir, true, true)
 
             let! store = seeded (fun d -> BlobDatasetStore.createWithCodec d (ChunkedJsonCodec(2))) instr
 
@@ -342,7 +342,8 @@ let private rangedReadTests =
 
         testCaseAsync "DataObjectStore serves bounded content ranges by content hash"
         <| async {
-            let dataObjects = baseDataObjects ()
+            use dir = freshDir ()
+            let dataObjects = baseDataObjects dir
             let ranged = dataObjects :?> IContentRangeReader
             let content = Array.init 100 byte
 
@@ -373,7 +374,7 @@ let private rangedReadTests =
 
 let tests =
     let factory () : IDatasetStore =
-        BlobDatasetStore.create (baseDataObjects ())
+        BlobDatasetStore.create (baseDataObjects (freshDir ()))
 
     testList "DatasetStore" [
         IDatasetStoreContract.tests "BlobDatasetStore (blob-backed, JSON-frame codec)" factory

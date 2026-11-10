@@ -14,6 +14,12 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Recording.fs" Link="Testing\Recording.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Clock.fs" Link="Testing\Clock.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="Testing\TempDir.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Loggers.fs" Link="Testing\Loggers.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\CoreFakes.fs" Link="Testing\CoreFakes.fs" />
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\Fakes.fs" Link="Testing\Fakes.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\TestSupport\AccessContexts.fs" Link="TestSupport\AccessContexts.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IDataObjectStoreContract.fs" Link="Contracts\IDataObjectStoreContract.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\IGrantConsentStoreContract.fs" Link="Contracts\IGrantConsentStoreContract.fs" />
@@ -30,7 +36,6 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\PermissionStoreTests.fs" Link="InProcess\PermissionStoreTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AdminMutationApprovalTests.fs" Link="InProcess\AdminMutationApprovalTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\GrantConsentTests.fs" Link="InProcess\GrantConsentTests.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\InProcess\StorageScopeResolverTests.fs" Link="InProcess\StorageScopeResolverTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\GoogleIdentityCompanionTests.fs" Link="InProcess\GoogleIdentityCompanionTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ShareTokenStoreTests.fs" Link="InProcess\ShareTokenStoreTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ServiceAccountStoreTests.fs" Link="InProcess\ServiceAccountStoreTests.fs" />
@@ -58,6 +63,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModuleVisibilityContractTests.fs" Link="InProcess\ModuleVisibilityContractTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigratorTests.fs" Link="InProcess\AnonymousSessionMigratorTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\DefaultSubjectResolverTests.fs" Link="InProcess\DefaultSubjectResolverTests.fs" />
+        <Compile Include="..\ToolUp.Platform.Tests\InProcess\TeamAuthorityTests.fs" Link="InProcess\TeamAuthorityTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\CsrfCarveOutDerivationTests.fs" Link="InProcess\CsrfCarveOutDerivationTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SurfaceEnforcementMiddlewareTests.fs" Link="InProcess\SurfaceEnforcementMiddlewareTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AnonymousSessionMigrationMiddlewareTests.fs" Link="InProcess\AnonymousSessionMigrationMiddlewareTests.fs" />

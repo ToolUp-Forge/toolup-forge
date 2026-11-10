@@ -11,7 +11,8 @@ Authentication and data isolation are driven by the deployment's declared surfac
 
 ### How scope resolution works
 
-Every request resolves a `StorageScope` via `IStorageScopeResolver`:
+Every request resolves a `Subject` through the deployment's one `ISubjectResolver` (`DefaultSubjectResolver`,
+walking `ServerConfig.Surfaces`), and its `StorageScope` is that subject projected by `StorageScopeDerivation`:
 
 ```fsharp skip=signature
 type StorageScope = {
@@ -20,18 +21,19 @@ type StorageScope = {
     Persist: bool      // false for ephemeral surfaces
 }
 
-type IStorageScopeResolver =
-    abstract Resolve: HttpContext -> StorageScope
+type ISubjectResolver =
+    abstract Resolve: SubjectResolutionRequest -> Async<Result<Subject, SubjectResolutionError>>
 ```
 
-Four implementations, one per mode:
-
-| Resolver | Auth | Container pattern | Persist |
+| Subject | Auth | Container pattern | Persist |
 |----------|------|-------------------|---------|
-| `AnonymousScopeResolver` | None (reads `X-User-Id` header) | `session-{sessionId}` | No |
-| `AuthenticatedEphemeralScopeResolver` | Required (calls `ValidateRequest`) | `user-{userId}` | No |
-| `AuthenticatedScopeResolver` | Required | `user-{userId}` | Yes |
-| `TeamScopeResolver` | Required + active team lookup | `team-{teamId}` | Yes |
+| `AnonymousSession` | None (a server-sealed session id; a bare `X-User-Id` names no one) | `session-{sessionId}` | the Anonymous surface's |
+| `AuthenticatedUser` | Required | `user-{userId}` | the AuthenticatedUser surface's |
+| `TeamMember` | Required + active team, membership re-checked per request | `team-{teamId}` | the Team surface's |
+
+Work with no request (a declared report subscription, a data source's delivery) resolves its declared
+principal through the same resolver (`DeclaredPrincipalResolver`), and the diagnostic handlers resolve
+the caller with `SubjectScope.resolve`.
 
 **The fact tier's typed scope (Phase 797).** The resolver's `StorageScope` is what the rest of the
 platform carries in `HttpContext.Items`; the fact store, the disclosure gate and the three fact AI
@@ -52,7 +54,7 @@ carries rather than resolves (jobs, imports, sweeps); the typed form is the stri
 ### Storage and eviction
 
 - **Persistent modes** (Individual, Team): files stored in-memory AND persisted to `IBlobStorage`. On server restart, persisted files are reloaded via `loadPersistedFiles()`
-- **Ephemeral modes** (Anonymous, AuthenticatedEphemeral): files in-memory only. A background timer evicts stores not accessed within `storeEvictionMinutes` (default 60 min)
+- **Ephemeral modes** (Anonymous, AuthenticatedEphemeral): files in-memory only. A background timer evicts stores not accessed within the `SessionFileStores` TTL (`ServerConfig.EphemeralStoreEvictionMinutes`, default 60 min)
 
 ## Team Management
 
@@ -83,14 +85,17 @@ Removing a member also clears their active team if it was the removed team.
 The platform exposes five sibling ToolUp.Remoting APIs auto-injected by `ServerApp.run` — originally a single `PlatformApi` umbrella, split for per-concern route prefixes and per-concern test surfaces:
 
 - **`PlatformInfoApi`** — `GetPlatformInfo` returns the current mode and whether auth is required. Always-on; no auth gating because the client shell needs this before deciding whether to render a login affordance.
-- **`TeamApi`** — wraps `TeamStore` with role-based access control: `CreateTeam` (caller becomes Owner + active team), `GetMyTeams`, `GetActiveTeam`, `GetTeamMembers` (read-only, all members), `AddTeamMember` / `RemoveTeamMember` / `ChangeMemberRole` (Owner/Admin gated), `SetActiveTeam` (membership-validated; invalidates the `IMemoryCache` entry so `TeamScopeResolver` picks up the change immediately).
+- **`TeamApi`** — wraps `TeamStore` with role-based access control: `CreateTeam` (caller becomes Owner + active team), `GetMyTeams`, `GetActiveTeam`, `GetTeamMembers` (read-only, all members), `AddTeamMember` / `RemoveTeamMember` / `ChangeMemberRole` (Owner/Admin gated), `SetActiveTeam` (membership-validated; publishes `MembershipChanged`, so the subject resolver's active-team cache picks up the change immediately).
 - **`PermissionApi`** — `GetTeamPermissions` (Owner/Admin), `SetMemberPermissions`, `SetTeamDefaults`. Teams with no permission document configured behave unrestricted (every member can access every module). Admins use these to opt into RBAC for their team.
 - **`AccessibilityApi`** — `GetAccessibleModules` returns the full set of managed modules + the subset the caller can access on their active team. UX filter, not a security boundary; the per-route guard is the actual enforcement.
 - **`DataCatalogApi`** — `GetDataCatalog` returns every data type the running platform supports, paired with the producing modules. Surfaces in admin UIs and AI tool discovery.
 
-### TeamScopeResolver caching
+### Active-team caching
 
-`TeamScopeResolver` resolves the active team synchronously (Giraffe handlers are synchronous). It uses `IMemoryCache` with a 5-minute sliding expiration to avoid hitting blob storage on every request. `SetActiveTeam` explicitly invalidates the cache entry.
+`DefaultSubjectResolver` caches each user's active-team pointer in `IMemoryCache` with a 5-minute sliding
+expiration to avoid hitting blob storage on every request. It evicts on `MembershipChanged` (`Removed`,
+`ActiveTeamSet`) on the reserved topic, a subscription it takes when the host starts it. Membership itself
+is re-checked on every request.
 
 ### Per-userId membership write serialisation
 
@@ -108,7 +113,7 @@ The dictionary is **unbounded by design**. `userId` cardinality is bounded by re
 
 `MultiTeam` mode supports in-session team switching: a single authenticated user is a member of many teams and can switch the active team without re-auth, with the entire UI (files, KB documents, AI conversations, per-team configs, sidebar RBAC) swapping to the new team's data. The same machinery activates in `Team` mode whenever `TeamApi.SetActiveTeam` is called (e.g. from an admin path) — only the header switcher is `MultiTeam`-only.
 
-**Server side** is straightforward: every `/api/*` request resolves a fresh `StorageScope` keyed to the current active team via `ScopeResolutionMiddleware` → `TeamScopeResolver`. `TeamApi.SetActiveTeam` persists the new team to `active-team/{userId}.txt` and invalidates the resolver's 5-min cache via `resolver.InvalidateUser(userId)`. The next request reads the new active team and resolves a `team-{newTeamId}` scope. KB / RAG / config / permissions / AI conversations / file storage all live in the team-scoped blob containers, so no cross-team leakage at the storage layer.
+**Server side** is straightforward: every `/api/*` request resolves a fresh `StorageScope` keyed to the current active team via `ScopeResolutionMiddleware` → `DefaultSubjectResolver`. `TeamApi.SetActiveTeam` persists the new team to `active-team/{userId}.txt`, and the `MembershipChanged` it publishes evicts the resolver's 5-min cache entry. The next request reads the new active team and resolves a `team-{newTeamId}` scope. KB / RAG / config / permissions / AI conversations / file storage all live in the team-scoped blob containers, so no cross-team leakage at the storage layer.
 
 **Client side** propagation goes through three pieces:
 
@@ -160,7 +165,7 @@ Helpers:
 
 #### Async ↔ Task adaptation
 
-`ScopeResolutionMiddleware` runs on every `/api/*` request and calls three `Async<_>`-returning interfaces (`ScopeRequestExtractor.fromHttpContext`, `IStorageScopeResolver.Resolve`, `IPermissionStore.GetEffectivePermissions`). The middleware itself is a `task { }` because ASP.NET Core's pipeline returns `Task`, and each call adapts via:
+`ScopeResolutionMiddleware` runs on every `/api/*` request and calls three `Async<_>`-returning interfaces (`SubjectRequestExtractor.fromHttpContext`, `ISubjectResolver.Resolve`, `IPermissionStore.GetEffectivePermissions`). The middleware itself is a `task { }` because ASP.NET Core's pipeline returns `Task`, and each call adapts via:
 
 ```fsharp
 let runAsync (computation: Async<'a>) : Task<'a> =

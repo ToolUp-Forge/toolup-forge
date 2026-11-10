@@ -42,9 +42,15 @@ let private mkScope () =
 /// Request context shaped like a live handler's: `DataType list` in DI
 /// (as `ScopeResolutionMiddleware`-era compose does), the resolved
 /// `StorageScope` in `Items`, and optionally an `INarrativeStore`.
+/// The session file stores every request in this file resolves through,
+/// as a host registers one.
+let private sessionStores =
+    new ToolUp.Platform.Files.SessionFileStores.SessionFileStores(60.0) :> ISessionFileStores
+
 let private buildCtx (scope: StorageScope) (narrativeStore: INarrativeStore option) : HttpContext =
     let services = ServiceCollection()
     services.AddSingleton<DataType list>([]) |> ignore
+    services.AddSingleton<ISessionFileStores>(sessionStores) |> ignore
 
     match narrativeStore with
     | Some s -> services.AddSingleton<INarrativeStore>(s) |> ignore
@@ -58,7 +64,9 @@ let private buildCtx (scope: StorageScope) (narrativeStore: INarrativeStore opti
 /// Seed a file into the scope's session store — the same store
 /// `getFileContents` resolves (keyed by `scope.Container`).
 let private seedFile (scope: StorageScope) (fileName: string) (contents: string) =
-    let store = getStore [] None FileManagementRuntime.empty scope
+    let store =
+        sessionStores.Resolve([], None, FileManagementRuntime.empty, scope)
+        |> Async.RunSynchronously
 
     let result =
         store.AddFile(
@@ -138,12 +146,12 @@ let private insightRoutine (contents: string) (request: DemoInsightRequest) : De
 let private demoApiBefore (ctx: HttpContext) : DemoApi = {
     GetPreview =
         fun fileName -> async {
-            let contents = getFileContents ctx fileName
+            let! contents = getFileContents ctx fileName
             return previewRoutine contents
         }
     RunInsight =
         fun request -> async {
-            let contents = getFileContents ctx request.FileName
+            let! contents = getFileContents ctx request.FileName
             let result = insightRoutine contents request
 
             match result.Narrative with
@@ -181,7 +189,8 @@ let private demoApiAfter (ctx: HttpContext) : DemoApi =
         GetPreview = m.FromFile(id, fun contents _ -> previewRoutine contents)
         RunInsight =
             fun request -> async {
-                let result = insightRoutine (m.GetFileContents request.FileName) request
+                let! contents = m.GetFileContents request.FileName
+                let result = insightRoutine contents request
 
                 match result.Narrative with
                 | Some doc ->
@@ -240,7 +249,8 @@ let tests =
             let scope = mkScope ()
             seedFile scope "data.csv" csv
             let m = ModuleApiFactory.create "Demo" (buildCtx scope None)
-            Expect.equal (m.GetFileContents "data.csv") csv "contents round-trip through the scope's store"
+            let! contents = m.GetFileContents "data.csv"
+            Expect.equal contents csv "contents round-trip through the scope's store"
         }
 
         testCase "GetFileContents raises FileNotFoundInSessionException for a missing file"
@@ -249,7 +259,7 @@ let tests =
             let m = ModuleApiFactory.create "Demo" (buildCtx scope None)
 
             Expect.throwsT<FileNotFoundInSessionException>
-                (fun () -> m.GetFileContents "absent.csv" |> ignore)
+                (fun () -> m.GetFileContents "absent.csv" |> Async.RunSynchronously |> ignore)
                 "missing file must surface the 4xx-classified exception, matching hand-rolled wiring"
 
         testCaseAsync "FromFile threads file contents and the request into the routine"

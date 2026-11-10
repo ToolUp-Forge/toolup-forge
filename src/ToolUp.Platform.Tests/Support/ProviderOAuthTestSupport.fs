@@ -49,20 +49,3 @@ let memoryProviderProfile () : IProviderProfile =
             | _ -> return Ok()
         }
     }
-
-/// `IAuditLog` that keeps what it was handed, so a test can assert the
-/// audit half of an outcome rather than only its state half.
-type RecordingAuditLog() =
-    let recorded = ResizeArray<AuditEvent>()
-
-    member _.Recorded = recorded |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _scopeId, _actor, audit) = async {
-            lock recorded (fun () -> recorded.Add audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _scopeId, _dateRange, _eventType) = async {
-            return recorded |> List.ofSeq
-        }

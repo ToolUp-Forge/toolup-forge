@@ -7,6 +7,7 @@ open ToolUp.Platform
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
+open ToolUp.Platform.Testing
 
 let private validate (baseDir: string) : ValidationResult =
     let v =
@@ -15,16 +16,8 @@ let private validate (baseDir: string) : ValidationResult =
     v.Validate() |> Async.RunSynchronously
 
 let private withTempDir (body: string -> unit) =
-    let tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))
-    Directory.CreateDirectory tempDir |> ignore
-
-    try
-        body tempDir
-    finally
-        try
-            Directory.Delete(tempDir, true)
-        with _ ->
-            ()
+    use dir = TempDir.create "secret-file-perms"
+    body dir.Path
 
 [<Tests>]
 let tests =

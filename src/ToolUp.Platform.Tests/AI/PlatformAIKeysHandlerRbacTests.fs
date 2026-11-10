@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.AI.PlatformAIKeysHandlerRbacTests
 
 open System
-open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Expecto
@@ -11,6 +10,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.AI
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 70 — PlatformAIKeysApi handler RBAC tests ─────────────
 //
@@ -99,36 +99,6 @@ let private stubFactory (descriptors: AIProviderDescriptor list) : IAIProviderFa
                 None
     }
 
-// ─── In-memory ISecretStore (BlobPlatformAIKeyStore backing) ─────
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 // ─── Stub ITeamStore ─────────────────────────────────────────────
 
 let private stubTeamStore (teams: TeamInfo list) : ITeamStore =
@@ -198,7 +168,7 @@ let private buildContext
     (teamStore: ITeamStore option)
     : HttpContext * IPlatformAIKeyStore =
     let services = ServiceCollection()
-    let secretStore = InMemorySecretStore() :> ISecretStore
+    let secretStore = Fakes.TestSecretStore() :> ISecretStore
     let keyStore = BlobPlatformAIKeyStore.create secretStore
 
     services.AddSingleton<AccessContext>(accessContext) |> ignore

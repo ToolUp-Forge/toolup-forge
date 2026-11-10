@@ -14,6 +14,7 @@ open ToolUp.AI
 open ToolUp.AI.DefaultAIProviderFactory
 open ToolUp.AIProviders.Tests.Support.InMemoryStores
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Live-API behavioural-conformance pack ──────────────────────────
 //
@@ -480,7 +481,7 @@ let tests (spec: ProviderSpec) : Test =
 
             testCaseAsync "Factory round-trip — InMemoryProviderProfile entry + DefaultAIProviderFactory.Resolve"
             <| async {
-                let secrets = InMemorySecretStore() :> ISecretStore
+                let secrets = TestSecretStore() :> ISecretStore
                 let profile = InMemoryProviderProfile() :> IProviderProfile
 
                 let scope = {

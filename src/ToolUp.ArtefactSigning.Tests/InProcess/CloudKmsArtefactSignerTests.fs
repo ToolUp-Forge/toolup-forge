@@ -9,8 +9,8 @@ open System.Text
 open System.Text.Json.Nodes
 open Expecto
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.Testing
 open ToolUp.ArtefactSigning
-open ToolUp.ArtefactSigning.Tests.Support.InMemoryStores
 open ToolUp.ArtefactSigning.Tests.Contracts
 
 // ─── Phase 160 — Azure Key Vault + GCP KMS artefact-signer arms ─────────
@@ -126,7 +126,7 @@ let private fixtureFor
     : IArtefactSignerContract.ArtefactSignerFixture =
     let ec = ECDsa.Create(ECCurve.NamedCurves.nistP256)
     let keyId = $"cloud-{label}-v1"
-    let secrets = InMemorySecretStore()
+    let secrets = TestSecretStore()
     seedPublicKey secrets keyId (ec.ExportPkcs8PrivateKey()) (ec.ExportSubjectPublicKeyInfo())
 
     {

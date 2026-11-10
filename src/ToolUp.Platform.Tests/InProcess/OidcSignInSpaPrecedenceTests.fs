@@ -25,19 +25,13 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 let private shellMarker = "SPA-SHELL-992"
 
 let private writeFile (path: string) (contents: string) =
     Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
     File.WriteAllText(path, contents)
-
-let private mkDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-signin-spa-tests", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
 
 /// Captures the host's lifetime once it has started, so the test can stop
 /// the host `ServerApp.run` blocks on.
@@ -61,14 +55,6 @@ let private freePort () =
     let port = (listener.LocalEndpoint :?> Net.IPEndPoint).Port
     listener.Stop()
     port
-
-let private quietLogger: ILogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 let private issuer =
     lazy (MockOidcServer.start MockOidcServer.MockOidcConfig.defaults)
@@ -119,7 +105,7 @@ let private signInOnlyApp (port: int) (publicDir: string) (extensions: ComposeEx
     |> ServerApp.withConfig config
     |> ServerApp.withExtensions extensions
     |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
-    |> ServerApp.withLogger quietLogger
+    |> ServerApp.withLogger Logger.silent
     |> ServerApp.withAuth auth
     |> ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn (new Net.Http.HttpClient()) (signInConfig port)
 
@@ -127,7 +113,8 @@ let private signInOnlyApp (port: int) (publicDir: string) (extensions: ComposeEx
 /// port; the host is stopped, and the process-wide culture `compose` sets
 /// is restored, whatever `body` does.
 let private withHost (body: Net.Http.HttpClient -> Async<unit>) = async {
-    let publicDir = mkDir ()
+    use spaDir = TempDir.create "signin-spa-tests"
+    let publicDir = spaDir.Path
     writeFile (Path.Combine(publicDir, "index.html")) ("<!doctype html><html><body>" + shellMarker + "</body></html>")
     writeFile (Path.Combine(publicDir, "main.js")) "console.log('bundle-992')"
     let port = freePort ()

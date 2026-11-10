@@ -28,6 +28,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 109 — IndexNow push-indexing tests ───────────────────────
 //
@@ -364,17 +365,8 @@ let private submissionTests =
 // ─── File-backed state store ────────────────────────────────────────
 
 let private withTempPath (action: string -> unit) : unit =
-    let path =
-        Path.Combine(Path.GetTempPath(), "toolup-indexnow-test-" + Guid.NewGuid().ToString("N") + ".json")
-
-    try
-        action path
-    finally
-        try
-            if File.Exists path then
-                File.Delete path
-        with _ ->
-            ()
+    use dir = TempDir.create "indexnow-test"
+    action (dir.File "state.json")
 
 let private fileStoreTests =
     testList "FileIndexNowStateStore" [
@@ -595,12 +587,7 @@ let private pingTests =
 
 // ─── Not composed = no extra route (GP 11 / 13) ─────────────────────
 
-let private mkContentRoot () : ContentRoot =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-indexnow-compose-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    ContentRoot dir
+let private mkContentRoot (dir: TempDir) : ContentRoot = ContentRoot dir.Path
 
 let private dummyLayout (_p: PublicPage) : XmlNode = html [] [ body [] [] ]
 
@@ -617,7 +604,8 @@ let private composeGateTests =
         }
 
         test "enabled IndexNow adds exactly one handler (the /{key}.txt route) vs not composed" {
-            let root = mkContentRoot ()
+            use dir = TempDir.create "indexnow-compose"
+            let root = mkContentRoot dir
 
             let baseConfig = {
                 ServerConfig.defaults with
@@ -649,7 +637,8 @@ let private composeGateTests =
         }
 
         test "enabled-but-no-host is inactive — adds no route" {
-            let root = mkContentRoot ()
+            use dir = TempDir.create "indexnow-compose"
+            let root = mkContentRoot dir
 
             // No PublicBaseUrl and no explicit Host → no resolvable host.
             let baseConfig = {

@@ -7,6 +7,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 6d.A — secret-at-rest migration + preflight validator ─────
 //
@@ -17,46 +18,6 @@ open ToolUp.Platform.Jobs
 // validator Errors before migration and passes after — the
 // acceptance-criteria adversarial case (a blob tampered to carry a
 // literal secret is rejected at startup).
-
-/// Minimal in-memory `ISecretStore`.
-type private InMemorySecretStore() =
-    let store =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            // `Result.Ok` qualified — `open ConfigValidation` brings a
-            // `ValidationResult.Ok` case into scope that would shadow it.
-            return Result.Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Result.Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
-let private nullLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 /// A pre-6d.A blob: inline plaintext `Secret`, no `SecretRef`.
 let private legacySubscription (scopeId: string) (secret: string) : WebhookSubscription =
@@ -85,11 +46,11 @@ let tests =
         testCaseAsync "migrate moves an inline secret into ISecretStore and rewrites the blob with only a ref"
         <| async {
             let storage = InMemoryBlobStorage.InMemoryBlobStorage()
-            let secretStore = InMemorySecretStore() :> ISecretStore
+            let secretStore = Fakes.TestSecretStore() :> ISecretStore
             let sub = legacySubscription "team-acme" "legacy-plaintext-secret"
             do! WebhookRegistry.saveSubscription storage sub |> Async.Ignore
 
-            let! summary = WebhookSecretMigration.migrate storage secretStore nullLogger
+            let! summary = WebhookSecretMigration.migrate storage secretStore Logger.silent
 
             Expect.equal summary.Scanned 1 "one subscription scanned"
             Expect.equal summary.Migrated 1 "one subscription migrated"
@@ -119,7 +80,7 @@ let tests =
         testCaseAsync "migrate also moves a grace-window previous secret and is idempotent on re-run"
         <| async {
             let storage = InMemoryBlobStorage.InMemoryBlobStorage()
-            let secretStore = InMemorySecretStore() :> ISecretStore
+            let secretStore = Fakes.TestSecretStore() :> ISecretStore
 
             let sub = {
                 legacySubscription "user-9" "current-plain" with
@@ -129,7 +90,7 @@ let tests =
 
             do! WebhookRegistry.saveSubscription storage sub |> Async.Ignore
 
-            let! first = WebhookSecretMigration.migrate storage secretStore nullLogger
+            let! first = WebhookSecretMigration.migrate storage secretStore Logger.silent
             Expect.equal first.Migrated 1 "migrated on first run"
 
             let! curStored =
@@ -148,7 +109,7 @@ let tests =
             Expect.equal prevStored (Some "previous-plain") "grace-window previous secret moved"
 
             // Idempotent: a second pass sees a fully-migrated blob.
-            let! second = WebhookSecretMigration.migrate storage secretStore nullLogger
+            let! second = WebhookSecretMigration.migrate storage secretStore Logger.silent
             Expect.equal second.Migrated 0 "nothing to migrate on re-run"
             Expect.equal second.AlreadyMigrated 1 "the blob is recognised as already migrated"
         }
@@ -156,7 +117,7 @@ let tests =
         testCaseAsync "WebhookSecretAtRestValidator Errors on an inline secret and passes after migration"
         <| async {
             let storage = InMemoryBlobStorage.InMemoryBlobStorage()
-            let secretStore = InMemorySecretStore() :> ISecretStore
+            let secretStore = Fakes.TestSecretStore() :> ISecretStore
             let sub = legacySubscription "team-acme" "tampered-inline-secret"
             do! WebhookRegistry.saveSubscription storage sub |> Async.Ignore
 
@@ -172,7 +133,7 @@ let tests =
             | Warning m -> failtestf "expected Error, got Warning: %s" m
 
             // After migration the validator passes.
-            let! _ = WebhookSecretMigration.migrate storage secretStore nullLogger
+            let! _ = WebhookSecretMigration.migrate storage secretStore Logger.silent
 
             match! validator.Validate() with
             | Ok -> ()

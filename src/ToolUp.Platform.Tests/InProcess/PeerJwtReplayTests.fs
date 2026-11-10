@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.PeerJwtReplayTests
 
 open System
-open System.Collections.Concurrent
 open System.Text
 open Expecto
 open ToolUp.InterPlatform
@@ -9,6 +8,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Testing
 
 // ─── Phase 338 — peer-token replay defence + call scoping ────────────
 //
@@ -32,34 +32,6 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 // growth claims are exact rather than argued.
 
 // ─── Fixtures ────────────────────────────────────────────────────────
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 /// A guard whose backing store is down. The point of a distinct verdict
 /// (rather than an exception or a `ReplayFirstUse`) is that the caller
@@ -112,7 +84,7 @@ let private signingKey = "peer-replay-defence-shared-key-0123456789"
 /// `JwtPeerAuthProvider` reads on every issue / validate, so every case
 /// below isolates the replay / scoping decision from the key decision.
 let private secretsWithKey () =
-    let store = InMemorySecretStore() :> ISecretStore
+    let store = Fakes.TestSecretStore() :> ISecretStore
 
     store.SetSecret("_platform", $"peers/{callerId.PeerId}/signing-key", signingKey)
     |> Async.RunSynchronously

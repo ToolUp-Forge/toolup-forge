@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.GroundedAnswerChainJoinTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.AI.AIAuditEvents
@@ -21,6 +20,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 680 — the grounded-answer chain join ──────────────────────
 //
@@ -45,14 +45,6 @@ open ToolUp.Platform.Compose
 // The negative direction is probed too: a deployment composing no audit
 // log records no row at all, and one composing no anchors records the
 // row with both join fields honestly `None` rather than blank strings.
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 let private scopeId = "team-chain-join"
 
@@ -198,7 +190,7 @@ let private annotateGate =
 /// full serialise → persist → decode round trip the codec registry owns.
 let private auditTier () =
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
-    events, AuditLog.EventStoreAuditLog(events, silentLogger) :> IAuditLog
+    events, AuditLog.EventStoreAuditLog(events, Logger.silent) :> IAuditLog
 
 let private runStage (join: AnswerAuditJoin) (sources: RetrievedSource list) (answer: string) =
     runVerificationStageWithJoin
@@ -214,7 +206,7 @@ let private runStage (join: AnswerAuditJoin) (sources: RetrievedSource list) (an
         (Guid.NewGuid())
         "prov"
         "model"
-        silentLogger
+        Logger.silent
     |> Async.RunSynchronously
 
 /// The single answer-verification row on the trail, or a failure naming
@@ -247,12 +239,8 @@ let private ledgerSettings: ChainedLedgerSettings = {
     PathPrefix = Some "chain-join"
 }
 
-let private newLedger () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-chain-join-tests", Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private newLedger (dir: TempDir) =
+    let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     storage, create "ledger-chain-join" ledgerSettings storage
 
 // ─── Tests ───────────────────────────────────────────────────────────
@@ -368,7 +356,8 @@ let tests =
 
             // ── Hop 5: the row is chainable. Replicated into the
             //    hash-chained ledger, the ledger verifies.
-            let storage, sink = newLedger ()
+            use dir = TempDir.create "chain-join-tests"
+            let storage, sink = newLedger dir
 
             let envelope =
                 AuditEnvelope.create AuditSubject.unattributed scopeId DateTime.UtcNow row
@@ -568,7 +557,7 @@ let tests =
                     (Guid.NewGuid())
                     "prov"
                     "model"
-                    silentLogger
+                    Logger.silent
                 |> Async.RunSynchronously
 
             Expect.equal answer "Widgets took £21,800 over the quarter." "unchanged"

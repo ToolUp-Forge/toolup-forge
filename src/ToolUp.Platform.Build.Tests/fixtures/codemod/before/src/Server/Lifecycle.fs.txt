@@ -1,0 +1,13 @@
+module Server.Lifecycle
+
+open ToolUp.Platform
+
+let guarded = TenantLifecycleAggregator.runGuardedWith lock audit hooks Deprovisioning scopeId actor
+let bundle = TenantLifecycleAggregator.exportThenDeprovisionWith lock audit runExport hooks scopeId actor
+let resolver: IStorageScopeResolver = resolve ()
+let summary = TenantLifecycleAggregator.runGuarded audit hooks Provisioning scopeId actor
+let exported = TenantLifecycleAggregator.exportThenDeprovision audit runExport hooks scopeId actor
+let legacy = new TeamScopeResolver(teams, cache, channel)
+let caller = FileManagement.getUserId ctx
+let contents = m.GetFileContents "data.csv"
+let guard = GrantPolicyPermissionStore(inner, registry, audit, "admin")

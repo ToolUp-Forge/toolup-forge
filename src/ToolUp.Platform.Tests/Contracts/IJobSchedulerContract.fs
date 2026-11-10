@@ -7,6 +7,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── IJobScheduler contract pack ──────────────────────────────────
 //
@@ -899,10 +900,8 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
             let binding = factory ()
             let scope = mint binding.ScopeId
 
-            let root =
-                IO.Path.Combine(IO.Path.GetTempPath(), "toolup-carried-scope-facts-" + Guid.NewGuid().ToString("N"))
-
-            IO.Directory.CreateDirectory root |> ignore
+            use scratch = TempDir.create "carried-scope-facts"
+            let root = scratch.Path
 
             let blobs =
                 LocalFileStorage.LocalFileStorage(root) :> ToolUp.Platform.BlobStorage.IBlobStorage

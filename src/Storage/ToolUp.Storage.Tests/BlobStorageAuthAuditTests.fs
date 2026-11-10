@@ -7,6 +7,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 2c — the credential-rejection trail ───────────────────────
 //
@@ -34,22 +35,7 @@ open ToolUp.Platform.Compose
 // the Phase 733 wrapper defects were finally measured — and the unit
 // here is what makes it cheap to reason about when it runs.
 
-// ─── Recording sink ──────────────────────────────────────────────────
-
-/// Records every `(scopeId, event)` handed to it. Same shape as the
-/// `RecordingAuditLog` several other packs carry; kept local rather than
-/// shared because those are each private to their pack.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Recorded = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+// ─── Failing sink ────────────────────────────────────────────────────
 
 /// A sink that fails on every write. `record`'s contract is that a
 /// failing sink is swallowed — audit emission must never turn a storage
@@ -62,11 +48,11 @@ type private ThrowingAuditLog() =
 
 let private run (work: Async<unit>) = Async.RunSynchronously work
 
-let private authRows (sink: RecordingAuditLog) =
-    sink.Recorded
-    |> List.choose (fun (scope, evt) ->
-        match evt with
-        | BlobStorageAuthFailed payload -> Some(scope, payload)
+let private authRows (sink: TestAuditLog) =
+    sink.Records
+    |> List.choose (fun row ->
+        match row.Event with
+        | BlobStorageAuthFailed payload -> Some(row.StreamKey, payload)
         | _ -> None)
 
 // ─── Real SDK exception instances ────────────────────────────────────
@@ -173,7 +159,7 @@ let tests =
 
         testList "record" [
             test "emits exactly one row, under _platform, carrying every queryable axis" {
-                let sink = RecordingAuditLog()
+                let sink = TestAuditLog()
 
                 run (BlobStorageAuthAudit.record (sink :> IAuditLog) "aws-s3" "acme-bucket" "Upload" 403 "denied")
 
@@ -194,7 +180,7 @@ let tests =
             }
 
             test "sanitises the reason on the way onto the row" {
-                let sink = RecordingAuditLog()
+                let sink = TestAuditLog()
 
                 run (
                     BlobStorageAuthAudit.record

@@ -275,7 +275,12 @@ let private files: Site = {
                     (fun s ->
                         s.AddSingleton<ILogger>(logger) |> ignore
                         s.AddSingleton<IAuditLog>(sinks.AuditLog) |> ignore
-                        s.AddSingleton<DataType list>([]) |> ignore)
+                        s.AddSingleton<DataType list>([]) |> ignore
+
+                        s.AddSingleton<FileManagement.ISessionFileStores>(
+                            new Files.SessionFileStores.SessionFileStores(60.0)
+                        )
+                        |> ignore)
                     "POST"
                     "/api/files/reset"
 
@@ -539,7 +544,7 @@ let private admitted: Admitted list = [
         Reason = "post-save hooks on retry, each wrapped in safeHook's try/with"
     }
     {
-        File = "Files/FileManagement.fs"
+        File = "Files/SessionFileStores.fs"
         Anchor = "The audit row above already recorded the fact."
         Reason = "the store-reset channel publish runs under its own try/with"
     }

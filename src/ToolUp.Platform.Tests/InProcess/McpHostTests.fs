@@ -60,6 +60,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Stub provider factory + profile (compose-only; never invoked) ───
 
@@ -612,7 +613,21 @@ let tests =
         <| fun () ->
             // The reservation must be RELEASED, or a concurrency cap of one
             // would admit exactly one call for the lifetime of the period.
-            let ledger = InMemoryBudgetLedger() :> IBudgetLedger
+            // The host releases fire-and-forget once the call settles, so
+            // each next call waits on that release itself, never on time.
+            let inner = InMemoryBudgetLedger() :> IBudgetLedger
+            let releases = Recording<BudgetLedgerKey>()
+
+            let ledger =
+                { new IBudgetLedger with
+                    member _.ReadUsage key = inner.ReadUsage key
+                    member _.Reserve(key, cost, ceiling) = inner.Reserve(key, cost, ceiling)
+
+                    member _.Release(key, adjustment) = async {
+                        do! inner.Release(key, adjustment)
+                        releases.Add key
+                    }
+                }
 
             let f =
                 fixture
@@ -635,6 +650,10 @@ let tests =
                 Expect.isTrue
                     (fst ((conformingResponse (string i) body).TryGetProperty "result"))
                     (sprintf "sequential call %d must be admitted — the previous reservation was released" i)
+
+                Expect.isTrue
+                    (Recording.waitForCount i releases)
+                    (sprintf "call %d's reservation was released once it settled" i)
 
         testCase "an unrestricted budget touches no ledger at all"
         <| fun () ->
@@ -697,10 +716,10 @@ let tests =
             let recorded () =
                 rows f McpHostConstants.AuditSourceModule
 
-            let deadline = DateTime.UtcNow.AddSeconds 5.0
-
-            while (recorded ()).Length < 4 && DateTime.UtcNow < deadline do
-                Threading.Thread.Sleep 25
+            Clock.waitUntil Clock.system (TimeSpan.FromMilliseconds 25.0) Recording.defaultBackstop (fun () ->
+                (recorded ()).Length >= 4)
+            |> Async.RunSynchronously
+            |> ignore
 
             let events = recorded ()
             let types = events |> List.map _.EventType |> List.distinct |> List.sort
@@ -734,11 +753,10 @@ let tests =
             call f "tools/call" "1" (Some "{\"name\":\"sales.summarise\",\"arguments\":{}}")
             |> ignore
 
-            let deadline = DateTime.UtcNow.AddSeconds 5.0
-
-            while (rows f AIAllowlistDiagnosticsHandler.SourceModule).IsEmpty
-                  && DateTime.UtcNow < deadline do
-                Threading.Thread.Sleep 25
+            Clock.waitUntil Clock.system (TimeSpan.FromMilliseconds 25.0) Recording.defaultBackstop (fun () ->
+                not (rows f AIAllowlistDiagnosticsHandler.SourceModule).IsEmpty)
+            |> Async.RunSynchronously
+            |> ignore
 
             let allowlist = rows f AIAllowlistDiagnosticsHandler.SourceModule
 

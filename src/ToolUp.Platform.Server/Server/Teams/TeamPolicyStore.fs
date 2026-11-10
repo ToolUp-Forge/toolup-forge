@@ -290,21 +290,20 @@ module TeamPolicyViewer =
     /// principal's. A projection of the principal, never of a user id the
     /// caller passes beside it.
     let resolve (services: IServiceProvider) (access: AccessContext option) (teamId: string) : Async<TeamPolicyViewer> = async {
-        let userId =
-            access |> Option.map AccessContext.callerId |> Option.defaultValue "anonymous"
+        let principal =
+            access
+            |> Option.defaultWith (fun () -> AccessContext.unresolved "TeamPolicyViewer")
 
         let! role =
             match services.GetService(typeof<ITeamStore>) with
-            | :? ITeamStore as teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
+            | :? ITeamStore as teams ->
+                TeamAuthority.effectiveRole teams TeamAuthority.AdminBypass.MembershipOnly principal (TeamId teamId)
             | _ -> async.Return None
 
         return {
-            UserId = UserId userId
+            UserId = UserId(AccessContext.callerId principal)
             TeamRole = role
-            IsPlatformAdmin =
-                access
-                |> Option.map AccessContext.canModifyPlatformConfig
-                |> Option.defaultValue false
+            IsPlatformAdmin = AccessContext.canModifyPlatformConfig principal
         }
     }
 

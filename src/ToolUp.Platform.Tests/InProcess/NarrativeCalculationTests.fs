@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.NarrativeCalculationTests
 
 open System
-open System.Collections.Concurrent
 open System.Text.Json
 open Expecto
 open ToolUp.Remoting.Json.SystemTextJson
@@ -20,6 +19,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Authorised narrative calculations ──────────────────
 //
@@ -31,34 +31,6 @@ open ToolUp.Platform.Compose
 // the tool and the gate over a real fact store; every gate refusal; the
 // signed calculation admission and its tamper check; and a deployment with
 // no declarations seeing no change.
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 // ── Declarations ──────────────────────────────────────────────────
 
@@ -431,7 +403,7 @@ let private fixture () : Fixture =
     let graph =
         ProvenanceGraph.createWithFacts lineage (FactStoreEvidenceSource.create store)
 
-    let secrets = InMemorySecretStore() :> ISecretStore
+    let secrets = Fakes.TestSecretStore() :> ISecretStore
     let audit = NoOpAuditLog() :> IAuditLog
 
     let signer =

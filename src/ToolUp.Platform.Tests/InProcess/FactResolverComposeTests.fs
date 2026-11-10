@@ -25,6 +25,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 558 — fact-resolver compose wiring ────────────────────────
 //
@@ -40,14 +41,6 @@ open ToolUp.Platform.Compose
 // armed, while a `FeatureMode.Disabled` deployment retrieves byte-identically.
 
 // ── Shared harness ────────────────────────────────────────────────
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
@@ -350,17 +343,22 @@ type private ConstantEmbedder() =
         member _.ProviderId = "test"
         member _.ModelId = "constant-v1"
 
+/// The store and what releases it: the store first, then its directory.
 let private newVectorStore () =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-fact-resolver-compose-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.create "fact-resolver-compose"
+    let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
 
     let store =
-        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = silentLogger, flushIntervalMs = 60000)
+        new ToolUp.RAG.InMemoryVectorStore.InMemoryVectorStore(storage, logger = Logger.silent, flushIntervalMs = 60000)
 
-    store :> IVectorStore, store :> IDisposable
+    let release =
+        { new IDisposable with
+            member _.Dispose() =
+                (store :> IDisposable).Dispose()
+                (tempDir :> IDisposable).Dispose()
+        }
+
+    store :> IVectorStore, release
 
 /// Mirror of `RAGCompose`'s Phase 558 pickup: resolve the fact tier from
 /// the built provider when present, and hand the *optional* results to the

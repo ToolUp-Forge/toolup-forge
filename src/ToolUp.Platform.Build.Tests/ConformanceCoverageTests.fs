@@ -6,6 +6,7 @@ module ToolUp.Platform.Build.Tests.ConformanceCoverageTests
 open System.IO
 open Expecto
 open ToolUp.Forge
+open ToolUp.Platform.Testing
 
 // ─── Phase 259 — the conformance-pack coverage gate ───────────────────
 //
@@ -65,8 +66,8 @@ let private pack name bindable : ConformanceCoverage.Pack = {
 /// invented — see the hazard note above — and the tree lives under the
 /// system temp directory, outside `src/`, so the real scan never sees it.
 let private withSyntheticTree (body: string -> unit) =
-    let root =
-        Path.Combine(Path.GetTempPath(), "conformance-coverage-" + System.Guid.NewGuid().ToString("N"))
+    use scratch = TempDir.create "conformance-coverage"
+    let root = scratch.Path
 
     let write (relative: string) (text: string) =
         let path = Path.Combine(root, relative)
@@ -75,40 +76,36 @@ let private withSyntheticTree (body: string -> unit) =
 
     let packText = "module M\n\nlet tests (name: string) = []\n"
 
-    try
-        write
-            "Build.fs"
-            (String.concat "\n" [
-                "let config = {"
-                "    BuildConfig.defaults with"
-                "        TestPacks = ["
-                "            TestPack.create \"Alpha\" \"src/Alpha.Tests/Alpha.Tests.fsproj\""
-                "            TestPack.create"
-                "                \"Beta\""
-                "                \"src/Nested/Beta.Tests/Beta.Tests.fsproj\""
-                "            // TestPack.create \"Gamma\" \"src/Gamma.Tests/Gamma.Tests.fsproj\""
-                "        ]"
-                "}"
-            ])
+    write
+        "Build.fs"
+        (String.concat "\n" [
+            "let config = {"
+            "    BuildConfig.defaults with"
+            "        TestPacks = ["
+            "            TestPack.create \"Alpha\" \"src/Alpha.Tests/Alpha.Tests.fsproj\""
+            "            TestPack.create"
+            "                \"Beta\""
+            "                \"src/Nested/Beta.Tests/Beta.Tests.fsproj\""
+            "            // TestPack.create \"Gamma\" \"src/Gamma.Tests/Gamma.Tests.fsproj\""
+            "        ]"
+            "}"
+        ])
 
-        write "src/Alpha.Tests/Contracts/IAlphaWidgetContract.fs" packText
-        write "src/Nested/Beta.Tests/Contracts/IBetaWidgetContract.fs" packText
-        write "src/Gamma.Tests/Contracts/IGammaWidgetContract.fs" packText
-        write "src/Delta.Tests/Contracts/IDeltaWidgetContract.fs" packText
+    write "src/Alpha.Tests/Contracts/IAlphaWidgetContract.fs" packText
+    write "src/Nested/Beta.Tests/Contracts/IBetaWidgetContract.fs" packText
+    write "src/Gamma.Tests/Contracts/IGammaWidgetContract.fs" packText
+    write "src/Delta.Tests/Contracts/IDeltaWidgetContract.fs" packText
 
-        // Alpha binds its own pack once and Beta's once. Gamma (commented
-        // out of the gate) binds Alpha's pack a second time — a call site
-        // the gate never executes, so it must not make Alpha double-bound.
-        write
-            "src/Alpha.Tests/Bindings.fs"
-            "let a = IAlphaWidgetContract.tests \"alpha\"\nlet b = IBetaWidgetContract.tests \"beta\"\n"
+    // Alpha binds its own pack once and Beta's once. Gamma (commented
+    // out of the gate) binds Alpha's pack a second time — a call site
+    // the gate never executes, so it must not make Alpha double-bound.
+    write
+        "src/Alpha.Tests/Bindings.fs"
+        "let a = IAlphaWidgetContract.tests \"alpha\"\nlet b = IBetaWidgetContract.tests \"beta\"\n"
 
-        write "src/Gamma.Tests/Bindings.fs" "let g = IAlphaWidgetContract.tests \"gamma\"\n"
+    write "src/Gamma.Tests/Bindings.fs" "let g = IAlphaWidgetContract.tests \"gamma\"\n"
 
-        body root
-    finally
-        if Directory.Exists root then
-            Directory.Delete(root, true)
+    body root
 
 /// A world with one packed seam, one unpacked seam, and the unpacked one
 /// acknowledged in the baseline: clean by construction, and the control

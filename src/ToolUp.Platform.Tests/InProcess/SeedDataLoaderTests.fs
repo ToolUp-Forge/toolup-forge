@@ -9,6 +9,7 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 447 — SeedDataLoader ──────────────────────────────────────
 //
@@ -17,13 +18,6 @@ open ToolUp.Platform.Compose
 // `InMemoryBlobStorage`: idempotency (applied-marker), version-bump
 // re-apply, mode gating (`NoSeedData` no-op, Team-shape refusal, forced
 // override), and target-scope isolation.
-
-type private SilentLogger() =
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
 
 /// Counting pack — records how many times `Apply` ran so idempotency and
 /// re-apply are observable without any store wiring.
@@ -62,7 +56,7 @@ type private BlobWritingSeedPack(name: string, version: string) =
             }
         }
 
-let private logger = SilentLogger() :> ILogger
+let private logger = Logger.silent
 
 let private providerFor (blob: IBlobStorage) (packs: ISeedPack list) : System.IServiceProvider =
     let services = ServiceCollection()

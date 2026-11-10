@@ -10,6 +10,7 @@ open ToolUp.Platform.Providers
 open ToolUp.Platform.Secrets
 open ToolUp.AI
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 498 — provider fallback / failover routing ────────────
 //
@@ -133,36 +134,6 @@ let private builders (log: CallLog) = [
 
 // ─── In-memory substrate ─────────────────────────────────────────
 
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    member _.Seed(container: string, key: string, value: string) = store[(container, key)] <- value
-
-    interface ISecretStore with
-        member _.GetSecret(container, key) = async {
-            match store.TryGetValue((container, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(container, key, value) = async {
-            store[(container, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(container, key) = async {
-            store.TryRemove((container, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(container) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (c, _) -> c = container)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 type private InMemoryProviderProfile() =
     let blobs = ConcurrentDictionary<string, ProviderProfile>()
 
@@ -207,7 +178,7 @@ let private scope =
 /// `others` as the additional labelled entries the chain may name.
 let private seedProfile
     (profileStore: InMemoryProviderProfile)
-    (secrets: InMemorySecretStore)
+    (secrets: Fakes.TestSecretStore)
     (primaryVendor: string)
     (others: (string * string) list)
     (chain: string list)
@@ -240,7 +211,7 @@ let private seedProfile
 /// with `withFailoverChain` over it, plus the recorded failover sink.
 let private harness (primaryVendor: string) (others: (string * string) list) (chain: string list) =
     let log = CallLog()
-    let secrets = InMemorySecretStore()
+    let secrets = Fakes.TestSecretStore()
     let profileStore = InMemoryProviderProfile()
     seedProfile profileStore secrets primaryVendor others chain
 
@@ -368,7 +339,7 @@ let tests =
             // real outage arrives in — the bare transient cases are
             // mostly seen from fail-fast providers.
             let log = CallLog()
-            let secrets = InMemorySecretStore()
+            let secrets = Fakes.TestSecretStore()
             let profileStore = InMemoryProviderProfile()
             seedProfile profileStore secrets "exhausted-vendor" [ "secondary", upVendor ] [ "secondary" ]
 
@@ -464,7 +435,7 @@ let tests =
         testCaseAsync "no FallbackChain → the SAME provider object is returned (GP 11)"
         <| async {
             let log = CallLog()
-            let secrets = InMemorySecretStore()
+            let secrets = Fakes.TestSecretStore()
             let profileStore = InMemoryProviderProfile()
             seedProfile profileStore secrets upVendor [] []
 
@@ -491,7 +462,7 @@ let tests =
             // and the provider's own `RetryPolicy` has already spent
             // its budget doing exactly that.
             let log = CallLog()
-            let secrets = InMemorySecretStore()
+            let secrets = Fakes.TestSecretStore()
             let profileStore = InMemoryProviderProfile()
             seedProfile profileStore secrets upVendor [] [ "primary"; "  "; "primary" ]
 

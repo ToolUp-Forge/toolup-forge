@@ -33,6 +33,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 let private run (work: Async<'T>) = Async.RunSynchronously work
 
@@ -40,18 +41,9 @@ let private utf8 (s: string) = Encoding.UTF8.GetBytes s
 
 // ─── Doubles ─────────────────────────────────────────────────────────
 
-/// Records every `(scopeId, event)` handed to it.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Recorded = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+/// Every `(scopeId, event)` a recording audit log was handed, in order.
+let private recorded (audit: TestAuditLog) =
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
 
 /// One key, destroyable at will — the crypto-shred half of Phase 22 in
 /// the smallest shape that exercises `ResolveKeyById`.
@@ -208,7 +200,7 @@ let private wipe (storage: IBlobStorage) =
 let private newFixture () =
     let live = InMemoryBlobStorage() :> IBlobStorage
     let target = InMemoryBlobStorage() :> IBlobStorage
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     populate live
 
     let coordinator =
@@ -275,7 +267,7 @@ let private tests_snapshot =
             | [ id ] -> Expect.equal id manifest.SnapshotId "the manifest is listed"
             | other -> failtestf "expected one snapshot, got %A" other
 
-            match audit.Recorded with
+            match recorded audit with
             | [ "_platform", BackupCompleted p ] ->
                 Expect.equal p.SnapshotId manifest.SnapshotId "audit names the snapshot"
                 Expect.equal p.BlobCount manifest.Entries.Length "audit carries the count"
@@ -375,7 +367,7 @@ let private tests_snapshot =
 
             Expect.isEmpty (run (coordinator.ListSnapshots())) "no manifest written"
 
-            match audit.Recorded with
+            match recorded audit with
             | [ "_platform", BackupFailed p ] ->
                 Expect.stringContains p.Reason "disk on fire" "audit carries the reason"
             | other -> failtestf "expected one BackupFailed row, got %A" other
@@ -701,7 +693,7 @@ let private tests_drill =
             Expect.equal verifier.LastOutcome (Some outcome) "outcome retained"
             Expect.equal (run (health.Check())) Healthy "probe Healthy after a pass"
 
-            match audit.Recorded |> List.filter (fun (_, e) -> e.IsRestoreDrillPassed) with
+            match recorded audit |> List.filter (fun (_, e) -> e.IsRestoreDrillPassed) with
             | [ "_platform", RestoreDrillPassed p ] ->
                 Expect.equal p.SnapshotId manifest.SnapshotId "audit names the snapshot"
 
@@ -730,7 +722,7 @@ let private tests_drill =
             | Degraded msg -> Expect.stringContains msg "preflight" "probe carries the stage"
             | other -> failtestf "expected Degraded, got %A" other
 
-            match audit.Recorded |> List.filter (fun (_, e) -> e.IsRestoreDrillFailed) with
+            match recorded audit |> List.filter (fun (_, e) -> e.IsRestoreDrillFailed) with
             | [ _, RestoreDrillFailed p ] ->
                 Expect.equal p.Stage "preflight" "audit stage"
                 Expect.equal p.SnapshotId (Some manifest.SnapshotId) "audit names the snapshot"
@@ -973,7 +965,7 @@ let private tests_boot =
                 ServerApp.empty
                 |> ServerApp.withConfig config
                 |> ServerApp.withExtensions extensions
-                |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
+                |> ServerApp.withStorage (Fakes.standardBlobStorage ())
                 |> ServerApp.withLogger quietLogger
 
             let culture = Globalization.CultureInfo.DefaultThreadCurrentCulture

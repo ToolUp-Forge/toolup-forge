@@ -10,6 +10,7 @@ open ToolUp.DataSources.Tests.Support
 open ToolUp.DataSources.Tests.Support.TestFakes
 open DataManagementTypes
 open ToolUp.Platform.Infra
+open ToolUp.Platform.Testing
 
 // ─── ToolUp.DataSources.Synapse ───────────────────────────────────
 
@@ -212,7 +213,7 @@ let private kindTests =
 
         testCaseAsync "SQL auth with no credential is CredentialMissing, not a connection attempt"
         <| async {
-            let source = SynapseDataSource.create (InMemorySecretStore())
+            let source = SynapseDataSource.create (TestSecretStore())
             let ctx = config "syn-1" "Synapse" baseScope |> context "test-scope" None
 
             match! source.Connect ctx with

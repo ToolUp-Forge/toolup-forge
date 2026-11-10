@@ -446,11 +446,10 @@ let recipientsOf (settings: GrantNotificationSettings) (notice: GrantNotice) : s
 /// not notify" and "notified but did not write" both fail a test rather than
 /// passing half the assertion.
 ///
-/// `resolveActor` is the server-side request identity, threaded in from
-/// the composition root exactly as Phase 555's proposer is. `None` is a
-/// legitimate answer (a background write, a consumer driving the store
-/// outside a request) and yields an empty `GrantedBy` — never a
-/// client-asserted id, and never a fabricated one.
+/// `principal` is the caller whose write this is, supplied with the rest of
+/// the chain by `PermissionWrites.asPrincipal`. A principal with no person
+/// behind it (a background write, `AccessContext.system`) yields an empty
+/// `GrantedBy` — never a client-asserted id, and never a fabricated one.
 ///
 /// **No retry.** Per 556.C the channel companion's own semantics are the
 /// delivery contract; a retry loop here would double-send against a
@@ -463,7 +462,7 @@ type GrantNotificationObserver
         channel: INotificationChannel,
         settings: GrantNotificationSettings,
         logger: ILogger,
-        resolveActor: unit -> string option,
+        principal: AccessContext,
         now: unit -> DateTimeOffset
     ) =
 
@@ -517,7 +516,13 @@ type GrantNotificationObserver
     let fanOut (teamId: string) (prior: TeamPermissions) (written: TeamPermissions) = async {
         let notices =
             try
-                diff registry teamId (resolveActor () |> Option.defaultValue "") (now ()) prior written
+                diff
+                    registry
+                    teamId
+                    (AdminMutationApproval.proposerOf principal |> Option.defaultValue "")
+                    (now ())
+                    prior
+                    written
             with ex ->
                 // The delta itself is pure, so this is unreachable short of a
                 // corrupt document — logged rather than propagated: the write

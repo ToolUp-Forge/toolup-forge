@@ -53,6 +53,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 
@@ -66,17 +67,6 @@ let private storage (scopeId: string) : StorageScope = {
 }
 
 let private newScopeId () = "team-" + Guid.NewGuid().ToString("N")
-
-/// A logger that keeps its warnings.
-type private RecordingLogger() =
-    let warnings = ConcurrentQueue<string>()
-    member _.Warnings = warnings |> List.ofSeq
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn message = warnings.Enqueue message
-        member _.Error(_, _) = ()
 
 let private noSecrets =
     { new ISecretStore with
@@ -197,12 +187,12 @@ type private Rig = {
     Ingestor: IDataIngestor
     Scheduler: RecordingScheduler
     Events: IEventStore
-    Logger: RecordingLogger
+    Logger: TestLogger
     Source: InMemoryDataSource.InMemoryDataSource
     Configs: IDataSourceConfigStore
 }
 
-let private configure (app: ServerApp) (scheduler: RecordingScheduler) (logger: RecordingLogger) =
+let private configure (app: ServerApp) (scheduler: RecordingScheduler) (logger: TestLogger) =
     let blobs = InMemoryBlobStorage() :> IBlobStorage
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let source = InMemoryDataSource.create ()
@@ -247,7 +237,7 @@ let private seedScope (configs: IDataSourceConfigStore) (source: InMemoryDataSou
 
 let private rig (app: ServerApp) : Rig =
     let scheduler = RecordingScheduler()
-    let logger = RecordingLogger()
+    let logger = Logger.recording ()
     let services = ServiceCollection()
     let events, source = configure app scheduler logger services
     let provider = services.BuildServiceProvider() :> IServiceProvider
@@ -269,7 +259,7 @@ let private rig (app: ServerApp) : Rig =
 /// a module's delivery route.
 let private hosted (app: ServerApp) (handler: Rig -> HttpHandler) (send: Net.Http.HttpClient -> Async<'T>) = async {
     let scheduler = RecordingScheduler()
-    let logger = RecordingLogger()
+    let logger = Logger.recording ()
     let composed = ref None
 
     use host =
@@ -428,7 +418,7 @@ let private requestTests =
             Expect.isEmpty all "neither reached the hook"
 
             Expect.exists
-                logger.Warnings
+                (logger.MessagesAt LogSeverity.Warn)
                 (fun w -> w.Contains "resolved no scope")
                 "the anonymous delivery says why it was not delivered"
         }
@@ -515,7 +505,7 @@ let private failureTests =
             let! delivery = after.First
             Expect.equal delivery.Scope.ScopeId scopeId "the hook after both failures still ran"
 
-            let warnings = logger.Warnings
+            let warnings = logger.MessagesAt LogSeverity.Warn
             Expect.exists warnings (fun w -> w.Contains "'throws-sync' callback failed") "the sync throw is logged"
             Expect.exists warnings (fun w -> w.Contains "'throws-async' callback failed") "the async throw is logged"
 
@@ -619,7 +609,11 @@ let private jobTests =
             Expect.equal r.Scheduler.Results [ JobResult.Success ] "the ingestion itself still ran"
             let! all = seen.Settled
             Expect.isEmpty all "no scope was minted for it"
-            Expect.exists r.Logger.Warnings (fun w -> w.Contains "resolved no scope") "and the log says why"
+
+            Expect.exists
+                (r.Logger.MessagesAt LogSeverity.Warn)
+                (fun w -> w.Contains "resolved no scope")
+                "and the log says why"
         }
 
         testCaseAsync "TriggerRefresh schedules under the request's scope, and its delivery reaches the hook"
@@ -858,7 +852,7 @@ let private ingestorUnderTest (wrap: IDataIngestor -> IDataIngestor) () : IDataI
             (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
             [ source :> IDataSource ]
             blobs
-            (RecordingLogger())
+            Logger.silent
 
     {
         Ingestor = wrap ingestor
@@ -894,7 +888,7 @@ let private conformanceTests =
             DeliveryCompleted.recording
                 [ recordingHook ]
                 (ServiceCollection().BuildServiceProvider())
-                (RecordingLogger())
+                Logger.silent
                 None
         )
 

@@ -8,6 +8,7 @@ open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 
 // ─── Phase 183 — the consumer codemod for the 0.x breaking renames ─────
 //
@@ -58,26 +59,20 @@ let private fixtureFiles (subdir: string) =
     |> Map.ofSeq
 
 /// Copies `before/` into a fresh scratch tree with the `.txt` suffix
-/// stripped, and returns the tree's root. The caller deletes it.
+/// stripped, and returns the tree. Disposing it deletes it.
 let private materialise () =
-    let temp =
-        Path.Combine(Path.GetTempPath(), "toolup-codemod-" + Guid.NewGuid().ToString "N")
+    let temp = TempDir.create "codemod"
 
     for KeyValue(rel, text) in fixtureFiles "before" do
-        let target = Path.Combine(temp, rel)
+        let target = Path.Combine(temp.Path, rel)
         Directory.CreateDirectory(Path.GetDirectoryName target) |> ignore
         File.WriteAllText(target, text, UTF8Encoding false)
 
     temp
 
 let private withScratchTree (body: string -> unit) =
-    let temp = materialise ()
-
-    try
-        body temp
-    finally
-        if Directory.Exists temp then
-            Directory.Delete(temp, true)
+    use temp = materialise ()
+    body temp.Path
 
 let private treeSnapshot (root: string) =
     Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
@@ -135,6 +130,7 @@ let tests =
                             "src/Server/Infrastructure.fs"
                             "src/Server/Ingestion.fs"
                             "src/Server/Jobs.fs"
+                            "src/Server/Lifecycle.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/RateLimit.fs"
@@ -188,6 +184,7 @@ let tests =
                             "src/Server/Infrastructure.fs"
                             "src/Server/Ingestion.fs"
                             "src/Server/Jobs.fs"
+                            "src/Server/Lifecycle.fs"
                             "src/Server/Models.fs"
                             "src/Server/Program.fs"
                             "src/Server/RateLimit.fs"
@@ -268,7 +265,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 26 file(s) visited, 146 rewrite(s) in 21 file(s), 131 site(s) for review."
+                        "Codemod: 27 file(s) visited, 149 rewrite(s) in 22 file(s), 137 site(s) for review."
                         "summary")
         ]
 
@@ -482,37 +479,29 @@ let tests =
             testCase
                 "a base the pass cannot re-read, or only shared labels on an unnamed base, is reported and untouched"
             <| fun () ->
-                let dir =
-                    Path.Combine(Path.GetTempPath(), "codemod-877-" + Guid.NewGuid().ToString("N"))
+                use scratch = TempDir.create "codemod"
+                let dir = scratch.Path
 
-                Directory.CreateDirectory dir |> ignore
+                let text =
+                    "let a = { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }\nlet deps = { JobDeps.empty with EventStore = store }\nlet ok = { ServerConfig.defaults with EventStore = InMemoryOnly }\n"
 
-                try
-                    let text =
-                        "let a = { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }\nlet deps = { JobDeps.empty with EventStore = store }\nlet ok = { ServerConfig.defaults with EventStore = InMemoryOnly }\n"
+                let path = Path.Combine(dir, "Config.fs")
+                File.WriteAllText(path, text)
+                let result = Codemod.analyseFile dir CodemodFileClass.Source path
 
-                    let path = Path.Combine(dir, "Config.fs")
-                    File.WriteAllText(path, text)
-                    let result = Codemod.analyseFile dir CodemodFileClass.Source path
+                Expect.equal
+                    (result.Findings |> List.map (fun f -> f.Line, f.RuleId))
+                    [ 1, "877-record-update-unprovable"; 2, "877-record-update-unprovable" ]
+                    "both unprovable sites are findings, with their own line"
 
-                    Expect.equal
-                        (result.Findings |> List.map (fun f -> f.Line, f.RuleId))
-                        [ 1, "877-record-update-unprovable"; 2, "877-record-update-unprovable" ]
-                        "both unprovable sites are findings, with their own line"
+                Expect.stringContains result.Findings[0].Guidance "could not nest it" "the base is the problem"
 
-                    Expect.stringContains result.Findings[0].Guidance "could not nest it" "the base is the problem"
+                Expect.stringContains result.Findings[1].Guidance "other records carry too" "the label is the problem"
 
-                    Expect.stringContains
-                        result.Findings[1].Guidance
-                        "other records carry too"
-                        "the label is the problem"
-
-                    Expect.equal
-                        result.Rewritten
-                        "let a = { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }\nlet deps = { JobDeps.empty with EventStore = store }\nlet ok = {\n    ServerConfig.defaults with\n        Stores = {\n            ServerConfig.defaults.Stores with\n                EventStore = InMemoryOnly\n        }\n}\n"
-                        "the named base nests a shared label; the others are left as written"
-                finally
-                    Directory.Delete(dir, true)
+                Expect.equal
+                    result.Rewritten
+                    "let a = { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }\nlet deps = { JobDeps.empty with EventStore = store }\nlet ok = {\n    ServerConfig.defaults with\n        Stores = {\n            ServerConfig.defaults.Stores with\n                EventStore = InMemoryOnly\n        }\n}\n"
+                    "the named base nests a shared label; the others are left as written"
 
             testCase "a moved field reads through its concern on a value receiver, and a module path is never a field"
             <| fun () ->
@@ -847,32 +836,27 @@ let tests =
         testList "encoding" [
             testCase "a UTF-8 BOM and CRLF terminators survive a rewrite"
             <| fun () ->
-                let temp =
-                    Path.Combine(Path.GetTempPath(), "toolup-codemod-" + Guid.NewGuid().ToString "N")
+                use scratch = TempDir.create "codemod"
+                let temp = scratch.Path
 
-                Directory.CreateDirectory temp |> ignore
+                let path = Path.Combine(temp, "Crlf.fs")
 
-                try
-                    let path = Path.Combine(temp, "Crlf.fs")
+                let bytes =
+                    Array.append
+                        [| 0xEFuy; 0xBBuy; 0xBFuy |]
+                        (Encoding.UTF8.GetBytes "open Elmish\r\nopen Fable.Remoting.Server\r\nlet x = 1\r\n")
 
-                    let bytes =
-                        Array.append
-                            [| 0xEFuy; 0xBBuy; 0xBFuy |]
-                            (Encoding.UTF8.GetBytes "open Elmish\r\nopen Fable.Remoting.Server\r\nlet x = 1\r\n")
+                File.WriteAllBytes(path, bytes)
+                let plan = Codemod.plan temp
+                Codemod.apply plan |> ignore
+                let written = File.ReadAllBytes path
 
-                    File.WriteAllBytes(path, bytes)
-                    let plan = Codemod.plan temp
-                    Codemod.apply plan |> ignore
-                    let written = File.ReadAllBytes path
+                Expect.equal written[0..2] [| 0xEFuy; 0xBBuy; 0xBFuy |] "the BOM is written back"
 
-                    Expect.equal written[0..2] [| 0xEFuy; 0xBBuy; 0xBFuy |] "the BOM is written back"
-
-                    Expect.equal
-                        (Encoding.UTF8.GetString(written, 3, written.Length - 3))
-                        "open ToolUp.Elmish\r\nopen ToolUp.Remoting.Server\r\nlet x = 1\r\n"
-                        "CRLF preserved on every line, changed or not"
-                finally
-                    Directory.Delete(temp, true)
+                Expect.equal
+                    (Encoding.UTF8.GetString(written, 3, written.Length - 3))
+                    "open ToolUp.Elmish\r\nopen ToolUp.Remoting.Server\r\nlet x = 1\r\n"
+                    "CRLF preserved on every line, changed or not"
 
             testCase "a file without a BOM does not gain one"
             <| fun () ->
@@ -914,6 +898,40 @@ let tests =
                 Expect.equal
                     (Codemod.migrationOfPhase "1084")
                     (Some CodemodMigration.SnapshotIndex)
+                    "the migration is reachable by its phase"
+
+            testCase "Phase 1063 — the guarded lifecycle wrappers become a LifecycleRun; the rest is reported"
+            <| fun () ->
+                let source =
+                    String.concat "\n" [
+                        "let! a = TenantLifecycleAggregator.runGuardedWith lock audit hooks Deprovisioning scopeId actor"
+                        "let! b = TenantLifecycleAggregator.exportThenDeprovisionWith lock audit runExport hooks scopeId actor"
+                        "let resolver: IStorageScopeResolver = resolve ()"
+                        "let! c = TenantLifecycleAggregator.runGuarded audit hooks Provisioning scopeId actor"
+                    ]
+
+                let rewritten, rewrites = rewriteSource source
+
+                Expect.equal
+                    rewritten
+                    (String.concat "\n" [
+                        "let! a = TenantLifecycleAggregator.run { TenantLifecycleAggregator.LifecycleRun.create audit hooks Deprovisioning scopeId actor with Guard = Some lock }"
+                        "let! b = TenantLifecycleAggregator.exportThenDeprovision runExport { TenantLifecycleAggregator.LifecycleRun.create audit hooks Deprovisioning scopeId actor with Guard = Some lock }"
+                        "let resolver: ISubjectResolver = resolve ()"
+                        "let! c = TenantLifecycleAggregator.runGuarded audit hooks Provisioning scopeId actor"
+                    ])
+                    "the two same-result wrappers and the interface rewrite; the summary-returning wrapper does not"
+
+                Expect.equal rewrites.Length 3 "three rewrites"
+
+                Expect.equal
+                    (reviewSource rewritten |> List.map (fun f -> f.RuleId, f.Line))
+                    [ "1063-lifecycle-wrappers", 4 ]
+                    "the wrapper whose result changes is reported"
+
+                Expect.equal
+                    (Codemod.migrationOfPhase "1063")
+                    (Some CodemodMigration.OneResolverOneGate)
                     "the migration is reachable by its phase"
 
             testCase "every migration resolves by its phase number, 874 included"

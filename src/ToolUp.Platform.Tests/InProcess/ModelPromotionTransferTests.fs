@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.ModelPromotionTransferTests
 
 open System
-open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
@@ -13,6 +12,7 @@ open ToolUp.Platform.Infra.DataObjectStore
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 646 — promotion-time provenance transfer ─────────────────────
 //
@@ -45,31 +45,13 @@ let private t0 = DateTimeOffset(2026, 7, 16, 10, 15, 0, TimeSpan.Zero)
 
 let private scope = "consortium-north"
 
-/// Records every `Record` call so a test can assert the audited fact rather
-/// than infer it from an answer.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    member this.Promotions =
-        this.Events
-        |> List.choose (function
-            | ModelArtifactPromoted p -> Some p
-            | _ -> None)
-
-    member this.Attachments =
-        this.Events
-        |> List.choose (function
-            | ModelArtifactProvenanceAttached p -> Some p
-            | _ -> None)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey _, _actor, audit) = async {
-            recorded.Add audit
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return List.ofSeq recorded }
+/// The promotions an audit log recorded, so a test can assert the audited
+/// fact rather than infer it from an answer.
+let private promotions (audit: TestAuditLog) =
+    audit.Events
+    |> List.choose (function
+        | ModelArtifactPromoted p -> Some p
+        | _ -> None)
 
 /// A signer that mints a deterministic, verifiable-by-construction
 /// "signature": the input's own digest, reversed. Deterministic so a test
@@ -106,17 +88,16 @@ type private Stack = {
     Registry: IModelRegistry
     DataObjects: IDataObjectStore
     Lineage: ILineageStore
-    Audit: RecordingAuditLog
+    Audit: TestAuditLog
 }
 
+/// The stack has no teardown, so its directory lives until the test
+/// process exits.
 let private freshStack (limits: ProvenanceAttachmentLimits) : Stack =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-transfer-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.forRun "transfer-test"
+    let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dataObjects = DataObjectStore(blob) :> IDataObjectStore
-    let audit = RecordingAuditLog()
+    let audit = TestAuditLog()
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let lineage = LineageStore.EventStoreLineageStore(eventStore) :> ILineageStore
 
@@ -428,7 +409,7 @@ let tests =
                         "the spec payload is recoverable verbatim, data-side"
 
                 let promotion =
-                    Expect.wantSome (List.tryHead stack.Audit.Promotions) "the transfer is audited"
+                    Expect.wantSome (List.tryHead (promotions stack.Audit)) "the transfer is audited"
 
                 Expect.isTrue promotion.Accepted "the audited row records the acceptance"
                 Expect.equal promotion.Channel "peer" "and the channel it arrived on"
@@ -479,7 +460,7 @@ let tests =
             | Error e -> failtestf "unexpected: %s" (ModelRegistryError.describe e)
 
             let promotion =
-                Expect.wantSome (List.tryHead stack.Audit.Promotions) "a refused transfer is audited too"
+                Expect.wantSome (List.tryHead (promotions stack.Audit)) "a refused transfer is audited too"
 
             Expect.isFalse promotion.Accepted "the row records the refusal"
 

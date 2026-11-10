@@ -30,8 +30,8 @@ type MembershipChangeKind =
 
 /// Payload of a `MembershipChanged` notification — published by
 /// `TeamStore` after every successful membership write, consumed by
-/// every cache that depends on team membership (`TeamScopeResolver`
-/// server-side, the client shell's `TeamSwitched` reset path).
+/// every cache that depends on team membership (the subject resolver's
+/// active-team cache server-side, the client shell's `TeamSwitched` reset path).
 ///
 /// Identity is by value (string ids, not framework handles) per
 /// portability rule 1. `PublishedAt` is informational — not a

@@ -29,19 +29,8 @@ open System.IO
 open System.Text
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 open ToolUp.AI.SystemPromptBuilder
-
-/// A logger that records every Warn/Error, so "emits no warning" is an
-/// assertion rather than an absence of console noise.
-type private CapturingLogger() =
-    let problems = ResizeArray<string>()
-    member _.Problems = List.ofSeq problems
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn m = problems.Add("WARN " + m)
-        member _.Error(m, _) = problems.Add("ERROR " + m)
 
 /// The forge `src/` directory, found by walking up from the test assembly.
 let private srcRoot () =
@@ -204,18 +193,8 @@ let private deliverThroughPackageReference (scratch: string) (projectRel: string
     [ "build", buildOut; "publish", publishOut ]
 
 let private withScratch (f: string -> unit) =
-    let scratch =
-        Path.Combine(Path.GetTempPath(), "toolup-768-" + Guid.NewGuid().ToString("N").Substring(0, 12))
-
-    Directory.CreateDirectory scratch |> ignore
-
-    try
-        f scratch
-    finally
-        try
-            Directory.Delete(scratch, true)
-        with _ ->
-            ()
+    use scratch = TempDir.create "pkgref"
+    f scratch.Path
 
 let private runBuilder (b: SystemPromptBuilder) : string =
     b (Unchecked.defaultof<PromptContext>) |> Async.RunSynchronously
@@ -236,10 +215,17 @@ let private expectDelivered
     let cookbook = Path.Combine(dir, fileName)
     Expect.isTrue (File.Exists cookbook) $"{shape}: {fileName} lands beside the assembly"
 
-    let logger = CapturingLogger()
+    // Every Warn/Error is recorded, so "emits no warning" is an assertion
+    // rather than an absence of console noise.
+    let logger = Logger.recording ()
     let prompt = runBuilder (build cookbook (Some(logger :> ILogger)))
     Expect.isNonEmpty prompt $"{shape}: the builder returns non-empty guidance"
-    Expect.isEmpty logger.Problems $"{shape}: the builder emits no warning"
+
+    let problems =
+        logger.Lines
+        |> List.filter (fun line -> line.Severity = LogSeverity.Warn || line.Severity = LogSeverity.Error)
+
+    Expect.isEmpty problems $"{shape}: the builder emits no warning"
 
 let tests =
     testList "Phase 768 — PackageReference delivery of the cookbooks" [

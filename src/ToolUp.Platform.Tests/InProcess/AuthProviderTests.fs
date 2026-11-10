@@ -23,25 +23,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Config.Auth
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Compose
-
-// ─── Recording metrics sink (Phase 9e.A) ────────────────────────────
-//
-// Test-only `IMetricsSink` that appends every `Increment` call to an
-// internal ResizeArray so assertions can inspect per-counter / per-tag
-// emission. Mirrors the `RecordingMetricsSink` already in
-// `FormsServerHygieneTests`; kept local rather than promoted to a
-// shared fixture because the assertion shape differs slightly per
-// test pack and the type is trivially small.
-
-type private RecordingMetricsSink() =
-    let increments = ResizeArray<string * Map<string, string>>()
-
-    interface IMetricsSink with
-        member _.Record(_, _, _) = ()
-        member _.Increment(name, tags) = increments.Add(name, tags)
-        member _.SetGauge(_, _, _) = ()
-
-    member _.Increments = increments :> seq<_>
+open ToolUp.Platform.Testing
 
 // ─── HttpContext helpers ─────────────────────────────────────────────
 //
@@ -1268,7 +1250,7 @@ let private oidcMetricsTests =
         <| async {
             let key = OidcFixture.mkKey ()
             let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
-            let sink = RecordingMetricsSink()
+            let sink = Fakes.TestMetricsSink()
 
             let provider =
                 OidcAuthProvider.fromConfigWithMetrics client None (Some(sink :> IMetricsSink)) (mkConfig key)
@@ -1292,7 +1274,7 @@ let private oidcMetricsTests =
         <| async {
             let key = OidcFixture.mkKey ()
             let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
-            let sink = RecordingMetricsSink()
+            let sink = Fakes.TestMetricsSink()
 
             let provider =
                 OidcAuthProvider.fromConfigWithMetrics client None (Some(sink :> IMetricsSink)) (mkConfig key)
@@ -1309,7 +1291,7 @@ let private oidcMetricsTests =
         <| async {
             let key = OidcFixture.mkKey ()
             let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
-            let sink = RecordingMetricsSink()
+            let sink = Fakes.TestMetricsSink()
 
             let provider =
                 OidcAuthProvider.fromConfigWithMetrics client None (Some(sink :> IMetricsSink)) (mkConfig key)
@@ -1352,8 +1334,8 @@ let private oidcMetricsTests =
             // provider B's sink.
             let key = OidcFixture.mkKey ()
             let client = mkClient [ key.JwksUrl, OidcFixture.buildJwks key ]
-            let sinkA = RecordingMetricsSink()
-            let sinkB = RecordingMetricsSink()
+            let sinkA = Fakes.TestMetricsSink()
+            let sinkB = Fakes.TestMetricsSink()
 
             let providerA =
                 OidcAuthProvider.fromConfigWithMetrics client None (Some(sinkA :> IMetricsSink)) (mkConfig key)
@@ -1473,14 +1455,6 @@ let private oidcConstructionTests =
 // are process-global, so the list is sequenced and each case snapshots
 // + restores what it touches.
 
-let private silentLogger =
-    { new ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn _ = ()
-        member _.Error(_, _) = ()
-    }
-
 let private fromEnvTests =
     let withEnv (pairs: (string * string option) list) (body: unit -> unit) =
         let priors =
@@ -1516,7 +1490,7 @@ let private fromEnvTests =
                 captured <- Some config
                 marker
 
-        AuthProvider.fromEnv silentLogger capturing |> ignore
+        AuthProvider.fromEnv Logger.silent capturing |> ignore
 
         match captured with
         | Some config -> config
@@ -1527,7 +1501,7 @@ let private fromEnvTests =
             testCase "unset TOOLUP_AUTH_MODE falls back to the dev HeaderAuthProvider"
             <| fun () ->
                 withEnv [ "TOOLUP_AUTH_MODE", None; "TOOLUP_OIDC_ISSUER", None ] (fun () ->
-                    let p = AuthProvider.fromEnv silentLogger oidcStub
+                    let p = AuthProvider.fromEnv Logger.silent oidcStub
                     Expect.isTrue (p :? HeaderAuthProvider.HeaderAuthProvider) "unset mode keeps the dev fallback")
 
             testCase "oidc mode with an issuer dispatches to the OIDC builder"
@@ -1538,21 +1512,21 @@ let private fromEnvTests =
                         "TOOLUP_OIDC_ISSUER", Some "https://idp.example.com"
                     ]
                     (fun () ->
-                        let p = AuthProvider.fromEnv silentLogger oidcStub
+                        let p = AuthProvider.fromEnv Logger.silent oidcStub
                         Expect.isTrue (obj.ReferenceEquals(p, marker)) "oidc branch builds via the supplied builder")
 
             testCase "oidc mode without an issuer refuses startup"
             <| fun () ->
                 withEnv [ "TOOLUP_AUTH_MODE", Some "oidc"; "TOOLUP_OIDC_ISSUER", None ] (fun () ->
                     Expect.throwsT<InvalidOperationException>
-                        (fun () -> AuthProvider.fromEnv silentLogger oidcStub |> ignore)
+                        (fun () -> AuthProvider.fromEnv Logger.silent oidcStub |> ignore)
                         "explicit OIDC intent must never degrade to header trust")
 
             testCase "unrecognised TOOLUP_AUTH_MODE refuses startup"
             <| fun () ->
                 withEnv [ "TOOLUP_AUTH_MODE", Some "oidcc"; "TOOLUP_OIDC_ISSUER", None ] (fun () ->
                     Expect.throwsT<InvalidOperationException>
-                        (fun () -> AuthProvider.fromEnv silentLogger oidcStub |> ignore)
+                        (fun () -> AuthProvider.fromEnv Logger.silent oidcStub |> ignore)
                         "a typo'd mode must refuse rather than boot in header-trust")
 
             // ─── Claim-mapping env wiring ────────────────────────────
@@ -1704,16 +1678,16 @@ let private oidcStaleJwksTests =
             let elapsed = TimeSpan.FromTicks 1L
 
             // 1. Seed the process cache with a successful fetch.
-            let! seeded = OidcAuthProviderJwks.getJwksCore okClient silentLogger key.JwksUrl false false tenMin oneMin
+            let! seeded = OidcAuthProviderJwks.getJwksCore okClient Logger.silent key.JwksUrl false false tenMin oneMin
 
             // 2. Default (failClosed=false): an elapsed ttl forces a re-fetch
             //    that fails → the stale fallback serves the seeded key set.
             let! staleDefault =
-                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false false elapsed oneMin
+                OidcAuthProviderJwks.getJwksCore failClient Logger.silent key.JwksUrl false false elapsed oneMin
 
             // 3. Strict (failClosed=true): same stale window → Error, no serve.
             let! staleStrict =
-                OidcAuthProviderJwks.getJwksCore failClient silentLogger key.JwksUrl false true elapsed oneMin
+                OidcAuthProviderJwks.getJwksCore failClient Logger.silent key.JwksUrl false true elapsed oneMin
 
             match seeded with
             | Ok keys -> Expect.equal keys.Count 1 "seed fetch returns the one JWKS key"

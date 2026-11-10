@@ -19,6 +19,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 9g.A — ToolUp.AuditSinks.Cef ─────────────────────────────
 //
@@ -307,8 +308,8 @@ let private uniqueDir () =
     Directory.CreateDirectory dir |> ignore
     dir
 
-let private emptyStorage () =
-    LocalFileStorage.LocalFileStorage(uniqueDir ()) :> IBlobStorage
+let private emptyStorage (dir: TempDir) =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 let private baseTime = DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc)
 
@@ -346,7 +347,12 @@ let private contractTests =
             FixedSecretStore(Some(sprintf "127.0.0.1:%d" listener.Port)) :> ISecretStore
 
         let sink =
-            create "test-cef" settings secrets "cef_syslog_endpoint" (emptyStorage ())
+            create
+                "test-cef"
+                settings
+                secrets
+                "cef_syslog_endpoint"
+                (LocalFileStorage.LocalFileStorage(uniqueDir ()) :> IBlobStorage)
 
         listeners[box sink] <- listener
         sink
@@ -722,8 +728,15 @@ let private configTests =
         }
 
         test "a missing endpoint secret surfaces as Error, not an exception" {
+            use scratch = TempDir.create "cef-audit-sink-tests"
+
             let sink =
-                create "cef-no-secret" CefSinkSettings.defaults (FixedSecretStore None) "cef_endpoint" (emptyStorage ())
+                create
+                    "cef-no-secret"
+                    CefSinkSettings.defaults
+                    (FixedSecretStore None)
+                    "cef_endpoint"
+                    (emptyStorage scratch)
 
             let envelope = envelopeFor "team-1" (loginEvent "u1")
 
@@ -772,7 +785,8 @@ let private configTests =
 
         test "the blob identity reaches the wire" {
             use listener = new TcpSyslogListener()
-            let dir = uniqueDir ()
+            use scratch = TempDir.create "cef-audit-sink-tests"
+            let dir = scratch.Path
             let storage = LocalFileStorage.LocalFileStorage dir :> IBlobStorage
 
             let json =
@@ -821,7 +835,8 @@ let private transportTests =
             }
 
             let secrets = FixedSecretStore(Some(sprintf "127.0.0.1:%d" listener.Port))
-            let sink = create "cef-udp" settings secrets "cef_endpoint" (emptyStorage ())
+            use scratch = TempDir.create "cef-audit-sink-tests"
+            let sink = create "cef-udp" settings secrets "cef_endpoint" (emptyStorage scratch)
 
             let result =
                 sink.Deliver [ envelopeFor "team-7" (loginEvent "u9") ]
@@ -853,7 +868,8 @@ let private transportTests =
             }
 
             let secrets = FixedSecretStore(Some(sprintf "127.0.0.1:%d" listener.Port))
-            let sink = create "cef-tcp" settings secrets "cef_endpoint" (emptyStorage ())
+            use scratch = TempDir.create "cef-audit-sink-tests"
+            let sink = create "cef-tcp" settings secrets "cef_endpoint" (emptyStorage scratch)
 
             let batch = [
                 envelopeFor "team-1" (loginEvent "u1")
@@ -884,8 +900,10 @@ let private transportTests =
             // Port 1 on the loopback: reliably refused, no DNS involved.
             let secrets = FixedSecretStore(Some "127.0.0.1:1")
 
+            use scratch = TempDir.create "cef-audit-sink-tests"
+
             let sink =
-                create "cef-unreachable" settings secrets "cef_endpoint" (emptyStorage ())
+                create "cef-unreachable" settings secrets "cef_endpoint" (emptyStorage scratch)
 
             match
                 sink.Deliver [ envelopeFor "team-1" (loginEvent "u1") ]
@@ -914,16 +932,11 @@ let private stripImportsTests =
             // the replicator subsystem — background service, bounded
             // channel, event-store decorator — is never constructed
             // (GP 13).
-            let storage = emptyStorage ()
+            use scratch = TempDir.create "cef-audit-sink-tests"
+            let storage = emptyStorage scratch
             let inner = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-            let logger =
-                { new ILogger with
-                    member _.Debug(_) = ()
-                    member _.Info(_) = ()
-                    member _.Warn(_) = ()
-                    member _.Error(_, _) = ()
-                }
+            let logger = Logger.silent
 
             let built =
                 ComposeAudit.buildAuditReplicatorSubsystem [] None AuditSamplingPolicy.none storage inner logger
@@ -932,16 +945,11 @@ let private stripImportsTests =
         }
 
         test "composing the CEF sink does construct the subsystem" {
-            let storage = emptyStorage ()
+            use scratch = TempDir.create "cef-audit-sink-tests"
+            let storage = emptyStorage scratch
             let inner = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-            let logger =
-                { new ILogger with
-                    member _.Debug(_) = ()
-                    member _.Info(_) = ()
-                    member _.Warn(_) = ()
-                    member _.Error(_, _) = ()
-                }
+            let logger = Logger.silent
 
             let sink =
                 create "cef-strip" CefSinkSettings.defaults (FixedSecretStore(Some "127.0.0.1:514")) "k" storage

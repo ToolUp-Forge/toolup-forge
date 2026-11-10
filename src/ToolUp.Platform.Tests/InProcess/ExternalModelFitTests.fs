@@ -33,6 +33,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 450 — the external model-fit binding ──────────────────────────
 //
@@ -75,13 +76,6 @@ open ToolUp.Platform.Compose
 
 // ── fixtures ─────────────────────────────────────────────────────────────
 
-let private freshDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-fit-ext-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    dir
-
 let private schema: DatasetSchema = {
     Columns = [
         {
@@ -101,8 +95,8 @@ let private rows = [
 ]
 
 /// A dataset store holding one vintage of `scope-fit/observations`.
-let private seededDatasets (scopeId: string) = async {
-    let blob = LocalFileStorage.LocalFileStorage(freshDir ()) :> IBlobStorage
+let private seededDatasets (dir: TempDir) (scopeId: string) = async {
+    let blob = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let store = BlobDatasetStore.create (DataObjectStore(blob) :> IDataObjectStore)
 
     let! created = store.Create(scopeId, "observations", schema, rows, "tester", Map.empty, StrictlyVersioned)
@@ -141,23 +135,6 @@ let private goodDescriptor: ModelFitArtifactDescriptor = {
 }
 
 // ── test doubles for the arms that are not about the wire ────────────────
-
-type private RecordingLogger() =
-    let lines = ConcurrentQueue<string>()
-    member _.Lines = lines |> Seq.toList
-
-    interface ILogger with
-        member _.Debug message = lines.Enqueue("DEBUG " + message)
-        member _.Info message = lines.Enqueue("INFO " + message)
-        member _.Warn message = lines.Enqueue("WARN " + message)
-        member _.Error(message, _) = lines.Enqueue("ERROR " + message)
-
-type private SilentSecretStore() =
-    interface ISecretStore with
-        member _.GetSecret(_scopeId, _key) = async.Return None
-        member _.SetSecret(_scopeId, _key, _value) = async.Return(Ok())
-        member _.DeleteSecret(_scopeId, _key) = async.Return(Ok())
-        member _.ListKeys _scopeId = async.Return []
 
 /// A dispatcher whose answers are scripted, so the failure map can be
 /// exercised without asking a real service to misbehave. It records what it
@@ -689,7 +666,8 @@ let private envelopeRefusalTests =
     testList "450.A — envelope-version refusal" [
         testCaseAsync "a worker that does not accept this envelope is refused BEFORE the payload is submitted"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
             let dispatcher = ScriptedDispatcher []
 
             let provider =
@@ -719,7 +697,8 @@ let private envelopeRefusalTests =
 
         testCaseAsync "CONTROL — the same provider submits when the envelope IS accepted"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
 
             let dispatcher =
                 ScriptedDispatcher [ ExternalOutcome.Succeeded(ModelFitWorkSpec.renderDescriptor goodDescriptor) ]
@@ -749,7 +728,8 @@ let private envelopeRefusalTests =
 
         testCaseAsync "a dataset belonging to another scope is refused, and never read (GP 4)"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
             let dispatcher = ScriptedDispatcher []
 
             let provider =
@@ -785,7 +765,8 @@ let private endToEndTests =
     testList "450.D — stub worker, end to end" [
         testCaseAsync "submit → progress → complete → outcome, with no worker-side SDK"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
 
             let handles = InMemoryExternalHandleStore() :> IExternalHandleStore
             let registry = ExternalFitCompletionRegistry()
@@ -799,9 +780,9 @@ let private endToEndTests =
             let dispatcher =
                 HttpComputeDispatcher.createTyped
                     (configFor worker ingress.BaseUrl)
-                    (SilentSecretStore() :> ISecretStore)
+                    (Fakes.TestSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             let progress = RecordingProgressSink()
 
@@ -812,7 +793,7 @@ let private endToEndTests =
                     registry,
                     options,
                     Some handles,
-                    Some(RecordingLogger() :> ILogger)
+                    Some Logger.silent
                 )
 
             let jobId = Guid.NewGuid()
@@ -916,7 +897,8 @@ let private endToEndTests =
 
         testCaseAsync "a replayed completion resolves once — the second delivery is idempotent"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
 
             let handles = InMemoryExternalHandleStore() :> IExternalHandleStore
             let registry = ExternalFitCompletionRegistry()
@@ -929,9 +911,9 @@ let private endToEndTests =
             let dispatcher =
                 HttpComputeDispatcher.createTyped
                     (configFor worker ingress.BaseUrl)
-                    (SilentSecretStore() :> ISecretStore)
+                    (Fakes.TestSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             let provider =
                 ExternalModelFitProvider(
@@ -970,7 +952,8 @@ let private endToEndTests =
 
         testCaseAsync "a worker that returns an unreadable result reference is refused, not accepted"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
 
             let handles = InMemoryExternalHandleStore() :> IExternalHandleStore
             let registry = ExternalFitCompletionRegistry()
@@ -986,9 +969,9 @@ let private endToEndTests =
             let dispatcher =
                 HttpComputeDispatcher.createTyped
                     (configFor worker ingress.BaseUrl)
-                    (SilentSecretStore() :> ISecretStore)
+                    (Fakes.TestSecretStore() :> ISecretStore)
                     sharedHttpClient.Value
-                    (RecordingLogger() :> ILogger)
+                    Logger.silent
 
             let provider =
                 ExternalModelFitProvider(
@@ -1016,7 +999,8 @@ let private endToEndTests =
 
 /// Run one fit against a stub worker that reports `rmse` in kilograms.
 let private fitAgainstKilograms (gateUnit: string option) = async {
-    let! datasets, version = seededDatasets "scope-fit"
+    use dir = TempDir.create "fit-ext"
+    let! datasets, version = seededDatasets dir "scope-fit"
 
     let handles = InMemoryExternalHandleStore() :> IExternalHandleStore
     let registry = ExternalFitCompletionRegistry()
@@ -1034,9 +1018,9 @@ let private fitAgainstKilograms (gateUnit: string option) = async {
     let dispatcher =
         HttpComputeDispatcher.createTyped
             (configFor worker ingress.BaseUrl)
-            (SilentSecretStore() :> ISecretStore)
+            (Fakes.TestSecretStore() :> ISecretStore)
             sharedHttpClient.Value
-            (RecordingLogger() :> ILogger)
+            Logger.silent
 
     let provider =
         ExternalModelFitProvider(
@@ -1101,7 +1085,8 @@ let private failureMapTests =
     testList "450.B — outcome mapping, timeout, cancellation" [
         testCaseAsync "a refused submission surfaces the backend's own retriability"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
 
             let dispatcher =
                 ScriptedDispatcher([], Error(ExternalComputeError.retriable "the worker pool is saturated"))
@@ -1123,7 +1108,8 @@ let private failureMapTests =
 
         testCaseAsync "a worker failure resolves by POLL when no callback ever arrives"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
 
             // No callback path at all — the universal fallback, which is
             // what makes the push path a latency optimisation rather than a
@@ -1162,7 +1148,8 @@ let private failureMapTests =
 
         testCaseAsync "a callback-capable backend behind the execution-profile gate is still handed its credential"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
             let credentials = ConcurrentQueue<Guid>()
 
             let scripted =
@@ -1211,7 +1198,8 @@ let private failureMapTests =
 
         testCaseAsync "a fit that outruns its budget is cancelled at the backend, not merely abandoned"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
 
             // Running forever: only the budget can end this.
             let dispatcher = ScriptedDispatcher [ ExternalOutcome.Running(Some 0.1) ]
@@ -1241,7 +1229,8 @@ let private failureMapTests =
 
         testCaseAsync "cancelling the caller's async propagates a teardown to the backend"
         <| async {
-            let! datasets, version = seededDatasets "scope-fit"
+            use dir = TempDir.create "fit-ext"
+            let! datasets, version = seededDatasets dir "scope-fit"
             let dispatcher = ScriptedDispatcher [ ExternalOutcome.Running(Some 0.1) ]
 
             let provider =

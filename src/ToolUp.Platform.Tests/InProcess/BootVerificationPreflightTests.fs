@@ -9,6 +9,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 657 — boot verification preflight + the verified profile ──
 //
@@ -30,54 +31,31 @@ open ToolUp.Platform.Compose
 
 // ─── Doubles ─────────────────────────────────────────────────────────
 
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    let gate = obj ()
-    member _.Events = lock gate (fun () -> List.ofSeq recorded)
+/// Every `(scopeId, event)` a recording audit log was handed, in order.
+let private auditRows (audit: TestAuditLog) =
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
 
-    /// Wait for `count` rows to land.
-    ///
-    /// The gate's deny observer is fire-and-forget by contract
-    /// (`Async.Start` onto the thread pool) — a refusal must not wait
-    /// on an audit backend — so a test asserting on the row has to wait
-    /// for the write it deliberately did not await. Event-driven, not
-    /// polled: `Record` pulses the monitor, so this returns the instant
-    /// the `count`-th row lands, and the cap only bites when the rows
-    /// are not coming at all. A timeout fails HERE, naming what did
-    /// arrive — a 5s wall-clock poll once expired under machine load
-    /// and the failure blamed the downstream ledger claim instead of
-    /// the scheduler (2026-08-24, VerifyAll beside a second pack).
-    member _.WaitFor(count: int) =
-        let cap = TimeSpan.FromSeconds 30.0
-        let sw = Diagnostics.Stopwatch.StartNew()
+/// Wait for `count` rows to land.
+///
+/// The gate's deny observer is fire-and-forget by contract
+/// (`Async.Start` onto the thread pool) — a refusal must not wait
+/// on an audit backend — so a test asserting on the row has to wait
+/// for the write it deliberately did not await. Event-driven, not
+/// polled: the wait wakes on every recorded row, so this returns the
+/// instant the `count`-th row lands, and the cap only bites when the
+/// rows are not coming at all. A timeout fails HERE, naming what did
+/// arrive — a 5s wall-clock poll once expired under machine load
+/// and the failure blamed the downstream ledger claim instead of
+/// the scheduler (2026-08-24, VerifyAll beside a second pack).
+let private waitForRows (count: int) (audit: TestAuditLog) =
+    let cap = TimeSpan.FromSeconds 30.0
 
-        lock gate (fun () ->
-            while recorded.Count < count && sw.Elapsed < cap do
-                let remaining = cap - sw.Elapsed
-
-                if remaining > TimeSpan.Zero then
-                    Threading.Monitor.Wait(gate, remaining) |> ignore
-
-            if recorded.Count < count then
-                failtestf
-                    "audit wait: %d of %d expected row(s) arrived within %.0fs — with an event-driven wait this long the deny observer's write never happened (it is not merely late); the ledger assertion after this wait has NOT been evaluated"
-                    recorded.Count
-                    count
-                    cap.TotalSeconds)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            lock gate (fun () ->
-                recorded.Add(scopeId, audit)
-                Threading.Monitor.PulseAll gate)
-
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async {
-            return lock gate (fun () -> recorded |> Seq.map snd |> List.ofSeq)
-        }
+    if not (audit.Recording.WaitUntil((fun rows -> List.length rows >= count), cap)) then
+        failtestf
+            "audit wait: %d of %d expected row(s) arrived within %.0fs — with an event-driven wait this long the deny observer's write never happened (it is not merely late); the ledger assertion after this wait has NOT been evaluated"
+            audit.Recording.Count
+            count
+            cap.TotalSeconds
 
 /// A dispatcher that declares no isolation posture — the shape every
 /// pre-478 companion has.
@@ -1106,46 +1084,40 @@ let tests =
             }
 
             test "a recorded artifact that no longer matches its digest is reported by file" {
-                let root = Path.Combine(Path.GetTempPath(), $"toolup-657-{Guid.NewGuid():N}")
-                Directory.CreateDirectory root |> ignore
+                use rootDir = TempDir.create "657"
+                let root = rootDir.Path
 
-                try
-                    let artifact = Path.Combine(root, "app.dll")
-                    File.WriteAllText(artifact, "honest bytes")
+                let artifact = Path.Combine(root, "app.dll")
+                File.WriteAllText(artifact, "honest bytes")
 
-                    let provenance =
-                        DeployProvenance.withArtifacts (DeployRecords.artifactsUnder root) DeployProvenance.none
+                let provenance =
+                    DeployProvenance.withArtifacts (DeployRecords.artifactsUnder root) DeployProvenance.none
 
-                    let record = DeployRecord.create "deploy-1" "tenant-1" "build-1" manifest provenance
+                let record = DeployRecord.create "deploy-1" "tenant-1" "build-1" manifest provenance
 
-                    let sealedRecord, sealedBinding = sealPair record composition
+                let sealedRecord, sealedBinding = sealPair record composition
 
-                    File.WriteAllText(artifact, "swapped bytes")
+                File.WriteAllText(artifact, "swapped bytes")
 
-                    let options = {
-                        optionsFor
-                            CompositionProfile.Standard
-                            BootVerificationPolicy.LogAndServe
-                            (Some sealedRecord)
-                            (Some sealedBinding)
-                            (NoOpAuditLog()) with
-                            Locate = DeployRecords.locateUnder root
-                    }
+                let options = {
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        (NoOpAuditLog()) with
+                        Locate = DeployRecords.locateUnder root
+                }
 
-                    match verdictOf options composition with
-                    | BootVerificationVerdict.VerificationFailed(failures, _) ->
-                        let rendered =
-                            failures
-                            |> List.map DeployRecords.DeployRecordVerificationFailure.describe
-                            |> String.concat " | "
+                match verdictOf options composition with
+                | BootVerificationVerdict.VerificationFailed(failures, _) ->
+                    let rendered =
+                        failures
+                        |> List.map DeployRecords.DeployRecordVerificationFailure.describe
+                        |> String.concat " | "
 
-                        Expect.stringContains rendered "app.dll" "the finding an operator acts on names the file"
-                    | other -> failtestf "expected VerificationFailed, got %A" other
-                finally
-                    try
-                        Directory.Delete(root, true)
-                    with _ ->
-                        ()
+                    Expect.stringContains rendered "app.dll" "the finding an operator acts on names the file"
+                | other -> failtestf "expected VerificationFailed, got %A" other
             }
 
             test "no sealed record is Unsealed, not a failure" {
@@ -1270,7 +1242,7 @@ let tests =
 
         testList "audit path" [
             test "the affirmative verdict is recorded too" {
-                let auditLog = RecordingAuditLog()
+                let auditLog = TestAuditLog()
                 let sealedRecord, sealedBinding = sealPair baseRecord composition
 
                 let options =
@@ -1285,7 +1257,7 @@ let tests =
                 |> Async.RunSynchronously
                 |> ignore
 
-                match auditLog.Events with
+                match auditRows auditLog with
                 | [ scopeId, CompositionVerificationRecorded payload ] ->
                     Expect.equal scopeId "_platform" "a boot verdict belongs to the deployment, not a tenant"
                     Expect.equal payload.Verdict "verified" ""
@@ -1297,7 +1269,7 @@ let tests =
             }
 
             test "a refused start is recorded before the process is told to stop" {
-                let auditLog = RecordingAuditLog()
+                let auditLog = TestAuditLog()
                 let sealedRecord, sealedBinding = sealPair baseRecord composition
 
                 let options =
@@ -1314,7 +1286,7 @@ let tests =
                 |> Async.RunSynchronously
                 |> ignore
 
-                match auditLog.Events with
+                match auditRows auditLog with
                 | [ _, CompositionVerificationRecorded payload ] ->
                     Expect.isTrue payload.RefusedStart "the row an incident review most needs"
                     Expect.isNonEmpty payload.Findings "and it carries what moved"
@@ -1371,7 +1343,7 @@ let tests =
             }
 
             test "a module exceeding its declared envelope is refused, audited, with module and envelope named" {
-                let auditLog = RecordingAuditLog()
+                let auditLog = TestAuditLog()
 
                 let gate =
                     match
@@ -1389,9 +1361,9 @@ let tests =
                     Expect.equal denial.Component reportsId "the refusal is fail-closed and names the component"
                 | CapabilityGateDecision.Granted -> failtest "an effecting access beyond a pure declaration is refused"
 
-                auditLog.WaitFor 1
+                waitForRows 1 auditLog
 
-                match auditLog.Events with
+                match auditRows auditLog with
                 | [ scopeId, CompositionCapabilityRefused payload ] ->
                     Expect.equal scopeId "_platform" ""
                     Expect.stringContains payload.Component "reports" "the module is named"
@@ -1407,7 +1379,7 @@ let tests =
             }
 
             test "an undeclared component is refused by default-deny, and the refusal is audited" {
-                let auditLog = RecordingAuditLog()
+                let auditLog = TestAuditLog()
 
                 let gate =
                     match
@@ -1422,8 +1394,8 @@ let tests =
 
                 match gate.Check (ComponentId.ofModule "unknown") effecting with
                 | CapabilityGateDecision.Denied _ ->
-                    auditLog.WaitFor 1
-                    Expect.equal auditLog.Events.Length 1 "the deny reached the audit path"
+                    waitForRows 1 auditLog
+                    Expect.equal (auditRows auditLog).Length 1 "the deny reached the audit path"
                 | CapabilityGateDecision.Granted ->
                     failtest "an undeclared component resolves to the identity, so an effecting access is denied"
             }

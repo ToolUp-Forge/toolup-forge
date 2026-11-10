@@ -15,7 +15,6 @@ module ToolUp.Platform.Tests.InProcess.IngestionStatusTests
 //      as a table.
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -27,6 +26,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 let private run = Async.RunSynchronously
 let private logger = ConsoleLogger.ConsoleLogger() :> ILogger
@@ -78,12 +78,11 @@ let private storeContract (label: string) (factory: unit -> IIngestionStatusStor
         }
     ]
 
+/// The store outlives this factory and the contract has no teardown hook,
+/// so the directory lives until the test process exits.
 let private dataObjectBackedFactory () : IIngestionStatusStore =
-    let tempDir =
-        Path.Combine(Path.GetTempPath(), "toolup-ingstatus-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory tempDir |> ignore
-    let blob = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+    let tempDir = TempDir.forRun "ingstatus"
+    let blob = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
     let dos = DataObjectStore(blob) :> IDataObjectStore
     IngestionStatusStore.create dos (Some logger)
 

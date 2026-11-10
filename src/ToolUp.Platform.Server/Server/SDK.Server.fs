@@ -1377,7 +1377,7 @@ let compose (plan: CompositionPlan) =
 
     // Phase 15e tail — per-request scope/subject/surface DI wiring
     // (extracted to `ComposeScopeResolver.registerScopeResolution`).
-    // Resolves `IStorageScopeResolver` / `ISubjectResolver` /
+    // Resolves `ISubjectResolver` /
     // `SurfaceRequirementRegistry` / `IAnonymousSessionMigrator`
     // and registers them alongside the scoped `AccessContext` factory
     // + `IHttpContextAccessor` + session.

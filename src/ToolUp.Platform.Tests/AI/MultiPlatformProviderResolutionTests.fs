@@ -11,6 +11,7 @@ open ToolUp.AI
 open ToolUp.AI.DefaultAIProviderFactory
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 70 — DefaultAIProviderFactory resolution-chain tests ──
 //
@@ -126,38 +127,6 @@ let private recordingBuilder (recorder: Recorder) (desc: AIProviderDescriptor) :
             recordingProvider recorder desc.Id
 }
 
-// ─── In-memory ISecretStore (BYOK + key-store backing) ───────────
-
-type private InMemorySecretStore() =
-    let store = ConcurrentDictionary<string * string, string>()
-
-    member _.Seed(scopeId: string, key: string, value: string) = store[(scopeId, key)] <- value
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | false, _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
-
 // ─── In-memory IProviderProfile ──────────────────────────────────
 
 type private InMemoryProviderProfile() =
@@ -233,7 +202,7 @@ let private buildFactory
     (fallbackPolicy: AIFallbackPolicy)
     (includeKeyStore: bool)
     =
-    let secretStore = InMemorySecretStore()
+    let secretStore = Fakes.TestSecretStore()
     let providerProfile = InMemoryProviderProfile()
 
     let platformProviders =

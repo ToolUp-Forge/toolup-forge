@@ -37,7 +37,6 @@ module ToolUp.Platform.Tests.InProcess.GrantNotificationTests
 // `GrantPolicyGuard.guardDispatch`'s pack established).
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -45,6 +44,7 @@ open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Jobs.GrantNotification
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 /// A log that records nothing and never refuses — the test's "no audit".
 let private noAudit =
@@ -67,12 +67,8 @@ let private readOk (read: Async<Result<'T, PermissionStoreError>>) : Async<'T> =
 let private Read = ModulePermission.Read
 let private Write = ModulePermission.Write
 
-let private freshStore () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-grantnotify-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-    PermissionStore(LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage) :> IPermissionStore
+let private freshStore (dir: TempDir) =
+    PermissionStore(LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage) :> IPermissionStore
 
 /// Records every publish, and can be told to throw so the isolation case
 /// exercises a real failure rather than a mocked one.
@@ -104,16 +100,6 @@ type private RecordingChannel(?failWith: string) =
         member _.Subscribe(_, _) = async { return Guid.NewGuid() }
         member _.Unsubscribe _ = async { return () }
 
-type private RecordingLogger() =
-    let warnings = ResizeArray<string>()
-    member _.Warnings = List.ofSeq warnings
-
-    interface ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn message = warnings.Add message
-        member _.Error(_, _) = ()
-
 let private registryOf declarations =
     GrantPolicyGuard.ModuleGrantPolicyRegistry.ofDeclarations declarations
 
@@ -130,7 +116,7 @@ let private observerOver
         channel,
         settings,
         logger,
-        (fun () -> Some "admin-1"),
+        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-1")),
         (fun () -> DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero))
     )
     :> IPermissionStore
@@ -362,9 +348,10 @@ let tests =
         testList "delivery through the observer" [
             testCaseAsync "a policied grant publishes a real-time notice AND a transactional envelope per audience"
             <| async {
-                let store = freshStore ()
+                use dir = TempDir.create "grantnotify"
+                let store = freshStore dir
                 let channel = RecordingChannel()
-                let logger = RecordingLogger()
+                let logger = Logger.recording ()
                 let party = PartyRef.create "acme-dpo"
                 let policy = GrantPolicy.RequiresCounterpartyApproval party
 
@@ -411,14 +398,15 @@ let tests =
                     [ "alice"; "dpo-user" ]
                     "addressed to the grantee and the resolved party — the affected principals"
 
-                Expect.isEmpty logger.Warnings "and nothing degraded"
+                Expect.isEmpty (logger.MessagesAt LogSeverity.Warn) "and nothing degraded"
             }
 
             testCaseAsync "an unpolicied grant through the same observer publishes nothing at all"
             <| async {
-                let store = freshStore ()
+                use dir = TempDir.create "grantnotify"
+                let store = freshStore dir
                 let channel = RecordingChannel()
-                let logger = RecordingLogger()
+                let logger = Logger.recording ()
 
                 let observed =
                     observerOver
@@ -460,9 +448,10 @@ let tests =
 
             testCaseAsync "a channel outage never fails the grant — the write lands and the failure is logged"
             <| async {
-                let store = freshStore ()
+                use dir = TempDir.create "grantnotify"
+                let store = freshStore dir
                 let channel = RecordingChannel(failWith = "notification transport down")
-                let logger = RecordingLogger()
+                let logger = Logger.recording ()
 
                 let observed =
                     observerOver
@@ -493,18 +482,21 @@ let tests =
                     (Some GrantState.Active)
                     "and the grant is genuinely durable, not merely reported so"
 
-                Expect.isNonEmpty logger.Warnings "the failure is logged rather than swallowed silently"
+                Expect.isNonEmpty
+                    (logger.MessagesAt LogSeverity.Warn)
+                    "the failure is logged rather than swallowed silently"
 
                 Expect.stringContains
-                    (String.Join(" ", logger.Warnings))
+                    (String.Join(" ", logger.MessagesAt(LogSeverity.Warn)))
                     "notification transport down"
                     "naming the underlying cause"
             }
 
             testCaseAsync "the observer never rewrites the inner store's answer — a refusal stays a refusal"
             <| async {
+                use dir = TempDir.create "grantnotify"
                 let channel = RecordingChannel()
-                let logger = RecordingLogger()
+                let logger = Logger.recording ()
 
                 // The Phase 551 guard beneath refuses an unbacked grant on
                 // a policied module. The observer must pass that through
@@ -513,9 +505,10 @@ let tests =
                 // telling them nothing.
                 let guarded =
                     GrantPolicyGuard.GrantPolicyPermissionStore(
-                        freshStore (),
+                        freshStore dir,
                         registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ],
-                        noAudit
+                        noAudit,
+                        (AccessContext.system "test")
                     )
                     :> IPermissionStore
 
@@ -535,9 +528,10 @@ let tests =
 
             testCaseAsync "team defaults and module exposure are not grants and notify nobody"
             <| async {
-                let store = freshStore ()
+                use dir = TempDir.create "grantnotify"
+                let store = freshStore dir
                 let channel = RecordingChannel()
-                let logger = RecordingLogger()
+                let logger = Logger.recording ()
 
                 let observed =
                     observerOver
@@ -650,11 +644,12 @@ let tests =
             testCaseAsync "either leg can be switched off independently"
             <| async {
                 let run publishRealTime publishTransactional = async {
+                    use dir = TempDir.create "grantnotify"
                     let channel = RecordingChannel()
 
                     let observed =
                         observerOver
-                            (freshStore ())
+                            (freshStore dir)
                             (registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ])
                             channel
                             {
@@ -662,7 +657,7 @@ let tests =
                                     PublishRealTime = publishRealTime
                                     PublishTransactional = publishTransactional
                             }
-                            (RecordingLogger())
+                            (Logger.recording ())
 
                     let! result =
                         observed.SetTeamPermissions(
@@ -694,15 +689,16 @@ let tests =
             testCaseAsync
                 "the correlation id is stable per (team, module, subject, transition) so a retrying vendor cannot double-send"
             <| async {
+                use dir = TempDir.create "grantnotify"
                 let channel = RecordingChannel()
 
                 let observed =
                     observerOver
-                        (freshStore ())
+                        (freshStore dir)
                         (registryOf [ "Partner", GrantPolicy.RequiresAcknowledgement ])
                         channel
                         GrantNotificationSettings.defaults
-                        (RecordingLogger())
+                        (Logger.recording ())
 
                 let! _ =
                     observed.SetTeamPermissions(

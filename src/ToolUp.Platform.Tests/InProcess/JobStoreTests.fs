@@ -1,13 +1,13 @@
 module ToolUp.Platform.Tests.InProcess.JobStoreTests
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── BlobJobStore — IJobStore contract binding ───────────────────
 //
@@ -18,12 +18,8 @@ open ToolUp.Platform.Jobs
 // subtree, two scope ids are GUID-suffixed, no test sees another's
 // blobs.
 
-let private tempStorage () =
-    let root =
-        Path.Combine(Path.GetTempPath(), "toolup-jobstore-tests-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory(root) |> ignore
-    LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+let private tempStorage (root: TempDir) =
+    LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
 
 let private uniqueScope () =
     "team-" + Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -52,7 +48,7 @@ let private mkDefinition (scopeId: string) (handler: string) (nextRunAt: DateTim
 
 let contractTests =
     let factory () =
-        let storage = tempStorage ()
+        let storage = tempStorage (TempDir.forRun "jobstore-tests")
         let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
         let store = JobStore.create storage eventStore
         let suffix = Guid.NewGuid().ToString("N").Substring(0, 8)
@@ -62,7 +58,8 @@ let contractTests =
         IJobStoreContract.tests "BlobJobStore" factory
         IJobStoreContract.failingBackendTests "BlobJobStore" (fun () ->
             let storage =
-                InMemoryBlobStorage.WriteRefusingBlobStorage(tempStorage ()) :> IBlobStorage
+                InMemoryBlobStorage.WriteRefusingBlobStorage(tempStorage (TempDir.forRun "jobstore-tests"))
+                :> IBlobStorage
 
             let store =
                 JobStore.create storage (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
@@ -79,15 +76,12 @@ let contractTests =
 /// default store's durability is `IBlobStorage`'s, not its own.
 let restartContractTests =
     let factory () =
-        let root =
-            Path.Combine(Path.GetTempPath(), "toolup-jobstore-restart-" + Guid.NewGuid().ToString("N"))
-
-        Directory.CreateDirectory root |> ignore
+        let root = TempDir.forRun "jobstore-restart"
 
         let binding: IJobStoreContract.ReopenableStore = {
             Open =
                 fun () ->
-                    let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+                    let storage = LocalFileStorage.LocalFileStorage(root.Path) :> IBlobStorage
                     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
                     JobStore.create storage eventStore
             ScopeId = uniqueScope ()
@@ -106,7 +100,8 @@ let indexTests =
 
         testCaseAsync "Update from Active to Cancelled removes the bucket entry"
         <| async {
-            let storage = tempStorage ()
+            use root = TempDir.create "jobstore-tests"
+            let storage = tempStorage root
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = JobStore.BlobJobStore(storage, eventStore)
             let storeI = store :> IJobStore
@@ -132,7 +127,8 @@ let indexTests =
 
         testCaseAsync "Update with new NextRunAt removes prior bucket"
         <| async {
-            let storage = tempStorage ()
+            use root = TempDir.create "jobstore-tests"
+            let storage = tempStorage root
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = JobStore.BlobJobStore(storage, eventStore)
             let storeI = store :> IJobStore
@@ -158,7 +154,8 @@ let indexTests =
 
         testCaseAsync "DueJobs uses the next-run index — drift hides due jobs"
         <| async {
-            let storage = tempStorage ()
+            use root = TempDir.create "jobstore-tests"
+            let storage = tempStorage root
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = JobStore.BlobJobStore(storage, eventStore)
             let storeI = store :> IJobStore
@@ -190,7 +187,8 @@ let indexTests =
 
         testCaseAsync "Rebuild restores idempotency index"
         <| async {
-            let storage = tempStorage ()
+            use root = TempDir.create "jobstore-tests"
+            let storage = tempStorage root
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = JobStore.BlobJobStore(storage, eventStore)
             let storeI = store :> IJobStore
@@ -220,7 +218,8 @@ let indexTests =
 
         testCaseAsync "Rebuild is idempotent"
         <| async {
-            let storage = tempStorage ()
+            use root = TempDir.create "jobstore-tests"
+            let storage = tempStorage root
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = JobStore.BlobJobStore(storage, eventStore)
             let storeI = store :> IJobStore
@@ -245,7 +244,8 @@ let indexTests =
 
         testCaseAsync "IndexConsistencyCheck reports zero drift on a freshly-written store"
         <| async {
-            let storage = tempStorage ()
+            use root = TempDir.create "jobstore-tests"
+            let storage = tempStorage root
             let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
             let store = JobStore.BlobJobStore(storage, eventStore)
             let storeI = store :> IJobStore

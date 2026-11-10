@@ -36,7 +36,7 @@ open ToolUp.Platform.Scope
 
 // ─── Test doubles ────────────────────────────────────────────────────
 
-type private RecordingAuditLog() =
+type private EagerRecordingAuditLog() =
     let events = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
 
     interface IAuditLog with
@@ -147,7 +147,7 @@ let tests =
         // ── Trigger fires once; Ok updates LastSeen + audits ──────────
         test "Ok migration → migrator invoked, LastSeen recorded (2nd request skips), audit Outcome=Ok" {
             let calls = ref 0
-            let audit = RecordingAuditLog()
+            let audit = EagerRecordingAuditLog()
             let migrator = countingMigrator calls (Ok(summary 3 300L [ "Forms" ])) None
             let cache = newCache ()
             let provider = mkProvider cache audit migrator
@@ -183,7 +183,7 @@ let tests =
         // ── NotEligible updates LastSeen but does NOT audit ───────────
         test "NotEligible → LastSeen recorded (2nd request skips), no audit emitted" {
             let calls = ref 0
-            let audit = RecordingAuditLog()
+            let audit = EagerRecordingAuditLog()
 
             let migrator =
                 countingMigrator calls (Result.Error(MigrationError.NotEligible "no data")) None
@@ -202,7 +202,7 @@ let tests =
         // ── InfrastructureFailed does NOT update LastSeen — retried ───
         test "InfrastructureFailed → LastSeen NOT recorded, retried next request, audited each time" {
             let calls = ref 0
-            let audit = RecordingAuditLog()
+            let audit = EagerRecordingAuditLog()
 
             let migrator =
                 countingMigrator calls (Result.Error(MigrationError.InfrastructureFailed "blob down")) None
@@ -227,7 +227,7 @@ let tests =
         // ── PartialFailure updates LastSeen and audits ────────────────
         test "PartialFailure → LastSeen recorded (2nd request skips), audit carries failedItems + error" {
             let calls = ref 0
-            let audit = RecordingAuditLog()
+            let audit = EagerRecordingAuditLog()
 
             let migrator =
                 countingMigrator
@@ -260,7 +260,7 @@ let tests =
         // ── No-trigger guard: X-User-Id == user id ────────────────────
         test "X-User-Id equal to the authenticated user id → no migration (no separate anon session)" {
             let calls = ref 0
-            let audit = RecordingAuditLog()
+            let audit = EagerRecordingAuditLog()
             let migrator = countingMigrator calls (Ok MigrationSummary.empty) None
             let provider = mkProvider (newCache ()) audit migrator
 
@@ -276,7 +276,7 @@ let tests =
         test "AnonymousSession subject → no migration target → no trigger" {
             let calls = ref 0
             let migrator = countingMigrator calls (Ok MigrationSummary.empty) None
-            let provider = mkProvider (newCache ()) (RecordingAuditLog()) migrator
+            let provider = mkProvider (newCache ()) (EagerRecordingAuditLog()) migrator
 
             let next =
                 invoke provider (Some(AnonymousSession "s")) None (Some aSession) "POST" "/api/x"
@@ -289,7 +289,7 @@ let tests =
         test "Missing X-User-Id header → no trigger" {
             let calls = ref 0
             let migrator = countingMigrator calls (Ok MigrationSummary.empty) None
-            let provider = mkProvider (newCache ()) (RecordingAuditLog()) migrator
+            let provider = mkProvider (newCache ()) (EagerRecordingAuditLog()) migrator
 
             let next =
                 invoke provider (Some(AuthenticatedUser "user-nh")) None None "POST" "/api/x"
@@ -302,7 +302,7 @@ let tests =
         test "Non-/api path → no trigger even with a valid anon→auth transition" {
             let calls = ref 0
             let migrator = countingMigrator calls (Ok MigrationSummary.empty) None
-            let provider = mkProvider (newCache ()) (RecordingAuditLog()) migrator
+            let provider = mkProvider (newCache ()) (EagerRecordingAuditLog()) migrator
 
             let next =
                 invoke provider (Some(AuthenticatedUser "user-np")) None (Some aSession) "GET" "/dashboard"
@@ -313,7 +313,7 @@ let tests =
 
         // ── Default NoOp migrator → uniform NotEligible, no audit ─────
         test "Unwired (NoOp) migrator → records LastSeen, no audit, 2nd request skips" {
-            let audit = RecordingAuditLog()
+            let audit = EagerRecordingAuditLog()
             let migrator = NoOpAnonymousSessionMigrator() :> IAnonymousSessionMigrator
             let cache = newCache ()
             let provider = mkProvider cache audit migrator
@@ -331,7 +331,7 @@ let tests =
         testCaseAsync "Two concurrent first requests for the same user → migrator invoked exactly once"
         <| async {
             let calls = ref 0
-            let audit = RecordingAuditLog()
+            let audit = EagerRecordingAuditLog()
 
             // Hold the migrator inside its critical section until both
             // request tasks have started, forcing the second to wait on

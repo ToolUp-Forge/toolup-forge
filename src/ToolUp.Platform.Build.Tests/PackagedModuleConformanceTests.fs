@@ -7,6 +7,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 
 // ─── Phase 586 — packaged-module shadow-project conformance ────────────
 //
@@ -93,18 +94,8 @@ let private expectOnly law (subjectFragment: string) (violations: ShadowLayoutVi
 // ─── On-disk fixture ───────────────────────────────────────────────────
 
 let private withTempDir (f: string -> 'a) =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "packaged-module-test-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
-
-    try
-        f dir
-    finally
-        try
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
+    use scratch = TempDir.create "packaged-module-test"
+    f scratch.Path
 
 let private mainProjectXml (packExclude: string) =
     $"""<Project Sdk="Microsoft.NET.Sdk">

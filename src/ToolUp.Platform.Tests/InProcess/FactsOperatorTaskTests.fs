@@ -318,7 +318,10 @@ let private unscoped (scheduler: IJobScheduler) (shard: string) (handler: string
 /// The platform's declared-principal resolver over a deployment resolver that
 /// resolves every principal to `key`.
 let private resolvingTo (key: ScopeKey) =
-    DeclaredPrincipalResolver(fun _ -> async.Return(Ok(StorageScope.ofKey true key)))
+    DeclaredPrincipalResolver(
+        ToolUp.Platform.Testing.Fakes.TestSubjectResolver(Subject.AuthenticatedUser "declared"),
+        fun _ -> Some(StorageScope.ofKey true key)
+    )
 
 let private runsAnonymous (scheduler: IJobScheduler) (carrier: ScopeCarrier) (shard: string) (jobId: JobId) =
     match scheduler.Get(shard, jobId) |> Async.RunSynchronously with

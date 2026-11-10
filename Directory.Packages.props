@@ -415,22 +415,16 @@
   </ItemGroup>
 
   <!--
-    ToolUp SDK package versions. App-Server / App-Client / TestClient
-    PackageReference these names (no version), resolved against the
-    shared workspace-level NuGet feed at ../../local-nuget-feed/ (see
-    nuget.config).
-
-    All versions track ToolUpSdkVersion in lockstep. Per-package overrides
-    are possible by declaring a more specific PackageVersion below the
-    bulk block (later wins).
-
-    Phase 11.C.3 will flip the consumption to the toolup-forge
-    GitHub Packages cloud feed via a one-line change in nuget.config.
-    The PackageVersion entries here are unchanged at split time.
+    ToolUp SDK package versions, for the template projects that build in
+    place under templates/ (no project in this repository references a
+    ToolUp.* package: they are project references). The template gate
+    passes the version it packed (-p:ToolUpSdkVersion=…), so this file
+    declares no default: a template built in place without the gate fails
+    restore by name instead of resolving whatever release the default
+    named. The one version this repository releases is <Version> in
+    Directory.Build.props; a consumer pins <ToolUpSdkVersion> in its own
+    Directory.Packages.props (the ToolUp.Sdk manifest).
   -->
-  <PropertyGroup>
-    <ToolUpSdkVersion>0.11.0</ToolUpSdkVersion>
-  </PropertyGroup>
   <ItemGroup>
     <!-- ToolUp.Platform — the SDK floor -->
     <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />

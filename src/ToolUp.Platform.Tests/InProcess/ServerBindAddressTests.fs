@@ -34,6 +34,7 @@ open ToolUp.Platform.Infra.TransientFault
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -102,30 +103,17 @@ let private allLoopback127 (addresses: string list) =
 
 // ─── Compose: the preflight is registered and run ─────────────────────
 
-type private CapturingLogger() =
-    let lines = Collections.Concurrent.ConcurrentQueue<string>()
-    member _.Lines = List.ofSeq lines
-
-    interface ILogger with
-        member _.Debug m = lines.Enqueue m
-        member _.Info m = lines.Enqueue m
-        member _.Warn m = lines.Enqueue m
-        member _.Error(m, _) = lines.Enqueue m
-
 /// Compose the default anonymous app exactly as `ServerApp.run` does, in a
 /// scratch working directory, and return what the preflight said about the
 /// listen address. Compose builds the host and never starts it, so nothing
 /// binds a port.
 let private composedVerdict (config: ServerConfig) : string * string list =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-1000-" + Guid.NewGuid().ToString("N"))
-
-    Directory.CreateDirectory dir |> ignore
+    use dir = TempDir.create "1000"
     let saved = Directory.GetCurrentDirectory()
-    let logger = CapturingLogger()
+    let logger = Logger.recording ()
 
     try
-        Directory.SetCurrentDirectory dir
+        Directory.SetCurrentDirectory dir.Path
 
         try
             ToolUp.Platform.Compose.Server.compose {
@@ -143,15 +131,11 @@ let private composedVerdict (config: ServerConfig) : string * string list =
     finally
         Directory.SetCurrentDirectory saved
 
-        try
-            Directory.Delete(dir, true)
-        with _ ->
-            ()
-
     let prefix = "[preflight] server-bind-address: "
+    let lines = logger.Lines |> List.map _.Message
 
-    match logger.Lines |> List.filter (fun l -> l.StartsWith prefix) with
-    | [ line ] -> line.Substring(prefix.Length).Split(' ').[0], logger.Lines
+    match lines |> List.filter (fun l -> l.StartsWith prefix) with
+    | [ line ] -> line.Substring(prefix.Length).Split(' ').[0], lines
     | [] -> failtest "the composed preflight never ran server-bind-address"
     | many -> failtestf "the composed preflight ran server-bind-address %d times" many.Length
 

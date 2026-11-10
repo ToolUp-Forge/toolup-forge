@@ -14,6 +14,7 @@ open ToolUp.ModelProviders.Reference
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 449 — model-fit envelope conformance pack ────────────────────
 //
@@ -31,27 +32,6 @@ open ToolUp.Platform.Compose
 //     key (GP 4 + GP 6);
 //   * the `IJobHandler` maps parse / envelope failures to the right
 //     `JobResult`.
-
-let private silentLogger =
-    { new ILogger with
-        member _.Debug(_: string) = ()
-        member _.Info(_: string) = ()
-        member _.Warn(_: string) = ()
-        member _.Error(_: string, _: exn option) = ()
-    }
-
-/// Records every `Record` call so a test can assert audit shape + count.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Events = List.ofSeq recorded
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return recorded |> Seq.map snd |> List.ofSeq }
 
 let private provider: IModelFitProvider = ReferenceModelFitProvider.create ()
 let private registry = ModelFitProviderRegistry [ provider ]
@@ -72,15 +52,12 @@ let private request (scope: string) (seed: int64) (gates: GateSpec list) : FitRe
     SubmitterClass = SubmitterClass.Human
 }
 
-/// Only the model-fit payloads of the recorded trail, in order.
-let private modelFitEvents (audit: RecordingAuditLog) = audit.Events |> List.map snd
-
 let tests =
     testList "ModelFit — IModelFitProvider envelope contract" [
 
         testCaseAsync "a registered provider fits; the outcome carries the composite key + diagnostics + verdicts"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let req =
                 request "team-1" 42L [
@@ -133,8 +110,8 @@ let tests =
                 }
             ]
 
-            let! first = ModelFitEnvelope.runFit registry (RecordingAuditLog()) (request "team-1" 7L gates)
-            let! second = ModelFitEnvelope.runFit registry (RecordingAuditLog()) (request "team-1" 7L gates)
+            let! first = ModelFitEnvelope.runFit registry (TestAuditLog()) (request "team-1" 7L gates)
+            let! second = ModelFitEnvelope.runFit registry (TestAuditLog()) (request "team-1" 7L gates)
 
             match first, second with
             | Ok a, Ok b -> Expect.equal a b "an identical seeded request must reproduce a byte-identical outcome"
@@ -143,8 +120,8 @@ let tests =
 
         testCaseAsync "a different seed produces a different outcome"
         <| async {
-            let! a = ModelFitEnvelope.runFit registry (RecordingAuditLog()) (request "team-1" 1L [])
-            let! b = ModelFitEnvelope.runFit registry (RecordingAuditLog()) (request "team-1" 2L [])
+            let! a = ModelFitEnvelope.runFit registry (TestAuditLog()) (request "team-1" 1L [])
+            let! b = ModelFitEnvelope.runFit registry (TestAuditLog()) (request "team-1" 2L [])
 
             match a, b with
             | Ok oa, Ok ob ->
@@ -157,7 +134,7 @@ let tests =
             // Fit once to read the deterministic `mean` diagnostic, then
             // build gates around the observed value so both directions are
             // exercised with known pass / fail outcomes.
-            let! baseline = ModelFitEnvelope.runFit registry (RecordingAuditLog()) (request "team-1" 99L [])
+            let! baseline = ModelFitEnvelope.runFit registry (TestAuditLog()) (request "team-1" 99L [])
 
             let observed =
                 match baseline with
@@ -191,7 +168,7 @@ let tests =
                 } // fails
             ]
 
-            let! result = ModelFitEnvelope.runFit registry (RecordingAuditLog()) (request "team-1" 99L gates)
+            let! result = ModelFitEnvelope.runFit registry (TestAuditLog()) (request "team-1" 99L gates)
 
             match result with
             | Ok outcome ->
@@ -202,7 +179,7 @@ let tests =
 
         testCaseAsync "a failed gate is a typed, audited verdict — not an error"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             // `mean` is in [0,1); an AtMost -1.0 gate can never pass.
             let gates = [
                 {
@@ -222,7 +199,7 @@ let tests =
                 Expect.equal (FitOutcome.failedGates outcome).Length 1 "exactly one failed verdict"
 
                 let gateFailedRows =
-                    modelFitEvents audit
+                    audit.Events
                     |> List.choose (function
                         | ModelFitGateFailed p -> Some p
                         | _ -> None)
@@ -238,7 +215,7 @@ let tests =
 
         testCaseAsync "no ModelFitGateFailed row when every gate passes"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let gates = [
                 {
@@ -252,7 +229,7 @@ let tests =
             let! _ = ModelFitEnvelope.runFit registry audit (request "team-1" 5L gates)
 
             let gateFailedRows =
-                modelFitEvents audit
+                audit.Events
                 |> List.filter (function
                     | ModelFitGateFailed _ -> true
                     | _ -> false)
@@ -271,7 +248,7 @@ let tests =
                 }
             ]
 
-            let! result = ModelFitEnvelope.runFit registry (RecordingAuditLog()) (request "team-1" 3L gates)
+            let! result = ModelFitEnvelope.runFit registry (TestAuditLog()) (request "team-1" 3L gates)
 
             match result with
             | Ok outcome ->
@@ -283,7 +260,7 @@ let tests =
 
         testCaseAsync "every run is audited under the request scope carrying the composite key"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
             let! result = ModelFitEnvelope.runFit registry audit (request "team-iso" 11L [])
 
             let outcome =
@@ -292,17 +269,17 @@ let tests =
                 | Error e -> failtestf "fit failed: %s" (ModelFitError.describe e)
 
             // Started + Completed, both under the request scope.
-            let scopes = audit.Events |> List.map fst |> List.distinct
+            let scopes = audit.Records |> List.map _.StreamKey |> List.distinct
             Expect.equal scopes [ "team-iso" ] "audit rows are scoped to the request scope (GP 4)"
 
             let started =
-                modelFitEvents audit
+                audit.Events
                 |> List.tryPick (function
                     | ModelFitStarted p -> Some p
                     | _ -> None)
 
             let completed =
-                modelFitEvents audit
+                audit.Events
                 |> List.tryPick (function
                     | ModelFitCompleted p -> Some p
                     | _ -> None)
@@ -316,7 +293,7 @@ let tests =
 
         testCaseAsync "an unknown provider kind is refused as typed data"
         <| async {
-            let audit = RecordingAuditLog()
+            let audit = TestAuditLog()
 
             let req = {
                 request "team-1" 1L [] with
@@ -346,8 +323,8 @@ let tests =
 
         testCaseAsync "the job handler maps a good payload to Success and a malformed payload to PermanentFailure"
         <| async {
-            let audit = RecordingAuditLog()
-            let handler = ModelFitJobHandler.create registry audit silentLogger
+            let audit = TestAuditLog()
+            let handler = ModelFitJobHandler.create registry audit Logger.silent
 
             let ctx (payload: string) : JobContext = {
                 JobId = Guid.NewGuid()
@@ -376,7 +353,7 @@ let tests =
 
         testCaseAsync "the job handler maps an unknown provider kind to PermanentFailure"
         <| async {
-            let handler = ModelFitJobHandler.create registry (RecordingAuditLog()) silentLogger
+            let handler = ModelFitJobHandler.create registry (TestAuditLog()) Logger.silent
 
             let req = {
                 request "team-1" 1L [] with
@@ -465,16 +442,11 @@ let tests =
 /// declared hash that deliberately does NOT match any canonical hash of
 /// its payload.
 let opacityTests =
-    let freshRegistry () =
-        let root =
-            IO.Path.Combine(IO.Path.GetTempPath(), "toolup-opacity-tests-" + Guid.NewGuid().ToString("N"))
-
-        IO.Directory.CreateDirectory root |> ignore
-
+    let freshRegistry (root: string) =
         let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
         let dataObjects = DataObjectStore(blob) :> IDataObjectStore
 
-        BlobModelRegistry.create dataObjects (RecordingAuditLog() :> IAuditLog)
+        BlobModelRegistry.create dataObjects (TestAuditLog() :> IAuditLog)
 
     /// A request whose declared spec hash is the caller's own token — by
     /// construction NOT the SHA-256 of the payload.
@@ -510,8 +482,7 @@ let opacityTests =
                 (ModelSpecRef.hashOf payload)
                 "the case is only meaningful when the declared hash differs from forge's own hashing rule"
 
-            let! result =
-                ModelFitEnvelope.runFit registry (RecordingAuditLog()) (opaqueRequest "team-1" payload declared 7L)
+            let! result = ModelFitEnvelope.runFit registry (TestAuditLog()) (opaqueRequest "team-1" payload declared 7L)
 
             match result with
             | Error e -> failtestf "fit refused: %s" (ModelFitError.describe e)
@@ -522,7 +493,8 @@ let opacityTests =
                     "the composite key carries the declared hash verbatim"
 
                 // Registered + retrievable by exactly that hash.
-                let modelRegistry = freshRegistry ()
+                use root = TempDir.create "opacity-tests"
+                let modelRegistry = freshRegistry root.Path
 
                 let! registered = modelRegistry.Register("team-1", outcome, "u1", Map.empty, "")
 
@@ -544,11 +516,12 @@ let opacityTests =
             "identical payloads under distinct declared hashes are distinct artifacts — the hash is the identity"
         <| async {
             let payload = """{"opaque":"same-payload"}"""
-            let modelRegistry = freshRegistry ()
+            use root = TempDir.create "opacity-tests"
+            let modelRegistry = freshRegistry root.Path
 
             let fitAndRegister (declared: string) = async {
                 let! result =
-                    ModelFitEnvelope.runFit registry (RecordingAuditLog()) (opaqueRequest "team-1" payload declared 7L)
+                    ModelFitEnvelope.runFit registry (TestAuditLog()) (opaqueRequest "team-1" payload declared 7L)
 
                 match result with
                 | Error e -> return failtestf "fit refused: %s" (ModelFitError.describe e)

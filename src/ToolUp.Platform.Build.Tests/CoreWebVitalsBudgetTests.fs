@@ -7,6 +7,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 
 // ─── Phase 213 — Lighthouse / Core-Web-Vitals budget gate ──────────────
 //
@@ -331,23 +332,15 @@ let private gateTests =
         }
 
         test "an empty reports directory is a gate failure, not a pass" {
-            let empty =
-                Path.Combine(Path.GetTempPath(), "cwv-empty-" + System.Guid.NewGuid().ToString("N"))
+            use scratch = TempDir.create "cwv-empty"
+            let empty = scratch.Path
 
-            Directory.CreateDirectory empty |> ignore
+            let options =
+                CoreWebVitalsGateOptions.create (fixturePath [ "fixture-budget.json" ]) empty
 
-            try
-                let options =
-                    CoreWebVitalsGateOptions.create (fixturePath [ "fixture-budget.json" ]) empty
-
-                match CoreWebVitalsBudgetGate.verify options with
-                | Ok _ -> failtest "a run that measured nothing must not read as a pass"
-                | Error errors -> Expect.isTrue (mentions "carries no" errors) "the empty measurement is named"
-            finally
-                try
-                    Directory.Delete(empty, true)
-                with _ ->
-                    ()
+            match CoreWebVitalsBudgetGate.verify options with
+            | Ok _ -> failtest "a run that measured nothing must not read as a pass"
+            | Error errors -> Expect.isTrue (mentions "carries no" errors) "the empty measurement is named"
         }
     ]
 

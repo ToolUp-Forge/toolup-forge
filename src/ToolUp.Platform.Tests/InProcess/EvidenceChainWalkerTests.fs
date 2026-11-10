@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.EvidenceChainWalkerTests
 
 open System
-open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.DeploymentVerification
@@ -12,6 +11,7 @@ open ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 713 — the join, with every break reported as data ─────────
 //
@@ -54,21 +54,6 @@ open ToolUp.Platform.Compose
 let private system = "work-system"
 
 let private ref' (id: string) : WorkRecordRef = WorkRecordRef.create system id
-
-/// An `IAuditLog` that records what it is handed, so the audited-read
-/// arm counts rows rather than trusting that one was written.
-type private RecordingAuditLog() =
-    let recorded = ConcurrentQueue<string * AuditEvent>()
-
-    member _.All = recorded |> Seq.map snd |> List.ofSeq
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Enqueue((scopeId, audit))
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
 
 /// A service provider over an explicit type→instance table. Small on
 /// purpose: the walk resolves exactly one service and a full container
@@ -425,7 +410,7 @@ let honestAbsenceTests =
         }
 
         test "an uncomposed walker still answers, and records nothing" {
-            let auditLog = RecordingAuditLog()
+            let auditLog = TestAuditLog()
 
             let outcome =
                 EvidenceChainWalker.run
@@ -442,7 +427,7 @@ let honestAbsenceTests =
 
                 Expect.equal chain.Outcome EvidenceChainOutcome.ChainUnrecorded "and the honest outcome"
 
-            Expect.isEmpty auditLog.All "nothing was read, so nothing is recorded"
+            Expect.isEmpty auditLog.Events "nothing was read, so nothing is recorded"
         }
 
         test "the mode default carries no implementation at all" {
@@ -898,7 +883,7 @@ let auditedReadTests =
     testList "Phase 713 — the walk is an audited read that mutates nothing" [
 
         test "exactly one row per completed walk, carrying who, the outcome and the digest" {
-            let auditLog = RecordingAuditLog()
+            let auditLog = TestAuditLog()
             let walker = EvidenceChainWalker.create (fullSources (workSource ()))
 
             let chain =
@@ -912,7 +897,7 @@ let auditedReadTests =
                 | Ok chain -> chain
                 | Error error -> failtestf "the walk was refused: %s" (EvidenceChainError.describe error)
 
-            match auditLog.All with
+            match auditLog.Events with
             | [ EvidenceChainWalked payload ] ->
                 Expect.equal payload.Actor "auditor" "the row names who walked"
                 Expect.equal payload.VerdictDigest chain.VerdictDigest "and commits to what the chain said"
@@ -930,7 +915,7 @@ let auditedReadTests =
         }
 
         test "a second walk records a second row and no more" {
-            let auditLog = RecordingAuditLog()
+            let auditLog = TestAuditLog()
             let walker = EvidenceChainWalker.create (fullSources (workSource ()))
             let services = servicesWith ((auditLog :> IAuditLog))
 
@@ -942,11 +927,11 @@ let auditedReadTests =
                 |> Async.RunSynchronously
                 |> ignore
 
-            Expect.equal (List.length auditLog.All) 2 "one row per walk — never zero, never two for one"
+            Expect.equal (List.length auditLog.Events) 2 "one row per walk — never zero, never two for one"
         }
 
         test "a REFUSED walk records nothing" {
-            let auditLog = RecordingAuditLog()
+            let auditLog = TestAuditLog()
             let walker = EvidenceChainWalker.create (fullSources (workSource ()))
 
             EvidenceChainWalker.run (servicesWith ((auditLog :> IAuditLog))) (ComposedEvidenceChainWalker walker) {
@@ -956,7 +941,7 @@ let auditedReadTests =
             |> Async.RunSynchronously
             |> ignore
 
-            Expect.isEmpty auditLog.All "nothing was walked, so there is nothing to record"
+            Expect.isEmpty auditLog.Events "nothing was walked, so there is nothing to record"
         }
 
         test "a deployment with no audit log composed still walks" {

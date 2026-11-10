@@ -444,6 +444,17 @@
 @@ L22 [1066-trigger-error-disabled]
 -            | Some job when job.Status = Disabled -> return Error "Cannot trigger a disabled job; enable it first"
 +            | Some job when job.Status = Disabled -> return Error TriggerError.JobDisabled
+--- a/src/Server/Lifecycle.fs
++++ b/src/Server/Lifecycle.fs
+@@ L5 [1063-lifecycle-guarded-with]
+-let guarded = TenantLifecycleAggregator.runGuardedWith lock audit hooks Deprovisioning scopeId actor
++let guarded = TenantLifecycleAggregator.run { TenantLifecycleAggregator.LifecycleRun.create audit hooks Deprovisioning scopeId actor with Guard = Some lock }
+@@ L6 [1063-lifecycle-export-with]
+-let bundle = TenantLifecycleAggregator.exportThenDeprovisionWith lock audit runExport hooks scopeId actor
++let bundle = TenantLifecycleAggregator.exportThenDeprovision runExport { TenantLifecycleAggregator.LifecycleRun.create audit hooks Deprovisioning scopeId actor with Guard = Some lock }
+@@ L7 [1063-storage-scope-resolver]
+-let resolver: IStorageScopeResolver = resolve ()
++let resolver: ISubjectResolver = resolve ()
 --- a/src/Server/Models.fs
 +++ b/src/Server/Models.fs
 @@ L7 [1094-fit-provider-capabilities-member]
@@ -542,4 +553,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 146 rewrite(s) across 21 file(s) pending.
+Codemod: 149 rewrite(s) across 22 file(s) pending.

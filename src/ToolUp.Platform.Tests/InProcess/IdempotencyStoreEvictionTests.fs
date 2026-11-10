@@ -1,11 +1,11 @@
 module ToolUp.Platform.Tests.InProcess.IdempotencyStoreEvictionTests
 
 open System
-open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Reflection
 open Expecto
 open ToolUp.Remoting.Server
+open ToolUp.Platform.Testing
 
 // ─── Bounded idempotency-store eviction + observability ──────
 //
@@ -37,16 +37,9 @@ let private resp (n: int) : MemoisedResponse = {
     RequestBodyHash = ""
 }
 
-/// Captures every `Warn` line so the recovery-path signal is assertable.
-type private CapturingLogger() =
-    let warns = ConcurrentQueue<string>()
-    member _.Warns = warns
-
-    interface ToolUp.Platform.ILogger with
-        member _.Debug _ = ()
-        member _.Info _ = ()
-        member _.Warn m = warns.Enqueue m
-        member _.Error(_, _) = ()
+/// The `Warn` lines a recording logger captured, so the recovery-path
+/// signal is assertable.
+let private warns (logger: TestLogger) = logger.MessagesAt LogSeverity.Warn
 
 /// An entry that has lost its marker is timing-dependent through the public
 /// API, so the deterministic recovery test reproduces it white-box: empty the
@@ -113,7 +106,7 @@ let tests =
         testCaseAsync "over-cap recovery keeps the cache and fires the Warn + counter (no entries.Clear)"
         <| async {
             let cap = 8
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let store = InMemoryIdempotencyStore(maxEntries = cap, logger = logger)
             let istore = store :> IIdempotencyStore
 
@@ -145,8 +138,8 @@ let tests =
 
             // Observability: the recovery path is visible to an operator.
             Expect.equal store.OverCapRecoveryCount 1L "the over-cap recovery counter incremented once"
-            Expect.equal logger.Warns.Count 1 "exactly one Warn was emitted on the recovery path"
-            let warn = logger.Warns |> Seq.head
+            Expect.equal (warns logger).Length 1 "exactly one Warn was emitted on the recovery path"
+            let warn = warns logger |> List.head
             Expect.stringContains warn "over-cap" "the Warn names the over-cap recovery"
         }
 
@@ -154,7 +147,7 @@ let tests =
         testCaseAsync "concurrent inserts at the cap never collapse the cache; counter/logger stay consistent"
         <| async {
             let cap = 64
-            let logger = CapturingLogger()
+            let logger = Logger.recording ()
             let store = InMemoryIdempotencyStore(maxEntries = cap, logger = logger)
             let istore = store :> IIdempotencyStore
 
@@ -183,7 +176,7 @@ let tests =
             // The observability wiring is consistent regardless of whether the
             // race fired: exactly one Warn per counted recovery.
             Expect.equal
-                (int64 logger.Warns.Count)
+                (int64 (warns logger).Length)
                 store.OverCapRecoveryCount
                 "each over-cap recovery emitted exactly one Warn"
 

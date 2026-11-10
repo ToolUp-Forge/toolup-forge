@@ -36,7 +36,6 @@ module ToolUp.Platform.Tests.InProcess.AdminMutationApprovalTests
 // silently lost on the way to disk fails a test rather than passing one.
 
 open System
-open System.IO
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -45,6 +44,7 @@ open ToolUp.Platform.Scope.AdminMutationApproval
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Testing
 
 /// A log that records nothing and never refuses — the test's "no audit".
 let private noAudit =
@@ -59,20 +59,14 @@ let private noAudit =
 let private Read = ModulePermission.Read
 let private Write = ModulePermission.Write
 
-let private tempDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-dualcontrol-" + Guid.NewGuid().ToString "N")
+let private tempDir () = TempDir.create "dualcontrol"
 
-    Directory.CreateDirectory dir |> ignore
-    dir
-
-let private storageAt (dir: string) =
-    LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+let private storageAt (dir: TempDir) =
+    LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
 
 /// A real blob-backed permission store plus the approval queue beside
 /// it, over one private temp dir — the same substrate a deployment runs.
-let private freshFixture () =
-    let dir = tempDir ()
+let private freshFixture (dir: TempDir) =
     let storage = storageAt dir
 
     let permissions = PermissionStore(storage) :> IPermissionStore
@@ -80,22 +74,14 @@ let private freshFixture () =
     let approvals =
         BlobAdminMutationApprovalStore(storage) :> IAdminMutationApprovalStore
 
-    dir, storage, permissions, approvals
+    storage, permissions, approvals
 
-/// Accumulates every recorded event so a test can assert the exact row.
-type private RecordingAuditLog() =
-    let recorded = ResizeArray<string * AuditEvent>()
-    member _.Recorded = List.ofSeq recorded
+/// Every recorded row as (audit stream, event), so a test can assert the exact row.
+let private recorded (audit: TestAuditLog) =
+    audit.Records |> List.map (fun r -> r.StreamKey, r.Event)
 
-    member this.EventNames = this.Recorded |> List.map (snd >> AuditEvent.eventTypeName)
-
-    interface IAuditLog with
-        member _.Record(AuditScope.StreamKey scopeId, _actor, audit) = async {
-            recorded.Add(scopeId, audit)
-            return Ok()
-        }
-
-        member _.GetAuditTrail(AuditScope.StreamKey _, _, _) = async { return [] }
+let private eventNames (audit: TestAuditLog) =
+    audit.Events |> List.map AuditEvent.eventTypeName
 
 /// An inner store whose document cannot be read: every read answers
 /// `Unreadable` and every write refuses. Before Phase 1062 the read RAISED
@@ -162,13 +148,15 @@ let tests =
         // ── 1. The ceremony ──────────────────────────────────────────
         testList "the two-person ceremony" [
             test "Phase 1062 — dual control over an unreadable document refuses with a typed error, never a throw" {
+                use dir = tempDir ()
+
                 let gate =
                     DualControlPermissionStore(
                         UnreadablePermissionStore(),
                         settingsAll,
-                        BlobAdminMutationApprovalStore(storageAt (tempDir ())),
+                        BlobAdminMutationApprovalStore(storageAt dir),
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -198,7 +186,8 @@ let tests =
 
 
             test "a gated grant is inert until a second administrator approves it" {
-                let _, _, permissions, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
 
                 let gate =
                     DualControlPermissionStore(
@@ -206,7 +195,7 @@ let tests =
                         settingsAll,
                         approvals,
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -256,8 +245,9 @@ let tests =
             }
 
             test "propose emits AdminMutationProposed naming the request, proposer and fingerprint" {
-                let _, _, _, approvals = freshFixture ()
-                let audit = RecordingAuditLog()
+                use dir = tempDir ()
+                let _, _, approvals = freshFixture dir
+                let audit = TestAuditLog()
 
                 let mutation = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ])
 
@@ -269,7 +259,7 @@ let tests =
                     | Ok q -> q
                     | Error r -> failtestf "propose refused: %s" (AdminMutationRefusal.describe r)
 
-                match audit.Recorded with
+                match recorded audit with
                 | [ scope, AdminMutationProposed p ] ->
                     Expect.equal scope "acme" "recorded under the team audit stream (the bare id)"
                     Expect.equal p.RequestId queued.RequestId "the row names the queued request"
@@ -281,8 +271,9 @@ let tests =
             }
 
             test "the proposer may withdraw their own proposal, and nothing applies" {
-                let _, _, permissions, approvals = freshFixture ()
-                let audit = RecordingAuditLog()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
+                let audit = TestAuditLog()
 
                 let mutation = AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read ])
 
@@ -305,7 +296,7 @@ let tests =
                     (effectiveFor permissions (UserId "bob") (TeamId "acme"))
                     "a rejected proposal applies nothing"
 
-                match audit.Recorded |> List.map (snd >> AuditEvent.eventTypeName) with
+                match eventNames audit with
                 | [ "AdminMutationRejected" ] -> ()
                 | names -> failtestf "expected exactly one AdminMutationRejected row; got %A" names
             }
@@ -315,8 +306,9 @@ let tests =
         testList "self-approval is refused by construction" [
 
             test "the proposer cannot approve their own proposal, and the record survives" {
-                let _, _, permissions, approvals = freshFixture ()
-                let audit = RecordingAuditLog()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
+                let audit = TestAuditLog()
 
                 let mutation =
                     AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
@@ -349,7 +341,7 @@ let tests =
                 | Ok(Some _) -> ()
                 | other -> failtestf "the pending record must survive a refused approval; got %A" other
 
-                match audit.Recorded with
+                match recorded audit with
                 | [ _, AdminMutationApprovalRefused p ] ->
                     Expect.equal p.RefusalCode "self-approval-refused" "the row carries the dashboarded code"
                     Expect.equal p.ProposerId "admin-a" "the row names the proposer"
@@ -363,7 +355,8 @@ let tests =
                 // on a capitalisation — which is precisely the class of
                 // near-miss this control exists to catch.
                 for variant in [ "ADMIN-A"; "Admin-A"; "  admin-a  " ] do
-                    let _, _, _, approvals = freshFixture ()
+                    use dir = tempDir ()
+                    let _, _, approvals = freshFixture dir
 
                     let queued =
                         match
@@ -394,7 +387,8 @@ let tests =
             }
 
             test "an unattributable gated write is refused, never parked" {
-                let _, _, permissions, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
 
                 let gate =
                     DualControlPermissionStore(
@@ -403,7 +397,7 @@ let tests =
                         approvals,
                         nothingIsPolicyBearing,
                         // No resolvable acting administrator.
-                        (fun () -> None),
+                        (AccessContext.system "test"),
                         (fun () -> t0),
                         noAudit
                     )
@@ -429,8 +423,9 @@ let tests =
         testList "a proposal that lapses is refused and swept" [
 
             test "approval past the TTL is refused, the record removed, and the expiry recorded" {
-                let _, _, permissions, approvals = freshFixture ()
-                let audit = RecordingAuditLog()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
+                let audit = TestAuditLog()
 
                 let queued =
                     match
@@ -471,14 +466,15 @@ let tests =
                 // attempt on it was refused. A trail that showed only the
                 // refusal would leave the proposal looking open forever.
                 Expect.equal
-                    audit.EventNames
+                    (eventNames audit)
                     [ "AdminMutationExpired"; "AdminMutationApprovalRefused" ]
                     "the expiry is recorded alongside the refused attempt"
             }
 
             test "listing the queue sweeps lapsed records and records each expiry" {
-                let _, _, _, approvals = freshFixture ()
-                let audit = RecordingAuditLog()
+                use dir = tempDir ()
+                let _, _, approvals = freshFixture dir
+                let audit = TestAuditLog()
 
                 for user in [ "bob"; "carol" ] do
                     propose
@@ -517,7 +513,7 @@ let tests =
                 | Error e -> failtestf "listing the queue failed: %s" e
 
                 Expect.equal
-                    (audit.EventNames
+                    (eventNames audit
                      |> List.filter (fun n -> n = "AdminMutationExpired")
                      |> List.length)
                     2
@@ -560,7 +556,8 @@ let tests =
                 // an administrator has decided must go, and would hand a
                 // compromised admin a way to keep their own access by
                 // proposing its removal and never approving it.
-                let _, _, permissions, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
 
                 permissions.SetMemberPermissions(TeamId "acme", UserId "bob", "reports", [ Read; Write ])
                 |> run
@@ -572,7 +569,7 @@ let tests =
                         settingsAll,
                         approvals,
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -597,8 +594,10 @@ let tests =
                 // the persisted document rather than a return value: a
                 // deployment that enables dual control must find writes the
                 // gate does not touch producing exactly the bytes they did.
-                let _, plainStorage, plainStore, _ = freshFixture ()
-                let _, gatedStorage, gatedInner, approvals = freshFixture ()
+                use plainDir = tempDir ()
+                use gatedDir = tempDir ()
+                let plainStorage, plainStore, _ = freshFixture plainDir
+                let gatedStorage, gatedInner, approvals = freshFixture gatedDir
 
                 let gate =
                     DualControlPermissionStore(
@@ -608,7 +607,7 @@ let tests =
                         settingsPolicyOnly,
                         approvals,
                         nothingIsPolicyBearing,
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -636,7 +635,8 @@ let tests =
             }
 
             test "the narrow scope gates only modules that declare a grant policy" {
-                let _, _, permissions, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
 
                 let gate =
                     DualControlPermissionStore(
@@ -644,7 +644,7 @@ let tests =
                         settingsPolicyOnly,
                         approvals,
                         (fun name -> name = "payroll"),
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -734,7 +734,8 @@ let tests =
                 // order: GrantPolicyPermissionStore outermost, dual
                 // control inside it. A write that can never be approved
                 // must not cost two administrators a ceremony.
-                let _, _, permissions, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
 
                 let gate =
                     DualControlPermissionStore(
@@ -742,7 +743,7 @@ let tests =
                         settingsAll,
                         approvals,
                         (fun name -> name = "payroll"),
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -753,7 +754,12 @@ let tests =
                     ]
 
                 let composed =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry, noAudit)
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        gate :> IPermissionStore,
+                        registry,
+                        noAudit,
+                        AccessContext.system "test"
+                    )
                     :> IPermissionStore
 
                 match
@@ -782,7 +788,8 @@ let tests =
                 // The two controls are independent, not alternatives:
                 // satisfying the module's ceremony does not satisfy the
                 // estate's.
-                let _, _, permissions, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
 
                 let gate =
                     DualControlPermissionStore(
@@ -790,7 +797,7 @@ let tests =
                         settingsAll,
                         approvals,
                         (fun name -> name = "payroll"),
-                        (fun () -> Some "admin-a"),
+                        (AccessContext.ofSubject ModulePermissions.Unrestricted (Subject.AuthenticatedUser "admin-a")),
                         (fun () -> t0),
                         noAudit
                     )
@@ -801,7 +808,12 @@ let tests =
                     ]
 
                 let composed =
-                    GrantPolicyGuard.GrantPolicyPermissionStore(gate :> IPermissionStore, registry, noAudit)
+                    GrantPolicyGuard.GrantPolicyPermissionStore(
+                        gate :> IPermissionStore,
+                        registry,
+                        noAudit,
+                        AccessContext.system "test"
+                    )
                     :> IPermissionStore
 
                 let outcome =
@@ -885,7 +897,8 @@ let tests =
             }
 
             test "a record whose payload no longer hashes to its fingerprint cannot be approved" {
-                let _, _, permissions, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, permissions, approvals = freshFixture dir
 
                 let queued =
                     match
@@ -931,7 +944,8 @@ let tests =
                 // apply something other than what was proposed. Every
                 // mutation arm is round-tripped, including the whole-
                 // document one carrying grant records and exposure.
-                let _, _, _, approvals = freshFixture ()
+                use dir = tempDir ()
+                let _, _, approvals = freshFixture dir
 
                 let mutations = [
                     AdminMutation.SetMemberPermissions(UserId "bob", "reports", [ Read; Write ])
@@ -1003,7 +1017,8 @@ let tests =
         // `Remove` therefore refuses the approval: nothing is applied, by
         // this approver or the next.
         test "a refused Remove applies nothing, and a second approver cannot apply it either" {
-            let _, _, _, approvals = freshFixture ()
+            use dir = tempDir ()
+            let _, _, approvals = freshFixture dir
 
             let stuck =
                 { new IAdminMutationApprovalStore with
@@ -1038,8 +1053,9 @@ let tests =
         }
 
         test "an unknown request is refused and applies nothing" {
-            let _, _, _, approvals = freshFixture ()
-            let audit = RecordingAuditLog()
+            use dir = tempDir ()
+            let _, _, approvals = freshFixture dir
+            let audit = TestAuditLog()
             let applied = ref false
 
             let apply _ = async {
@@ -1057,7 +1073,7 @@ let tests =
 
             Expect.isFalse applied.Value "nothing applied"
 
-            match audit.Recorded with
+            match recorded audit with
             | [ _, AdminMutationApprovalRefused p ] ->
                 Expect.equal p.RefusalCode "unknown-request" "the row carries the dashboarded code"
             | other -> failtestf "expected exactly one refusal row; got %A" other

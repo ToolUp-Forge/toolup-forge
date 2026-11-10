@@ -12,6 +12,7 @@ open ToolUp.Cli
 open ToolUp.Cli.DescribeCommand
 open ToolUp.Platform
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 782 — `toolup describe` ───────────────────────────────────
 //
@@ -47,12 +48,7 @@ let private parseOk (args: string list) =
     | Ok opts -> opts
     | Error e -> failtestf "expected %A to parse: %s" args e
 
-let private scratchDir () =
-    let dir =
-        Path.Combine(Path.GetTempPath(), "toolup-describe-tests-" + Guid.NewGuid().ToString "N")
-
-    Directory.CreateDirectory dir |> ignore
-    dir
+let private scratchDir () = TempDir.create "describe-tests"
 
 let private parseTests =
     testList "parse" [
@@ -199,37 +195,35 @@ let private moduleTests =
         }
 
         test "a module reference resolves as an assembly path, a .nupkg, or a package id" {
-            let scratch = scratchDir ()
+            use dir = scratchDir ()
+            let scratch = dir.Path
 
-            try
-                let packages = Path.Combine(scratch, "packages")
-                let lib = Path.Combine(packages, "acme.sales", "1.2.0", "lib", "net10.0")
-                Directory.CreateDirectory lib |> ignore
-                File.WriteAllText(Path.Combine(lib, "Acme.Sales.dll"), "")
+            let packages = Path.Combine(scratch, "packages")
+            let lib = Path.Combine(packages, "acme.sales", "1.2.0", "lib", "net10.0")
+            Directory.CreateDirectory lib |> ignore
+            File.WriteAllText(Path.Combine(lib, "Acme.Sales.dll"), "")
 
-                Expect.equal
-                    (resolveModuleAssembly packages (Path.Combine(scratch, "x")) "Acme.Sales" None)
-                    (Ok(Path.Combine(lib, "Acme.Sales.dll")))
-                    "package id"
+            Expect.equal
+                (resolveModuleAssembly packages (Path.Combine(scratch, "x")) "Acme.Sales" None)
+                (Ok(Path.Combine(lib, "Acme.Sales.dll")))
+                "package id"
 
-                let nupkg = Path.Combine(scratch, "Acme.Sales.1.2.0.nupkg")
+            let nupkg = Path.Combine(scratch, "Acme.Sales.1.2.0.nupkg")
 
-                do
-                    use zip = ZipFile.Open(nupkg, ZipArchiveMode.Create)
-                    zip.CreateEntry("lib/net10.0/Acme.Sales.dll") |> ignore
-                    zip.CreateEntry("Acme.Sales.nuspec") |> ignore
+            do
+                use zip = ZipFile.Open(nupkg, ZipArchiveMode.Create)
+                zip.CreateEntry("lib/net10.0/Acme.Sales.dll") |> ignore
+                zip.CreateEntry("Acme.Sales.nuspec") |> ignore
 
-                let extracted = Path.Combine(scratch, "extracted")
+            let extracted = Path.Combine(scratch, "extracted")
 
-                Expect.equal
-                    (resolveModuleAssembly packages extracted nupkg None)
-                    (Ok(Path.Combine(extracted, "lib", "net10.0", "Acme.Sales.dll")))
-                    ".nupkg"
+            Expect.equal
+                (resolveModuleAssembly packages extracted nupkg None)
+                (Ok(Path.Combine(extracted, "lib", "net10.0", "Acme.Sales.dll")))
+                ".nupkg"
 
-                Expect.isError (resolveModuleAssembly packages extracted "Not.There" None) "an unknown id"
-                Expect.isError (resolveModuleAssembly packages extracted "missing.dll" None) "a missing path"
-            finally
-                Directory.Delete(scratch, true)
+            Expect.isError (resolveModuleAssembly packages extracted "Not.There" None) "an unknown id"
+            Expect.isError (resolveModuleAssembly packages extracted "missing.dll" None) "a missing path"
         }
 
         test "the describe command reports a module failure as a runtime error, a bad invocation as usage" {

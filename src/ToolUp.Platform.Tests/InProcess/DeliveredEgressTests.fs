@@ -16,6 +16,7 @@ open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Infra.Usage
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Testing
 
 // ─── Phase 742 — delivered-egress reconciliation ──────────────────────
 //
@@ -54,23 +55,6 @@ type private RecordingUsageLog() =
 
         member _.Query(_, _, _) = async.Return []
         member _.Aggregate(_, _) = async.Return Map.empty
-
-type private RecordingMetricsSink() =
-    let observations = ResizeArray<string * float * Map<string, string>>()
-    let increments = ResizeArray<string * Map<string, string>>()
-    let gate = obj ()
-
-    member _.Observations = lock gate (fun () -> List.ofSeq observations)
-    member _.Increments = lock gate (fun () -> List.ofSeq increments)
-
-    interface IMetricsSink with
-        member _.Record(name, value, tags) =
-            lock gate (fun () -> observations.Add((name, value, tags)))
-
-        member _.Increment(name, tags) =
-            lock gate (fun () -> increments.Add((name, tags)))
-
-        member _.SetGauge(_, _, _) = ()
 
 /// A secret store holding one fixed signing key, so `MediaUrlSigner`
 /// mints and verifies against a known value without a blob store.
@@ -396,7 +380,7 @@ let private ingestionTests =
 
         test "unattributable records are DROPPED and COUNTED, never raised" {
             let usage = RecordingUsageLog()
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
 
             let ingestor =
                 DeliveredEgressIngestor(usage, Some(metrics :> IMetricsSink), None, None)
@@ -1134,7 +1118,7 @@ let private semanticsTests =
 
         test "the metric carries the declaration as a tag" {
             let usage = RecordingUsageLog()
-            let metrics = RecordingMetricsSink()
+            let metrics = Fakes.TestMetricsSink()
 
             let resolver =
                 CallbackLogSource.CallbackScopeResolver("t", Map.ofList [ "abc", scope "team-1" ])

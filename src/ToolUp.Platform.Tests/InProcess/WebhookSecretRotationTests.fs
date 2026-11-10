@@ -13,6 +13,7 @@ open ToolUp.Platform.Tests.Contracts
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Testing
 
 // ─── Phase 235 + 6d.A — webhook signing-secret rotation & at-rest ────
 //
@@ -34,37 +35,6 @@ open ToolUp.Platform.Jobs
 //     current after it drops.
 
 // ─── Helpers ─────────────────────────────────────────────────────────
-
-/// Minimal in-memory `ISecretStore` for the handler + store-persistence
-/// assertions. Writable, scope+key keyed, idempotent delete.
-type private InMemorySecretStore() =
-    let store =
-        System.Collections.Concurrent.ConcurrentDictionary<string * string, string>()
-
-    interface ISecretStore with
-        member _.GetSecret(scopeId, key) = async {
-            match store.TryGetValue((scopeId, key)) with
-            | true, v -> return Some v
-            | _ -> return None
-        }
-
-        member _.SetSecret(scopeId, key, value) = async {
-            store[(scopeId, key)] <- value
-            return Ok()
-        }
-
-        member _.DeleteSecret(scopeId, key) = async {
-            store.TryRemove((scopeId, key)) |> ignore
-            return Ok()
-        }
-
-        member _.ListKeys(scopeId) = async {
-            return
-                store.Keys
-                |> Seq.filter (fun (s, _) -> s = scopeId)
-                |> Seq.map snd
-                |> List.ofSeq
-        }
 
 /// A migrated / freshly-created subscription: secret lives in
 /// `ISecretStore` at `SecretRef`, the blob carries no inline value.
@@ -313,7 +283,7 @@ let tests =
                 WebhookRegistry.createRegistry (InMemoryBlobStorage.InMemoryBlobStorage())
 
             let events = CapturingEventStore()
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = Fakes.TestSecretStore() :> ISecretStore
             let api = buildHandler "user-1" registry events store
             let secret = "my-webhook-signing-secret-0123456789abcdef"
 
@@ -355,7 +325,7 @@ let tests =
                 WebhookRegistry.createRegistry (InMemoryBlobStorage.InMemoryBlobStorage())
 
             let events = CapturingEventStore()
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = Fakes.TestSecretStore() :> ISecretStore
             let sub = sampleSubscription "user-1"
             let originalSecret = "original-secret-value-0123456789abcdef"
 
@@ -417,7 +387,7 @@ let tests =
                 WebhookRegistry.createRegistry (InMemoryBlobStorage.InMemoryBlobStorage())
 
             let events = CapturingEventStore()
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = Fakes.TestSecretStore() :> ISecretStore
             let sub = sampleSubscription "user-1"
             let originalSecret = "original-secret-value-0123456789abcdef"
 
@@ -454,7 +424,7 @@ let tests =
                 WebhookRegistry.createRegistry (InMemoryBlobStorage.InMemoryBlobStorage())
 
             let events = CapturingEventStore()
-            let store = InMemorySecretStore() :> ISecretStore
+            let store = Fakes.TestSecretStore() :> ISecretStore
             let sub = sampleSubscription "user-1"
 
             do!

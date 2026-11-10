@@ -2,22 +2,20 @@ module ToolUp.Platform.Compose.MembershipCacheLifecycle
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Scope
 open ToolUp.Platform.Config.TeamManagement
 
-// ─── Phase 54 — first-party membership-cache lifecycle hook ──────────
+// ─── First-party membership-cache lifecycle hook ────────────────────
 //
 // On `OnDeprovisioned`, evicts the offboarded team's active-team cache
-// entries so a removed member can never resolve back into the dead
-// scope from a warm cache. Resolves the active `IStorageScopeResolver`
-// + `ITeamStore` from DI per call (GP 12 rule 4):
-//   * `TeamScopeResolver` present — enumerate the team's members via
-//     `ITeamStore.GetTeamMembers` and `InvalidateUser` each (which
-//     publishes a `MembershipChanged` event so every subscriber —
-//     this resolver and any cross-instance companion — evicts uniformly,
-//     reusing the Phase 5d event-driven invalidation path).
-//   * any other resolver (Individual / Anonymous / ephemeral modes) —
-//     `Skipped`, there is no team membership cache to invalidate.
+// entries so a removed member can never resolve back into the dead scope
+// from a warm cache. The one membership cache is the deployment's resolver
+// (`DefaultSubjectResolver`); the hook resolves it, the `ITeamStore` and
+// the notification channel from DI per call (GP 12 rule 4), enumerates the
+// team's members and publishes a `MembershipChanged` (`ActiveTeamSet`) per
+// member on the reserved topic, so every subscriber — the resolver and any
+// cross-instance companion — evicts uniformly. A deployment whose resolver
+// holds no team cache (no team store) is `Skipped`.
 //
 // `OnProvisioned` is a no-op `Skipped`: the active-team cache is
 // populated lazily on a member's first request, so provisioning has
@@ -31,28 +29,41 @@ let private teamIdOf (scopeId: string) =
     | _ -> TeamId scopeId
 
 /// The first-party membership-cache offboard hook, as a value. Its
-/// substrate is the team scope resolver (the only resolver with a team
-/// membership cache) and the team store that enumerates the members.
-let hook: TenantHook<TeamScopeResolver * ITeamStore> = {
+/// substrate is the deployment's resolver (the one membership cache), the
+/// team store that enumerates the members and the channel the eviction is
+/// published on.
+let hook: TenantHook<INotificationChannel * ITeamStore> = {
     Name = "membership-cache"
-    Requires = "a TeamScopeResolver with an ITeamStore (team membership cache)"
+    Requires = "a DefaultSubjectResolver with an ITeamStore and an INotificationChannel (team membership cache)"
     Resolve =
         fun services ->
-            match services.GetService(typeof<IStorageScopeResolver>), services.GetService(typeof<ITeamStore>) with
-            | (:? TeamScopeResolver as resolver), (:? ITeamStore as store) -> Some(resolver, store)
+            match
+                services.GetService(typeof<ISubjectResolver>),
+                services.GetService(typeof<ITeamStore>),
+                services.GetService(typeof<INotificationChannel>)
+            with
+            | (:? DefaultSubjectResolver.DefaultSubjectResolver),
+              (:? ITeamStore as store),
+              (:? INotificationChannel as channel) -> Some(channel, store)
             | _ -> None
     // The active-team cache is populated lazily on a member's first
     // request, so provisioning has nothing to evict.
     OnProvisioned = None
     OnDeprovisioned =
-        Some(fun (resolver, store) scopeId _ -> async {
+        Some(fun (channel, store) scopeId _ -> async {
             let! members = store.GetTeamMembers(TeamId((teamIdOf scopeId).Value))
 
-            // InvalidateUser publishes a MembershipChanged event per
-            // member; the resolver (and any cross-instance companion)
-            // evicts the affected user's active-team cache entry.
             for m in members do
-                resolver.InvalidateUser m.UserId
+                do!
+                    channel.Publish(
+                        NotificationKind.PlatformReservedScope,
+                        MembershipChanged {
+                            TeamId = teamIdOf scopeId
+                            AffectedUserId = UserId m.UserId
+                            ChangeKind = MembershipChangeKind.ActiveTeamSet
+                            PublishedAt = DateTime.UtcNow
+                        }
+                    )
 
             return LifecycleHookResult.Completed
         })
@@ -66,5 +77,5 @@ let hook: TenantHook<TeamScopeResolver * ITeamStore> = {
 }
 
 /// Construct the first-party membership-cache lifecycle hook. Resolves
-/// the active scope resolver + team store from `services` on every call.
+/// the resolver, team store and channel from `services` on every call.
 let create (services: IServiceProvider) : ITenantLifecycle = TenantHook.asLifecycle hook services

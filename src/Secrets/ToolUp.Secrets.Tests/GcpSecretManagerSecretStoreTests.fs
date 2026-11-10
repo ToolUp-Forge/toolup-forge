@@ -4,6 +4,7 @@ open System
 open System.IO
 open Expecto
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Testing
 
 // ─── Env-gated ───────────────────────────────────────────────────────
 //
@@ -51,9 +52,8 @@ open ToolUp.Platform.Tests.Contracts
 // `GOOGLE_APPLICATION_CREDENTIALS` env var.
 
 let private withCredentialsFile (json: string) (action: unit -> unit) =
-    let path =
-        Path.Combine(Path.GetTempPath(), sprintf "toolup-gcp-sa-%s.json" (Guid.NewGuid().ToString "N"))
-
+    use dir = TempDir.create "gcp-sa"
+    let path = dir.File "service-account.json"
     File.WriteAllText(path, json)
     let prior = Environment.GetEnvironmentVariable "GOOGLE_APPLICATION_CREDENTIALS"
     Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", path)
@@ -62,7 +62,6 @@ let private withCredentialsFile (json: string) (action: unit -> unit) =
         action ()
     finally
         Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", prior)
-        File.Delete path
 
 let private wellFormedKeyJson =
     """{
