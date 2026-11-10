@@ -318,7 +318,7 @@ module ShellSlots =
             "UsageDashboard"
 
     let private auditViewer =
-        authenticatedAdmin _.AuditViewer AuditLogUI.moduleId AuditLogUI.create None "AuditViewer"
+        authenticatedAdmin _.AuditViewer AuditLogUI.moduleId builtIn AuditLogUI.builtIn None "AuditViewer"
 
     let private dataIngestionAdmin =
         authenticatedAdmin
