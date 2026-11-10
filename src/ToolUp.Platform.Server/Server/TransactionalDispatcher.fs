@@ -80,7 +80,7 @@ let NotificationsSourceModule = "_platform.notifications"
 /// across the SSE-equivalent path and the audit trail.
 type private DispatchTask = {
     Envelope: NotificationEnvelope
-    SinkKind: string
+    SinkKind: NotificationKind.SinkKind
 }
 
 /// Pre-flight team-prefs check. Reads the effective
@@ -126,23 +126,6 @@ let private isKindEnabledForScope
 
             return false
     }
-
-/// Map a transactional `Notification` to its `INotificationSink.Kind`
-/// discriminator. Returns `None` for non-transactional kinds — the
-/// decorator filters before enqueue, so this is the dispatcher's
-/// internal lookup helper. `MobilePush` envelopes carry no platform
-/// discriminator on the wire today, so they are routed to the SDK's
-/// default push variant (`PushVariant.WebPush`) — the only push
-/// companion shipped at 11.C.5. When a future phase enriches the
-/// `MobilePush` payload to carry an explicit variant, this lookup
-/// reads it directly.
-let private sinkKindOf (n: Notification) : NotificationKind.SinkKind option =
-    match n with
-    | TransactionalEmail _ -> Some NotificationKind.SinkKind.Email
-    | TransactionalSms _ -> Some NotificationKind.SinkKind.Sms
-    | MobilePush _ -> Some(NotificationKind.SinkKind.Push NotificationKind.PushVariant.WebPush)
-    | TransactionalWhatsApp _ -> Some NotificationKind.SinkKind.WhatsApp
-    | _ -> None
 
 /// Extract recipient userIds + correlation id from a transactional
 /// envelope for audit emission. Returns the empty list / `None` for
@@ -406,16 +389,12 @@ type TransactionalDispatcher
             BoundedChannelOptions(QueueCapacity, FullMode = BoundedChannelFullMode.DropWrite)
         )
 
-    /// Sinks indexed by the wire-format string of their `Kind` for
-    /// O(1) dispatch lookup. Kept on the instance so the worker loop
-    /// reads it without a closure capture of the constructor list.
-    /// Keyed by `SinkKind.toWireString` so two push variants
-    /// (`Push.WebPush` + `Push.Fcm`) hold distinct slots — the
-    /// uniqueness validator uses the same key.
-    let sinksByKind: Map<string, INotificationSink> =
-        sinks
-        |> List.map (fun s -> NotificationKind.SinkKind.toWireString s.Kind, s)
-        |> Map.ofList
+    /// Sinks indexed by their `Kind` for dispatch lookup, so two push
+    /// variants (`Push.WebPush` + `Push.Fcm`) hold distinct slots. Kept on
+    /// the instance so the worker loop reads it without a closure capture
+    /// of the constructor list.
+    let sinksByKind: Map<NotificationKind.SinkKind, INotificationSink> =
+        sinks |> List.map (fun s -> s.Kind, s) |> Map.ofList
 
     /// Enqueue a transactional envelope. Called by the wrapping
     /// channel decorator at `Publish` time. Drop-write failure is
@@ -424,12 +403,12 @@ type TransactionalDispatcher
     /// Returns `true` if accepted, `false` if dropped — the decorator
     /// uses the return value for telemetry but does not propagate it.
     member _.TryEnqueue(envelope: NotificationEnvelope) : bool =
-        match sinkKindOf envelope.Notification with
-        | None -> false // not transactional — decorator should have filtered
-        | Some sinkKind ->
+        match NotificationKind.route envelope.Notification with
+        | NotificationKind.Route.SseFanOut -> false // not transactional — decorator should have filtered
+        | NotificationKind.Route.Sink sinkKind ->
             let sinkKindWire = NotificationKind.SinkKind.toWireString sinkKind
 
-            if not (Map.containsKey sinkKindWire sinksByKind) then
+            if not (Map.containsKey sinkKind sinksByKind) then
                 logger.Debug
                     $"%s{LogPrefix} no_sink_registered kind=%s{sinkKindWire} scope=%s{envelope.ScopeId} envelopeId=%O{envelope.Id} — envelope ignored"
 
@@ -437,7 +416,7 @@ type TransactionalDispatcher
             else
                 let task = {
                     Envelope = envelope
-                    SinkKind = sinkKindWire
+                    SinkKind = sinkKind
                 }
 
                 if queue.Writer.TryWrite task then
@@ -452,7 +431,10 @@ type TransactionalDispatcher
     /// decorator to short-circuit before constructing an envelope —
     /// publishing a transactional kind with no registered sink in a
     /// deployment is pure waste otherwise.
-    member _.HasSinkForKind(kind: string) : bool = Map.containsKey kind sinksByKind
+    member _.HasSinkForKind(kind: string) : bool =
+        match NotificationKind.SinkKind.tryParse kind with
+        | Some sinkKind -> Map.containsKey sinkKind sinksByKind
+        | None -> false
 
     /// Async loop draining the queue. Runs until the
     /// `BackgroundService` cancellation token fires on shutdown.
@@ -473,11 +455,11 @@ type TransactionalDispatcher
                             Background.start
                                 deliveries
                                 logger
-                                $"%s{LogPrefix} delivery_unhandled kind=%s{task.SinkKind} scope=%s{task.Envelope.ScopeId} envelopeId=%O{task.Envelope.Id}: this delivery failed outside its own handling"
+                                $"%s{LogPrefix} delivery_unhandled kind=%s{NotificationKind.SinkKind.toWireString task.SinkKind} scope=%s{task.Envelope.ScopeId} envelopeId=%O{task.Envelope.Id}: this delivery failed outside its own handling"
                                 (runDelivery sink configStore auditLog retry logger activitySink task.Envelope)
                         | None ->
                             logger.Warn
-                                $"%s{LogPrefix} sink_disappeared kind=%s{task.SinkKind} scope=%s{task.Envelope.ScopeId} envelopeId=%O{task.Envelope.Id} — envelope dropped"
+                                $"%s{LogPrefix} sink_disappeared kind=%s{NotificationKind.SinkKind.toWireString task.SinkKind} scope=%s{task.Envelope.ScopeId} envelopeId=%O{task.Envelope.Id} — envelope dropped"
 
                             // Gap audit #7 — emit a NotificationDeliveryFailed
                             // audit row so an operator querying the audit trail
@@ -499,7 +481,7 @@ type TransactionalDispatcher
                                             NotificationDeliveryFailed {
                                                 UserId = UserId SystemActorId
                                                 ScopeId = task.Envelope.ScopeId
-                                                NotificationKind = task.SinkKind
+                                                NotificationKind = NotificationKind.SinkKind.toWireString task.SinkKind
                                                 Provider = "<unregistered>"
                                                 RecipientUserIds = recipientUserIds
                                                 Error = "sink_unregistered"

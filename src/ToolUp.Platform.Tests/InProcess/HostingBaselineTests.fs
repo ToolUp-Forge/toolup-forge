@@ -380,9 +380,119 @@ let placementTests =
         }
     ]
 
+// ─── The pipeline is a table ─────────────────────────────────────────
+
+/// The pipeline's stages in today's order. The order is load-bearing (each
+/// stage's comment in `ConfigurePipeline.fs` says why it sits where it does),
+/// so a reorder is a deliberate edit of this list.
+let private pipelineOrder = [
+    "ForwardedHeaders"
+    "ExceptionHandler"
+    "HttpsRedirection"
+    "RequestId"
+    "SecurityHeaders"
+    "Csp"
+    "Cors"
+    "ResponseCompression"
+    "PrerenderedRoutes"
+    "StaticFiles"
+    "Session"
+    "Csrf"
+    "PreMiddleware"
+    "ShareTokenAuth"
+    "ServiceAccountToken"
+    "ScopeResolution"
+    "PlatformAdminAuthorization"
+    "PeerBearerAuth"
+    "SurfaceEnforcement"
+    "ModuleVisibility"
+    "SessionRevocation"
+    "AnonymousSessionMigration"
+    "Metrics"
+    "RequestTiming"
+    "InboundRateLimit"
+    "RateLimiter"
+    "HealthChecks"
+    "Router"
+    "PostMiddleware"
+]
+
+let private sealedPipeline (config: ServerConfig) =
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.compositionManifest
+    |> CompositionManifest.pipeline
+
+let private pipelineTests =
+    testList "the pipeline as stages" [
+        test "the stages are listed in pipeline order" {
+            Expect.equal (ConfigurePipeline.stages |> List.map _.Name) pipelineOrder "today's order"
+        }
+
+        test "a stage whose When is false is not mounted, and the rest keep their order" {
+            let config = {
+                ServerConfig.defaults with
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = false
+                            TrustForwardedHeaders = false
+                    }
+            }
+
+            let mounted = ConfigurePipeline.mounted config |> List.map _.Name
+            Expect.isFalse (List.contains "HttpsRedirection" mounted) "RequireHttps off: not mounted"
+            Expect.isFalse (List.contains "ForwardedHeaders" mounted) "TrustForwardedHeaders off: not mounted"
+
+            Expect.equal
+                mounted
+                (pipelineOrder |> List.filter (fun name -> List.contains name mounted))
+                "mounted stages keep the pipeline order"
+        }
+
+        test "the composition manifest seals the mounted stages, and moves when a stage's When does" {
+            let off = {
+                ServerConfig.defaults with
+                    SecurityPosture = {
+                        ServerConfig.defaults.SecurityPosture with
+                            RequireHttps = false
+                    }
+            }
+
+            let on = {
+                off with
+                    SecurityPosture = {
+                        off.SecurityPosture with
+                            RequireHttps = true
+                    }
+            }
+
+            Expect.equal
+                (sealedPipeline off)
+                (ConfigurePipeline.mounted off |> List.map _.Name)
+                "the manifest records the mounted stages in order"
+
+            Expect.contains (sealedPipeline on) "HttpsRedirection" "the flipped stage is recorded"
+
+            let manifest (config: ServerConfig) =
+                ServerApp.empty |> ServerApp.withConfig config |> ServerApp.compositionManifest
+
+            Expect.notEqual
+                (BootVerificationPreflight.compositionCanonicalForm (manifest on))
+                (BootVerificationPreflight.compositionCanonicalForm (manifest off))
+                "the sealed bytes move with the stage"
+
+            match BootVerificationPreflight.compare (manifest off) (manifest on) with
+            | [ PipelineChanged(recorded, observed) ] ->
+                Expect.equal recorded (sealedPipeline off) "names what was sealed"
+                Expect.equal observed (sealedPipeline on) "and what is mounted"
+            | other -> failtestf "expected one PipelineChanged finding, got %A" other
+        }
+    ]
+
 let tests =
     testList "Phase 771 — the hardening baseline" [
         placementTests
+        pipelineTests
 
 
         testList "classification: each control observed on and off" [

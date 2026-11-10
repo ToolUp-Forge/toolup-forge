@@ -951,9 +951,13 @@ let tests =
                         (NoOpAuditLog())
 
                 match verdictOf options observed with
-                | BootVerificationVerdict.VerifiedUnrecorded [ ContributionPlanUnrecorded _; ConfigKeysUnrecorded _ ] ->
-                    ()
-                | other -> failtestf "expected VerifiedUnrecorded naming the plan and the config keys, got %A" other
+                | BootVerificationVerdict.VerifiedUnrecorded [ ContributionPlanUnrecorded _
+                                                               ConfigKeysUnrecorded _
+                                                               PipelineUnrecorded _ ] -> ()
+                | other ->
+                    failtestf
+                        "expected VerifiedUnrecorded naming the plan, the config keys and the pipeline, got %A"
+                        other
             }
         ]
 
@@ -2034,6 +2038,50 @@ let tests =
                         "without the observation the floor is not met"
                 | Ok result ->
                     failtestf "an unobserved quote must not meet a runtime-quoted floor, got %A" result.Verdict
+            }
+        ]
+
+        testList "HTTP pipeline" [
+            test
+                "a schema-5 recording is silent on the pipeline: no drift, the stages are unrecorded, and no block is framed" {
+                let observed = planned basePlan
+
+                let legacy = {
+                    observed with
+                        SchemaVersion = CompositionManifest.ConfigKeySchemaVersion
+                        Pipeline = Unchecked.defaultof<string list>
+                }
+
+                Expect.isNonEmpty (CompositionManifest.pipeline observed) "the running composition mounts stages"
+                Expect.isFalse (CompositionManifest.recordsPipeline legacy) "a schema-5 manifest never carried them"
+                Expect.isEmpty (BootVerificationPreflight.compare legacy observed) "silence is not drift"
+
+                match BootVerificationPreflight.unrecorded legacy observed with
+                | [ PipelineUnrecorded stages ] ->
+                    Expect.equal stages (CompositionManifest.pipeline observed) "the mounted stages, in order"
+                | other -> failtestf "expected the pipeline to be unrecorded, got %A" other
+
+                Expect.isFalse
+                    ((BootVerificationPreflight.compositionCanonicalForm legacy).Contains
+                        BootVerificationPreflight.PipelineFramingVersion)
+                    "no pipeline block is framed for a manifest too old to carry one"
+
+                Expect.stringContains
+                    (BootVerificationPreflight.compositionCanonicalForm observed)
+                    BootVerificationPreflight.PipelineFramingVersion
+                    "a current manifest frames it"
+            }
+
+            test "a stage mounted or moved between two recorded boots is drift naming both orders" {
+                let observed = planned basePlan
+                let stages = CompositionManifest.pipeline observed
+                let recorded = observed |> CompositionManifest.withPipeline (List.rev stages)
+
+                match BootVerificationPreflight.compare recorded observed with
+                | [ PipelineChanged(was, now) ] ->
+                    Expect.equal was (List.rev stages) "the sealed order"
+                    Expect.equal now stages "the running order"
+                | other -> failtestf "expected one PipelineChanged finding, got %A" other
             }
         ]
     ]

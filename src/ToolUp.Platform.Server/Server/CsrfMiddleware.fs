@@ -83,7 +83,7 @@ module Csrf =
 
         Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
 
-    // Phase 467 — was a private verbatim copy of the same BCL call. It
+    // Was a private verbatim copy of the same BCL call. It
     // is byte-correct either way; what the copy cost was a second place
     // the pattern could be edited (or re-derived char-wise) independently
     // of the sanctioned one. Unified onto `JwtCrypto.fixedTimeEqualsUtf8`
@@ -156,7 +156,7 @@ module Csrf =
             | null -> ""
             | p -> p
 
-        let isApi = path.StartsWith("/api/", StringComparison.Ordinal)
+        let isApi = RouteClass.isApiSurface (RouteClassifier.ofRequest ctx)
         let isTokenRoute = path = TokenPath
 
         let admitsAnonOrClaim =

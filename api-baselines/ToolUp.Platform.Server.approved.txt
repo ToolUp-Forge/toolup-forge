@@ -560,6 +560,7 @@ ToolUp.Platform.Compose.BootVerificationPreflight.BindingFramingVersion : System
 ToolUp.Platform.Compose.BootVerificationPreflight.BindingSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.Compose.BootVerificationPreflight.CanonicalMethodFramingVersion : System.String (literal)
 ToolUp.Platform.Compose.BootVerificationPreflight.ConfigKeyFramingVersion : System.String (literal)
+ToolUp.Platform.Compose.BootVerificationPreflight.PipelineFramingVersion : System.String (literal)
 ToolUp.Platform.Compose.BootVerificationPreflight.PlanFramingVersion : System.String (literal)
 ToolUp.Platform.Compose.BootVerificationPreflight.PlatformScopeId : System.String (literal)
 ToolUp.Platform.Compose.BootVerificationPreflight.bindingCanonicalBytes(ToolUp.Platform.Compose.CompositionBinding) : System.Byte[]
@@ -1209,6 +1210,7 @@ ToolUp.Platform.Compose.CompositionDrift.IsContributionAdded : System.Boolean { 
 ToolUp.Platform.Compose.CompositionDrift.IsContributionChanged : System.Boolean { get }
 ToolUp.Platform.Compose.CompositionDrift.IsContributionMoved : System.Boolean { get }
 ToolUp.Platform.Compose.CompositionDrift.IsContributionRemoved : System.Boolean { get }
+ToolUp.Platform.Compose.CompositionDrift.IsPipelineChanged : System.Boolean { get }
 ToolUp.Platform.Compose.CompositionDrift.Tag : System.Int32 { get }
 ToolUp.Platform.Compose.CompositionDrift+CanonicalMethodChanged (class)
 ToolUp.Platform.Compose.CompositionDrift+CanonicalMethodChanged.metricId : System.String { get }
@@ -1264,6 +1266,9 @@ ToolUp.Platform.Compose.CompositionDrift+ContributionRemoved (class)
 ToolUp.Platform.Compose.CompositionDrift+ContributionRemoved.kind : System.String { get }
 ToolUp.Platform.Compose.CompositionDrift+ContributionRemoved.owner : System.String { get }
 ToolUp.Platform.Compose.CompositionDrift+ContributionRemoved.position : System.Int32 { get }
+ToolUp.Platform.Compose.CompositionDrift+PipelineChanged (class)
+ToolUp.Platform.Compose.CompositionDrift+PipelineChanged.observed : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Compose.CompositionDrift+PipelineChanged.recorded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.CompositionDrift+Tags (class)
 ToolUp.Platform.Compose.CompositionDrift+Tags.CanonicalMethodChanged : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionDrift+Tags.CanonicalMethodDeclared : System.Int32 (literal)
@@ -1279,6 +1284,7 @@ ToolUp.Platform.Compose.CompositionDrift+Tags.ContributionAdded : System.Int32 (
 ToolUp.Platform.Compose.CompositionDrift+Tags.ContributionChanged : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionDrift+Tags.ContributionMoved : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionDrift+Tags.ContributionRemoved : System.Int32 (literal)
+ToolUp.Platform.Compose.CompositionDrift+Tags.PipelineChanged : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionDriftModule (class)
 ToolUp.Platform.Compose.CompositionDriftModule.describe(ToolUp.Platform.Compose.CompositionDrift) : System.String
 ToolUp.Platform.Compose.CompositionDryRun (class)
@@ -1394,7 +1400,7 @@ ToolUp.Platform.Compose.CompositionInspectorHandler+CompositionInspectorSnapshot
 ToolUp.Platform.Compose.CompositionInspectorHandler+CompositionInspectorSnapshotModule.rules(ToolUp.Platform.Compose.CompositionManifest, ToolUp.Platform.Compose.CompositionReferences, System.DateTime) : ToolUp.Platform.RulesView
 ToolUp.Platform.Compose.CompositionInspectorHandler+CompositionInspectorSnapshotModule.surfaces : ToolUp.Platform.SurfacesView { get }
 ToolUp.Platform.Compose.CompositionManifest (class)
-ToolUp.Platform.Compose.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.MetricCanonicalMethod], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.PlanEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigKnob])
+ToolUp.Platform.Compose.CompositionManifest..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.MetricCanonicalMethod], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.PlanEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigKnob], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.Compose.CompositionManifest.CanonicalMethods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.MetricCanonicalMethod] { get }
 ToolUp.Platform.Compose.CompositionManifest.CompanionSlots : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry] { get }
 ToolUp.Platform.Compose.CompositionManifest.ConfigKnobs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigKnob] { get }
@@ -1402,6 +1408,7 @@ ToolUp.Platform.Compose.CompositionManifest.DataTypes : Microsoft.FSharp.Collect
 ToolUp.Platform.Compose.CompositionManifest.LiveInterfaceTools : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.CompositionManifest.Metrics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry] { get }
 ToolUp.Platform.Compose.CompositionManifest.Modules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry] { get }
+ToolUp.Platform.Compose.CompositionManifest.Pipeline : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.CompositionManifest.Plan : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.PlanEntry] { get }
 ToolUp.Platform.Compose.CompositionManifest.Purposes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry] { get }
 ToolUp.Platform.Compose.CompositionManifest.SchemaVersion : System.Int32 { get }
@@ -1412,6 +1419,7 @@ ToolUp.Platform.Compose.CompositionManifestModule (class)
 ToolUp.Platform.Compose.CompositionManifestModule.CanonicalMethodSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionManifestModule.ConfigKeySchemaVersion : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionManifestModule.LiveInterfaceSchemaVersion : System.Int32 (literal)
+ToolUp.Platform.Compose.CompositionManifestModule.PipelineSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionManifestModule.PlanSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionManifestModule.PreCanonicalMethodSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionManifestModule.SchemaVersion : System.Int32 (literal)
@@ -1436,6 +1444,7 @@ ToolUp.Platform.Compose.CompositionManifestModule.liveInterfaceTools(ToolUp.Plat
 ToolUp.Platform.Compose.CompositionManifestModule.liveInterfaceToolsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Compose.CompositionManifestModule.metricEntry(System.String) : ToolUp.Platform.Compose.ComponentEntry
 ToolUp.Platform.Compose.CompositionManifestModule.moduleEntry(System.String, ToolUp.Platform.ComponentId) : ToolUp.Platform.Compose.ComponentEntry
+ToolUp.Platform.Compose.CompositionManifestModule.pipeline(ToolUp.Platform.Compose.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Compose.CompositionManifestModule.plan(ToolUp.Platform.Compose.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.PlanEntry]
 ToolUp.Platform.Compose.CompositionManifestModule.planEntryOf(ToolUp.Platform.Compose.Contribution) : ToolUp.Platform.Compose.PlanEntry
 ToolUp.Platform.Compose.CompositionManifestModule.planOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.Contribution]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.PlanEntry]
@@ -1443,6 +1452,7 @@ ToolUp.Platform.Compose.CompositionManifestModule.purposeEntry(ToolUp.Platform.C
 ToolUp.Platform.Compose.CompositionManifestModule.recordsCanonicalMethods(ToolUp.Platform.Compose.CompositionManifest) : System.Boolean
 ToolUp.Platform.Compose.CompositionManifestModule.recordsConfigKeys(ToolUp.Platform.Compose.CompositionManifest) : System.Boolean
 ToolUp.Platform.Compose.CompositionManifestModule.recordsLiveInterfaceTools(ToolUp.Platform.Compose.CompositionManifest) : System.Boolean
+ToolUp.Platform.Compose.CompositionManifestModule.recordsPipeline(ToolUp.Platform.Compose.CompositionManifest) : System.Boolean
 ToolUp.Platform.Compose.CompositionManifestModule.recordsPlan(ToolUp.Platform.Compose.CompositionManifest) : System.Boolean
 ToolUp.Platform.Compose.CompositionManifestModule.sealedConfigKeys(ToolUp.Platform.Compose.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigKnob]
 ToolUp.Platform.Compose.CompositionManifestModule.subjectEntry(System.String) : ToolUp.Platform.Compose.ComponentEntry
@@ -1452,6 +1462,7 @@ ToolUp.Platform.Compose.CompositionManifestModule.withCanonicalMethods(Microsoft
 ToolUp.Platform.Compose.CompositionManifestModule.withConfigKeys(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigKnob], ToolUp.Platform.Compose.CompositionManifest) : ToolUp.Platform.Compose.CompositionManifest
 ToolUp.Platform.Compose.CompositionManifestModule.withGrounding(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], ToolUp.Platform.Compose.CompositionManifest) : ToolUp.Platform.Compose.CompositionManifest
 ToolUp.Platform.Compose.CompositionManifestModule.withLiveInterfaceTools(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Compose.CompositionManifest) : ToolUp.Platform.Compose.CompositionManifest
+ToolUp.Platform.Compose.CompositionManifestModule.withPipeline(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Compose.CompositionManifest) : ToolUp.Platform.Compose.CompositionManifest
 ToolUp.Platform.Compose.CompositionManifestModule.withPlan(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.PlanEntry], ToolUp.Platform.Compose.CompositionManifest) : ToolUp.Platform.Compose.CompositionManifest
 ToolUp.Platform.Compose.CompositionManifestModule.withPurposes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ComponentEntry], ToolUp.Platform.Compose.CompositionManifest) : ToolUp.Platform.Compose.CompositionManifest
 ToolUp.Platform.Compose.CompositionProfile (class)
@@ -1581,6 +1592,7 @@ ToolUp.Platform.Compose.CompositionUnrecorded (class)
 ToolUp.Platform.Compose.CompositionUnrecorded.IsCanonicalMethodUnrecorded : System.Boolean { get }
 ToolUp.Platform.Compose.CompositionUnrecorded.IsConfigKeysUnrecorded : System.Boolean { get }
 ToolUp.Platform.Compose.CompositionUnrecorded.IsContributionPlanUnrecorded : System.Boolean { get }
+ToolUp.Platform.Compose.CompositionUnrecorded.IsPipelineUnrecorded : System.Boolean { get }
 ToolUp.Platform.Compose.CompositionUnrecorded.Tag : System.Int32 { get }
 ToolUp.Platform.Compose.CompositionUnrecorded+CanonicalMethodUnrecorded (class)
 ToolUp.Platform.Compose.CompositionUnrecorded+CanonicalMethodUnrecorded.metricId : System.String { get }
@@ -1589,10 +1601,13 @@ ToolUp.Platform.Compose.CompositionUnrecorded+ConfigKeysUnrecorded (class)
 ToolUp.Platform.Compose.CompositionUnrecorded+ConfigKeysUnrecorded.keys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.CompositionUnrecorded+ContributionPlanUnrecorded (class)
 ToolUp.Platform.Compose.CompositionUnrecorded+ContributionPlanUnrecorded.observed : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.Compose.CompositionUnrecorded+PipelineUnrecorded (class)
+ToolUp.Platform.Compose.CompositionUnrecorded+PipelineUnrecorded.observed : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.CompositionUnrecorded+Tags (class)
 ToolUp.Platform.Compose.CompositionUnrecorded+Tags.CanonicalMethodUnrecorded : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionUnrecorded+Tags.ConfigKeysUnrecorded : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionUnrecorded+Tags.ContributionPlanUnrecorded : System.Int32 (literal)
+ToolUp.Platform.Compose.CompositionUnrecorded+Tags.PipelineUnrecorded : System.Int32 (literal)
 ToolUp.Platform.Compose.CompositionUnrecordedModule (class)
 ToolUp.Platform.Compose.CompositionUnrecordedModule.code(ToolUp.Platform.Compose.CompositionUnrecorded) : System.String
 ToolUp.Platform.Compose.CompositionUnrecordedModule.describe(ToolUp.Platform.Compose.CompositionUnrecorded) : System.String
@@ -1709,6 +1724,22 @@ ToolUp.Platform.Compose.ConfigValidators.fromEnv(Microsoft.FSharp.Core.FSharpOpt
 ToolUp.Platform.Compose.ConfigurePipeline (class)
 ToolUp.Platform.Compose.ConfigurePipeline.buildForwardedHeadersOptions(ToolUp.Platform.ServerConfig) : Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
 ToolUp.Platform.Compose.ConfigurePipeline.configurePipeline(Microsoft.AspNetCore.Builder.WebApplication, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Infra.Metrics.IMetricsSink, ToolUp.Platform.Compose.ComposeExtensions, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]) : System.Void
+ToolUp.Platform.Compose.ConfigurePipeline.mounted(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigurePipeline+Stage]
+ToolUp.Platform.Compose.ConfigurePipeline.stages : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.ConfigurePipeline+Stage] { get }
+ToolUp.Platform.Compose.ConfigurePipeline+Stage (class)
+ToolUp.Platform.Compose.ConfigurePipeline+Stage..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerConfig, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Compose.ConfigurePipeline+StageInputs, Microsoft.FSharp.Core.Unit])
+ToolUp.Platform.Compose.ConfigurePipeline+Stage.Mount : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Compose.ConfigurePipeline+StageInputs, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.Compose.ConfigurePipeline+Stage.Name : System.String { get }
+ToolUp.Platform.Compose.ConfigurePipeline+Stage.When : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ServerConfig, System.Boolean] { get }
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs (class)
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs..ctor(Microsoft.AspNetCore.Builder.WebApplication, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger, ToolUp.Platform.Infra.Metrics.IMetricsSink, ToolUp.Platform.Compose.ComposeExtensions, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]])
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs.App : Microsoft.AspNetCore.Builder.WebApplication { get }
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs.Config : ToolUp.Platform.ServerConfig { get }
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs.DevRoutes : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs.Extensions : ToolUp.Platform.Compose.ComposeExtensions { get }
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs.Logger : ToolUp.Platform.ILogger { get }
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs.MetricsSink : ToolUp.Platform.Infra.Metrics.IMetricsSink { get }
+ToolUp.Platform.Compose.ConfigurePipeline+StageInputs.Router : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
 ToolUp.Platform.Compose.ConflictCause (class)
 ToolUp.Platform.Compose.ConflictCause.IsNotInDocument : System.Boolean { get }
 ToolUp.Platform.Compose.ConflictCause.IsRefused : System.Boolean { get }
@@ -2095,15 +2126,16 @@ ToolUp.Platform.Compose.DevDiagnosticsHandler+DataCatalogEntry.HasSchema : Syste
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DataCatalogEntry.Id : System.String { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DataCatalogEntry.Producers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture (class)
-ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSnapshot], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ServiceDescriptorSnapshot], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SecondaryIndex+IndexConsistencyEntry]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+LightweightFeatureEntry], ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary)
+ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSnapshot], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ServiceDescriptorSnapshot], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SecondaryIndex+IndexConsistencyEntry]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+LightweightFeatureEntry], ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry])
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture.CompositionSeam : ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture.IndexInspectors : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SecondaryIndex+IndexConsistencyEntry]]]] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture.LightweightFeatures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+LightweightFeatureEntry] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture.Modules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSnapshot] { get }
+ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture.PipelineStages : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture.Services : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ServiceDescriptorSnapshot] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsCapture.TotalRouteHandlers : System.Int32 { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport (class)
-ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport..ctor(System.String, System.String, System.String, ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSummary], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+DataCatalogEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ServiceEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SecondaryIndex+IndexConsistencyEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+LightweightFeatureEntry], ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+HealthCheckSummary], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ValidatorSummary], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.Compose.DevDiagnosticsHandler+ProcessProfileSummary)
+ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport..ctor(System.String, System.String, System.String, ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSummary], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+DataCatalogEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ServiceEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SecondaryIndex+IndexConsistencyEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+LightweightFeatureEntry], ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+HealthCheckSummary], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ValidatorSummary], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.Compose.DevDiagnosticsHandler+ProcessProfileSummary, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry])
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.BuildMode : System.String { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.Caller : ToolUp.Platform.Compose.DevDiagnosticsHandler+CallerSummary { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.CompositionSeam : ToolUp.Platform.Compose.DevDiagnosticsHandler+CompositionSeamSummary { get }
@@ -2114,6 +2146,7 @@ ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.HealthChecks 
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.IndexConsistency : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.SecondaryIndex+IndexConsistencyEntry] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.LightweightFeatures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+LightweightFeatureEntry] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.Modules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSummary] { get }
+ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.Pipeline : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.ProcessProfile : ToolUp.Platform.Compose.DevDiagnosticsHandler+ProcessProfileSummary { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.Services : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ServiceEntry] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+DevDiagnosticsReport.Surfaces : System.String { get }
@@ -2145,6 +2178,10 @@ ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSummary.DataTypeCount : Syst
 ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSummary.DataTypes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSummary.HasConfigSchema : System.Boolean { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+ModuleSummary.Name : System.String { get }
+ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry (class)
+ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry..ctor(System.String, System.Boolean)
+ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry.Mounted : System.Boolean { get }
+ToolUp.Platform.Compose.DevDiagnosticsHandler+PipelineStageEntry.Name : System.String { get }
 ToolUp.Platform.Compose.DevDiagnosticsHandler+ProcessProfileSummary (class)
 ToolUp.Platform.Compose.DevDiagnosticsHandler+ProcessProfileSummary..ctor(System.String, System.String, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.DevDiagnosticsHandler+ProcessProfileUnitEntry])
 ToolUp.Platform.Compose.DevDiagnosticsHandler+ProcessProfileSummary.HttpPipelineMounted : System.Boolean { get }
@@ -3656,7 +3693,7 @@ ToolUp.Platform.Compose.LifecycleJobHandler+LifecycleJobHandler (class)
 ToolUp.Platform.Compose.LifecycleJobHandler+LifecycleJobHandler..ctor(System.IServiceProvider)
 ToolUp.Platform.Compose.LiveSessionHandler (class)
 ToolUp.Platform.Compose.LiveSessionHandler.FrameEventName : System.String (literal)
-ToolUp.Platform.Compose.LiveSessionHandler.handler(ToolUp.Platform.Compose.LiveSessionOptions, ToolUp.Platform.Jobs.ILiveSessionHost) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.Platform.Compose.LiveSessionHandler.handler(ToolUp.Platform.SseAuthMode, ToolUp.Platform.Compose.LiveSessionOptions, ToolUp.Platform.Jobs.ILiveSessionHost) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Platform.Compose.LiveSessionOptions (class)
 ToolUp.Platform.Compose.LiveSessionOptions..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.StorePosture, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.ILiveSessionHost])
 ToolUp.Platform.Compose.LiveSessionOptions.Host : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Jobs.ILiveSessionHost] { get }

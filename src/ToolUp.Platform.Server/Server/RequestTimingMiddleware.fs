@@ -27,16 +27,17 @@ open ToolUp.Platform
 // scope-resolution and auth gates that ran before this middleware.
 
 type RequestTimingMiddleware(next: RequestDelegate, config: ServerConfig, logger: ILogger) =
-    /// Routes that are long-lived by design and would always trip the
-    /// slow-request threshold. `/api/notifications` and `/api/ai/events`
-    /// are SSE streams held open until client disconnect; `/health` and
-    /// `/ready` are load-balancer probes. Mirrors the bypass list in
-    /// `RateLimiting.fs`.
-    static member private IsLongRunningPath(path: string) =
-        path.StartsWith("/api/notifications", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/api/ai/events", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/health", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/ready", StringComparison.OrdinalIgnoreCase)
+    /// Route classes that are long-lived by design and would always trip
+    /// the slow-request threshold: SSE streams are held open until client
+    /// disconnect, and probes are load-balancer traffic.
+    static member private IsLongRunning(routeClass: RouteClass) =
+        match routeClass with
+        | RouteClass.Sse
+        | RouteClass.Health -> true
+        | RouteClass.Api
+        | RouteClass.Dev
+        | RouteClass.Metrics
+        | RouteClass.Page -> false
 
     /// Resolve the slow-request threshold for `path`: longest-prefix
     /// match in `SlowRequestThresholdOverrides` wins, falling back to
@@ -76,7 +77,7 @@ type RequestTimingMiddleware(next: RequestDelegate, config: ServerConfig, logger
 
                 if
                     stopwatch.Elapsed > threshold
-                    && not (RequestTimingMiddleware.IsLongRunningPath route)
+                    && not (RequestTimingMiddleware.IsLongRunning(RouteClassifier.ofRequest ctx))
                 then
                     let method = ctx.Request.Method
                     let status = ctx.Response.StatusCode

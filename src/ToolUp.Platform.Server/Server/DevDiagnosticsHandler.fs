@@ -168,6 +168,10 @@ type ProcessProfileSummary = {
     Units: ProcessProfileUnitEntry list
 }
 
+/// One middleware stage of the HTTP pipeline, in pipeline order, with its
+/// `When` evaluated against the deployment's configuration.
+type PipelineStageEntry = { Name: string; Mounted: bool }
+
 type DevDiagnosticsReport = {
     Generated: string
     BuildMode: string
@@ -223,6 +227,8 @@ type DevDiagnosticsReport = {
     /// whether this silo admits it. Appended at the end of the report so
     /// existing JSON consumers continue to find every field they expect.
     ProcessProfile: ProcessProfileSummary
+    /// The HTTP pipeline's stages in order, each marked mounted or not.
+    Pipeline: PipelineStageEntry list
 }
 
 /// Phase 9a follow-up — the `/dev/version` payload. Answers "is this
@@ -316,6 +322,8 @@ type DevDiagnosticsCapture = {
     /// Hook counts (pre/post middleware), `SecurityHeaders` keys
     /// (values redacted), CORS active flag.
     CompositionSeam: CompositionSeamSummary
+    /// The HTTP pipeline's stages in order, each `When` evaluated at compose.
+    PipelineStages: PipelineStageEntry list
 }
 
 // ─── Snapshot helpers ────────────────────────────────────────────────
@@ -728,6 +736,7 @@ let buildReport
             Validators = validators
             Contributors = contributors
             ProcessProfile = processProfile
+            Pipeline = capture.PipelineStages
         }
     }
 
@@ -992,6 +1001,29 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
 
     sb.AppendLine(sprintf "<tr><th>HTTP pipeline</th><td>%s</td></tr>" pipelineCell)
     |> ignore
+
+    sb.AppendLine "</table>" |> ignore
+
+    // The pipeline's stages in order; an unmounted stage costs nothing and
+    // is listed so the order reads whole.
+    sb.AppendLine "<h3>Pipeline stages</h3>" |> ignore
+
+    sb.AppendLine "<table><tr><th>#</th><th>Stage</th><th>Mounted</th></tr>"
+    |> ignore
+
+    report.Pipeline
+    |> List.iteri (fun index stage ->
+        sb.AppendLine(
+            sprintf
+                "<tr><td>%d</td><td><code>%s</code></td><td>%s</td></tr>"
+                (index + 1)
+                (encode stage.Name)
+                (if stage.Mounted then
+                     okTick
+                 else
+                     """<span class="muted">not mounted</span>""")
+        )
+        |> ignore)
 
     sb.AppendLine "</table>" |> ignore
 

@@ -16,6 +16,7 @@ case ToolUp.Platform AnalysisResult ToolUp.Platform.Infra
 case ToolUp.Platform AnonymousReachable ToolUp.Platform.Compose
 case ToolUp.Platform AnswerPlanNode ToolUp.Platform.Infra
 case ToolUp.Platform Answered ToolUp.Platform.Infra
+case ToolUp.Platform Api ToolUp.Platform.Infra
 case ToolUp.Platform Approved ToolUp.Platform.Infra
 case ToolUp.Platform ArtefactDigestMismatch ToolUp.Platform.Compose
 case ToolUp.Platform ArtifactHashMismatch ToolUp.Platform.Infra
@@ -144,6 +145,7 @@ case ToolUp.Platform DescriptorSchemaMigration ToolUp.Platform.Compose
 case ToolUp.Platform DescriptorSchemaRejected ToolUp.Platform.Compose
 case ToolUp.Platform DescriptorTooNew ToolUp.Platform.Compose
 case ToolUp.Platform Detached ToolUp.Platform.Compose
+case ToolUp.Platform Dev ToolUp.Platform.Infra
 case ToolUp.Platform Diagnostics ToolUp.Platform.Jobs
 case ToolUp.Platform DiodeDegraded ToolUp.Platform.Compose
 case ToolUp.Platform DiodeExternalProbeClass ToolUp.Platform.Compose
@@ -237,6 +239,7 @@ case ToolUp.Platform GroundingDiverged ToolUp.Platform.Compose
 case ToolUp.Platform HasAttachment ToolUp.Platform.Infra
 case ToolUp.Platform HashMismatch ToolUp.Platform.Infra
 case ToolUp.Platform HeadMismatch ToolUp.Platform.Compose
+case ToolUp.Platform Health ToolUp.Platform.Infra
 case ToolUp.Platform HealthSection ToolUp.Platform.Compose
 case ToolUp.Platform HigherIsBetter ToolUp.Platform.Infra
 case ToolUp.Platform Hosted ToolUp.Platform.Compose
@@ -300,6 +303,7 @@ case ToolUp.Platform MeanAcrossFolds ToolUp.Platform.Infra
 case ToolUp.Platform MessageRef ToolUp.Platform.Infra
 case ToolUp.Platform MetricComponent ToolUp.Platform.Compose
 case ToolUp.Platform MetricRegistrationFacet ToolUp.Platform.Compose
+case ToolUp.Platform Metrics ToolUp.Platform.Infra
 case ToolUp.Platform Middleware ToolUp.Platform.Compose
 case ToolUp.Platform MigrationBlocked ToolUp.Platform.Compose
 case ToolUp.Platform MigrationFailed ToolUp.Platform.Compose
@@ -366,6 +370,7 @@ case ToolUp.Platform Other ToolUp.Platform.Infra
 case ToolUp.Platform OutOfPathDrift ToolUp.Platform.Compose
 case ToolUp.Platform OutsideVocabulary ToolUp.Platform.Compose
 case ToolUp.Platform OverwriteExisting ToolUp.Platform.Compose
+case ToolUp.Platform Page ToolUp.Platform.Infra
 case ToolUp.Platform PatchBump ToolUp.Platform.Compose
 case ToolUp.Platform PayloadConflict ToolUp.Platform.Infra
 case ToolUp.Platform Peer ToolUp.Platform.Infra
@@ -374,6 +379,8 @@ case ToolUp.Platform PendingApproval ToolUp.Platform.Infra
 case ToolUp.Platform PermanentFailure ToolUp.Platform.Jobs
 case ToolUp.Platform PermissionsUnavailable ToolUp.Platform.Compose
 case ToolUp.Platform PerpetualBudget ToolUp.Platform.Compose
+case ToolUp.Platform PipelineChanged ToolUp.Platform.Compose
+case ToolUp.Platform PipelineUnrecorded ToolUp.Platform.Compose
 case ToolUp.Platform PlanInvalid ToolUp.Platform.Infra
 case ToolUp.Platform PlanUnsupported ToolUp.Platform.Infra
 case ToolUp.Platform PlannedBy ToolUp.Platform.Infra
@@ -503,6 +510,7 @@ case ToolUp.Platform SourceUnresolvable ToolUp.Platform.Jobs
 case ToolUp.Platform SpecUnreadable ToolUp.Platform.Jobs
 case ToolUp.Platform SpendCommitted ToolUp.Platform.Compose
 case ToolUp.Platform SpendReturned ToolUp.Platform.Compose
+case ToolUp.Platform Sse ToolUp.Platform.Infra
 case ToolUp.Platform Staged ToolUp.Platform.Compose
 case ToolUp.Platform StaleBaseline ToolUp.Platform.Compose
 case ToolUp.Platform StaleTimestamp ToolUp.Platform.Infra
@@ -1812,6 +1820,8 @@ type ToolUp.Platform ResultStore ToolUp.Platform.Config
 type ToolUp.Platform RevintageError ToolUp.Platform.Jobs
 type ToolUp.Platform RevocationSet ToolUp.Platform.Compose
 type ToolUp.Platform RollingOriginPlan ToolUp.Platform.Infra
+type ToolUp.Platform RouteClass ToolUp.Platform.Infra
+type ToolUp.Platform RouteClassifier ToolUp.Platform.Infra
 type ToolUp.Platform RouteEffectContainment ToolUp.Platform.Compose
 type ToolUp.Platform RouteEffectContext ToolUp.Platform.Compose
 type ToolUp.Platform RouteEffectDeclaration ToolUp.Platform.Compose

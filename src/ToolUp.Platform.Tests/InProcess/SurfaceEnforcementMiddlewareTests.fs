@@ -108,6 +108,115 @@ let private run
             | ct -> ct
     }
 
+// ─── RouteClassifierTests — the one path-prefix table ────────────────
+//
+// Seven lists used to classify a route, each with its own prefixes. Every
+// prefix any of them held is pinned here to the class that list implied,
+// so the table that replaced them is held to what they said.
+
+/// (list, path, the class it implied).
+let private formerListPrefixes: (string * string * RouteClass) list = [
+    // MetricsMiddleware: excluded from request latency emission.
+    "metrics exclusion", "/api/notifications", RouteClass.Sse
+    "metrics exclusion", "/api/ai/events", RouteClass.Sse
+    "metrics exclusion", "/health", RouteClass.Health
+    "metrics exclusion", "/ready", RouteClass.Health
+    "metrics exclusion", "/metrics", RouteClass.Metrics
+    // RequestTimingMiddleware: long-running, never a slow request.
+    "slow-request exemption", "/api/notifications", RouteClass.Sse
+    "slow-request exemption", "/api/ai/events", RouteClass.Sse
+    "slow-request exemption", "/health", RouteClass.Health
+    "slow-request exemption", "/ready", RouteClass.Health
+    // RateLimiting: probes bypass; SSE connects take the per-IP window.
+    "rate-limit bypass", "/health", RouteClass.Health
+    "rate-limit bypass", "/ready", RouteClass.Health
+    "rate-limit SSE connect", "/api/notifications", RouteClass.Sse
+    "rate-limit SSE connect", "/api/ai/events", RouteClass.Sse
+    // SurfaceRequirementRegistry: the SSE carve-out's routes.
+    "surface SSE routes", "/api/ai/events", RouteClass.Sse
+    "surface SSE routes", "/api/notifications", RouteClass.Sse
+    // ReaderRouteClass: the reader refusal's SSE class.
+    "reader SSE class", "/api/ai/events", RouteClass.Sse
+    "reader SSE class", "/api/notifications", RouteClass.Sse
+    // ScopeResolutionMiddleware: `/api`, `/dev`, and a page route.
+    "scope resolution", "/api/x", RouteClass.Api
+    "scope resolution", "/api", RouteClass.Api
+    "scope resolution", "/dev/inspect", RouteClass.Dev
+    "scope resolution", "/dev", RouteClass.Dev
+    "scope resolution", "/reports/q3", RouteClass.Page
+    "scope resolution", "/", RouteClass.Page
+    // SurfaceEnforcementMiddleware: the `/api` surface it gates.
+    "surface gate", "/api/TeamApi/CreateTeam", RouteClass.Api
+]
+
+let private routeClassifierTests =
+    testList "RouteClassifierTests — one path-prefix table" [
+        test "every prefix a former list held classifies as that list implied" {
+            for list, path, expected in formerListPrefixes do
+                Expect.equal (RouteClassifier.classify path) expected $"{list}: {path}"
+        }
+
+        test "a prefix matches by whole segments, ignoring case" {
+            Expect.equal (RouteClassifier.classify "/API/X") RouteClass.Api "case-insensitive, like StartsWithSegments"
+            Expect.equal (RouteClassifier.classify "/apix") RouteClass.Page "not a segment of /api"
+            Expect.equal (RouteClassifier.classify "/api/notifications/x") RouteClass.Sse "under an SSE stream"
+            Expect.equal (RouteClassifier.classify "/health/rag") RouteClass.Health "under a probe"
+            Expect.equal (RouteClassifier.classify "/healthz") RouteClass.Page "not a segment of /health"
+            Expect.equal (RouteClassifier.classify null) RouteClass.Page "no path"
+        }
+
+        test "the `/api` surface is the API and its SSE streams, and nothing else" {
+            for routeClass in
+                [
+                    RouteClass.Api
+                    RouteClass.Dev
+                    RouteClass.Health
+                    RouteClass.Metrics
+                    RouteClass.Sse
+                    RouteClass.Page
+                ] do
+                Expect.equal
+                    (RouteClass.isApiSurface routeClass)
+                    (routeClass = RouteClass.Api || routeClass = RouteClass.Sse)
+                    (RouteClass.name routeClass)
+        }
+
+        test "the SSE carve-out reads the table's SSE prefixes" {
+            Expect.equal
+                (RouteClassifier.prefixesOf RouteClass.Sse |> Set.ofList)
+                (set [ "/api/notifications"; "/api/ai/events" ])
+                "the two SDK streams"
+        }
+
+        test "a request carries the stamped class; an unstamped one is classified from its path" {
+            let ctx = DefaultHttpContext()
+            ctx.Request.Path <- PathString "/api/x"
+            Expect.equal (RouteClassifier.ofRequest ctx) RouteClass.Api "unstamped: read from the path"
+            RouteClassifier.stamp ctx.Items RouteClass.Sse
+            Expect.equal (RouteClassifier.ofItems ctx.Items) (Some RouteClass.Sse) "the stamp round-trips"
+            Expect.equal (RouteClassifier.ofRequest ctx) RouteClass.Sse "the stamp wins"
+        }
+
+        test "the surface gate passes a non-/api route by its stamped class" {
+            let ctx = DefaultHttpContext()
+            ctx.Request.Method <- "GET"
+            ctx.Request.Path <- PathString "/api/x"
+            RouteClassifier.stamp ctx.Items RouteClass.Page
+            let mutable nextInvoked = false
+
+            let mw =
+                SurfaceEnforcementMiddleware(
+                    RequestDelegate(fun _ ->
+                        nextInvoked <- true
+                        Task.CompletedTask),
+                    registryFor SurfaceRequirement.userOrTeam
+                )
+
+            mw.InvokeAsync(ctx).GetAwaiter().GetResult()
+            Expect.isTrue nextInvoked "the gate reads the stamp, not a list of its own"
+        }
+    ]
+
 let tests =
     testList "Phase 66 D.2 — SurfaceEnforcementMiddleware response-code matrix" [
 
@@ -247,4 +356,6 @@ let tests =
             Expect.isTrue r.NextInvoked "strict default userOrTeam admits a signed-in user"
             Expect.equal r.Body "" "pass writes no rejection body"
         }
+
+        routeClassifierTests
     ]

@@ -10,6 +10,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open ToolUp.Platform
 open ToolUp.Platform.Config
+open ToolUp.Platform.Infra
 
 // ─── AnonymousSessionMigrationMiddleware — Phase 66 Stream C.1 ───────
 //                                          (continuation)
@@ -104,7 +105,7 @@ let private migrationTargetId (subject: Subject) : string option =
     | TeamMember(uid, _) -> Some uid
     | AnonymousSession _
     | ClaimBearer _
-    // Phase 1002 — a publication reader is not an app user: no anonymous
+    // A publication reader is not an app user: no anonymous
     // session's data is ever lifted into it.
     | PublicationReader _ -> None
 
@@ -117,10 +118,9 @@ let private runAsync (computation: Async<'a>) : System.Threading.Tasks.Task<'a> 
 type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
     member _.InvokeAsync(ctx: HttpContext) : System.Threading.Tasks.Task =
         task {
-            let path = ctx.Request.Path
-            let isApi = path.StartsWithSegments(PathString "/api")
+            let isApi = RouteClass.isApiSurface (RouteClassifier.ofRequest ctx)
 
-            // Phase 337 — the anonymous session id comes from the sealed
+            // The anonymous session id comes from the sealed
             // binding cookie, never from the self-asserted `X-User-Id`
             // header. Phase 135 read the header and then re-checked the
             // binding, which was equivalent in effect but left a raw

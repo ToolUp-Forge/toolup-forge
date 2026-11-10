@@ -6,26 +6,19 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.RateLimiting
 open ToolUp.Platform
 
-/// Routes that bypass rate limiting entirely. `/health` and `/ready`
-/// are load-balancer probes and must not be 429'd.
-let private isBypassed (path: string) =
-    path.StartsWith("/health", StringComparison.OrdinalIgnoreCase)
-    || path.StartsWith("/ready", StringComparison.OrdinalIgnoreCase)
-
-/// SSE connect routes. Long-lived streaming connections are the wrong
-/// shape for the per-subject request buckets (one held-open connection
-/// would eat a permit from the caller's whole API budget, and the
-/// subject policies are sized for request/response traffic), so until
-/// Phase 117 both routes bypassed rate limiting entirely. That left
-/// the *connect attempt* unmetered — an unauthenticated client could
-/// hammer `?userId=` probes or flood the per-scope connection cap at
-/// wire speed. These routes now get their own per-IP fixed window
-/// (`sseConnectPolicy` below) instead of either extreme.
-let private isSseConnect (path: string) =
-    path.StartsWith("/api/notifications", StringComparison.OrdinalIgnoreCase)
-    || path.StartsWith("/api/ai/events", StringComparison.OrdinalIgnoreCase)
-
-/// Phase 117 — per-IP fixed-window policy for SSE connect attempts.
+/// A probe (`RouteClass.Health`) bypasses rate limiting entirely: a
+/// load-balancer probe must not be 429'd.
+///
+/// An SSE connect (`RouteClass.Sse`) is the wrong shape for the
+/// per-subject request buckets (one held-open connection would eat a
+/// permit from the caller's whole API budget, and the subject policies
+/// are sized for request/response traffic), and bypassing it left the
+/// *connect attempt* unmetered — an unauthenticated client could hammer
+/// `?userId=` probes or flood the per-scope connection cap at wire speed.
+/// It gets its own per-IP fixed window (`sseConnectPolicy` below) instead
+/// of either extreme. Both classes are read off the request's stamp.
+///
+/// Per-IP fixed-window policy for SSE connect attempts.
 /// Expressed as data (`RateLimitPolicy`) like every other limit in
 /// this subsystem. Sizing: a legitimate tab opens at most two SSE
 /// connections (notifications + AI events) and reconnects on auth
@@ -58,7 +51,7 @@ let private resolveSubject (ctx: HttpContext) : Subject option =
     | Some subject -> Some subject
     | _ -> None
 
-/// Phase 66 Stream C.3 — resolve the fixed-window policy + partition
+/// Resolve the fixed-window policy + partition
 /// key for a request. The policy is chosen by the resolved subject's
 /// kind (`RateLimitConfig.policyFor`); the partition is implied by the
 /// subject itself (`RateLimitPolicy.partitionFor` — `token:` / `team:`
@@ -84,7 +77,7 @@ let private resolvePolicyAndKey (config: RateLimitConfig) (ctx: HttpContext) : (
 /// `compose` when `ServerConfig.RateLimit` would register a limiter
 /// (`RateLimitConfig.isEnabled`). Uses a fixed-window limiter whose
 /// per-request policy + partition are derived from the resolved
-/// `Subject` (Phase 66 Stream C.3). Excluded routes and subject kinds
+/// `Subject`. Excluded routes and subject kinds
 /// with no configured policy return `RateLimitPartition.GetNoLimiter`,
 /// which short-circuits the limiter for that request.
 let configure (config: RateLimitConfig) (options: RateLimiterOptions) =
@@ -92,14 +85,13 @@ let configure (config: RateLimitConfig) (options: RateLimiterOptions) =
 
     options.GlobalLimiter <-
         PartitionedRateLimiter.Create<HttpContext, string>(fun ctx ->
-            if isBypassed ctx.Request.Path.Value then
-                RateLimitPartition.GetNoLimiter("__bypass")
-            elif isSseConnect ctx.Request.Path.Value then
-                // Phase 117 — SSE connects get their own per-IP window
-                // (see `sseConnectPolicy`), keyed off the remote IP
-                // rather than the resolved subject: the probing this
-                // throttles is precisely the traffic that has no (or a
-                // forged) subject.
+            match RouteClassifier.ofRequest ctx with
+            | RouteClass.Health -> RateLimitPartition.GetNoLimiter("__bypass")
+            | RouteClass.Sse ->
+                // SSE connects get their own per-IP window (see
+                // `sseConnectPolicy`), keyed off the remote IP rather than
+                // the resolved subject: the probing this throttles is
+                // precisely the traffic that has no (or a forged) subject.
                 RateLimitPartition.GetFixedWindowLimiter(
                     $"sse:ip:{remoteIp ctx}",
                     fun _ ->
@@ -111,7 +103,10 @@ let configure (config: RateLimitConfig) (options: RateLimiterOptions) =
                             AutoReplenishment = true
                         )
                 )
-            else
+            | RouteClass.Api
+            | RouteClass.Dev
+            | RouteClass.Metrics
+            | RouteClass.Page ->
                 match resolvePolicyAndKey config ctx with
                 | None -> RateLimitPartition.GetNoLimiter("__unlimited")
                 | Some(policy, key) ->
@@ -135,10 +130,10 @@ let configure (config: RateLimitConfig) (options: RateLimiterOptions) =
         Func<OnRejectedContext, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>
             (fun rejectedCtx _ ->
                 let retryAfterSeconds =
-                    // Phase 117 — SSE connects are limited under their own
-                    // per-IP policy, not the subject policy, so their
-                    // Retry-After must come from the same place.
-                    if isSseConnect rejectedCtx.HttpContext.Request.Path.Value then
+                    // SSE connects are limited under their own per-IP
+                    // policy, not the subject policy, so their Retry-After
+                    // must come from the same place.
+                    if RouteClassifier.ofRequest rejectedCtx.HttpContext = RouteClass.Sse then
                         sseConnectPolicy.WindowSeconds
                     else
                         match resolvePolicyAndKey config rejectedCtx.HttpContext with

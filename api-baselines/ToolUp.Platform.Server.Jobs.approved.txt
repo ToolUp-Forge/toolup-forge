@@ -1513,6 +1513,7 @@ ToolUp.Platform.Jobs.SseScopeResolution (class)
 ToolUp.Platform.Jobs.SseScopeResolution.mismatchDenialCode : System.String (literal)
 ToolUp.Platform.Jobs.SseScopeResolution.refuseUnauthenticated(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task
 ToolUp.Platform.Jobs.SseScopeResolution.resolve(ToolUp.Platform.SseAuthMode, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.Jobs.SseScopeResolution+SseScopeResult
+ToolUp.Platform.Jobs.SseScopeResolution.resolveWith(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, System.String], ToolUp.Platform.SseAuthMode, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.Jobs.SseScopeResolution+SseScopeResult
 ToolUp.Platform.Jobs.SseScopeResolution+SseScopeResult (class)
 ToolUp.Platform.Jobs.SseScopeResolution+SseScopeResult.IsSseScope : System.Boolean { get }
 ToolUp.Platform.Jobs.SseScopeResolution+SseScopeResult.IsSseUnauthenticated : System.Boolean { get }

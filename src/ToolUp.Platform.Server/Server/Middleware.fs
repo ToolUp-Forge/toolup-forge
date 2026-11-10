@@ -539,23 +539,23 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
     member _.InvokeAsync(ctx: HttpContext) =
         task {
-            // Phase 9a: also resolve scope for `/dev/*` so the dev
-            // diagnostics endpoint sees the same `AccessContext` /
-            // `StorageScope` an API handler would for this request.
-            // `SurfaceEnforcementMiddleware` deliberately does *not*
-            // gate `/dev/*` — diagnosing auth failures is the
-            // endpoint's job.
-            let path = ctx.Request.Path
-            let isApi = path.StartsWithSegments(PathString "/api")
-            let isDev = path.StartsWithSegments(PathString "/dev")
-
-            // Phase 989 — every other path is a page route (or the SPA
-            // shell / a health probe). Its principal is resolved too: an
-            // audience-gated SSR page decides 401 / 403 / 200 from the
-            // `AccessContext` built out of what this middleware writes, so
-            // a page route that skipped resolution was judged against no
-            // principal at all.
-            let isPageRoute = not (isApi || isDev)
+            // Every route's principal is resolved: `/api` (and its SSE
+            // streams), `/dev` (so the diagnostics endpoint sees the same
+            // `AccessContext` an API handler would; `SurfaceEnforcementMiddleware`
+            // deliberately does not gate it) and every other path, a page
+            // route, the SPA shell or a probe — an audience-gated SSR page
+            // decides 401 / 403 / 200 from the `AccessContext` built out of
+            // what this middleware writes. A page route differs only in how
+            // an unsupported anonymous subject and a team member's user are
+            // read below. The class is the one `RequestIdMiddleware` stamped.
+            let isPageRoute =
+                match RouteClassifier.ofRequest ctx with
+                | RouteClass.Api
+                | RouteClass.Sse
+                | RouteClass.Dev -> false
+                | RouteClass.Health
+                | RouteClass.Metrics
+                | RouteClass.Page -> true
 
             // Phase 9l — root activity for the request. Inherits parent
             // context from the incoming W3C `traceparent` header so a
@@ -1083,6 +1083,10 @@ type RequestIdMiddleware(next: RequestDelegate) =
                     | None -> Guid.NewGuid().ToString("N")
 
             ctx.Items[ContextItemKey] <- box requestId
+
+            // The route's class, computed once from the one prefix table and
+            // read by every later middleware instead of a list of its own.
+            RouteClassifier.stamp ctx.Items (RouteClassifier.classify ctx.Request.Path.Value)
 
             // Stamp BOTH headers on the response so consumers of either
             // name see the same value. Legacy `X-Request-Id` readers

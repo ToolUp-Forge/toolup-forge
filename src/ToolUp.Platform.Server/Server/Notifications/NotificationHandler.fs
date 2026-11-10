@@ -44,7 +44,7 @@ let private serializeEnvelope (env: NotificationEnvelope) =
 /// under `CookieRequired` an unauthenticated connect is refused 401.
 ///
 /// **Subscription lifecycle.** One subscription per connection, and ONE
-/// writer per response (Phase 1064). The connection is registered with the
+/// writer per response. The connection is registered with the
 /// manager, which hands back its `ConnectionWriter`; each envelope is
 /// framed and enqueued on that writer, which writes and flushes one frame
 /// at a time, and the manager's keepalive goes through the same queue. The
@@ -59,7 +59,7 @@ let private serializeEnvelope (env: NotificationEnvelope) =
 /// scope — which is acceptable for the in-memory default; distributed
 /// implementations are free to multiplex differently behind the same
 /// interface.
-// Phase 6l.D — pre-handshake scope-at-capacity refusal lives below
+// Pre-handshake scope-at-capacity refusal lives below
 // inside the handler body so the response stays a plain 429 with
 // Retry-After when the scope is at cap. The legacy unconditional
 // writeReadyResponse moved underneath the Result.Ok branch.
@@ -99,7 +99,7 @@ let notificationHandler
 
             match manager.AddWriter(scopeId, sink) with
             | Result.Error refusal ->
-                // Phase 6l.D — scope at capacity. Refuse with 429 +
+                // Scope at capacity. Refuse with 429 +
                 // Retry-After before any text/event-stream headers
                 // commit so the client sees a clean HTTP error.
                 ctx.Response.StatusCode <- 429
@@ -121,16 +121,17 @@ let notificationHandler
                 // connection that has stopped reading: end it, exactly
                 // as the manager's own fan-out does.
                 //
-                // Phase 6f filter: transactional kinds (`TransactionalEmail`,
-                // `TransactionalSms`, `MobilePush`) ride the same channel for
-                // free portability, but they are out-of-band deliveries — only
-                // an `INotificationSink` should consume them. Skipping them
-                // here keeps the SSE wire UI-only and makes the channel itself
-                // a leak-tolerant fan-out (a sink running in another process
-                // will still see the publish via Redis; an in-process tab will
-                // not).
+                // Only a notification that routes to the SSE fan-out is
+                // written. Transactional kinds ride the same channel for free
+                // portability, but they route to an `INotificationSink`, out of
+                // band. Skipping them here keeps the SSE wire UI-only and makes
+                // the channel itself a leak-tolerant fan-out (a sink running in
+                // another process will still see the publish via Redis; an
+                // in-process tab will not).
                 let sendEnvelope (env: NotificationEnvelope) =
-                    if not (NotificationKind.isTransactional env.Notification) then
+                    match NotificationKind.route env.Notification with
+                    | NotificationKind.Route.Sink _ -> ()
+                    | NotificationKind.Route.SseFanOut ->
                         let eventName = NotificationKind.ofNotification env.Notification
                         let frame = SSE.namedFrame eventName (serializeEnvelope env)
 

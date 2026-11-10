@@ -261,7 +261,7 @@ type PushEnvelope = {
     CorrelationId: string option
 }
 
-/// Payload of a `TransactionalWhatsApp` notification (Phase 827). The
+/// Payload of a `TransactionalWhatsApp` notification. The
 /// vendor-neutral half of WhatsApp: a sink (one per vendor) reads it,
 /// resolves the recipients' numbers and sends.
 ///
@@ -358,7 +358,7 @@ type Notification =
     /// (WebPush / future FCM / APNs). One envelope fan-outs across
     /// every registered `PushToken` for each recipient.
     | MobilePush of PushEnvelope
-    /// Out-of-band WhatsApp message (Phase 827). Same dispatch model as
+    /// Out-of-band WhatsApp message. Same dispatch model as
     /// `TransactionalSms` — SSE-filtered, sink-routed by
     /// `Kind = SinkKind.WhatsApp` — with the WhatsApp Business rules
     /// (template for business-initiated sends, the 24-hour window for
@@ -369,7 +369,7 @@ type Notification =
 /// server stamps `Id` and `OccurredAt` at publish time; subscribers
 /// use them to deduplicate replays and order toasts.
 ///
-/// **`TraceContext`** (Phase 9l) carries a W3C `traceparent` header
+/// **`TraceContext`** carries a W3C `traceparent` header
 /// value (`00-<32 hex traceId>-<16 hex spanId>-<2 hex flags>`)
 /// captured from the publisher's ambient `Activity.Current`. When the
 /// envelope is consumed by a distributed-channel subscriber (Redis,
@@ -474,7 +474,7 @@ module NotificationKind =
     [<Literal>]
     let MobilePush = "MobilePush"
 
-    /// Kind string for `Notification.TransactionalWhatsApp` (Phase 827).
+    /// Kind string for `Notification.TransactionalWhatsApp`.
     [<Literal>]
     let TransactionalWhatsApp = "TransactionalWhatsApp"
 
@@ -504,7 +504,7 @@ module NotificationKind =
         | Email
         | Sms
         | Push of PushVariant
-        /// WhatsApp, vendor-neutral (Phase 827): every WhatsApp vendor
+        /// WhatsApp, vendor-neutral: every WhatsApp vendor
         /// companion registers under this one kind, so a deployment
         /// composes at most one WhatsApp sink.
         | WhatsApp
@@ -570,14 +570,40 @@ module NotificationKind =
         | Notification.MobilePush _ -> MobilePush
         | Notification.TransactionalWhatsApp _ -> TransactionalWhatsApp
 
+    /// Where a notification goes: to exactly one transactional sink kind
+    /// (out of band, never written to the SSE stream), or to the SSE fan-out
+    /// of its scope.
+    [<RequireQualifiedAccess>]
+    type Route =
+        | Sink of SinkKind
+        | SseFanOut
+
+    /// The one routing decision for a notification, over every case. A
+    /// `MobilePush` carries no platform discriminator, so it routes to the
+    /// SDK's default push variant (`PushVariant.WebPush`).
+    let route (n: Notification) : Route =
+        match n with
+        | Notification.TransactionalEmail _ -> Route.Sink SinkKind.Email
+        | Notification.TransactionalSms _ -> Route.Sink SinkKind.Sms
+        | Notification.MobilePush _ -> Route.Sink(SinkKind.Push PushVariant.WebPush)
+        | Notification.TransactionalWhatsApp _ -> Route.Sink SinkKind.WhatsApp
+        | Notification.SystemMessage _
+        | Notification.JobCompleted _
+        | Notification.DataRefreshed _
+        | Notification.TeamActivity _
+        | Notification.ModuleAction _
+        | Notification.CustomNotification _
+        | Notification.MembershipChanged _ -> Route.SseFanOut
+
+    /// The sink kind a notification routes to, or `None` for the SSE fan-out.
+    /// A projection of `route`.
+    let sinkKindOf (n: Notification) : SinkKind option =
+        match route n with
+        | Route.Sink kind -> Some kind
+        | Route.SseFanOut -> None
+
     /// `true` when a notification represents an out-of-band transactional
     /// delivery (email / SMS / push / WhatsApp) that must NOT be written to the
     /// SSE stream — those kinds are routed to `INotificationSink`
-    /// implementations only.
-    let isTransactional (n: Notification) : bool =
-        match n with
-        | Notification.TransactionalEmail _
-        | Notification.TransactionalSms _
-        | Notification.MobilePush _
-        | Notification.TransactionalWhatsApp _ -> true
-        | _ -> false
+    /// implementations only. A projection of `route`.
+    let isTransactional (n: Notification) : bool = (sinkKindOf n).IsSome
