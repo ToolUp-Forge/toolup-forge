@@ -1152,6 +1152,10 @@ let main args =
         "src/ToolUp.Platform.Server/Server/Middleware.fs"
     ]
 
+    /// Files that spell the old and new forms as TEXT, never as code: the
+    /// codemod's rules match and rewrite them.
+    let accessFallbackSpellers = [ "src/ToolUp.Platform.Build/Build/SDK.Codemod.fs" ]
+
     let runVerifyAccessFallbacks (root: string) : int =
         let rec walk (dir: string) = seq {
             for d in Directory.EnumerateDirectories dir do
@@ -1200,12 +1204,13 @@ let main args =
                     let rel = Paths.toSlash (Path.GetRelativePath(root, file))
                     let home = unrestrictedHomes |> List.contains rel
 
-                    for i, line in File.ReadAllLines file |> Array.indexed do
-                        if not (isComment line) then
-                            if retired.IsMatch line then
-                                yield rel, i + 1, "the retired fallback", line.Trim()
-                            elif not home && stated.IsMatch line then
-                                yield rel, i + 1, "Unrestricted stated outside its homes", line.Trim()
+                    if not (accessFallbackSpellers |> List.contains rel) then
+                        for i, line in File.ReadAllLines file |> Array.indexed do
+                            if not (isComment line) then
+                                if retired.IsMatch line then
+                                    yield rel, i + 1, "the retired fallback", line.Trim()
+                                elif not home && stated.IsMatch line then
+                                    yield rel, i + 1, "Unrestricted stated outside its homes", line.Trim()
             ]
 
             Trace.tracefn ""
