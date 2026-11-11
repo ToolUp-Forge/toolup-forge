@@ -219,6 +219,29 @@ let eventStoreAccount (store: IEventStore) (now: unit -> DateTime) : BudgetAccou
             ()
     })
 
+/// Records a `BudgetWindowUnreadable` under its reserved source module.
+///
+/// Best-effort, like the refusal records above: the read that failed may
+/// be the event store itself, and a wedged store must not turn a recorded
+/// failure into a second one on the call's path.
+let unreadableRecorder (store: IEventStore) : BudgetWindowUnreadable -> Async<unit> =
+    fun record -> async {
+        let evt: ModuleEvent = {
+            Id = Guid.NewGuid()
+            OccurredAt = record.OccurredAt
+            ScopeId = record.ScopeId
+            SourceModule = BudgetWindowUnreadable.SourceModule
+            EventType = BudgetWindowUnreadable.EventType
+            Payload = JsonSerializer.Serialize(record, budgetJsonOptions)
+        }
+
+        try
+            let! child = Async.StartChild(EventStore.writeOrRaise store evt, BudgetAuditWriteTimeoutMs)
+            do! child
+        with _ ->
+            ()
+    }
+
 /// Phase 9s — the pre-call per-user token-budget check.
 ///
 /// Stateless between invocations except for the read-through cache,
@@ -231,8 +254,26 @@ type AIBudgetEnforcer
         eventStore: IEventStore,
         cache: AIBudgetWindowCache,
         account: BudgetAccount,
+        posture: BudgetPosture,
+        recordUnreadable: BudgetWindowUnreadable -> Async<unit>,
         now: unit -> DateTime
     ) =
+
+    /// The default posture, `FailOpen`, recording unreadable reads in
+    /// `eventStore`.
+    new(configStore, eventStore, cache, account, now) =
+        AIBudgetEnforcer(
+            configStore,
+            eventStore,
+            cache,
+            account,
+            BudgetPosture.FailOpen,
+            unreadableRecorder eventStore,
+            now
+        )
+
+    /// The posture this enforcer applies when a read fails.
+    member _.Posture = posture
 
     /// The live window cache — the `/dev/inspect` contributor's read.
     member _.Cache = cache
@@ -816,8 +857,28 @@ type AISpendEnforcer
         cache: AISpendWindowCache,
         accountOf: AISpendBudgetPolicy -> BudgetAccount,
         warn: string -> unit,
+        posture: BudgetPosture,
+        recordUnreadable: BudgetWindowUnreadable -> Async<unit>,
         now: unit -> DateTime
     ) =
+
+    /// The default posture, `FailOpen`, recording unreadable reads in
+    /// `eventStore`.
+    new(configStore, eventStore, priceTable, cache, accountOf, warn, now) =
+        AISpendEnforcer(
+            configStore,
+            eventStore,
+            priceTable,
+            cache,
+            accountOf,
+            warn,
+            BudgetPosture.FailOpen,
+            unreadableRecorder eventStore,
+            now
+        )
+
+    /// The posture this enforcer applies when a read fails.
+    member _.Posture = posture
 
     /// The live window cache — the `/dev/inspect` contributor's read.
     member _.Cache = cache

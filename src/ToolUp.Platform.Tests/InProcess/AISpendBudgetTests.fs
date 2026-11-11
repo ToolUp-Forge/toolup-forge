@@ -288,6 +288,78 @@ let private sendThrough (factory: IAIProviderFactory) (userId: string) (text: st
     }
     |> Async.RunSynchronously
 
+// ─── Unreadable reads ────────────────────────────────────────────
+
+/// An `IEventStore` whose latency stream cannot be read. Every other read
+/// and every write reaches `inner`, so the record of the failure can be
+/// read back.
+type private UnreadableWindowStore(inner: IEventStore) =
+    interface IEventStore with
+        member _.Write evt = inner.Write evt
+        member _.ReadAll scopeId = inner.ReadAll scopeId
+        member _.ReadByType(scopeId, eventType) = inner.ReadByType(scopeId, eventType)
+
+        member _.ReadBySource(scopeId, sourceModule) =
+            if sourceModule = AILatencyRecord.SourceModule then
+                async { return raise (InvalidOperationException "the event store is unavailable") }
+            else
+                inner.ReadBySource(scopeId, sourceModule)
+
+        member _.ListScopes() = inner.ListScopes()
+
+        member _.Erase(scopeId, subjectUserId, policy, dryRun) =
+            inner.Erase(scopeId, subjectUserId, policy, dryRun)
+
+let private unreadableWindowStore () =
+    UnreadableWindowStore(ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore) :> IEventStore
+
+/// An `IConfigStore` whose policy read throws.
+let private unreadableConfigStore =
+    { new IConfigStore with
+        member _.GetRaw(_scope, _moduleKey) = async {
+            return raise (InvalidOperationException "the config store is unavailable")
+        }
+
+        member _.Get<'T>(_scope, _moduleKey) : Async<'T option> = failwith "not used by the spend path"
+
+        member _.GetEffective<'T>(_scope, _moduleKey, _schema) : Async<'T> = failwith "not used by the spend path"
+
+        member _.Set<'T>(_scope, _moduleKey, _value: 'T, _schema) = failwith "not used by the spend path"
+
+        member _.SetRaw(_scope, _moduleKey, _values, _schema) = failwith "not used by the spend path"
+
+        member _.Clear(_scope, _moduleKey) = failwith "not used by the spend path"
+
+        member _.Erase(_scopeId, _subjectUserId, _policy, _dryRun) = failwith "not used by the spend path"
+    }
+
+/// Every recorded unreadable read in `scopeId`.
+let private readUnreadable (store: IEventStore) (scopeId: string) : BudgetWindowUnreadable list =
+    store.ReadBySource(scopeId, BudgetWindowUnreadable.SourceModule)
+    |> Async.RunSynchronously
+    |> List.map (fun evt -> JsonSerializer.Deserialize<BudgetWindowUnreadable>(evt.Payload, jsonOptions))
+
+/// A spend enforcer under an explicit posture.
+let private enforcerUnder (posture: BudgetPosture) (config: IConfigStore) (store: IEventStore) =
+    AIBudgetEnforcer.AISpendEnforcer(
+        config,
+        store,
+        rateCard,
+        AIBudgetEnforcer.AISpendWindowCache(30),
+        AIBudgetEnforcer.spendEventStoreAccount store rateCard.Currency (fun () -> noon),
+        ignore,
+        posture,
+        AIBudgetEnforcer.unreadableRecorder store,
+        fun () -> noon
+    )
+
+let private perUserCap () = spendConfig (Some(5.00M, "daily")) None
+
+let private refusalOf (verdict: BudgetVerdict) : BudgetDenial =
+    match verdict with
+    | BudgetVerdict.Refused d -> d
+    | other -> failwithf "expected a refusal, got %A" other
+
 // ─── Cases ───────────────────────────────────────────────────────
 
 [<Tests>]
@@ -843,5 +915,74 @@ let tests =
                 (entry.Schema.Fields
                  |> List.exists (fun f -> f.Key = AIBudgetConfigKey.maxTokensPerUserPerHour))
                 "the Phase 9s token cap still stands beside the monetary ones"
+        }
+
+        // ─── Unreadable reads and the posture ────────────────────
+
+        test "an unreadable window under the default posture admits the call and records one BudgetWindowUnreadable" {
+            let store = unreadableWindowStore ()
+
+            let enforcer = enforcerOver perUserCap store rateCard 30 ignore (fun () -> noon)
+
+            let verdict = enforcer.Check(scopeId, alice, 1.00M) |> Async.RunSynchronously
+
+            Expect.equal verdict BudgetVerdict.Allowed "the default posture admits a call it cannot price"
+
+            match readUnreadable store scopeId with
+            | [ record ] ->
+                Expect.equal record.Read BudgetRead.Window "the record names the window"
+                Expect.equal record.Posture BudgetPosture.FailOpen "and the posture that admitted the call"
+                Expect.equal record.Domain AISpendBudgetPolicy.Domain "and the budget"
+            | other -> failtestf "expected exactly one BudgetWindowUnreadable, got %d" other.Length
+
+            Expect.isEmpty (readRefusals store scopeId) "an admitted call is not a refusal"
+        }
+
+        test "an unreadable window under FailClosed refuses with a denial naming the window" {
+            let store = unreadableWindowStore ()
+
+            let enforcer =
+                enforcerUnder BudgetPosture.FailClosed (configStoreOver perUserCap) store
+
+            let denial =
+                enforcer.Check(scopeId, alice, 1.00M) |> Async.RunSynchronously |> refusalOf
+
+            Expect.equal
+                denial.Dimension
+                (BudgetWindowUnreadable.dimension BudgetRead.Window)
+                "the denial names the window"
+
+            Expect.equal denial.Domain AISpendBudgetPolicy.Domain "for the spend budget"
+            Expect.hasLength (readUnreadable store scopeId) 1 "and the read failure is recorded once"
+        }
+
+        test "an unreadable policy under the default posture admits the call and records one BudgetWindowUnreadable" {
+            let store = newEventStore () :> IEventStore
+            let enforcer = enforcerUnder BudgetPosture.FailOpen unreadableConfigStore store
+            let verdict = enforcer.Check(scopeId, alice, 1.00M) |> Async.RunSynchronously
+
+            Expect.equal verdict BudgetVerdict.Allowed "the default posture admits a call whose policy it cannot read"
+
+            match readUnreadable store scopeId with
+            | [ record ] ->
+                Expect.equal record.Read BudgetRead.Policy "the record names the policy"
+                Expect.equal record.Posture BudgetPosture.FailOpen "and the posture that admitted the call"
+            | other -> failtestf "expected exactly one BudgetWindowUnreadable, got %d" other.Length
+        }
+
+        test "an unreadable policy under FailClosed refuses with a denial naming the policy" {
+            let store = newEventStore () :> IEventStore
+            let enforcer = enforcerUnder BudgetPosture.FailClosed unreadableConfigStore store
+
+            let denial =
+                enforcer.Check(scopeId, alice, 1.00M) |> Async.RunSynchronously |> refusalOf
+
+            Expect.equal
+                denial.Dimension
+                (BudgetWindowUnreadable.dimension BudgetRead.Policy)
+                "the denial names the policy"
+
+            Expect.equal denial.Domain AISpendBudgetPolicy.Domain "for the spend budget"
+            Expect.hasLength (readUnreadable store scopeId) 1 "and the read failure is recorded once"
         }
     ]

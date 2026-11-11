@@ -2,7 +2,9 @@ module ToolUp.Platform.Tests.AI.AITokenBudgetTests
 
 open ToolUp.Platform.Transport
 open System
+open System.IO
 open System.Text.Json
+open System.Text.RegularExpressions
 open Expecto
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
@@ -253,6 +255,74 @@ let private sendThrough (factory: IAIProviderFactory) (userId: string) (text: st
         | Ok provider -> return! provider.SendMessage([ userMessage text ], [], None, None, RetryPolicy.defaults)
     }
     |> Async.RunSynchronously
+
+// ─── Unreadable reads ────────────────────────────────────────────
+
+/// An `IEventStore` whose latency stream cannot be read. Every other read
+/// and every write reaches `inner`, so the record of the failure can be
+/// read back.
+type private UnreadableWindowStore(inner: IEventStore) =
+    interface IEventStore with
+        member _.Write evt = inner.Write evt
+        member _.ReadAll scopeId = inner.ReadAll scopeId
+        member _.ReadByType(scopeId, eventType) = inner.ReadByType(scopeId, eventType)
+
+        member _.ReadBySource(scopeId, sourceModule) =
+            if sourceModule = AILatencyRecord.SourceModule then
+                async { return raise (InvalidOperationException "the event store is unavailable") }
+            else
+                inner.ReadBySource(scopeId, sourceModule)
+
+        member _.ListScopes() = inner.ListScopes()
+
+        member _.Erase(scopeId, subjectUserId, policy, dryRun) =
+            inner.Erase(scopeId, subjectUserId, policy, dryRun)
+
+let private unreadableWindowStore () =
+    UnreadableWindowStore(ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore) :> IEventStore
+
+/// An `IConfigStore` whose policy read throws.
+let private unreadableConfigStore =
+    { new IConfigStore with
+        member _.GetRaw(_scope, _moduleKey) = async {
+            return raise (InvalidOperationException "the config store is unavailable")
+        }
+
+        member _.Get<'T>(_scope, _moduleKey) : Async<'T option> = failwith "not used by the budget path"
+
+        member _.GetEffective<'T>(_scope, _moduleKey, _schema) : Async<'T> = failwith "not used by the budget path"
+
+        member _.Set<'T>(_scope, _moduleKey, _value: 'T, _schema) = failwith "not used by the budget path"
+
+        member _.SetRaw(_scope, _moduleKey, _values, _schema) = failwith "not used by the budget path"
+
+        member _.Clear(_scope, _moduleKey) = failwith "not used by the budget path"
+
+        member _.Erase(_scopeId, _subjectUserId, _policy, _dryRun) = failwith "not used by the budget path"
+    }
+
+/// Every recorded unreadable read in `scopeId`.
+let private readUnreadable (store: IEventStore) (scopeId: string) : BudgetWindowUnreadable list =
+    store.ReadBySource(scopeId, BudgetWindowUnreadable.SourceModule)
+    |> Async.RunSynchronously
+    |> List.map (fun evt -> JsonSerializer.Deserialize<BudgetWindowUnreadable>(evt.Payload, jsonOptions))
+
+/// An enforcer under an explicit posture.
+let private enforcerUnder (posture: BudgetPosture) (config: IConfigStore) (store: IEventStore) =
+    AIBudgetEnforcer.AIBudgetEnforcer(
+        config,
+        store,
+        AIBudgetEnforcer.AIBudgetWindowCache(30),
+        AIBudgetEnforcer.eventStoreAccount store (fun () -> noon),
+        posture,
+        AIBudgetEnforcer.unreadableRecorder store,
+        fun () -> noon
+    )
+
+let private refusalOf (verdict: BudgetVerdict) : BudgetDenial =
+    match verdict with
+    | BudgetVerdict.Refused d -> d
+    | other -> failwithf "expected a refusal, got %A" other
 
 // ─── Cases ───────────────────────────────────────────────────────
 
@@ -580,5 +650,104 @@ let tests =
 
             let fresh = AIBudgetEnforcer.mergeAIBudgetSchema []
             Expect.hasLength fresh 1 "an app declaring nothing gets the SDK entry"
+        }
+
+        test "an unreadable window under the default posture admits the call and records one BudgetWindowUnreadable" {
+            let store = unreadableWindowStore ()
+            let enforcer = enforcerOver (fun () -> capOf (Some 1000)) store 30 (fun () -> noon)
+            let verdict = enforcer.Check(scopeId, alice, 10M) |> Async.RunSynchronously
+
+            Expect.equal verdict BudgetVerdict.Allowed "the default posture admits a call it cannot measure"
+
+            match readUnreadable store scopeId with
+            | [ record ] ->
+                Expect.equal record.Read BudgetRead.Window "the record names the window"
+                Expect.equal record.Posture BudgetPosture.FailOpen "and the posture that admitted the call"
+                Expect.equal record.UserId (UserId alice) "and the caller"
+                Expect.equal record.Domain AITokenBudgetPolicy.Domain "and the budget"
+            | other -> failtestf "expected exactly one BudgetWindowUnreadable, got %d" other.Length
+
+            Expect.isEmpty (readRefusals store scopeId) "an admitted call is not a refusal"
+        }
+
+        test "an unreadable window under FailClosed refuses with a denial naming the window" {
+            let store = unreadableWindowStore ()
+
+            let enforcer =
+                enforcerUnder BudgetPosture.FailClosed (configStoreOver (fun () -> capOf (Some 1000))) store
+
+            let denial =
+                enforcer.Check(scopeId, alice, 10M) |> Async.RunSynchronously |> refusalOf
+
+            Expect.equal
+                denial.Dimension
+                (BudgetWindowUnreadable.dimension BudgetRead.Window)
+                "the denial names the window"
+
+            Expect.isTrue (BudgetWindowUnreadable.isDenial denial) "and reads as an unreadable refusal"
+            Expect.equal denial.Domain AITokenBudgetPolicy.Domain "for the token budget"
+            Expect.equal denial.ClassLabel alice "and the caller"
+
+            match readUnreadable store scopeId with
+            | [ record ] -> Expect.equal record.Posture BudgetPosture.FailClosed "the record names the refusing posture"
+            | other -> failtestf "expected exactly one BudgetWindowUnreadable, got %d" other.Length
+        }
+
+        test "an unreadable policy under the default posture admits the call and records one BudgetWindowUnreadable" {
+            let store = newEventStore () :> IEventStore
+            let enforcer = enforcerUnder BudgetPosture.FailOpen unreadableConfigStore store
+            let verdict = enforcer.Check(scopeId, alice, 10M) |> Async.RunSynchronously
+
+            Expect.equal verdict BudgetVerdict.Allowed "the default posture admits a call whose policy it cannot read"
+
+            match readUnreadable store scopeId with
+            | [ record ] ->
+                Expect.equal record.Read BudgetRead.Policy "the record names the policy"
+                Expect.equal record.Posture BudgetPosture.FailOpen "and the posture that admitted the call"
+            | other -> failtestf "expected exactly one BudgetWindowUnreadable, got %d" other.Length
+        }
+
+        test "an unreadable policy under FailClosed refuses with a denial naming the policy" {
+            let store = newEventStore () :> IEventStore
+            let enforcer = enforcerUnder BudgetPosture.FailClosed unreadableConfigStore store
+
+            let denial =
+                enforcer.Check(scopeId, alice, 10M) |> Async.RunSynchronously |> refusalOf
+
+            Expect.equal
+                denial.Dimension
+                (BudgetWindowUnreadable.dimension BudgetRead.Policy)
+                "the denial names the policy"
+
+            Expect.equal denial.Domain AITokenBudgetPolicy.Domain "for the token budget"
+            Expect.hasLength (readUnreadable store scopeId) 1 "and the read failure is recorded once"
+        }
+
+        test "no discarded-exception arm decides a budget check: both enforcers catch only to apply the posture" {
+            let source =
+                File.ReadAllText(
+                    Path.Combine(
+                        ToolUp.Platform.Tests.Contracts.ArchitectureFitness.repoRoot (),
+                        "src",
+                        "ToolUp.AI.Server",
+                        "Server",
+                        "AIBudgetEnforcer.fs"
+                    )
+                )
+
+            let bodyOf (first: string) (next: string) =
+                let start = source.IndexOf first
+                let finish = if start < 0 then -1 else source.IndexOf(next, start)
+                Expect.isTrue (start >= 0 && finish > start) (sprintf "the enforcer source still declares %s" first)
+                source.Substring(start, finish - start)
+
+            for name, body in
+                [
+                    "AIBudgetEnforcer", bodyOf "type AIBudgetEnforcer" "type AITokenBudgetContributor"
+                    "AISpendEnforcer", bodyOf "type AISpendEnforcer" "type AISpendBudgetContributor"
+                ] do
+                Expect.isFalse
+                    (Regex.IsMatch(body, @"\bwith\s+_\s*->"))
+                    (sprintf "%s decides nothing by a discarded exception; a failed read goes to the posture" name)
         }
     ]

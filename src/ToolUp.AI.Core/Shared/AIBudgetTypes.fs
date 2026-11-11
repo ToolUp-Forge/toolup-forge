@@ -96,6 +96,122 @@ module AIBudgetConfigKey =
     [<Literal>]
     let spendPerScopePeriod = "AISpendPerScopePeriod"
 
+// ─── What a budget does when it cannot read ──────────────────────
+//
+// A budget check reads two things before it decides: the scope's policy
+// from the config store, and the consumption window from the event
+// store. Either read can fail. What happens then is the deployment's
+// declared `BudgetPosture`, not an accident of a catch arm, and every
+// such failure is recorded as a `BudgetWindowUnreadable` event, so an
+// operator can tell "no ceiling is configured" from "the ceiling could
+// not be read".
+
+/// What a budget check does when it cannot read its policy or its window.
+[<RequireQualifiedAccess>]
+type BudgetPosture =
+    /// Admit the call as if no ceiling applied, and record the failure.
+    /// The default: a cost ceiling that converts a config-store or
+    /// telemetry outage into a total AI outage fails worse than the spend
+    /// it protects against.
+    | FailOpen
+    /// Refuse the call with a denial naming what could not be read. For a
+    /// deployment whose ceiling is a hard commitment rather than a
+    /// fairness control.
+    | FailClosed
+
+[<RequireQualifiedAccess>]
+module BudgetPosture =
+    /// Stable lowercase label for logs and the diagnostics panel.
+    let label =
+        function
+        | BudgetPosture.FailOpen -> "fail-open"
+        | BudgetPosture.FailClosed -> "fail-closed"
+
+/// Which of a budget check's two reads failed.
+[<RequireQualifiedAccess>]
+type BudgetRead =
+    /// The scope's policy, read from the config store.
+    | Policy
+    /// The consumption window, summed from the event store.
+    | Window
+
+[<RequireQualifiedAccess>]
+module BudgetRead =
+    /// Stable lowercase label; the suffix of an unreadable denial's
+    /// dimension.
+    let label =
+        function
+        | BudgetRead.Policy -> "policy"
+        | BudgetRead.Window -> "window"
+
+/// One budget check that could not read its policy or its window. Written
+/// through `IEventStore` under `BudgetWindowUnreadable.SourceModule` on
+/// every such failure, whichever posture is in force, so "when was the
+/// budget blind, and what did it do" is a query.
+type BudgetWindowUnreadable = {
+    OccurredAt: DateTime
+    /// Storage scope the call belonged to.
+    ScopeId: string
+    /// The caller, `""` when the call was unattributed.
+    UserId: UserId
+    /// `BudgetSubject.Domain` of the budget that could not read —
+    /// `"ai-tokens"` or `"ai-spend"`.
+    Domain: string
+    /// Which read failed.
+    Read: BudgetRead
+    /// The posture that decided the call: `FailOpen` admitted it,
+    /// `FailClosed` refused it.
+    Posture: BudgetPosture
+    /// The failure's message. Diagnostic; the wording is not stable.
+    Reason: string
+}
+
+[<RequireQualifiedAccess>]
+module BudgetWindowUnreadable =
+    /// Reserved `IEventStore` source-module namespace for unreadable
+    /// budget reads. Sibling of `AITokenBudgetExceeded.SourceModule`.
+    [<Literal>]
+    let SourceModule = "_platform.ai.budget_unreadable"
+
+    /// Reserved `IEventStore` event-type for one unreadable read.
+    [<Literal>]
+    let EventType = "BudgetWindowUnreadable"
+
+    /// Prefix of the `BudgetDenial.Dimension` a `FailClosed` refusal
+    /// carries; the read's label follows it.
+    [<Literal>]
+    let DimensionPrefix = "unreadable-"
+
+    /// The denial dimension naming an unreadable `read`:
+    /// `"unreadable-policy"` or `"unreadable-window"`.
+    let dimension (read: BudgetRead) : string = DimensionPrefix + BudgetRead.label read
+
+    /// `true` for a denial a `FailClosed` posture issued because a read
+    /// failed, rather than because a ceiling was reached.
+    let isDenial (denial: BudgetDenial) : bool =
+        not (isNull denial.Dimension) && denial.Dimension.StartsWith DimensionPrefix
+
+    /// The refusal a `FailClosed` posture issues for this record. Quota
+    /// and spend are zero because neither is known; the dimension names
+    /// the read that failed.
+    let denial (periodKey: string) (requested: decimal) (record: BudgetWindowUnreadable) : BudgetDenial = {
+        Domain = record.Domain
+        ScopeId = record.ScopeId
+        ClassLabel = record.UserId.Value
+        Dimension = dimension record.Read
+        Quota = 0M
+        Spent = 0M
+        Requested = requested
+        PeriodKey = periodKey
+    }
+
+    /// The user-facing refusal message for a `FailClosed` refusal.
+    let message (denial: BudgetDenial) : string =
+        sprintf
+            "AI budget unavailable — this deployment's %s budget could not read its %s and refuses calls it cannot account for. Try again shortly."
+            denial.Domain
+            (denial.Dimension.Substring DimensionPrefix.Length)
+
 /// Phase 9s — the per-user token budget for one scope.
 ///
 /// One window, deliberately. The two team windows
