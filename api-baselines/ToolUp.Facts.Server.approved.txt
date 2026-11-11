@@ -1470,6 +1470,7 @@ ToolUp.Facts.FactsCompose.withFactTablesOptions(ToolUp.Facts.FactTablesOptions, 
 ToolUp.Facts.FactsCompose.withFactTier(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.Compose.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Compose.GroundingEnvelope]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withNarrativeCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.FactsCompose.withPipelineProfile(ToolUp.Facts.RegisteredPipelineProfile, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withTeamOutputVisibility(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withToleranceTriggers(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceTrigger], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -1774,20 +1775,117 @@ ToolUp.Facts.PipelineAssertion (class)
 ToolUp.Facts.PipelineAssertion.ComputeVersion : System.String { get }
 ToolUp.Facts.PipelineAssertion.MaxInputs : System.Int32 { get }
 ToolUp.Facts.PipelineAssertion.OperationId : System.String (literal)
+ToolUp.Facts.PipelineAssertion.answerUnder(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.RegisteredPipelineProfile], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Facts.PipelineToolResult, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionResult]], ToolUp.Facts.PipelineRefusal]]
 ToolUp.Facts.PipelineAssertion.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Facts.PipelineToolResult, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionResult]], ToolUp.Facts.PipelineRefusal]]
 ToolUp.Facts.PipelineAssertion.draft(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.FactSlice, ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineAssertionRequest, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft], ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineAssertion.factIdOf(ToolUp.Facts.FactDraft) : System.String
 ToolUp.Facts.PipelineAssertion.methodOf(System.String) : ToolUp.Facts.MethodRef
 ToolUp.Facts.PipelineAssertion.text(ToolUp.Facts.PipelineAssertionResult) : System.String
+ToolUp.Facts.PipelineCaller (class)
+ToolUp.Facts.PipelineCaller..ctor(ToolUp.Platform.ResolvedScope, System.String)
+ToolUp.Facts.PipelineCaller.Principal : System.String { get }
+ToolUp.Facts.PipelineCaller.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Facts.PipelineJoin (class)
+ToolUp.Facts.PipelineJoin..ctor(System.Int32, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String)
+ToolUp.Facts.PipelineJoin.Joined : System.String { get }
+ToolUp.Facts.PipelineJoin.Kind : System.String { get }
+ToolUp.Facts.PipelineJoin.On : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Facts.PipelineJoin.Step : System.Int32 { get }
+ToolUp.Facts.PipelineJoin.Table : System.String { get }
+ToolUp.Facts.PipelineProfile (class)
+ToolUp.Facts.PipelineProfile..ctor(System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PipelineCaller, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PipelineJoin, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]])
+ToolUp.Facts.PipelineProfile.Expressions : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Facts.PipelineProfile.Fields : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
+ToolUp.Facts.PipelineProfile.Functions : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Facts.PipelineProfile.Name : System.String { get }
+ToolUp.Facts.PipelineProfile.Operators : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Facts.PipelineProfile.RelationCheck : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PipelineCaller, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PipelineJoin, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]] { get }
+ToolUp.Facts.PipelineProfile.Steps : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Facts.PipelineProfileModule (class)
+ToolUp.Facts.PipelineProfileModule.admit(ToolUp.Facts.RegisteredPipelineProfile, ToolUp.Facts.PipelineCaller, System.String, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineJoin], ToolUp.Facts.PipelineRefusal]
+ToolUp.Facts.PipelineProfileModule.defaultProfile : ToolUp.Facts.PipelineProfile { get }
+ToolUp.Facts.PipelineProfileModule.expressionExamples : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.ColExpr] { get }
+ToolUp.Facts.PipelineProfileModule.expressionName(Fuaran.Compute.ColExpr) : System.String
+ToolUp.Facts.PipelineProfileModule.fragment(ToolUp.Facts.PipelineProfile) : System.String
+ToolUp.Facts.PipelineProfileModule.functionName(Fuaran.Compute.ScalarFn) : System.String
+ToolUp.Facts.PipelineProfileModule.knownExpressions : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineProfileModule.knownFields : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]] { get }
+ToolUp.Facts.PipelineProfileModule.knownFunctions : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineProfileModule.knownOperators : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineProfileModule.knownSteps : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineProfileModule.named(System.String) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.operatorName(Fuaran.Compute.BinOp) : System.String
+ToolUp.Facts.PipelineProfileModule.register(ToolUp.Facts.PipelineProfile) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.RegisteredPipelineProfile, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineProfileRefusal]]
+ToolUp.Facts.PipelineProfileModule.stepExamples : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform] { get }
+ToolUp.Facts.PipelineProfileModule.stepName(Fuaran.Compute.Transform) : System.String
+ToolUp.Facts.PipelineProfileModule.withExpressions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withFields(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withFunctions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withOperators(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withRelationCheck(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PipelineCaller, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PipelineJoin, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withSteps(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withoutExpressions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withoutFunctions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withoutOperators(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.withoutSteps(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.PipelineProfile) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileRefusal (class)
+ToolUp.Facts.PipelineProfileRefusal.IsFieldsOfUnadmittedStep : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsJoinWithoutRelationCheck : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsNoName : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsNoSteps : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsReadsAnotherSource : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsUnbindable : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsUnknownExpression : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsUnknownField : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsUnknownFunction : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsUnknownOperator : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.IsUnknownStep : System.Boolean { get }
+ToolUp.Facts.PipelineProfileRefusal.JoinWithoutRelationCheck : ToolUp.Facts.PipelineProfileRefusal { get }
+ToolUp.Facts.PipelineProfileRefusal.NoName : ToolUp.Facts.PipelineProfileRefusal { get }
+ToolUp.Facts.PipelineProfileRefusal.NoSteps : ToolUp.Facts.PipelineProfileRefusal { get }
+ToolUp.Facts.PipelineProfileRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.PipelineProfileRefusal+FieldsOfUnadmittedStep (class)
+ToolUp.Facts.PipelineProfileRefusal+FieldsOfUnadmittedStep.step : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+ReadsAnotherSource (class)
+ToolUp.Facts.PipelineProfileRefusal+ReadsAnotherSource.step : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+Tags (class)
+ToolUp.Facts.PipelineProfileRefusal+Tags.FieldsOfUnadmittedStep : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.JoinWithoutRelationCheck : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.NoName : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.NoSteps : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.ReadsAnotherSource : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.Unbindable : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.UnknownExpression : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.UnknownField : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.UnknownFunction : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.UnknownOperator : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Tags.UnknownStep : System.Int32 (literal)
+ToolUp.Facts.PipelineProfileRefusal+Unbindable (class)
+ToolUp.Facts.PipelineProfileRefusal+Unbindable.expression : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+UnknownExpression (class)
+ToolUp.Facts.PipelineProfileRefusal+UnknownExpression.expression : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+UnknownField (class)
+ToolUp.Facts.PipelineProfileRefusal+UnknownField.field : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+UnknownField.step : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+UnknownFunction (class)
+ToolUp.Facts.PipelineProfileRefusal+UnknownFunction.fn : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+UnknownOperator (class)
+ToolUp.Facts.PipelineProfileRefusal+UnknownOperator.operator : System.String { get }
+ToolUp.Facts.PipelineProfileRefusal+UnknownStep (class)
+ToolUp.Facts.PipelineProfileRefusal+UnknownStep.step : System.String { get }
+ToolUp.Facts.PipelineProfileRefusalModule (class)
+ToolUp.Facts.PipelineProfileRefusalModule.describe(ToolUp.Facts.PipelineProfileRefusal) : System.String
 ToolUp.Facts.PipelineTool (class)
 ToolUp.Facts.PipelineTool.AssertArgument : System.String (literal)
 ToolUp.Facts.PipelineTool.Name : System.String (literal)
+ToolUp.Facts.PipelineTool.answerUnder(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.RegisteredPipelineProfile], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]
 ToolUp.Facts.PipelineTool.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]
 ToolUp.Facts.PipelineTool.assertionOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionRequest], ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.decode(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.PipelineTool.definitionWithAssertions : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.PipelineTool.evaluate(ToolUp.Facts.PipelineToolRequest, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.FactSlice, System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]
+ToolUp.Facts.PipelineTool.evaluateJoined(ToolUp.Facts.PipelineToolRequest, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.FactSlice, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.FactSlice]], System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.refusalText(ToolUp.Facts.PipelineRefusal) : System.String
 ToolUp.Facts.PipelineTool.requestOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolRequest, ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.summary(ToolUp.Facts.PipelineToolResult) : System.String
@@ -1832,6 +1930,12 @@ ToolUp.Facts.RefusedFactJob.CreatedAt : System.DateTime { get }
 ToolUp.Facts.RefusedFactJob.CreatedBy : System.String { get }
 ToolUp.Facts.RefusedFactJob.Handler : System.String { get }
 ToolUp.Facts.RefusedFactJob.JobId : System.Guid { get }
+ToolUp.Facts.RegisteredPipelineProfile (class)
+ToolUp.Facts.RegisteredPipelineProfile.Description : System.String { get }
+ToolUp.Facts.RegisteredPipelineProfile.Fragment : System.String { get }
+ToolUp.Facts.RegisteredPipelineProfile.FragmentBytes : System.Int32 { get }
+ToolUp.Facts.RegisteredPipelineProfile.FragmentTokens : System.Int32 { get }
+ToolUp.Facts.RegisteredPipelineProfile.Profile : ToolUp.Facts.PipelineProfile { get }
 ToolUp.Facts.SubjectBranch (class)
 ToolUp.Facts.SubjectBranch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }

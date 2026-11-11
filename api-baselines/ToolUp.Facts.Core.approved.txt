@@ -696,6 +696,7 @@ ToolUp.Facts.PipelineRefusal.IsAssertionNotOffered : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsEvaluationFailed : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsInputsOverCap : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsInputsUnnamed : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsJoinRefused : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsMalformedArguments : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsMalformedAssertion : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsMalformedPipeline : System.Boolean { get }
@@ -704,6 +705,7 @@ ToolUp.Facts.PipelineRefusal.IsNoFacts : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsNotADerivedMetric : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsNothingDisclosable : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsOpenSchema : System.Boolean { get }
+ToolUp.Facts.PipelineRefusal.IsOutsideProfile : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsResultOverCap : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsSliceRefused : System.Boolean { get }
 ToolUp.Facts.PipelineRefusal.IsSubjectKeyUnresolved : System.Boolean { get }
@@ -735,6 +737,9 @@ ToolUp.Facts.PipelineRefusal+InputsOverCap.inputs : System.Int32 { get }
 ToolUp.Facts.PipelineRefusal+InputsOverCap.subject : System.String { get }
 ToolUp.Facts.PipelineRefusal+InputsUnnamed (class)
 ToolUp.Facts.PipelineRefusal+InputsUnnamed.subject : System.String { get }
+ToolUp.Facts.PipelineRefusal+JoinRefused (class)
+ToolUp.Facts.PipelineRefusal+JoinRefused.reason : System.String { get }
+ToolUp.Facts.PipelineRefusal+JoinRefused.step : System.Int32 { get }
 ToolUp.Facts.PipelineRefusal+MalformedArguments (class)
 ToolUp.Facts.PipelineRefusal+MalformedArguments.reason : System.String { get }
 ToolUp.Facts.PipelineRefusal+MalformedAssertion (class)
@@ -756,6 +761,11 @@ ToolUp.Facts.PipelineRefusal+NothingDisclosable.withheld : Microsoft.FSharp.Coll
 ToolUp.Facts.PipelineRefusal+OpenSchema (class)
 ToolUp.Facts.PipelineRefusal+OpenSchema.reason : System.String { get }
 ToolUp.Facts.PipelineRefusal+OpenSchema.step : System.Int32 { get }
+ToolUp.Facts.PipelineRefusal+OutsideProfile (class)
+ToolUp.Facts.PipelineRefusal+OutsideProfile.admitted : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.PipelineRefusal+OutsideProfile.kind : System.String { get }
+ToolUp.Facts.PipelineRefusal+OutsideProfile.name : System.String { get }
+ToolUp.Facts.PipelineRefusal+OutsideProfile.step : System.Int32 { get }
 ToolUp.Facts.PipelineRefusal+ResultOverCap (class)
 ToolUp.Facts.PipelineRefusal+ResultOverCap.cap : System.Int32 { get }
 ToolUp.Facts.PipelineRefusal+ResultOverCap.cells : System.Int32 { get }
@@ -775,6 +785,7 @@ ToolUp.Facts.PipelineRefusal+Tags.AssertionNotOffered : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.EvaluationFailed : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.InputsOverCap : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.InputsUnnamed : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.JoinRefused : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.MalformedArguments : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.MalformedAssertion : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.MalformedPipeline : System.Int32 (literal)
@@ -783,6 +794,7 @@ ToolUp.Facts.PipelineRefusal+Tags.NoFacts : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.NotADerivedMetric : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.NothingDisclosable : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.OpenSchema : System.Int32 (literal)
+ToolUp.Facts.PipelineRefusal+Tags.OutsideProfile : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.ResultOverCap : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.SliceRefused : System.Int32 (literal)
 ToolUp.Facts.PipelineRefusal+Tags.SubjectKeyUnresolved : System.Int32 (literal)

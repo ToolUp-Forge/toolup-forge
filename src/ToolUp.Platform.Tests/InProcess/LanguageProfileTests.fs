@@ -210,7 +210,7 @@ let fragmentTests =
                     [
                         platform
                         SystemPromptBuilder.activeModuleContext
-                        SystemPromptBuilder.languageProfile None None
+                        SystemPromptBuilder.promptFragments None []
                     ]
                     context
 
@@ -220,7 +220,9 @@ let fragmentTests =
         testAsync "a registered profile adds its one cached fragment, and boot reports its size" {
             let profile = registered pilotProfile
             let logger, lines = capturingLogger ()
-            let builder = SystemPromptBuilder.languageProfile (Some logger) (Some profile)
+
+            let builder =
+                SystemPromptBuilder.promptFragments (Some logger) [ PromptFragment.ofLanguageProfile profile ]
 
             Expect.equal
                 (List.ofSeq lines)
@@ -232,13 +234,46 @@ let fragmentTests =
             let! first = builder context
             let! second = builder context
             Expect.isTrue (Object.ReferenceEquals(first, second)) "the same string every turn"
-            Expect.isTrue (Object.ReferenceEquals(first, profile.Fragment)) "the fragment registration rendered"
+            Expect.equal first profile.Fragment "the fragment registration rendered"
             Expect.equal lines.Count 1 "a turn logs nothing"
 
             let! prompt =
                 SystemPromptBuilder.compose [ SystemPromptBuilder.fromStatic "You are the assistant."; builder ] context
 
             Expect.equal prompt ("You are the assistant.\n\n" + profile.Fragment) "appended as one layer"
+        }
+
+        testAsync "a deployment with both profiles gets both fragments, in order, and boot reports each" {
+            let language = registered pilotProfile
+
+            let pipeline =
+                match ToolUp.Facts.PipelineProfile.register ToolUp.Facts.PipelineProfile.defaultProfile with
+                | Ok r -> r
+                | Error refusals -> failwithf "the default pipeline profile did not register: %A" refusals
+
+            let logger, lines = capturingLogger ()
+
+            let builder =
+                SystemPromptBuilder.promptFragments (Some logger) [
+                    PromptFragment.ofLanguageProfile language
+                    PromptFragment.create pipeline.Description pipeline.Fragment
+                ]
+
+            Expect.equal
+                (List.ofSeq lines)
+                [
+                    sprintf "Language profile 'pilot': 6 kind(s), prompt fragment %d bytes." language.FragmentBytes
+                    sprintf "Pipeline profile 'default': 7 verb(s), prompt fragment %d bytes." pipeline.FragmentBytes
+                ]
+                "one size line per fragment"
+
+            let! prompt =
+                SystemPromptBuilder.compose [ SystemPromptBuilder.fromStatic "You are the assistant."; builder ] context
+
+            Expect.equal
+                prompt
+                ("You are the assistant.\n\n" + language.Fragment + "\n\n" + pipeline.Fragment)
+                "both fragments, as one layer, language first"
         }
     ]
 
