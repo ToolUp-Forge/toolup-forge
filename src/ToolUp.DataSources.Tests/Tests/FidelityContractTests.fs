@@ -412,6 +412,298 @@ let private snowflakeTarget () : FidelityTarget =
         SnowflakeCatalogue.toColumnType
         adoPayload
 
+// ─── The exact-decimal laws, bound ────────────────────
+
+module private DecimalBindings =
+
+    module Laws = DataSourceFidelityContract.DecimalFidelityContract
+
+    /// The decimal fixture's amount as a database `DECIMAL(38, 18)` holds it.
+    let private sqlDecimalOf (digits: string) : System.Data.SqlTypes.SqlDecimal =
+        System.Data.SqlTypes.SqlDecimal.ConvertToPrecScale(System.Data.SqlTypes.SqlDecimal.Parse digits, 38, 18)
+
+    /// A reader shaped as SqlClient's is over a `DECIMAL(38, 18)` column:
+    /// `GetFieldType` says `decimal`, `GetValue` THROWS `OverflowException`
+    /// for a value wider than `System.Decimal` (SqlClient's "Conversion
+    /// overflows."), and `GetProviderSpecificValue` answers the exact
+    /// `SqlDecimal`. Everything else delegates to a `DataTableReader`.
+    type SqlClientShapedReader(inner: DataTableReader) =
+        inherit System.Data.Common.DbDataReader()
+
+        let isSqlDecimal (ordinal: int) =
+            inner.GetFieldType ordinal = typeof<System.Data.SqlTypes.SqlDecimal>
+
+        override _.GetFieldType ordinal =
+            if isSqlDecimal ordinal then
+                typeof<decimal>
+            else
+                inner.GetFieldType ordinal
+
+        override _.GetValue ordinal =
+            match inner.GetValue ordinal with
+            | :? System.Data.SqlTypes.SqlDecimal as value when not value.IsNull ->
+                // `SqlDecimal.Value` is exactly SqlClient's conversion: it
+                // throws `OverflowException` past `System.Decimal`.
+                box value.Value
+            | :? System.Data.SqlTypes.SqlDecimal -> box DBNull.Value
+            | other -> other
+
+        override _.GetProviderSpecificValue ordinal = inner.GetValue ordinal
+        override _.Depth = inner.Depth
+        override _.FieldCount = inner.FieldCount
+        override _.HasRows = inner.HasRows
+        override _.IsClosed = inner.IsClosed
+        override _.RecordsAffected = inner.RecordsAffected
+
+        override this.Item
+            with get (ordinal: int): obj = this.GetValue ordinal
+
+        override this.Item
+            with get (name: string): obj = this.GetValue(inner.GetOrdinal name)
+
+        override _.GetBoolean ordinal = inner.GetBoolean ordinal
+        override _.GetByte ordinal = inner.GetByte ordinal
+
+        override _.GetBytes(ordinal, offset, buffer, bufferOffset, length) =
+            inner.GetBytes(ordinal, offset, buffer, bufferOffset, length)
+
+        override _.GetChar ordinal = inner.GetChar ordinal
+
+        override _.GetChars(ordinal, offset, buffer, bufferOffset, length) =
+            inner.GetChars(ordinal, offset, buffer, bufferOffset, length)
+
+        override _.GetDataTypeName ordinal = inner.GetDataTypeName ordinal
+        override _.GetDateTime ordinal = inner.GetDateTime ordinal
+        override _.GetDecimal ordinal = inner.GetDecimal ordinal
+        override _.GetDouble ordinal = inner.GetDouble ordinal
+
+        override _.GetEnumerator() =
+            (inner :> Collections.IEnumerable).GetEnumerator()
+
+        override _.GetFloat ordinal = inner.GetFloat ordinal
+        override _.GetGuid ordinal = inner.GetGuid ordinal
+        override _.GetInt16 ordinal = inner.GetInt16 ordinal
+        override _.GetInt32 ordinal = inner.GetInt32 ordinal
+        override _.GetInt64 ordinal = inner.GetInt64 ordinal
+        override _.GetName ordinal = inner.GetName ordinal
+        override _.GetOrdinal name = inner.GetOrdinal name
+        override _.GetString ordinal = inner.GetString ordinal
+        override _.GetValues values = inner.GetValues values
+        override _.IsDBNull ordinal = inner.IsDBNull ordinal
+        override _.NextResult() = inner.NextResult()
+        override _.Read() = inner.Read()
+
+    /// The decimal fixture through SqlClient's shape and `Csv.ofReader`,
+    /// the exact call the ADO-shaped connectors' `Query` makes.
+    let private sqlClientPayload () : byte[] =
+        use table = new DataTable()
+        table.Columns.Add("id", typeof<string>) |> ignore
+
+        table.Columns.Add(Laws.AmountColumn, typeof<System.Data.SqlTypes.SqlDecimal>)
+        |> ignore
+
+        for row in Laws.rows do
+            let amount =
+                match row.Amount with
+                | Some digits -> box (sqlDecimalOf digits)
+                | None -> box System.Data.SqlTypes.SqlDecimal.Null
+
+            table.Rows.Add([| box row.Case; amount |]) |> ignore
+
+        use reader = new SqlClientShapedReader(table.CreateDataReader())
+        CsvWire.ofReader reader |> Async.RunSynchronously
+
+    /// A recorded target over the decimal fixture table.
+    let private recorded (kind: string) (declares: IDataSource) (amountType: string) (render: unit -> byte[]) =
+        let schema =
+            TypeMap.schema Laws.Table [
+                TypeMap.column "id" "varchar(64)" false
+                TypeMap.column Laws.AmountColumn amountType true
+            ]
+
+        {
+            Laws.Source = RecordedSource(kind, declares, schema, render) :> IDataSource
+            Laws.Context = TestFakes.config "fidelity" kind [] |> TestFakes.context "test-scope" None
+            Laws.Table = Laws.Table
+            Laws.Statement = Laws.Table
+            Laws.IsExactDecimal = TypeMap.isExactDecimal
+        }
+
+    let synapseTarget () =
+        recorded
+            SynapseDataSource.Kind
+            (SynapseDataSource.createWithDefaultCredentials ())
+            "decimal(38,18)"
+            sqlClientPayload
+
+    /// The Data API returns a `DECIMAL` as its `stringValue` arm — the
+    /// digits, never a double.
+    let redshiftTarget () =
+        let field (setValue: DataApiField -> unit) =
+            let field = DataApiField()
+            setValue field
+            field
+
+        let records =
+            Laws.rows
+            |> List.map (fun row -> [
+                field (fun f -> f.StringValue <- row.Case)
+                match row.Amount with
+                | Some digits -> field (fun f -> f.StringValue <- digits)
+                | None -> field (fun f -> f.IsNull <- true)
+            ])
+
+        recorded
+            RedshiftDataSource.Kind
+            (RedshiftDataSource.createWithDefaultCredentials ())
+            "numeric(38,18)"
+            (fun () ->
+                CsvWire.toBytes
+                    [ "id"; Laws.AmountColumn ]
+                    (records |> Seq.map (List.map RedshiftDataSource.renderField >> Seq.ofList)))
+
+    /// The decimal fixture as a Parquet file: `id` text, `amount`
+    /// `DECIMAL(38, 18)`, written as Parquet decimals.
+    let parquetTarget () : Laws.DecimalTarget =
+        let idField = DataField("id", typeof<string>, isNullable = false)
+        let amountField = BigDecimalDataField(Laws.AmountColumn, 38, 18, isNullable = true)
+
+        let amounts =
+            Laws.rows
+            |> List.map (fun row ->
+                match row.Amount with
+                | Some digits -> Nullable(ParquetDecimal.ofText 38 18 digits)
+                | None -> Nullable())
+            |> List.toArray
+
+        use stream = new MemoryStream()
+
+        let write = task {
+            use! writer = ParquetWriter.CreateAsync(ParquetSchema(idField :> Field, amountField :> Field), stream)
+            use rowGroup = writer.CreateRowGroup()
+            do! rowGroup.WriteAsync(idField, Laws.rows |> List.map _.Case |> List.toArray)
+
+            do!
+                rowGroup.WriteAsync<Parquet.Data.BigDecimal>(
+                    amountField,
+                    ReadOnlyMemory<Nullable<Parquet.Data.BigDecimal>> amounts
+                )
+        }
+
+        write.GetAwaiter().GetResult()
+
+        let storage = FakeBlobStorage.InMemoryBlobStorage()
+        storage.Put("team-fidelity", $"extracts/%s{Laws.Table}.parquet", stream.ToArray())
+
+        {
+            Source = ParquetDataSource.create storage
+            Context = fileContext ParquetDataSource.Kind "extracts/" []
+            Table = Laws.Table
+            Statement = Laws.Table
+            IsExactDecimal = TypeMap.isExactDecimal
+        }
+
+    let tests =
+        testList "exact-decimal fidelity bindings" [
+            Laws.tests "ParquetDataSource (live)" parquetTarget
+            Laws.tests "SynapseDataSource (recorded SqlClient-shaped ADO result)" synapseTarget
+            Laws.tests "RedshiftDataSource (recorded Data API result)" redshiftTarget
+
+            Laws.unbound
+                "SqlDataSource (sqlite)"
+                "SQLite has no exact decimal: a DECIMAL column has NUMERIC affinity and stores a fractional value as an 8-byte REAL, so the 38-digit value cannot be seeded at all. The SQL Server shape the same connector drains through Csv.ofReader is bound above as Synapse"
+            Laws.unbound
+                "CsvDataSource"
+                "a delimited file declares no column types: GetSchema infers 'number (inferred)', which is not a declaration of an exact decimal. The digits themselves travel as the file's text, untouched"
+            Laws.unbound
+                "ExcelDataSource"
+                "a workbook holds a number as an IEEE double, so the source itself cannot state the 38-digit value"
+            Laws.unbound
+                "SnowflakeDataSource"
+                "Snowflake.Data materialises NUMBER through System.Decimal, and what it does past 29 digits cannot be recorded without the service; TypeMap.isExactDecimal maps NUMBER and DECIMAL to Decimal, and an in-range value renders exactly through Csv.ofReader"
+            Laws.unbound
+                "BigQueryDataSource"
+                "Query renders BigQueryRow values inside the connector's private implementation and a BigQueryRow cannot be constructed without the service; TypeMap.isExactDecimal maps NUMERIC and BIGNUMERIC to Decimal"
+            Laws.unbound
+                "AthenaDataSource"
+                "its Datum-to-cell mapping is private to the connector's result pager and there is no local Athena; Athena returns every cell as text, and TypeMap.isExactDecimal maps decimal(p,s) to Decimal"
+            Laws.unbound "GoogleAnalyticsDataSource" "it declares Json and GA4 reports no exact-decimal type"
+            Laws.unbound
+                "InMemoryDataSource"
+                "a byte store that publishes no columns, so a binding would test the seed rather than the connector"
+
+            test "TypeMap.isExactDecimal names each family's exact-decimal types, and only those" {
+                for native in
+                    [
+                        "decimal(38,18)"
+                        "NUMERIC(38, 9)"
+                        "numeric"
+                        "money"
+                        "smallmoney"
+                        "NUMBER(38,0)"
+                        "FIXED"
+                        "BIGNUMERIC"
+                        "BIGDECIMAL"
+                        "Decimal?"
+                        "BigDecimal"
+                    ] do
+                    Expect.isTrue (TypeMap.isExactDecimal native) $"%s{native} is an exact decimal"
+
+                for native in
+                    [
+                        "float"
+                        "double precision"
+                        "real"
+                        "FLOAT64"
+                        "int"
+                        "bigint"
+                        "varchar(10)"
+                        ""
+                    ] do
+                    Expect.isFalse (TypeMap.isExactDecimal native) $"%s{native} is not an exact decimal"
+            }
+
+            test "Csv.readDecimal reads the digits as written, and an empty field as NULL" {
+                let format = Some IngestedPayload.CurrentPayloadFormat
+
+                Expect.equal
+                    (CsvWire.readDecimal format "12345678901234567890.123456789012345678" false)
+                    (Ok(DatasetValue.Decimal "12345678901234567890.123456789012345678"))
+                    "every digit"
+
+                Expect.equal (CsvWire.readDecimal format "0.100" false) (Ok(DatasetValue.Decimal "0.1")) "canonical"
+                Expect.equal (CsvWire.readDecimal format "" false) (Ok DatasetValue.Null) "NULL"
+
+                Expect.equal
+                    (CsvWire.readDecimal format "" true)
+                    (Ok DatasetValue.Null)
+                    "a decimal is never the empty string"
+
+                Expect.equal (CsvWire.readDecimal None "" false) (Ok DatasetValue.Null) "nor in an older payload"
+                Expect.isError (CsvWire.readDecimal format "1.2E+19" false) "a float's spelling is refused, not guessed"
+            }
+
+            test "Csv.ofReader names a provider that offers no exact text, rather than rounding" {
+                use table = new DataTable()
+                table.Columns.Add("amount", typeof<obj>) |> ignore
+                table.Rows.Add([| box "unused" |]) |> ignore
+
+                let reader =
+                    { new SqlClientShapedReader(table.CreateDataReader()) with
+                        override _.GetFieldType _ = typeof<decimal>
+
+                        override _.GetValue _ =
+                            raise (OverflowException "Conversion overflows.")
+
+                        override _.GetProviderSpecificValue _ = box "not a number"
+                    }
+
+                Expect.throwsT<InvalidOperationException>
+                    (fun () -> CsvWire.ofReader reader |> Async.RunSynchronously |> ignore)
+                    "a named failure"
+            }
+        ]
+
 // ─── The bindings ─────────────────────────────────────────────────
 
 let tests =
@@ -440,4 +732,7 @@ let tests =
         DataSourceFidelityContract.unbound
             "InMemoryDataSource"
             "a byte store: Query returns exactly the bytes it was seeded with and GetSchema publishes no columns, so a binding would test the seed rather than the connector"
+
+        // The exact-decimal laws.
+        DecimalBindings.tests
     ]

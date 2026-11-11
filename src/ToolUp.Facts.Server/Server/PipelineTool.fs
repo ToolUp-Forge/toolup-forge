@@ -19,7 +19,11 @@ open ToolUp.Platform.Infra
 //   2. decodes the pipeline step by step, refusing a malformed step naming
 //      its position, and refuses a step that reads another source (`join`,
 //      `union`, `intersect`, `except`), names a parameter or reads the clock:
-//      the slice is the only source and nothing is bound;
+//      the slice is the only source and nothing is bound. Where the deployment
+//      registered a pipeline profile (`PipelineProfile`), the pipeline is first
+//      read against it, and a `join` its relation check admits is the one
+//      other source: the joined fact table is read through the same gated
+//      slice read, and its columns enter the lineage under their own names;
 //   3. reads the slice through the fact browse's view-slice read
 //      (`FactBrowseHandler.querySlice`) under the caller's resolved scope and
 //      principal, with the gate asked at the TOOL-RESULT door. The read checks
@@ -320,13 +324,17 @@ module PipelineTool =
         | Fit _ -> None
 
     /// The refusals decided by the pipeline alone, before anything is read:
-    /// another source, a parameter, the clock.
-    let private preflight (pipeline: Transform list) : Result<unit, PipelineRefusal> =
+    /// another source, a parameter, the clock. A join the profile's relation
+    /// check admitted (`joined`) is the one other source read.
+    let private preflight (joined: bool) (pipeline: Transform list) : Result<unit, PipelineRefusal> =
         pipeline
         |> List.mapi (fun i step -> i + 1, step)
         |> List.tryPick (fun (i, step) ->
             match otherSource step with
-            | Some verb -> Some(PipelineRefusal.NamedSource(i, verb))
+            | Some verb ->
+                match step with
+                | Join _ when joined -> None
+                | _ -> Some(PipelineRefusal.NamedSource(i, verb))
             | None ->
                 match Transform.paramsOf [ step ] with
                 | [] when Transform.usesNow [ step ] -> Some(PipelineRefusal.UnpinnedClock i)
@@ -404,11 +412,11 @@ module PipelineTool =
             spec.Response :: spec.GroupBy
             @ Option.toList spec.Weights
             @ (FitSpec.exprs spec |> List.collect exprColumns)
+        | Join(_, on, _) -> List.map fst on
         | Distinct
         | Limit _
         | Define _
         | Predict _
-        | Join _
         | Union _
         | Intersect _
         | Except _ -> []
@@ -422,10 +430,23 @@ module PipelineTool =
         Order: Set<string>
     }
 
+    /// The lineage name of column `column` of a joined fact table: a column a
+    /// lineage reads from a joined table is named apart from the request
+    /// table's own column of the same name.
+    let internal joinedColumn (table: string) (column: string) : string = table + "::" + column
+
     /// One step's lineage, given the output columns the schema walk names
-    /// after it. `all` is every slice column — the lineage of a column the
-    /// rules below do not attribute.
-    let private lineageAfter (all: Set<string>) (outputs: string list) (lineage: Lineage) (step: Transform) : Lineage =
+    /// before and after it. `all` is every column of every slice read — the
+    /// lineage of a column the rules below do not attribute — and `joined`
+    /// each joined table's schema, by id.
+    let private lineageAfter
+        (all: Set<string>)
+        (joined: Map<string, Schema>)
+        (before: string list)
+        (outputs: string list)
+        (lineage: Lineage)
+        (step: Transform)
+        : Lineage =
         let of' (name: string) =
             lineage.Columns.TryFind name |> Option.defaultValue all
 
@@ -461,6 +482,31 @@ module PipelineTool =
             | Distinct ->
                 lineage.Columns, Set.union lineage.Rows (lineage.Columns |> Map.values |> Set.unionMany), lineage.Order
             | Define _ -> lineage.Columns, lineage.Rows, lineage.Order
+            // A join of a fact table read through the gate: the keys of both
+            // sides decide which rows survive and which right row each left
+            // row meets, so they join the row lineage; a right column reads
+            // its own joined column, under the name the evaluator gives it.
+            | Join(Ref table, on, how) when joined.ContainsKey table ->
+                let keys =
+                    Set.union (ofMany (List.map fst on)) (on |> List.map (snd >> joinedColumn table) |> Set.ofList)
+
+                let right =
+                    match how with
+                    | Semi
+                    | Anti -> []
+                    | Inner
+                    | Left
+                    | Right
+                    | Outer ->
+                        let names = joined[table] |> List.map _.Name
+
+                        List.zip (DataFrame.joinRightNames before names) names
+                        |> List.map (fun (out, name) -> out, Set.singleton (joinedColumn table name))
+
+                (lineage.Columns, right)
+                ||> List.fold (fun acc (name, read) -> acc.Add(name, read)),
+                Set.union lineage.Rows keys,
+                lineage.Order
             // A fit pools its rows into one model per group, and a prediction
             // scores against a model: neither output is attributed column by
             // column, so every column reads every slice column.
@@ -482,16 +528,41 @@ module PipelineTool =
         }
 
     /// The static walk: each step's reads checked against the columns its input
-    /// has, the output kept nameable, and the lineage of every output column —
-    /// its own lineage joined with what decided the row set.
-    let private walk (schema: Schema) (pipeline: Transform list) : Result<Map<string, Set<string>>, PipelineRefusal> =
-        let all = schema |> List.map _.Name |> Set.ofList
+    /// has (and a join's right keys against the joined table's), the output
+    /// kept nameable, and the lineage of every output column — its own lineage
+    /// joined with what decided the row set. `joined` is each joined table's
+    /// schema, by id: the only sources a `Ref` resolves to.
+    let private walk
+        (schema: Schema)
+        (joined: Map<string, Schema>)
+        (pipeline: Transform list)
+        : Result<Map<string, Set<string>>, PipelineRefusal> =
+        let all =
+            joined
+            |> Map.toList
+            |> List.collect (fun (table, fields) -> fields |> List.map (fun f -> joinedColumn table f.Name))
+            |> Set.ofList
+            |> Set.union (schema |> List.map _.Name |> Set.ofList)
 
         let start = {
-            Columns = all |> Seq.map (fun c -> c, Set.singleton c) |> Map.ofSeq
+            Columns = schema |> List.map (fun f -> f.Name, Set.singleton f.Name) |> Map.ofList
             Rows = Set.empty
             Order = Set.empty
         }
+
+        // A join's right key the joined table does not have, with its columns.
+        let rightKeyMissing (step: Transform) : (string * string list) option =
+            match step with
+            | Join(Ref table, on, _) ->
+                joined.TryFind table
+                |> Option.bind (fun fields ->
+                    let names = fields |> List.map _.Name
+
+                    on
+                    |> List.map snd
+                    |> List.tryFind (fun k -> not (List.contains k names))
+                    |> Option.map (fun k -> k, names))
+            | _ -> None
 
         let rec go (knowledge: SchemaKnowledge) (lineage: Lineage) (rest: (int * Transform) list) =
             match rest with
@@ -499,14 +570,17 @@ module PipelineTool =
             | (i, step) :: rest ->
                 let available = SchemaWalk.names knowledge
 
-                match stepReads step |> List.tryFind (fun c -> not (SchemaWalk.has c knowledge)) with
-                | Some missing -> Error(PipelineRefusal.UnknownColumn(i, missing, available))
-                | None ->
-                    let after = SchemaWalk.ofTransform SchemaWalk.noSources knowledge step
+                match
+                    stepReads step |> List.tryFind (fun c -> not (SchemaWalk.has c knowledge)), rightKeyMissing step
+                with
+                | Some missing, _ -> Error(PipelineRefusal.UnknownColumn(i, missing, available))
+                | None, Some(missing, names) -> Error(PipelineRefusal.UnknownColumn(i, missing, names))
+                | None, None ->
+                    let after = SchemaWalk.ofTransform joined.TryFind knowledge step
 
                     match SchemaWalk.reason after with
                     | Some reason -> Error(PipelineRefusal.OpenSchema(i, reason))
-                    | None -> go after (lineageAfter all (SchemaWalk.names after) lineage step) rest
+                    | None -> go after (lineageAfter all joined available (SchemaWalk.names after) lineage step) rest
 
         // The walk reads the pipeline with every defined function expanded
         // inline, as the evaluator does, so a call's lineage is its body's.
@@ -531,7 +605,7 @@ module PipelineTool =
         (schema: Schema)
         (pipeline: Transform list)
         : Result<Map<string, Set<string>>, PipelineRefusal> =
-        walk schema pipeline
+        walk schema Map.empty pipeline
 
     // ── The slice's withheld cells ────────────────────────────────
 
@@ -592,10 +666,22 @@ module PipelineTool =
         Column.ofCells column.Name field.Type (List.replicate (Column.length column) Null)
         |> Result.mapError (fun e -> PipelineRefusal.EvaluationFailed(ColumnCodec.errorString e))
 
+    /// A slice the evaluation read: the request's table, or a joined one.
+    /// `Column` names a slice column as a lineage reads it, and `Label` a
+    /// metric as the withheld report names it.
+    type private SliceRead = {
+        Slice: FactSlice
+        Table: Table
+        Column: string -> string
+        Label: string -> string
+    }
+
     /// The admitted fact ids of the metrics a lineage reads, in slice order.
-    let private factIdsRead (slice: FactSlice) (table: Table) (read: Set<string>) : string list =
+    let private factIdsRead (source: SliceRead) (read: Set<string>) : string list =
+        let slice, table = source.Slice, source.Table
+
         slice.Metrics
-        |> List.filter (fun m -> readsMetric m.Metric read)
+        |> List.filter (fun m -> readsMetric (source.Column m.Metric) read)
         |> List.collect (fun m ->
             List.zip
                 (cellsOf (FactBrowseSlice.metricColumn m.Metric "fact_id") table)
@@ -605,27 +691,65 @@ module PipelineTool =
                 | _ -> None))
         |> List.distinct
 
-    /// Evaluate a decoded pipeline over a gated slice: the static walk, the
-    /// evaluation, the withheld rule, the bound and the record. Pure: the
-    /// slice is the only input. `request` is the request as the caller made it;
-    /// `readAt` is when the slice was read.
-    let evaluate
+    /// Each slice held for evaluation, or the first refusal.
+    let private holdAll
+        (slices: (string * FactSlice) list)
+        : Result<(string * FactSlice * Table) list, PipelineRefusal> =
+        let rec go acc rest =
+            match rest with
+            | [] -> Ok(List.rev acc)
+            | (table, slice) :: rest ->
+                match FactBrowseSlice.hold slice with
+                | Error reason -> Error(PipelineRefusal.SliceRefused reason)
+                | Ok held -> go ((table, slice, DataFrame.toTable held.Prepared) :: acc) rest
+
+        go [] slices
+
+    /// Evaluate a decoded pipeline over a gated slice and the gated slices of
+    /// the fact tables it joins (`joined`, by table id): the static walk, the
+    /// evaluation, the withheld rule over every slice, the bound and the
+    /// record. Pure: the slices are the only input. `request` is the request
+    /// as the caller made it; `readAt` is when the slices were read.
+    let evaluateJoined
         (request: PipelineToolRequest)
         (pipeline: Transform list)
         (slice: FactSlice)
+        (joined: (string * FactSlice) list)
         (readAt: DateTime)
         : Result<PipelineToolResult, PipelineRefusal> =
-        match FactBrowseSlice.hold slice with
-        | Error reason -> Error(PipelineRefusal.SliceRefused reason)
-        | Ok held ->
+        match FactBrowseSlice.hold slice, holdAll joined with
+        | Error reason, _ -> Error(PipelineRefusal.SliceRefused reason)
+        | _, Error refusal -> Error refusal
+        | Ok held, Ok heldJoined ->
             let source = DataFrame.toTable held.Prepared
 
-            match walk source.Schema pipeline with
+            let tables = heldJoined |> List.map (fun (table, _, t) -> table, t) |> Map.ofList
+
+            let reads = [
+                {
+                    Slice = slice
+                    Table = source
+                    Column = id
+                    Label = id
+                }
+                for (table, joinedSlice, t) in heldJoined do
+                    {
+                        Slice = joinedSlice
+                        Table = t
+                        Column = joinedColumn table
+                        Label = fun metric -> table + ":" + metric
+                    }
+            ]
+
+            let resolve (name: string) =
+                match tables.TryFind name with
+                | Some t -> Ok t
+                | None -> Error(UnresolvedSource name)
+
+            match walk source.Schema (tables |> Map.map (fun _ t -> t.Schema)) pipeline with
             | Error refusal -> Error refusal
             | Ok lineage ->
-                match
-                    DataFrame.evalPrepared (fun name -> Error(UnresolvedSource name)) Map.empty pipeline held.Prepared
-                with
+                match DataFrame.evalPrepared resolve Map.empty pipeline held.Prepared with
                 | Error e -> Error(PipelineRefusal.EvaluationFailed(DataFrame.errorString e))
                 | Ok result ->
                     let rows = Table.rowCount result
@@ -634,8 +758,20 @@ module PipelineTool =
                     if cells > FactBrowseApi.MaxSliceCells then
                         Error(PipelineRefusal.ResultOverCap(cells, FactBrowseApi.MaxSliceCells))
                     else
-                        let withheld = withheldByMetric slice source
-                        let all = source.Schema |> List.map _.Name |> Set.ofList
+                        // Every withheld metric of every slice: its label, the
+                        // lineage columns it is read through, its counts.
+                        let withheld =
+                            reads
+                            |> List.collect (fun r ->
+                                withheldByMetric r.Slice r.Table
+                                |> Map.toList
+                                |> List.map (fun (m, counts) ->
+                                    r.Label m, Set.map r.Column (withheldSources m), counts))
+
+                        let all =
+                            reads
+                            |> List.collect (fun r -> r.Table.Schema |> List.map (fun f -> r.Column f.Name))
+                            |> Set.ofList
 
                         let lineageOf (column: string) =
                             lineage.TryFind column |> Option.defaultValue all
@@ -647,16 +783,16 @@ module PipelineTool =
 
                                 match
                                     withheld
-                                    |> Map.toList
-                                    |> List.filter (fun (m, _) ->
-                                        not (Set.isEmpty (Set.intersect read (withheldSources m))))
+                                    |> List.filter (fun (_, sources, _) ->
+                                        not (Set.isEmpty (Set.intersect read sources)))
                                 with
                                 | [] -> None
                                 | metrics ->
                                     Some {
                                         Column = field.Name
-                                        Metrics = List.map fst metrics
-                                        Withheld = metrics |> List.collect snd |> mergeCounts
+                                        Metrics = metrics |> List.map (fun (label, _, _) -> label)
+                                        Withheld =
+                                            metrics |> List.collect (fun (_, _, counts) -> counts) |> mergeCounts
                                     })
 
                         let withheldNames = withheldColumns |> List.map _.Column |> Set.ofList
@@ -687,7 +823,7 @@ module PipelineTool =
                             | Ok encoded ->
                                 let read = result.Schema |> List.map (fun f -> lineageOf f.Name) |> Set.unionMany
 
-                                let ids = factIdsRead slice source read
+                                let ids = reads |> List.collect (fun r -> factIdsRead r read) |> List.distinct
 
                                 Ok {
                                     Request = {
@@ -701,10 +837,22 @@ module PipelineTool =
                                     PipelineHash = IncrementalCodec.pipelineHash pipeline
                                     RunStamp = slice.RunStamp
                                     ReadAt = readAt
-                                    SliceCells = slice.CellCount
+                                    SliceCells = reads |> List.sumBy _.Slice.CellCount
                                     FactIds = List.truncate PopulationQuery.MaxTopK ids
                                     FactIdCount = List.length ids
                                 }
+
+    /// Evaluate a decoded pipeline over a gated slice, its only source: the
+    /// static walk, the evaluation, the withheld rule, the bound and the
+    /// record. Pure. `request` is the request as the caller made it; `readAt`
+    /// is when the slice was read.
+    let evaluate
+        (request: PipelineToolRequest)
+        (pipeline: Transform list)
+        (slice: FactSlice)
+        (readAt: DateTime)
+        : Result<PipelineToolResult, PipelineRefusal> =
+        evaluateJoined request pipeline slice [] readAt
 
     // ── The answer ────────────────────────────────────────────────
 
@@ -751,64 +899,130 @@ module PipelineTool =
     let refusalText (refusal: PipelineRefusal) : string =
         sprintf "%s refused the request: %s." Name (PipelineRefusal.describe refusal)
 
-    /// The evaluation, with the gated slice it was computed over. The `assert`
-    /// argument is not read here.
-    let internal evaluateSliced
+    /// The slices refused before evaluation: a table with no fact in range,
+    /// or one every cell of which is withheld from the caller.
+    let private readable (table: string) (slice: FactSlice) : Result<FactSlice, PipelineRefusal> =
+        if slice.CellCount = 0 then
+            Error(PipelineRefusal.NoFacts table)
+        elif slice.WithheldCount >= slice.CellCount then
+            Error(
+                PipelineRefusal.NothingDisclosable(
+                    slice.CellCount,
+                    slice.Withheld
+                    |> List.map (fun w ->
+                        ({
+                            PolicyRef = w.PolicyRef
+                            Count = w.Count
+                        }
+                        : PipelineWithheldCount))
+                )
+            )
+        else
+            Ok slice
+
+    /// The steps checked before anything is read: against the deployment's
+    /// profile when it registered one (answering the joins its relation check
+    /// admitted), and for another source, a parameter or the clock.
+    let private admitted
+        (profile: RegisteredPipelineProfile option)
+        (caller: PipelineCaller)
+        (table: string)
+        (pipeline: Transform list)
+        : Result<PipelineJoin list, PipelineRefusal> =
+        match profile with
+        | None -> preflight false pipeline |> Result.map (fun () -> [])
+        | Some registered ->
+            PipelineProfile.admit registered caller table pipeline
+            |> Result.bind (fun joins -> preflight (not joins.IsEmpty) pipeline |> Result.map (fun () -> joins))
+
+    /// The evaluation under `profile` (none: the full algebra, no join), with
+    /// the gated slice it was computed over. The `assert` argument is not read
+    /// here. A joined table is read over the request's period range and
+    /// subject prefix, every metric of it, through the same gated read.
+    let internal evaluateSlicedUnder
+        (profile: RegisteredPipelineProfile option)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
         (argsJson: string)
         : Async<Result<FactSlice * PipelineToolResult, PipelineRefusal>> =
         async {
-            match requestOf argsJson with
-            | Error refusal -> return Error refusal
-            | Ok request ->
-                match
+            let caller: PipelineCaller = { Scope = scope; Principal = principal }
+
+            match
+                requestOf argsJson
+                |> Result.bind (fun request ->
                     decode request.Pipeline
-                    |> Result.bind (fun p -> preflight p |> Result.map (fun () -> p))
-                with
-                | Error refusal -> return Error refusal
-                | Ok pipeline ->
-                    let gated = {
-                        deps with
-                            Gate = FactBrowseHandler.atSurface FactToolResult deps.Gate
-                    }
+                    |> Result.bind (fun p ->
+                        admitted profile caller request.TableId p
+                        |> Result.map (fun joins -> request, p, joins)))
+            with
+            | Error refusal -> return Error refusal
+            | Ok(request, pipeline, joins) ->
+                let gated = {
+                    deps with
+                        Gate = FactBrowseHandler.atSurface FactToolResult deps.Gate
+                }
 
-                    let readAt = deps.Clock()
+                let readAt = deps.Clock()
 
+                let read (table: string) (metrics: string list) = async {
                     match!
                         FactBrowseHandler.querySlice gated scope principal {
-                            TableId = request.TableId
+                            TableId = table
                             PeriodFrom = request.PeriodFrom
                             PeriodTo = request.PeriodTo
                             SubjectPrefix = request.PathPrefix
-                            Metrics = request.Metrics
+                            Metrics = metrics
                         }
                     with
                     | Error reason -> return Error(PipelineRefusal.SliceRefused reason)
-                    | Ok slice when slice.CellCount = 0 -> return Error(PipelineRefusal.NoFacts request.TableId)
-                    | Ok slice when slice.WithheldCount >= slice.CellCount ->
-                        return
-                            Error(
-                                PipelineRefusal.NothingDisclosable(
-                                    slice.CellCount,
-                                    slice.Withheld
-                                    |> List.map (fun w ->
-                                        ({
-                                            PolicyRef = w.PolicyRef
-                                            Count = w.Count
-                                        }
-                                        : PipelineWithheldCount))
-                                )
-                            )
-                    | Ok slice -> return evaluate request pipeline slice readAt |> Result.map (fun r -> slice, r)
+                    | Ok slice -> return Ok slice
+                }
+
+                // A joined table withheld whole is read, not refused: its
+                // columns are withheld through the join's lineage.
+                let rec readJoined (acc: (string * FactSlice) list) (tables: string list) = async {
+                    match tables with
+                    | [] -> return Ok(List.rev acc)
+                    | table :: rest ->
+                        match! read table [] with
+                        | Error refusal -> return Error refusal
+                        | Ok slice when slice.CellCount = 0 -> return Error(PipelineRefusal.NoFacts table)
+                        | Ok slice -> return! readJoined ((table, slice) :: acc) rest
+                }
+
+                match! read request.TableId request.Metrics with
+                | Error refusal -> return Error refusal
+                | Ok slice ->
+                    match readable request.TableId slice with
+                    | Error refusal -> return Error refusal
+                    | Ok slice ->
+                        match! readJoined [] (joins |> List.map _.Joined |> List.distinct) with
+                        | Error refusal -> return Error refusal
+                        | Ok joined ->
+                            return
+                                evaluateJoined request pipeline slice joined readAt
+                                |> Result.map (fun r -> slice, r)
         }
 
-    /// The executor over explicit dependencies. `deps` are the fact browse's;
-    /// the slice is read under `scope` for `principal`, with the gate asked at
+    /// `evaluateSlicedUnder` with no profile: the full algebra and no join.
+    let internal evaluateSliced
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<Result<FactSlice * PipelineToolResult, PipelineRefusal>> =
+        evaluateSlicedUnder None deps scope principal argsJson
+
+    /// The executor over explicit dependencies, under the deployment's
+    /// pipeline profile (`None`: the full algebra, as a deployment that
+    /// registered none has it). `deps` are the fact browse's; the slice is
+    /// read under `scope` for `principal`, with the gate asked at
     /// `FactToolResult`. Arguments carrying `assert` are refused: asserting is
     /// offered only where a deployment composes it (`PipelineAssertion`).
-    let answerWith
+    let answerUnder
+        (profile: RegisteredPipelineProfile option)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
@@ -817,8 +1031,17 @@ module PipelineTool =
         async {
             match assertionOf argsJson with
             | Ok None ->
-                let! evaluated = evaluateSliced deps scope principal argsJson
+                let! evaluated = evaluateSlicedUnder profile deps scope principal argsJson
                 return evaluated |> Result.map snd
             | Ok(Some _)
             | Error _ -> return Error PipelineRefusal.AssertionNotOffered
         }
+
+    /// `answerUnder` with no profile: the full algebra and no join.
+    let answerWith
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<Result<PipelineToolResult, PipelineRefusal>> =
+        answerUnder None deps scope principal argsJson

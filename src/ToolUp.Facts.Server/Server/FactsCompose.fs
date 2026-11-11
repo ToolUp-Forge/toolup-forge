@@ -982,6 +982,28 @@ module FactsCompose =
                 else
                     s.AddSingleton<NarrativeCalculations>(calculations))
 
+    /// **Adds** the deployment's pipeline profile: `evaluate_pipeline` then
+    /// reads every pipeline the assistant writes against it, and refuses one
+    /// outside it by name, before any fact is read. Serve its fragment
+    /// (`RegisteredPipelineProfile.Fragment`) in the system prompt beside the
+    /// tool. A deployment that registers none keeps the full algebra; one with
+    /// no fact store is unchanged; registering a profile twice is refused.
+    let withPipelineProfile (profile: RegisteredPipelineProfile) (app: ServerApp) : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
+            app
+            |> contribute (fun s ->
+                if s |> Seq.exists (fun d -> d.ServiceType = typeof<RegisteredPipelineProfile>) then
+                    ServiceComposition.refuse (
+                        CompositionRefusal.InvalidDeclaration(
+                            "FactsCompose.withPipelineProfile",
+                            "a pipeline profile is already registered; a deployment registers one"
+                        )
+                    )
+                else
+                    s.AddSingleton<RegisteredPipelineProfile>(profile))
+
     /// Declare what `list_fact_tables` lists: the cap on the distinct members
     /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
     /// turns member listing off). Call it after `withFactStore`, which declares
