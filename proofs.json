@@ -678,6 +678,34 @@
       }
     },
     {
+      "id": "toolgate-sequence-partition",
+      "level": "proved",
+      "claim": "The gate sequence every door runs (Gates.admitAll over Gates.sequence: the tool gate, the allowlist, the approval, the module's opt-in, the user's consent) admits a read exactly when every gate passes every call it makes, and refuses exactly when some gate refuses some call; a refusal names the FIRST gate in the order that refuses, and every gate before it passed every call - so a later gate (a dialog) is never asked while an earlier one refuses. Holds for any host gates, any order and any number of calls.",
+      "evidence": {
+        "theorem": "admit_all_partition",
+        "model": "proofs/ToolGate.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "admit_all_first_refusal",
+          "across_none_iff"
+        ]
+      }
+    },
+    {
+      "id": "toolgate-every-door-holds-authority",
+      "level": "proved",
+      "claim": "A read the gate sequence admits holds Read on, and a live grant over, EVERY module it reaches, with its declaration within the policy's ceiling and every host gate passed for it - at the loop door (the tool's own source module, where this is the decision the list was filtered by) and at a reach door (one call per target module, the query_entity producer shape). A reach tool is a door like the loop, with no gate missing: the query_entity read-and-grant check and query_module's grant check are this lemma's two instances.",
+      "evidence": {
+        "theorem": "admitted_reach_holds_authority",
+        "model": "proofs/ToolGate.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "loop_door_never_wider_than_list",
+          "admitted_iff_within"
+        ]
+      }
+    },
+    {
       "id": "toolgate-model-agrees-with-shipped-code",
       "level": "tested",
       "claim": "The extracted model and the shipped gate agree on the VERDICT for every in-tree tool the host can reach (the narrative and cross-module built-ins, the three fact tools, the sample client tool) and for 60 generated tools, under 28 generated policies including the external-principal view of each, 11 generated callers and their grant predicates; on the LISTED SET, in order, under every policy and caller; and on the DISPATCH answer by authored name, by provider alias and for an unknown name. This is the only thing that says the proved model is about the code that runs.",
@@ -689,7 +717,9 @@
           "the extracted decision agrees with production over generated tools with generated declarations",
           "the extracted list agrees with ListAccessible - the same tools, in the same order - under every policy and caller",
           "the extracted dispatch check agrees with FindByName-then-decide, by authored name, by alias, and for an unknown name",
-          "the model never throws, on any tool, under any policy, caller or grant predicate"
+          "the model never throws, on any tool, under any policy, caller or grant predicate",
+          "the extracted sequence agrees with Gates.admitAll on every generated row, at the loop and reach doors",
+          "the order table's reach rows replay through the extraction and production alike, the flipped rows included"
         ],
         "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT per module because a filter matching nothing reports success"
       }
@@ -713,7 +743,8 @@
         "host": "src/ToolUp.Platform.Tests/InProcess/ToolGateProofOracleTests.fs",
         "cases": [
           "the differential CATCHES a gate that ignores Egress - the go-red case",
-          "and egress under a read-only ceiling is what it catches"
+          "and egress under a read-only ceiling is what it catches",
+          "the sequence differential CATCHES a reordered production sequence - the go-red case"
         ]
       }
     },

@@ -386,11 +386,256 @@ let private registryUnder (policy: AIToolRegistry.ToolPolicy) (tools: AIToolRegi
 
 let private allTools () = inTreeTools @ generatedTools
 
+// ─── The gate sequence: the extraction beside Gates.admitAll ────────
+
+/// The slot a production refusal is, by its case.
+let private slotOf (refusal: ToolRefusal) : ToolGate.slot =
+    match refusal with
+    | ToolRefusal.Unreadable _
+    | ToolRefusal.GrantNotLive _
+    | ToolRefusal.OutsideCeiling _ -> ToolGate.SToolGate
+    | ToolRefusal.AllowlistDenied _ -> ToolGate.SAllowlist
+    | ToolRefusal.ApprovalRefused _ -> ToolGate.SApproval
+    | ToolRefusal.Unqueryable _ -> ToolGate.SQueryability
+    | ToolRefusal.ConsentRefused _
+    | ToolRefusal.Denied _ -> ToolGate.SConsent
+
+/// One row: a caller and its grant predicate, a policy, a tool, the
+/// modules one read reaches, and the host gates' answers per module.
+type private SequenceRow = {
+    Label: string
+    Caller: Caller
+    Policy: AIToolRegistry.ToolPolicy
+    Tool: AIToolRegistry.RegisteredTool
+    Modules: string list
+    /// (allowlist, approval, queryable, consent) per module.
+    Host: Map<string, bool * bool * bool * bool>
+}
+
+let private hostOf (row: SequenceRow) (moduleName: string) =
+    row.Host
+    |> Map.tryFind moduleName
+    |> Option.defaultValue (true, true, true, true)
+
+/// Production's `GateSet` for a row, each host slot refusing with its own
+/// case. `swapLastTwo` is the go-red sequence: consent asked before the
+/// module's opt-in.
+let private productionSet (row: SequenceRow) (swapLastTwo: bool) : AIToolRegistry.GateSet =
+    let slot (pick: bool * bool * bool * bool -> bool) (refuse: AIToolRegistry.GateCall -> ToolRefusal) =
+        fun (call: AIToolRegistry.GateCall) -> async {
+            if pick (hostOf row call.Module) then
+                return Ok()
+            else
+                return Error(refuse call)
+        }
+
+    let queryability =
+        slot (fun (_, _, q, _) -> q) (fun call -> ToolRefusal.Unqueryable(call.Tool.Name, call.Module))
+
+    let consent =
+        slot (fun (_, _, _, c) -> c) (fun call -> ToolRefusal.ConsentRefused(call.Tool.Name, call.Module, "no"))
+
+    {
+        ToolGate = AIToolRegistry.Gates.toolGate row.Caller.GrantLive row.Policy
+        Allowlist = slot (fun (a, _, _, _) -> a) (fun call -> ToolRefusal.AllowlistDenied(call.Tool.Name, "no"))
+        Approval = slot (fun (_, a, _, _) -> a) (fun call -> ToolRefusal.ApprovalRefused(call.Tool.Name, "no"))
+        Queryability = if swapLastTwo then consent else queryability
+        Consent = if swapLastTwo then queryability else consent
+    }
+
+/// A service provider holding nothing: no grant policy is composed, so the
+/// tool gate's grant audit is a no-op.
+let private emptyServices: IServiceProvider =
+    { new IServiceProvider with
+        member _.GetService _ = null
+    }
+
+/// Production's answer for a row: `Gates.admitAll` over the row's calls.
+let private productionSequence (swapLastTwo: bool) (row: SequenceRow) : ToolGate.slot option =
+    let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+
+    ctx.RequestServices <- emptyServices
+
+    let calls: AIToolRegistry.GateCall list = [
+        for m in row.Modules ->
+            {
+                Request = ctx
+                Access = row.Caller.Access
+                Tool = row.Tool.Definition
+                Arguments = "{}"
+                Module = m
+            }
+    ]
+
+    match
+        AIToolRegistry.Gates.admitAll (productionSet row swapLastTwo) calls
+        |> Async.RunSynchronously
+    with
+    | Ok _ -> None
+    | Error refusal -> Some(slotOf refusal)
+
+/// The extraction's answer for the same row: `ToolGate.admit_reach`.
+let private modelSequence (row: SequenceRow) : ToolGate.slot option =
+    let effects = toModelDeclaration (AIToolEffects.declaredOf row.Tool.Definition)
+    let host pick (c: ToolGate.reach) = pick (hostOf row c.reach_module)
+
+    let calls = [
+        for m in row.Modules ->
+            {
+                ToolGate.reach_module = m
+                ToolGate.reach_effects = effects
+            }
+    ]
+
+    match
+        ToolGate.admit_reach
+            (AIToolRegistry.isToolSourcePermittedFor row.Caller.Access)
+            row.Caller.GrantLive
+            (toModelPolicy row.Policy)
+            (host (fun (a, _, _, _) -> a))
+            (host (fun (_, a, _, _) -> a))
+            (host (fun (_, _, q, _) -> q))
+            (host (fun (_, _, _, c) -> c))
+            calls
+    with
+    | ToolGate.ONone -> None
+    | ToolGate.OSome slot -> Some slot
+
+/// Generated rows: every caller under every policy, over a spread of tools,
+/// at the loop door (the tool's own source module) and at a reach door
+/// (one to three target modules, `query_entity`'s producer shape), with the
+/// host gates answering per module from a seeded draw.
+let private sequenceRows: SequenceRow list =
+    let random = Random 10780
+
+    let tools =
+        allTools ()
+        |> List.indexed
+        |> List.filter (fun (i, _) -> i % 4 = 0)
+        |> List.map snd
+
+    [
+        for caller in generatedCallers do
+            for policyName, policy in generatedPolicies do
+                for tool in tools do
+                    let draw () =
+                        sourceModules
+                        |> List.map (fun m ->
+                            m, (random.Next 5 > 0, random.Next 5 > 0, random.Next 4 > 0, random.Next 4 > 0))
+                        |> Map.ofList
+
+                    yield {
+                        Label = sprintf "%s / %s / %s / loop door" caller.Name policyName tool.Definition.Name
+                        Caller = caller
+                        Policy = policy
+                        Tool = tool
+                        Modules = [ tool.Definition.SourceModule ]
+                        Host = draw ()
+                    }
+
+                    let targets =
+                        sourceModules
+                        |> List.filter (fun m -> not (m.StartsWith "_" || m.StartsWith "ToolUp."))
+                        |> List.filter (fun _ -> random.Next 2 = 0)
+                        |> List.truncate 3
+
+                    if not (List.isEmpty targets) then
+                        yield {
+                            Label = sprintf "%s / %s / %s / reach door" caller.Name policyName tool.Definition.Name
+                            Caller = caller
+                            Policy = AIToolRegistry.ToolPolicy.unrestricted
+                            Tool = tool
+                            Modules = targets
+                            Host = draw ()
+                        }
+    ]
+
+let private sequenceDisagreements (production: SequenceRow -> ToolGate.slot option) (rows: SequenceRow list) = [
+    for row in rows do
+        let fromModel = modelSequence row
+        let fromProduction = production row
+
+        if fromModel <> fromProduction then
+            yield sprintf "%s: extraction %A, production %A" row.Label fromModel fromProduction
+]
+
+/// The gate-order table's reach rows (`GatesAdmitOrderTests`), at the
+/// reach door over one target module: (row, Read held, grant live,
+/// queryable, consented, the slot that answers).
+let private orderTableReachRows = [
+    "every gate shut", false, false, false, false, Some ToolGate.SToolGate
+    "Read held, grant pending, the rest shut", true, false, false, false, Some ToolGate.SToolGate
+    "Read and a live grant, not queryable, no consent", true, true, false, false, Some ToolGate.SQueryability
+    "queryable, the user refused", true, true, true, false, Some ToolGate.SConsent
+    "every gate open", true, true, true, true, None
+]
+
+let private sequenceTests =
+    testList "the gate sequence" [
+        testCase "the extracted sequence agrees with Gates.admitAll on every generated row, at the loop and reach doors"
+        <| fun () ->
+            Expect.isGreaterThan (List.length sequenceRows) 2000 "the row population is not vacuous"
+
+            Expect.isTrue
+                (sequenceRows
+                 |> List.exists (fun r -> List.length r.Modules > 1 && modelSequence r = Some ToolGate.SToolGate))
+                "a multi-module read refused at the tool gate is in the population"
+
+            Expect.isTrue (sequenceRows |> List.exists (fun r -> modelSequence r = None)) "and an admitted read is"
+
+            let diffs = sequenceDisagreements (productionSequence false) sequenceRows
+
+            Expect.isEmpty
+                diffs
+                (sprintf
+                    "%d of %d rows disagree:\n  %s"
+                    diffs.Length
+                    sequenceRows.Length
+                    (diffs |> List.truncate 10 |> String.concat "\n  "))
+
+        testCase
+            "the order table's reach rows replay through the extraction and production alike, the flipped rows included"
+        <| fun () ->
+            for label, readable, live, queryable, consented, expected in orderTableReachRows do
+                let row = {
+                    Label = label
+                    Caller = {
+                        Name = label
+                        Access = {
+                            AccessContexts.forSubject (AuthenticatedUser "alice") with
+                                ModulePermissions =
+                                    AccessContexts.permissionsOf (
+                                        if readable then
+                                            [ "Payroll", [ ModulePermission.Read ] ]
+                                        else
+                                            [ "Other", [ ModulePermission.Read ] ]
+                                    )
+                        }
+                        GrantLive = fun _ -> live
+                    }
+                    Policy = AIToolRegistry.ToolPolicy.unrestricted
+                    Tool =
+                        inTreeTools
+                        |> List.find (fun t -> t.Definition.Name = "_platform.ai.query_entity")
+                    Modules = [ "Payroll" ]
+                    Host = Map.ofList [ "Payroll", (true, true, queryable, consented) ]
+                }
+
+                Expect.equal (modelSequence row) expected $"{label}: the extraction"
+                Expect.equal (productionSequence false row) expected $"{label}: production"
+
+        testCase "the sequence differential CATCHES a reordered production sequence - the go-red case"
+        <| fun () ->
+            let diffs = sequenceDisagreements (productionSequence true) sequenceRows
+            Expect.isNonEmpty diffs "consent asked before the opt-in must disagree with the extraction somewhere"
+    ]
+
 // ─── The pack ────────────────────────────────────────────────────────
 
 [<Tests>]
 let tests =
     testList "Phase 793 - the proved gate as oracle" [
+        sequenceTests
 
         testCase "the covered set is not vacuous"
         <| fun () ->
