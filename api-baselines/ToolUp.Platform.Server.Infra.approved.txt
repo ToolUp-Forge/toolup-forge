@@ -470,17 +470,16 @@ ToolUp.Platform.Infra.ComputeBackendStats.Submitted : System.Int64 { get }
 ToolUp.Platform.Infra.ComputeBackendStats.Succeeded : System.Int64 { get }
 ToolUp.Platform.Infra.ComputeBudgetGuard (class)
 ToolUp.Platform.Infra.ComputeBudgetGuard..ctor(ToolUp.Platform.Infra.IComputeBudgetStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.ComputeCostModel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Usage.UsageRecord, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
-ToolUp.Platform.Infra.ComputeBudgetGuard.Admit(System.String, ToolUp.Platform.SubmitterClass, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.Infra.ComputeBudgetReservation, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]], ToolUp.Platform.ComputeBudgetDenial]]
+ToolUp.Platform.Infra.ComputeBudgetGuard.Admit(System.String, ToolUp.Platform.SubmitterClass, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.Infra.ComputeBudgetReservation, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]], ToolUp.Platform.BudgetDenial]]
 ToolUp.Platform.Infra.ComputeBudgetGuard.CostModel : ToolUp.Platform.Infra.ComputeCostModel { get }
 ToolUp.Platform.Infra.ComputeBudgetGuard.Release(ToolUp.Platform.Infra.ComputeBudgetReservation) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.ComputeBudgetGuard.Settle(ToolUp.Platform.Infra.ComputeBudgetReservation, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
-ToolUp.Platform.Infra.ComputeBudgetGuard.toComputeError(ToolUp.Platform.ComputeBudgetDenial) : ToolUp.Platform.ExternalComputeError
+ToolUp.Platform.Infra.ComputeBudgetGuard.toComputeError(ToolUp.Platform.BudgetDenial) : ToolUp.Platform.ExternalComputeError
 ToolUp.Platform.Infra.ComputeBudgetJson (class)
 ToolUp.Platform.Infra.ComputeBudgetJson.SchemaVersion : System.Int32 (literal)
 ToolUp.Platform.Infra.ComputeBudgetJson.deserialiseBudget(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeBudget]
-ToolUp.Platform.Infra.ComputeBudgetJson.deserialiseUsage(System.String, System.String, System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComputeBudgetUsage]
+ToolUp.Platform.Infra.ComputeBudgetJson.deserialiseUsage(System.String, System.String, System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BudgetUsage]
 ToolUp.Platform.Infra.ComputeBudgetJson.serialiseBudget(ToolUp.Platform.ComputeBudget) : System.Byte[]
-ToolUp.Platform.Infra.ComputeBudgetJson.serialiseUsage(ToolUp.Platform.ComputeBudgetUsage) : System.Byte[]
 ToolUp.Platform.Infra.ComputeBudgetLayout (class)
 ToolUp.Platform.Infra.ComputeBudgetLayout.BlobPrefix : System.String (literal)
 ToolUp.Platform.Infra.ComputeBudgetLayout.DefaultContainer : System.String (literal)
@@ -1235,7 +1234,7 @@ ToolUp.Platform.Infra.FitBatchError.IsScopeMismatch : System.Boolean { get }
 ToolUp.Platform.Infra.FitBatchError.MissingBatchId : ToolUp.Platform.Infra.FitBatchError { get }
 ToolUp.Platform.Infra.FitBatchError.Tag : System.Int32 { get }
 ToolUp.Platform.Infra.FitBatchError+BudgetDenied (class)
-ToolUp.Platform.Infra.FitBatchError+BudgetDenied.Item : ToolUp.Platform.ComputeBudgetDenial { get }
+ToolUp.Platform.Infra.FitBatchError+BudgetDenied.Item : ToolUp.Platform.BudgetDenial { get }
 ToolUp.Platform.Infra.FitBatchError+ScopeMismatch (class)
 ToolUp.Platform.Infra.FitBatchError+ScopeMismatch.index : System.Int32 { get }
 ToolUp.Platform.Infra.FitBatchError+ScopeMismatch.itemScope : System.String { get }
@@ -1418,9 +1417,9 @@ ToolUp.Platform.Infra.IBuildOrchestrator.ListActiveBuilds(Microsoft.FSharp.Core.
 ToolUp.Platform.Infra.ICallerLabelledIngestor (interface)
 ToolUp.Platform.Infra.ICallerLabelledIngestor.RunLabelledIngestion(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IngestionLabel]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]
 ToolUp.Platform.Infra.IComputeBudgetStore (interface)
-ToolUp.Platform.Infra.IComputeBudgetStore.Admit(System.String, System.String, System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ComputeBudgetUsage, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ComputeBudgetDenial]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ComputeBudgetUsage, ToolUp.Platform.ComputeBudgetDenial]]
+ToolUp.Platform.Infra.IComputeBudgetStore.Admit(System.String, System.String, System.Decimal, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BudgetDenial]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]]
 ToolUp.Platform.Infra.IComputeBudgetStore.GetBudget(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ComputeBudget]
-ToolUp.Platform.Infra.IComputeBudgetStore.ReadUsage(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ComputeBudgetUsage]
+ToolUp.Platform.Infra.IComputeBudgetStore.ReadUsage(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BudgetUsage]
 ToolUp.Platform.Infra.IComputeBudgetStore.SetBudget(System.String, ToolUp.Platform.ComputeBudget) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Infra.IComputeBudgetStore.Settle(System.String, System.String, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IConditionalDataObjectStore (interface)

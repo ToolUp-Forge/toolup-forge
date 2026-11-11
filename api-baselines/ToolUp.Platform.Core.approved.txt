@@ -2932,26 +2932,24 @@ ToolUp.Platform.CompositionView.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.CompositionView.Subjects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedComponent] { get }
 ToolUp.Platform.CompositionView.Tools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedComponent] { get }
 ToolUp.Platform.ComputeBudget (class)
-ToolUp.Platform.ComputeBudget..ctor(ToolUp.Platform.ComputeBudgetPeriod, ToolUp.Platform.ComputeBudgetLimits, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ComputeBudgetLimits])
+ToolUp.Platform.ComputeBudget..ctor(ToolUp.Platform.BudgetPeriod, ToolUp.Platform.ComputeBudgetLimits, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ComputeBudgetLimits])
 ToolUp.Platform.ComputeBudget.ClassLimits : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ComputeBudgetLimits] { get }
 ToolUp.Platform.ComputeBudget.Limits : ToolUp.Platform.ComputeBudgetLimits { get }
-ToolUp.Platform.ComputeBudget.Period : ToolUp.Platform.ComputeBudgetPeriod { get }
-ToolUp.Platform.ComputeBudgetDenial (class)
-ToolUp.Platform.ComputeBudgetDenial..ctor(System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String)
-ToolUp.Platform.ComputeBudgetDenial.Dimension : System.String { get }
-ToolUp.Platform.ComputeBudgetDenial.PeriodKey : System.String { get }
-ToolUp.Platform.ComputeBudgetDenial.Quota : System.Decimal { get }
-ToolUp.Platform.ComputeBudgetDenial.Requested : System.Decimal { get }
-ToolUp.Platform.ComputeBudgetDenial.ScopeId : System.String { get }
-ToolUp.Platform.ComputeBudgetDenial.Spent : System.Decimal { get }
-ToolUp.Platform.ComputeBudgetDenial.SubmitterClass : System.String { get }
-ToolUp.Platform.ComputeBudgetDenialModule (class)
-ToolUp.Platform.ComputeBudgetDenialModule.describe(ToolUp.Platform.ComputeBudgetDenial) : System.String
-ToolUp.Platform.ComputeBudgetDenialModule.ofBudgetDenial(ToolUp.Platform.BudgetDenial) : ToolUp.Platform.ComputeBudgetDenial
-ToolUp.Platform.ComputeBudgetDenialModule.toBudgetDenial(ToolUp.Platform.ComputeBudgetDenial) : ToolUp.Platform.BudgetDenial
+ToolUp.Platform.ComputeBudget.Period : ToolUp.Platform.BudgetPeriod { get }
+ToolUp.Platform.ComputeBudgetDeniedFigures (class)
+ToolUp.Platform.ComputeBudgetDeniedFigures..ctor(System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String)
+ToolUp.Platform.ComputeBudgetDeniedFigures.Dimension : System.String { get }
+ToolUp.Platform.ComputeBudgetDeniedFigures.PeriodKey : System.String { get }
+ToolUp.Platform.ComputeBudgetDeniedFigures.Quota : System.Decimal { get }
+ToolUp.Platform.ComputeBudgetDeniedFigures.Requested : System.Decimal { get }
+ToolUp.Platform.ComputeBudgetDeniedFigures.ScopeId : System.String { get }
+ToolUp.Platform.ComputeBudgetDeniedFigures.Spent : System.Decimal { get }
+ToolUp.Platform.ComputeBudgetDeniedFigures.SubmitterClass : System.String { get }
+ToolUp.Platform.ComputeBudgetDeniedFiguresModule (class)
+ToolUp.Platform.ComputeBudgetDeniedFiguresModule.ofDenial(ToolUp.Platform.BudgetDenial) : ToolUp.Platform.ComputeBudgetDeniedFigures
 ToolUp.Platform.ComputeBudgetDeniedPayload (class)
-ToolUp.Platform.ComputeBudgetDeniedPayload..ctor(ToolUp.Platform.ComputeBudgetDenial, System.String, System.String, System.String, System.DateTime)
-ToolUp.Platform.ComputeBudgetDeniedPayload.Denial : ToolUp.Platform.ComputeBudgetDenial { get }
+ToolUp.Platform.ComputeBudgetDeniedPayload..ctor(ToolUp.Platform.ComputeBudgetDeniedFigures, System.String, System.String, System.String, System.DateTime)
+ToolUp.Platform.ComputeBudgetDeniedPayload.Denial : ToolUp.Platform.ComputeBudgetDeniedFigures { get }
 ToolUp.Platform.ComputeBudgetDeniedPayload.Kind : System.String { get }
 ToolUp.Platform.ComputeBudgetDeniedPayload.RefusedAt : System.DateTime { get }
 ToolUp.Platform.ComputeBudgetDeniedPayload.SubmittedBy : System.String { get }
@@ -2983,42 +2981,16 @@ ToolUp.Platform.ComputeBudgetLimitsModule.runDuration(System.TimeSpan) : ToolUp.
 ToolUp.Platform.ComputeBudgetLimitsModule.unrestricted : ToolUp.Platform.ComputeBudgetLimits { get }
 ToolUp.Platform.ComputeBudgetModule (class)
 ToolUp.Platform.ComputeBudgetModule.Domain : System.String (literal)
-ToolUp.Platform.ComputeBudgetModule.create(ToolUp.Platform.ComputeBudgetPeriod, ToolUp.Platform.ComputeBudgetLimits) : ToolUp.Platform.ComputeBudget
+ToolUp.Platform.ComputeBudgetModule.create(ToolUp.Platform.BudgetPeriod, ToolUp.Platform.ComputeBudgetLimits) : ToolUp.Platform.ComputeBudget
 ToolUp.Platform.ComputeBudgetModule.isUnrestricted(ToolUp.Platform.ComputeBudget) : System.Boolean
 ToolUp.Platform.ComputeBudgetModule.limitsFor(ToolUp.Platform.SubmitterClass, ToolUp.Platform.ComputeBudget) : ToolUp.Platform.ComputeBudgetLimits
 ToolUp.Platform.ComputeBudgetModule.unrestricted : ToolUp.Platform.ComputeBudget { get }
 ToolUp.Platform.ComputeBudgetModule.withClassLimits(ToolUp.Platform.SubmitterClass, ToolUp.Platform.ComputeBudgetLimits, ToolUp.Platform.ComputeBudget) : ToolUp.Platform.ComputeBudget
-ToolUp.Platform.ComputeBudgetPeriod (class)
-ToolUp.Platform.ComputeBudgetPeriod.Daily : ToolUp.Platform.ComputeBudgetPeriod { get }
-ToolUp.Platform.ComputeBudgetPeriod.IsDaily : System.Boolean { get }
-ToolUp.Platform.ComputeBudgetPeriod.IsMonthly : System.Boolean { get }
-ToolUp.Platform.ComputeBudgetPeriod.IsPerpetual : System.Boolean { get }
-ToolUp.Platform.ComputeBudgetPeriod.Monthly : ToolUp.Platform.ComputeBudgetPeriod { get }
-ToolUp.Platform.ComputeBudgetPeriod.Perpetual : ToolUp.Platform.ComputeBudgetPeriod { get }
-ToolUp.Platform.ComputeBudgetPeriod.Tag : System.Int32 { get }
-ToolUp.Platform.ComputeBudgetPeriod+Tags (class)
-ToolUp.Platform.ComputeBudgetPeriod+Tags.Daily : System.Int32 (literal)
-ToolUp.Platform.ComputeBudgetPeriod+Tags.Monthly : System.Int32 (literal)
-ToolUp.Platform.ComputeBudgetPeriod+Tags.Perpetual : System.Int32 (literal)
-ToolUp.Platform.ComputeBudgetPeriodModule (class)
-ToolUp.Platform.ComputeBudgetPeriodModule.key(ToolUp.Platform.ComputeBudgetPeriod, System.DateTime) : System.String
-ToolUp.Platform.ComputeBudgetPeriodModule.label(ToolUp.Platform.ComputeBudgetPeriod) : System.String
-ToolUp.Platform.ComputeBudgetPeriodModule.toBudgetPeriod(ToolUp.Platform.ComputeBudgetPeriod) : ToolUp.Platform.BudgetPeriod
 ToolUp.Platform.ComputeBudgetPolicy (class)
-ToolUp.Platform.ComputeBudgetPolicy.admit(System.String, ToolUp.Platform.SubmitterClass, ToolUp.Platform.ComputeBudgetLimits, ToolUp.Platform.ComputeBudgetUsage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Decimal) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ComputeBudgetDenial]
-ToolUp.Platform.ComputeBudgetPolicy.claims(ToolUp.Platform.ComputeBudgetLimits, ToolUp.Platform.ComputeBudgetUsage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Decimal) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetClaim]
+ToolUp.Platform.ComputeBudgetPolicy.admit(System.String, ToolUp.Platform.SubmitterClass, ToolUp.Platform.ComputeBudgetLimits, ToolUp.Platform.BudgetUsage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Decimal) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BudgetDenial]
+ToolUp.Platform.ComputeBudgetPolicy.claims(ToolUp.Platform.ComputeBudgetLimits, ToolUp.Platform.BudgetUsage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan], System.Decimal) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BudgetClaim]
+ToolUp.Platform.ComputeBudgetPolicy.describe(ToolUp.Platform.BudgetDenial) : System.String
 ToolUp.Platform.ComputeBudgetPolicy.effectiveDuration(ToolUp.Platform.ComputeBudgetLimits, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]) : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]
-ToolUp.Platform.ComputeBudgetUsage (class)
-ToolUp.Platform.ComputeBudgetUsage..ctor(System.String, System.String, System.Int32, System.Decimal, System.DateTime)
-ToolUp.Platform.ComputeBudgetUsage.InFlight : System.Int32 { get }
-ToolUp.Platform.ComputeBudgetUsage.PeriodKey : System.String { get }
-ToolUp.Platform.ComputeBudgetUsage.ScopeId : System.String { get }
-ToolUp.Platform.ComputeBudgetUsage.Spent : System.Decimal { get }
-ToolUp.Platform.ComputeBudgetUsage.UpdatedAt : System.DateTime { get }
-ToolUp.Platform.ComputeBudgetUsageModule (class)
-ToolUp.Platform.ComputeBudgetUsageModule.empty(System.String, System.String) : ToolUp.Platform.ComputeBudgetUsage
-ToolUp.Platform.ComputeBudgetUsageModule.ofBudgetUsage(ToolUp.Platform.BudgetUsage) : ToolUp.Platform.ComputeBudgetUsage
-ToolUp.Platform.ComputeBudgetUsageModule.toBudgetUsage(ToolUp.Platform.ComputeBudgetUsage) : ToolUp.Platform.BudgetUsage
 ToolUp.Platform.ComputeBudgetWarningPayload (class)
 ToolUp.Platform.ComputeBudgetWarningPayload..ctor(System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal, System.String, System.DateTime)
 ToolUp.Platform.ComputeBudgetWarningPayload.ObservedAt : System.DateTime { get }
@@ -9634,7 +9606,7 @@ ToolUp.Platform.ModelExecutionRefusal.IsUnknownProvider : System.Boolean { get }
 ToolUp.Platform.ModelExecutionRefusal.ScopeUnavailable : ToolUp.Platform.ModelExecutionRefusal { get }
 ToolUp.Platform.ModelExecutionRefusal.Tag : System.Int32 { get }
 ToolUp.Platform.ModelExecutionRefusal+BudgetDenied (class)
-ToolUp.Platform.ModelExecutionRefusal+BudgetDenied.Item : ToolUp.Platform.ComputeBudgetDenial { get }
+ToolUp.Platform.ModelExecutionRefusal+BudgetDenied.Item : ToolUp.Platform.BudgetDenial { get }
 ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch (class)
 ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.accepted : Microsoft.FSharp.Collections.FSharpList`1[System.Int32] { get }
 ToolUp.Platform.ModelExecutionRefusal+EnvelopeVersionMismatch.received : System.Int32 { get }
@@ -16490,12 +16462,12 @@ ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAuditEventPage(ToolUp.Platform.A
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAuditEventView(ToolUp.Platform.AuditEventView) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeAuthoredBy(ToolUp.Platform.AuthoredBy) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeBIFriendlyType(ToolUp.Platform.BIFriendlyType) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.PlatformJsonEncoders.encodeBudgetDenial(ToolUp.Platform.BudgetDenial) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCategoryChannelPreference(ToolUp.Platform.CategoryChannelPreference) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCellTransform(ColumnMappingTypes+CellTransform) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeColumnExpr(ColumnMappingTypes+ColumnExpr) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeColumnType(DataManagementTypes+ColumnType) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeCompositionView(ToolUp.Platform.CompositionView) : ToolUp.Remoting.Json.JsonValue
-ToolUp.Remoting.Json.PlatformJsonEncoders.encodeComputeBudgetDenial(ToolUp.Platform.ComputeBudgetDenial) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeConfigFieldKind(ToolUp.Platform.ConfigFieldKind) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeConfigFieldSchema(ToolUp.Platform.ConfigFieldSchema) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.PlatformJsonEncoders.encodeContactOwner(ToolUp.Platform.ContactOwner) : ToolUp.Remoting.Json.JsonValue
@@ -16867,12 +16839,12 @@ ToolUp.Remoting.PlatformDecoders.auditEventPage : Microsoft.FSharp.Core.FSharpFu
 ToolUp.Remoting.PlatformDecoders.auditEventView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuditEventView, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.authoredBy : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AuthoredBy, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.biFriendlyType : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BIFriendlyType, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.budgetDenial : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BudgetDenial, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.categoryChannelPreference : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CategoryChannelPreference, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.cellTransform : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+CellTransform, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.columnExpr(ToolUp.Remoting.MsgPack.Value) : Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+ColumnExpr, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.PlatformDecoders.columnType : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[DataManagementTypes+ColumnType, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.compositionView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CompositionView, ToolUp.Remoting.DecodeError]] { get }
-ToolUp.Remoting.PlatformDecoders.computeBudgetDenial : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ComputeBudgetDenial, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.configFieldKind : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConfigFieldKind, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.configFieldSchema : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConfigFieldSchema, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.contactOwner : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ContactOwner, ToolUp.Remoting.DecodeError]] { get }

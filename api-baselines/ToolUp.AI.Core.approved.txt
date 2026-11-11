@@ -382,6 +382,45 @@ ToolUp.AI.ApprovalPrompt (class)
 ToolUp.AI.ApprovalPrompt..ctor(System.String, System.String)
 ToolUp.AI.ApprovalPrompt.Detail : System.String { get }
 ToolUp.AI.ApprovalPrompt.Summary : System.String { get }
+ToolUp.AI.BudgetPosture (class)
+ToolUp.AI.BudgetPosture.FailClosed : ToolUp.AI.BudgetPosture { get }
+ToolUp.AI.BudgetPosture.FailOpen : ToolUp.AI.BudgetPosture { get }
+ToolUp.AI.BudgetPosture.IsFailClosed : System.Boolean { get }
+ToolUp.AI.BudgetPosture.IsFailOpen : System.Boolean { get }
+ToolUp.AI.BudgetPosture.Tag : System.Int32 { get }
+ToolUp.AI.BudgetPosture+Tags (class)
+ToolUp.AI.BudgetPosture+Tags.FailClosed : System.Int32 (literal)
+ToolUp.AI.BudgetPosture+Tags.FailOpen : System.Int32 (literal)
+ToolUp.AI.BudgetPostureModule (class)
+ToolUp.AI.BudgetPostureModule.label(ToolUp.AI.BudgetPosture) : System.String
+ToolUp.AI.BudgetRead (class)
+ToolUp.AI.BudgetRead.IsPolicy : System.Boolean { get }
+ToolUp.AI.BudgetRead.IsWindow : System.Boolean { get }
+ToolUp.AI.BudgetRead.Policy : ToolUp.AI.BudgetRead { get }
+ToolUp.AI.BudgetRead.Tag : System.Int32 { get }
+ToolUp.AI.BudgetRead.Window : ToolUp.AI.BudgetRead { get }
+ToolUp.AI.BudgetRead+Tags (class)
+ToolUp.AI.BudgetRead+Tags.Policy : System.Int32 (literal)
+ToolUp.AI.BudgetRead+Tags.Window : System.Int32 (literal)
+ToolUp.AI.BudgetReadModule (class)
+ToolUp.AI.BudgetReadModule.label(ToolUp.AI.BudgetRead) : System.String
+ToolUp.AI.BudgetWindowUnreadable (class)
+ToolUp.AI.BudgetWindowUnreadable..ctor(System.DateTime, System.String, ToolUp.Platform.UserId, System.String, ToolUp.AI.BudgetRead, ToolUp.AI.BudgetPosture, System.String)
+ToolUp.AI.BudgetWindowUnreadable.Domain : System.String { get }
+ToolUp.AI.BudgetWindowUnreadable.OccurredAt : System.DateTime { get }
+ToolUp.AI.BudgetWindowUnreadable.Posture : ToolUp.AI.BudgetPosture { get }
+ToolUp.AI.BudgetWindowUnreadable.Read : ToolUp.AI.BudgetRead { get }
+ToolUp.AI.BudgetWindowUnreadable.Reason : System.String { get }
+ToolUp.AI.BudgetWindowUnreadable.ScopeId : System.String { get }
+ToolUp.AI.BudgetWindowUnreadable.UserId : ToolUp.Platform.UserId { get }
+ToolUp.AI.BudgetWindowUnreadableModule (class)
+ToolUp.AI.BudgetWindowUnreadableModule.DimensionPrefix : System.String (literal)
+ToolUp.AI.BudgetWindowUnreadableModule.EventType : System.String (literal)
+ToolUp.AI.BudgetWindowUnreadableModule.SourceModule : System.String (literal)
+ToolUp.AI.BudgetWindowUnreadableModule.denial(System.String, System.Decimal, ToolUp.AI.BudgetWindowUnreadable) : ToolUp.Platform.BudgetDenial
+ToolUp.AI.BudgetWindowUnreadableModule.dimension(ToolUp.AI.BudgetRead) : System.String
+ToolUp.AI.BudgetWindowUnreadableModule.isDenial(ToolUp.Platform.BudgetDenial) : System.Boolean
+ToolUp.AI.BudgetWindowUnreadableModule.message(ToolUp.Platform.BudgetDenial) : System.String
 ToolUp.AI.Chunk (class)
 ToolUp.AI.Chunk..ctor(System.String, System.String, ToolUp.AI.ChunkGateResult, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.AI.Chunk.ChunkId : System.String { get }
