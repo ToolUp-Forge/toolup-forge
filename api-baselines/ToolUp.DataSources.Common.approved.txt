@@ -29,7 +29,9 @@ ToolUp.DataSources.Common.Csv.absentIfEmpty(System.String) : System.String
 ToolUp.DataSources.Common.Csv.distinguishesNull(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean
 ToolUp.DataSources.Common.Csv.escapeField(System.String) : System.String
 ToolUp.DataSources.Common.Csv.ofReader(System.Data.Common.DbDataReader) : Microsoft.FSharp.Control.FSharpAsync`1[System.Byte[]]
+ToolUp.DataSources.Common.Csv.readDecimal(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Boolean) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetValue, System.String]
 ToolUp.DataSources.Common.Csv.readField(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Boolean) : ToolUp.DataSources.Common.Csv+PayloadField
+ToolUp.DataSources.Common.Csv.renderCell(System.Data.Common.DbDataReader, System.Int32) : System.String
 ToolUp.DataSources.Common.Csv.renderRow(System.Collections.Generic.IEnumerable`1[System.String]) : System.String
 ToolUp.DataSources.Common.Csv.renderValue(System.Object) : System.String
 ToolUp.DataSources.Common.Csv.toBytes(System.Collections.Generic.IEnumerable`1[System.String], System.Collections.Generic.IEnumerable`1[System.Collections.Generic.IEnumerable`1[System.String]]) : System.Byte[]
@@ -489,6 +491,7 @@ ToolUp.DataSources.Common.TypeMap (class)
 ToolUp.DataSources.Common.TypeMap.ansi(System.String) : DataManagementTypes+ColumnType
 ToolUp.DataSources.Common.TypeMap.classify(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+ColumnType]], System.String) : DataManagementTypes+ColumnType
 ToolUp.DataSources.Common.TypeMap.column(System.String, System.String, System.Boolean) : ToolUp.Platform.ColumnInfo
+ToolUp.DataSources.Common.TypeMap.isExactDecimal(System.String) : System.Boolean
 ToolUp.DataSources.Common.TypeMap.normalise(System.String) : System.String
 ToolUp.DataSources.Common.TypeMap.schema(System.String, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.ColumnInfo]) : ToolUp.Platform.TableSchema
 ToolUp.DataSources.Common.TypeProbe (class)

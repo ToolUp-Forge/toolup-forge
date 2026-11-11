@@ -4767,10 +4767,12 @@ ToolUp.Platform.DatasetColumnRoleModule.parse(System.String) : Microsoft.FSharp.
 ToolUp.Platform.DatasetDType (class)
 ToolUp.Platform.DatasetDType.Bool : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.Categorical : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType.Decimal : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.Float : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.Int : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.IsBool : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsCategorical : System.Boolean { get }
+ToolUp.Platform.DatasetDType.IsDecimal : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsFloat : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsInt : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsText : System.Boolean { get }
@@ -4781,6 +4783,7 @@ ToolUp.Platform.DatasetDType.Timestamp : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType+Tags (class)
 ToolUp.Platform.DatasetDType+Tags.Bool : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.DatasetDType+Tags.Decimal : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Float : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Int : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Text : System.Int32 (literal)
@@ -4788,6 +4791,12 @@ ToolUp.Platform.DatasetDType+Tags.Timestamp : System.Int32 (literal)
 ToolUp.Platform.DatasetDTypeModule (class)
 ToolUp.Platform.DatasetDTypeModule.name(ToolUp.Platform.DatasetDType) : System.String
 ToolUp.Platform.DatasetDTypeModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetDType]
+ToolUp.Platform.DatasetDecimal (class)
+ToolUp.Platform.DatasetDecimal.compare(System.String, System.String) : System.Int32
+ToolUp.Platform.DatasetDecimal.isCanonical(System.String) : System.Boolean
+ToolUp.Platform.DatasetDecimal.ofDecimal(System.Decimal) : System.String
+ToolUp.Platform.DatasetDecimal.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.DatasetDecimal.tryToDecimal(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
 ToolUp.Platform.DatasetDeclassifiedPayload (class)
 ToolUp.Platform.DatasetDeclassifiedPayload..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.Int32, System.String)
 ToolUp.Platform.DatasetDeclassifiedPayload.Actor : System.String { get }
@@ -4933,6 +4942,7 @@ ToolUp.Platform.DatasetStoreMode+Tags.NoDatasets : System.Int32 (literal)
 ToolUp.Platform.DatasetValue (class)
 ToolUp.Platform.DatasetValue.IsBool : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsCategorical : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsDecimal : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsFloat : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsInt : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsNull : System.Boolean { get }
@@ -4944,6 +4954,8 @@ ToolUp.Platform.DatasetValue+Bool (class)
 ToolUp.Platform.DatasetValue+Bool.Item : System.Boolean { get }
 ToolUp.Platform.DatasetValue+Categorical (class)
 ToolUp.Platform.DatasetValue+Categorical.Item : System.String { get }
+ToolUp.Platform.DatasetValue+Decimal (class)
+ToolUp.Platform.DatasetValue+Decimal.digits : System.String { get }
 ToolUp.Platform.DatasetValue+Float (class)
 ToolUp.Platform.DatasetValue+Float.Item : System.Double { get }
 ToolUp.Platform.DatasetValue+Int (class)
@@ -4951,6 +4963,7 @@ ToolUp.Platform.DatasetValue+Int.Item : System.Int64 { get }
 ToolUp.Platform.DatasetValue+Tags (class)
 ToolUp.Platform.DatasetValue+Tags.Bool : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Decimal : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Float : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Int : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Null : System.Int32 (literal)

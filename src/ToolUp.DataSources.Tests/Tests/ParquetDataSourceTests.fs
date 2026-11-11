@@ -370,10 +370,113 @@ let private nativeTests =
         }
     ]
 
+// ─── The decimal logical type, every digit ───────────
+
+/// A nullable Parquet decimal column of the given shape, written from
+/// canonical texts (`None` writes a null).
+let private decimalColumn (name: string) (precision: int) (scale: int) (values: string option list) : FixtureColumn =
+    let field = BigDecimalDataField(name, precision, scale, isNullable = true)
+
+    let cells =
+        values
+        |> List.map (fun value ->
+            match value with
+            | Some digits -> Nullable(ParquetDecimal.ofText precision scale digits)
+            | None -> Nullable())
+        |> List.toArray
+
+    field :> DataField,
+    fun (rowGroup: ParquetRowGroupWriter) (field: DataField) ->
+        rowGroup.WriteAsync<Data.BigDecimal>(field, ReadOnlyMemory<Nullable<Data.BigDecimal>> cells)
+
+/// Amounts wider than a float and than `System.Decimal` (which Parquet.Net
+/// reads through unless told otherwise), a tiny negative, and a NULL, in a
+/// `DECIMAL(38, 18)` column — 38 digits is the widest a Parquet.Net decimal
+/// holds.
+let private decimalAmounts = [
+    Some "12345678901234567890.123456789012345678"
+    Some "-0.0000000005"
+    Some "0.1"
+    None
+]
+
+let private decimalFile () =
+    writeParquet [
+        valueColumn<int64> "id" [ 1L .. int64 decimalAmounts.Length ]
+        decimalColumn "amount" 38 18 decimalAmounts
+    ]
+
+let private decimalTests =
+    testList "exact decimals" [
+        testCaseAsync "the native payload reads a decimal column as Decimal, every digit"
+        <| async {
+            let rig = ingestRig "src" [ ParquetDataSource.payloadReader () ] None
+            rig.Storage.Put(container "src", $"%s{Prefix}money.parquet", decimalFile ())
+
+            match! ingest rig "src" "money" with
+            | Error run -> failtestf "ingestion did not succeed: %A" run
+            | Ok(payload, bytes) ->
+                match PayloadReader.read [ ParquetDataSource.payloadReader () ] payload bytes with
+                | Error e -> failtestf "reader refused: %s" (PayloadReader.describe e)
+                | Ok(schema, rows) ->
+                    Expect.equal schema.Columns[1].DType DatasetDType.Decimal "the decimal logical type is Decimal"
+
+                    Expect.sequenceEqual
+                        (rows |> List.map (fun r -> r.Cells[1]))
+                        (decimalAmounts
+                         |> List.map (fun amount ->
+                             match amount with
+                             | Some digits -> DatasetValue.Decimal digits
+                             | None -> DatasetValue.Null))
+                        "every digit, and the NULL"
+        }
+
+        testCaseAsync "Query renders a decimal column as its exact digits"
+        <| async {
+            let storage = FakeBlobStorage.InMemoryBlobStorage()
+            let source = ParquetDataSource.create storage
+            storage.Put(container "src", $"%s{Prefix}money.parquet", decimalFile ())
+
+            match! source.Query(context "src", "money") with
+            | Ok bytes ->
+                let lines =
+                    Text.Encoding.UTF8
+                        .GetString(bytes)
+                        .Split(
+                            "
+",
+                            StringSplitOptions.RemoveEmptyEntries
+                        )
+
+                Expect.sequenceEqual
+                    lines
+                    [|
+                        "id,amount"
+                        "1,12345678901234567890.123456789012345678"
+                        "2,-0.0000000005"
+                        "3,0.1"
+                        "4,"
+                    |]
+                    "every digit, and NULL as the unquoted empty field"
+            | Error err -> failtestf "Query failed: %A" err
+        }
+
+        test "a host-decimal Parquet column also reads as Decimal" {
+            Expect.equal (ParquetDataSource.toColumnType typeof<Data.BigDecimal>) NumberColumn "coarse type"
+
+            Expect.equal
+                (ParquetDataSource.datasetDType (DataField("d", typeof<decimal>, isNullable = false)))
+                DatasetDType.Decimal
+                "decimal is exact, not a float"
+        }
+    ]
+
 let tests =
     testList "ParquetDataSource" [
 
         nativeTests
+
+        decimalTests
 
         LocalFileDataSourceContract.tests "Parquet" target
 

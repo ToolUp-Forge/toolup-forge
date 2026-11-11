@@ -604,7 +604,8 @@ type DatasetAssemblyExecutor
     let cellText =
         function
         | DatasetValue.Text s
-        | DatasetValue.Categorical s -> Some s
+        | DatasetValue.Categorical s
+        | DatasetValue.Decimal s -> Some s
         | DatasetValue.Int i -> Some(string i)
         | DatasetValue.Float f -> Some(string f)
         | DatasetValue.Bool b -> Some(string b)
