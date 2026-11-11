@@ -187,7 +187,14 @@ let private contextOver (storage: IBlobStorage) (provider: IAIProvider) : HttpCo
     ctx :> HttpContext
 
 let private assistantOver (storage: IBlobStorage) (provider: IAIProvider) : AIAssistantApi =
-    fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) (contextOver storage provider))
+    fst (
+        aiAssistantApi
+            None
+            Map.empty
+            (new SSEConnectionManager())
+            (AIAssistantHandler.AITaskStatusRegistry())
+            (contextOver storage provider)
+    )
 
 // ─── The read rule on the meta and consent siblings ──────────────────
 

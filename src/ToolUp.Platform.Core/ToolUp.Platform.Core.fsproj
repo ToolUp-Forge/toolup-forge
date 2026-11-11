@@ -484,8 +484,8 @@
              Fable-safe (BCL primitives only — no backend SDK type), so a
              Client can hold an ExternalHandle opaquely. -->
         <!-- Compute-budget value types (SubmitterClass /
-             ComputeBudget / ComputeBudgetDenial / ComputeBudgetUsage) + the
-             pure admission policy + the ComputeBudgetMode opt-in DU. BEFORE
+             ComputeBudget / ComputeBudgetLimits) + the
+             pure admission policy. BEFORE
              ExternalCompute.fs, because ExternalWorkSpec carries a
              SubmitterClass — which is also why the denial's projection onto
              ExternalComputeError lives Server-side (precedence cannot be

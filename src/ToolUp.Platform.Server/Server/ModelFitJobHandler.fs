@@ -76,8 +76,8 @@ module ModelFitEnvelope =
                 | Ok providerOutcome ->
                     // Forge owns the composite key + gate verdicts — overwrite
                     // whatever the provider set so identity + gate outcome are
-                    // authoritative regardless of provider behaviour. Phase
-                    // 1011: a gate whose unit is not its diagnostic's is not
+                    // authoritative regardless of provider behaviour.
+                    // A gate whose unit is not its diagnostic's is not
                     // evaluated, and no outcome is produced to carry a verdict
                     // over it.
                     match
@@ -156,11 +156,11 @@ module ModelFitJobHandler =
     let create (registry: ModelFitProviderRegistry) (audit: IAuditLog) (logger: ILogger) : IJobHandler =
         RunJob.handler logger (job registry audit)
 
-// ─── Phase 599 — batch fit submission ───────────────────────────────────
+// ─── Batch fit submission ───────────────────────────────────
 //
 // A `FitRequestBatch` fans out to one `_platform.modelfit.batchitem` job
 // per request under a single `ModelFitBatchSubmitted` audit row. Item
-// execution is the unchanged Phase 449 envelope plus registry
+// execution is the unchanged fit envelope plus registry
 // registration carrying the batch annotations (the item handler lives in
 // `ModelFitBatchItemJobHandler.fs` — it needs `IModelRegistry`, which
 // compiles later); a per-item failure fails only that item's job. The
@@ -187,7 +187,7 @@ type FitBatchSubmission = {
     /// `(index, jobId)` per successfully enqueued item, in batch order.
     ScheduledJobs: (int * JobId) list
     /// `(index, refusal)` per item whose enqueue failed, in batch order.
-    /// Typed since Phase 640 — see `FitEnqueueRefusal` for why a string
+    /// Typed now — see `FitEnqueueRefusal` for why a string
     /// was the wrong shape for the one denial a caller has to branch on.
     ScheduleFailures: (int * FitEnqueueRefusal) list
 }
@@ -197,14 +197,14 @@ module ModelFitBatch =
     [<Literal>]
     let ItemHandlerName = "_platform.modelfit.batchitem"
 
-    /// Phase 451 — take one budget reservation per item, releasing every
+    /// Take one budget reservation per item, releasing every
     /// reservation already taken if any item is refused. `Ok` carries the
     /// reservations the caller must release once the batch is enqueued.
     let private reserveBatch
         (guard: ComputeBudgetGuard)
         (submittedBy: string)
         (batch: FitRequestBatch)
-        : Async<Result<ComputeBudgetReservation list, ComputeBudgetDenial>> =
+        : Async<Result<ComputeBudgetReservation list, BudgetDenial>> =
         async {
             let taken = ResizeArray<ComputeBudgetReservation>()
             let mutable denial = None
@@ -245,12 +245,12 @@ module ModelFitBatch =
     /// job per request. Per-item enqueue failures are collected as data,
     /// never thrown, and never abort sibling items. Requires
     /// `ItemHandlerName` to be registered with the scheduler —
-    /// consumer-wired, like the Phase 454 scoring handler:
+    /// consumer-wired, like the scoring handler:
     /// `scheduler.RegisterHandler(ModelFitBatch.ItemHandlerName,
     /// ModelFitBatchItemJobHandler.create providers modelRegistry audit
     /// logger)`.
     ///
-    /// **Phase 451 — this is the second of the two budget enforcement
+    /// **This is the second of the two compute-budget enforcement
     /// points, and the only one a federated peer reaches.** A peer
     /// `SubmitFit` lands on `ModelExecutionApi.SubmitFit`, which enqueues a
     /// fit job that runs `IModelFitProvider.Fit` in this process — it never
@@ -260,7 +260,7 @@ module ModelFitBatch =
     /// remoting surface, the peer surface, and any consumer calling it
     /// directly.
     ///
-    /// `guard` is optional: `None` is the pre-451 behaviour exactly, with
+    /// `guard` is optional: `None` is the unbudgeted behaviour exactly, with
     /// no budget read and no branch beyond the one match (GP 13).
     ///
     /// **One reservation per ITEM, and the batch is all-or-nothing.**
@@ -378,7 +378,7 @@ module ModelFitBatch =
         }
 
     /// Submit a batch with no compute budget — `submitBudgeted` with
-    /// `None`, and therefore byte-for-byte the pre-451 behaviour (GP 11).
+    /// `None`, and therefore byte-for-byte the unbudgeted behaviour (GP 11).
     /// Kept as its own name because it is the signature every existing
     /// caller and test uses.
     let submit

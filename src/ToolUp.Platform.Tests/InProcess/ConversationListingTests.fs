@@ -146,6 +146,11 @@ type private FakeFactory(provider: IAIProvider) =
         member _.TryResolveByLabel(_, _) = async { return Ok provider }
         member _.BuildPlatform(_, _, _) = None
 
+
+/// The task-status registry every request in this file shares, as one
+/// composed server's requests do.
+let private taskRegistry = AITaskStatusRegistry()
+
 let private buildContext
     (storage: IBlobStorage)
     (provider: IAIProvider option)
@@ -176,6 +181,7 @@ let private buildContext
     )
     |> ignore
 
+
     titling
     |> Option.iter (fun p -> services.AddSingleton<ConversationTitlingPolicy>(p) |> ignore)
 
@@ -193,7 +199,7 @@ let private buildContext
 
 let private apiFor (ctx: HttpContext) : AIAssistantApi =
     let manager = new SSEConnectionManager()
-    fst (aiAssistantApi None Map.empty manager ctx)
+    fst (aiAssistantApi None Map.empty manager taskRegistry ctx)
 
 /// Poll `GetTaskStatus` until the task is terminal — bounded, so a hang
 /// fails the test instead of the run.
@@ -802,6 +808,53 @@ let tests =
                 CreatedAt = t0
                 CompletedAt = None
             }
+
+            testCase "two servers composed in one process keep two registries"
+            <| fun () ->
+                let factory =
+                    { new IAIProviderFactory with
+                        member _.Available = []
+                        member _.PlatformDescriptors = []
+                        member _.PlatformDescriptor = None
+                        member _.Resolve _ = async { return Error NoProviderConfigured }
+                        member _.TryResolveByLabel(_, _) = async { return Error NoProviderConfigured }
+                        member _.BuildPlatform(_, _, _) = None
+                    }
+
+                let profile =
+                    { new ToolUp.Platform.Providers.IProviderProfile with
+                        member _.Get _ = async { return None }
+                        member _.Set(_, _) = async { return Ok() }
+                        member _.Clear _ = async { return () }
+                        member _.ResolveEntry(_, _, _) = async { return None }
+                        member _.SetEntryHealth(_, _, _) = async { return Ok() }
+                    }
+
+                let composedRegistry () =
+                    let services = ServiceCollection() :> IServiceCollection
+
+                    let app =
+                        ServerApp.empty |> AICompose.withAI (AICompose.AIOptions.create factory profile)
+
+                    match ServerApp.serviceConfig app with
+                    | Some configure -> configure services |> ignore
+                    | None -> failtest "composing AI registers its services"
+
+                    services
+                    |> Seq.pick (fun d ->
+                        match d.ImplementationInstance with
+                        | :? AITaskStatusRegistry as registry when d.ServiceType = typeof<AITaskStatusRegistry> ->
+                            Some registry
+                        | _ -> None)
+
+                let first = composedRegistry ()
+                let second = composedRegistry ()
+                Expect.isFalse (obj.ReferenceEquals(first, second)) "each composed server owns its registry"
+
+                let t = task (Guid.NewGuid())
+                first.Register("c1", "alice", t, t0)
+                Expect.isSome (first.TryGet("c1", "alice", t.TaskId, t0)) "the server that accepted the task knows it"
+                Expect.isNone (second.TryGet("c1", "alice", t.TaskId, t0)) "the other server does not"
 
             testCase "a status is readable only by its container and owner"
             <| fun () ->

@@ -227,7 +227,8 @@ let private awaitTerminal (api: AIAssistantApi) (taskId: Guid) = async {
 
 /// Submit one chat turn on `ctx` and wait for it to finish.
 let private chatTurn (ctx: HttpContext) =
-    let api = fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx)
+    let api =
+        fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) (AIAssistantHandler.AITaskStatusRegistry()) ctx)
 
     async {
         let! submitted =

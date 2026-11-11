@@ -10,13 +10,10 @@ open System.Collections.Concurrent
 open System.Text.Json
 open ToolUp.Platform.BlobStorage
 
-// ─── Phase 689 — the shipped budget ledgers ──────────────────────────────
+// ─── The shipped budget ledgers ──────────────────────────────────────────
 //
 // Two implementations of `IBudgetLedger` and the small latch that keeps a
-// threshold warning from becoming a per-request log line. All three were
-// Phase 451's, written against `ComputeBudgetUsage` and reachable only by
-// a compute submission; the code is unchanged and the types are the seam's,
-// which is the whole of what this phase did to them.
+// threshold warning from becoming a per-request log line.
 //
 // **Two tiers of atomicity, and the difference is honest rather than
 // hidden.** `Reserve` must make read → decide → reserve indivisible, or a
@@ -59,12 +56,12 @@ open ToolUp.Platform.BlobStorage
 // reason other than contention, admit without durable accounting, logged:
 // the fail-open direction in `IBudgetLedger`'s header.
 
-/// Phase 689 — JSON codec for a stored usage row. Separated from the
+/// JSON codec for a stored usage row. Separated from the
 /// ledger so a test can pin the wire form without a blob backend, and so a
 /// future admin surface writes exactly what the ledger reads.
 ///
 /// **The domain is in the PATH, not the row**, which is why the stored
-/// shape is byte-identical to the one Phase 451 has been writing: a row
+/// shape is byte-identical to the one the compute budget has been writing: a row
 /// written by that phase's store before this seam existed reads back
 /// through this codec unchanged.
 [<RequireQualifiedAccess>]
@@ -134,7 +131,7 @@ module BudgetUsageJson =
         | Ok row -> forKey key row
         | Error _ -> None
 
-/// Phase 689 — the refusal a ledger produces when it cannot make a
+/// The refusal a ledger produces when it cannot make a
 /// decision stick, distinct from one the policy produced.
 [<RequireQualifiedAccess>]
 module BudgetContention =
@@ -158,7 +155,7 @@ module BudgetContention =
         PeriodKey = usage.PeriodKey
     }
 
-/// Phase 689 — the blob-backed `IBudgetLedger`: one JSON row per
+/// The blob-backed `IBudgetLedger`: one JSON row per
 /// (domain, scope, period) under the reserved `_platform` container.
 ///
 /// `blobs` is the composed `IBlobStorage`; when it also implements
@@ -300,7 +297,7 @@ type BlobBudgetLedger
             return ()
         }
 
-/// Phase 689 — an in-process `IBudgetLedger` for tests and single-node
+/// An in-process `IBudgetLedger` for tests and single-node
 /// development.
 ///
 /// Genuinely atomic (one lock over a dictionary) and genuinely
@@ -337,7 +334,7 @@ type InMemoryBudgetLedger(?clock: unit -> DateTime) =
                 rows[BudgetLedgerKey.cacheKey key] <- BudgetUsage.settle costAdjustment (now ()) (current key))
         }
 
-/// Phase 689 — reports a threshold crossing once per key rather than on
+/// Reports a threshold crossing once per key rather than on
 /// every subsequent request.
 ///
 /// A warning is a leading indicator; one emitted on every admission after

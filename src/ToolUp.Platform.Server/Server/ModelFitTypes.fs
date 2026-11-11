@@ -9,7 +9,7 @@ open System
 open System.Text
 open System.Security.Cryptography
 
-// ─── Phase 449 — Model-fit envelope core types ──────────────────────────
+// ─── Model-fit envelope core types ──────────────────────────
 //
 // The neutral fit contract (statistical-modelling substrate plan, Stage
 // 2a): `(datasetVersion, opaque spec, seed, gates)` →
@@ -18,7 +18,7 @@ open System.Security.Cryptography
 // modelling math lives behind `IModelFitProvider` — these types carry no
 // estimator or domain vocabulary (GP 1).
 //
-// **Why server-only, not Core/Shared.** A dataset (Phase 448) is a
+// **Why server-only, not Core/Shared.** A dataset is a
 // client-renderable surface, so its types sit in `Platform.Core` under
 // `fable/`. A fit run is a server-side compute envelope with no client
 // view and no ToolUp.Remoting API in this phase, and its identity is
@@ -45,11 +45,11 @@ type ModelSpecRef = {
     /// Lowercase SHA-256 hex of `Payload` (UTF-8). Part of the composite
     /// identity; two specs with identical bytes share a hash.
     SpecHash: string
-    /// Phase 640 — the identifier of the minting rule that produced
+    /// The identifier of the minting rule that produced
     /// `SpecHash`, where the submitter named one. **Stored verbatim and
     /// never acted on**: forge does not re-derive the hash under it, does
     /// not validate the name, and does not refuse an unrecognised one (the
-    /// Phase 603 opacity posture, unchanged by carrying the field).
+    /// opacity posture, unchanged by carrying the field).
     ///
     /// It is deliberately **not** part of `FitCompositeKey`. Identity is
     /// the hash, not the rule that produced it; folding the rule into the
@@ -81,8 +81,8 @@ module ModelSpecRef =
     }
 
 /// Value reference to an immutable dataset vintage a fit reads against
-/// (Phase 448). Identity by value (GP 12 rule 1) — scope + id + version,
-/// never a live store handle. Kept distinct from Phase 448's
+/// Identity by value (GP 12 rule 1) — scope + id + version,
+/// never a live store handle. Kept distinct from
 /// `DatasetVersion` (the full metadata record) so the fit envelope stays
 /// decoupled from the dataset store's metadata shape.
 type DatasetVersionRef = {
@@ -97,7 +97,7 @@ module DatasetVersionRef =
     let key (r: DatasetVersionRef) : string =
         sprintf "%s/%s@v%d" r.ScopeId r.DatasetId r.Version
 
-    /// Phase 641 — the inverse of `key`. `None` when the token is not a
+    /// The inverse of `key`. `None` when the token is not a
     /// dataset-version key. The composite key stores the training vintage as
     /// this token, so a consumer holding an artifact can recover the vintage
     /// it was fitted against without a side channel — which is why the
@@ -156,7 +156,7 @@ type GateSpec = {
     /// Diagnostic key the gate reads from `FitOutcome.Diagnostics`.
     Name: string
     Threshold: float
-    /// Phase 1011 — the unit `Threshold` is stated in (unit text), or `None`
+    /// The unit `Threshold` is stated in (unit text), or `None`
     /// where the gate states none. The gate is evaluated only where this is
     /// the unit the provider reports for the diagnostic (`Gate.evaluate`).
     Unit: string option
@@ -170,7 +170,7 @@ type GateSpec = {
 type GateVerdict = {
     Name: string
     Threshold: float
-    /// Phase 1011 — the unit `Threshold` and `Observed` are both in: the
+    /// The unit `Threshold` and `Observed` are both in: the
     /// gate's, which is the diagnostic's wherever a verdict exists.
     Unit: string option
     Direction: GateDirection
@@ -180,7 +180,7 @@ type GateVerdict = {
     Passed: bool
 }
 
-/// Phase 1011 — a gate that was NOT evaluated, because its unit is not the
+/// A gate that was NOT evaluated, because its unit is not the
 /// unit the provider reports its diagnostic in. `Unit` is the gate's and
 /// `Reported` the diagnostic's; either is `None` where that side states no
 /// unit. A refusal, not a verdict: a comparison across units is never made,
@@ -326,7 +326,7 @@ type ArtifactRef = {
 type FitRequest = {
     /// Scope the fit runs under (GP 4 — structural isolation).
     ScopeId: string
-    /// The immutable dataset vintage the fit reads (Phase 448).
+    /// The immutable dataset vintage the fit reads.
     DatasetVersion: DatasetVersionRef
     /// Opaque provider spec + its content hash.
     SpecRef: ModelSpecRef
@@ -337,7 +337,7 @@ type FitRequest = {
     Seed: int64
     /// Gates to evaluate against the provider's reported diagnostics.
     Gates: GateSpec list
-    /// Phase 451 (interface-plan decision D5) — who asked for this fit.
+    /// Who asked for this fit (interface-plan decision D5).
     /// Read only by compute-budget policy, which can hold agent-initiated
     /// exploration to a tighter ceiling than interactive use. Not part of
     /// the fit's composite identity: the same spec fitted on the same
@@ -361,7 +361,7 @@ type FitOutcome = {
     /// Provider-reported diagnostics (name → float). Forge stores + compares
     /// them; it never interprets them (plan D10).
     Diagnostics: Map<string, float>
-    /// Phase 1011 — the unit each diagnostic is stated in (name → unit
+    /// The unit each diagnostic is stated in (name → unit
     /// text), as the provider reports it. A diagnostic with no entry states
     /// no unit, and a provider that states none returns `Map.empty`. Stating
     /// a unit interprets nothing: it says what a number measures, and it is
@@ -401,7 +401,7 @@ type ModelFitError =
     /// The provider's `Fit` raised. The message is the exception's; the job
     /// layer treats this as retryable (transient).
     | ProviderFailed of kind: string * message: string
-    /// Phase 1011 — a requested gate's unit is not the unit the provider
+    /// A requested gate's unit is not the unit the provider
     /// reports its diagnostic in, so the gate was not evaluated and no
     /// outcome is recorded. Terminal — the same request against the same
     /// provider reports the same units.
@@ -420,12 +420,12 @@ module ModelFitError =
                 (ModelExecutionUnits.describe m.Unit)
                 (ModelExecutionUnits.describe m.Reported)
 
-// ─── Phase 599 — batch fit submission types ─────────────────────────────
+// ─── Batch fit submission types ─────────────────────────────
 //
 // Fleet-shaped consumers submit hundreds of fits per wave; the batch shape
 // makes single-item the degenerate case without changing any envelope
 // semantics — per-item seed, gates, composite key, and audit are exactly
-// the Phase 449 single-item machinery, fanned out. A batch is **audited as
+// the single-item machinery, fanned out. A batch is **audited as
 // a unit** (`ModelFitBatchSubmitted`, one row) and then each item runs
 // independently: a per-item failure never aborts sibling items (partial
 // completion is the normal case, reported as data).
@@ -457,13 +457,13 @@ type FitBatchError =
     | MissingBatchId
     /// Item `index` declares a scope other than the batch's (GP 4).
     | ScopeMismatch of index: int * itemScope: string
-    /// Phase 451 — the scope's compute budget refused the batch. Denied
+    /// The scope's compute budget refused the batch. Denied
     /// before any item is enqueued, so a refused batch costs nothing and
     /// leaves no partially-scheduled residue: the alternative — enqueue
     /// until the budget runs out mid-batch — would produce a wave whose
     /// membership depended on how much allowance happened to be left,
     /// which is not a result anybody can interpret.
-    | BudgetDenied of ComputeBudgetDenial
+    | BudgetDenied of BudgetDenial
 
 module FitBatchError =
     let describe =
@@ -471,9 +471,9 @@ module FitBatchError =
         | FitBatchError.EmptyBatch -> "fit batch contains no requests"
         | FitBatchError.MissingBatchId -> "fit batch has no batch id"
         | FitBatchError.ScopeMismatch(i, s) -> sprintf "fit batch item %d declares scope '%s', not the batch scope" i s
-        | FitBatchError.BudgetDenied d -> ComputeBudgetDenial.describe d
+        | FitBatchError.BudgetDenied d -> ComputeBudgetPolicy.describe d
 
-/// Phase 640 — why one item of an accepted batch did not reach the queue.
+/// Why one item of an accepted batch did not reach the queue.
 ///
 /// Typed rather than a diagnostic string, because this is the per-item
 /// denial a submitter most needs to act on programmatically: it arrives on
@@ -539,9 +539,9 @@ module FitRequestBatch =
                 | Some e -> Error e
                 | None -> Ok()
 
-// ─── Phase 652 — evaluation plans: masked + rolling fold families ───────
+// ─── Evaluation plans: masked + rolling fold families ───────
 //
-// The Phase 456 harness evaluates one artifact against one holdout split —
+// The harness evaluates one artifact against one holdout split —
 // the degenerate single-fold case. A closed `EvaluationPlan` DU widens that
 // to two further fold families: `MaskedObservations` (a declared set of
 // excluded observations, excluded from the *evaluation*, with the series
@@ -843,7 +843,7 @@ module EvaluationPlan =
 /// a forge-computed fallback.
 type IModelEvaluationMetrics =
     /// Compute evaluation metrics for a scored holdout: the predictions
-    /// frame (the Phase 454 scored vintage) and the actuals frame (the
+    /// frame (the scored vintage) and the actuals frame (the
     /// holdout vintage itself). Returns provider-computed metrics
     /// (name → float); `Error reason` is a typed refusal (e.g. the frames
     /// lack the columns the provider evaluates on).
@@ -868,7 +868,7 @@ type EvaluationFoldContext = {
     /// The fold to evaluate. `EvaluationFold.aggregate` for the run's
     /// aggregate row (`FoldWindow.WholeHoldout`, index `-1`).
     Fold: EvaluationFold
-    /// Schema of the predictions frame (the Phase 454 scored vintage).
+    /// Schema of the predictions frame (the scored vintage).
     PredictionsSchema: DatasetSchema
     /// The whole predictions frame.
     Predictions: DatasetRow list

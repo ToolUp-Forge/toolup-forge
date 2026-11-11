@@ -13,7 +13,7 @@ open System.Threading
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
 
-// ─── Phase 451 — the blob-backed compute-budget store ────────────────────
+// ─── The blob-backed compute-budget store ────────────────────
 //
 // The default `IComputeBudgetStore`: budgets and usage rows as JSON blobs
 // under the reserved `_platform` container, keyed by scope and — for usage
@@ -63,7 +63,7 @@ open ToolUp.Platform.Infra
 // zero row rather than an exception out of an admission check, and the
 // on-disk shape is one an operator can read and edit.
 
-/// Phase 451 — JSON codec for the two stored shapes. Separated from the
+/// JSON codec for the two stored shapes. Separated from the
 /// store so a test can pin the wire form without a blob backend, and so a
 /// future admin surface writes exactly what the store reads.
 [<RequireQualifiedAccess>]
@@ -115,7 +115,7 @@ module ComputeBudgetJson =
         (use writer = new Utf8JsonWriter(ms)
          writer.WriteStartObject()
          writer.WriteNumber("SchemaVersion", SchemaVersion)
-         writer.WriteString("Period", ComputeBudgetPeriod.label budget.Period)
+         writer.WriteString("Period", BudgetPeriod.label budget.Period)
          writeLimits writer "Limits" budget.Limits
          writer.WriteStartObject "ClassLimits"
 
@@ -141,11 +141,12 @@ module ComputeBudgetJson =
             if root.GetProperty("SchemaVersion").GetInt32() <> SchemaVersion then
                 None
             else
+                // An unrecognised window reads as monthly, the default a
+                // budget is created with.
                 let period =
-                    match root.GetProperty("Period").GetString() with
-                    | "perpetual" -> ComputeBudgetPeriod.Perpetual
-                    | "daily" -> ComputeBudgetPeriod.Daily
-                    | _ -> ComputeBudgetPeriod.Monthly
+                    root.GetProperty("Period").GetString()
+                    |> BudgetPeriod.parse
+                    |> Option.defaultValue BudgetPeriod.Monthly
 
                 let classLimits =
                     root.GetProperty "ClassLimits"
@@ -161,15 +162,6 @@ module ComputeBudgetJson =
         with _ ->
             None
 
-    /// Serialise a usage row.
-    ///
-    /// Phase 689: the stored shape is `BudgetUsageJson`'s, which was
-    /// lifted from this function — so the bytes are the ones this store
-    /// has always written, and a row written before the seam existed reads
-    /// back through the shared ledger unchanged.
-    let serialiseUsage (usage: ComputeBudgetUsage) : byte[] =
-        BudgetUsageJson.serialise (ComputeBudgetUsage.toBudgetUsage usage)
-
     /// Parse a usage row, refusing one that is not for `scopeId` +
     /// `periodKey`.
     ///
@@ -177,11 +169,10 @@ module ComputeBudgetJson =
     /// blob path already partitions by scope, and this makes a mis-derived
     /// path degrade to "no consumption recorded" rather than to one tenant
     /// spending another's allowance.
-    let deserialiseUsage (scopeId: string) (periodKey: string) (bytes: byte[]) : ComputeBudgetUsage option =
+    let deserialiseUsage (scopeId: string) (periodKey: string) (bytes: byte[]) : BudgetUsage option =
         BudgetUsageJson.deserialise (ComputeBudgetLayout.ledgerKey scopeId periodKey) bytes
-        |> Option.map ComputeBudgetUsage.ofBudgetUsage
 
-/// Phase 451 — the blob-backed `IComputeBudgetStore` registered when
+/// The blob-backed `IComputeBudgetStore` registered when
 /// `ServerConfig.ComputeBudget = FeatureMode.Enabled`.
 ///
 /// `blobs` is the composed `IBlobStorage`; when it also implements
@@ -198,7 +189,7 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
         | Some log -> log.Warn message
         | None -> ()
 
-    /// Phase 689 — the consumption half, on the shared ledger.
+    /// The consumption half, on the shared ledger.
     ///
     /// Every property this store's header described — the per-key
     /// semaphore, the ETag CAS with bounded retries, the fail-open read,
@@ -272,26 +263,11 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
             | Error message -> return Error message
         }
 
-        member _.ReadUsage(scopeId: string, periodKey: string) = async {
-            let! usage = ledger.ReadUsage(ComputeBudgetLayout.ledgerKey scopeId periodKey)
-            return ComputeBudgetUsage.ofBudgetUsage usage
-        }
+        member _.ReadUsage(scopeId: string, periodKey: string) =
+            ledger.ReadUsage(ComputeBudgetLayout.ledgerKey scopeId periodKey)
 
-        member _.Admit(scopeId, periodKey, cost, decide) = async {
-            let! reserved =
-                ledger.Reserve(
-                    ComputeBudgetLayout.ledgerKey scopeId periodKey,
-                    cost,
-                    fun row ->
-                        decide (ComputeBudgetUsage.ofBudgetUsage row)
-                        |> Result.mapError ComputeBudgetDenial.toBudgetDenial
-                )
-
-            return
-                reserved
-                |> Result.map ComputeBudgetUsage.ofBudgetUsage
-                |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
-        }
+        member _.Admit(scopeId, periodKey, cost, decide) =
+            ledger.Reserve(ComputeBudgetLayout.ledgerKey scopeId periodKey, cost, decide)
 
         member _.Settle(scopeId, periodKey, costAdjustment) =
             // The in-flight and spend clamps live in `BudgetUsage.settle`,
@@ -299,7 +275,7 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
             // settling means.
             ledger.Release(ComputeBudgetLayout.ledgerKey scopeId periodKey, costAdjustment)
 
-/// Phase 451 — an in-process `IComputeBudgetStore` for tests and
+/// An in-process `IComputeBudgetStore` for tests and
 /// single-node development.
 ///
 /// Genuinely atomic (one lock over a dictionary) and genuinely
@@ -309,7 +285,7 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
 type InMemoryComputeBudgetStore(?clock: unit -> DateTime) =
     let budgets = ConcurrentDictionary<string, ComputeBudget>()
 
-    /// Phase 689 — the consumption half, on the shared in-memory ledger.
+    /// The consumption half, on the shared in-memory ledger.
     let ledger = InMemoryBudgetLedger(?clock = clock) :> IBudgetLedger
 
     interface IComputeBudgetStore with
@@ -324,26 +300,11 @@ type InMemoryComputeBudgetStore(?clock: unit -> DateTime) =
             return Ok()
         }
 
-        member _.ReadUsage(scopeId: string, periodKey: string) = async {
-            let! row = ledger.ReadUsage(ComputeBudgetLayout.ledgerKey scopeId periodKey)
-            return ComputeBudgetUsage.ofBudgetUsage row
-        }
+        member _.ReadUsage(scopeId: string, periodKey: string) =
+            ledger.ReadUsage(ComputeBudgetLayout.ledgerKey scopeId periodKey)
 
-        member _.Admit(scopeId, periodKey, cost, decide) = async {
-            let! reserved =
-                ledger.Reserve(
-                    ComputeBudgetLayout.ledgerKey scopeId periodKey,
-                    cost,
-                    fun row ->
-                        decide (ComputeBudgetUsage.ofBudgetUsage row)
-                        |> Result.mapError ComputeBudgetDenial.toBudgetDenial
-                )
-
-            return
-                reserved
-                |> Result.map ComputeBudgetUsage.ofBudgetUsage
-                |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
-        }
+        member _.Admit(scopeId, periodKey, cost, decide) =
+            ledger.Reserve(ComputeBudgetLayout.ledgerKey scopeId periodKey, cost, decide)
 
         member _.Settle(scopeId, periodKey, costAdjustment) =
             ledger.Release(ComputeBudgetLayout.ledgerKey scopeId periodKey, costAdjustment)

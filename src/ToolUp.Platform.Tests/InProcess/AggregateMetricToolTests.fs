@@ -626,7 +626,9 @@ let private requestFor (sp: IServiceProvider) (scopeId: string) : HttpContext =
 
 /// Submit one chat turn and return the assistant's reply as persisted.
 let private chatTurn (ctx: HttpContext) : ConversationMessage =
-    let api = fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx)
+    let api =
+        fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) (AIAssistantHandler.AITaskStatusRegistry()) ctx)
+
     let conversationId = Guid.NewGuid()
 
     async {

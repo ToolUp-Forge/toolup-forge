@@ -130,6 +130,11 @@ type CodemodMigration =
     /// formatters take the caller's locale, and `Layout.AppShell` is the
     /// one shell entry, over an `AppShellProps` record.
     | OneViewContract
+    /// One budget vocabulary: the compute budget's period, denial and usage
+    /// twins and their four adapters are the seam's `BudgetPeriod`,
+    /// `BudgetDenial` and `BudgetUsage`; the AI budgets declare a
+    /// `BudgetPosture`, and the task-status registry is a DI singleton.
+    | OneBudgetVocabulary
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -178,6 +183,8 @@ module CodemodMigration =
             "docs/migrations/1087-redesign-g-knowledge-policies-the-hook-and-the-deletions.md"
         | CodemodMigration.OneViewContract ->
             "docs/migrations/1075-redesign-e-one-view-contract-toolkit-locale-and-appshell.md"
+        | CodemodMigration.OneBudgetVocabulary ->
+            "docs/migrations/1081-redesign-f-budget-posture-and-the-compute-twins-retired.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -214,6 +221,7 @@ module CodemodMigration =
         | CodemodMigration.OneResolverOneGate -> "Phase 1063"
         | CodemodMigration.KnowledgePolicies -> "Phase 1087"
         | CodemodMigration.OneViewContract -> "Phase 1075"
+        | CodemodMigration.OneBudgetVocabulary -> "Phase 1081"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1357,6 +1365,65 @@ module Codemod =
             @"\bBootDegradation\.bannerWith\b"
             "BootDegradation.banner"
             "`BootDegradation.bannerWith messages` → `BootDegradation.banner messages` (the English `banner` is gone)"
+        // The compute budget's twins are the seam's types. The adapters were
+        // identities up to the twin, so an applied adapter is its argument
+        // and a point-free one is `id`.
+        rewrite
+            "1081-adapter-applied"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\b(?:ComputeBudgetPeriod\.toBudgetPeriod|ComputeBudgetDenial\.(?:toBudgetDenial|ofBudgetDenial)|ComputeBudgetUsage\.(?:toBudgetUsage|ofBudgetUsage))\s+([A-Za-z_][\w']*(?:\.[A-Za-z_][\w']*)*)"
+            "$1"
+            "an applied compute-budget adapter (`ComputeBudgetPeriod.toBudgetPeriod p`, `ComputeBudgetDenial.toBudgetDenial d` / `ofBudgetDenial d`, `ComputeBudgetUsage.toBudgetUsage u` / `ofBudgetUsage u`) → its argument"
+        rewrite
+            "1081-adapter-point-free"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\b(?:ComputeBudgetPeriod\.toBudgetPeriod|ComputeBudgetDenial\.(?:toBudgetDenial|ofBudgetDenial)|ComputeBudgetUsage\.(?:toBudgetUsage|ofBudgetUsage))\b"
+            "id"
+            "a point-free compute-budget adapter → `id`"
+        rewrite
+            "1081-denial-describe"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bComputeBudgetDenial\.describe\b"
+            "ComputeBudgetPolicy.describe"
+            "`ComputeBudgetDenial.describe` → `ComputeBudgetPolicy.describe` (over the seam's `BudgetDenial`, the same wording)"
+        rewrite
+            "1081-usage-empty"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bComputeBudgetUsage\.empty\b"
+            "BudgetUsage.empty ComputeBudget.Domain"
+            "`ComputeBudgetUsage.empty scope period` → `BudgetUsage.empty ComputeBudget.Domain scope period`"
+        rewrite
+            "1081-usage-json"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bComputeBudgetJson\.serialiseUsage\b"
+            "BudgetUsageJson.serialise"
+            "`ComputeBudgetJson.serialiseUsage` → `BudgetUsageJson.serialise` (it was the shared ledger's codec under the twin)"
+        rewrite
+            "1081-period-type"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bComputeBudgetPeriod\b"
+            "BudgetPeriod"
+            "`ComputeBudgetPeriod` → `BudgetPeriod` (the same cases, labels and keys; the seam adds `Hourly`)"
+        rewrite
+            "1081-denial-type"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bComputeBudgetDenial\b"
+            "BudgetDenial"
+            "`ComputeBudgetDenial` → `BudgetDenial` (the seam's denial, in the `compute-budget` domain)"
+        rewrite
+            "1081-usage-type"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bComputeBudgetUsage\b"
+            "BudgetUsage"
+            "`ComputeBudgetUsage` → `BudgetUsage` (the seam's row, in the `compute-budget` domain)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -2191,6 +2258,50 @@ module Codemod =
             CodemodFileClass.Source
             @"\bLayout\.(?:AppShellWith|AppShell|userButton)\b"
             "`Layout.AppShell` takes one `AppShellProps` record — `{ Sidebar = sidebarProps; Content = content; SidePanel = …; HeaderAction = …; IdentityAction = Layout.headerIdentityAction (); InputsWidth = … }`; the positional form and `AppShellWith` are gone, and `Layout.userButton` is the `IdentityAction` slot"
+        // The compute twins: the sites a type rename cannot finish.
+        review
+            "1081-denial-class"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\b\w*[Dd]enial\w*\.SubmitterClass\b"
+            "a compute denial is a `BudgetDenial`: the submitter class is `.ClassLabel`, and the denial also carries `Domain` (`ComputeBudget.Domain`). An audit row's `ComputeBudgetDeniedPayload.Denial` keeps `SubmitterClass`: it is the frozen row shape, `ComputeBudgetDeniedFigures`"
+        review
+            "1081-record-literal"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @":\s*(?:BudgetDenial|BudgetUsage)\s*=\s*\{"
+            "a literal of the seam's `BudgetDenial` / `BudgetUsage` that stood for a compute twin needs `Domain = ComputeBudget.Domain`, and a denial names the class `ClassLabel`; prefer `BudgetUsage.empty ComputeBudget.Domain scope period with …`"
+        review
+            "1081-audit-denial"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bComputeBudgetDenied\s*\{"
+            "`ComputeBudgetDeniedPayload.Denial` is the frozen row shape `ComputeBudgetDeniedFigures`: build it with `ComputeBudgetDeniedFigures.ofDenial denial` from the `BudgetDenial` the policy refused with"
+        review
+            "1081-period-match"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\|\s*BudgetPeriod\.(?:Perpetual|Daily|Monthly)\s*->"
+            "a match over a compute budget's period is a match over `BudgetPeriod`, which has a fourth case, `Hourly`: give it an arm"
+        // The AI budget posture and the task registry.
+        review
+            "1081-read-policy"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\.ReadPolicy\b"
+            "if this is an `AIBudgetEnforcer` / `AISpendEnforcer`, `ReadPolicy` returns `Result<policy, string>`: a config-store failure is an `Error`, decided by the declared `BudgetPosture` (`AIOptions.withBudgetPosture`), never read as unbounded"
+        review
+            "1081-assistant-api"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\baiAssistantApi\b"
+            "`aiAssistantApi` takes the server's `AITaskStatusRegistry` after the SSE manager: `aiAssistantApi config contexts sseManager taskRegistry ctx` — pass the composed one, or one `AITaskStatusRegistry()` shared by the requests that must see each other's tasks"
+        review
+            "1081-task-registry"
+            CodemodMigration.OneBudgetVocabulary
+            CodemodFileClass.Source
+            @"\bAITaskStatusRegistry\.Shared\b"
+            "`AITaskStatusRegistry.Shared` is gone: `AICompose` registers one registry per composed server; resolve it from DI (`services.GetService(typeof<AITaskStatusRegistry>)`), or register `AITaskStatusRegistry()` in a hand-built container"
     ]
 
 
@@ -3422,6 +3533,7 @@ module Codemod =
             CodemodMigration.OneResolverOneGate
             CodemodMigration.KnowledgePolicies
             CodemodMigration.OneViewContract
+            CodemodMigration.OneBudgetVocabulary
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

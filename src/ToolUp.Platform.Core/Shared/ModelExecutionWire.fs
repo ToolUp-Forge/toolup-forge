@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 open System
 
-// ─── Phase 600 — model-execution submitter wire surface ─────────────────
+// ─── Model-execution submitter wire surface ─────────────────
 //
 // Fable-safe wire records for the out-of-process submitter face of the
 // model-execution envelope (fit submission, outcome retrieval, dataset
@@ -20,14 +20,14 @@ open System
 // submission carries the submitter's own `SpecHash` alongside the opaque
 // payload; forge stores and keys exactly the hash it was handed — it
 // never re-derives, normalises, or validates it against the payload
-// (the Phase 603 opacity posture). Handlers MUST NOT re-hash.
+// (the opacity posture). Handlers MUST NOT re-hash.
 //
 // **Scope is never wire-supplied.** Every method executes under the
 // caller's resolved scope (GP 4) — a submission cannot name another
 // team's scope; the handler overwrites any ambient scope assumption the
 // caller makes (the `JobApi` anti-impersonation precedent).
 //
-// ─── Phase 640 — closing the certified carry gaps ───────────────────────
+// ─── Closing the certified carry gaps ───────────────────────
 //
 // The conformance harness that certifies this face against the external
 // model-execution corpus records its carry gaps as an explicit residue
@@ -58,7 +58,7 @@ open System
 type ModelExecutionGate = {
     Name: string
     Threshold: float
-    /// Phase 1011 — the unit `Threshold` is stated in, as unit text (the
+    /// The unit `Threshold` is stated in, as unit text (the
     /// specification's canonical text of an admitted unit), or `None` where
     /// the gate states none. Compared with the unit the provider reports for
     /// the diagnostic by TEXT, never converted: a gate is evaluated only where
@@ -72,7 +72,7 @@ type ModelExecutionGate = {
 type ModelExecutionGateVerdict = {
     Name: string
     Threshold: float
-    /// Phase 1011 — the unit both `Threshold` and `Observed` are in: the
+    /// The unit both `Threshold` and `Observed` are in: the
     /// gate's unit, for a verdict exists only where it equals the
     /// diagnostic's.
     Unit: string option
@@ -112,7 +112,7 @@ type ModelExecutionFitSubmission = {
     ProviderKind: string
     Seed: int64
     Gates: ModelExecutionGate list
-    /// Phase 451 (interface-plan decision D5) — who asked for this fit.
+    /// Who asked for this fit (interface-plan decision D5).
     /// Declared by the submitter and used only by compute-budget policy,
     /// which can gate agent-driven exploration harder than interactive
     /// use. Forge never infers it and never acts on it beyond the budget
@@ -122,7 +122,7 @@ type ModelExecutionFitSubmission = {
 }
 
 /// An ordered batch of fit submissions under one caller-supplied
-/// correlation id (the Phase 599 batch shape on the wire).
+/// correlation id (the batch shape on the wire).
 type ModelExecutionBatchSubmission = {
     BatchId: string
     Items: ModelExecutionFitSubmission list
@@ -146,7 +146,7 @@ type ModelExecutionScoreRefusal =
 /// catch-all mapping).
 ///
 /// **The vocabulary is closed for interpretation and open for addition.**
-/// A case may be added (Phase 640 added four); a case is never removed and
+/// A case may be added; a case is never removed and
 /// never has its meaning changed, because removing one turns a handled
 /// condition into an unhandled one at every consumer that was branching
 /// on it.
@@ -173,7 +173,7 @@ type ModelExecutionRefusal =
     | InvalidQuery of reason: string
     /// The scoring envelope refused, with the typed scoring reason.
     | ScoreRefused of ModelExecutionScoreRefusal
-    /// Phase 451 — the caller's scope has no compute budget left for this
+    /// The caller's scope has no compute budget left for this
     /// submission, or the submission exceeds a per-class ceiling. Denied
     /// before any work is enqueued; the payload names which ceiling, what
     /// the quota is, and what has been spent, so a submitter (very often an
@@ -186,28 +186,28 @@ type ModelExecutionRefusal =
     /// would fit, whereas a policy refusal carries a rule identifier and
     /// nothing to arithmetic against. Collapsing the two would throw away
     /// the only numbers that make the refusal actionable.
-    | BudgetDenied of ComputeBudgetDenial
-    /// Phase 640 — the peer declared a profile version this deployment does
+    | BudgetDenied of BudgetDenial
+    /// The peer declared a profile version this deployment does
     /// not read. Carries what arrived and the versions that are accepted,
     /// so the caller can re-aim without a second round trip.
     | EnvelopeVersionMismatch of received: int * accepted: int list
-    /// Phase 640 — the caller named a document shape / operation this
+    /// The caller named a document shape / operation this
     /// participant does not implement. `known` is the set it does, for the
     /// same reason `UnknownProvider` carries one.
     | UnknownDocumentKind of kind: string * known: string list
-    /// Phase 640 — work completed but did not clear the gates its submitter
+    /// Work completed but did not clear the gates its submitter
     /// declared, and this deployment's policy is to refuse rather than hand
     /// the artifact on. Carries the verdicts, so the caller need not
     /// re-query to learn which gate failed and by how much.
     ///
     /// Note what this case does **not** mean: forge still *registers* a
     /// gate-failed fit (a failed gate is a typed verdict, not an error —
-    /// Phase 449's standing acceptance), because a failure is evidence and
+    /// the standing acceptance), because a failure is evidence and
     /// deleting it would make the evidence base a survivorship sample. This
     /// refusal governs what a submitter is handed downstream of that, and
     /// only where a deployment opted in (`ModelExecutionPolicy`).
     | GateFailed of verdicts: ModelExecutionGateVerdict list
-    /// Phase 640 — a named policy refused the request. The rule's
+    /// A named policy refused the request. The rule's
     /// identifier is stable and is the thing to branch on; any wording that
     /// accompanies it is diagnostic.
     | PolicyRefused of rule: string
@@ -216,7 +216,7 @@ type ModelExecutionRefusal =
     /// An unmapped server-side exception, surfaced as data — the
     /// contract-proven "no bare exception on the wire" backstop.
     | Unexpected of message: string
-    /// Phase 1011 — a gate's unit is not the unit the provider reports the
+    /// A gate's unit is not the unit the provider reports the
     /// diagnostic it reads in, so the gate was not evaluated: a comparison is
     /// never made across units, and neither value is converted. `unit` is the
     /// gate's and `reported` the diagnostic's; either is `None` where that side
@@ -228,7 +228,7 @@ type ModelExecutionRefusal =
     /// positional wire.
     | GateUnitMismatch of name: string * unit: string option * reported: string option
 
-/// Phase 1011 — the one rule every gate-evaluating path applies to units.
+/// The one rule every gate-evaluating path applies to units.
 module ModelExecutionUnits =
     /// A gate may be evaluated only where its unit and the unit reported for
     /// its diagnostic are the same text, or both absent. Text equality is the
@@ -260,7 +260,7 @@ module ModelExecutionRefusal =
         | ModelExecutionRefusal.NotFound w -> $"not found: {w}"
         | ModelExecutionRefusal.InvalidQuery r -> $"invalid query: {r}"
         | ModelExecutionRefusal.ScoreRefused _ -> "scoring refused (see typed reason)"
-        | ModelExecutionRefusal.BudgetDenied d -> ComputeBudgetDenial.describe d
+        | ModelExecutionRefusal.BudgetDenied d -> ComputeBudgetPolicy.describe d
         | ModelExecutionRefusal.EnvelopeVersionMismatch(received, accepted) ->
             let acceptedText = accepted |> List.map string |> String.concat separator
 
@@ -306,13 +306,13 @@ type ModelExecutionReceipt = {
     /// `(index, refusal)` per item whose enqueue failed — partial
     /// acceptance is data, never an exception, and the reason is the same
     /// typed vocabulary every other denial on this face uses. It was a
-    /// diagnostic string until Phase 640, which meant the one refusal a
+    /// diagnostic string once, which meant the one refusal a
     /// caller most needs to act on programmatically (which items of my wave
     /// did not start?) was the one it had to string-match.
     EnqueueFailures: (int * ModelExecutionRefusal) list
 }
 
-/// A reference to the stored artifact a fit produced (the Phase 449
+/// A reference to the stored artifact a fit produced (the
 /// `ArtifactRef` projection). Optional on an outcome — see
 /// `ModelExecutionOutcome.Artifact`.
 type ModelExecutionArtifactRef = {
@@ -353,13 +353,13 @@ type ModelExecutionOutcome = {
     ProviderVersion: string
     /// The fitted artifact, or `None` when the run produced no retained
     /// artifact — a refused or failed run, recorded because a failure is
-    /// still evidence. Before Phase 640 these were two non-optional
+    /// still evidence. Before, these were two non-optional
     /// strings, so "nothing was retained" and "something was retained under
     /// empty identifiers" were the same value, and no consumer could tell
     /// an absent artifact from a malformed one.
     Artifact: ModelExecutionArtifactRef option
     Diagnostics: Map<string, float>
-    /// Phase 1011 — the unit each diagnostic is stated in, as unit text,
+    /// The unit each diagnostic is stated in, as unit text,
     /// keyed by the diagnostic's name. A diagnostic with no entry states no
     /// unit, so an outcome whose provider states none carries the empty map.
     /// Beside `Diagnostics` rather than inside it: the values keep their type,
@@ -377,7 +377,7 @@ type ModelExecutionOutcome = {
 }
 
 /// Multi-key outcome filter (conjunctive; empty list / `None` = any) —
-/// the Phase 599 `ModelRegistryQuery` on the wire. Statuses are stable
+/// the `ModelRegistryQuery` on the wire. Statuses are stable
 /// case-name strings.
 type ModelExecutionOutcomeQuery = {
     SpecHashes: string list
@@ -405,7 +405,7 @@ type ModelExecutionScoreRequest = {
 
 /// A dataset version's resolution info — enough for a submitter to pin a
 /// vintage and for a worker to fetch the content blob (format-honest
-/// handoff, the Phase 448 `DatasetContentRef` projection).
+/// handoff, the `DatasetContentRef` projection).
 type ModelExecutionDatasetVersion = {
     DatasetId: string
     Version: int
@@ -415,7 +415,7 @@ type ModelExecutionDatasetVersion = {
     CreatedAt: DateTimeOffset
 }
 
-/// Phase 640 — opt-in executor policy for the submitter face.
+/// Opt-in executor policy for the submitter face.
 ///
 /// Resolved from DI per request like every other substrate this face uses,
 /// so a deployment that registers nothing gets the permissive value and is
@@ -446,7 +446,7 @@ module ModelExecutionPolicy =
     let refuseGateFailures: ModelExecutionPolicy = { RefuseGateFailedArtifacts = true }
 
 /// The authenticated remoting surface for out-of-process submitters
-/// (Phase 600). Every method is team-scoped through the caller's
+/// Every method is team-scoped through the caller's
 /// resolved `AccessContext` (GP 4) and audited with the submitter
 /// identity (GP 6); mutating methods carry the Owner/Admin write gate in
 /// team modes. Dispatcher-anonymous like `JobApi` — the handler enforces

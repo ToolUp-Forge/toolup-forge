@@ -7,7 +7,7 @@ open ToolUp.Platform
 
 open System
 
-// ─── Phase 451 — the compute-budget store seam ───────────────────────────
+// ─── The compute-budget store seam ───────────────────────────
 //
 // `ComputeBudgetPolicy.admit` (Core) is a pure function of a budget, a
 // usage row and a submission. This seam is the other half: where the budget
@@ -28,10 +28,10 @@ open System
 //
 // **Six portability rules (GP 12) — audited.**
 // 1. *Identity by value* — scope ids, period keys, `decimal`s and the
-//    `ComputeBudget` / `ComputeBudgetUsage` records. No live handle, no
+//    `ComputeBudget` / `BudgetUsage` records. No live handle, no
 //    transaction object, no lock crosses the surface.
 // 2. *Async at every boundary* — every member returns `Async<_>`.
-// 3. *Retry + supervision as data* — a refusal is a `ComputeBudgetDenial`
+// 3. *Retry + supervision as data* — a refusal is a `BudgetDenial`
 //    in the error channel, never an exception; a write failure is a
 //    `Result` string. Nothing here takes a callback.
 // 4. *Stateless between invocations* — every call carries the whole scope
@@ -44,7 +44,7 @@ open System
 //    durations are `TimeSpan`. The period boundary is UTC-day / UTC-month
 //    granularity and is declared as such, never sub-second.
 
-/// Phase 451 — where a scope's compute budget and its live consumption
+/// Where a scope's compute budget and its live consumption
 /// live.
 ///
 /// Two concerns behind one seam, deliberately: the budget (rarely written,
@@ -72,9 +72,9 @@ type IComputeBudgetStore =
     abstract SetBudget: scopeId: string * budget: ComputeBudget -> Async<Result<unit, string>>
 
     /// The live usage row for one scope+period. Read-only; returns
-    /// `ComputeBudgetUsage.empty` for a period nothing has been charged
+    /// `BudgetUsage.empty` for a period nothing has been charged
     /// to yet.
-    abstract ReadUsage: scopeId: string * periodKey: string -> Async<ComputeBudgetUsage>
+    abstract ReadUsage: scopeId: string * periodKey: string -> Async<BudgetUsage>
 
     /// **Atomically** evaluate `decide` against the live usage row and, if
     /// it admits, apply the reservation (`InFlight + 1`, `Spent + cost`)
@@ -90,11 +90,8 @@ type IComputeBudgetStore =
     /// `Ok` carries the usage row **as it stands after** the reservation,
     /// so a caller can emit a threshold warning without a second read.
     abstract Admit:
-        scopeId: string *
-        periodKey: string *
-        cost: decimal *
-        decide: (ComputeBudgetUsage -> Result<unit, ComputeBudgetDenial>) ->
-            Async<Result<ComputeBudgetUsage, ComputeBudgetDenial>>
+        scopeId: string * periodKey: string * cost: decimal * decide: (BudgetUsage -> Result<unit, BudgetDenial>) ->
+            Async<Result<BudgetUsage, BudgetDenial>>
 
     /// Release one reservation on a terminal outcome: `InFlight - 1`, and
     /// `Spent + costAdjustment`.
@@ -118,11 +115,11 @@ type IComputeBudgetStore =
     /// grant extra concurrency, which is the wrong failure direction.
     abstract Settle: scopeId: string * periodKey: string * costAdjustment: decimal -> Async<unit>
 
-/// Phase 451 — where budget state lives in blob storage. Shared so a
+/// Where budget state lives in blob storage. Shared so a
 /// future admin surface or sweep enumerates exactly what the store writes,
 /// the reason `ComputeMemoLayout` exists.
 ///
-/// Phase 689: the usage half is `BudgetLedgerLayout` with this domain's
+/// The budget seam: the usage half is `BudgetLedgerLayout` with this domain's
 /// label, which is why the shared ledger reads and writes exactly the
 /// blobs this phase has been writing since it shipped — the adoption is a
 /// re-expression, not a data migration. The budget blob stays here,

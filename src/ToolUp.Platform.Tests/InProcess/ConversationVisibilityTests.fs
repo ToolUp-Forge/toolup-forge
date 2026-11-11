@@ -124,6 +124,10 @@ let private newWorld (settings: TeamConversationVisibilitySettings option) = asy
     }
 }
 
+/// The task-status registry every request in this file shares, as one
+/// composed server's requests do.
+let private taskRegistry = AITaskStatusRegistry()
+
 /// What the assistant handler resolves unconditionally, over `storage`.
 let private chatServices (storage: IBlobStorage) : ServiceCollection =
     let services = ServiceCollection()
@@ -190,7 +194,7 @@ let private contextFor (world: World) (teamId: string) (userId: string) : HttpCo
 
 let private assistant (world: World) (teamId: string) (userId: string) : AIAssistantApi =
     let manager = new SSEConnectionManager()
-    fst (aiAssistantApi None Map.empty manager (contextFor world teamId userId))
+    fst (aiAssistantApi None Map.empty manager taskRegistry (contextFor world teamId userId))
 
 let private policyApi (world: World) (teamId: string) (userId: string) =
     teamConversationVisibilityApi (contextFor world teamId userId)
@@ -391,7 +395,7 @@ let private matrixCase (level: Level) (label: string, userId: string, teamId: st
             CompletedAt = None
         }
 
-        AITaskStatusRegistry.Shared.Register(containerOf "alpha", "alice", task, DateTime.UtcNow)
+        taskRegistry.Register(containerOf "alpha", "alice", task, DateTime.UtcNow)
         let! status = api.GetTaskStatus task.TaskId
         Expect.equal status.IsSome (userId = "alice") $"task status — {what}"
 
@@ -498,7 +502,9 @@ let private readPathTests =
                     Encoding.UTF8.GetBytes(JsonSerializer.Serialize([ message id User "mine" t0 "alice" ], jsonOptions))
                 )
 
-            let api = fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx)
+            let api =
+                fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) taskRegistry ctx)
+
             let! listed = api.ListConversations()
             Expect.equal (listed |> List.map _.Id) [ id ] "listed as before"
 
@@ -598,7 +604,9 @@ let private perTeamTests =
                     )
                 )
 
-            let api = fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx)
+            let api =
+                fst (aiAssistantApi None Map.empty (new SSEConnectionManager()) taskRegistry ctx)
+
             let! listed = api.ListConversations()
             Expect.equal (listed |> List.map _.Id) [ id ] "another member's conversation is listed, as before"
             let! opened = api.GetConversation id
@@ -930,6 +938,7 @@ let private historySeenBy (world: World) (store: IConversationStore) (userId: st
                 (Some config)
                 Map.empty
                 (new SSEConnectionManager())
+                taskRegistry
                 (contextWithStore world "alpha" userId store)
         )
 
@@ -1216,7 +1225,7 @@ let private surfacesWith
             teamId
             userId
 
-    aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx
+    aiAssistantApi None Map.empty (new SSEConnectionManager()) taskRegistry ctx
 
 /// Every event of a typed stream, bounded.
 let private collect (stream: Collections.Generic.IAsyncEnumerable<AIStreamEvent>) = async {

@@ -2598,24 +2598,26 @@ module PlatformDecoders =
             | 5 -> Some(Decode.payload (Decode.asString |> Decode.map ModelExecutionScoreRefusal.StorageFailure))
             | _ -> None)
 
-    /// Generated decoder for `ComputeBudgetDenial` — one combinator per field or case, read off the type's own shape.
-    let computeBudgetDenial: Decoder<ComputeBudgetDenial> =
-        Decode.succeed (fun scopeId submitterClass dimension quota spent requested periodKey -> ({
+    /// Generated decoder for `BudgetDenial` — one combinator per field or case, read off the type's own shape.
+    let budgetDenial: Decoder<BudgetDenial> =
+        Decode.succeed (fun domain scopeId classLabel dimension quota spent requested periodKey -> ({
+            Domain = domain
             ScopeId = scopeId
-            SubmitterClass = submitterClass
+            ClassLabel = classLabel
             Dimension = dimension
             Quota = quota
             Spent = spent
             Requested = requested
             PeriodKey = periodKey
-        }: ComputeBudgetDenial))
-        |> Decode.apply (Decode.field "ScopeId" 0 Decode.asString)
-        |> Decode.apply (Decode.field "SubmitterClass" 1 Decode.asString)
-        |> Decode.apply (Decode.field "Dimension" 2 Decode.asString)
-        |> Decode.apply (Decode.field "Quota" 3 Decode.asDecimal)
-        |> Decode.apply (Decode.field "Spent" 4 Decode.asDecimal)
-        |> Decode.apply (Decode.field "Requested" 5 Decode.asDecimal)
-        |> Decode.apply (Decode.field "PeriodKey" 6 Decode.asString)
+        }: BudgetDenial))
+        |> Decode.apply (Decode.field "Domain" 0 Decode.asString)
+        |> Decode.apply (Decode.field "ScopeId" 1 Decode.asString)
+        |> Decode.apply (Decode.field "ClassLabel" 2 Decode.asString)
+        |> Decode.apply (Decode.field "Dimension" 3 Decode.asString)
+        |> Decode.apply (Decode.field "Quota" 4 Decode.asDecimal)
+        |> Decode.apply (Decode.field "Spent" 5 Decode.asDecimal)
+        |> Decode.apply (Decode.field "Requested" 6 Decode.asDecimal)
+        |> Decode.apply (Decode.field "PeriodKey" 7 Decode.asString)
 
     /// Generated decoder for `ModelExecutionGateVerdict` — one combinator per field or case, read off the type's own shape.
     let modelExecutionGateVerdict: Decoder<ModelExecutionGateVerdict> =
@@ -2645,7 +2647,7 @@ module PlatformDecoders =
             | 5 -> Some(Decode.payload (Decode.asString |> Decode.map ModelExecutionRefusal.NotFound))
             | 6 -> Some(Decode.payload (Decode.asString |> Decode.map ModelExecutionRefusal.InvalidQuery))
             | 7 -> Some(Decode.payload (modelExecutionScoreRefusal |> Decode.map ModelExecutionRefusal.ScoreRefused))
-            | 8 -> Some(Decode.payload (computeBudgetDenial |> Decode.map ModelExecutionRefusal.BudgetDenied))
+            | 8 -> Some(Decode.payload (budgetDenial |> Decode.map ModelExecutionRefusal.BudgetDenied))
             | 9 ->
                 Some(
                     Decode.fields
@@ -3162,7 +3164,7 @@ module PlatformDecoders =
         typeof<ScheduleError>.FullName
         typeof<ModelExecutionJobRef>.FullName
         typeof<ModelExecutionScoreRefusal>.FullName
-        typeof<ComputeBudgetDenial>.FullName
+        typeof<BudgetDenial>.FullName
         typeof<ModelExecutionGateVerdict>.FullName
         typeof<ModelExecutionRefusal>.FullName
         typeof<ModelExecutionReceipt>.FullName
@@ -3496,7 +3498,7 @@ module PlatformDecoders =
         Codecs.register<ScheduleError> Scope.Unscoped (Codec.msgPack scheduleError)
         Codecs.register<ModelExecutionJobRef> Scope.Unscoped (Codec.msgPack modelExecutionJobRef)
         Codecs.register<ModelExecutionScoreRefusal> Scope.Unscoped (Codec.msgPack modelExecutionScoreRefusal)
-        Codecs.register<ComputeBudgetDenial> Scope.Unscoped (Codec.msgPack computeBudgetDenial)
+        Codecs.register<BudgetDenial> Scope.Unscoped (Codec.msgPack budgetDenial)
         Codecs.register<ModelExecutionGateVerdict> Scope.Unscoped (Codec.msgPack modelExecutionGateVerdict)
         Codecs.register<ModelExecutionRefusal> Scope.Unscoped (Codec.msgPack modelExecutionRefusal)
         Codecs.register<ModelExecutionReceipt> Scope.Unscoped (Codec.msgPack modelExecutionReceipt)
@@ -3831,7 +3833,7 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<ScheduleError> gate draws seed scheduleError
         RemotingDecoders.verifyThrough<ModelExecutionJobRef> gate draws seed modelExecutionJobRef
         RemotingDecoders.verifyThrough<ModelExecutionScoreRefusal> gate draws seed modelExecutionScoreRefusal
-        RemotingDecoders.verifyThrough<ComputeBudgetDenial> gate draws seed computeBudgetDenial
+        RemotingDecoders.verifyThrough<BudgetDenial> gate draws seed budgetDenial
         RemotingDecoders.verifyThrough<ModelExecutionGateVerdict> gate draws seed modelExecutionGateVerdict
         RemotingDecoders.verifyThrough<ModelExecutionRefusal> gate draws seed modelExecutionRefusal
         RemotingDecoders.verifyThrough<ModelExecutionReceipt> gate draws seed modelExecutionReceipt

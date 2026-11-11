@@ -144,6 +144,11 @@ type AIOptions = {
     /// model (`AIOptions.withReflectionTools`). `false` (the default)
     /// offers exactly the module tools (GP 11).
     ReflectionTools: bool
+    /// What the token and spend budgets do when they cannot read their
+    /// policy or their window: `FailOpen` (the default) admits the call,
+    /// `FailClosed` refuses it. Either way the failure is recorded as a
+    /// `BudgetWindowUnreadable` event. Set via `AIOptions.withBudgetPosture`.
+    BudgetPosture: BudgetPosture
 }
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
@@ -263,7 +268,7 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
         // builder but forgot" message.
         if Set.ofList declaredIds <> Set.ofList factoryIds then
             failwithf
-                "AI platform-provider declaration mismatch. AIOptions.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
+                "AI platform-provider declaration mismatch. AIOptions.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution."
                 (System.String.Join(", ", declaredIds))
                 (System.String.Join(", ", factoryIds))
 
@@ -344,6 +349,11 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
     // completion via try/finally.
     let cancellationRegistry = AICancellationRegistry.AICancellationRegistry()
 
+    // Per-server record of each chat task's latest status, read by the
+    // polling fallback. One per composed server: two servers in one
+    // process keep two records.
+    let taskStatusRegistry = AITaskStatusRegistry()
+
     // Dev-only telemetry endpoints. Runtime-gated via
     // `ServerConfig.EnableDevEndpoints` (default `false`). The previous
     // `#if DEBUG` belt-and-suspenders gate was removed when ToolUp.Platform
@@ -364,12 +374,16 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
 
     let aiHandlers =
         [
-            makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> fst)
+            makeApi (fun ctx ->
+                aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) taskStatusRegistry ctx
+                |> fst)
             // The typed streaming companion (StreamChatV2).
             // Same per-request closure; the dispatcher auto-frames its
             // IAsyncEnumerable<AIStreamEvent> method as SSE. Legacy
             // SubmitMessage + /api/ai/events (below) stay mounted unchanged.
-            makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> snd)
+            makeApi (fun ctx ->
+                aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) taskStatusRegistry ctx
+                |> snd)
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
             // The active team's conversation visibility level.
             makeApi TeamConversationPolicyStore.teamConversationVisibilityApi
@@ -433,7 +447,9 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
         // header on the rule-4 split).
         let s =
             if DeploymentConfig.hasTeamScope config then
-                let budgetCache = AIBudgetEnforcer.AIBudgetWindowCache()
+                let budgetCache =
+                    AIBudgetEnforcer.AIBudgetWindowCache(AIBudgetEnforcer.WindowCacheTtlSeconds, options.BudgetPosture)
+
 
                 s
                     .AddSingleton<AIBudgetEnforcer.AIBudgetWindowCache>(budgetCache)
@@ -463,7 +479,8 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
         // exactly that.
         let s =
             s
-                .AddSingleton<AIBudgetEnforcer.AISpendWindowCache>()
+                .AddSingleton<AIBudgetEnforcer.AISpendWindowCache>(fun (_: System.IServiceProvider) ->
+                    AIBudgetEnforcer.AISpendWindowCache(AIBudgetEnforcer.WindowCacheTtlSeconds, options.BudgetPosture))
                 .AddSingleton<IDevDiagnosticsContributor>(fun (sp: System.IServiceProvider) ->
                     let table =
                         match sp.GetService(typeof<ModelPriceTable>) with
@@ -560,6 +577,7 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
                 // what makes `TrustEverything` actually reachable.
                 .AddSingleton<AIConsentMode>(options.ConsentMode)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
+                .AddSingleton<AITaskStatusRegistry>(taskStatusRegistry)
                 // The services an agent turn reads, resolved once per turn
                 // (transient: one resolution each time a turn asks), so the
                 // loop holds one record instead of probing the container.
@@ -723,6 +741,14 @@ module AIOptions =
         ToolEffects = None
         AIAnsweringTools = []
         ReflectionTools = false
+        BudgetPosture = BudgetPosture.FailOpen
+    }
+
+    /// **Sets** what the budgets do when they cannot read their policy or
+    /// their window; a later call replaces it.
+    let withBudgetPosture (posture: BudgetPosture) (options: AIOptions) : AIOptions = {
+        options with
+            BudgetPosture = posture
     }
 
     /// **Sets** the assistant's server config; a later call replaces it.

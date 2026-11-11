@@ -1,0 +1,36 @@
+module Consumer.Budgets
+
+let period: ComputeBudgetPeriod = ComputeBudgetPeriod.Daily
+
+let seamPeriod = ComputeBudgetPeriod.toBudgetPeriod period
+
+let periods = [ ComputeBudgetPeriod.Monthly ] |> List.map ComputeBudgetPeriod.toBudgetPeriod
+
+let usage = ComputeBudgetUsage.empty "team-a" "2026-08"
+
+let row: ComputeBudgetUsage = { usage with InFlight = 1 }
+
+let bytes = ComputeBudgetJson.serialiseUsage (ComputeBudgetUsage.toBudgetUsage usage)
+
+let back = rows |> List.map ComputeBudgetUsage.ofBudgetUsage
+
+let describe (denial: ComputeBudgetDenial) = ComputeBudgetDenial.describe denial
+
+let seamDenial = ComputeBudgetDenial.toBudgetDenial refusal
+
+let refused = result |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
+
+let who = denial.SubmitterClass
+
+let audited = ComputeBudgetDenied { Denial = refusal; Surface = "external-compute"; Kind = "fit"; SubmittedBy = ""; RefusedAt = now }
+
+let window =
+    match period with
+    | ComputeBudgetPeriod.Daily -> "day"
+    | _ -> "other"
+
+let policy = enforcer.ReadPolicy scopeId
+
+let api = aiAssistantApi None Map.empty manager ctx
+
+let registry = AITaskStatusRegistry.Shared

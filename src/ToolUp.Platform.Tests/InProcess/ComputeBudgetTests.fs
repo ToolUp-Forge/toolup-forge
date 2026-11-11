@@ -23,7 +23,7 @@ open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Testing
 
-// ─── Phase 451 — compute-budget governance ───────────────────────────────
+// ─── Compute-budget governance ───────────────────────────────
 //
 // The claims, and the shape each is asserted in. Throughout, the assertion
 // is on **what the inner substrate was handed** rather than on what the
@@ -69,7 +69,7 @@ open ToolUp.Platform.Testing
 //      peer contract's `runOperation` calls.
 //
 //   8. **Metering** — a settled run emits one `compute.units` usage record
-//      (the Phase 9d integration), and the quantity is what the run
+//      (the integration), and the quantity is what the run
 //      actually cost rather than what admission reserved.
 
 // ── doubles ──────────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ let private policyTests =
 
         test "an unrestricted budget admits everything, whatever the class" {
             for submitter in SubmitterClass.all do
-                let usage = ComputeBudgetUsage.empty scope "2026-08"
+                let usage = BudgetUsage.empty ComputeBudget.Domain scope "2026-08"
 
                 let verdict =
                     ComputeBudgetPolicy.admit scope submitter ComputeBudgetLimits.unrestricted usage None 1_000_000M
@@ -216,7 +216,7 @@ let private policyTests =
             }
 
             let usage = {
-                ComputeBudgetUsage.empty scope "2026-08" with
+                BudgetUsage.empty ComputeBudget.Domain scope "2026-08" with
                     InFlight = 5
                     Spent = 99M
             }
@@ -235,7 +235,7 @@ let private policyTests =
 
         test "a declared duration over the cap is refused; one under it passes" {
             let limits = ComputeBudgetLimits.runDuration (TimeSpan.FromMinutes 10.0)
-            let usage = ComputeBudgetUsage.empty scope "perpetual"
+            let usage = BudgetUsage.empty ComputeBudget.Domain scope "perpetual"
 
             let over =
                 ComputeBudgetPolicy.admit scope SubmitterClass.Human limits usage (Some(TimeSpan.FromMinutes 11.0)) 1M
@@ -281,7 +281,7 @@ let private policyTests =
 
         test "a class override REPLACES the default rather than merging into it" {
             let budget =
-                ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 10)
+                ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 10)
                 |> ComputeBudget.withClassLimits SubmitterClass.AgentInitiated (ComputeBudgetLimits.allowance 5M)
 
             let agent = ComputeBudget.limitsFor SubmitterClass.AgentInitiated budget
@@ -297,14 +297,11 @@ let private policyTests =
             let lateUtc = DateTime(2026, 8, 5, 23, 30, 0, DateTimeKind.Utc)
             let nextUtc = DateTime(2026, 8, 6, 0, 30, 0, DateTimeKind.Utc)
 
-            Expect.equal (ComputeBudgetPeriod.key ComputeBudgetPeriod.Daily lateUtc) "2026-08-05" "daily key"
-            Expect.equal (ComputeBudgetPeriod.key ComputeBudgetPeriod.Daily nextUtc) "2026-08-06" "daily key rolls"
-            Expect.equal (ComputeBudgetPeriod.key ComputeBudgetPeriod.Monthly lateUtc) "2026-08" "monthly key"
+            Expect.equal (BudgetPeriod.key BudgetPeriod.Daily lateUtc) "2026-08-05" "daily key"
+            Expect.equal (BudgetPeriod.key BudgetPeriod.Daily nextUtc) "2026-08-06" "daily key rolls"
+            Expect.equal (BudgetPeriod.key BudgetPeriod.Monthly lateUtc) "2026-08" "monthly key"
 
-            Expect.equal
-                (ComputeBudgetPeriod.key ComputeBudgetPeriod.Perpetual nextUtc)
-                "perpetual"
-                "a perpetual budget never rolls"
+            Expect.equal (BudgetPeriod.key BudgetPeriod.Perpetual nextUtc) "perpetual" "a perpetual budget never rolls"
         }
 
         test "an unknown or absent submitter-class label reads as Human, not as agent" {
@@ -337,9 +334,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith
-                        (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 2))
-                        clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 2)) clock
 
                 let backend = ControllablePoll(fun () -> ExternalOutcome.Pending)
 
@@ -372,9 +367,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith
-                        (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 3))
-                        clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 3)) clock
 
                 let backend = ControllablePoll(fun () -> ExternalOutcome.Pending)
 
@@ -395,9 +388,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith
-                        (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 1))
-                        clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 1)) clock
 
                 let mutable terminal = false
 
@@ -445,7 +436,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith (ComputeBudget.create ComputeBudgetPeriod.Daily (ComputeBudgetLimits.allowance 2M)) clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Daily (ComputeBudgetLimits.allowance 2M)) clock
 
                 let backend = ControllablePoll(fun () -> ExternalOutcome.Pending)
 
@@ -489,7 +480,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let budget =
-                    ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 10)
+                    ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 10)
                     |> ComputeBudget.withClassLimits SubmitterClass.AgentInitiated (ComputeBudgetLimits.concurrency 1)
 
                 let store = storeWith budget clock
@@ -522,9 +513,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith
-                        (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 100))
-                        clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 100)) clock
 
                 let backend = RecordingDispatcher()
 
@@ -585,7 +574,7 @@ let private dispatcherTests =
 
                 let budget =
                     ComputeBudget.create
-                        ComputeBudgetPeriod.Monthly
+                        BudgetPeriod.Monthly
                         (ComputeBudgetLimits.runDuration (TimeSpan.FromMinutes 5.0))
 
                 let store = storeWith budget clock
@@ -623,9 +612,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith
-                        (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 1))
-                        clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 1)) clock
 
                 let refusing =
                     { new IExternalComputeDispatcher with
@@ -668,9 +655,7 @@ let private dispatcherTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith
-                        (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 2))
-                        clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.concurrency 2)) clock
 
                 let backend = ControllablePoll(fun () -> ExternalOutcome.Pending)
 
@@ -711,7 +696,7 @@ let private auditTests =
                 let store =
                     storeWith
                         (ComputeBudget.create
-                            ComputeBudgetPeriod.Monthly
+                            BudgetPeriod.Monthly
                             (ComputeBudgetLimits.concurrency 0 |> fun l -> { l with MaxConcurrent = 1 }))
                         clock
 
@@ -750,9 +735,20 @@ let private auditTests =
                     // be able to disagree.
                     match refused with
                     | Error e ->
+                        let audited: BudgetDenial = {
+                            Domain = ComputeBudget.Domain
+                            ScopeId = payload.Denial.ScopeId
+                            ClassLabel = payload.Denial.SubmitterClass
+                            Dimension = payload.Denial.Dimension
+                            Quota = payload.Denial.Quota
+                            Spent = payload.Denial.Spent
+                            Requested = payload.Denial.Requested
+                            PeriodKey = payload.Denial.PeriodKey
+                        }
+
                         Expect.equal
                             e.Message
-                            (ComputeBudgetDenial.describe payload.Denial)
+                            (ComputeBudgetPolicy.describe audited)
                             "the audited denial is the one the caller got"
                     | Ok _ -> ()
                 | None -> failtest "expected a ComputeBudgetDenied row"
@@ -768,7 +764,7 @@ let private auditTests =
                 let audit = TestAuditLog()
 
                 let store =
-                    storeWith (ComputeBudget.create ComputeBudgetPeriod.Daily (ComputeBudgetLimits.allowance 10M)) clock
+                    storeWith (ComputeBudget.create BudgetPeriod.Daily (ComputeBudgetLimits.allowance 10M)) clock
 
                 let backend = ControllablePoll(fun () -> ExternalOutcome.Pending)
 
@@ -807,7 +803,7 @@ let private auditTests =
             })
 
         test "both audit cases round-trip through the AuditLog registry" {
-            // The Phase 114 gate keys the decode registry on the emitted
+            // The gate keys the decode registry on the emitted
             // discriminator; a case with no codec silently stops archiving.
             for name in [ "ComputeBudgetDenied"; "ComputeBudgetWarning" ] do
                 Expect.isTrue
@@ -816,7 +812,7 @@ let private auditTests =
         }
     ]
 
-// ── metering (Phase 9d integration) ──────────────────────────────────────
+// ── metering ──────────────────────────────────────
 
 let private meteringTests =
     testList "Phase 451 — metering integration" [
@@ -830,7 +826,7 @@ let private meteringTests =
                 do!
                     store.SetBudget(
                         scope,
-                        ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.allowance 100M)
+                        ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.allowance 100M)
                     )
                     |> Async.Ignore
 
@@ -860,7 +856,7 @@ let private meteringTests =
                 let reservation =
                     match admitted with
                     | Ok(r, _) -> r
-                    | Error d -> failtest (ComputeBudgetDenial.describe d)
+                    | Error d -> failtest (ComputeBudgetPolicy.describe d)
 
                 do! guard.Settle(reservation, TimeSpan.FromMinutes 3.0)
 
@@ -900,7 +896,7 @@ let private meteringTests =
 
                 match admitted with
                 | Ok(r, _) -> do! guard.Settle r
-                | Error d -> failtest (ComputeBudgetDenial.describe d)
+                | Error d -> failtest (ComputeBudgetPolicy.describe d)
 
                 Expect.isEmpty metered "an unconstrained submission costs nothing and meters nothing"
             })
@@ -942,7 +938,7 @@ let private storeTests =
                 Expect.isTrue (ComputeBudget.isUnrestricted before) "an unconfigured scope is unrestricted, not refused"
 
                 let budget =
-                    ComputeBudget.create ComputeBudgetPeriod.Daily {
+                    ComputeBudget.create BudgetPeriod.Daily {
                         MaxConcurrent = 4
                         MaxRunDuration = Some(TimeSpan.FromMinutes 30.0)
                         PeriodAllowance = 250.5M
@@ -954,6 +950,29 @@ let private storeTests =
 
                 Expect.equal read budget "the whole budget round-trips, including the class override"
             })
+
+        test "a stored budget names its window by the seam period's label, and reads back to the same window" {
+            for period, label in
+                [
+                    BudgetPeriod.Perpetual, "perpetual"
+                    BudgetPeriod.Daily, "daily"
+                    BudgetPeriod.Monthly, "monthly"
+                ] do
+                let budget = ComputeBudget.create period (ComputeBudgetLimits.concurrency 2)
+                let bytes = ComputeBudgetJson.serialiseBudget budget
+
+                Expect.equal
+                    (Text.Encoding.UTF8.GetString bytes)
+                    $"{{\"SchemaVersion\":1,\"Period\":\"{label}\",\"Limits\":{{\"MaxConcurrent\":2,\"MaxRunDurationSeconds\":null,\"PeriodAllowance\":0}},\"ClassLimits\":{{}}}}"
+                    $"{label}: the stored bytes"
+
+                Expect.equal (BudgetPeriod.label (period)) label $"{label}: the seam label"
+
+                Expect.equal
+                    (ComputeBudgetJson.deserialiseBudget bytes |> Option.map _.Period)
+                    (Some period)
+                    $"{label}: reads back to the same window"
+        }
 
         testCaseAsync
             "a corrupt budget blob degrades to unrestricted rather than throwing"
@@ -985,7 +1004,7 @@ let private storeTests =
                 let store =
                     BlobComputeBudgetStore(blobs, Logger.silent, clock = clock.Fn) :> IComputeBudgetStore
 
-                let admitAny = fun (_: ComputeBudgetUsage) -> Ok()
+                let admitAny = fun (_: BudgetUsage) -> Ok()
 
                 do! store.Admit("team-a", "2026-08", 1M, admitAny) |> Async.Ignore
                 do! store.Admit("team-b", "2026-08", 5M, admitAny) |> Async.Ignore
@@ -1016,7 +1035,8 @@ let private storeTests =
                 // spending another's allowance.
                 let blobs = InMemoryBlobStorage() :> IBlobStorage
 
-                let foreign: ComputeBudgetUsage = {
+                let foreign: BudgetUsage = {
+                    Domain = ComputeBudget.Domain
                     ScopeId = "team-a"
                     PeriodKey = "2026-08"
                     InFlight = 3
@@ -1029,7 +1049,7 @@ let private storeTests =
                         ComputeBudgetLayout.DefaultContainer,
                         // team-a's envelope at team-b's own path
                         ComputeBudgetLayout.usageBlob "team-b" "2026-08",
-                        ComputeBudgetJson.serialiseUsage foreign
+                        BudgetUsageJson.serialise foreign
                     )
                     |> Async.Ignore
 
@@ -1065,7 +1085,7 @@ let private storeTests =
                 let store = BlobComputeBudgetStore(blobs, Logger.silent) :> IComputeBudgetStore
                 let limits = ComputeBudgetLimits.concurrency 1
 
-                let decide (usage: ComputeBudgetUsage) =
+                let decide (usage: BudgetUsage) =
                     ComputeBudgetPolicy.admit scope SubmitterClass.AgentInitiated limits usage None 1M
 
                 let! results =
@@ -1199,7 +1219,7 @@ let private fitEnqueueTests =
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
 
                 let budget =
-                    ComputeBudget.create ComputeBudgetPeriod.Monthly ComputeBudgetLimits.unrestricted
+                    ComputeBudget.create BudgetPeriod.Monthly ComputeBudgetLimits.unrestricted
                     |> ComputeBudget.withClassLimits SubmitterClass.AgentInitiated (ComputeBudgetLimits.allowance 1M)
 
                 let fixture = newFitFixture budget clock
@@ -1220,7 +1240,7 @@ let private fitEnqueueTests =
 
                 match second with
                 | Error(ModelExecutionRefusal.BudgetDenied denial) ->
-                    Expect.equal denial.SubmitterClass "agent" "the refusal names the peer's declared class"
+                    Expect.equal denial.ClassLabel "agent" "the refusal names the peer's declared class"
 
                     Expect.equal
                         denial.Dimension
@@ -1264,7 +1284,7 @@ let private fitEnqueueTests =
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
 
                 let budget =
-                    ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.allowance 2M)
+                    ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.allowance 2M)
 
                 let fixture = newFitFixture budget clock
 
@@ -1323,9 +1343,7 @@ let private fitEnqueueTests =
                 let clock = TestClock(DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc))
 
                 let fixture =
-                    newFitFixture
-                        (ComputeBudget.create ComputeBudgetPeriod.Monthly (ComputeBudgetLimits.allowance 1M))
-                        clock
+                    newFitFixture (ComputeBudget.create BudgetPeriod.Monthly (ComputeBudgetLimits.allowance 1M)) clock
 
                 let request (seed: int64) : FitRequest = {
                     ScopeId = scope

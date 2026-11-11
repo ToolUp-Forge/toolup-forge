@@ -5,10 +5,10 @@ namespace ToolUp.Platform
 
 open System
 
-// ─── Phase 451 — compute-budget governance ───────────────────────────────
+// ─── Compute-budget governance ───────────────────────────────
 //
-// Phase 318 gave the platform a portable way to hand work to compute that
-// is not this process, and Phase 449 gave it a way to enqueue a long fit.
+// The platform has a portable way to hand work to compute that is not
+// this process, and a way to enqueue a long fit.
 // Neither of them can say **no**. A submission is accepted because it is
 // well-formed, and a deployment whose work costs real money on a metered
 // backend has, until this phase, exactly one lever: hope.
@@ -23,8 +23,8 @@ open System
 // projection to `ExternalComputeError` lives Server-side rather than
 // here.** `ExternalWorkSpec` carries a `SubmitterClass`, so this file has
 // to precede it, and precedence cannot be mutual. Projecting a denial onto
-// the Phase 318 error shape is a decorator concern anyway — a Fable client
-// receives the typed `ComputeBudgetDenial`, never the lossy string form —
+// the error shape is a decorator concern anyway — a Fable client
+// receives the typed `BudgetDenial`, never the lossy string form —
 // so the split costs nothing and the helper sits with its one caller
 // (`ComputeBudgetGuard.toComputeError`).
 //
@@ -40,7 +40,7 @@ open System
 // operator cannot reconcile.
 //
 // **Zero is unrestricted, everywhere.** Every numeric ceiling reads "no
-// limit" at `<= 0`, matching the Phase 9d quota fields an operator already
+// limit" at `<= 0`, matching the quota fields an operator already
 // knows (`MaxConcurrentJobs` / `MaxAITokensPerDay` default to `0` = no
 // ceiling). It also makes the *absent* budget and the *empty* budget the
 // same value, so a scope with no configuration is unrestricted by
@@ -54,7 +54,7 @@ open System
 // learning what an "agent exploration" is — which it must not, because the
 // distinction is a domain one and the substrate is not.
 
-/// Phase 451 — who (or what) asked for this unit of work.
+/// Who (or what) asked for this unit of work.
 ///
 /// A **closed** vocabulary, deliberately: policy keyed on an open string
 /// would let a submitter mint a class nobody wrote a limit for and be
@@ -70,7 +70,7 @@ open System
 [<RequireQualifiedAccess>]
 type SubmitterClass =
     /// An interactive request a person is waiting on. The most permissive
-    /// class by convention, and the default every pre-451 call site gets
+    /// class by convention, and the default every call site that declares no class gets
     /// (GP 11) — an existing deployment's submissions do not silently
     /// become agent traffic.
     | Human
@@ -130,63 +130,7 @@ module SubmitterClass =
     let ofLabelOrHuman (raw: string) : SubmitterClass =
         parse raw |> Option.defaultValue SubmitterClass.Human
 
-/// Phase 451 — the window a `PeriodAllowance` is measured over.
-///
-/// The period is part of the **storage key** rather than a stored counter
-/// with a reset timestamp, which is what makes a reset free and correct:
-/// there is nothing to reset, because the next period is a different key
-/// and starts at zero by not existing yet. A stored counter would need a
-/// reset job, and a reset job that does not run is a budget that never
-/// refills — the failure mode where the control silently becomes an
-/// outage. (Prior art in this codebase: the differential-privacy ledger's
-/// epoch key.)
-[<RequireQualifiedAccess>]
-type ComputeBudgetPeriod =
-    /// One allowance for all time — a hard lifetime cap for a trial
-    /// tenancy or a bounded engagement. Never refills.
-    | Perpetual
-    /// Refills at UTC midnight.
-    | Daily
-    /// Refills at the first instant of the UTC month.
-    | Monthly
-
-[<RequireQualifiedAccess>]
-module ComputeBudgetPeriod =
-    /// Stable lowercase label for config, logs and audit payloads.
-    let label =
-        function
-        | ComputeBudgetPeriod.Perpetual -> "perpetual"
-        | ComputeBudgetPeriod.Daily -> "daily"
-        | ComputeBudgetPeriod.Monthly -> "monthly"
-
-    /// Phase 689 — this period as the platform budget seam's own window.
-    ///
-    /// Total and injective: compute budgets are a subset of the seam's
-    /// periods (it also has `Hourly`, which a token budget needs and a
-    /// compute deployment has no use for), so the projection loses
-    /// nothing and the two produce the same key for the same window.
-    let toBudgetPeriod (period: ComputeBudgetPeriod) : BudgetPeriod =
-        match period with
-        | ComputeBudgetPeriod.Perpetual -> BudgetPeriod.Perpetual
-        | ComputeBudgetPeriod.Daily -> BudgetPeriod.Daily
-        | ComputeBudgetPeriod.Monthly -> BudgetPeriod.Monthly
-
-    /// The key identifying the period `now` falls in — `"perpetual"`,
-    /// `"2026-08-05"`, or `"2026-08"`.
-    ///
-    /// Always computed in UTC, never local time. A period boundary that
-    /// moved with the server's timezone would put two replicas of one
-    /// deployment in different periods for an hour twice a year, and the
-    /// resulting double-allowance is exactly the kind of thing nobody
-    /// notices until the bill.
-    ///
-    /// Phase 689: the key derivation itself lives in `BudgetPeriod.key` —
-    /// one implementation of the period-as-storage-key rule, so two budget
-    /// domains cannot disagree about where a UTC month begins.
-    let key (period: ComputeBudgetPeriod) (now: DateTime) : string =
-        BudgetPeriod.key (toBudgetPeriod period) now
-
-/// Phase 451 — one set of ceilings. The three dimensions the interface
+/// One set of ceilings. The three dimensions the interface
 /// plan named, and no more.
 ///
 /// Each is independently disableable at `<= 0` / `None`, so a deployment
@@ -252,7 +196,7 @@ module ComputeBudgetLimits =
             MaxRunDuration = Some longest
     }
 
-/// Phase 451 — one scope's whole budget: a period, a default set of
+/// One scope's whole budget: a period, a default set of
 /// ceilings, and per-submitter-class overrides.
 ///
 /// **An override REPLACES the default rather than layering on it.** A
@@ -264,8 +208,10 @@ module ComputeBudgetLimits =
 /// with an entry is governed entirely by that entry; a class without one is
 /// governed entirely by `Limits`. One lookup, one answer.
 type ComputeBudget = {
-    /// Window `PeriodAllowance` is measured over.
-    Period: ComputeBudgetPeriod
+    /// Window `PeriodAllowance` is measured over. The seam's periods; a
+    /// compute budget has no use for `Hourly`, which a token budget needs,
+    /// and nothing stops a deployment choosing it.
+    Period: BudgetPeriod
     /// Ceilings applied to any class with no override.
     Limits: ComputeBudgetLimits
     /// Per-`SubmitterClass.label` overrides. Keyed by the stable label
@@ -276,12 +222,12 @@ type ComputeBudget = {
 
 [<RequireQualifiedAccess>]
 module ComputeBudget =
-    /// Phase 689 — this budget family's stable label in the platform
+    /// This budget family's stable label in the platform
     /// budget seam. Namespaces the ledger key, the blob prefix and the
     /// refusal, so a deployment running compute budgets alongside a token
     /// or spend budget can never have one read the other's consumption.
     ///
-    /// It is the string Phase 451 already used as its blob prefix, which
+    /// It is the string the compute budget already used as its blob prefix, which
     /// is what makes adopting the shared ledger a re-expression rather
     /// than a data migration.
     [<Literal>]
@@ -292,13 +238,13 @@ module ComputeBudget =
     /// which is what makes "no budget configured" and "a budget that
     /// permits everything" the same behaviour rather than two code paths.
     let unrestricted: ComputeBudget = {
-        Period = ComputeBudgetPeriod.Monthly
+        Period = BudgetPeriod.Monthly
         Limits = ComputeBudgetLimits.unrestricted
         ClassLimits = Map.empty
     }
 
     /// A budget applying `limits` to every class over `period`.
-    let create (period: ComputeBudgetPeriod) (limits: ComputeBudgetLimits) : ComputeBudget = {
+    let create (period: BudgetPeriod) (limits: ComputeBudgetLimits) : ComputeBudget = {
         Period = period
         Limits = limits
         ClassLimits = Map.empty
@@ -328,7 +274,7 @@ module ComputeBudget =
         && budget.ClassLimits
            |> Map.forall (fun _ l -> ComputeBudgetLimits.isUnrestricted l)
 
-/// Phase 451 — which ceiling a refusal hit. Enumerable data (interface plan
+/// Which ceiling a refusal hit. Enumerable data (interface plan
 /// decision D6), so a client branches on the dimension rather than
 /// string-matching a message.
 [<RequireQualifiedAccess>]
@@ -349,148 +295,7 @@ module ComputeBudgetDimension =
         | ComputeBudgetDimension.RunDuration -> "run-duration"
         | ComputeBudgetDimension.PeriodAllowance -> "period-allowance"
 
-/// Phase 451 — a budget refusal, as data.
-///
-/// The interface plan's `BudgetDenied {quota, spent}` shape (decision D6),
-/// widened with the three fields that make it actionable rather than merely
-/// true: WHICH ceiling, for WHICH submitter class, in WHICH period. A
-/// refusal that says only "over budget" leaves the recipient — often an
-/// agent deciding whether to narrow its search or wait — with nothing to
-/// decide on.
-///
-/// Every field is a primitive or a stable label string (GP 12 rule 1), so
-/// the denial serialises onto the peer wire, into an audit payload, and
-/// into a Fable client without carrying a DU converter.
-type ComputeBudgetDenial = {
-    /// Scope whose budget refused the submission.
-    ScopeId: string
-    /// `SubmitterClass.label` of the refused submission.
-    SubmitterClass: string
-    /// `ComputeBudgetDimension.label` of the ceiling that was hit.
-    Dimension: string
-    /// The configured ceiling, in the dimension's own unit — cost units
-    /// for `PeriodAllowance`, a run count for `Concurrency`, whole seconds
-    /// for `RunDuration`.
-    Quota: decimal
-    /// What the scope had already consumed against `Quota` when the
-    /// submission arrived. `0` for `RunDuration`, which is a property of
-    /// the submission rather than an accumulation.
-    Spent: decimal
-    /// What this submission asked for **on top of** `Spent`. Carried
-    /// separately so a caller can tell "you are already over" from "this
-    /// one request would take you over", which are different remedies.
-    Requested: decimal
-    /// `ComputeBudgetPeriod.key` of the accounting period the refusal was
-    /// measured in. `"perpetual"` when the budget never refills.
-    PeriodKey: string
-}
-
-[<RequireQualifiedAccess>]
-module ComputeBudgetDenial =
-    /// One-line operator-facing description. The typed fields, not this
-    /// string, are the contract.
-    let describe (denial: ComputeBudgetDenial) : string =
-        sprintf
-            "compute budget exceeded for scope '%s': %s limit %M reached by a '%s' submission (already consumed %M, this request needs %M) in period '%s'"
-            denial.ScopeId
-            denial.Dimension
-            denial.Quota
-            denial.SubmitterClass
-            denial.Spent
-            denial.Requested
-            denial.PeriodKey
-
-    /// Phase 689 — this denial as the seam's `BudgetDenial`. Field for
-    /// field: the seam's shape IS this one, generalised with the `Domain`
-    /// that says which budget refused when a deployment runs several.
-    let toBudgetDenial (denial: ComputeBudgetDenial) : BudgetDenial = {
-        Domain = ComputeBudget.Domain
-        ScopeId = denial.ScopeId
-        ClassLabel = denial.SubmitterClass
-        Dimension = denial.Dimension
-        Quota = denial.Quota
-        Spent = denial.Spent
-        Requested = denial.Requested
-        PeriodKey = denial.PeriodKey
-    }
-
-    /// Phase 689 — a seam denial in compute's own vocabulary. The domain
-    /// is dropped, being what a `ComputeBudgetDenial` says by existing.
-    let ofBudgetDenial (denial: BudgetDenial) : ComputeBudgetDenial = {
-        ScopeId = denial.ScopeId
-        SubmitterClass = denial.ClassLabel
-        Dimension = denial.Dimension
-        Quota = denial.Quota
-        Spent = denial.Spent
-        Requested = denial.Requested
-        PeriodKey = denial.PeriodKey
-    }
-
-/// Phase 451 — one scope's live consumption within one period.
-///
-/// `InFlight` is a **reservation** count, not an observation: it is
-/// incremented when a submission is admitted and decremented when its run
-/// reaches a terminal outcome. That makes the concurrency cap enforceable
-/// against work that has not reported anything yet, which is the whole
-/// point — a cap that could only count runs the backend had already
-/// acknowledged would admit an unbounded burst in the window before the
-/// first acknowledgement.
-///
-/// The honest cost of a reservation model is stated rather than hidden: a
-/// process that dies between admitting a run and settling it leaks one
-/// slot until the period rolls (or an operator resets the counter). The
-/// alternative — deriving the count from live backend state on every
-/// admission — trades that for a backend round-trip on the hot path and a
-/// different failure mode (a backend that is slow to list makes every
-/// submission slow). The reservation is the cheaper wrong answer, and it
-/// is wrong in the safe direction: a leaked slot refuses work, it never
-/// admits work it should have refused.
-type ComputeBudgetUsage = {
-    ScopeId: string
-    /// `ComputeBudgetPeriod.key` this row accounts for.
-    PeriodKey: string
-    /// Runs admitted and not yet settled.
-    InFlight: int
-    /// Cost units consumed in this period, including the reservations
-    /// held by the `InFlight` runs.
-    Spent: decimal
-    /// When the row last changed (UTC).
-    UpdatedAt: DateTime
-}
-
-[<RequireQualifiedAccess>]
-module ComputeBudgetUsage =
-    /// The zero row for a scope+period that has never been written. A
-    /// store returns this rather than an option, so "no consumption yet"
-    /// and "consumed nothing" are the same value at every call site.
-    let empty (scopeId: string) (periodKey: string) : ComputeBudgetUsage = {
-        ScopeId = scopeId
-        PeriodKey = periodKey
-        InFlight = 0
-        Spent = 0M
-        UpdatedAt = DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-    }
-
-    /// Phase 689 — this row as the seam's `BudgetUsage`.
-    let toBudgetUsage (usage: ComputeBudgetUsage) : BudgetUsage = {
-        Domain = ComputeBudget.Domain
-        ScopeId = usage.ScopeId
-        PeriodKey = usage.PeriodKey
-        InFlight = usage.InFlight
-        Spent = usage.Spent
-        UpdatedAt = usage.UpdatedAt
-    }
-
-    /// Phase 689 — a seam row in compute's own vocabulary.
-    let ofBudgetUsage (usage: BudgetUsage) : ComputeBudgetUsage = {
-        ScopeId = usage.ScopeId
-        PeriodKey = usage.PeriodKey
-        InFlight = usage.InFlight
-        Spent = usage.Spent
-        UpdatedAt = usage.UpdatedAt
-    }
-
-/// Phase 451 — the admission decision, as a pure function.
+/// The admission decision, as a pure function.
 ///
 /// Separated from the store on purpose: the interesting part of a budget
 /// is the policy, and a policy expressed as a total function over
@@ -498,8 +303,7 @@ module ComputeBudgetUsage =
 /// a clock, or a container. The store's job is only to make the read and
 /// the reservation atomic.
 ///
-/// **Phase 689 — the decision itself now runs on the platform budget
-/// seam.** `claims` projects this domain's three ceilings onto
+/// **The decision runs on the platform budget seam.** `claims` projects this domain's three ceilings onto
 /// `BudgetClaim`s and `admit` is `BudgetPolicy.check` over them. The three
 /// dimensions look unrelated and are all `Spent + Requested > Ceiling`
 /// (see `Budget.fs`), so the projection is total and the behaviour is
@@ -512,7 +316,7 @@ module ComputeBudgetPolicy =
     /// Seconds of a `TimeSpan`, as the `decimal` a denial reports.
     let private seconds (span: TimeSpan) : decimal = decimal span.TotalSeconds
 
-    /// Phase 689 — this submission's ceilings as seam claims, in check
+    /// This submission's ceilings as seam claims, in check
     /// order.
     ///
     /// **Order is concurrency → duration → allowance, cheapest and
@@ -531,7 +335,7 @@ module ComputeBudgetPolicy =
     /// wants to read.
     let claims
         (limits: ComputeBudgetLimits)
-        (usage: ComputeBudgetUsage)
+        (usage: BudgetUsage)
         (declaredDuration: TimeSpan option)
         (cost: decimal)
         : BudgetClaim list =
@@ -569,16 +373,28 @@ module ComputeBudgetPolicy =
         (scopeId: string)
         (submitter: SubmitterClass)
         (limits: ComputeBudgetLimits)
-        (usage: ComputeBudgetUsage)
+        (usage: BudgetUsage)
         (declaredDuration: TimeSpan option)
         (cost: decimal)
-        : Result<unit, ComputeBudgetDenial> =
+        : Result<unit, BudgetDenial> =
         let subject =
             BudgetSubject.create ComputeBudget.Domain scopeId (SubmitterClass.label submitter)
 
         claims limits usage declaredDuration cost
         |> BudgetPolicy.check subject usage.PeriodKey
-        |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
+
+    /// One-line operator-facing description of a compute refusal. The
+    /// typed denial, not this string, is the contract.
+    let describe (denial: BudgetDenial) : string =
+        sprintf
+            "compute budget exceeded for scope '%s': %s limit %M reached by a '%s' submission (already consumed %M, this request needs %M) in period '%s'"
+            denial.ScopeId
+            denial.Dimension
+            denial.Quota
+            denial.ClassLabel
+            denial.Spent
+            denial.Requested
+            denial.PeriodKey
 
     /// The wall-clock budget a submission should actually carry once the
     /// run-duration cap is applied — the submission's own when it is

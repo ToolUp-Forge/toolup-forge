@@ -6,9 +6,9 @@ namespace ToolUp.AI
 open System
 open ToolUp.Platform
 
-// ─── Phase 9s — per-user AI token budget ─────────────────────────
+// ─── Per-user AI token budget ─────────────────────────
 //
-// Phase 9d already bounds a SCOPE's AI spend: `_platform.usage`
+// The team quota already bounds a SCOPE's AI spend: `_platform.usage`
 // carries `MaxAITokensPerDay` / `MaxAITokensPerMonth`, and
 // `QuotaEnforcingProvider` refuses before any provider spend. What a
 // per-scope ceiling cannot do is stop ONE member of a team consuming
@@ -18,7 +18,7 @@ open ToolUp.Platform
 // not carry, and nothing else: the two team windows stay where they
 // are and are not restated here.
 //
-// **Expressed on the Phase 689 budget seam, not beside it.** The cap
+// **Expressed on the budget seam, not beside it.** The cap
 // is a `BudgetClaim` (`Ceiling` = the configured cap, `Spent` = the
 // user's tokens summed from `IEventStore`, `Requested` = this call's
 // estimate) over `BudgetPeriod.Hourly`; the check is
@@ -33,8 +33,8 @@ open ToolUp.Platform
 // **Consumption is DERIVED, never reserved.** A token budget is
 // unusual among the seam's instances in that nobody can know a turn's
 // cost until the provider reports it, so there is nothing honest to
-// reserve at admission. The window is therefore summed from the Phase
-// 6i.A `AILatencyRecord` stream — the always-on per-turn telemetry
+// reserve at admission. The window is therefore summed from the
+// `AILatencyRecord` stream — the always-on per-turn telemetry
 // that already carries `PromptTokens` / `OutputTokens` — rather than
 // held in an `IBudgetLedger` counter. That is also why this file
 // composes the seam's *pure* half (`BudgetClaim` / `BudgetPolicy` /
@@ -44,10 +44,10 @@ open ToolUp.Platform
 // Fable-safe types. The enforcer, the event-store sum and the
 // provider decorator are Server tier.
 
-/// Phase 9s — reserved `IConfigStore` key for the per-scope AI token
+/// Reserved `IConfigStore` key for the per-scope AI token
 /// budget schema, and its field keys.
 ///
-/// A dedicated module key rather than more fields on Phase 9d's
+/// A dedicated module key rather than more fields on the team quota's
 /// `_platform.usage`, for the reason 9d gave for splitting from the
 /// general `_platform` schema: the two have different lifecycles. The
 /// 9d ceilings are billing-coupled ceilings on the TEAM's spend; this
@@ -63,10 +63,10 @@ module AIBudgetConfigKey =
     [<Literal>]
     let maxTokensPerUserPerHour = "MaxAITokensPerUserPerHour"
 
-    // ─── Phase 499 — the monetary ceilings ───────────────────────
+    // ─── The monetary ceilings ───────────────────────
     //
     // The spend budget shares this module key rather than minting a
-    // second one. The 9s rationale for splitting from Phase 9d's
+    // second one. The token budget's rationale for splitting from the team quota's
     // `_platform.usage` — different lifecycles, different decisions —
     // does not apply between these two: they are the same decision
     // ("how much AI may this scope consume") expressed in two units,
@@ -96,10 +96,126 @@ module AIBudgetConfigKey =
     [<Literal>]
     let spendPerScopePeriod = "AISpendPerScopePeriod"
 
-/// Phase 9s — the per-user token budget for one scope.
+// ─── What a budget does when it cannot read ──────────────────────
+//
+// A budget check reads two things before it decides: the scope's policy
+// from the config store, and the consumption window from the event
+// store. Either read can fail. What happens then is the deployment's
+// declared `BudgetPosture`, not an accident of a catch arm, and every
+// such failure is recorded as a `BudgetWindowUnreadable` event, so an
+// operator can tell "no ceiling is configured" from "the ceiling could
+// not be read".
+
+/// What a budget check does when it cannot read its policy or its window.
+[<RequireQualifiedAccess>]
+type BudgetPosture =
+    /// Admit the call as if no ceiling applied, and record the failure.
+    /// The default: a cost ceiling that converts a config-store or
+    /// telemetry outage into a total AI outage fails worse than the spend
+    /// it protects against.
+    | FailOpen
+    /// Refuse the call with a denial naming what could not be read. For a
+    /// deployment whose ceiling is a hard commitment rather than a
+    /// fairness control.
+    | FailClosed
+
+[<RequireQualifiedAccess>]
+module BudgetPosture =
+    /// Stable lowercase label for logs and the diagnostics panel.
+    let label =
+        function
+        | BudgetPosture.FailOpen -> "fail-open"
+        | BudgetPosture.FailClosed -> "fail-closed"
+
+/// Which of a budget check's two reads failed.
+[<RequireQualifiedAccess>]
+type BudgetRead =
+    /// The scope's policy, read from the config store.
+    | Policy
+    /// The consumption window, summed from the event store.
+    | Window
+
+[<RequireQualifiedAccess>]
+module BudgetRead =
+    /// Stable lowercase label; the suffix of an unreadable denial's
+    /// dimension.
+    let label =
+        function
+        | BudgetRead.Policy -> "policy"
+        | BudgetRead.Window -> "window"
+
+/// One budget check that could not read its policy or its window. Written
+/// through `IEventStore` under `BudgetWindowUnreadable.SourceModule` on
+/// every such failure, whichever posture is in force, so "when was the
+/// budget blind, and what did it do" is a query.
+type BudgetWindowUnreadable = {
+    OccurredAt: DateTime
+    /// Storage scope the call belonged to.
+    ScopeId: string
+    /// The caller, `""` when the call was unattributed.
+    UserId: UserId
+    /// `BudgetSubject.Domain` of the budget that could not read —
+    /// `"ai-tokens"` or `"ai-spend"`.
+    Domain: string
+    /// Which read failed.
+    Read: BudgetRead
+    /// The posture that decided the call: `FailOpen` admitted it,
+    /// `FailClosed` refused it.
+    Posture: BudgetPosture
+    /// The failure's message. Diagnostic; the wording is not stable.
+    Reason: string
+}
+
+[<RequireQualifiedAccess>]
+module BudgetWindowUnreadable =
+    /// Reserved `IEventStore` source-module namespace for unreadable
+    /// budget reads. Sibling of `AITokenBudgetExceeded.SourceModule`.
+    [<Literal>]
+    let SourceModule = "_platform.ai.budget_unreadable"
+
+    /// Reserved `IEventStore` event-type for one unreadable read.
+    [<Literal>]
+    let EventType = "BudgetWindowUnreadable"
+
+    /// Prefix of the `BudgetDenial.Dimension` a `FailClosed` refusal
+    /// carries; the read's label follows it.
+    [<Literal>]
+    let DimensionPrefix = "unreadable-"
+
+    /// The denial dimension naming an unreadable `read`:
+    /// `"unreadable-policy"` or `"unreadable-window"`.
+    let dimension (read: BudgetRead) : string = DimensionPrefix + BudgetRead.label read
+
+    /// `true` for a denial a `FailClosed` posture issued because a read
+    /// failed, rather than because a ceiling was reached.
+    let isDenial (denial: BudgetDenial) : bool =
+        not (isNull denial.Dimension) && denial.Dimension.StartsWith DimensionPrefix
+
+    /// The refusal a `FailClosed` posture issues for this record. Quota
+    /// and spend are zero because neither is known; the dimension names
+    /// the read that failed.
+    let denial (periodKey: string) (requested: decimal) (record: BudgetWindowUnreadable) : BudgetDenial = {
+        Domain = record.Domain
+        ScopeId = record.ScopeId
+        ClassLabel = record.UserId.Value
+        Dimension = dimension record.Read
+        Quota = 0M
+        Spent = 0M
+        Requested = requested
+        PeriodKey = periodKey
+    }
+
+    /// The user-facing refusal message for a `FailClosed` refusal.
+    let message (denial: BudgetDenial) : string =
+        sprintf
+            "AI budget unavailable — this deployment's %s budget could not read its %s and refuses calls it cannot account for. Try again shortly."
+            denial.Domain
+            (denial.Dimension.Substring DimensionPrefix.Length)
+
+/// The per-user token budget for one scope.
 ///
 /// One window, deliberately. The two team windows
-/// (`MaxAITokensPerDay` / `MaxAITokensPerMonth`) are Phase 9d's and
+/// (`MaxAITokensPerDay` / `MaxAITokensPerMonth`) are the team quota's and
 /// live in `_platform.usage`; duplicating them here would give a
 /// deployment two places to configure one ceiling and two answers when
 /// they disagree.
@@ -114,13 +230,12 @@ type AITokenBudgetPolicy = {
 [<RequireQualifiedAccess>]
 module AITokenBudgetPolicy =
     /// The unbounded policy — what a scope with no configuration has,
-    /// and what every parse failure degrades to. An unreadable cap
-    /// must never become a refusal: a config store that hiccups would
-    /// otherwise deny every AI call in the deployment.
+    /// and what every parse failure degrades to. A policy that cannot be
+    /// READ is not this: it is decided by `BudgetPosture`.
     let unbounded: AITokenBudgetPolicy = { PerUserPerHour = None }
 
     /// `BudgetSubject.Domain` every claim, denial and ledger key in
-    /// this family is namespaced under. Named by the Phase 689 header.
+    /// this family is namespaced under. Named by the header.
     [<Literal>]
     let Domain = "ai-tokens"
 
@@ -177,7 +292,7 @@ module AITokenBudgetPolicy =
     /// enforcer short-circuits on before reading the event store.
     let isUnbounded (policy: AITokenBudgetPolicy) : bool = policy.PerUserPerHour.IsNone
 
-/// Phase 9s — one recorded per-user budget refusal. Written through
+/// One recorded per-user budget refusal. Written through
 /// `IEventStore` under `AITokenBudgetExceeded.SourceModule` each time
 /// a call is refused, so "which users are hitting the wall" is a query
 /// rather than a log grep.
@@ -189,7 +304,7 @@ module AITokenBudgetPolicy =
 type AITokenBudgetExceeded = {
     OccurredAt: DateTime
     /// The user whose window was exhausted. This is the whole point of
-    /// the record: Phase 9d's refusal names only the scope.
+    /// the record: the refusal names only the scope.
     UserId: UserId
     /// Storage scope the refused call belonged to — the same scope key
     /// `AILatencyRecord`s are written under, so the two streams join.
@@ -206,7 +321,7 @@ type AITokenBudgetExceeded = {
     UsedTokens: decimal
     /// The estimate this call asked for on top of `UsedTokens`.
     /// Carried separately because "already over" and "this one request
-    /// takes you over" have different remedies (Phase 689).
+    /// takes you over" have different remedies.
     RequestedTokens: decimal
     /// `BudgetPeriod.key` of the window — `"2026-09-16T14"`. Two
     /// refusals in the same key are the same wall.
@@ -224,7 +339,7 @@ module AITokenBudgetExceeded =
     [<Literal>]
     let EventType = "AITokenBudgetExceeded"
 
-    /// Build the record from a Phase 689 denial. The denial already
+    /// Build the record from a denial. The denial already
     /// carries every figure; this is a projection, not a second
     /// accounting of the same refusal.
     let ofDenial (occurredAt: DateTime) (denial: BudgetDenial) : AITokenBudgetExceeded = {
@@ -244,11 +359,14 @@ module AITokenBudgetExceeded =
     /// what a user reads when their work stops, and "quota exceeded"
     /// with no numbers tells them nothing about when to try again.
     let message (denial: BudgetDenial) : string =
-        sprintf "Token budget exceeded for this user this hour — %M tokens used vs %M cap" denial.Spent denial.Quota
-// ─── Phase 499 — monetary AI cost budgets ────────────────────────
+        if BudgetWindowUnreadable.isDenial denial then
+            BudgetWindowUnreadable.message denial
+        else
+            sprintf "Token budget exceeded for this user this hour — %M tokens used vs %M cap" denial.Spent denial.Quota
+// ─── Monetary AI cost budgets ────────────────────────
 //
-// Phase 9s above bounds a user's TOKENS. This is the currency-
-// denominated sibling: the same Phase 689 seam, the same decorator
+// The per-user token budget above bounds a user's TOKENS. This is the currency-
+// denominated sibling: the same budget seam, the same decorator
 // chain, the same refusal path — with a price model in front of it so
 // an operator can say "5.00 per user per day" instead of a token count
 // nobody can convert into money without a rate card.
@@ -272,14 +390,14 @@ module AITokenBudgetExceeded =
 // own Fable-safe types. The enforcer, the window sum and the provider
 // decorator are Server tier.
 
-/// Phase 499 — the four rates that price one `(providerId, model)`,
+/// The four rates that price one `(providerId, model)`,
 /// each expressed **per million tokens** in the table's currency.
 ///
 /// Per million rather than per token because that is the unit every
 /// operator's rate card is written in, and because a per-token rate is
 /// a number with six leading zeros that invites a transcription error
 /// nobody notices until the ceiling refuses a call it should have
-/// admitted. `decimal` throughout, never `float` — the Phase 689
+/// admitted. `decimal` throughout, never `float` — the budget seam's
 /// precision rule, and the same reason `UsageRecord.Quantity` is
 /// decimal.
 ///
@@ -328,7 +446,7 @@ module ModelPrice =
         CacheCreationPerMillion = 0M
     }
 
-/// Phase 499 — the operator's rate card: what each `(providerId,
+/// The operator's rate card: what each `(providerId,
 /// model)` costs, and the currency every figure derived from it is
 /// denominated in.
 ///
@@ -389,7 +507,7 @@ module ModelPriceTable =
     /// estimate and the post-call true-up both call it, with different
     /// token figures — so the two can never disagree about what a given
     /// usage costs, and any drift between them is drift in the TOKEN
-    /// estimate alone. That is the property Phase 499.E's drift case
+    /// estimate alone. That is the property the drift case
     /// pins.
     ///
     /// `promptTokens` is the TOTAL input the provider reported (cached +
@@ -433,7 +551,7 @@ module ModelPriceTable =
         tryFind providerId model table
         |> Option.map (fun price -> cost price promptTokens cachedPromptTokens outputTokens cacheCreationTokens)
 
-/// Phase 499 — the `UsageRecord.ResourceKind` the post-call true-up
+/// The `UsageRecord.ResourceKind` the post-call true-up
 /// writes actual spend under.
 ///
 /// Declared here rather than in `Platform.Core`'s `ResourceKinds`
@@ -455,7 +573,7 @@ module AISpendResourceKind =
     [<Literal>]
     let cost = "ai.cost"
 
-/// Phase 499 — one monetary ceiling: an amount, and the window it
+/// One monetary ceiling: an amount, and the window it
 /// refills over.
 ///
 /// `Ceiling` is denominated in the `ModelPriceTable.Currency` the
@@ -472,13 +590,13 @@ type AISpendBudget = {
     Ceiling: decimal
 }
 
-/// Phase 499 — a scope's monetary AI budget.
+/// A scope's monetary AI budget.
 ///
 /// Two independent ceilings, because the phase's own goal names both
 /// shapes an operator reasons in: "5.00 per USER per day" (fairness
 /// within a team) and "a per-TEAM monthly cap" (the bill). They are
 /// evaluated as two `BudgetClaim`s in one `BudgetPolicy.verdict` call,
-/// per-user first — the Phase 689 ordering rule: report the ceiling
+/// per-user first — the ordering rule: report the ceiling
 /// whose remedy the caller can act on before the one whose remedy is
 /// "wait for the month to roll".
 ///
@@ -494,15 +612,15 @@ type AISpendBudgetPolicy = {
 [<RequireQualifiedAccess>]
 module AISpendBudgetPolicy =
     /// The unbounded policy — what a scope with no configuration has,
-    /// and what every parse failure degrades to. An unreadable ceiling
-    /// must never become a refusal.
+    /// and what every parse failure degrades to. A policy that cannot be
+    /// READ is not this: it is decided by `BudgetPosture`.
     let unbounded: AISpendBudgetPolicy = { PerUser = None; PerScope = None }
 
     /// `BudgetSubject.Domain` every claim, denial and refusal record in
     /// this family is namespaced under.
     ///
-    /// **Its own domain, not `AITokenBudgetPolicy.Domain`.** Phase
-    /// 689's substrate note requires budget-exhausted to be
+    /// **Its own domain, not `AITokenBudgetPolicy.Domain`.** The
+    /// budget seam's substrate note requires budget-exhausted to be
     /// distinguishable from token-quota-exhausted by the LABEL rather
     /// than by a second error type, and `Domain` plus `Dimension` is
     /// exactly the pair that carries it: a client reads
@@ -588,7 +706,7 @@ module AISpendBudgetPolicy =
     let claim (dimension: string) (budget: AISpendBudget) (spent: decimal) (requested: decimal) : BudgetClaim =
         BudgetClaim.create dimension budget.Ceiling spent requested
 
-/// Phase 499 — one recorded monetary budget refusal, written through
+/// One recorded monetary budget refusal, written through
 /// `IEventStore` under its own reserved source module so "which users
 /// and which teams are hitting a spend ceiling" is a query rather than
 /// a log grep.
@@ -653,7 +771,7 @@ module AISpendBudgetExceeded =
         |> Option.map _.Period
         |> Option.defaultValue AISpendBudgetPolicy.defaultPeriod
 
-    /// Build the record from a Phase 689 denial. The denial already
+    /// Build the record from a denial. The denial already
     /// carries every figure; this is a projection, not a second
     /// accounting of the same refusal.
     let ofDenial
@@ -675,7 +793,7 @@ module AISpendBudgetExceeded =
             PeriodKey = denial.PeriodKey
         }
 
-    /// The user-facing refusal message (Phase 499.D).
+    /// The user-facing refusal message.
     ///
     /// Distinct from `AITokenBudgetExceeded.message` in the three ways
     /// that matter to whoever reads it when their work stops: it says
@@ -688,20 +806,23 @@ module AISpendBudgetExceeded =
     /// wording is pinned by a test because a refusal with no numbers
     /// tells a user nothing about when to try again.
     let message (currency: string) (windowLabel: string) (denial: BudgetDenial) : string =
-        let whose =
-            if denial.Dimension = AISpendBudgetPolicy.PerScopeDimension then
-                "this team"
-            else
-                "this user"
+        if BudgetWindowUnreadable.isDenial denial then
+            BudgetWindowUnreadable.message denial
+        else
+            let whose =
+                if denial.Dimension = AISpendBudgetPolicy.PerScopeDimension then
+                    "this team"
+                else
+                    "this user"
 
-        sprintf
-            "AI spend budget exceeded for %s (%s) — %s %M spent against a %s %M cap, and this request is estimated at a further %s %M. The budget refills at the start of the next %s window."
-            whose
-            denial.Dimension
-            currency
-            denial.Spent
-            currency
-            denial.Quota
-            currency
-            denial.Requested
-            windowLabel
+            sprintf
+                "AI spend budget exceeded for %s (%s) — %s %M spent against a %s %M cap, and this request is estimated at a further %s %M. The budget refills at the start of the next %s window."
+                whose
+                denial.Dimension
+                currency
+                denial.Spent
+                currency
+                denial.Quota
+                currency
+                denial.Requested
+                windowLabel

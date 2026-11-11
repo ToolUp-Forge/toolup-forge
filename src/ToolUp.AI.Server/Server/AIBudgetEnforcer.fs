@@ -10,16 +10,16 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
 
-// ─── Phase 9s — the per-user token-budget check ──────────────────
+// ─── The per-user token-budget check ──────────────────
 //
 // The enforcement half of `AIBudgetTypes.fs`: read the scope's policy,
 // sum the caller's consumption in the current UTC hour out of the
-// Phase 6i.A `AILatencyRecord` stream, and hand back a Phase 689
+// `AILatencyRecord` stream, and hand back the budget seam's
 // `BudgetVerdict`. The provider decorator that consumes it lives in
-// `AIProviderUsageMiddleware.fs`, beside Phase 9d's
+// `AIProviderUsageMiddleware.fs`, beside the team quota's
 // `QuotaEnforcingProvider` — one chain, not two enforcement paths.
 //
-// **What is cached and what is not, because that split IS the Phase 9c
+// **What is cached and what is not, because that split IS the GP 12
 // rule-4 answer.** The expensive half is the event-store scan, and it
 // is cached per (scope, user, hour) for 30 s. The POLICY is not cached
 // at all: an admin who lowers a cap mid-hour is respected by the very
@@ -31,16 +31,10 @@ open ToolUp.Platform.Compose
 // (rule 4: no in-memory state between invocations that the answer
 // depends on). Its honest cost is stated rather than hidden: a user
 // can overshoot by up to one cache window's worth of spend, which is
-// the same class of slack Phase 9d's advisory pre-call estimate
+// the same class of slack the advisory pre-call estimate
 // already carries.
 //
-// **It fails OPEN, deliberately.** A token ceiling is a cost control,
-// not an authorization control. If the config store or the event store
-// throws, refusing would convert a telemetry outage into a total AI
-// outage for every user in the deployment — a strictly worse failure
-// than the spend the ceiling was protecting against. The refusal path
-// is reached only when a cap is configured AND the window was read AND
-// the arithmetic says the request does not fit.
+// A failed read is decided by the declared `BudgetPosture` (`AIOptions.BudgetPosture`, default `FailOpen`).
 
 /// Cache lifetime for one computed window sum. 30 s, as the phase
 /// specifies: long enough that a burst of turns costs one scan,
@@ -84,18 +78,28 @@ type AIBudgetWindowEntry = {
 /// Keyed by the period key as well as the identities, so an hour
 /// boundary evicts by construction — the next hour is a different key
 /// that has never been written, which is the same "the period is a
-/// storage key, not a counter with a reset job" property the Phase 689
+/// storage key, not a counter with a reset job" property the budget seam
 /// ledger relies on. Stale entries for elapsed hours are swept on
 /// write rather than by a timer, so the cache holds nothing a
 /// deployment is not still asking about.
-type AIBudgetWindowCache(ttlSeconds: int) =
+type AIBudgetWindowCache(ttlSeconds: int, posture: BudgetPosture) =
     let entries =
         ConcurrentDictionary<struct (string * string * string), AIBudgetWindowEntry>()
 
-    /// The default TTL (`WindowCacheTtlSeconds`).
-    new() = AIBudgetWindowCache(WindowCacheTtlSeconds)
+    let mutable lastUnreadable: DateTime option = None
+
+    /// The default posture, `FailOpen`.
+    new(ttlSeconds: int) = AIBudgetWindowCache(ttlSeconds, BudgetPosture.FailOpen)
+
+    /// The default TTL (`WindowCacheTtlSeconds`) and posture.
+    new() = AIBudgetWindowCache(WindowCacheTtlSeconds, BudgetPosture.FailOpen)
 
     member _.TtlSeconds = ttlSeconds
+
+    /// The deployment's declared `BudgetPosture`. The cache is the one
+    /// per-deployment singleton the enforcer (built per resolution) and the
+    /// diagnostics panel share, so the posture rides it.
+    member _.Posture = posture
 
     /// The cached sum for this window, if one was computed within the
     /// TTL. `None` on a miss, on an expired entry, and always when
@@ -134,6 +138,14 @@ type AIBudgetWindowCache(ttlSeconds: int) =
     /// empty cache as with a warm one.
     member _.Clear() = entries.Clear()
 
+    /// When a check last failed to read its policy or its window, if
+    /// ever — the diagnostics panel's way of telling "unbounded" from
+    /// "unreadable".
+    member _.LastUnreadableAt: DateTime option = lastUnreadable
+
+    /// Note a read that failed at `at`.
+    member _.MarkUnreadable(at: DateTime) = lastUnreadable <- Some at
+
 /// The UTC hour `at` falls in. Must agree with
 /// `BudgetPeriod.key BudgetPeriod.Hourly`, which is why both are
 /// computed from the same `ToUniversalTime()` value: a window start
@@ -145,16 +157,16 @@ let hourWindowStart (at: DateTime) : DateTime =
 
 /// Tokens one user consumed in `scopeId` since `windowStart`.
 ///
-/// Reads the Phase 6i.A latency stream — the always-on per-turn
-/// telemetry — rather than `IUsageLog`, which Phase 9d's team windows
+/// Reads the latency stream — the always-on per-turn
+/// telemetry — rather than `IUsageLog`, which the team windows
 /// use. Two reasons, and the first is decisive: the usage log is
 /// written only when `UsageMetering = FeatureMode.Enabled`, so a
 /// budget summing it would silently never refuse on a deployment that
 /// had not also enabled metering. The second is attribution: the usage
 /// record carries the user id in a metadata map, the latency record
-/// (since 9s) carries it as a typed field.
+/// carries it as a typed field.
 ///
-/// A record with no `UserId` — every record written before 9s — is
+/// A record with no `UserId` — every record written before the field existed — is
 /// UNATTRIBUTED and charged to nobody. Wrong in the safe direction,
 /// and self-healing within one hour of deploying.
 let sumUserWindow (store: IEventStore) (scopeId: string) (userId: string) (windowStart: DateTime) : Async<decimal> = async {
@@ -219,7 +231,30 @@ let eventStoreAccount (store: IEventStore) (now: unit -> DateTime) : BudgetAccou
             ()
     })
 
-/// Phase 9s — the pre-call per-user token-budget check.
+/// Records a `BudgetWindowUnreadable` under its reserved source module.
+///
+/// Best-effort, like the refusal records above: the read that failed may
+/// be the event store itself, and a wedged store must not turn a recorded
+/// failure into a second one on the call's path.
+let unreadableRecorder (store: IEventStore) : BudgetWindowUnreadable -> Async<unit> =
+    fun record -> async {
+        let evt: ModuleEvent = {
+            Id = Guid.NewGuid()
+            OccurredAt = record.OccurredAt
+            ScopeId = record.ScopeId
+            SourceModule = BudgetWindowUnreadable.SourceModule
+            EventType = BudgetWindowUnreadable.EventType
+            Payload = JsonSerializer.Serialize(record, budgetJsonOptions)
+        }
+
+        try
+            let! child = Async.StartChild(EventStore.writeOrRaise store evt, BudgetAuditWriteTimeoutMs)
+            do! child
+        with _ ->
+            ()
+    }
+
+/// The pre-call per-user token-budget check.
 ///
 /// Stateless between invocations except for the read-through cache,
 /// which the file header explains is not load-bearing (GP 12 rule 4).
@@ -237,10 +272,10 @@ type AIBudgetEnforcer
     /// The live window cache — the `/dev/inspect` contributor's read.
     member _.Cache = cache
 
-    /// The scope's configured policy, read fresh. Never cached: see the
-    /// file header on why cap changes must not wait for an invalidation
-    /// signal.
-    member _.ReadPolicy(scopeId: string) : Async<AITokenBudgetPolicy> = async {
+    /// The scope's configured policy, read fresh, or why it could not be
+    /// read. Never cached: see the file header on why cap changes must
+    /// not wait for an invalidation signal.
+    member _.ReadPolicy(scopeId: string) : Async<Result<AITokenBudgetPolicy, string>> = async {
         try
             let scope: StorageScope = {
                 ScopeId = scopeId
@@ -249,40 +284,61 @@ type AIBudgetEnforcer
             }
 
             let! raw = configStore.GetRaw(scope, AIBudgetConfigKey.value)
-            return AITokenBudgetPolicy.ofRaw raw
-        with _ ->
-            return AITokenBudgetPolicy.unbounded
+            return Ok(AITokenBudgetPolicy.ofRaw raw)
+        with ex ->
+            return Error ex.Message
     }
 
     /// May `userId` spend an estimated `requested` more tokens in
     /// `scopeId` right now?
     ///
-    /// Returns the full Phase 689 verdict, so a caller can act on
-    /// `NearLimit` as well as `Refused`; the accounting has already run
-    /// by the time it returns.
+    /// Returns the full verdict, so a caller can act on `NearLimit` as
+    /// well as `Refused`; the accounting has already run by the time it
+    /// returns. A read that fails is decided by the posture, and recorded.
     member this.Check(scopeId: string, userId: string, requested: decimal) : Async<BudgetVerdict> = async {
         // An unattributable call is charged to nobody. A deployment
         // with no user identity (Anonymous) has no per-USER window to
-        // enforce — Phase 9d's per-scope ceilings are the control
-        // there, and they are unaffected.
+        // enforce; the per-scope ceilings are the control there, and
+        // they are unaffected.
         if String.IsNullOrWhiteSpace scopeId || String.IsNullOrWhiteSpace userId then
             return BudgetVerdict.Allowed
         else
-            let! policy = this.ReadPolicy scopeId
+            let unreadable (read: BudgetRead) (reason: string) = async {
+                let at = now ()
 
+                let record: BudgetWindowUnreadable = {
+                    OccurredAt = at
+                    ScopeId = scopeId
+                    UserId = UserId userId
+                    Domain = AITokenBudgetPolicy.Domain
+                    Read = read
+                    Posture = cache.Posture
+                    Reason = reason
+                }
+
+                cache.MarkUnreadable at
+                do! unreadableRecorder eventStore record
+
+                match cache.Posture with
+                | BudgetPosture.FailOpen -> return BudgetVerdict.Allowed
+                | BudgetPosture.FailClosed ->
+                    let periodKey = BudgetPeriod.key AITokenBudgetPolicy.perUserPeriod at
+                    return BudgetVerdict.Refused(BudgetWindowUnreadable.denial periodKey requested record)
+            }
+
+            match! this.ReadPolicy scopeId with
+            | Error reason -> return! unreadable BudgetRead.Policy reason
             // GP 11 / GP 13. An unconfigured scope reads no events,
-            // touches no cache and allocates no claim — the call is
-            // byte-for-byte what it was before this phase.
-            if AITokenBudgetPolicy.isUnbounded policy then
-                return BudgetVerdict.Allowed
-            else
+            // touches no cache and allocates no claim.
+            | Ok policy when AITokenBudgetPolicy.isUnbounded policy -> return BudgetVerdict.Allowed
+            | Ok policy ->
                 let at = now ()
                 let periodKey = BudgetPeriod.key AITokenBudgetPolicy.perUserPeriod at
                 let windowStart = hourWindowStart at
 
-                let! spent = async {
+                let! window = async {
                     match cache.TryRead(scopeId, userId, periodKey, at) with
-                    | Some cached -> return cached
+                    | Some cached -> return Ok cached
                     | None ->
                         try
                             let! computed = sumUserWindow eventStore scopeId userId windowStart
@@ -296,25 +352,25 @@ type AIBudgetEnforcer
                                 ComputedAt = at
                             }
 
-                            return computed
-                        with _ ->
-                            // Fail open — see the file header. A window
-                            // that could not be read is not evidence of
-                            // overspend.
-                            return 0M
+                            return Ok computed
+                        with ex ->
+                            return Error ex.Message
                 }
 
-                let claim = AITokenBudgetPolicy.perUserClaim policy spent requested
-                let subject = AITokenBudgetPolicy.subject scopeId userId
+                match window with
+                | Error reason -> return! unreadable BudgetRead.Window reason
+                | Ok spent ->
+                    let claim = AITokenBudgetPolicy.perUserClaim policy spent requested
+                    let subject = AITokenBudgetPolicy.subject scopeId userId
 
-                let verdict =
-                    BudgetPolicy.verdict subject periodKey BudgetPolicy.defaultWarnThreshold [ claim ]
+                    let verdict =
+                        BudgetPolicy.verdict subject periodKey BudgetPolicy.defaultWarnThreshold [ claim ]
 
-                do! BudgetAccount.record account verdict
-                return verdict
+                    do! BudgetAccount.record account verdict
+                    return verdict
     }
 
-/// `/dev/inspect` panel over the live windows (Phase 9s task 4).
+/// `/dev/inspect` panel over the live windows.
 ///
 /// Reports what the enforcer has actually evaluated recently, which is
 /// the honest thing a stateless enforcer can say: there is no registry
@@ -332,6 +388,11 @@ type AITokenBudgetContributor(cache: AIBudgetWindowCache) =
                 configKey = AIBudgetConfigKey.value
                 capField = AIBudgetConfigKey.maxTokensPerUserPerHour
                 window = BudgetPeriod.label AITokenBudgetPolicy.perUserPeriod
+                // An unreadable policy or window admits (fail-open) or
+                // refuses (fail-closed); either way it is not "unbounded",
+                // and these two say which happened and when.
+                posture = BudgetPosture.label cache.Posture
+                lastUnreadableAt = cache.LastUnreadableAt
                 cacheTtlSeconds = cache.TtlSeconds
                 liveWindows = List.length entries
                 // "Recent" is exact here: an entry survives only while
@@ -346,6 +407,8 @@ type AITokenBudgetContributor(cache: AIBudgetWindowCache) =
                         periodKey = e.PeriodKey
                         usedTokens = e.UsedTokens
                         capAtLastSum = e.CapAtLastSum
+                        posture = BudgetPosture.label cache.Posture
+                        lastUnreadableAt = cache.LastUnreadableAt
                         computedAt = e.ComputedAt
                     |})
             |}
@@ -358,13 +421,13 @@ type AITokenBudgetContributor(cache: AIBudgetWindowCache) =
 // The per-team config panel is schema-driven: a `ModuleConfigEntry`
 // declares the field and the existing Owner/Admin-gated config UI
 // renders, validates and persists it. Declaring the schema IS the
-// admin surface (the same route Phase 9d's `_platform.usage` quota tab
+// admin surface (the same route the `_platform.usage` quota tab
 // takes) — writing a bespoke Fable panel for one integer would be a
 // second editor for a value the generic one already edits, and a
 // second place for its validation to drift.
 
-/// Phase 499 — the monetary ceilings, appended to the same
-/// `_platform.ai.budget` schema Phase 9s declares.
+/// The monetary ceilings, appended to the same
+/// `_platform.ai.budget` schema the per-user token budget declares.
 ///
 /// Four fields, defaulting to `0` / `"daily"` so a deployment that
 /// surfaces the tab and sets nothing behaves exactly as it did (GP 11).
@@ -413,14 +476,14 @@ let spendBudgetFields: ConfigFieldSchema list = [
     }
 ]
 
-/// SDK-shipped default `_platform.ai.budget` schema (Phase 9s; the
-/// monetary ceilings appended by Phase 499).
+/// SDK-shipped default `_platform.ai.budget` schema (the per-user token budget; the
+/// monetary ceilings appended by the spend budget).
 ///
 /// Every field defaults to `0` (= unbounded) or to the default window,
 /// so a deployment that surfaces the tab and sets nothing behaves
 /// exactly as it did (GP 11).
 ///
-/// `DisplayName` says "AI Budgets" rather than 9s's "AI Token Budget"
+/// `DisplayName` says "AI Budgets" rather than the token budget's "AI Token Budget"
 /// because the tab now holds two units. It is an operator-facing label
 /// on a generated panel, not a contract: nothing keys on it.
 let sdkAIBudgetSchema: ModuleConfigEntry = {
@@ -441,7 +504,7 @@ let sdkAIBudgetSchema: ModuleConfigEntry = {
                 }
             ]
             @ spendBudgetFields
-        // Bumped from 9s's `1`: the schema gained four fields. Every
+        // Bumped from the token budget's `1`: the schema gained four fields. Every
         // one of them has a default, so a document persisted under
         // version 1 stays valid and reads identically — the version
         // records that the shape moved, it does not gate anything.
@@ -476,24 +539,24 @@ let mergeAIBudgetSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 
         appEntries
         |> List.map (fun e -> if e.ModuleKey = AIBudgetConfigKey.value then merged else e)
-// ─── Phase 499 — the monetary spend-budget check ─────────────────
+// ─── The monetary spend-budget check ─────────────────
 //
-// The enforcement half of the Phase 499 types: price the scope's
-// recent turns off the same always-on latency stream Phase 9s sums,
+// The enforcement half of the types: price the scope's
+// recent turns off the same always-on latency stream the per-user token budget sums,
 // compare against the operator's monetary ceilings, and hand back a
-// Phase 689 `BudgetVerdict`. The provider decorator that consumes it
-// lives beside 9s's in `AIProviderUsageMiddleware.fs` — one chain,
+// `BudgetVerdict`. The provider decorator that consumes it
+// lives beside the token budget's in `AIProviderUsageMiddleware.fs` — one chain,
 // three windows, not three enforcement paths.
 //
-// **Why the same stream and not `IUsageLog`.** Phase 9s's reasoning
+// **Why the same stream and not `IUsageLog`.** The reasoning
 // carries over unchanged and is decisive: the usage log is written
 // only when `UsageMetering = FeatureMode.Enabled`, so a spend ceiling
 // summing it would silently never refuse on a deployment that set a
 // budget but had not also enabled metering — a cost control that is
 // off when you think it is on. The latency stream is always-on and,
-// since Phase 6i.A / 6i.B, already carries the four token counts AND
-// the `(ProviderName, ProviderModel)` pair a price needs. Phase
-// 499.C's `IUsageLog` cost record is the BILLING artefact, written
+// now, already carries the four token counts AND
+// the `(ProviderName, ProviderModel)` pair a price needs. The
+// metering path's `IUsageLog` cost record is the BILLING artefact, written
 // beside the token records by the metering decorator; it is not what
 // the ceiling reads.
 //
@@ -503,7 +566,7 @@ let mergeAIBudgetSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 // it). `Spent` is never an estimate: it is the priced sum of what
 // providers actually reported. So the true-up is not a second write
 // that has to be reconciled — the next call's window sum IS the
-// settled figure, which is the shape Phase 689's substrate note calls
+// settled figure, which is the shape the substrate note calls
 // "the ledger's `Release` cost adjustment" on a domain whose
 // consumption is derived rather than reserved.
 //
@@ -515,8 +578,7 @@ let mergeAIBudgetSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 // blocked on an unpriced model would turn adding a model into an
 // outage.
 //
-// **It fails OPEN**, for the reason 9s states: a spend ceiling is a
-// cost control, not an authorization control.
+// A failed read is decided by the declared `BudgetPosture`, as for the token budget.
 
 /// Output tokens the PRE-CALL estimate assumes a turn will generate.
 ///
@@ -546,7 +608,7 @@ let AssumedOutputTokens = 1_000
 ///
 /// `0.5` — fifty percent. Deliberately loose, and loose for a reason
 /// that is worth stating rather than tightening away: the character
-/// estimator is Phase 9d's advisory 4-chars-per-token ratio, which
+/// estimator is the advisory 4-chars-per-token ratio, which
 /// drifts materially on code-heavy or non-English prompts, and the
 /// output term is an assumption rather than a measurement. A tolerance
 /// tight enough to look impressive would be a test that fails on a
@@ -585,24 +647,33 @@ type AISpendWindowEntry = {
 /// so a key built from one of them would serve a stale figure for the
 /// other. Either window rolling misses the entry, which is the same
 /// "the period is a storage key, not a counter with a reset job"
-/// property Phase 9s's cache relies on.
+/// property the cache relies on.
 ///
-/// Exactly as in Phase 9s, the cache is a read-through accelerator
-/// over a DERIVED figure and is not part of the answer (Phase 9c rule
+/// Exactly as in the per-user token budget, the cache is a read-through accelerator
+/// over a DERIVED figure and is not part of the answer (GP 12 rule
 /// 4): drop it, restart, or run two replicas that never share it and
 /// every verdict is still computed from the event store. The policy is
 /// never cached, so lowering a ceiling mid-window is respected by the
 /// very next request.
-type AISpendWindowCache(ttlSeconds: int) =
+type AISpendWindowCache(ttlSeconds: int, posture: BudgetPosture) =
     let entries = ConcurrentDictionary<struct (string * string), AISpendWindowEntry>()
     let unpriced = ConcurrentDictionary<string, unit>()
+    let mutable lastUnreadable: DateTime option = None
 
-    /// The default TTL (`WindowCacheTtlSeconds`, shared with Phase 9s —
+    /// The default TTL (`WindowCacheTtlSeconds`, shared with the per-user token budget —
     /// the two caches accelerate scans of the same stream and a
     /// different staleness budget for each would be arbitrary).
-    new() = AISpendWindowCache(WindowCacheTtlSeconds)
+    new() = AISpendWindowCache(WindowCacheTtlSeconds, BudgetPosture.FailOpen)
+
+    /// The default posture, `FailOpen`.
+    new(ttlSeconds: int) = AISpendWindowCache(ttlSeconds, BudgetPosture.FailOpen)
 
     member _.TtlSeconds = ttlSeconds
+
+    /// The deployment's declared `BudgetPosture`. The cache is the one
+    /// per-deployment singleton the enforcer (built per resolution) and the
+    /// diagnostics panel share, so the posture rides it.
+    member _.Posture = posture
 
     /// The cached sums for these windows, if computed within the TTL
     /// and still covering BOTH period keys. `None` on a miss, an
@@ -666,6 +737,14 @@ type AISpendWindowCache(ttlSeconds: int) =
     /// window in which two turns on a newly-added model both warn.
     member _.TryMarkUnpriced(key: string) : bool = unpriced.TryAdd(key, ())
 
+    /// When a check last failed to read its policy or its window, if
+    /// ever — the diagnostics panel's way of telling "unbounded" from
+    /// "unreadable".
+    member _.LastUnreadableAt: DateTime option = lastUnreadable
+
+    /// Note a read that failed at `at`.
+    member _.MarkUnreadable(at: DateTime) = lastUnreadable <- Some at
+
 /// The start of the `period` that `at` falls in.
 ///
 /// Must agree with `BudgetPeriod.key`, which is why both are computed
@@ -685,7 +764,7 @@ let periodWindowStart (period: BudgetPeriod) (at: DateTime) : DateTime =
 
 /// One turn's priced contribution to the two windows.
 type private PricedTurn = {
-    /// `AILatencyRecord.UserId`, `""` when the record predates Phase 9s.
+    /// `AILatencyRecord.UserId`, `""` when the record predates the per-user token budget.
     UserId: UserId
     OccurredAt: DateTime
     /// The turn's cost under the rate card, or `None` when its
@@ -749,7 +828,7 @@ let private priceWindow
                 with _ ->
                     // One malformed payload must not blind the window to
                     // every other record in it — the same choice
-                    // `AILatencyHandler.decodePayload` and Phase 9s's
+                    // `AILatencyHandler.decodePayload` and the token budget's
                     // token sum both make.
                     None)
 
@@ -764,7 +843,7 @@ let private priceWindow
 /// The `BudgetAccount` that records a monetary refusal as an
 /// `AISpendBudgetExceeded` event under its own reserved source module.
 ///
-/// `OnNearLimit` is deliberately silent, for the reason Phase 9s gives:
+/// `OnNearLimit` is deliberately silent, for the reason the per-user token budget gives:
 /// writing a not-yet-refused request into the refusal stream would make
 /// the one query that stream exists to answer wrong.
 /// `policy` comes LAST so `spendEventStoreAccount store currency now`
@@ -800,7 +879,7 @@ let spendEventStoreAccount
             ()
     })
 
-/// Phase 499 — the pre-call monetary spend check.
+/// The pre-call monetary spend check.
 ///
 /// `warn` is the once-per-`(providerId, model)` unpriced-model sink,
 /// supplied as data rather than resolved here (GP 12 rule 3): the
@@ -827,9 +906,9 @@ type AISpendEnforcer
 
 
     /// The scope's configured monetary policy, read fresh. Never
-    /// cached: see the Phase 9s header on why ceiling changes must not
+    /// cached: see the header on why ceiling changes must not
     /// wait for an invalidation signal that does not exist.
-    member _.ReadPolicy(scopeId: string) : Async<AISpendBudgetPolicy> = async {
+    member _.ReadPolicy(scopeId: string) : Async<Result<AISpendBudgetPolicy, string>> = async {
         try
             let scope: StorageScope = {
                 ScopeId = scopeId
@@ -838,31 +917,53 @@ type AISpendEnforcer
             }
 
             let! raw = configStore.GetRaw(scope, AIBudgetConfigKey.value)
-            return AISpendBudgetPolicy.ofRaw raw
-        with _ ->
-            return AISpendBudgetPolicy.unbounded
+            return Ok(AISpendBudgetPolicy.ofRaw raw)
+        with ex ->
+            return Error ex.Message
     }
 
     /// May `userId` spend an estimated `requested` (in the rate card's
     /// currency) in `scopeId` right now?
     ///
-    /// Returns the full Phase 689 verdict, so a caller can act on
+    /// Returns the full verdict, so a caller can act on
     /// `NearLimit` as well as `Refused`; the accounting has already run
     /// by the time it returns.
     member this.Check(scopeId: string, userId: string, requested: decimal) : Async<BudgetVerdict> = async {
         if String.IsNullOrWhiteSpace scopeId then
             return BudgetVerdict.Allowed
         else
-            let! policy = this.ReadPolicy scopeId
+            let caller = if isNull (box userId) then "" else userId
 
-            // GP 11 / GP 13. An unconfigured scope reads no events,
-            // touches no cache and allocates no claim — the call is
-            // byte-for-byte what it was before this phase.
-            if AISpendBudgetPolicy.isUnbounded policy then
-                return BudgetVerdict.Allowed
-            else
+            let unreadable (read: BudgetRead) (reason: string) = async {
                 let at = now ()
-                let caller = if isNull (box userId) then "" else userId
+
+                let record: BudgetWindowUnreadable = {
+                    OccurredAt = at
+                    ScopeId = scopeId
+                    UserId = UserId caller
+                    Domain = AISpendBudgetPolicy.Domain
+                    Read = read
+                    Posture = cache.Posture
+                    Reason = reason
+                }
+
+                cache.MarkUnreadable at
+                do! unreadableRecorder eventStore record
+
+                match cache.Posture with
+                | BudgetPosture.FailOpen -> return BudgetVerdict.Allowed
+                | BudgetPosture.FailClosed ->
+                    let periodKey = BudgetPeriod.key AISpendBudgetPolicy.defaultPeriod at
+                    return BudgetVerdict.Refused(BudgetWindowUnreadable.denial periodKey requested record)
+            }
+
+            match! this.ReadPolicy scopeId with
+            | Error reason -> return! unreadable BudgetRead.Policy reason
+            // GP 11 / GP 13. An unconfigured scope reads no events,
+            // touches no cache and allocates no claim.
+            | Ok policy when AISpendBudgetPolicy.isUnbounded policy -> return BudgetVerdict.Allowed
+            | Ok policy ->
+                let at = now ()
 
                 // A ceiling that is not configured is measured over the
                 // default window, which costs nothing: its claim is
@@ -885,7 +986,7 @@ type AISpendEnforcer
 
                 let! entry = async {
                     match cache.TryRead(scopeId, caller, userPeriodKey, scopePeriodKey, at) with
-                    | Some cached -> return cached
+                    | Some cached -> return Ok cached
                     | None ->
                         try
                             let earliest = if userStart < scopeStart then userStart else scopeStart
@@ -900,7 +1001,7 @@ type AISpendEnforcer
                                 if cache.TryMarkUnpriced key then
                                     warn (
                                         sprintf
-                                            "AI spend budget: no price declared for '%s'. Turns on this provider/model contribute nothing to the spend window and are counted only (Phase 499, GP 11). Declare a rate in the registered ModelPriceTable to include them."
+                                            "AI spend budget: no price declared for '%s'. Turns on this provider/model contribute nothing to the spend window and are counted only (GP 11). Declare a rate in the registered ModelPriceTable to include them."
                                             key
                                     )
 
@@ -915,7 +1016,7 @@ type AISpendEnforcer
                                         0M)
 
                             // A record with no `UserId` (written before
-                            // Phase 9s) is UNATTRIBUTED and charged to
+                            // the per-user token budget) is UNATTRIBUTED and charged to
                             // nobody in the per-USER window — wrong in
                             // the safe direction. It still counts in the
                             // per-SCOPE window, where attribution is not
@@ -939,87 +1040,83 @@ type AISpendEnforcer
                             }
 
                             cache.Write computed
-                            return computed
-                        with _ ->
-                            // Fail open — a window that could not be read
-                            // is not evidence of overspend.
-                            return {
-                                ScopeId = scopeId
-                                UserId = UserId caller
-                                UserPeriodKey = userPeriodKey
-                                ScopePeriodKey = scopePeriodKey
-                                UserSpend = 0M
-                                ScopeSpend = 0M
-                                UnpricedTurns = 0
-                                ComputedAt = at
-                            }
+                            return Ok computed
+                        with ex ->
+                            return Error ex.Message
                 }
 
-                // Per-user first, then per-scope. `BudgetPolicy.breach`
-                // reports the FIRST ceiling hit and the order is the
-                // caller's to choose (Phase 689): the member's own
-                // ceiling has a remedy they can act on, the team's
-                // monthly cap does not.
-                //
-                // An unattributable caller (`""`) has no per-user window
-                // to enforce, so its claim is dropped rather than
-                // evaluated against a zero spend — which would refuse
-                // only once the ESTIMATE alone exceeded the ceiling, a
-                // verdict about nobody.
-                let userClaims =
-                    match policy.PerUser with
-                    | Some budget when caller <> "" -> [
-                        AISpendBudgetPolicy.claim AISpendBudgetPolicy.PerUserDimension budget entry.UserSpend requested
-                      ]
-                    | _ -> []
+                match entry with
+                | Error reason -> return! unreadable BudgetRead.Window reason
+                | Ok entry ->
+                    // Per-user first, then per-scope. `BudgetPolicy.breach`
+                    // reports the FIRST ceiling hit and the order is the
+                    // caller's to choose: the member's own
+                    // ceiling has a remedy they can act on, the team's
+                    // monthly cap does not.
+                    //
+                    // An unattributable caller (`""`) has no per-user window
+                    // to enforce, so its claim is dropped rather than
+                    // evaluated against a zero spend — which would refuse
+                    // only once the ESTIMATE alone exceeded the ceiling, a
+                    // verdict about nobody.
+                    let userClaims =
+                        match policy.PerUser with
+                        | Some budget when caller <> "" -> [
+                            AISpendBudgetPolicy.claim
+                                AISpendBudgetPolicy.PerUserDimension
+                                budget
+                                entry.UserSpend
+                                requested
+                          ]
+                        | _ -> []
 
-                let scopeClaims =
-                    match policy.PerScope with
-                    | Some budget -> [
-                        AISpendBudgetPolicy.claim
-                            AISpendBudgetPolicy.PerScopeDimension
-                            budget
-                            entry.ScopeSpend
-                            requested
-                      ]
-                    | None -> []
+                    let scopeClaims =
+                        match policy.PerScope with
+                        | Some budget -> [
+                            AISpendBudgetPolicy.claim
+                                AISpendBudgetPolicy.PerScopeDimension
+                                budget
+                                entry.ScopeSpend
+                                requested
+                          ]
+                        | None -> []
 
-                let claims = userClaims @ scopeClaims
+                    let claims = userClaims @ scopeClaims
 
-                if List.isEmpty claims then
-                    return BudgetVerdict.Allowed
-                else
-                    // The denial's `PeriodKey` must name the window the
-                    // BREACHED ceiling was measured in. The two ceilings
-                    // can sit on different windows, so the key is chosen
-                    // after the breach is known rather than passed in
-                    // blind.
-                    let verdictFor (periodKey: string) (subject: BudgetSubject) (cs: BudgetClaim list) =
-                        BudgetPolicy.verdict subject periodKey BudgetPolicy.defaultWarnThreshold cs
+                    if List.isEmpty claims then
+                        return BudgetVerdict.Allowed
+                    else
+                        // The denial's `PeriodKey` must name the window the
+                        // BREACHED ceiling was measured in. The two ceilings
+                        // can sit on different windows, so the key is chosen
+                        // after the breach is known rather than passed in
+                        // blind.
+                        let verdictFor (periodKey: string) (subject: BudgetSubject) (cs: BudgetClaim list) =
+                            BudgetPolicy.verdict subject periodKey BudgetPolicy.defaultWarnThreshold cs
 
-                    let userVerdict =
-                        verdictFor userPeriodKey (AISpendBudgetPolicy.userSubject scopeId caller) userClaims
+                        let userVerdict =
+                            verdictFor userPeriodKey (AISpendBudgetPolicy.userSubject scopeId caller) userClaims
 
-                    let verdict =
-                        match userVerdict with
-                        | BudgetVerdict.Refused _ -> userVerdict
-                        | _ ->
-                            let scopeVerdict =
-                                verdictFor scopePeriodKey (AISpendBudgetPolicy.scopeSubject scopeId) scopeClaims
+                        let verdict =
+                            match userVerdict with
+                            | BudgetVerdict.Refused _ -> userVerdict
+                            | _ ->
+                                let scopeVerdict =
+                                    verdictFor scopePeriodKey (AISpendBudgetPolicy.scopeSubject scopeId) scopeClaims
 
-                            match scopeVerdict with
-                            | BudgetVerdict.Refused _ -> scopeVerdict
-                            | BudgetVerdict.NearLimit _ ->
-                                match userVerdict with
-                                | BudgetVerdict.NearLimit _ -> userVerdict
-                                | _ -> scopeVerdict
-                            | BudgetVerdict.Allowed -> userVerdict
+                                match scopeVerdict with
+                                | BudgetVerdict.Refused _ -> scopeVerdict
+                                | BudgetVerdict.NearLimit _ ->
+                                    match userVerdict with
+                                    | BudgetVerdict.NearLimit _ -> userVerdict
+                                    | _ -> scopeVerdict
+                                | BudgetVerdict.Allowed -> userVerdict
 
-                    do! BudgetAccount.record (accountOf policy) verdict
-                    return verdict
+                        do! BudgetAccount.record (accountOf policy) verdict
+                        return verdict
     }
 
-/// `/dev/inspect` panel over the live spend windows (Phase 499).
+/// `/dev/inspect` panel over the live spend windows.
 ///
 /// Reports what the enforcer has actually evaluated recently — the
 /// honest thing a stateless enforcer can say — plus the rate card's
@@ -1048,6 +1145,8 @@ type AISpendBudgetContributor(cache: AISpendWindowCache, priceTable: ModelPriceT
                 currency = priceTable |> Option.map _.Currency |> Option.defaultValue ""
                 pricedModels = priceTable |> Option.map (_.Rates >> Map.count) |> Option.defaultValue 0
                 unpricedModelsSeen = cache.UnpricedKeys
+                posture = BudgetPosture.label cache.Posture
+                lastUnreadableAt = cache.LastUnreadableAt
                 cacheTtlSeconds = cache.TtlSeconds
                 liveWindows = List.length entries
                 consumption =

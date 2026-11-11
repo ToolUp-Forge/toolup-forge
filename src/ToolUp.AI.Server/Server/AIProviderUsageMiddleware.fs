@@ -636,8 +636,11 @@ type private SpendEnforcingProvider
 
         match verdict with
         | BudgetVerdict.Refused denial ->
+            // The policy only labels the refusal's window; an unreadable
+            // one leaves the default label, which an unreadable denial's
+            // message does not use.
             let! policy = enforcer.ReadPolicy scopeId
-            return refusal denial policy
+            return refusal denial (policy |> Result.defaultValue AISpendBudgetPolicy.unbounded)
         | BudgetVerdict.Allowed
         | BudgetVerdict.NearLimit _ -> return! proceed ()
     }

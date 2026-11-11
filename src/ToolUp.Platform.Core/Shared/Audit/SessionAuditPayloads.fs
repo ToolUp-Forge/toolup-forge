@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 open System
 
-// Phase 347 — carved out of AuditTypes.fs: share-token, session, service-account,
+// Carved out of AuditTypes.fs: share-token, session, service-account,
 // beacon, conversation, config-drift, diagnostic-bundle, rate-limit,
 // compute-budget and data-subject-request payload records.
 // Declaration order is unchanged from the monolith; same namespace, same
@@ -49,7 +49,7 @@ type ShareTokenRevokedPayload = {
     ResourceId: string
 }
 
-/// Phase 528 — one recorded session was revoked, by its owner or by a
+/// One recorded session was revoked, by its owner or by a
 /// team administrator. `ActorUserId` is who performed the revocation and
 /// `SubjectUserId` is whose session it was; they differ exactly on the
 /// admin force-revoke path, which is the case worth being able to find
@@ -75,7 +75,7 @@ type SessionRevokedPayload = {
     ByAdministrator: bool
 }
 
-/// Phase 528 — a wholesale revocation: sign-out-everywhere, or a team
+/// A wholesale revocation: sign-out-everywhere, or a team
 /// administrator cutting off another user entirely. `RevokedCount` is
 /// how many records moved from active to revoked, so a trail reader can
 /// tell a real sign-out-everywhere from a no-op repeat.
@@ -86,7 +86,7 @@ type AllSessionsRevokedPayload = {
     ByAdministrator: bool
 }
 
-// ─── Service accounts (Phase 527) ────────────────────────────────────
+// ─── Service accounts ────────────────────────────────────
 //
 // Machine principals and their scoped API tokens. Reserved
 // `SourceModule = "_platform.audit.service_accounts"`
@@ -153,13 +153,13 @@ type ServiceAccountStatusChangedPayload = {
     Disabled: bool
 }
 
-// ─── Phase 53 — `IConversationStore` lifecycle audit payloads ───
+// ─── `IConversationStore` lifecycle audit payloads ───
 //
 // Five payloads cover the conversation substrate's lifecycle, emitted
 // under reserved `SourceModule = "_platform.conversations"`. Bodies
 // are deliberately metadata-only: digests + counts + ids, never
-// conversation content or tool payloads (PII protection — Phase 6h.A
-// owns content-redaction; this audit family piggy-backs on the
+// conversation content or tool payloads (PII protection — the content
+// redaction owns that; this audit family piggy-backs on the
 // substrate's own digests + counts so the audit trail itself never
 // becomes a PII sink). Admin queries filter on `SourceModule`
 // + `EventType` for per-event-kind rollups.
@@ -252,7 +252,7 @@ type ConfigDriftChange = {
     To: string option
 }
 
-/// Phase 9q — startup-time `ServerConfig` drift detection.
+/// Startup-time `ServerConfig` drift detection.
 /// Emitted by `ConfigDriftDetector` after `compose` resolves the
 /// effective config and finds the persisted previous snapshot
 /// (`_platform/_deploy/last-config.json`) differs. Recorded under
@@ -292,7 +292,7 @@ type ConfigDriftPayload = {
     SnapshotTakenAt: DateTime
 }
 
-/// Phase 9n — operator (or automated tooling) downloaded the
+/// Operator (or automated tooling) downloaded the
 /// `/dev/bundle` diagnostic-support archive. Recorded under
 /// `_platform` scope with reserved `SourceModule =
 /// "_platform.diagnostics"`. The bundle download is a privileged
@@ -321,7 +321,7 @@ type DiagnosticBundleAccessedPayload = {
     Truncated: bool
 }
 
-/// Phase 9v — outbound rate-limit wait exceeded
+/// Outbound rate-limit wait exceeded
 /// `ServerConfig.SlowRateLimitThreshold`. Emitted by
 /// `InProcessRateLimiter` after a `Wait` admitted with a `DelayedBy`
 /// outcome whose duration crossed the threshold (default 5 s). Sub-
@@ -347,7 +347,7 @@ type RateLimitWaitedPayload = {
     WaitedMs: int64
 }
 
-/// Phase 9v — outbound long-window quota exhausted. Emitted by
+/// Outbound long-window quota exhausted. Emitted by
 /// `InProcessRateLimiter` when a descriptor's `LongWindow` (typically
 /// a daily ceiling) is hit and `Wait` returns `Refused`. Unlike
 /// `RateLimitWaited`, this event is always recorded — refusals are
@@ -363,7 +363,43 @@ type RateLimitRefusedPayload = {
     Reason: string
 }
 
-/// Phase 451 — a compute submission was refused by the scope's budget.
+/// A compute refusal's figures, as the `ComputeBudgetDenied` audit row
+/// stores them: the seam's `BudgetDenial` without its domain (every such
+/// row is a compute refusal), with the class under the name the row has
+/// always carried. The row's bytes are frozen (archives, SIEM rules and the
+/// audit wire corpus hold them), which is why it is its own record rather
+/// than the denial itself.
+type ComputeBudgetDeniedFigures = {
+    /// Scope whose budget refused the submission.
+    ScopeId: string
+    /// `SubmitterClass.label` of the refused submission.
+    SubmitterClass: string
+    /// `ComputeBudgetDimension.label` of the ceiling that was hit.
+    Dimension: string
+    /// The configured ceiling, in the dimension's own unit.
+    Quota: decimal
+    /// What the scope had already consumed against `Quota`.
+    Spent: decimal
+    /// What this submission asked for on top of `Spent`.
+    Requested: decimal
+    /// `BudgetPeriod.key` of the period the refusal was measured in.
+    PeriodKey: string
+}
+
+[<RequireQualifiedAccess>]
+module ComputeBudgetDeniedFigures =
+    /// The row's figures for a compute refusal.
+    let ofDenial (denial: BudgetDenial) : ComputeBudgetDeniedFigures = {
+        ScopeId = denial.ScopeId
+        SubmitterClass = denial.ClassLabel
+        Dimension = denial.Dimension
+        Quota = denial.Quota
+        Spent = denial.Spent
+        Requested = denial.Requested
+        PeriodKey = denial.PeriodKey
+    }
+
+/// A compute submission was refused by the scope's budget.
 /// Emitted by `ComputeBudgetGuard` on every denial, from both enforcement
 /// points (the `IExternalComputeDispatcher.Submit` decorator and the
 /// fit-job enqueue path), so an operator sees one uniform row whichever
@@ -375,9 +411,10 @@ type RateLimitRefusedPayload = {
 /// That is the same argument that made `RateLimitRefused` unconditional
 /// while `RateLimitWaited` is threshold-gated.
 type ComputeBudgetDeniedPayload = {
-    /// The typed refusal, verbatim — the same value the caller received,
-    /// so the audit row and the client's error cannot disagree.
-    Denial: ComputeBudgetDenial
+    /// The refusal's figures — the denial the caller received, projected
+    /// by `ComputeBudgetDeniedFigures.ofDenial`, so the audit row and the
+    /// client's error cannot disagree.
+    Denial: ComputeBudgetDeniedFigures
     /// Which enforcement point refused: `"external-compute"` (the
     /// dispatcher decorator) or `"model-fit-enqueue"`.
     Surface: string
@@ -394,7 +431,7 @@ type ComputeBudgetDeniedPayload = {
     RefusedAt: DateTime
 }
 
-/// Phase 451 — a compute submission was **admitted** while the scope's
+/// A compute submission was **admitted** while the scope's
 /// period allowance was at or past its warning threshold.
 ///
 /// The event exists because a budget whose only signal is refusal tells an
@@ -411,7 +448,7 @@ type ComputeBudgetWarningPayload = {
     ScopeId: string
     /// `SubmitterClass.label` of the submission that crossed the threshold.
     SubmitterClass: string
-    /// `ComputeBudgetPeriod.key` of the accounting period.
+    /// `BudgetPeriod.key` of the accounting period.
     PeriodKey: string
     /// The configured period allowance, in abstract cost units.
     Quota: decimal
@@ -426,7 +463,7 @@ type ComputeBudgetWarningPayload = {
     ObservedAt: DateTime
 }
 
-/// Phase 9h — data-subject-request lifecycle event. One payload shape
+/// Data-subject-request lifecycle event. One payload shape
 /// across every transition emitted by `DataSubjectRequestApiHandler`
 /// (RequestStarted / PreviewCompleted / ErasureCompleted /
 /// ErasureFailed / ExportCompleted). The transition discriminator

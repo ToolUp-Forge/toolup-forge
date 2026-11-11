@@ -229,7 +229,12 @@ let private getConversation (storage: IBlobStorage) (conversationId: Guid) : Con
     let manager = new SSEConnectionManager()
 
     let api, _ =
-        AIAssistantHandler.aiAssistantApi None Map.empty manager (ctx :> HttpContext)
+        AIAssistantHandler.aiAssistantApi
+            None
+            Map.empty
+            manager
+            (AIAssistantHandler.AITaskStatusRegistry())
+            (ctx :> HttpContext)
 
     api.GetConversation conversationId |> Async.RunSynchronously
 
