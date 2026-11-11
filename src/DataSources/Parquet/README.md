@@ -40,6 +40,7 @@ deployments that do not need native-Parquet handoff pay nothing.
 | `Bool` | boolean |
 | `Text` / `Categorical` | UTF-8 string |
 | `Timestamp` | timestamp (microseconds, UTC-adjusted) |
+| `Decimal` | decimal logical type, at the precision and scale the column's values need; past 38 digits (the most Parquet.Net writes) the canonical decimal text as a UTF-8 string |
 
 Nullability maps to Parquet optional columns. `Text` vs `Categorical` and the
 column roles (`PanelUnit` / `PanelPeriod` / `Target`) are not representable in
