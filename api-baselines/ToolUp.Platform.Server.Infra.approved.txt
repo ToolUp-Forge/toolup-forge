@@ -337,6 +337,26 @@ ToolUp.Platform.Infra.BlobWorkerKeyRegistry..ctor(ToolUp.Platform.BlobStorage+IB
 ToolUp.Platform.Infra.BlobWorkerKeyRegistry.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IWorkerKeyRegistry]
 ToolUp.Platform.Infra.BlobXmlRepository (class)
 ToolUp.Platform.Infra.BlobXmlRepository..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
+ToolUp.Platform.Infra.BoundQuery (class)
+ToolUp.Platform.Infra.BoundQuery.run(ToolUp.Platform.Infra.IDataSource, ToolUp.Platform.Infra.DataSourceCallContext, ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.Infra.BoundStatementError]]
+ToolUp.Platform.Infra.BoundQuery.runNative(ToolUp.Platform.Infra.IDataSource, ToolUp.Platform.Infra.DataSourceCallContext, ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.Infra.PayloadFormat, System.Byte[]], ToolUp.Platform.Infra.BoundStatementError]]
+ToolUp.Platform.Infra.BoundStatementError (class)
+ToolUp.Platform.Infra.BoundStatementError.IsFailed : System.Boolean { get }
+ToolUp.Platform.Infra.BoundStatementError.IsNotDeclared : System.Boolean { get }
+ToolUp.Platform.Infra.BoundStatementError.IsRefused : System.Boolean { get }
+ToolUp.Platform.Infra.BoundStatementError.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.BoundStatementError+Failed (class)
+ToolUp.Platform.Infra.BoundStatementError+Failed.Item : ToolUp.Platform.IngestionError { get }
+ToolUp.Platform.Infra.BoundStatementError+NotDeclared (class)
+ToolUp.Platform.Infra.BoundStatementError+NotDeclared.Item : ToolUp.Platform.Infra.CapabilityNotDeclared { get }
+ToolUp.Platform.Infra.BoundStatementError+Refused (class)
+ToolUp.Platform.Infra.BoundStatementError+Refused.Item : ToolUp.Platform.BindingRefusal { get }
+ToolUp.Platform.Infra.BoundStatementError+Tags (class)
+ToolUp.Platform.Infra.BoundStatementError+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.Infra.BoundStatementError+Tags.NotDeclared : System.Int32 (literal)
+ToolUp.Platform.Infra.BoundStatementError+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.Infra.BoundStatementErrorModule (class)
+ToolUp.Platform.Infra.BoundStatementErrorModule.describe(ToolUp.Platform.Infra.BoundStatementError) : System.String
 ToolUp.Platform.Infra.BoundedMemoIndex`2 (class)
 ToolUp.Platform.Infra.BoundedMemoIndex`2..ctor(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
 ToolUp.Platform.Infra.BoundedMemoIndex`2.Count : System.Int32 { get }
@@ -594,24 +614,34 @@ ToolUp.Platform.Infra.ConditionalSaveError+VersionConflict (class)
 ToolUp.Platform.Infra.ConditionalSaveError+VersionConflict.actual : System.Int32 { get }
 ToolUp.Platform.Infra.ConditionalSaveError+VersionConflict.expected : System.Int32 { get }
 ToolUp.Platform.Infra.ConnectorCapabilities (class)
-ToolUp.Platform.Infra.ConnectorCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IWatchableFileSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmitsNativePayload])
+ToolUp.Platform.Infra.ConnectorCapabilities..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IWatchableFileSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmitsNativePayload], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IBindsStatements], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmitsNativeBoundPayload])
+ToolUp.Platform.Infra.ConnectorCapabilities.Binds : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IBindsStatements] { get }
 ToolUp.Platform.Infra.ConnectorCapabilities.Native : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmitsNativePayload] { get }
+ToolUp.Platform.Infra.ConnectorCapabilities.NativeBound : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmitsNativeBoundPayload] { get }
 ToolUp.Platform.Infra.ConnectorCapabilities.Watchable : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IWatchableFileSource] { get }
 ToolUp.Platform.Infra.ConnectorCapabilitiesModule (class)
+ToolUp.Platform.Infra.ConnectorCapabilitiesModule.binds(ToolUp.Platform.Infra.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.IBindsStatements, ToolUp.Platform.Infra.CapabilityNotDeclared]
 ToolUp.Platform.Infra.ConnectorCapabilitiesModule.declared(ToolUp.Platform.Infra.ConnectorCapabilities) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.ConnectorCapability]
 ToolUp.Platform.Infra.ConnectorCapabilitiesModule.declares(ToolUp.Platform.Infra.ConnectorCapability, ToolUp.Platform.Infra.ConnectorCapabilities) : System.Boolean
 ToolUp.Platform.Infra.ConnectorCapabilitiesModule.native(ToolUp.Platform.Infra.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.IEmitsNativePayload, ToolUp.Platform.Infra.CapabilityNotDeclared]
+ToolUp.Platform.Infra.ConnectorCapabilitiesModule.nativeBound(ToolUp.Platform.Infra.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.IEmitsNativeBoundPayload, ToolUp.Platform.Infra.CapabilityNotDeclared]
 ToolUp.Platform.Infra.ConnectorCapabilitiesModule.none : ToolUp.Platform.Infra.ConnectorCapabilities { get }
 ToolUp.Platform.Infra.ConnectorCapabilitiesModule.require(ToolUp.Platform.Infra.ConnectorCapability, ToolUp.Platform.Infra.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.CapabilityNotDeclared]
 ToolUp.Platform.Infra.ConnectorCapabilitiesModule.watchable(ToolUp.Platform.Infra.IDataSource) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.IWatchableFileSource, ToolUp.Platform.Infra.CapabilityNotDeclared]
 ToolUp.Platform.Infra.ConnectorCapability (class)
+ToolUp.Platform.Infra.ConnectorCapability.Binds : ToolUp.Platform.Infra.ConnectorCapability { get }
+ToolUp.Platform.Infra.ConnectorCapability.IsBinds : System.Boolean { get }
 ToolUp.Platform.Infra.ConnectorCapability.IsNative : System.Boolean { get }
+ToolUp.Platform.Infra.ConnectorCapability.IsNativeBound : System.Boolean { get }
 ToolUp.Platform.Infra.ConnectorCapability.IsWatchable : System.Boolean { get }
 ToolUp.Platform.Infra.ConnectorCapability.Native : ToolUp.Platform.Infra.ConnectorCapability { get }
+ToolUp.Platform.Infra.ConnectorCapability.NativeBound : ToolUp.Platform.Infra.ConnectorCapability { get }
 ToolUp.Platform.Infra.ConnectorCapability.Tag : System.Int32 { get }
 ToolUp.Platform.Infra.ConnectorCapability.Watchable : ToolUp.Platform.Infra.ConnectorCapability { get }
 ToolUp.Platform.Infra.ConnectorCapability+Tags (class)
+ToolUp.Platform.Infra.ConnectorCapability+Tags.Binds : System.Int32 (literal)
 ToolUp.Platform.Infra.ConnectorCapability+Tags.Native : System.Int32 (literal)
+ToolUp.Platform.Infra.ConnectorCapability+Tags.NativeBound : System.Int32 (literal)
 ToolUp.Platform.Infra.ConnectorCapability+Tags.Watchable : System.Int32 (literal)
 ToolUp.Platform.Infra.ConnectorCapabilityModule (class)
 ToolUp.Platform.Infra.ConnectorCapabilityModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.ConnectorCapability] { get }
@@ -1403,6 +1433,9 @@ ToolUp.Platform.Infra.HealthStateTracker+ProbeState.Buffer : Microsoft.FSharp.Co
 ToolUp.Platform.Infra.HealthStateTracker+ProbeState.StableStatus : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Infra.IArtifactProvenanceSource (interface)
 ToolUp.Platform.Infra.IArtifactProvenanceSource.GetArtifact(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.ArtifactProvenance]]
+ToolUp.Platform.Infra.IBindsStatements (interface)
+ToolUp.Platform.Infra.IBindsStatements.BindableKinds : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DatasetDType] { get }
+ToolUp.Platform.Infra.IBindsStatements.QueryBound(ToolUp.Platform.Infra.DataSourceCallContext, ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.Infra.BoundStatementError]]
 ToolUp.Platform.Infra.IBudgetLedger (interface)
 ToolUp.Platform.Infra.IBudgetLedger.ReadUsage(ToolUp.Platform.Infra.BudgetLedgerKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BudgetUsage]
 ToolUp.Platform.Infra.IBudgetLedger.Release(ToolUp.Platform.Infra.BudgetLedgerKey, System.Decimal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -1675,6 +1708,9 @@ ToolUp.Platform.Infra.IEmbeddingProvider+ScopedEmbedding.forScope(ToolUp.Platfor
 ToolUp.Platform.Infra.IEmbeddingProvider+ScopedEmbedding.isScopeKeyed(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider) : System.Boolean
 ToolUp.Platform.Infra.IEmbeddingProvider+ScopedEmbedding.resetScope(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.IEmbeddingProvider+ScopedEmbedding.tryFactory(ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmbeddingProvider+IScopedEmbeddingProviderFactory]
+ToolUp.Platform.Infra.IEmitsNativeBoundPayload (interface)
+ToolUp.Platform.Infra.IEmitsNativeBoundPayload.NativeFormat : ToolUp.Platform.Infra.PayloadFormat { get }
+ToolUp.Platform.Infra.IEmitsNativeBoundPayload.QueryBoundNative(ToolUp.Platform.Infra.DataSourceCallContext, ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.Infra.BoundStatementError]]
 ToolUp.Platform.Infra.IEmitsNativePayload (interface)
 ToolUp.Platform.Infra.IEmitsNativePayload.NativeFormat : ToolUp.Platform.Infra.PayloadFormat { get }
 ToolUp.Platform.Infra.IEmitsNativePayload.QueryNative(ToolUp.Platform.Infra.DataSourceCallContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.IngestionError]]
@@ -2099,6 +2135,9 @@ ToolUp.Platform.Infra.InMemoryComputeBudgetStore (class)
 ToolUp.Platform.Infra.InMemoryComputeBudgetStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.Infra.InMemoryDataSource (class)
 ToolUp.Platform.Infra.InMemoryDataSource.create() : ToolUp.Platform.Infra.InMemoryDataSource+InMemoryDataSource
+ToolUp.Platform.Infra.InMemoryDataSource+InMemoryBinding (class)
+ToolUp.Platform.Infra.InMemoryDataSource+InMemoryBinding.select(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.Platform.Infra.InMemoryDataSource+InMemoryBinding.table(System.String) : System.String
 ToolUp.Platform.Infra.InMemoryDataSource+InMemoryDataSource (class)
 ToolUp.Platform.Infra.InMemoryDataSource+InMemoryDataSource..ctor()
 ToolUp.Platform.Infra.InMemoryDataSource+InMemoryDataSource.Seed(System.String, System.String, System.Byte[]) : System.Void
