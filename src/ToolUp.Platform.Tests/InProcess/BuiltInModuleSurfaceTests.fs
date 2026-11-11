@@ -280,7 +280,9 @@ let visibilityTests =
     testList "Phase 66 Stream B.4 — SDK built-in client-side Visibility" [
 
         test "PlatformAdminUI declares visibleToAuthenticated" {
-            let m = PlatformAdminUI.create None PublicUtilityConfig.defaults
+            let m =
+                ShellSlots.builtIn (PlatformAdminUI.builtIn PublicUtilityConfig.defaults) None
+
             assertVisibleToAuthenticated "PlatformAdminUI" m
         }
 
@@ -289,17 +291,17 @@ let visibilityTests =
             // a user with no active team can reach the create-team /
             // accept-invite flow. `visibleToAuthenticated` admits UserKind
             // + TeamMemberKind + ClaimBearerKind — the right shape.
-            let m = TeamManagerUI.create None
+            let m = ShellSlots.builtIn TeamManagerUI.builtIn None
             assertVisibleToAuthenticated "TeamManagerUI" m
         }
 
         test "HealthMonitorUI declares visibleToAuthenticated" {
-            let m = HealthMonitorUI.create None
+            let m = ShellSlots.builtIn HealthMonitorUI.builtIn None
             assertVisibleToAuthenticated "HealthMonitorUI" m
         }
 
         test "UsageDashboard declares visibleToAuthenticated" {
-            let m = UsageDashboard.create None
+            let m = ShellSlots.builtIn UsageDashboard.builtIn None
             assertVisibleToAuthenticated "UsageDashboard" m
         }
 
@@ -310,27 +312,27 @@ let visibilityTests =
             // module is admin-shaped (group "Platform Admin", role gated
             // server-side), so its sidebar Visibility hides from
             // AnonymousKind in line with the other admin built-ins.
-            let m = ServiceStatusBoardUI.create None
+            let m = ShellSlots.builtIn ServiceStatusBoardUI.builtIn None
             assertVisibleToAuthenticated "ServiceStatusBoardUI" m
         }
 
         test "PermissionsAdminUI declares visibleToAuthenticated" {
-            let m = PermissionsAdminUI.create None
+            let m = ShellSlots.builtIn PermissionsAdminUI.builtIn None
             assertVisibleToAuthenticated "PermissionsAdminUI" m
         }
 
         test "DataIngestionUI declares visibleToAuthenticated" {
-            let m = DataIngestionUI.create None
+            let m = ShellSlots.builtIn DataIngestionUI.builtIn None
             assertVisibleToAuthenticated "DataIngestionUI" m
         }
 
         test "WebhookAdminUI declares visibleToAuthenticated" {
-            let m = WebhookAdminUI.create None
+            let m = ShellSlots.builtIn WebhookAdminUI.builtIn None
             assertVisibleToAuthenticated "WebhookAdminUI" m
         }
 
         test "TeamConfigUI declares visibleToAuthenticated" {
-            let m = TeamConfigUI.create None
+            let m = ShellSlots.builtIn TeamConfigUI.builtIn None
             assertVisibleToAuthenticated "TeamConfigUI" m
         }
 
@@ -338,12 +340,14 @@ let visibilityTests =
             // FileManagerUI is the SDK's `_sdk.DataManager` built-in.
             // Empty `displays` is fine here — `create` only stores the
             // list; the view function is never invoked.
-            let m = FileManagerUI.create [] DataManagerConfig.unlabelled
+            let m =
+                ShellSlots.builtIn (FileManagerUI.builtIn [] DataManagerConfig.unlabelled) None
+
             assertVisibleToAuthenticated "FileManagerUI" m
         }
 
         test "DataSubjectRequestAdminUI declares visibleToAuthenticated" {
-            let m = DataSubjectRequestAdminUI.create None
+            let m = ShellSlots.builtIn DataSubjectRequestAdminUI.builtIn None
             assertVisibleToAuthenticated "DataSubjectRequestAdminUI" m
         }
 
@@ -354,23 +358,141 @@ let visibilityTests =
             // sidebar shape. Pinning the set here means a future addition
             // is a deliberate edit.
             let builtIns: (string * ErasedModule) list = [
-                "PlatformAdminUI", PlatformAdminUI.create None PublicUtilityConfig.defaults
-                "TeamManagerUI", TeamManagerUI.create None
-                "HealthMonitorUI", HealthMonitorUI.create None
-                "UsageDashboard", UsageDashboard.create None
-                "ServiceStatusBoardUI", ServiceStatusBoardUI.create None
-                "PermissionsAdminUI", PermissionsAdminUI.create None
-                "DataIngestionUI", DataIngestionUI.create None
-                "WebhookAdminUI", WebhookAdminUI.create None
-                "TeamConfigUI", TeamConfigUI.create None
-                "FileManagerUI", FileManagerUI.create [] DataManagerConfig.unlabelled
-                "DataSubjectRequestAdminUI", DataSubjectRequestAdminUI.create None
-                "NotificationPreferencesUI", NotificationPreferencesUI.create None
+                "PlatformAdminUI", ShellSlots.builtIn (PlatformAdminUI.builtIn PublicUtilityConfig.defaults) None
+                "TeamManagerUI", ShellSlots.builtIn TeamManagerUI.builtIn None
+                "HealthMonitorUI", ShellSlots.builtIn HealthMonitorUI.builtIn None
+                "UsageDashboard", ShellSlots.builtIn UsageDashboard.builtIn None
+                "ServiceStatusBoardUI", ShellSlots.builtIn ServiceStatusBoardUI.builtIn None
+                "PermissionsAdminUI", ShellSlots.builtIn PermissionsAdminUI.builtIn None
+                "DataIngestionUI", ShellSlots.builtIn DataIngestionUI.builtIn None
+                "WebhookAdminUI", ShellSlots.builtIn WebhookAdminUI.builtIn None
+                "TeamConfigUI", (ShellSlots.builtIn TeamConfigUI.builtIn) None
+                "FileManagerUI", ShellSlots.builtIn (FileManagerUI.builtIn [] DataManagerConfig.unlabelled) None
+                "DataSubjectRequestAdminUI", (ShellSlots.builtIn DataSubjectRequestAdminUI.builtIn) None
+                "NotificationPreferencesUI", ShellSlots.builtIn NotificationPreferencesUI.builtIn None
             ]
 
             Expect.equal (List.length builtIns) 12 "twelve Platform.Client built-ins pinned"
 
             for (label, m) in builtIns do
                 Expect.isFalse (m.Visibility AnonymousKind) (sprintf "%s must hide from AnonymousKind" label)
+        }
+    ]
+
+// ─── Each built-in is one BuiltIn value over the view contract ─────────
+//
+// A built-in exports a `BuiltIn` value that `ShellSlots.builtIn` builds, and
+// its view takes the shell's `RenderContext`; the `create` pipelines and the
+// `[<ReactComponent>] XxxBody` components that existed only to read the
+// catalog through a hook are gone. Read from the sources, because the
+// property is about how the module is written.
+
+/// Repo root (`toolup-forge`) from the running assembly.
+let private repoRoot () =
+    let assemblyDir =
+        System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+
+    System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+/// The client module files: every `*UI.fs` under `src/`, plus the three
+/// built-ins whose names do not end in `UI`.
+let private clientModuleFiles () =
+    let src = System.IO.Path.Combine(repoRoot (), "src")
+    let client = System.IO.Path.Combine(src, "ToolUp.Platform.Client", "Client")
+
+    let named = [
+        System.IO.Path.Combine(client, "Home.fs")
+        System.IO.Path.Combine(client, "AdminHome.fs")
+        System.IO.Path.Combine(client, "UsageDashboard.fs")
+    ]
+
+    let uiFiles =
+        System.IO.Directory.EnumerateFiles(src, "*UI.fs", System.IO.SearchOption.AllDirectories)
+        |> Seq.filter (fun f ->
+            let segments = f.Split([| '\\'; '/' |])
+
+            not (
+                segments
+                |> Array.exists (fun seg -> seg = "bin" || seg = "obj" || seg = "node_modules")
+            ))
+        |> List.ofSeq
+
+    named @ uiFiles |> List.distinct |> List.sort
+
+/// `XxxBody` components: a `[<ReactComponent>]` whose binding is named `…Body`.
+let internal hookSiteBodies (lines: string array) : string list = [
+    for i in 0 .. lines.Length - 2 do
+        if lines[i].Trim() = "[<ReactComponent>]" then
+            let m =
+                System.Text.RegularExpressions.Regex.Match(
+                    lines[i + 1],
+                    @"^\s*let\s+(?:private\s+|internal\s+)?(\w+Body)\b"
+                )
+
+            if m.Success then
+                yield m.Groups[1].Value
+]
+
+let builtInContractTests =
+    testList "every built-in is one BuiltIn value over the view contract" [
+        test "the scan reads the client module files" {
+            let files = clientModuleFiles ()
+            Expect.isGreaterThanOrEqual (List.length files) 30 "the module files the scan reads"
+        }
+
+        test "no client module declares a hook-site body" {
+            let offending = [
+                for f in clientModuleFiles () do
+                    for body in hookSiteBodies (System.IO.File.ReadAllLines f) do
+                        yield $"{System.IO.Path.GetFileName f}: {body}"
+            ]
+
+            Expect.isEmpty
+                offending
+                "a [<ReactComponent>] body that exists to read the catalog through a hook; the view reads `ctx.Messages` from its RenderContext"
+        }
+
+        test "no built-in module file defines a create pipeline" {
+            let createSite =
+                System.Text.RegularExpressions.Regex(
+                    @"^let create \(",
+                    System.Text.RegularExpressions.RegexOptions.Multiline
+                )
+
+            let offending = [
+                for f in clientModuleFiles () do
+                    if createSite.IsMatch(System.IO.File.ReadAllText f) then
+                        yield System.IO.Path.GetFileName f
+            ]
+
+            Expect.isEmpty offending "a built-in exports a `BuiltIn` value that `ShellSlots.builtIn` builds"
+        }
+
+        test "every slot the shell fills with an SDK module builds a BuiltIn value" {
+            let slots =
+                System.IO.File.ReadAllText(
+                    System.IO.Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client", "Client", "ShellSlots.fs")
+                )
+
+            Expect.isFalse
+                (System.Text.RegularExpressions.Regex.IsMatch(slots, @"\b\w+(?:UI|Home|Dashboard)\.create\b"))
+                "a slot row calls a module's create"
+
+            Expect.isGreaterThanOrEqual
+                (System.Text.RegularExpressions.Regex.Matches(slots, @"\bbuiltIn\b[^\n]*\.builtIn\b").Count)
+                25
+                "the slot rows build the built-ins' BuiltIn values"
+        }
+
+        test "the scan flags a re-added hook-site body — go-red" {
+            let lines = [|
+                "[<ReactComponent>]"
+                "let private TeamManagerBody (model: Model) (dispatch: Msg -> unit) ="
+                "    let msgs = (MessageCatalogProvider.useMessages ()).TeamManager"
+                "[<ReactComponent>]"
+                "let private QuietHoursForm (current: int) ="
+            |]
+
+            Expect.equal (hookSiteBodies lines) [ "TeamManagerBody" ] "the body is flagged; a stateful form is not"
         }
     ]

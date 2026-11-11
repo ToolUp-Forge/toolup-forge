@@ -123,7 +123,7 @@ module ChunkingConfig =
         else
             Error(List.ofSeq errors)
 
-// ─── Phase 505 — character-offset spans ───────────────────────────
+// ─── Character-offset spans ───────────────────────────
 //
 // A citation used to be chunk-granular: "this answer came from somewhere
 // inside chunk 7 of report.pdf". That is enough to *name* a source and not
@@ -217,7 +217,7 @@ let private sentenceSplitter =
     Regex(@"(?<=[.!?])\s+(?=[A-Z""'\(\[])", RegexOptions.Compiled)
 
 /// Sentence segmentation that keeps each sentence's absolute `[start, end)`
-/// offsets in `text` (Phase 505). Offsets are what the chunk spans are
+/// offsets in `text`. Offsets are what the chunk spans are
 /// ultimately built from, so the split has to be done positionally rather
 /// than by `Regex.Split` (which discards where each piece came from).
 ///
@@ -261,7 +261,7 @@ let splitBySentence (text: string) : string list =
 /// Returns an empty list when the input is shorter than `MinTokens` (the
 /// caller can decide whether to merge it with a sibling chunk or drop).
 ///
-/// Phase 505: this is the span-aware implementation. Each emitted piece
+/// This is the span-aware implementation. Each emitted piece
 /// carries the `[start, end)` range of `text` its units were drawn from —
 /// the first unit's start to the last unit's end, so the span covers the
 /// contiguous source region including any inter-sentence whitespace the
@@ -418,7 +418,7 @@ let formatRow (headers: string array) (values: string array) =
         sprintf "%s: %s" h v)
     |> String.concat " | "
 
-/// Optional source-text context for spreadsheet span capture (Phase 505).
+/// Optional source-text context for spreadsheet span capture.
 ///
 /// A row-group chunk's *text* is synthesised — `Sheet "…", rows N–M` plus a
 /// re-rendered `Col: val | …` body — so it has no offsets of its own. The
@@ -473,7 +473,7 @@ let private spanForRows (ctx: SpanContext option) (indices: int seq) : SourceSpa
 /// emitted — the embedder will truncate at its own max input, but the row
 /// is preserved as a citable unit.
 ///
-/// Phase 505: each piece additionally carries the source span of its row
+/// Each piece additionally carries the source span of its row
 /// range when `ctx` supplies row offsets; `ctx = None` (every shipped
 /// caller today) yields `Span = None` and byte-identical chunk text.
 let chunkSpreadsheetWithSpans (config: ChunkingConfig) (ctx: SpanContext option) (data: SheetData) : ChunkPiece list =
@@ -549,28 +549,3 @@ let chunkSpreadsheetWithSpans (config: ChunkingConfig) (ctx: SpanContext option)
 /// preserved verbatim for every existing caller.
 let chunkSpreadsheet (config: ChunkingConfig) (data: SheetData) : string list =
     chunkSpreadsheetWithSpans config None data |> List.map ChunkPiece.text
-
-// ─── Optional contextual header ───────────────────────────────────
-
-/// Optional: prepend a short contextual summary to each chunk via a
-/// summariser companion. Off by default — summarisation is a per-chunk
-/// AI call, expensive at ingestion time. When `summariser = None` the
-/// caller should not wrap chunks with this and pay nothing.
-///
-/// Pattern is "anthropic-contextual-retrieval": each chunk gets a 50-100
-/// token preamble describing its place in the document, which lifts
-/// retrieval recall on documents where chunks are otherwise indistinguishable
-/// (boilerplate-heavy contracts, repetitive financial tables). See
-/// `ITextSummariser` in core for the extension point.
-let withContextualHeader
-    (summariser: ToolUp.Platform.Infra.ITextSummariser.ITextSummariser option)
-    (documentContext: string)
-    (chunk: string)
-    : Async<string> =
-    async {
-        match summariser with
-        | None -> return chunk
-        | Some s ->
-            let! header = s.Summarise documentContext chunk
-            return String.concat "\n" [ header; chunk ]
-    }

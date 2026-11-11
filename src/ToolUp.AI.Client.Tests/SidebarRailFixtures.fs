@@ -176,8 +176,8 @@ let private pagedRow (id: string) (name: string) (group: string option) (pages: 
 
 /// The four SDK reserved rows, with the ids, names and declared slots the
 /// shell really builds them with — the two landings via
-/// `ClientModule.withPlacement` (`Home.create` names it "Home",
-/// `AdminHome.create` "Administration"), the two Phase 567 area switchers
+/// `ClientModule.withPlacement` (`Home.builtIn` names it "Home",
+/// `AdminHome.builtIn` "Administration"), the two Phase 567 area switchers
 /// at their literal construction site in `sidebarSections`. Restated here
 /// rather than driven through those factories, which reach `Icons` and the
 /// shell's `ClientConfig`; the cost is the same one `SidebarPlacementTests`
@@ -416,7 +416,8 @@ let railStates: RailState list = [
 /// The sections the shell would hand the renderer for this state — the
 /// same fold the component itself runs, exposed so a caller can compare a
 /// pure projection (e.g. `railStops`) against the rendered markup.
-let sectionsFor (state: RailState) = buildSections state.Modules state.Prefs
+let sectionsFor (state: RailState) =
+    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar state.Modules state.Prefs
 
 /// A mounted rail: the jsdom window it lives in and the host element the
 /// component rendered into. Phase 1112 — exposed so a pack can drive

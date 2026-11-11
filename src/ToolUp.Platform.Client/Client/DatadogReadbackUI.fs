@@ -476,16 +476,8 @@ let private tabBar (msgs: DatadogReadbackMessages) (model: Model) (dispatch: Msg
         ]
     ]
 
-/// The module body as a React COMPONENT rather than a plain render
-/// function, so it has a hook site from which to read the resolved
-/// catalog — the same reason `HealthMonitorUI.HealthMonitorBody`
-/// documents. A module's `view` is invoked inline by the shell's own
-/// render, where a hook would join the shell's hook order and break the
-/// moment the active module changed.
-[<ReactComponent>]
-let private DatadogReadbackBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).DatadogReadback
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: DatadogReadbackMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.ActiveTab with
         | MonitorsTab -> monitorsTabView msgs model dispatch
@@ -497,7 +489,8 @@ let private DatadogReadbackBody (model: Model) (dispatch: Msg -> unit) =
         prop.children [ tabBar msgs model dispatch; content ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = DatadogReadbackBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.DatadogReadback model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -524,17 +517,21 @@ let ObservabilityGroup = ToolUp.Platform.SidebarVisibility.ObservabilitySidebarG
 /// Phase 9x added the group to the set, so the declaration is now
 /// belt-and-braces rather than load-bearing; it stays, because the area
 /// is this module's decision and should not hinge on a set elsewhere.
-let create (config: DatadogReadbackConfig) : ErasedModule =
-    ToolUp.Platform.ClientModule.create {
-        Init = init config
-        Update = update
+/// This built-in's module id.
+let moduleId = "_sdk.DatadogReadback"
+
+let builtIn (config: DatadogReadbackConfig) : BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
         Name = "Datadog"
         Icon = ToolUp.Platform.Icons.health
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.DatadogReadback"
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup ObservabilityGroup
-    |> ToolUp.Platform.ClientModule.withArea ToolUp.Platform.ModuleArea.Administration
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some ObservabilityGroup
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = ToolUp.Platform.ModuleArea.Administration
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init config ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

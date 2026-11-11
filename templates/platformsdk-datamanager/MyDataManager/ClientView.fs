@@ -4,7 +4,9 @@ open Feliz
 open ToolUp.Platform
 open MyDataManager.ClientModel
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let dispatch = ctx.Dispatch
+
     let left =
         Html.div [
             prop.children [
@@ -30,7 +32,7 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
             ]
         ]
 
-    left, right
+    PageContent.SplitPanel(left, right)
 
 /// Returns the erased module. To make it the deployment's data
 /// manager, fill the data-manager shell slot with it in the app's

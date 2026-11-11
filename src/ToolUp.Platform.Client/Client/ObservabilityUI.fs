@@ -935,13 +935,8 @@ let private tabBar
         prop.children [ Tabs.bar tabs model.ActiveTab (SwitchTab >> dispatch) ]
     ]
 
-/// The module body as a React COMPONENT, so it has a hook site from which
-/// to read the resolved catalog — the reason `HealthMonitorUI` and the
-/// Datadog readback module give for the same shape.
-[<ReactComponent>]
-let private ObservabilityBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).Observability
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: ObservabilityMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.Sources with
         | Remote.NotAsked
@@ -973,7 +968,8 @@ let private ObservabilityBody (model: Model) (dispatch: Msg -> unit) =
 
     Html.div [ prop.className "flex flex-col h-full"; prop.children [ content ] ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = ObservabilityBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.Observability model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -988,17 +984,21 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = Observa
 /// `DatadogReadbackUI.ObservabilityGroup`, which is in the platform-admin
 /// allow-list, so the module lands in the administration area and stays
 /// visible to a team-less platform admin.
-let create () : ErasedModule =
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
+/// This built-in's module id.
+let moduleId = "_sdk.Observability"
+
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
         Name = "Telemetry"
         Icon = ToolUp.Platform.Icons.usage
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.Observability"
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup DatadogReadbackUI.ObservabilityGroup
-    |> ToolUp.Platform.ClientModule.withArea ToolUp.Platform.ModuleArea.Administration
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some DatadogReadbackUI.ObservabilityGroup
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = ToolUp.Platform.ModuleArea.Administration
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

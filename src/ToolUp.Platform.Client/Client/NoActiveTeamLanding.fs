@@ -41,7 +41,7 @@ type NoActiveTeamLandingConfig = {
 /// Identity + gate resolution for the SDK's built-in no-active-team
 /// landing module (the parameterized alternative to a consumer-supplied
 /// `NoActiveTeamLandingFill.Module`). The stable id is shared by the module
-/// factory (`NoActiveTeamLandingUI.create`, in a later compilation unit
+/// factory (`NoActiveTeamLandingUI.builtIn`, in a later compilation unit
 /// once `Icons` is available) and the gate resolver
 /// (`ClientConfig.effectiveNoActiveTeamLandingId`).
 module NoActiveTeamLanding =

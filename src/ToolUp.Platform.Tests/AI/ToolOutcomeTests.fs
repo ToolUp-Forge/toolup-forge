@@ -211,8 +211,8 @@ let private railTests =
 
             Expect.allEqual
                 run.Completed
-                """{"error":"InvalidArguments","message":"Required argument 'moduleName' is missing."}"""
-                "the model reads the body the tool has always rendered"
+                "Tool '_platform.ai.list_results' received invalid arguments: required argument is missing (argument 'moduleName' — expected a string)."
+                "the model reads the fault naming the argument's path and its declared type"
 
             expectRailTripped run "argument refusal"
         }
@@ -289,14 +289,15 @@ let private classificationTests =
                 "requireRawJson, absent"
         }
 
-        testCaseAsync "get_narrative refuses an unparseable argument body as a missing id"
+        testCaseAsync "get_narrative refuses an unparseable argument body as an argument fault"
         <| async {
             let! run = runLoop NarrativeTools.builtInTools "get_narrative" "not json" ""
 
-            Expect.allEqual
-                run.Completed
-                """{"error":"Required argument 'id' is missing. Call list_narratives first to get valid ids."}"""
-                "the same refusal a body without an id gets"
+            for content in run.Completed do
+                Expect.stringStarts
+                    content
+                    "Tool 'get_narrative' received invalid arguments: arguments were not valid JSON"
+                    "an argument fault, not a lookup"
 
             expectRailTripped run "get_narrative"
         }
@@ -306,7 +307,10 @@ let private classificationTests =
             let! run = runLoop NarrativeTools.builtInTools "list_narratives" "not json" ""
 
             for content in run.Completed do
-                Expect.stringStarts content """{"error":"Arguments were not valid JSON""" "a refusal, not a listing"
+                Expect.stringStarts
+                    content
+                    "Tool 'list_narratives' received invalid arguments: arguments were not valid JSON"
+                    "a refusal, not a listing"
 
             expectRailTripped run "list_narratives"
         }

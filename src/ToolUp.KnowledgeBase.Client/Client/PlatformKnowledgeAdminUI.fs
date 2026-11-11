@@ -277,8 +277,7 @@ let private documentsPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispat
 /// the list locally via `loadDocsCmd ()` in `update`; this subscription
 /// covers the cross-session case.
 [<ReactComponent>]
-let private AdminPanel (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.Admin
+let private AdminPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispatch: Msg -> unit) =
 
     React.useEffectOnce (fun () ->
         let dispose =
@@ -294,14 +293,14 @@ let private AdminPanel (model: Model) (dispatch: Msg -> unit) =
         prop.children [ uploadPanel msgs model dispatch; documentsPanel msgs model dispatch ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
-    AdminPanel model dispatch, Html.none
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.SplitPanel(AdminPanel ctx.Messages.KnowledgeBase.Admin model ctx.Dispatch, Html.none)
 
 // ─── Module registration ─────────────────────────────────────────────
 
-/// Register the Platform Knowledge Base admin module. Apps that list
-/// their modules by hand call this in `Client.fs` alongside
-/// `KnowledgeBaseView.register ()`.
+/// The Platform Knowledge Base admin module. Apps that list their modules
+/// by hand add `ShellSlots.builtIn PlatformKnowledgeAdminUI.builtIn None`
+/// in `Client.fs` alongside `KnowledgeBaseView.register ()`.
 ///
 /// Phase 1e — `KnowledgeBaseClientConfig.withKnowledgeBase` now appends
 /// this module alongside the team-side one on
@@ -316,16 +315,18 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
 /// Reserved Id `_sdk.PlatformKnowledgeAdmin`. Group "Platform Admin".
 /// The shell-level role gate (commit 4f.2) hides the sidebar entry
 /// from non-admin callers.
-let register () : ToolUp.Platform.ErasedModule =
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = "_sdk.PlatformKnowledgeAdmin"
+    Defaults = {
         Name = "Platform KB"
         Icon = ToolUp.KnowledgeBase.Icons.knowledge
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformKnowledgeAdmin"
-    |> ToolUp.Platform.ClientModule.withView view
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

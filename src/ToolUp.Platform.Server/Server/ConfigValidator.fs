@@ -7,7 +7,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Platform.Secrets
 
-// ─── First-party config validators (Phase 9m) ────────────────────────
+// ─── First-party config validators ────────────────────────
 //
 // Two SDK-built-in validators against the abstract storage / secret
 // interfaces. Both register automatically in `compose` whenever the
@@ -27,6 +27,16 @@ let private blobSentinelKey = "preflight/sentinel.bin"
 
 [<Literal>]
 let private secretSentinelKey = "_platform_preflight_canary"
+
+/// A validator as a value: its name and its check, at
+/// `IConfigValidator.defaultTimeout`. A validator that needs nothing but the
+/// values it closes over is a call to this, not a class.
+let create (name: string) (validate: unit -> Async<ValidationResult>) : IConfigValidator =
+    { new IConfigValidator with
+        member _.Name = name
+        member _.Timeout = IConfigValidator.defaultTimeout
+        member _.Validate() = validate ()
+    }
 
 /// Shared body for the "gated-refusal" auth validators (`csrf-default-mode`,
 /// `sse-auth-mode`, `header-auth-mode`, `encrypted-secret-store-mode`,
@@ -117,7 +127,7 @@ type SecretStoreValidator(secretStore: ISecretStore, ?timeout: TimeSpan) =
                 return Error(sprintf "secret store read failed: %s" ex.Message)
         }
 
-/// Phase 1038 — the secret-store preflight's timeout, chosen by what kind of
+/// The secret-store preflight's timeout, chosen by what kind of
 /// store it probes. `storeSupplied` is whether the application supplied its
 /// own store (`ServerApp.withSecretStore`) rather than composing the SDK's
 /// in-process `FileSecretStore` default: a supplied store is taken to be

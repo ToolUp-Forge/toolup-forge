@@ -117,6 +117,44 @@ type ShellSlot = {
 /// The shell's slot table.
 module ShellSlots =
 
+    // ── Building a built-in ───────────────────────────────────────────
+
+    /// The module a built-in fills its slot with, under the slot's `label`
+    /// (`None` is the built-in's own `Defaults`). The one place the
+    /// construction of a built-in is written; each built-in exports the
+    /// `BuiltIn` value this reads.
+    let builtIn (b: BuiltIn<'Model, 'Msg>) (label: ModuleLabel option) : ErasedModule =
+        let label = defaultArg label b.Defaults
+
+        let module': ClientModule<'Model, 'Msg> =
+            ClientModule.create {
+                Init = fun () -> b.Init ClientModuleContext.empty
+                Update = b.Update
+                Name = label.Name
+                Icon = label.Icon
+            }
+            |> ClientModule.withId b.Id
+            |> ClientModule.withContextInit b.Init
+            |> ClientModule.withArea b.Area
+            |> ClientModule.withVisibility b.Visibility
+
+        let module' =
+            match b.View with
+            | BuiltInView.Page view -> ClientModule.withView view module'
+            | BuiltInView.Pages pages -> ClientModule.withPages pages module'
+
+        let module' =
+            match b.Group with
+            | Some group -> ClientModule.withGroup group module'
+            | None -> module'
+
+        let module' =
+            match b.NavRole with
+            | Some role -> ClientModule.withNavRole role module'
+            | None -> module'
+
+        module' |> b.Extend |> ClientModule.register
+
     // ── Building a slot ───────────────────────────────────────────────
 
     let private slot<'cfg>
@@ -177,7 +215,7 @@ module ShellSlots =
             ShellSlotGate.Always
             _.HomeModule
             Home.moduleId
-            (fun ctx label -> Home.create ctx.Config.Shell.HomeRecents label)
+            (fun ctx label -> builtIn (Home.builtIn ctx.Config.Shell.HomeRecents) label)
             None
 
     /// The data-manager slot — the one the shell reads for the boot-time
@@ -194,9 +232,10 @@ module ShellSlots =
             | None -> FileManagerUI.moduleId)
             (fun ctx choice ->
                 match choice with
-                | None -> FileManagerUI.create ctx.DataTypes DataManagerConfig.unlabelled
-                | Some(DataManagerChoice.FileUpload cfg) -> FileManagerUI.create ctx.DataTypes cfg
-                | Some(DataManagerChoice.ColumnMapping cfg) -> MappingDataManagerUI.create ctx.DataTypes cfg)
+                | None -> builtIn (FileManagerUI.builtIn ctx.DataTypes DataManagerConfig.unlabelled) None
+                | Some(DataManagerChoice.FileUpload cfg) -> builtIn (FileManagerUI.builtIn ctx.DataTypes cfg) None
+                | Some(DataManagerChoice.ColumnMapping cfg) ->
+                    builtIn (MappingDataManagerUI.builtIn ctx.DataTypes cfg) None)
             None
 
     let private teamManager =
@@ -206,7 +245,7 @@ module ShellSlots =
             ShellSlotGate.AnyTeamSurface
             _.TeamManager
             TeamManagerUI.moduleId
-            (fun _ label -> TeamManagerUI.create label)
+            (fun _ label -> builtIn TeamManagerUI.builtIn label)
             (Some TeamManagerUI.adminTile)
 
     let private authenticatedAdmin fillOf moduleId create tile id =
@@ -223,16 +262,16 @@ module ShellSlots =
         labelled id ShellSlotPosition.Trailing ShellSlotGate.Always fillOf moduleId create tile
 
     let private teamConfig =
-        authenticatedAdmin _.TeamConfig TeamConfigUI.moduleId TeamConfigUI.create None "TeamConfig"
+        authenticatedAdmin _.TeamConfig TeamConfigUI.moduleId (builtIn TeamConfigUI.builtIn) None "TeamConfig"
 
     let private webhookAdmin =
-        authenticatedAdmin _.WebhookAdmin WebhookAdminUI.moduleId WebhookAdminUI.create None "WebhookAdmin"
+        authenticatedAdmin _.WebhookAdmin WebhookAdminUI.moduleId (builtIn WebhookAdminUI.builtIn) None "WebhookAdmin"
 
     let private serviceAccountAdmin =
         authenticatedAdmin
             _.ServiceAccountAdmin
             ServiceAccountUI.moduleId
-            ServiceAccountUI.create
+            (builtIn ServiceAccountUI.builtIn)
             None
             "ServiceAccountAdmin"
 
@@ -240,7 +279,7 @@ module ShellSlots =
         authenticatedAdmin
             _.ExternalContactManager
             ExternalContactManagerUI.moduleId
-            ExternalContactManagerUI.create
+            (builtIn ExternalContactManagerUI.builtIn)
             None
             "ExternalContactManager"
 
@@ -248,7 +287,7 @@ module ShellSlots =
         authenticatedAdmin
             _.NotificationPreferences
             NotificationPreferencesUI.moduleId
-            NotificationPreferencesUI.create
+            (builtIn NotificationPreferencesUI.builtIn)
             None
             "NotificationPreferences"
 
@@ -256,18 +295,23 @@ module ShellSlots =
         authenticatedAdmin
             _.ModuleVisibilityAdmin
             ModuleVisibilityAdminUI.moduleId
-            ModuleVisibilityAdminUI.create
+            (builtIn ModuleVisibilityAdminUI.builtIn)
             None
             "ModuleVisibilityAdmin"
 
     let private sessionSecurity =
-        authenticatedAdmin _.SessionSecurity SessionSecurityUI.moduleId SessionSecurityUI.create None "SessionSecurity"
+        authenticatedAdmin
+            _.SessionSecurity
+            SessionSecurityUI.moduleId
+            (builtIn SessionSecurityUI.builtIn)
+            None
+            "SessionSecurity"
 
     let private permissionsAdmin =
         authenticatedAdmin
             _.PermissionsAdmin
             PermissionsAdminUI.moduleId
-            PermissionsAdminUI.create
+            (builtIn PermissionsAdminUI.builtIn)
             None
             "PermissionsAdmin"
 
@@ -275,29 +319,34 @@ module ShellSlots =
         authenticatedAdmin
             _.UsageDashboard
             UsageDashboard.moduleId
-            UsageDashboard.create
+            (builtIn UsageDashboard.builtIn)
             (Some UsageDashboard.adminTile)
             "UsageDashboard"
 
     let private auditViewer =
-        authenticatedAdmin _.AuditViewer AuditLogUI.moduleId AuditLogUI.create None "AuditViewer"
+        authenticatedAdmin _.AuditViewer AuditLogUI.moduleId (builtIn AuditLogUI.builtIn) None "AuditViewer"
 
     let private dataIngestionAdmin =
         authenticatedAdmin
             _.DataIngestionAdmin
             DataIngestionUI.moduleId
-            DataIngestionUI.create
+            (builtIn DataIngestionUI.builtIn)
             None
             "DataIngestionAdmin"
 
     let private jobsAdmin =
-        authenticatedAdmin _.JobsAdmin JobsAdminUI.moduleId JobsAdminUI.create (Some JobsAdminUI.adminTile) "JobsAdmin"
+        authenticatedAdmin
+            _.JobsAdmin
+            JobsAdminUI.moduleId
+            (builtIn JobsAdminUI.builtIn)
+            (Some JobsAdminUI.adminTile)
+            "JobsAdmin"
 
     let private platformAdmin =
         everywhereAdmin
             _.PlatformAdmin
             PlatformAdminUI.moduleId
-            (fun ctx label -> PlatformAdminUI.create label ctx.Config.PublicUtility)
+            (fun ctx label -> builtIn (PlatformAdminUI.builtIn ctx.Config.PublicUtility) label)
             None
             "PlatformAdmin"
 
@@ -305,7 +354,7 @@ module ShellSlots =
         everywhereAdmin
             _.HealthMonitor
             HealthMonitorUI.moduleId
-            (fun _ label -> HealthMonitorUI.create label)
+            (fun _ label -> builtIn HealthMonitorUI.builtIn label)
             (Some HealthMonitorUI.adminTile)
             "HealthMonitor"
 
@@ -313,7 +362,7 @@ module ShellSlots =
         everywhereAdmin
             _.ServiceStatusBoard
             ServiceStatusBoardUI.moduleId
-            (fun _ label -> ServiceStatusBoardUI.create label)
+            (fun _ label -> builtIn ServiceStatusBoardUI.builtIn label)
             (Some ServiceStatusBoardUI.adminTile)
             "ServiceStatusBoard"
 
@@ -321,18 +370,23 @@ module ShellSlots =
         authenticatedAdmin
             _.DataSubjectRequestAdmin
             DataSubjectRequestAdminUI.moduleId
-            DataSubjectRequestAdminUI.create
+            (builtIn DataSubjectRequestAdminUI.builtIn)
             None
             "DataSubjectRequestAdmin"
 
     let private migrationAdmin =
-        authenticatedAdmin _.MigrationAdmin MigrationStatusUI.moduleId MigrationStatusUI.create None "MigrationAdmin"
+        authenticatedAdmin
+            _.MigrationAdmin
+            MigrationStatusUI.moduleId
+            (builtIn MigrationStatusUI.builtIn)
+            None
+            "MigrationAdmin"
 
     let private compositionInspector =
         authenticatedAdmin
             _.CompositionInspector
             CompositionInspectorUI.moduleId
-            CompositionInspectorUI.create
+            (builtIn CompositionInspectorUI.builtIn)
             None
             "CompositionInspector"
 
@@ -358,25 +412,30 @@ module ShellSlots =
     /// own landing module is one of its own modules).
     let private noActiveTeamLanding (ctx: ShellSlotContext) =
         match ClientConfig.hasTeamScope ctx.Config, ctx.Config.Chrome.NoActiveTeamLanding with
-        | true, ChromeFill.On(NoActiveTeamLandingFill.BuiltIn landing) -> [ NoActiveTeamLandingUI.create landing ]
+        | true, ChromeFill.On(NoActiveTeamLandingFill.BuiltIn landing) -> [
+            builtIn (NoActiveTeamLandingUI.builtIn landing) None
+          ]
         | _ -> []
 
     /// Phase 573 — the administration landing leads the admin partition,
     /// and exists only while the Administration area is on.
-    let private adminHome = chrome _.AdminArea AdminHome.create
+    let private adminHome =
+        chrome _.AdminArea (fun () -> builtIn AdminHome.builtIn None)
 
-    let private datadogReadback = chrome _.DatadogReadback DatadogReadbackUI.create
+    let private datadogReadback =
+        chrome _.DatadogReadback (fun cfg -> builtIn (DatadogReadbackUI.builtIn cfg) None)
 
-    let private observability = chrome _.Observability ObservabilityUI.create
+    let private observability =
+        chrome _.Observability (fun () -> builtIn ObservabilityUI.builtIn None)
 
     /// Phase 54e — on by default; the "Platform Management" group's role
     /// gate hides it from non-admins, and on `FeatureMode.Disabled` its
     /// API 404s and the panel shows its empty state (GP 13).
     let private tenantLifecycleAdmin =
-        chrome _.TenantLifecycle TenantLifecycleAdminUI.create
+        chrome _.TenantLifecycle (fun () -> builtIn TenantLifecycleAdminUI.builtIn None)
 
     let private platformUsers =
-        chrome _.PlatformUsers (fun () -> PlatformUsersUI.create None)
+        chrome _.PlatformUsers (fun () -> builtIn PlatformUsersUI.builtIn None)
 
     /// The composed order. Within `Trailing`, every "Team Management"
     /// module is listed before every "Platform Management" one, so the

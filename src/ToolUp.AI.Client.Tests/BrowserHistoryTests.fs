@@ -123,11 +123,11 @@ let private singlePage (id: string) (inits: ResizeArray<string>) =
         Name = id
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId id
     |> ClientModule.register
 
-let private page (route: string) : PageConfig * (int -> (unit -> unit) -> PageContent) =
+let private page (route: string) : PageConfig * (int -> RenderContext<unit> -> PageContent) =
     {
         Route = route
         Title = route
@@ -156,7 +156,7 @@ let private adminOnly (id: string) (inits: ResizeArray<string>) =
         Name = id
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId id
     |> ClientModule.withNavRole NavRole.PlatformAdminOnly
     |> ClientModule.register
@@ -243,7 +243,7 @@ let tests =
     testList "Browser history (Phase 1240)" [
         testList "multi-page routes" [
             testCase "a Composition page opens from its sidebar entry" (fun () ->
-                let inspector = CompositionInspectorUI.create None
+                let inspector = ShellSlots.builtIn CompositionInspectorUI.builtIn None
                 let modules = [ singlePage "home" (ResizeArray()); inspector ]
                 let model = boot ClientConfig.defaults modules
 

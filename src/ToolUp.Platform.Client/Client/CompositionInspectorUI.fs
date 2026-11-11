@@ -255,23 +255,15 @@ let private panelBody (msgs: CompositionInspectorMessages) (data: PanelData<'T>)
         ]
     | PanelLoaded value -> render value
 
-/// Shared page chrome: the module heading, the panel title, the export
-/// bar, then the body.
-/// The panel body as a React COMPONENT rather than a plain
-/// render function, so it has a hook site of its own from which to read
-/// the resolved catalog. See `HealthMonitorUI.HealthMonitorBody`. All
-/// five pages share this one, taking their own body as a parameter: the
-/// catalog is only readable from a hook site, so the per-panel renderer
-/// has to be invoked from INSIDE the component rather than composed
-/// outside it.
-[<ReactComponent>]
-let private InspectorPage
+/// One panel's page: the inspector's heading, the panel's title and export
+/// bar, then the panel's body.
+let private inspectorPage
+    (msgs: CompositionInspectorMessages)
     (panel: InspectorPanel)
     (model: Model)
     (dispatch: Msg -> unit)
     (renderBody: CompositionInspectorMessages -> Model -> ReactElement)
-    =
-    let msgs = (MessageCatalogProvider.useMessages ()).CompositionInspector
+    : ReactElement =
 
     let title =
         match panel with
@@ -458,10 +450,9 @@ let private page (panel: InspectorPanel) (render: CompositionInspectorMessages -
     let config: PageConfig = {
         // The shell splits a sidebar id at its first `/`, so the route carries it.
         Route = "/" + InspectorPanel.slug panel
-        // The catalog is only readable from a hook site, so the sidebar
-        // title falls back to the panel's slug-derived English. The page
-        // BODY renders the localised title; a `PageConfig` is built
-        // outside React and cannot consult the provider.
+        // A `PageConfig` is built before any render, so the sidebar title
+        // is the panel's slug-derived English; the page BODY renders the
+        // localised title from its `RenderContext`.
         Title =
             (InspectorPanel.slug panel).Substring(0, 1).ToUpperInvariant()
             + (InspectorPanel.slug panel).Substring 1
@@ -469,47 +460,41 @@ let private page (panel: InspectorPanel) (render: CompositionInspectorMessages -
     }
 
     config,
-    (fun (model: Model) (dispatch: Msg -> unit) -> PageContent.FullWidth(InspectorPage panel model dispatch render))
+    (fun (model: Model) (ctx: RenderContext<Msg>) ->
+        PageContent.FullWidth(inspectorPage ctx.Messages.CompositionInspector panel model ctx.Dispatch render))
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.CompositionInspector"
 
-/// Create the built-in composition inspector as an `ErasedModule`. The
+/// The built-in composition inspector (`ShellSlots.builtIn` builds its module). The
 /// module fills the `CompositionInspector` shell slot (Default /
 /// Configured), admitted on any authenticated surface. The
 /// server-side handler enforces the Owner/Admin gate independently — the
 /// `NavRole` below hides the sidebar entry, which is an affordance,
 /// never the boundary.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Composition"
-
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
     // `interconnected` is the closest glyph in the shipped set to "what
-    // this deployment is wired out of"; adding an SVG asset for one
-    // module is not this phase's business.
-    let icon =
-        config
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.interconnected
-
-    // SDK-built-in — reserved under the `_sdk.` Id namespace so it can
-    // never collide with an app's RBAC-managed `ServerConfig.ModuleNames`.
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+    // this deployment is wired out of".
+    Defaults = {
+        Name = "Composition"
+        Icon = ToolUp.Platform.Icons.interconnected
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withPages [
-        page CompositionPanel compositionBody
-        page SurfacesPanel surfacesBody
-        page RulesPanel rulesBody
-        page DisclosurePanel disclosureBody
-        page ProvenancePanel provenanceBody
-    ]
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View =
+        BuiltInView.Pages [
+            page CompositionPanel compositionBody
+            page SurfacesPanel surfacesBody
+            page RulesPanel rulesBody
+            page DisclosurePanel disclosureBody
+            page ProvenancePanel provenanceBody
+        ]
+    Extend = id
+}

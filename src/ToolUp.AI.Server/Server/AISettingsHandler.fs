@@ -111,12 +111,9 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                 member _.Error(_, _) = ()
             }
 
-    // Same access-context resolution pattern as AIAssistantHandler —
-    // DI first, fall back to HttpContext.Items for tests that bypass
-    // composeWithAI's middleware.
-    let accessContext =
-        AccessContext.tryResolve ctx.RequestServices
-        |> Option.defaultWith (fun () -> AccessContext.unresolved "AISettingsHandler")
+    // The caller, resolved once; a request without one is served
+    // unresolved and holds no configuration scope.
+    let accessContext = AIRequest.accessOrUnresolved "AISettingsHandler" ctx
 
     let scopeOpt = AccessContext.configScope accessContext
 
@@ -339,7 +336,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                         /// so a first-ever save that fails leaves the
                         /// scope exactly as it was found.
                         ///
-                        /// Phase 1105 — the undo IS the refusal's promise:
+                        /// The undo IS the refusal's promise:
                         /// "the API key was not saved" is true only if the
                         /// unverified key (and entry) went and the previous
                         /// ones came back. Both writes are attempted, and a

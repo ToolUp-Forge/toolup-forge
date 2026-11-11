@@ -1062,14 +1062,8 @@ let private tabBar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> u
         ]
     ]
 
-/// Phase 751 — the page body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render, so a hook called there would join the
-/// shell's hook order and break the moment the active module changed.
-[<ReactComponent>]
-let private TeamConfigBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).TeamConfig
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let content =
         match model.ActiveTab with
         | ConfigTab ->
@@ -1095,40 +1089,32 @@ let private TeamConfigBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TeamConfigBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.TeamConfig model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.TeamConfig"
 
-/// Create the built-in configuration admin as an `ErasedModule`. The
+/// The built-in configuration admin (`ShellSlots.builtIn` builds its module). The
 /// shell's `prepareModules` injects this when the deployment runs in
 /// any non-Anonymous mode — Anonymous has no persistent scope so the
 /// form would fail every read.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Configuration"
-
-    let icon =
-        config
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.teamConfig
-
-    let route = "/" + name.ToLower().Replace(" ", "-")
-
-    // SDK-built-in — reserved under the `_sdk.` Id namespace so it can
-    // never collide with an app's RBAC-managed `ServerConfig.ModuleNames`.
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Configuration"
+        Icon = ToolUp.Platform.Icons.teamConfig
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

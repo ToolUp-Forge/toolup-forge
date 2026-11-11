@@ -310,23 +310,7 @@ let private decodeSequenceOutcome (evt: ModuleEvent) : (SequenceOutcomeBeacon * 
     with _ ->
         None
 
-let private resolveScope (ctx: HttpContext) : StorageScope =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s
-    | _ ->
-        let fallback =
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id -> id
-            | _ -> "anonymous"
-
-        {
-            ScopeId = fallback
-            Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-            Persist = true
-        }
-
-let private buildReport (ctx: HttpContext) : Async<FastPathReport> = async {
-    let scope = resolveScope ctx
+let private buildReport (ctx: HttpContext) (scope: StorageScope) : Async<FastPathReport> = async {
     let now = DateTime.UtcNow
     let windowStart = now - rollingWindow
 
@@ -402,11 +386,18 @@ let private renderJson (report: FastPathReport) =
 /// so dev-tools sees fresh stats on every refresh.
 let private telemetryHandler: HttpHandler =
     fun next ctx -> task {
-        let! report = buildReport ctx
-        ctx.Response.ContentType <- "application/json; charset=utf-8"
-        ctx.Response.Headers["Cache-Control"] <- "no-store"
-        do! ctx.Response.WriteAsync(renderJson report)
-        return! next ctx
+        match AIRequest.scope ctx with
+        | None ->
+            // No resolved principal: there is no scope to read, and none is
+            // invented for it.
+            ctx.Response.StatusCode <- 401
+            return! next ctx
+        | Some scope ->
+            let! report = buildReport ctx scope
+            ctx.Response.ContentType <- "application/json; charset=utf-8"
+            ctx.Response.Headers["Cache-Control"] <- "no-store"
+            do! ctx.Response.WriteAsync(renderJson report)
+            return! next ctx
     }
 
 /// Route for the fast-path telemetry endpoint. Mounted only when

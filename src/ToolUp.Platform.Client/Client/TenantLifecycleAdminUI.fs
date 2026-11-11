@@ -292,15 +292,8 @@ let private ScopeForm (loading: bool) (onSubmit: string -> unit) =
         ]
     ]
 
-/// The view body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` / `AdminHomeHeader` are: `view` is
-/// invoked inline by the shell's own render, so a hook called there would
-/// join the shell's hook order and break the moment the active module
-/// changed. `view` below keeps its existing signature and delegates here.
-[<ReactComponent>]
-let private TenantLifecycleAdminBody (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let msgs = (MessageCatalogProvider.useMessages ()).TenantLifecycleAdmin
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: TenantLifecycleAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let resultPane =
         match model.Summary with
         | Some summary -> summaryTable msgs summary
@@ -345,7 +338,8 @@ let private TenantLifecycleAdminBody (model: Model) (dispatch: Msg -> unit) : Re
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TenantLifecycleAdminBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.TenantLifecycleAdmin model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
@@ -353,16 +347,21 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = TenantL
 /// `ErasedModule`. Registered mode-agnostically alongside the other
 /// `_sdk.*` Platform-Admin modules; the shell's sidebar role filter hides
 /// the "Platform Management" group from non-admin callers.
-let create () : ErasedModule =
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
+/// This built-in's module id.
+let moduleId = "_sdk.TenantLifecycleAdmin"
+
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
         Name = "Tenant Lifecycle"
         Icon = ToolUp.Platform.Icons.health
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.TenantLifecycleAdmin"
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

@@ -9,7 +9,7 @@ open ToolUp.Elmish
 // ─── Phase 110 — host-neutral client tree-hosting seam ────────────────
 //
 // A `ClientModule` view body is already an arbitrary `ReactElement`
-// (`withFullWidthView` hosts any rendered tree), so an external typed
+// (a `PageContent.FullWidth` page hosts any rendered tree), so an external typed
 // Node-tree UI language renders into the SDK shell today. What was
 // missing is the RUNTIME seam: the named bag of host capabilities a
 // tree's typed actions route through so every hosting module doesn't
@@ -106,7 +106,7 @@ module ClientHostCapabilities =
                 |> List.iter (fun effect -> effect dispatch)
         }
 
-/// `ClientModule.withFullWidthView`-shaped builder step whose view also
+/// full-width `ClientModule.withView`-shaped builder step whose view also
 /// receives the host-capability bag, so a runtime-hosted tree gets the
 /// four hooks without the consumer re-deriving them. Lives in its own
 /// module (not `ClientModule`) because the builder module is sealed at
@@ -123,15 +123,14 @@ module ClientHostCapabilities =
 module ClientHostView =
 
     /// Single-page full-width view that additionally receives a
-    /// `ClientHostCapabilities` constructed from the same dispatch the
-    /// view already gets. Existing `withView` / `withFullWidthView` /
-    /// `withPages` callers are untouched (GP 11).
+    /// `ClientHostCapabilities` constructed from the module's dispatch.
     let withElementView
         (view: 'Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> ReactElement)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
-        ClientModule.withFullWidthView
-            (fun model dispatch -> view model dispatch (ClientHostCapabilities.create dispatch))
+        ClientModule.withView
+            (fun model ctx ->
+                PageContent.FullWidth(view model ctx.Dispatch (ClientHostCapabilities.create ctx.Dispatch)))
             m
 
     // ─── Phase 267 — multi-region hosting (panes + pages) ──────────────
@@ -149,9 +148,8 @@ module ClientHostView =
     // region shares ONE dispatch and therefore ONE capability bag: a
     // per-region tree's typed actions route through the same shipped
     // concretes as any other region's (the acceptance "capabilities reach
-    // the right concretes from every region"). Existing `withView` /
-    // `withElementView` / `withFullWidthView` callers are untouched
-    // (GP 11); a pipeline that never calls these pays nothing (GP 13).
+    // the right concretes from every region"). A pipeline that never calls
+    // these pays nothing (GP 13).
 
     /// Split-pane host: the view returns a `(control, output)` pair of
     /// rendered trees, which the shell lays out as `PageContent.SplitPanel`
@@ -164,7 +162,10 @@ module ClientHostView =
         (view: 'Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> ReactElement * ReactElement)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
-        ClientModule.withView (fun model dispatch -> view model dispatch (ClientHostCapabilities.create dispatch)) m
+        ClientModule.withView
+            (fun model ctx ->
+                PageContent.SplitPanel(view model ctx.Dispatch (ClientHostCapabilities.create ctx.Dispatch)))
+            m
 
     /// Multi-page host: each entry pairs a `PageConfig` with a view that
     /// returns any `PageContent` case (`SplitPanel` / `Stacked` /
@@ -179,7 +180,9 @@ module ClientHostView =
         : ClientModule<'Model, 'Msg> =
         pageViews
         |> List.map (fun (page, view) ->
-            page, (fun model dispatch -> view model dispatch (ClientHostCapabilities.create dispatch)))
+            page,
+            (fun model (ctx: RenderContext<'Msg>) ->
+                view model ctx.Dispatch (ClientHostCapabilities.create ctx.Dispatch)))
         |> fun mapped -> ClientModule.withPages mapped m
 
 // ─── Phase 266 — additive Invoke hook for capabilities beyond the four ──
@@ -220,9 +223,7 @@ module ClientHostInvokeView =
     /// `ClientHostView.withElementView`-shaped builder whose view ALSO
     /// receives a `ClientHostInvoke` constructed from the composed registry,
     /// so a hosted tree gets the four built-in hooks PLUS the authorizer-gated
-    /// `Invoke` for capabilities beyond them. Existing `withView` /
-    /// `withFullWidthView` / `withPages` / `withElementView` callers are
-    /// untouched (GP 11):
+    /// `Invoke` for capabilities beyond them:
     ///
     /// ```
     /// ClientModule.create spec
@@ -235,9 +236,15 @@ module ClientHostInvokeView =
         (view: 'Model -> ('Msg -> unit) -> ClientHostCapabilities<'Msg> -> ClientHostInvoke -> ReactElement)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
-        ClientModule.withFullWidthView
-            (fun model dispatch ->
-                view model dispatch (ClientHostCapabilities.create dispatch) (ClientHostInvoke.create registry))
+        ClientModule.withView
+            (fun model ctx ->
+                PageContent.FullWidth(
+                    view
+                        model
+                        ctx.Dispatch
+                        (ClientHostCapabilities.create ctx.Dispatch)
+                        (ClientHostInvoke.create registry)
+                ))
             m
 
 // ─── Phase 270 — hosted-tree capability/version negotiation gate ──────
@@ -390,4 +397,4 @@ module ClientHostNegotiatedView =
         | Ok() -> ClientHostView.withElementView view m
         | Error mismatch ->
             onMismatch mismatch
-            ClientModule.withFullWidthView (fun _ _ -> HostMismatchElement mismatch) m
+            ClientModule.withView (fun _ _ -> PageContent.FullWidth(HostMismatchElement mismatch)) m

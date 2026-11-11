@@ -226,6 +226,20 @@
 @@ L43 [879-slot-case-nullary]
 -let usageOn = config.UsageDashboard <> NoUsageDashboard
 +let usageOn = config.UsageDashboard <> SlotFill.Empty
+--- a/src/Client/Views.fs
++++ b/src/Client/Views.fs
+@@ L10 [1075-split-panel-view]
+-    |> ClientModule.withView view
++    |> ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
+@@ L15 [1075-full-width-view]
+-    |> ClientModule.withFullWidthView settingsView
++    |> ClientModule.withView (fun model ctx -> PageContent.FullWidth(settingsView model ctx.Dispatch))
+@@ L23 [1075-build-sections-with]
+-let sections = Toolup.Sidebar.buildSectionsWith catalog.Sidebar modules prefs
++let sections = Toolup.Sidebar.buildSections catalog.Sidebar modules prefs
+@@ L24 [1075-banner-with]
+-let degraded = BootDegradation.bannerWith catalog.BootDegradation degradations retry dismiss
++let degraded = BootDegradation.banner catalog.BootDegradation degradations retry dismiss
 --- a/src/Server/Assistant.fs
 +++ b/src/Server/Assistant.fs
 @@ L14 [1077-history-window-default]
@@ -444,6 +458,17 @@
 @@ L22 [1066-trigger-error-disabled]
 -            | Some job when job.Status = Disabled -> return Error "Cannot trigger a disabled job; enable it first"
 +            | Some job when job.Status = Disabled -> return Error TriggerError.JobDisabled
+--- a/src/Server/Knowledge.fs
++++ b/src/Server/Knowledge.fs
+@@ L3 [1087-original-object-data-type]
+-let dataType = KnowledgeObjectRetentionPolicy.ObjectDataType
++let dataType = KnowledgePolicies.OriginalObjectDataType
+@@ L5 [1087-emit-ingestion-drop]
+-let drop = ToolUp.RAG.RAGCompose.emitIngestionDrop audit None queue logger scope docId 0 reason None
++let drop = ToolUp.RAG.VectorisationHook.emitIngestionDrop audit None queue logger scope docId 0 reason None
+@@ L7 [1087-docx-mode]
+-let mode = KnowledgeBase.DocxExtraction.DocxExtractionMode.Structured
++let mode = DocxExtractionMode.Structured
 --- a/src/Server/Lifecycle.fs
 +++ b/src/Server/Lifecycle.fs
 @@ L5 [1063-lifecycle-guarded-with]
@@ -553,4 +578,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 149 rewrite(s) across 22 file(s) pending.
+Codemod: 156 rewrite(s) across 24 file(s) pending.

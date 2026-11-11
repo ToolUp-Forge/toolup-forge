@@ -344,7 +344,7 @@ match extensions.ServiceConfig with
 // `StorageScopeDerivation`. Its membership-change subscription is taken
 // when the host starts it, never in its constructor.
 let subjectResolver =
-    new DefaultSubjectResolver(
+    new DefaultSubjectResolver.DefaultSubjectResolver(
         config.Surfaces,
         teamStoreOpt |> Option.map (fun ts -> ts :> ITeamStore),
         new MemoryCache(MemoryCacheOptions()),

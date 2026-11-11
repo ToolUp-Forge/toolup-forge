@@ -65,7 +65,11 @@ let private csvTests =
 
         test "the quoted cells reach the chunk text" {
             let chunks =
-                extractChunks noOpOcr noOpTables "doc-1" "people.csv" (Text.Encoding.UTF8.GetBytes quoted)
+                extractChunks
+                    (ExtractDeps.composed noOpOcr noOpTables DocxExtractionMode.Flat)
+                    "doc-1"
+                    "people.csv"
+                    (Text.Encoding.UTF8.GetBytes quoted)
                 |> Async.RunSynchronously
                 |> List.map (fun (chunk, _) -> chunk.Content)
                 |> String.concat "\n"
@@ -397,7 +401,8 @@ let private xlsxOf (sheets: (string * string list list) list) : byte[] =
     stream.ToArray()
 
 let private extractWith (ocr: IOcrProvider) (tables: ITableExtractor) (fileName: string) (bytes: byte[]) =
-    extractChunks ocr tables "doc-golden" fileName bytes |> Async.RunSynchronously
+    extractChunks (ExtractDeps.composed ocr tables DocxExtractionMode.Flat) "doc-golden" fileName bytes
+    |> Async.RunSynchronously
 
 let private ocrPages = [
     {
@@ -465,11 +470,12 @@ let private goldenScenarios: (string * (unit -> (TextChunk * SourceReference) li
     "docx-flat", (fun () -> extractWith noOpOcr noOpTables "notes.docx" (knowledgeDocx ()))
     "docx-structured",
     fun () ->
-        try
-            KnowledgeBase.DocxExtraction.enableStructuredDocxExtraction ()
-            extractWith noOpOcr noOpTables "notes.docx" (knowledgeDocx ())
-        finally
-            KnowledgeBase.DocxExtraction.resetToFlatDocxExtraction ()
+        extractChunks
+            (ExtractDeps.composed noOpOcr noOpTables DocxExtractionMode.Structured)
+            "doc-golden"
+            "notes.docx"
+            (knowledgeDocx ())
+        |> Async.RunSynchronously
     "xlsx",
     fun () ->
         let bytes =
@@ -512,7 +518,11 @@ let private shortTextTests =
     testList "KnowledgeBase short text" [
         test "a .txt shorter than the splitter's minimum is one whole chunk" {
             let chunks =
-                extractChunks noOpOcr noOpTables "doc-1" "short.txt" (Text.Encoding.UTF8.GetBytes "  A short note.  ")
+                extractChunks
+                    (ExtractDeps.composed noOpOcr noOpTables DocxExtractionMode.Flat)
+                    "doc-1"
+                    "short.txt"
+                    (Text.Encoding.UTF8.GetBytes "  A short note.  ")
                 |> Async.RunSynchronously
 
             Expect.hasLength chunks 1 "one chunk, not none"

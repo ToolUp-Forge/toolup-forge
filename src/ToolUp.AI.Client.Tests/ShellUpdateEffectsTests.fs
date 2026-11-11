@@ -87,7 +87,7 @@ let private counterModule (id: string) =
         Name = id
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId id
     |> ClientModule.withActionDecoder (fun (key, _) ->
         match key with
@@ -204,7 +204,7 @@ let private readingModuleWith
         Name = readId
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId readId
     |> ClientModule.withActionDecoder (fun (key, payload) ->
         match key with
@@ -232,7 +232,7 @@ let private homeModule () =
         Name = homeId
         Icon = Html.none
     }
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId homeId
     |> ClientModule.register
 
@@ -256,7 +256,7 @@ let private catalogModule () =
         Icon = Html.none
     }
     |> ClientModule.withContextInit (fun ctx -> { Seen = ctx.Messages }, Cmd.none)
-    |> ClientModule.withView (fun _ _ -> Html.none, Html.none)
+    |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId catalogId
     |> ClientModule.withEventSubscription catalogTopic (fun (_: string) -> Woken)
     |> ClientModule.register

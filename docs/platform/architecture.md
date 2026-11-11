@@ -137,7 +137,7 @@ The Elmish shell handles sidebar navigation, module state management, file manag
 
 A module is a single F# project ([see `modules.md`](modules.md)) with four files: `SharedTypes.fs`, `Server.fs`, `ClientModel.fs`, `ClientView.fs`. The module fsproj compiles `Shared` + `Server`; the Client files are injected into the consumer's client project via the module's `.Client.props`.
 
-A module is **one Elmish MVU**. A page is a sidebar-visible entry rendered against that MVU. Modules can be single-page (the default, returning a tuple `ReactElement * ReactElement` for the left/right split-panel layout) or multi-page (declaring multiple `PageConfig` entries with per-page views, each returning a `PageContent` value picking its layout shape).
+A module is **one Elmish MVU**. A page is a sidebar-visible entry rendered against that MVU. Modules can be single-page (the default) or multi-page (declaring multiple `PageConfig` entries with per-page views); every view is `'Model -> RenderContext<'Msg> -> PageContent`, taking the dispatch, the resolved catalog and the locale from the context the shell hands it and returning a `PageContent` value that picks its layout shape.
 
 Modules declare:
 - **What they are** — `ClientModule.Name`, `ClientModule.Icon`

@@ -18,7 +18,7 @@ ToolUp.AI.AISlotFillsModule.configured(ToolUp.AI.AIAssistantClientBranding) : To
 ToolUp.AI.AISlotFillsModule.defaults : ToolUp.AI.AISlotFills { get }
 ToolUp.AI.AISlotFillsModule.empty : ToolUp.AI.AISlotFills { get }
 ToolUp.AI.Client.AIAssistantUI (class)
-ToolUp.AI.Client.AIAssistantUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAssistantClientBranding]) : ToolUp.Platform.ErasedModule
+ToolUp.AI.Client.AIAssistantUI.builtIn(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAssistantClientBranding]) : ToolUp.Platform.BuiltIn`2[ToolUp.AI.Client.AIAssistantUI+Model, ToolUp.AI.Client.AIAssistantUI+Msg]
 ToolUp.AI.Client.AIAssistantUI.init() : System.Tuple`2[ToolUp.AI.Client.AIAssistantUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.AIAssistantUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.AIAssistantUI.update(ToolUp.AI.Client.AIAssistantUI+Msg, ToolUp.AI.Client.AIAssistantUI+Model) : System.Tuple`2[ToolUp.AI.Client.AIAssistantUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.AIAssistantUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.AIAssistantUI+Model (class)
@@ -228,7 +228,7 @@ ToolUp.AI.Client.AIClientConfig+SidePanelMsg+TaskStatusPolled.token : System.Gui
 ToolUp.AI.Client.AIClientConfig+SidePanelMsg+WatchdogFired (class)
 ToolUp.AI.Client.AIClientConfig+SidePanelMsg+WatchdogFired.token : System.Guid { get }
 ToolUp.AI.Client.AISettingsUI (class)
-ToolUp.AI.Client.AISettingsUI.create() : ToolUp.Platform.ErasedModule
+ToolUp.AI.Client.AISettingsUI.builtIn : ToolUp.Platform.BuiltIn`2[ToolUp.AI.Client.AISettingsUI+Model, ToolUp.AI.Client.AISettingsUI+Msg] { get }
 ToolUp.AI.Client.AISettingsUI.init() : System.Tuple`2[ToolUp.AI.Client.AISettingsUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.AISettingsUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.AISettingsUI.update(ToolUp.AI.Client.AISettingsUI+Msg, ToolUp.AI.Client.AISettingsUI+Model) : System.Tuple`2[ToolUp.AI.Client.AISettingsUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.AISettingsUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.AISettingsUI+Model (class)
@@ -531,9 +531,9 @@ ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags.NoResolution : System.Int32 
 ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags.Resolved : System.Int32 (literal)
 ToolUp.AI.Client.NarrativePromptAdminUI (class)
 ToolUp.AI.Client.NarrativePromptAdminUI.adminTile : ToolUp.Platform.AdminTile { get }
+ToolUp.AI.Client.NarrativePromptAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[ToolUp.AI.Client.NarrativePromptAdminUI+Model, ToolUp.AI.Client.NarrativePromptAdminUI+Msg] { get }
 ToolUp.AI.Client.NarrativePromptAdminUI.canApprove(System.Int32, ToolUp.AI.NarrativeWordingProposal) : System.Boolean
 ToolUp.AI.Client.NarrativePromptAdminUI.changedGuidance(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeDeclaredSection], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeSectionGuidance]
-ToolUp.AI.Client.NarrativePromptAdminUI.create() : ToolUp.Platform.ErasedModule
 ToolUp.AI.Client.NarrativePromptAdminUI.followThroughText(System.Int32, ToolUp.AI.NarrativeOffenceStanding) : System.String
 ToolUp.AI.Client.NarrativePromptAdminUI.init() : System.Tuple`2[ToolUp.AI.Client.NarrativePromptAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.NarrativePromptAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.NarrativePromptAdminUI.maxPolls : System.Int32 { get }
@@ -674,7 +674,7 @@ ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.Refused : System
 ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.Starting : System.Int32 (literal)
 ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.StillRunning : System.Int32 (literal)
 ToolUp.AI.Client.PlatformAIKeysAdminUI (class)
-ToolUp.AI.Client.PlatformAIKeysAdminUI.create() : ToolUp.Platform.ErasedModule
+ToolUp.AI.Client.PlatformAIKeysAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[ToolUp.AI.Client.PlatformAIKeysAdminUI+Model, ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg] { get }
 ToolUp.AI.Client.PlatformAIKeysAdminUI.init() : System.Tuple`2[ToolUp.AI.Client.PlatformAIKeysAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.PlatformAIKeysAdminUI.update(ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg, ToolUp.AI.Client.PlatformAIKeysAdminUI+Model) : System.Tuple`2[ToolUp.AI.Client.PlatformAIKeysAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.AI.Client.PlatformAIKeysAdminUI+Banner (class)

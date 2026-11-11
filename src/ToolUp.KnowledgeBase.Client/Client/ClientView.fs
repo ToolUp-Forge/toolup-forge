@@ -1117,17 +1117,17 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
 
 // ─── Per-page views ───────────────────────────────────────────────
 
-let private documentsView (model: Model) (dispatch: Msg -> unit) : PageContent =
-    PageContent.FullWidth(MainPanel model dispatch)
+let private documentsView (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(MainPanel model ctx.Dispatch)
 
-let private notesView (model: Model) (dispatch: Msg -> unit) : PageContent =
-    PageContent.FullWidth(NotesPanel model dispatch)
+let private notesView (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(NotesPanel model ctx.Dispatch)
 
-let private aiContextView (model: Model) (dispatch: Msg -> unit) : PageContent =
-    PageContent.FullWidth(AIContextPanel model dispatch)
+let private aiContextView (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(AIContextPanel model ctx.Dispatch)
 
-let private platformLibraryView (model: Model) (dispatch: Msg -> unit) : PageContent =
-    PageContent.FullWidth(PlatformLibraryPanel model dispatch)
+let private platformLibraryView (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(PlatformLibraryPanel model ctx.Dispatch)
 
 // ─── Module registration ──────────────────────────────────────────
 

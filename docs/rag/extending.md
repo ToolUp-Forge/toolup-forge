@@ -280,7 +280,7 @@ Required when `MergeStrategy = DenseSparseRerank`; ignored otherwise.
 
 ## Writing a new `ITextSummariser`
 
-Optional. Used by `Chunking.withContextualHeader` to prepend a one-sentence summary to each chunk so the model has document-level context.
+Optional. No forge path calls it: a consumer that wants a one-sentence summary prepended to each chunk, so the model has document-level context, calls it from its own ingestion.
 
 `Summarise` receives the document context AND the chunk, curried — the point is a chunk-level summary written with the whole document in view:
 

@@ -72,7 +72,7 @@ type private CapturingAuditLog() =
 
 let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (container: string) : KnowledgeApiDeps = {
     Storage = storage
-    Queue = IngestionQueue()
+    Queue = Some(IngestionQueue())
     OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
     Notifications = noopNotifications
@@ -96,22 +96,15 @@ let private mkDeps (storage: IBlobStorage) (quota: KnowledgeQuotaPolicy) (contai
     PublishInventory = fun () -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
-    UploadPolicy = KnowledgeUploadPolicy.permissive
-    DedupPolicy = KnowledgeDedupPolicy.enabled
-    // Phase 510 — quota/retention are asserted on the unversioned path.
-    VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    Policies = {
+        KnowledgePolicies.defaults with
+            Quota = quota
+    }
     // Phase 105 — retention not composed: the pre-105 convention-blob path.
     DataObjectStore = None
-    QuotaPolicy = quota
-    RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     // Phase 515 — no scanner composed: the pre-515 upload path.
     ContentScanner = None
-    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = None
-    // Phase 511 — bulk import is not exercised here: archive guards at
-    // their shipped defaults, URL ingestion inert, no transport.
-    ArchiveImportPolicy = ArchiveImportPolicy.defaults
-    UrlIngestionPolicy = UrlIngestionPolicy.disabled
     UrlFetcher = None
 }
 
@@ -255,7 +248,8 @@ let tests =
 
             // The refusal stored NOTHING — the index still holds exactly the
             // two admitted documents, and the third's raw blob was never written.
-            let! index = loadIndex storage "team-quota-docs"
+            let! read = loadIndex storage "team-quota-docs"
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 2 "a refused upload leaves the index untouched"
 
             Expect.isFalse
@@ -290,7 +284,8 @@ let tests =
             | None -> failtest $"expected the second upload to be refused, got %A{second.Status}"
             | Some reason -> Expect.stringContains reason "storage quota" "the refusal names the byte quota"
 
-            let! index = loadIndex storage "team-quota-bytes"
+            let! read = loadIndex storage "team-quota-bytes"
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 1 "the over-quota upload persisted nothing"
         }
 
@@ -306,7 +301,8 @@ let tests =
                     (rejectionReason doc.Status)
                     "an uncomposed deployment refuses nothing, however large the corpus grows"
 
-            let! index = loadIndex storage "team-uncapped"
+            let! read = loadIndex storage "team-uncapped"
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 6 "every upload landed"
         }
 
@@ -336,7 +332,8 @@ let tests =
             Expect.isNone (rejectionReason again.Status) "a byte-identical re-upload is deduped, not refused"
             Expect.equal again.Id first.Id "the existing document is returned verbatim"
 
-            let! index = loadIndex storage "team-dedup-quota"
+            let! read = loadIndex storage "team-dedup-quota"
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 1 "no second document was created"
         }
 
@@ -499,7 +496,8 @@ let tests =
             Expect.equal report.Examined 2 "the report names how much was considered"
             Expect.isTrue (RetentionSweepReport.isClean report) "a purge with no surviving chunks is clean"
 
-            let! index = loadIndex storage container
+            let! read = loadIndex storage container
+            let index = Expect.wantOk read "the index reads"
             Expect.equal (index |> List.map _.Id) [ "fresh" ] "the unexpired document is untouched"
 
             let! staleBlobs = storage.List(container, sprintf "knowledge/%s" stale.Id)
@@ -545,7 +543,8 @@ let tests =
             Expect.isEmpty report.Purged "retainForever purges nothing"
             Expect.equal report.Examined 0 "an inert policy short-circuits before it even reads the index"
 
-            let! index = loadIndex storage container
+            let! read = loadIndex storage container
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 1 "the corpus is untouched"
             Expect.isEmpty audit.Events "a run that removed nothing writes no purge row"
         }

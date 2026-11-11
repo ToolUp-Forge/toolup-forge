@@ -56,12 +56,12 @@ let private noopLogger =
 let private mkDeps
     (storage: IBlobStorage)
     (channel: INotificationChannel)
-    (versioning: KnowledgeVersioningPolicy)
-    (dedup: KnowledgeDedupPolicy)
+    (versioning: bool)
+    (dedup: bool)
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = IngestionQueue()
+        Queue = Some(IngestionQueue())
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = channel
@@ -85,22 +85,18 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = KnowledgeUploadPolicy.permissive
-        DedupPolicy = dedup
-        VersioningPolicy = versioning
+        Policies = {
+            KnowledgePolicies.defaults with
+                Dedup = dedup
+                Versioning = versioning
+        }
         DataObjectStore = None
-        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         ContentScanner = None
-        ScanPolicy = ContentScanPolicy.defaults
         DisclosureGate = None
-        ArchiveImportPolicy = ArchiveImportPolicy.defaults
-        UrlIngestionPolicy = UrlIngestionPolicy.disabled
         UrlFetcher = None
     }
 
-let private defaultDeps storage channel =
-    mkDeps storage channel KnowledgeVersioningPolicy.disabled KnowledgeDedupPolicy.enabled
+let private defaultDeps storage channel = mkDeps storage channel false true
 
 /// Extraction runs off the request path, so wait for the announcement.
 let rec private waitPublished (channel: CapturingChannel) (docId: string) (attempts: int) = async {
@@ -160,12 +156,7 @@ let tests =
         <| async {
             let channel = CapturingChannel()
 
-            let deps =
-                mkDeps
-                    (InMemoryBlobStorage() :> IBlobStorage)
-                    channel
-                    KnowledgeVersioningPolicy.enabled
-                    KnowledgeDedupPolicy.disabled
+            let deps = mkDeps (InMemoryBlobStorage() :> IBlobStorage) channel true false
 
             let body =
                 bytesOf "first paragraph of the handbook\n\nsecond paragraph of the handbook"

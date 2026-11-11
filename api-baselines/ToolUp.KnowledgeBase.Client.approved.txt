@@ -314,8 +314,8 @@ KnowledgeListView+SortKey+Tags.SortByStatus : System.Int32 (literal)
 KnowledgeListView+SortKey+Tags.SortByType : System.Int32 (literal)
 KnowledgeListView+SortKey+Tags.SortByUploader : System.Int32 (literal)
 PlatformKnowledgeAdminUI (class)
+PlatformKnowledgeAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[PlatformKnowledgeAdminUI+Model, PlatformKnowledgeAdminUI+Msg] { get }
 PlatformKnowledgeAdminUI.init() : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
-PlatformKnowledgeAdminUI.register() : ToolUp.Platform.ErasedModule
 PlatformKnowledgeAdminUI.update(PlatformKnowledgeAdminUI+Msg, PlatformKnowledgeAdminUI+Model) : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PlatformKnowledgeAdminUI+Model (class)
 PlatformKnowledgeAdminUI+Model..ctor(ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])

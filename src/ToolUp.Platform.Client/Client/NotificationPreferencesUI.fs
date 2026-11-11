@@ -396,12 +396,8 @@ let private QuietHoursForm (current: QuietHours option) (busy: bool) (onApply: Q
         ]
     ]
 
-/// Page body. A `[<ReactComponent>]` so the message-catalog hook has a
-/// component boundary of its own.
-[<ReactComponent>]
-let private NotificationPreferencesBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).NotificationPreferences
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: NotificationPreferencesMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
         prop.className "p-6 max-w-4xl"
         prop.children [
@@ -436,35 +432,30 @@ let private NotificationPreferencesBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    NotificationPreferencesBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.NotificationPreferences model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.NotificationPreferences"
 
-/// Create the built-in preference centre as an `ErasedModule`. Visible
+/// The built-in preference centre (`ShellSlots.builtIn` builds its module). Visible
 /// to every authenticated person; the server enforces ownership.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name =
-        config |> Option.map _.Name |> Option.defaultValue "Notification Preferences"
-
-    let icon =
-        config
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.settings
-
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Notification Preferences"
+        Icon = ToolUp.Platform.Icons.settings
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Settings"
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Settings"
+    NavRole = None
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

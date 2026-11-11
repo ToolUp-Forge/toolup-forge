@@ -119,6 +119,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ConsentGatedScriptTests.fs" Link="InProcess\ConsentGatedScriptTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\AdAnalyticsSinkTests.fs" Link="InProcess\AdAnalyticsSinkTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\ModuleGroupingValidatorTests.fs" Link="InProcess\ModuleGroupingValidatorTests.fs" />
+        <Compile Include="..\..\NavRoleFinding.fs" Link="NavRoleFinding.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\SidebarVisibilityContractTests.fs" Link="InProcess\SidebarVisibilityContractTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\RouteGuardContractTests.fs" Link="InProcess\RouteGuardContractTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\CommandPaletteContractTests.fs" Link="InProcess\CommandPaletteContractTests.fs" />

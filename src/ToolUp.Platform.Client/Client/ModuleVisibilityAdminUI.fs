@@ -496,14 +496,8 @@ let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit ->
         ]
     ]
 
-/// The module body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render, so a hook there would join the shell's
-/// hook order and break the moment the active module changed.
-[<ReactComponent>]
-let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).ModuleVisibilityAdmin
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: ModuleVisibilityAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let noticeMsgs = { Dismiss = msgs.Dismiss }
 
     let candidateRows =
@@ -577,14 +571,14 @@ let private ModuleVisibilityAdminBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    ModuleVisibilityAdminBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.ModuleVisibilityAdmin model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.ModuleVisibilityAdmin"
 
 /// Create the built-in module-visibility profile editor as an
@@ -593,28 +587,18 @@ let moduleId = "_sdk.ModuleVisibilityAdmin"
 /// sidebar role filter hides it from callers below
 /// `NavRole.TeamOwnerAdmin`, which is the same authority the server's
 /// write gate enforces.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Module Visibility"
-
-    let icon =
-        config
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.settings
-
-    // SDK-built-in — reserved under the `_sdk.` Id namespace so it can
-    // never collide with an app's RBAC-managed `ServerConfig.ModuleNames`,
-    // and so a profile stated over that list can never hide the surface
-    // profiles are administered from.
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Module Visibility"
+        Icon = ToolUp.Platform.Icons.settings
     }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Team Management"
+    NavRole = Some ToolUp.Platform.NavRole.TeamOwnerAdmin
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

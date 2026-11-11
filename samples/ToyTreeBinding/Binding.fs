@@ -78,7 +78,7 @@ let private view (model: Model) (_dispatch: Msg -> unit) (host: ClientHostCapabi
     lower (route host) (tree model)
 
 /// Register the toy as an ordinary `ClientModule`. The pipeline shape is
-/// identical to any `withFullWidthView` module — the only difference is
+/// identical to any full-width `withView` module — the only difference is
 /// the view additionally receives the capability bag.
 let register () : ErasedModule =
     ClientModule.create {

@@ -52,14 +52,14 @@ let private inviteApi: ITeamInviteApi =
 /// command lands; `Joined` is terminal — the shell is already tearing
 /// this module down via the team switch.
 [<RequireQualifiedAccess>]
-type private CheckState =
+type internal CheckState =
     | Idle
     | Checking
     | NothingPending
     | Joined of teamName: string
     | Failed of message: string
 
-type private Model = {
+type internal Model = {
     State: CheckState
     /// Populated from `ClientModuleContext.OnTeamSwitched` at init —
     /// `None` on a non-team-shaped surface, where this module is not
@@ -67,7 +67,7 @@ type private Model = {
     OnTeamSwitched: (string -> unit) option
 }
 
-type private Msg =
+type internal Msg =
     | CheckInvites
     | InvitesChecked of Result<TeamInfo option, string>
 
@@ -137,65 +137,58 @@ let private statusLine (msgs: NoActiveTeamLandingMessages) (state: CheckState) :
     // literal this file authors, so there is nothing here to translate.
     | CheckState.Failed message -> Html.p [ prop.className $"{Tokens.Colours.error} text-sm"; prop.text message ]
 
-/// A component, so it has a hook site for the catalog. The
-/// heading, body and rail label stay `cfg`-supplied: they are the
-/// DEPLOYMENT's words about its own product, not SDK chrome.
-[<ReactComponent>]
-let private NoActiveTeamLandingBody
-    (cfg: NoActiveTeamLandingConfig)
-    (model: Model)
-    (dispatch: Msg -> unit)
-    : ReactElement =
-    let msgs = (MessageCatalogProvider.useMessages ()).NoActiveTeamLanding
+/// The page. The heading, body and rail label stay `cfg`-supplied: they
+/// are the DEPLOYMENT's words about its own product, not SDK chrome.
+let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let msgs = ctx.Messages.NoActiveTeamLanding
+    let dispatch = ctx.Dispatch
 
-    Html.div [
-        prop.className "flex items-center justify-center h-full p-8"
-        prop.children [
-            Html.div [
-                prop.className "max-w-md text-center space-y-4"
-                prop.children [
-                    Html.h2 [
-                        prop.className [ "text-xl font-semibold"; Tokens.Text.primary ]
-                        prop.text cfg.Title
+    PageContent.FullWidth(
+
+        Html.div [
+            prop.className "flex items-center justify-center h-full p-8"
+            prop.children [
+                Html.div [
+                    prop.className "max-w-md text-center space-y-4"
+                    prop.children [
+                        Html.h2 [
+                            prop.className [ "text-xl font-semibold"; Tokens.Text.primary ]
+                            prop.text cfg.Title
+                        ]
+                        Html.p [
+                            prop.className [ "text-sm leading-relaxed"; Tokens.Text.secondary ]
+                            prop.text cfg.Body
+                        ]
+                        statusLine msgs model.State
+                        Forms.Button.primaryWith
+                            (Forms.Button.stateOf (model.State = CheckState.Checking) msgs.Checking false)
+                            msgs.CheckForInvitations
+                            (fun () -> dispatch CheckInvites)
                     ]
-                    Html.p [
-                        prop.className [ "text-sm leading-relaxed"; Tokens.Text.secondary ]
-                        prop.text cfg.Body
-                    ]
-                    statusLine msgs model.State
-                    Forms.Button.primaryWith
-                        (Forms.Button.stateOf (model.State = CheckState.Checking) msgs.Checking false)
-                        msgs.CheckForInvitations
-                        (fun () -> dispatch CheckInvites)
                 ]
             ]
         ]
-    ]
+    )
 
-let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    NoActiveTeamLandingBody cfg model dispatch
-
-/// Build the SDK built-in no-active-team landing `ErasedModule` from its
-/// parameterized config. `cfg.Icon = None` falls back to `Icons.home`.
-/// Registered under `NoActiveTeamLanding.moduleId` with
+/// The SDK built-in no-active-team landing from its parameterized config
+/// (`ShellSlots.builtIn` builds it when `Chrome.NoActiveTeamLanding` is
+/// `ChromeFill.On(NoActiveTeamLandingFill.BuiltIn cfg)`). `cfg.Icon = None`
+/// falls back to `Icons.home`. Registered under
+/// `NoActiveTeamLanding.moduleId`, in the group the config names, with
 /// `Visibility.visibleTo [ UserKind ]` so it disappears once a team is
-/// active. Public so a consumer can register it directly (and point
-/// `NoActiveTeamLandingFill.Module` at the same id) if needed, though the
-/// normal path is just setting `ClientConfig.NoActiveTeamLanding`.
-let create (cfg: NoActiveTeamLandingConfig) : ErasedModule =
-    // `init` is `ClientModuleContext -> Model * Cmd<Msg>` (Phase 548 —
-    // it reads `OnTeamSwitched`); seed `create` with the empty context,
-    // then override with the real context-aware init via
-    // `withContextInit`, the same wiring `PermissionsAdminUI` uses.
-    ClientModule.create {
-        Init = fun () -> init ClientModuleContext.empty
-        Update = update
+/// active.
+let internal builtIn (cfg: NoActiveTeamLandingConfig) : BuiltIn<Model, Msg> = {
+    Id = NoActiveTeamLanding.moduleId
+    Defaults = {
         Name = cfg.Label
         Icon = cfg.Icon |> Option.defaultValue Icons.home
     }
-    |> ClientModule.withId NoActiveTeamLanding.moduleId
-    |> ClientModule.withContextInit init
-    |> ClientModule.withGroup cfg.Label
-    |> ClientModule.withVisibility (Visibility.visibleTo [ UserKind ])
-    |> ClientModule.withFullWidthView (landingView cfg)
-    |> ClientModule.register
+    Group = Some cfg.Label
+    NavRole = None
+    Area = Product
+    Visibility = Visibility.visibleTo [ UserKind ]
+    Init = init
+    Update = update
+    View = BuiltInView.Page(landingView cfg)
+    Extend = id
+}

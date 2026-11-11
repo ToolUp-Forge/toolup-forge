@@ -161,6 +161,7 @@ let private toolFor (name: string) (sourceModule: string) : RegisteredTool = {
     }
     Execute = fun _ _ -> async { return "{}" }
     Answer = None
+    ExecuteTyped = None
 }
 
 /// A background-shaped `HttpContext` carrying exactly what

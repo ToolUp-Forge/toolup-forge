@@ -828,7 +828,7 @@ let private page (route: string) (title: string) (icon: ReactElement) (body: Mod
         Icon = icon
     }
 
-    config, (fun (model: Model) (dispatch: Msg -> unit) -> PageContent.FullWidth(body model dispatch))
+    config, (fun (model: Model) (ctx: RenderContext<Msg>) -> PageContent.FullWidth(body model ctx.Dispatch))
 
 /// Create the fact browse module (`FactBrowseLinks.ModuleId`). Its three
 /// pages sit under the module's name in the sidebar; it subscribes to the

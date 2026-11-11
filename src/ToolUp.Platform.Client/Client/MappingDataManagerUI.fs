@@ -1985,18 +1985,9 @@ let private filesView (msgs: MappingDataManagerMessages) (displays: DataTypeDisp
         ]
 
 // ─── Module body panes ─────────────────────────────────────────
-//
-// `view` returns a `ReactElement * ReactElement` tuple (input pane, output
-// pane) rather than a single tree, so unlike `HealthMonitorUI`'s
-// single-component wrapper, each pane needs its OWN React component —
-// `[<ReactComponent>]` requires a single `ReactElement` return, so one
-// component cannot own both halves of the tuple. `view` itself stays a
-// plain (non-hook) function invoked inline by the shell's own render, and
-// each pane's component calls `useMessages ()` independently.
 
-[<ReactComponent>]
-let private ImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let msgs = (MessageCatalogProvider.useMessages ()).MappingDataManager
+/// The input pane, over the catalog section the view hands it.
+let private ImportPanel (msgs: MappingDataManagerMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
     Layout.Panel.panel msgs.ImportCsvPanelTitle [
         Layout.Panel.panelSection msgs.UploadFileSectionTitle [
@@ -2039,9 +2030,13 @@ let private ImportPanel (model: Model) (dispatch: Msg -> unit) : ReactElement =
         ]
     ]
 
-[<ReactComponent>]
-let private FilesOrWizardPanel (displays: DataTypeDisplay list) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let msgs = (MessageCatalogProvider.useMessages ()).MappingDataManager
+/// The output pane: the file list, or the mapping wizard while it is open.
+let private FilesOrWizardPanel
+    (msgs: MappingDataManagerMessages)
+    (displays: DataTypeDisplay list)
+    (model: Model)
+    (dispatch: Msg -> unit)
+    : ReactElement =
 
     Html.div [
         prop.children [
@@ -2072,40 +2067,35 @@ let private FilesOrWizardPanel (displays: DataTypeDisplay list) (model: Model) (
         ]
     ]
 
-let private view (displays: DataTypeDisplay list) (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
-    ImportPanel model dispatch, FilesOrWizardPanel displays model dispatch
+let private view (displays: DataTypeDisplay list) (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let msgs = ctx.Messages.MappingDataManager
+    PageContent.SplitPanel(ImportPanel msgs model ctx.Dispatch, FilesOrWizardPanel msgs displays model ctx.Dispatch)
 
 // ─── Module creation ──────────────────────────────────────────────
 
 /// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.MappingDataManager"
 
 /// Create the mapping-aware Data Manager as an `ErasedModule`. `displays`
 /// supplies the registered data types (and their schemas) the wizard maps
 /// into — same list the built-in `FileManagerUI` receives. The
 /// `DataManagerConfig` overrides the name / icon / sidebar group.
-let create (displays: DataTypeDisplay list) (config: DataManagerConfig) : ErasedModule =
-    let name = config.Label |> Option.map _.Name |> Option.defaultValue "Import & Map"
-
-    let icon =
+let builtIn (displays: DataTypeDisplay list) (config: DataManagerConfig) : BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults =
         config.Label
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.upload
-
-    let group = config.Group |> Option.defaultValue "Data Management"
-
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update displays
-        Name = name
-        Icon = icon
-    }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withView (view displays)
-    |> ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
-    |> ToolUp.Platform.ClientModule.withGroup group
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+        |> Option.defaultValue {
+            Name = "Import & Map"
+            Icon = ToolUp.Platform.Icons.upload
+        }
+    Group = Some(config.Group |> Option.defaultValue "Data Management")
+    NavRole = None
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update displays
+    View = BuiltInView.Page(view displays)
+    Extend = ToolUp.Platform.ClientModule.withProcessedData _.ProcessedData
+}

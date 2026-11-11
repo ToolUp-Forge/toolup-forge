@@ -194,6 +194,7 @@ module Forms =
 
         [<ReactComponent>]
         let currency
+            (locale: string)
             (value: decimal)
             (onChange: decimal -> unit)
             (placeholder: string)
@@ -202,13 +203,7 @@ module Forms =
             =
 
             let formatNumber (n: decimal) : string =
-                (float n)?toLocaleString (
-                    OutputFormatting.fallbackLocale,
-                    {|
-                        minimumFractionDigits = 2
-                        maximumFractionDigits = 2
-                    |}
-                )
+                OutputFormatting.formatNumber locale 2 2 n
 
             let displayValue, setDisplayValue = React.useState (formatNumber value)
 
@@ -239,14 +234,11 @@ module Forms =
                 if e.key = "Enter" then
                     e.preventDefault ()
                     let target = e.target :?> Browser.Types.HTMLInputElement
-                    let cleaned = target.value.Replace(",", "").Replace(" ", "")
 
-                    if System.String.IsNullOrWhiteSpace(cleaned) then
+                    if System.String.IsNullOrWhiteSpace target.value then
                         onChange 0m
                     else
-                        match System.Double.TryParse(cleaned) with
-                        | true, n -> onChange (decimal n)
-                        | false, _ -> ()
+                        OutputFormatting.parseDecimal locale target.value |> Option.iter onChange
 
             let handleBlur () = setDisplayValue (formatNumber value)
 
@@ -284,13 +276,19 @@ module Forms =
 
 
         [<ReactComponent>]
-        let integerInput (value: int) (onChange: int -> unit) (placeholder: string) (includeCommas: bool) =
+        let integerInput
+            (locale: string)
+            (value: int)
+            (onChange: int -> unit)
+            (placeholder: string)
+            (includeCommas: bool)
+            =
 
             let formatNumber (n: int) (includeCommas: bool) : string =
                 if not includeCommas then
                     string n
                 else
-                    (int n)?toLocaleString OutputFormatting.fallbackLocale
+                    OutputFormatting.formatInt locale n
 
             let displayValue, setDisplayValue =
                 React.useState (formatNumber value includeCommas)
@@ -319,14 +317,13 @@ module Forms =
                 if e.key = "Enter" then
                     e.preventDefault ()
                     let target = e.target :?> Browser.Types.HTMLInputElement
-                    let cleaned = target.value.Replace(",", "").Replace(" ", "")
 
-                    if System.String.IsNullOrWhiteSpace(cleaned) then
+                    if System.String.IsNullOrWhiteSpace target.value then
                         onChange 0
                     else
-                        match System.Int32.TryParse(cleaned) with
-                        | true, n -> onChange (int n)
-                        | false, _ -> ()
+                        match OutputFormatting.parseDecimal locale target.value with
+                        | Some n when n = System.Math.Truncate n -> onChange (int n)
+                        | _ -> ()
 
             let handleBlur () =
                 setDisplayValue (formatNumber value includeCommas)

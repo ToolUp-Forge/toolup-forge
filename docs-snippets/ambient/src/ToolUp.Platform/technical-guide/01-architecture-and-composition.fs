@@ -21,6 +21,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.Platform.Providers
+open ToolUp.Platform.Scope
 open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Config.FlagEvaluator
 open ToolUp.Platform.Scope.StorageScopeResolver
@@ -52,10 +53,9 @@ module PageAmbient =
 
         let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = failwith "ambient"
 
-    /// The module's own single-page view, from `ClientView.fs`. Single-page
-    /// views return the `(left, right)` tuple the shell wraps as a
-    /// `SplitPanel`.
-    let view (model: MyModel.Model) (dispatch: MyModel.Msg -> unit) : ReactElement * ReactElement = failwith "ambient"
+    /// The module's own single-page view, from `ClientView.fs`: it takes the
+    /// shell's `RenderContext` and returns its page's `PageContent`.
+    let view (model: MyModel.Model) (ctx: RenderContext<MyModel.Msg>) : PageContent = failwith "ambient"
 
     /// The file-manager summary display the module contributes.
     let myDataTypeDisplay: DataTypeDisplay = failwith "ambient"

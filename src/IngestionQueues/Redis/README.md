@@ -4,7 +4,7 @@ Redis-backed `IIngestionQueueStore` for the `ToolUp.RAG` companion — a **durab
 
 | Queue | Shared across replicas | Survives restart | Multi-replica |
 |---|---|---|---|
-| in-memory `Channels` queue (default) | no | no | refused by `RagIngestionInstanceValidator` |
+| in-memory `Channels` queue (default) | no | no | refused by `ragIngestionInstanceValidator` |
 | **`ToolUp.IngestionQueues.Redis`** | **yes** | **yes** | allowed |
 
 The shipped default hands documents from the upload handler to the background ingestion service over a `System.Threading.Channels` channel. That is correct for one replica and one process lifetime, and wrong outside it: a restart mid-ingestion loses every queued document (the index entry survives in a non-terminal status, the job does not), and only the replica that handled an upload can drain it — which is why the SDK's preflight *refuses* `ReplicaCount > 1` without an explicit escape hatch.

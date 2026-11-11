@@ -371,7 +371,8 @@ let private referenceClient () : ErasedModule =
         Name = "conformance-reference"
         Icon = Unchecked.defaultof<ReactElement>
     }
-    |> ClientModule.withView (fun _ _ -> Unchecked.defaultof<ReactElement>, Unchecked.defaultof<ReactElement>)
+    |> ClientModule.withView (fun _ _ ->
+        PageContent.SplitPanel(Unchecked.defaultof<ReactElement>, Unchecked.defaultof<ReactElement>))
     // Phase 621 — the SDK's own canonical module declares both halves.
     // `withRequiredDataTypes` is the same gate `withNeedsData (fun has ->
     // has "ConformanceSales")` expressed once, so the predicate law 3
@@ -544,7 +545,8 @@ let private helloWorldClient () : ErasedModule =
         Name = "Hello World"
         Icon = Unchecked.defaultof<ReactElement>
     }
-    |> ClientModule.withView (fun _ _ -> Unchecked.defaultof<ReactElement>, Unchecked.defaultof<ReactElement>)
+    |> ClientModule.withView (fun _ _ ->
+        PageContent.SplitPanel(Unchecked.defaultof<ReactElement>, Unchecked.defaultof<ReactElement>))
     |> ClientModule.withAvailability DebugOnly
     |> ClientModule.withGroup "Debug"
     |> ClientModule.register

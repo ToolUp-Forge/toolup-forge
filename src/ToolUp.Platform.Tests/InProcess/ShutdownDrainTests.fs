@@ -314,7 +314,7 @@ let private ingestion =
             do! (svc :> IHostedService).StartAsync CancellationToken.None |> Async.AwaitTask
 
             store.Arm()
-            Expect.isTrue (q.Enqueue(mkJob "d1")) "accepted"
+            Expect.isTrue ((q.EnqueueAsync(mkJob "d1") |> Async.RunSynchronously)) "accepted"
             let! claimed = waitUntil 5000 (fun () -> store.Claimed.IsCompleted)
             Expect.isTrue claimed "the drain loop's claim has taken the lease"
 
@@ -338,7 +338,7 @@ let private ingestion =
             use svc = ingestionService q pipeline
             do! (svc :> IHostedService).StartAsync CancellationToken.None |> Async.AwaitTask
 
-            Expect.isTrue (q.Enqueue(mkJob "d1")) "accepted"
+            Expect.isTrue ((q.EnqueueAsync(mkJob "d1") |> Async.RunSynchronously)) "accepted"
             let! inFlight = waitUntil 5000 (fun () -> not pipeline.Entered.IsEmpty)
             Expect.isTrue inFlight "the document is in flight"
 
@@ -357,7 +357,7 @@ let private ingestion =
             use svc = ingestionService q pipeline
             do! (svc :> IHostedService).StartAsync CancellationToken.None |> Async.AwaitTask
 
-            Expect.isTrue (q.Enqueue(mkJob "d1")) "accepted"
+            Expect.isTrue ((q.EnqueueAsync(mkJob "d1") |> Async.RunSynchronously)) "accepted"
             let! inFlight = waitUntil 5000 (fun () -> not pipeline.Entered.IsEmpty)
             Expect.isTrue inFlight "the document is in flight"
 
@@ -377,11 +377,13 @@ let private ingestion =
             use svc = ingestionService q pipeline
             do! (svc :> IHostedService).StartAsync CancellationToken.None |> Async.AwaitTask
 
-            Expect.isTrue (q.Enqueue(mkJob "d1")) "accepted"
+            Expect.isTrue ((q.EnqueueAsync(mkJob "d1") |> Async.RunSynchronously)) "accepted"
             let! inFlight = waitUntil 5000 (fun () -> not pipeline.Entered.IsEmpty)
             Expect.isTrue inFlight "one document is in flight"
 
-            let accepted = [ for i in 2..8 -> q.Enqueue(mkJob (sprintf "d%d" i)) ]
+            let accepted = [
+                for i in 2..8 -> (q.EnqueueAsync(mkJob (sprintf "d%d" i)) |> Async.RunSynchronously)
+            ]
 
             Expect.equal
                 (accepted |> List.filter id |> List.length)

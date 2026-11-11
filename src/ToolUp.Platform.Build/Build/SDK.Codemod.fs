@@ -120,6 +120,16 @@ type CodemodMigration =
     /// permission write chain built over the principal, one `LifecycleRun`
     /// with three entry points, and the session file stores as a service.
     | OneResolverOneGate
+    /// The knowledge base's policies are one `KnowledgePolicies` record (the
+    /// three single-flag records, the eight `KnowledgeApiDeps` policy fields
+    /// and the DOCX setters go), its index read is a `Result`, the RAG
+    /// validators are functions, and the dead RAG surface is deleted.
+    | KnowledgePolicies
+    /// A module's view is `'Model -> RenderContext<'Msg> -> PageContent`
+    /// (`withFullWidthView` and the tuple view are gone), the toolkit's
+    /// formatters take the caller's locale, and `Layout.AppShell` is the
+    /// one shell entry, over an `AppShellProps` record.
+    | OneViewContract
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -164,6 +174,10 @@ module CodemodMigration =
             "docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md"
         | CodemodMigration.OneResolverOneGate ->
             "docs/migrations/1063-redesign-c-one-resolver-teamauthority-lifecyclerun-sessionfilestores.md"
+        | CodemodMigration.KnowledgePolicies ->
+            "docs/migrations/1087-redesign-g-knowledge-policies-the-hook-and-the-deletions.md"
+        | CodemodMigration.OneViewContract ->
+            "docs/migrations/1075-redesign-e-one-view-contract-toolkit-locale-and-appshell.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -198,6 +212,8 @@ module CodemodMigration =
         | CodemodMigration.IngestionAttempt -> "Phase 1085"
         | CodemodMigration.ClientConfigByConcern -> "Phase 1074"
         | CodemodMigration.OneResolverOneGate -> "Phase 1063"
+        | CodemodMigration.KnowledgePolicies -> "Phase 1087"
+        | CodemodMigration.OneViewContract -> "Phase 1075"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -1287,6 +1303,60 @@ module Codemod =
             @"\bIStorageScopeResolver\b"
             "ISubjectResolver"
             "`IStorageScopeResolver` → `ISubjectResolver` (derive the storage scope from the resolved subject with `StorageScopeDerivation.tryFromSubject`, or `SubjectScope.resolve`)"
+        // The original-object data type is the policy record's.
+        rewrite
+            "1087-original-object-data-type"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\bKnowledgeObjectRetentionPolicy\.ObjectDataType\b"
+            "KnowledgePolicies.OriginalObjectDataType"
+            "`KnowledgeObjectRetentionPolicy.ObjectDataType` → `KnowledgePolicies.OriginalObjectDataType` (the same literal)"
+        // The drop triple moved with the hook.
+        rewrite
+            "1087-emit-ingestion-drop"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\bRAGCompose\.emitIngestionDrop\b"
+            "VectorisationHook.emitIngestionDrop"
+            "`RAGCompose.emitIngestionDrop` → `VectorisationHook.emitIngestionDrop` (the post-save hook's own module)"
+        // The DOCX mode moved into KnowledgeBase.Core beside the policy record.
+        rewrite
+            "1087-docx-mode"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\b(?:KnowledgeBase\.)?DocxExtraction\.DocxExtractionMode\b"
+            "DocxExtractionMode"
+            "`KnowledgeBase.DocxExtraction.DocxExtractionMode` → `DocxExtractionMode` (KnowledgeBase.Core, `SharedTypes`)"
+        // A view takes the shell's `RenderContext` and returns `PageContent`.
+        rewrite
+            "1075-full-width-view"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bwithFullWidthView\s+([A-Za-z_][\w']*)\s*$"
+            "withView (fun model ctx -> PageContent.FullWidth($1 model ctx.Dispatch))"
+            "`withFullWidthView view` → `withView (fun model ctx -> PageContent.FullWidth(view model ctx.Dispatch))`"
+        rewrite
+            "1075-split-panel-view"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bClientModule\.withView\s+([A-Za-z_][\w']*)\s*$"
+            "ClientModule.withView (fun model ctx -> PageContent.SplitPanel($1 model ctx.Dispatch))"
+            "`ClientModule.withView view` (a `(left, right)` view) → `ClientModule.withView (fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))`"
+        // The localised twins take the plain names.
+        rewrite
+            "1075-build-sections-with"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bbuildSectionsWith\b"
+            "buildSections"
+            "`Sidebar.buildSectionsWith messages` → `Sidebar.buildSections messages` (the English `buildSections` is gone)"
+        rewrite
+            "1075-banner-with"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bBootDegradation\.bannerWith\b"
+            "BootDegradation.banner"
+            "`BootDegradation.bannerWith messages` → `BootDegradation.banner messages` (the English `banner` is gone)"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -2054,6 +2124,73 @@ module Codemod =
             CodemodFileClass.Source
             @"\b(?:GrantPolicyPermissionStore|DualControlPermissionStore|GrantNotificationObserver)\s*\("
             "the decorators take the caller's `AccessContext` in place of an actor id or a `unit -> string option` closure; a handler wraps its writes once with `PermissionWrites.asPrincipal principal writes` (the registered `PermissionWrites`), which builds grant policy outside dual control"
+        // The three single-flag policy records are fields of one record.
+        review
+            "1087-policy-records"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\bKnowledge(?:Dedup|Versioning|ObjectRetention)Policy\b|\b(?:DedupUploads|VersionUploads|RetainOriginalsInObjectStore)\b"
+            "`KnowledgeDedupPolicy`, `KnowledgeVersioningPolicy` and `KnowledgeObjectRetentionPolicy` are the `Dedup`, `Versioning` and `ObjectRetention` fields of `KnowledgePolicies` (`KnowledgePolicies.defaults`): compose with `withDocumentDedup` / `withDocumentVersioning` / `withObjectStoreRetention` (unchanged), or register one `KnowledgePolicies` value; a direct `AddSingleton<KnowledgeDedupPolicy>` reads nothing any more"
+        // The deps record carries one policy field.
+        review
+            "1087-deps-policy-fields"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"^\s*(?:UploadPolicy|DedupPolicy|VersioningPolicy|QuotaPolicy|RetentionPolicy|ScanPolicy|ArchiveImportPolicy|UrlIngestionPolicy)\s*=|\.(?:DedupPolicy|VersioningPolicy|ScanPolicy|ArchiveImportPolicy|UrlIngestionPolicy)\b"
+            "a full `KnowledgeApiDeps` literal sets `Policies = { KnowledgePolicies.defaults with … }` in place of its eight policy fields (`Upload`, `Dedup`, `Versioning`, `Quota`, `Retention`, `Scan`, `Archive`, `Url`), and `Queue` is an `IngestionQueue option`; a handler reads `deps.Policies.Quota` (and so on)"
+        // The DOCX setters are a builder now.
+        review
+            "1087-docx-setters"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\b(?:enableStructuredDocxExtraction|resetToFlatDocxExtraction)\b"
+            "the module-level DOCX setters are gone: compose `KnowledgeBase.ServerUploadPolicy.withDocxExtraction DocxExtractionMode.Structured` on the `ServerApp` (it sets `KnowledgePolicies.DocxMode`); an extraction outside the API takes the mode in `ExtractDeps.composed ocr tables mode`"
+        // The thirteen RAG validator classes are functions.
+        review
+            "1087-rag-validator-classes"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\b(?:TeamModeLocalEmbedder|RagPersistence|TeamModeSharedEmbeddingCache|RetrievalDefaults|ChunkingConfig|CitationDevEndpoint|RagIngestionInstance|VacuumSchedule|RAGRateLimitConfigured|LocalEmbeddingProviderInProductionMode|RAGHandlersRegistered|RAGConfigBounds|InProcessIndexReplica)Validator\s*\("
+            "the RAG validator classes are functions returning `IConfigValidator` (`ConfigValidator.create`): call the lower-case name with the same tupled arguments (`ragPersistenceValidator (config, storage, store)`), drop the `:> IConfigValidator` and any explicit timeout; `ragIngestionInstanceValidator` also takes the overflow policy and the queue's `DroppedLast60s`"
+        // The deleted RAG surface has no replacement.
+        review
+            "1087-deleted-rag-surface"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\b(?:withIndexConversations|IndexConversations|withContextualHeader|RecordDequeue)\b"
+            "deleted, with no replacement: `RagOptions.withIndexConversations` / `IndexConversations` were never read, `Chunking.withContextualHeader` had no caller, and `IngestionQueue.RecordDequeue` belonged to the drainer seam (`IIngestionQueue.Dequeue` decrements the gauge itself); a test that drained the queue through `.Reader` reads `IIngestionQueue.TryDequeue` / `Dequeue`, and a synchronous `.Enqueue job` is `EnqueueAsync job`"
+        // The index read is a result.
+        review
+            "1087-load-index-result"
+            CodemodMigration.KnowledgePolicies
+            CodemodFileClass.Source
+            @"\bloadIndex\b"
+            "`loadIndex storage container` returns `Result<KnowledgeDocument list, IndexReadError>`: an absent index is `Ok []`, an unreadable or corrupt one an `Error` — a decision refuses on it (`IndexReadError.describe`), a listing reads `loadListing logger storage container`"
+        // Phase 1075 — the view contract, where the view is written inline.
+        review
+            "1075-view-lambda"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\b(?:withView|withFullWidthView)\s*\(\s*fun\b(?!\s+model\s+ctx\s*->\s*PageContent\.)|\bwithPages\b"
+            "if this view is not yet `'Model -> RenderContext<'Msg> -> PageContent`: it takes `model ctx`, dispatches with `ctx.Dispatch`, reads strings from `ctx.Messages`, and returns a `PageContent` — a `(left, right)` pair is `PageContent.SplitPanel(left, right)`, a single pane `PageContent.FullWidth body`"
+        review
+            "1075-use-messages"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bMessageCatalogProvider\.useMessages\s*\(\s*\)"
+            "in a module view, read the resolved catalog from `ctx.Messages` (and the locale from `ctx.Locale`): a view needs no `[<ReactComponent>]` hook site to reach it"
+        review
+            "1075-toolkit-locale"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bOutputFormatting\.(?:formatCurrency|formatDecimal|formatInt|fallbackLocale)\b|\bInput\.(?:currency|integerInput)\b"
+            "the toolkit takes the caller's locale: `OutputFormatting.formatDecimal locale value`, `formatInt locale value`, `formatCurrency locale currencyCode value`, `Input.currency locale …`, `Input.integerInput locale …` — a view passes `ctx.Locale`; `fallbackLocale` is gone"
+        review
+            "1075-app-shell"
+            CodemodMigration.OneViewContract
+            CodemodFileClass.Source
+            @"\bLayout\.(?:AppShellWith|AppShell|userButton)\b"
+            "`Layout.AppShell` takes one `AppShellProps` record — `{ Sidebar = sidebarProps; Content = content; SidePanel = …; HeaderAction = …; IdentityAction = Layout.headerIdentityAction (); InputsWidth = … }`; the positional form and `AppShellWith` are gone, and `Layout.userButton` is the `IdentityAction` slot"
     ]
 
 
@@ -3283,6 +3420,8 @@ module Codemod =
             CodemodMigration.IngestionAttempt
             CodemodMigration.ClientConfigByConcern
             CodemodMigration.OneResolverOneGate
+            CodemodMigration.KnowledgePolicies
+            CodemodMigration.OneViewContract
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

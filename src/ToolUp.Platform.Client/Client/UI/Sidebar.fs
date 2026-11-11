@@ -16,7 +16,7 @@ open ToolUp.Platform.DataProp
 // Phase 767 — the sidebar reads its own catalog section. `SidebarMessages`
 // and the built-in English live in the Feliz-free half of the substrate
 // (Core's `Shared/LocalizationTypes.fs` / `Shared/MessageCatalog.fs`), which is
-// why the pure `buildSectionsWith` can take the section as a value and
+// why the pure `buildSections` can take the section as a value and
 // the .NET harness can exercise it without a provider; only the
 // `Sidebar` component itself reaches for `MessageCatalogProvider`.
 open ToolUp.Platform
@@ -206,7 +206,7 @@ let TrailingKey = "_trailing"
 [<Literal>]
 let HiddenKey = "_hidden"
 
-/// The SDK Home module's reserved id (see `Home.create` →
+/// The SDK Home module's reserved id (see `Home.builtIn` →
 /// `ClientModule.withId "_sdk.home"`). The sidebar lifts it into a
 /// dedicated leading section that is always visible and never
 /// collapsed, rather than letting it fall into `_other` at the bottom.
@@ -214,7 +214,7 @@ let HiddenKey = "_hidden"
 let HomeId = "_sdk.home"
 
 /// Phase 573 — the Administration area's landing module id (see
-/// `AdminHome.create`). Lifted into the SAME leading section as `HomeId`
+/// `AdminHome.builtIn`). Lifted into the SAME leading section as `HomeId`
 /// below, which is what makes it first in the admin rail without anyone
 /// maintaining a sort order. At most one of the two is ever in the rail
 /// set at a time: under `ShellChrome.AdminArea = ChromeFill.On()` the shell renders
@@ -357,7 +357,7 @@ let private applyOrder (order: string list) (modules: SidebarModule list) : Side
 /// `Hidden items`, `Other`). Titles are display text: every section is
 /// keyed by its reserved `_pinned` / `_hidden` / `_other` constant and
 /// nothing downstream compares a title, so a translation moves no row.
-let buildSectionsWith
+let buildSections
     (messages: SidebarMessages)
     (modules: SidebarModuleView list)
     (prefs: UserSidebarPreferences)
@@ -669,12 +669,6 @@ let buildSectionsWith
     @ otherSection
     @ trailingSection
     @ hiddenSection
-
-/// `buildSectionsWith` under the built-in English section — the shape
-/// every pre-767 caller and every `buildSections` test still uses. The
-/// shell itself calls `buildSectionsWith` with the resolved catalog.
-let buildSections (modules: SidebarModuleView list) (prefs: UserSidebarPreferences) : SidebarSection list =
-    buildSectionsWith MessageCatalog.english.Sidebar modules prefs
 
 /// Flatten a section list to the ordered entry sequence — used by
 /// consumers that need to resolve the currently-selected id (e.g. the
@@ -2193,13 +2187,11 @@ let Sidebar
 
                         if showsRowsInExpandedRail section then
                             React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
-                    else if
-                        // Narrow (at-rest) rail. The Hidden items section is
-                        // omitted entirely: a list of things the user chose
-                        // not to see, rendered as an anonymous icon, is worse
-                        // than absent. It returns the moment the rail expands.
-                        section.Key = HiddenKey
-                    then
+                    // Narrow (at-rest) rail. The Hidden items section is
+                    // omitted entirely: a list of things the user chose
+                    // not to see, rendered as an anonymous icon, is worse
+                    // than absent. It returns the moment the rail expands.
+                    else if section.Key = HiddenKey then
                         ()
                     else
                         // The placed sections, the pinned overlay and the

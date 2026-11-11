@@ -778,15 +778,8 @@ let private principalRow
 
 // ─── View ────────────────────────────────────────────────────────────
 
-/// The module body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` is one: a module's `view` is invoked
-/// inline by the shell's own render, so a hook called there joins the
-/// shell's hook order and breaks the moment the active module changes. A
-/// component of its own has a stable identity and its own hook site.
-[<ReactComponent>]
-let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).PlatformUsers
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: PlatformUsersMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let filterBar =
         Html.div [
             prop.className "flex items-center justify-between mb-4 flex-wrap gap-2"
@@ -875,32 +868,32 @@ let private PlatformUsersBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = PlatformUsersBody model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.PlatformUsers model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Create the built-in platform-users admin as an `ErasedModule`.
+/// This built-in's module id, reserved under the `_sdk.` namespace.
+let moduleId = "_sdk.PlatformUsers"
+
+/// The built-in platform-users admin (`ShellSlots.builtIn` builds its module).
 /// Registered under the `_sdk.` namespace in the "Platform Management"
 /// sidebar group; the shell's role filter hides the group from non-admin
 /// callers, and every `IPlatformTenantApi` method is Platform-Admin gated
 /// server-side regardless (GP 4). Injected only when
 /// `ClientConfig.Chrome.PlatformUsers = DefaultPlatformUsers` (GP 11/13).
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Users"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.users
-
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Users"
+        Icon = ToolUp.Platform.Icons.users
     }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformUsers"
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
-    |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "Platform Management"
+    NavRole = Some ToolUp.Platform.NavRole.PlatformAdminOnly
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

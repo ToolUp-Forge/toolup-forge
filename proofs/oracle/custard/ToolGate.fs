@@ -117,3 +117,43 @@ let dispatch_admits (source_permitted : (string -> bool)) (grant_live : (string 
    | ONone -> false
    | (OSome (t)) -> (admits (decide source_permitted grant_live p (t).source_module (t).effects)))
 
+type slot =
+  | SToolGate
+  | SAllowlist
+  | SApproval
+  | SQueryability
+  | SConsent
+
+
+let gate_order : list<slot> =
+  (SToolGate :: (SAllowlist :: (SApproval :: (SQueryability :: (SConsent :: [])))))
+
+type reach = {
+  reach_module : string;
+  reach_effects : declaration;
+}
+
+let rec across (passes : (slot -> reach -> bool)) (s : slot) (calls : list<reach>) : opt<slot> =
+  (match calls with
+   | [] -> ONone
+   | (x :: rest) -> (if (passes s x) then (across passes s rest) else (OSome (s))))
+
+let rec admit_all (passes : (slot -> reach -> bool)) (order : list<slot>) (calls : list<reach>) : opt<slot> =
+  (match order with
+   | [] -> ONone
+   | (s :: rest) -> (match (across passes s calls) with
+                     | (OSome (refused)) -> 
+                         (OSome (refused))
+                     | ONone -> (admit_all passes rest calls)))
+
+let gate_passes (source_permitted : (string -> bool)) (grant_live : (string -> bool)) (p : policy) (allowlist : (reach -> bool)) (approval : (reach -> bool)) (queryable : (reach -> bool)) (consent : (reach -> bool)) (s : slot) (c : reach) : bool =
+  (match s with
+   | SToolGate -> (admits (decide source_permitted grant_live p (c).reach_module (c).reach_effects))
+   | SAllowlist -> (allowlist c)
+   | SApproval -> (approval c)
+   | SQueryability -> (queryable c)
+   | SConsent -> (consent c))
+
+let admit_reach (source_permitted : (string -> bool)) (grant_live : (string -> bool)) (p : policy) (allowlist : (reach -> bool)) (approval : (reach -> bool)) (queryable : (reach -> bool)) (consent : (reach -> bool)) (calls : list<reach>) : opt<slot> =
+  (admit_all (gate_passes source_permitted grant_live p allowlist approval queryable consent) gate_order calls)
+

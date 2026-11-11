@@ -43,7 +43,7 @@ module ToolUp.Platform.SidebarVisibility
 // declares its gate with `ClientModule.withNavRole` now; the group-name
 // match below survives only as the fallback for consumer modules built
 // against `withGroup "Platform Admin"` before the typed field existed.
-// Removal is deferred to the next major (GP 11) — see `effectiveNavRole`.
+// Removal is at 1.0, with the gate's finding as evidence — see `effectiveNavRole`.
 
 /// The sidebar group the SDK's observability admin modules share —
 /// `HealthMonitorUI`, `DatadogReadbackUI` and `ObservabilityUI`. The ONE
@@ -279,16 +279,21 @@ let private rbacAdmits (inputs: SidebarVisibilityInputs) (f: SidebarModuleFacts)
 /// fallback, because inferring `TeamOwnerAdmin` from a group label would
 /// hide entries from Members that a consumer never asked to gate.
 ///
-/// Removal is deferred to the next major. Migration is one line per
-/// module: `|> ClientModule.withNavRole NavRole.PlatformAdminOnly`.
+/// Removal is at 1.0, on the evidence of the gate's `effectiveNavRole`
+/// finding (`NavRoleFinding.fs`), which names every module in the tree that
+/// still relies on it. Migration is one line per module:
+/// `|> ClientModule.withNavRole NavRole.PlatformAdminOnly`.
 let private effectiveNavRole (f: SidebarModuleFacts) : NavRole option =
     match f.NavRole with
     | Some declared -> Some declared
-    | None ->
-        if isPlatformAdminSidebarGroup f.Group then
-            Some NavRole.PlatformAdminOnly
-        else
-            None
+    | None when isPlatformAdminSidebarGroup f.Group -> Some NavRole.PlatformAdminOnly
+    | None -> None
+
+/// Whether a module's gate comes from the deprecated group-name fallback:
+/// it declares no `NavRole` and sits in a platform-scoped group. The reading
+/// the gate's `effectiveNavRole` finding makes of a module's source.
+let reliesOnGroupFallback (f: SidebarModuleFacts) : bool =
+    f.NavRole.IsNone && isPlatformAdminSidebarGroup f.Group
 
 /// Does this caller clear the given gate? See the `NavRole` cases for
 /// the reasoning behind each answer — in particular why `TeamOwnerAdmin`

@@ -291,26 +291,26 @@ module file. A test that initialises a module directly passes
 `ClientModuleContext.empty`, which carries `MessageCatalog.english`, or a
 context `with Messages = …` for another language.
 
-**Views and chrome read the provider.** Module views are invoked inline by the
-shell's render, so they are not hook sites of their own. Read the catalog from
-a component:
+**A view reads its `RenderContext`.** The shell hands every module view a
+`RenderContext` built once per render from the same resolved catalog the
+reducers read: `ctx.Messages` is the catalog and `ctx.Locale` its locale, for
+the toolkit's formatters (`OutputFormatting.formatDecimal ctx.Locale value`,
+`Forms.Input.currency ctx.Locale …`). A view therefore needs no hook site of
+its own to reach the catalog:
 
 ```fsharp skip=fragment
-[<ReactComponent>]
-let private Body (model: Model) (dispatch: Msg -> unit) =
-    let msgs = MessageCatalogProvider.useMessages ()
-    Html.div [ prop.text msgs.Shell.SignOut ]
-
-let private view (model: Model) (dispatch: Msg -> unit) = Body model dispatch
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    let msgs = ctx.Messages.Shell
+    PageContent.FullWidth(Html.div [ prop.text msgs.SignOut ])
 ```
 
-Outside a provider the hook returns the built-in English catalog, so an
-isolated component render in a test harness neither crashes nor renders
-blanks.
+A sub-view over a narrower message type takes `RenderContext.map wrap ctx`.
 
-A view-level `RenderContext` carrying the catalog, which retires these
-hook-site components, is the next step (Phase 1075); until then the provider is
-the view tier.
+**Chrome and stateful components read the provider.** A component that holds
+React state of its own, and the shell's chrome, read the catalog with
+`MessageCatalogProvider.useMessages ()`. Outside a provider the hook returns
+the built-in English catalog, so an isolated component render in a test
+harness neither crashes nor renders blanks.
 
 Note that the catalog covers the **SDK's** strings. Your own module's strings
 are yours to localise — through this same mechanism if you thread your own

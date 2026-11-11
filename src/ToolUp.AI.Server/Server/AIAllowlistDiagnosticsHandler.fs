@@ -11,9 +11,9 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.Compose
 
-// ─── Phase 47 — `/dev/ai-allowlist` action-denial rollup ─────────
+// ─── `/dev/ai-allowlist` action-denial rollup ─────────
 //
-// Read-side companion to Phase 45's G12 trust boundary. The agent loop
+// Read-side companion to the G12 trust boundary. The agent loop
 // writes a `_platform.ai.tool_allowlist_denial` / `ToolAllowlistDenied`
 // `ModuleEvent` every time `IClientToolAuthorizer` refuses a
 // model-driven `ClientResident` tool call. Those rows were written and
@@ -22,8 +22,8 @@ open ToolUp.Platform.Compose
 // campaign and a quiet afternoon produced the same operator experience.
 //
 // This module is the rollup. It mirrors the shape of its two siblings
-// on the same gate — `/dev/ai-fastpath` (Phase 6j.A) and
-// `/dev/ai-latency` (Phase 6i.A) — deliberately, so an operator reads
+// on the same gate — `/dev/ai-fastpath` and
+// `/dev/ai-latency` — deliberately, so an operator reads
 // all three against a comparable 60-minute slice.
 //
 // **Two readers, one shape.** The report record is
@@ -55,7 +55,7 @@ let DenialEventType = "ToolAllowlistDenied"
 /// Rolling window for the rollup. Matches `/dev/ai-fastpath`,
 /// `/dev/ai-latency` and `/dev/ai-cross-module` so an operator comparing
 /// them is comparing the same slice of time — one declaration since
-/// Phase 36.E, so they cannot drift apart.
+/// the cross-module observability change, so they cannot drift apart.
 let private rollingWindow = AIDiagnosticsWindow.rollingWindow
 
 /// Cap on `TopToolModulePairs`. Small on purpose — the list answers
@@ -243,7 +243,7 @@ let rollupFor (storeOpt: IEventStore option) (scopeId: string) : Async<AIDenialR
 
 // ─── The `IAIDenialRollupProbe` seam implementation ──────────────
 
-/// Phase 47 — the AI tier's implementation of the Core
+/// The AI tier's implementation of the Core
 /// `IAIDenialRollupProbe` seam, so the platform-tier health-monitor
 /// admin surface can render this rollup without `Platform.Server`
 /// referencing `ToolUp.AI` (GP 1).
@@ -260,23 +260,7 @@ let probe (resolveStore: unit -> IEventStore option) : IAIDenialRollupProbe =
 
 // ─── Route handler ──────────────────────────────────────────────
 
-let private resolveScope (ctx: HttpContext) : StorageScope =
-    match AccessContext.scopeOf ctx.Items with
-    | Some s -> s
-    | _ ->
-        let fallback =
-            match AccessContext.callerIdOf ctx.Items with
-            | Some id -> id
-            | _ -> "anonymous"
-
-        {
-            ScopeId = fallback
-            Container = ScopeKey.container (ScopeKey.User(UserId fallback))
-            Persist = true
-        }
-
-let private buildReport (ctx: HttpContext) : Async<AIDenialRollup> =
-    let scope = resolveScope ctx
+let private buildReport (ctx: HttpContext) (scope: StorageScope) : Async<AIDenialRollup> =
 
     let storeOpt =
         match ctx.RequestServices.GetService(typeof<IEventStore>) with
@@ -289,11 +273,18 @@ let private buildReport (ctx: HttpContext) : Async<AIDenialRollup> =
 /// so a refresh always re-reads the store.
 let private allowlistHandler: HttpHandler =
     fun next ctx -> task {
-        let! report = buildReport ctx
-        ctx.Response.ContentType <- "application/json; charset=utf-8"
-        ctx.Response.Headers["Cache-Control"] <- "no-store"
-        do! ctx.Response.WriteAsync(JsonSerializer.Serialize(report, indentedJsonOptions))
-        return! next ctx
+        match AIRequest.scope ctx with
+        | None ->
+            // No resolved principal: there is no scope to read, and none is
+            // invented for it.
+            ctx.Response.StatusCode <- 401
+            return! next ctx
+        | Some scope ->
+            let! report = buildReport ctx scope
+            ctx.Response.ContentType <- "application/json; charset=utf-8"
+            ctx.Response.Headers["Cache-Control"] <- "no-store"
+            do! ctx.Response.WriteAsync(JsonSerializer.Serialize(report, indentedJsonOptions))
+            return! next ctx
     }
 
 /// Route for the AI action-denial rollup. Mounted only when

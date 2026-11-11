@@ -3,18 +3,6 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
-KnowledgeBase.DocxExtraction (class)
-KnowledgeBase.DocxExtraction.enableStructuredDocxExtraction() : System.Void
-KnowledgeBase.DocxExtraction.resetToFlatDocxExtraction() : System.Void
-KnowledgeBase.DocxExtraction+DocxExtractionMode (class)
-KnowledgeBase.DocxExtraction+DocxExtractionMode.Flat : KnowledgeBase.DocxExtraction+DocxExtractionMode { get }
-KnowledgeBase.DocxExtraction+DocxExtractionMode.IsFlat : System.Boolean { get }
-KnowledgeBase.DocxExtraction+DocxExtractionMode.IsStructured : System.Boolean { get }
-KnowledgeBase.DocxExtraction+DocxExtractionMode.Structured : KnowledgeBase.DocxExtraction+DocxExtractionMode { get }
-KnowledgeBase.DocxExtraction+DocxExtractionMode.Tag : System.Int32 { get }
-KnowledgeBase.DocxExtraction+DocxExtractionMode+Tags (class)
-KnowledgeBase.DocxExtraction+DocxExtractionMode+Tags.Flat : System.Int32 (literal)
-KnowledgeBase.DocxExtraction+DocxExtractionMode+Tags.Structured : System.Int32 (literal)
 KnowledgeBase.Server (class)
 KnowledgeBase.Server.ingestionStatusStream : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Collections.Generic.IAsyncEnumerable`1[SharedTypes+IngestionStatus]]]] { get }
 KnowledgeBase.Server.kbInventoryBuilder : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]] { get }
@@ -57,13 +45,11 @@ KnowledgeBase.ServerApiDeps+EnqueueRefused.count : System.Int32 { get }
 KnowledgeBase.ServerApiDeps+EnqueueRefusedModule (class)
 KnowledgeBase.ServerApiDeps+EnqueueRefusedModule.describe(KnowledgeBase.ServerApiDeps+EnqueueRefused) : System.String
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps (class)
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.RAG.IngestionTypes+IngestionQueue, ToolUp.Platform.Infra.IOcrProvider+IOcrProvider, ToolUp.Platform.Infra.ITableExtractor+ITableExtractor, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.StorageScope, ToolUp.Platform.UserId, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.INarrativeStore], ToolUp.Platform.AccessContext, KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], System.Boolean, SharedTypes+KnowledgeUploadPolicy, SharedTypes+KnowledgeDedupPolicy, SharedTypes+KnowledgeVersioningPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IDataObjectStore], SharedTypes+KnowledgeQuotaPolicy, SharedTypes+KnowledgeRetentionPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IContentScanner], ToolUp.Platform.ContentScanPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.ResolvedScope]], SharedTypes+ArchiveImportPolicy, SharedTypes+UrlIngestionPolicy, Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerBulkImport+IUrlContentFetcher])
+KnowledgeBase.ServerApiDeps+KnowledgeApiDeps..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionQueue], ToolUp.Platform.Infra.IOcrProvider+IOcrProvider, ToolUp.Platform.Infra.ITableExtractor+ITableExtractor, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.StorageScope, ToolUp.Platform.UserId, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IVectorStore+IVectorStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IIndexLifecycle+IIndexLifecycle], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.INarrativeStore], ToolUp.Platform.AccessContext, KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], System.Boolean, SharedTypes+KnowledgePolicies, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IDataObjectStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IContentScanner], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.ResolvedScope]], Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerBulkImport+IUrlContentFetcher])
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.AccessContext : ToolUp.Platform.AccessContext { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.ArchiveImportPolicy : SharedTypes+ArchiveImportPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.AuditLog : ToolUp.Platform.IAuditLog { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.ContentScanner : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IContentScanner] { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.DataObjectStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IDataObjectStore] { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.DedupPolicy : SharedTypes+KnowledgeDedupPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.DisclosureGate : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.ResolvedScope]] { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.EmbeddingProvider : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IEmbeddingProvider+IEmbeddingProvider] { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.EnsureContextWriteAllowed : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
@@ -74,23 +60,18 @@ KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.NarrativeStore : Microsoft.FSharp.C
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.Notifications : ToolUp.Platform.INotificationChannel { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.OcrProvider : ToolUp.Platform.Infra.IOcrProvider+IOcrProvider { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.OriginalResolver : KnowledgeBase.ServerOriginalSourceResolver+IOriginalSourceResolver { get }
+KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.Policies : SharedTypes+KnowledgePolicies { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.PublishInventory : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.Queue : ToolUp.RAG.IngestionTypes+IngestionQueue { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.QuotaPolicy : SharedTypes+KnowledgeQuotaPolicy { get }
+KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.Queue : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionQueue] { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.RecordEnqueue : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit] { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.RetentionPolicy : SharedTypes+KnowledgeRetentionPolicy { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.ScanPolicy : ToolUp.Platform.ContentScanPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.Scope : ToolUp.Platform.StorageScope { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.ScopeResolvedFromRequest : System.Boolean { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.Storage : ToolUp.Platform.BlobStorage+IBlobStorage { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.TableExtractor : ToolUp.Platform.Infra.ITableExtractor+ITableExtractor { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UploadPolicy : SharedTypes+KnowledgeUploadPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UrlFetcher : Microsoft.FSharp.Core.FSharpOption`1[KnowledgeBase.ServerBulkImport+IUrlContentFetcher] { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UrlIngestionPolicy : SharedTypes+UrlIngestionPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.UserId : ToolUp.Platform.UserId { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.VectorScope : ToolUp.Platform.VectorKnowledgeTypes+VectorScope { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.VectorStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Infra.IVectorStore+IVectorStore] { get }
-KnowledgeBase.ServerApiDeps+KnowledgeApiDeps.VersioningPolicy : SharedTypes+KnowledgeVersioningPolicy { get }
 KnowledgeBase.ServerApiDeps+KnowledgeApiDepsModule (class)
 KnowledgeBase.ServerApiDeps+KnowledgeApiDepsModule.guardResolvedScope(KnowledgeBase.ServerApiDeps+KnowledgeApiDeps) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 KnowledgeBase.ServerApiDeps+KnowledgeApiDepsModule.resolve(Microsoft.AspNetCore.Http.HttpContext) : KnowledgeBase.ServerApiDeps+KnowledgeApiDeps
@@ -180,7 +161,8 @@ KnowledgeBase.ServerIndexStorage.indexBlobName : System.String { get }
 KnowledgeBase.ServerIndexStorage.indexWritesAreConditional(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 KnowledgeBase.ServerIndexStorage.ingestionAttemptBlobName(System.String) : System.String
 KnowledgeBase.ServerIndexStorage.loadChunkHashes(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
-KnowledgeBase.ServerIndexStorage.loadIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]
+KnowledgeBase.ServerIndexStorage.loadIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], KnowledgeBase.ServerIndexStorage+IndexReadError]]
+KnowledgeBase.ServerIndexStorage.loadListing(ToolUp.Platform.ILogger, ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]
 KnowledgeBase.ServerIndexStorage.loadVersions(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]
 KnowledgeBase.ServerIndexStorage.noteBodyBlobName(System.String) : System.String
 KnowledgeBase.ServerIndexStorage.persistedStatus(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+IngestionStatus]]
@@ -193,6 +175,19 @@ KnowledgeBase.ServerIndexStorage.updateIndexStatus(ToolUp.Platform.BlobStorage+I
 KnowledgeBase.ServerIndexStorage.upsertIndexEntry(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.versionedOriginalBlobName(System.String, System.Int32, System.String) : System.String
 KnowledgeBase.ServerIndexStorage.versionsBlobName(System.String) : System.String
+KnowledgeBase.ServerIndexStorage+IndexReadError (class)
+KnowledgeBase.ServerIndexStorage+IndexReadError.IsCorrupt : System.Boolean { get }
+KnowledgeBase.ServerIndexStorage+IndexReadError.IsUnreadable : System.Boolean { get }
+KnowledgeBase.ServerIndexStorage+IndexReadError.Tag : System.Int32 { get }
+KnowledgeBase.ServerIndexStorage+IndexReadError+Corrupt (class)
+KnowledgeBase.ServerIndexStorage+IndexReadError+Corrupt.reason : System.String { get }
+KnowledgeBase.ServerIndexStorage+IndexReadError+Tags (class)
+KnowledgeBase.ServerIndexStorage+IndexReadError+Tags.Corrupt : System.Int32 (literal)
+KnowledgeBase.ServerIndexStorage+IndexReadError+Tags.Unreadable : System.Int32 (literal)
+KnowledgeBase.ServerIndexStorage+IndexReadError+Unreadable (class)
+KnowledgeBase.ServerIndexStorage+IndexReadError+Unreadable.reason : System.String { get }
+KnowledgeBase.ServerIndexStorage+IndexReadErrorModule (class)
+KnowledgeBase.ServerIndexStorage+IndexReadErrorModule.describe(KnowledgeBase.ServerIndexStorage+IndexReadError) : System.String
 KnowledgeBase.ServerIndexStorage+IngestionStatusFeed (class)
 KnowledgeBase.ServerIndexStorage+IngestionStatusFeed.subscribe(System.String, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestionStatus, Microsoft.FSharp.Core.Unit]) : System.IDisposable
 KnowledgeBase.ServerIndexStorage+KnowledgeIndexWriteFailed (class)
@@ -437,6 +432,7 @@ KnowledgeBase.ServerUploadPolicy (class)
 KnowledgeBase.ServerUploadPolicy.withContentScanning(ToolUp.Platform.IContentScanner, ToolUp.Platform.ContentScanPolicy, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 KnowledgeBase.ServerUploadPolicy.withDocumentDedup(System.Boolean, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 KnowledgeBase.ServerUploadPolicy.withDocumentVersioning(System.Boolean, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+KnowledgeBase.ServerUploadPolicy.withDocxExtraction(SharedTypes+DocxExtractionMode, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 KnowledgeBase.ServerUploadPolicy.withKnowledgeQuota(SharedTypes+KnowledgeQuotaPolicy, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 KnowledgeBase.ServerUploadPolicy.withKnowledgeQuotaAndUsageEndpoint(SharedTypes+KnowledgeQuotaPolicy, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 KnowledgeBase.ServerUploadPolicy.withKnowledgeRetention(SharedTypes+KnowledgeRetentionPolicy, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp

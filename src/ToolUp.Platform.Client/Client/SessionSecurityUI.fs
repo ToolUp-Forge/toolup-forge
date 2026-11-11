@@ -251,7 +251,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 /// widen without reading as a removal in the public-API approval
 /// baseline, so the message-catalog-aware body is the additive
 /// `…With` variant and this delegates with the English catalog,
-/// matching `BootDegradation.bannerWith` / `Components.ModuleBoundary.wrapWith`.
+/// matching `BootDegradation.banner` / `Components.ModuleBoundary.wrapWith`.
 let lastSeenLabelWith (msgs: SessionSecurityMessages) (now: DateTimeOffset) (at: DateTimeOffset) : string =
     let elapsed = now - at
 
@@ -339,16 +339,8 @@ let private sessionRow
 
 // ─── View ────────────────────────────────────────────────────────────
 
-/// The module body as a React COMPONENT rather than a plain
-/// render function, so it has a hook site from which to read the
-/// resolved catalog. `view` is invoked inline by the shell's own
-/// render, where a hook would join the shell's hook order and break the
-/// moment the active module changed; a component of its own has a
-/// stable identity and its own. Same distinction `HealthMonitorUI`
-/// documents at `HealthMonitorBody`.
-[<ReactComponent>]
-let private SessionSecurityBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).SessionSecurity
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: SessionSecurityMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let now = DateTimeOffset.UtcNow
 
     let noticeMsgs = { Dismiss = msgs.Dismiss }
@@ -414,38 +406,31 @@ let private SessionSecurityBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement = SessionSecurityBody model dispatch
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.SessionSecurity model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────────
 
 /// Phase 879 — this built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
-/// without building one; `create` registers the module under it.
+/// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.SessionSecurity"
 
-/// Create the built-in session-security page as an `ErasedModule`.
+/// The built-in session-security page (`ShellSlots.builtIn` builds its module).
 /// Injected by the shell's `prepareModules` when the deployment opts in
 /// via `ClientConfig.SessionSecurity`.
-let create (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Session Security"
-
-    let icon =
-        config
-        |> Option.map _.Icon
-        |> Option.defaultValue ToolUp.Platform.Icons.settings
-
-    // SDK built-in — reserved under the `_sdk.` Id namespace so it can
-    // never collide with an app's RBAC-managed `ServerConfig.ModuleNames`,
-    // and so a module-visibility profile stated over that list can never
-    // hide the page a user signs a stolen session out from.
-    ToolUp.Platform.ClientModule.create {
-        Init = fun () -> init ToolUp.Platform.ClientModuleContext.empty
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn: BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Session Security"
+        Icon = ToolUp.Platform.Icons.settings
     }
-    |> ToolUp.Platform.ClientModule.withContextInit init
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = None
+    NavRole = None
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = init
+    Update = update
+    View = BuiltInView.Page view
+    Extend = id
+}

@@ -130,7 +130,9 @@ let private renderTests =
 
             let m = baseModule () |> ClientHostView.withElementPanes paneView
             let paneRender = m.View.Value
-            paneRender { Count = 3 } ignore |> ignore
+
+            paneRender { Count = 3 } (RenderContext.create MessageCatalog.english ignore)
+            |> ignore
 
             Expect.hasLength captured 2 "both panes were produced"
             Expect.stringContains captured[0] "control: count=3" "the control pane rendered the hosted tree"
@@ -154,8 +156,12 @@ let private renderTests =
 
             let views = m.PageViews.Value
             let model = { Count = 7 }
-            (Map.find "/a" views) model ignore |> ignore
-            (Map.find "/b" views) model ignore |> ignore
+
+            (Map.find "/a" views) model (RenderContext.create MessageCatalog.english ignore)
+            |> ignore
+
+            (Map.find "/b" views) model (RenderContext.create MessageCatalog.english ignore)
+            |> ignore
 
             Expect.hasLength captured 2 "both pages rendered their hosted subtree"
             Expect.stringContains captured[0] "page-a: count=7" "page A rendered the hosted tree"
@@ -188,7 +194,9 @@ let private capabilityTests =
 
                 let m = baseModule () |> ClientHostView.withElementPanes paneView
                 let paneRender = m.View.Value
-                paneRender { Count = 0 } ignore |> ignore
+
+                paneRender { Count = 0 } (RenderContext.create MessageCatalog.english ignore)
+                |> ignore
 
                 Expect.contains navigated "FromControl" "the control pane's Navigate reached the shipped hook"
                 Expect.contains navigated "FromOutput" "the output pane's Navigate reached the shipped hook"
@@ -208,7 +216,9 @@ let private capabilityTests =
                 |> ClientHostView.withElementPages [ pageConfig "/p" "P", pageView ]
 
             let model = { Count = 0 }
-            (Map.find "/p" m.PageViews.Value) model dispatched.Add |> ignore
+
+            (Map.find "/p" m.PageViews.Value) model (RenderContext.create MessageCatalog.english dispatched.Add)
+            |> ignore
 
             Expect.contains dispatched Bumped "the page's Dispatch routed to the module dispatch (the shared bag)"
     ]
@@ -233,19 +243,19 @@ let private pageContentCaseTests =
             let views = m.PageViews.Value
             let model = { Count = 0 }
 
-            match (Map.find "/split" views) model ignore with
+            match (Map.find "/split" views) model (RenderContext.create MessageCatalog.english ignore) with
             | PageContent.SplitPanel _ -> ()
             | other -> failtestf "expected SplitPanel; got %A" other
 
-            match (Map.find "/stack" views) model ignore with
+            match (Map.find "/stack" views) model (RenderContext.create MessageCatalog.english ignore) with
             | PageContent.Stacked _ -> ()
             | other -> failtestf "expected Stacked; got %A" other
 
-            match (Map.find "/full" views) model ignore with
+            match (Map.find "/full" views) model (RenderContext.create MessageCatalog.english ignore) with
             | PageContent.FullWidth _ -> ()
             | other -> failtestf "expected FullWidth; got %A" other
 
-            match (Map.find "/dash" views) model ignore with
+            match (Map.find "/dash" views) model (RenderContext.create MessageCatalog.english ignore) with
             | PageContent.Dashboard _ -> ()
             | other -> failtestf "expected Dashboard; got %A" other
     ]
@@ -262,7 +272,7 @@ let private boundaryTests =
                 baseModule ()
                 |> ClientHostView.withElementView (fun _ _ _ -> Unchecked.defaultof<ReactElement>)
 
-            Expect.isSome m.PageViews "withElementView remains the full-width single-page shape (via withFullWidthView)"
+            Expect.isSome m.View "withElementView remains the full-width single-page shape"
 
         testCase "the multi-region seam sources carry no banned OSS vocabulary (GP 1)"
         <| fun _ ->

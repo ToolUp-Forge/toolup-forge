@@ -102,7 +102,8 @@ let tests =
                     ]
                 ]
 
-                let sections = buildSections views UserSidebarPreferences.empty
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views UserSidebarPreferences.empty
 
                 match moduleIn sections "Analytics" "Sales" with
                 | Some m ->
@@ -117,7 +118,9 @@ let tests =
 
             testCase "a single-page module is a leaf with no children" (fun () ->
                 let views = [ singlePage "Reports" "Reports" (Some "Analytics") ]
-                let sections = buildSections views UserSidebarPreferences.empty
+
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views UserSidebarPreferences.empty
 
                 match moduleIn sections "Analytics" "Reports" with
                 | Some m -> Expect.isEmpty m.Pages "single-page module has no page children"
@@ -127,7 +130,9 @@ let tests =
         testList "buildSections — expand state" [
             testCase "a multi-page module is collapsed by default" (fun () ->
                 let views = [ multiPage "Sales" "Sales" None [ "/a", "A"; "/b", "B" ] ]
-                let sections = buildSections views UserSidebarPreferences.empty
+
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views UserSidebarPreferences.empty
                 // Phase 1112 — an ungrouped application row sits in `_app`.
                 let m = moduleIn sections AppKey "Sales"
 
@@ -143,7 +148,9 @@ let tests =
                         ExpandedModules = Set.ofList [ "Sales" ]
                 }
 
-                let sections = buildSections views prefs
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views prefs
+
                 let m = moduleIn sections AppKey "Sales"
                 Expect.isTrue (m |> Option.map _.IsExpanded |> Option.defaultValue false) "expanded when in the set")
         ]
@@ -157,7 +164,8 @@ let tests =
                         PinnedModuleIds = [ "Sales/b" ]
                 }
 
-                let sections = buildSections views prefs
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views prefs
 
                 match moduleIn sections PinnedKey "Sales/b" with
                 | Some leaf ->
@@ -174,7 +182,8 @@ let tests =
                         PinnedModuleIds = [ "Sales/b" ]
                 }
 
-                let sections = buildSections views prefs
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views prefs
 
                 match moduleIn sections "Analytics" "Sales" with
                 | Some m ->
@@ -192,7 +201,8 @@ let tests =
                         PinnedModuleIds = [ "Sales" ]
                 }
 
-                let sections = buildSections views prefs
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views prefs
 
                 match moduleIn sections PinnedKey "Sales" with
                 | Some leaf ->
@@ -203,7 +213,11 @@ let tests =
         testList "flatten — composite page ids resolve for the header" [
             testCase "flatten yields the parent plus one leaf per page" (fun () ->
                 let views = [ multiPage "Sales" "Sales" None [ "/a", "Alpha"; "/b", "Beta" ] ]
-                let flat = buildSections views UserSidebarPreferences.empty |> flatten
+
+                let flat =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views UserSidebarPreferences.empty
+                    |> flatten
+
                 let ids = flat |> List.map _.Id
                 Expect.isTrue (List.contains "Sales" ids) "the parent is present"
                 Expect.isTrue (List.contains "Sales/a" ids) "page A resolves"

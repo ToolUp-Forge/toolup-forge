@@ -1,4 +1,4 @@
-Codemod: 137 site(s) in 24 file(s) need human review (not rewritten):
+Codemod: 147 site(s) in 26 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] Auth.DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -53,6 +53,15 @@ Codemod: 137 site(s) in 24 file(s) need human review (not rewritten):
       -> Phase 879: the per-built-in mode type is gone: a value of it is a `SlotFill<ModuleLabel>` (`SlotFill<DataManagerChoice>` for the data manager), and a case qualified through the type (`TeamManagerMode.NoTeamManager`) is the bare `SlotFill` case
     L43 [879-slot-read] let usageOn = config.UsageDashboard <> SlotFill.Empty
       -> Phase 879: a read of a per-built-in `ClientConfig` field: it is `config.Slots.<field>` now, and a `match` on it takes the `SlotFill` cases (`Empty` / `Default` / `Configured` / `External`)
+  src/Client/Views.fs
+    L20 [1075-view-lambda] |> ClientModule.withPages [ overviewPage, overviewView ]
+      -> Phase 1075: if this view is not yet `'Model -> RenderContext<'Msg> -> PageContent`: it takes `model ctx`, dispatches with `ctx.Dispatch`, reads strings from `ctx.Messages`, and returns a `PageContent` — a `(left, right)` pair is `PageContent.SplitPanel(left, right)`, a single pane `PageContent.FullWidth body`
+    L25 [1075-toolkit-locale] let total = OutputFormatting.formatDecimal amount
+      -> Phase 1075: the toolkit takes the caller's locale: `OutputFormatting.formatDecimal locale value`, `formatInt locale value`, `formatCurrency locale currencyCode value`, `Input.currency locale …`, `Input.integerInput locale …` — a view passes `ctx.Locale`; `fallbackLocale` is gone
+    L26 [1075-app-shell] let shell = Layout.AppShellWith sidebar content None None Narrow
+      -> Phase 1075: `Layout.AppShell` takes one `AppShellProps` record — `{ Sidebar = sidebarProps; Content = content; SidePanel = …; HeaderAction = …; IdentityAction = Layout.headerIdentityAction (); InputsWidth = … }`; the positional form and `AppShellWith` are gone, and `Layout.userButton` is the `IdentityAction` slot
+    L27 [1075-use-messages] let heading = (MessageCatalogProvider.useMessages ()).Shell.Loading
+      -> Phase 1075: in a module view, read the resolved catalog from `ctx.Messages` (and the locale from `ctx.Locale`): a view needs no `[<ReactComponent>]` hook site to reach it
   src/Server/AiRag.fs
     L9 [876-ai-options] AIServerApp.create factory profile
       -> Phase 876: `AIServerApp` is gone: the AI tier is a companion composed onto the `ServerApp`. Build its options with `AIOptions.create factory providerProfile` and the AI-only setters (`AIOptions.withAIConfig`, `withModuleAIContexts`, `withToolEffects`, `withReflectionTools`, `withAIAnsweringTools`, `withPlatformProvider`, …), and compose it with `app |> AICompose.withAI options |> ServerApp.run`. An `AIServerApp.withX` delegator is the `ServerApp.withX` builder applied to the deployment, on either side of `withAI`; `withAnswerVerifier`, `withNumericFidelityGate`, `withAnswerProvenanceAnchors` and `withFastPathTriage` are `AICompose.withX` over the `ServerApp`; `AIServerApp.run` is `ServerApp.run`; `createFrom` and the old `withAI factory providerProfile configure` are `withAI (AIOptions.create factory providerProfile |> …)`; a `.Base` read is the `ServerApp` itself
@@ -214,6 +223,19 @@ Codemod: 137 site(s) in 24 file(s) need human review (not rewritten):
       -> Phase 1066: `TriggerOnce` refuses with a `TriggerError` (`JobNotFound` / `JobCancelled` / `JobDisabled` / `SchedulerStopping` / `QuotaExceeded` / `DispatchRefused`): match the cases, or render the old sentence with `TriggerError.message`
     L23 [878-typed-seam-call] | Some _ -> return! inner.TriggerOnce(scopeId, jobId, byUserId)
       -> Phase 878: if this is a platform store or service seam, its user and team id parameters are `UserId` / `TeamId` now: wrap a string at the call (`UserId userId`, or `UserId.tryCreate raw` for an id from a request), and read `.Value` where a string is needed; `ITeamStore.GetActiveTeam` answers `TeamId option`
+  src/Server/Knowledge.fs
+    L9 [1087-policy-records] let dedup = KnowledgeDedupPolicy.disabled
+      -> Phase 1087: `KnowledgeDedupPolicy`, `KnowledgeVersioningPolicy` and `KnowledgeObjectRetentionPolicy` are the `Dedup`, `Versioning` and `ObjectRetention` fields of `KnowledgePolicies` (`KnowledgePolicies.defaults`): compose with `withDocumentDedup` / `withDocumentVersioning` / `withObjectStoreRetention` (unchanged), or register one `KnowledgePolicies` value; a direct `AddSingleton<KnowledgeDedupPolicy>` reads nothing any more
+    L13 [1087-deps-policy-fields] QuotaPolicy = quota
+      -> Phase 1087: a full `KnowledgeApiDeps` literal sets `Policies = { KnowledgePolicies.defaults with … }` in place of its eight policy fields (`Upload`, `Dedup`, `Versioning`, `Quota`, `Retention`, `Scan`, `Archive`, `Url`), and `Queue` is an `IngestionQueue option`; a handler reads `deps.Policies.Quota` (and so on)
+    L16 [1087-docx-setters] KnowledgeBase.DocxExtraction.enableStructuredDocxExtraction ()
+      -> Phase 1087: the module-level DOCX setters are gone: compose `KnowledgeBase.ServerUploadPolicy.withDocxExtraction DocxExtractionMode.Structured` on the `ServerApp` (it sets `KnowledgePolicies.DocxMode`); an extraction outside the API takes the mode in `ExtractDeps.composed ocr tables mode`
+    L18 [1087-rag-validator-classes] let persistence = RagPersistenceValidator(config, true, false)
+      -> Phase 1087: the RAG validator classes are functions returning `IConfigValidator` (`ConfigValidator.create`): call the lower-case name with the same tupled arguments (`ragPersistenceValidator (config, storage, store)`), drop the `:> IConfigValidator` and any explicit timeout; `ragIngestionInstanceValidator` also takes the overflow policy and the queue's `DroppedLast60s`
+    L20 [1087-deleted-rag-surface] let conversations = RagOptions.withIndexConversations true options
+      -> Phase 1087: deleted, with no replacement: `RagOptions.withIndexConversations` / `IndexConversations` were never read, `Chunking.withContextualHeader` had no caller, and `IngestionQueue.RecordDequeue` belonged to the drainer seam (`IIngestionQueue.Dequeue` decrements the gauge itself); a test that drained the queue through `.Reader` reads `IIngestionQueue.TryDequeue` / `Dequeue`, and a synchronous `.Enqueue job` is `EnqueueAsync job`
+    L22 [1087-load-index-result] let index = loadIndex storage container
+      -> Phase 1087: `loadIndex storage container` returns `Result<KnowledgeDocument list, IndexReadError>`: an absent index is `Ok []`, an unreadable or corrupt one an `Error` — a decision refuses on it (`IndexReadError.describe`), a listing reads `loadListing logger storage container`
   src/Server/Lifecycle.fs
     L8 [1063-lifecycle-wrappers] let summary = TenantLifecycleAggregator.runGuarded audit hooks Provisioning scopeId actor
       -> Phase 1063: build a `LifecycleRun` (`LifecycleRun.create audit hooks phase scope actor`, then `with Request = Some r` / `Timeout = t` / `Guard = None` for a caller that already holds the scope) and call `run`, `runResumable cursor` or `exportThenDeprovision export`; all three answer whether the guard admitted the run (`GuardedRun.Ran summary` / `AlreadyInProgress`), and `runResumable` takes its ledger, progress and retry policy as one `LifecycleCursor`
@@ -309,9 +331,11 @@ Codemod: 137 site(s) in 24 file(s) need human review (not rewritten):
     Phase 1071 — docs/migrations/1071-redesign-e-bootsources-table-and-initmodule-by-id.md
     Phase 1073 — docs/migrations/1073-redesign-e-admin-page-kit-and-sub-models.md
     Phase 1074 — docs/migrations/1074-redesign-e-clientconfig-by-concern-and-the-ai-family-as-slots.md
+    Phase 1075 — docs/migrations/1075-redesign-e-one-view-contract-toolkit-locale-and-appshell.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1079 — docs/migrations/1079-redesign-f-the-connector-kernel.md
     Phase 1085 — docs/migrations/1085-redesign-g-ingestion-attempt-and-its-lattice.md
+    Phase 1087 — docs/migrations/1087-redesign-g-knowledge-policies-the-hook-and-the-deletions.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md

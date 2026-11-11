@@ -68,7 +68,7 @@ let private serviceStatusBoard =
 
 /// The landing module itself — ungrouped, area-declared, gated on the
 /// weakest administration role so every caller with an admin area to
-/// enter can see its landing (`AdminHome.create`).
+/// enter can see its landing (`AdminHome.builtIn`).
 let private adminHome = {
     moduleFacts "_sdk.admin-home" None NavRole.TeamOwnerAdmin with
         Group = None

@@ -49,7 +49,6 @@
     <ItemGroup>
         <Compile Include="Server\KnowledgeAuditEvents.fs" />
         <Compile Include="Server\JsonHelpers.fs" />
-        <Compile Include="Server\DocxExtraction.fs" />
         <Compile Include="Server\Extractors.fs" />
         <Compile Include="Server\ExtractionErrors.fs" />
         <Compile Include="Server\IndexStorage.fs" />

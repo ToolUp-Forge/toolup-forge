@@ -93,7 +93,7 @@ let private mkDeps
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = queue
+        Queue = Some queue
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = Unchecked.defaultof<INotificationChannel>
@@ -117,23 +117,12 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = KnowledgeUploadPolicy.permissive
-        DedupPolicy = KnowledgeDedupPolicy.enabled
-        VersioningPolicy = KnowledgeVersioningPolicy.disabled
+        Policies = KnowledgePolicies.defaults
         // Phase 105 — retention not composed: the pre-105 convention-blob path.
         DataObjectStore = None
-        // Phase 512 — these packs pin pre-512 paths; the unlimited /
-        // retain-forever defaults keep them byte-identical.
-        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         // Phase 515 — no scanner composed: the pre-515 upload path.
         ContentScanner = None
-        ScanPolicy = ContentScanPolicy.defaults
         DisclosureGate = None
-        // Phase 511 — bulk import is not exercised here: archive guards at
-        // their shipped defaults, URL ingestion inert, no transport.
-        ArchiveImportPolicy = ArchiveImportPolicy.defaults
-        UrlIngestionPolicy = UrlIngestionPolicy.disabled
         UrlFetcher = None
     }
 
@@ -384,13 +373,15 @@ let private lineageTests =
 
             // Extraction runs off the request path (Async.Start); the
             // enqueued job is the observable hand-off point.
-            let readTask = queue.Reader.ReadAsync().AsTask()
-            let! winner = Task.WhenAny(readTask, Task.Delay 15000) |> Async.AwaitTask
+            use timeout = new System.Threading.CancellationTokenSource(15000)
 
-            if not (obj.ReferenceEquals(winner, readTask)) then
-                failtest "timed out waiting for the upload's ingestion job"
+            let! lease = (queue :> IIngestionQueue).Dequeue timeout.Token |> Async.Catch
 
-            let job = readTask.Result
+            let job =
+                match lease with
+                | Choice1Of2(Some lease) -> lease.Job
+                | _ -> failtest "timed out waiting for the upload's ingestion job"
+
             Expect.isNonEmpty job.Chunks "csv upload produces chunks"
 
             for _, chunk in job.Chunks do

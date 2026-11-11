@@ -299,11 +299,13 @@ ToolUp.Platform.CodemodMigration.IsDeprecations : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsFailureAsData : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsIngestionAttempt : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsJobOutcomes : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsKnowledgePolicies : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsModelCapabilities : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsModuleHost : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsNestedConfig : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsOneResolverOneGate : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsOneScopeForm : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsOneViewContract : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsOpenAuditRegistry : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRateLimitAdmission : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsRemoteAndMemo : System.Boolean { get }
@@ -316,11 +318,13 @@ ToolUp.Platform.CodemodMigration.IsSubsystemNamespaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsSurfaces : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsTypedIdentity : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.JobOutcomes : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.KnowledgePolicies : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ModelCapabilities : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ModuleHost : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.NestedConfig : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.OneResolverOneGate : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.OneScopeForm : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.OneViewContract : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.OpenAuditRegistry : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.RateLimitAdmission : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.RemoteAndMemo : ToolUp.Platform.CodemodMigration { get }
@@ -348,11 +352,13 @@ ToolUp.Platform.CodemodMigration+Tags.Deprecations : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.FailureAsData : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.IngestionAttempt : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.JobOutcomes : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.KnowledgePolicies : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ModelCapabilities : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ModuleHost : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.NestedConfig : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.OneResolverOneGate : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.OneScopeForm : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.OneViewContract : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.OpenAuditRegistry : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RateLimitAdmission : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.RemoteAndMemo : System.Int32 (literal)

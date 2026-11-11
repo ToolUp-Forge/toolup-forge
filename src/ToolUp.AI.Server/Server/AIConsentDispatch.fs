@@ -59,46 +59,25 @@ open ToolUp.Platform.Compose
 [<Literal>]
 let SuspendedDispatchTimeoutMs = SuspendedPrompt.SuspendedDispatchTimeoutMs
 
-// ─── Per-request items the gate reads ────────────────────────────
+// ─── The request-items carry ─────────────────────────────────────
 
-/// `HttpContext.Items` keys the agent loop stamps so a SERVER-resident tool
-/// executor can reach the two things its signature does not carry.
-///
-/// A tool executor is `HttpContext -> argsJson -> Async<string>`: it has no
-/// conversation and no way to emit on the SSE stream, because no other
-/// server-resident tool needs either. Widening that signature
-/// would retype every tool in the SDK and every tool a consumer has
-/// written, to serve one gate; stamping the items is the same stringly-keyed
-/// per-request carry the loop already uses for the principal's `StorageScope` /
-/// the stamped principal (and which `reconstructAccessContext`
-/// documents as the RBAC-correct path on the background flow).
-///
-/// Named through constants so the stamping end and the reading end move
-/// together — the same discipline the grant stamps follow.
+/// The consumer compatibility carry's keys (`ToolContext.ItemsKeys`), under
+/// the name a consumer tool has always read them by.
 module ItemsKeys =
     /// `Guid` — the conversation the current turn belongs to.
     [<Literal>]
-    let ConversationId = "ToolUp.AI.ConversationId"
+    let ConversationId = ToolContext.ItemsKeys.ConversationId
 
-    /// `Guid` — the `AITask` the current turn belongs to. Rides the SSE
-    /// event for parity with `ClientToolInvoke`; the registry keys on the
-    /// consent id alone.
+    /// `Guid` — the `AITask` the current turn belongs to.
     [<Literal>]
-    let TaskId = "ToolUp.AI.TaskId"
+    let TaskId = ToolContext.ItemsKeys.TaskId
 
-    /// `StreamEmitter` — the agent loop's own emitter, so a tool can put
-    /// an event on the stream the user is already watching.
+    /// `StreamEmitter` — the turn's emitter.
     [<Literal>]
-    let StreamEmitter = "ToolUp.AI.StreamEmitter"
+    let StreamEmitter = ToolContext.ItemsKeys.StreamEmitter
 
-/// The agent loop's SSE emitter, wrapped in a nominal type.
-///
-/// A bare `AIStreamEvent -> unit` would box as an `FSharpFunc` and be
-/// recovered by a type test over a function type — legal, but a shape
-/// nothing else in the items dictionary uses and one that silently
-/// matches any same-arity function. A one-field record is unambiguous at
-/// the read site and gives the stamp a name to grep for.
-type StreamEmitter = { Emit: AIStreamEvent -> unit }
+/// The turn's emitter as the carry holds it.
+type StreamEmitter = ToolUp.AI.StreamEmitter
 
 // ─── Pending-consent registry ────────────────────────────────────
 
@@ -252,26 +231,6 @@ let resolveMode (ctx: HttpContext) : AIConsentMode =
     | :? AIConsentMode as mode -> mode
     | _ -> RememberPerConversation
 
-let private guidItem (ctx: HttpContext) (key: string) : Guid option =
-    match ctx.Items.TryGetValue key with
-    | true, (:? Guid as value) -> Some value
-    | _ -> None
-
-let private emitterOf (ctx: HttpContext) : StreamEmitter option =
-    match ctx.Items.TryGetValue ItemsKeys.StreamEmitter with
-    | true, (:? StreamEmitter as emitter) -> Some emitter
-    | _ -> None
-
-let private containerOf (ctx: HttpContext) : string option =
-    match AccessContext.scopeOf ctx.Items with
-    | Some scope -> Some scope.Container
-    | _ -> None
-
-let private userIdOf (ctx: HttpContext) : string =
-    match AccessContext.callerIdOf ctx.Items with
-    | Some id -> id
-    | _ -> "anonymous"
-
 /// The standing refusal text, written for the model: the remedy is the
 /// user's, so re-planning the same read through another tool is wasted
 /// turns, and it is NOT a permission the deployment can grant.
@@ -296,6 +255,7 @@ let private userDeniedMessage (moduleName: string) =
 /// says nothing rather than failing closed on infrastructure the caller
 /// never had.
 let requireConsent
+    (channel: PromptChannel option)
     (ctx: HttpContext)
     (toolName: string)
     (targetModule: string)
@@ -304,6 +264,7 @@ let requireConsent
     : Async<ConsentOutcome> =
     async {
         let mode = resolveMode ctx
+        let access = AIRequest.principal ctx
 
         match mode with
         | TrustEverything -> return ConsentGranted
@@ -319,8 +280,11 @@ let requireConsent
                 | :? IBlobStorage as s -> Some s
                 | _ -> None
 
-            match guidItem ctx ItemsKeys.ConversationId, emitterOf ctx, registry, containerOf ctx, storage with
-            | Some conversationId, Some emitter, Some registry, Some container, Some storage ->
+            match channel, registry, access, storage with
+            | Some channel, Some registry, Some access, Some storage ->
+                let conversationId = channel.ConversationId
+                let container = (AIRequest.scopeOf access).Container
+
                 // A standing decision short-circuits the prompt — but only
                 // in `RememberPerConversation`. `AlwaysAsk` neither reads
                 // nor trusts the record: every read is its own decision.
@@ -341,8 +305,6 @@ let requireConsent
                     // unregistered id.
                     let consentId = Guid.NewGuid()
 
-                    let taskId = guidItem ctx ItemsKeys.TaskId |> Option.defaultValue Guid.Empty
-
                     let awaited =
                         registry.RegisterPending(
                             consentId,
@@ -350,13 +312,13 @@ let requireConsent
                                 ConversationId = conversationId
                                 TargetModule = targetModule
                                 Container = container
-                                UserId = UserId(userIdOf ctx)
+                                UserId = UserId access.UserId
                             }
                         )
 
-                    emitter.Emit(
+                    channel.Emit(
                         AIConsentRequired(
-                            taskId,
+                            channel.TaskId,
                             consentId,
                             conversationId,
                             toolName,
@@ -386,13 +348,22 @@ let requireConsent
                                     (SuspendedDispatchTimeoutMs / 1000)
                             )
             | _ ->
-                // No live turn to ask on (no conversation stamped, no
-                // emitter, no registry, or no blob storage to remember a
+                // No live turn to ask on (no prompt channel, no registry, no
+                // resolved principal, or no blob storage to remember a
                 // decision in). Nothing to prompt and nothing to persist,
                 // so this gate abstains rather than refusing: the three
                 // gates outside it have already run and are what protect
                 // the read. A composed deployment always has all five —
-                // the loop stamps the first three, `composeAI` registers
-                // the fourth and core `compose` the fifth.
+                // the loop supplies the channel, `composeAI` registers the
+                // registry and core `compose` the storage.
                 return ConsentGranted
+    }
+
+/// The consent gate (g7) over the module the call reaches: the user's
+/// standing or fresh decision, asked on `channel`.
+let gate (channel: PromptChannel option) (intendedQueryKey: string) : AIToolRegistry.GateCheck =
+    fun call -> async {
+        match! requireConsent channel call.Request call.Tool.Name call.Module intendedQueryKey call.Arguments with
+        | ConsentGranted -> return Ok()
+        | ConsentRefused reason -> return Error(ToolRefusal.ConsentRefused(call.Tool.Name, call.Module, reason))
     }

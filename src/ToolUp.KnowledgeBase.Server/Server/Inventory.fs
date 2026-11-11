@@ -13,16 +13,8 @@ open ToolUp.Platform.Jobs
 
 // ─── Inventory partition helper ──────────────────────────────────
 
-/// Split an index into uploaded-or-narrative documents vs notes.
-/// Both `publishInventoryUpdate` and `formatInventory` need this split,
-/// so it lives here as a single helper rather than being repeated.
-///
-/// Both of them had gone back to repeating it inline anyway — four copies
-/// of the same predicate across two functions — and neither called this.
-/// Phase 626's unreferenced-code report is what surfaced that, which is
-/// the useful shape of that tool's output: a helper with no callers whose
-/// doc comment says it has two is not dead code, it is a helper that lost
-/// its call sites. Rewired 2026-08-26 (tidy-drain).
+/// Split an index into uploaded-or-narrative documents vs notes. Every
+/// inventory surface reads this split; none repeats the predicate.
 let private partitionInventory (docs: KnowledgeDocument list) =
     docs
     |> List.partition (fun d ->
@@ -30,6 +22,31 @@ let private partitionInventory (docs: KnowledgeDocument list) =
         | Note _ -> false
         | UploadedFile
         | FromNarrative _ -> true)
+
+/// The heuristic suggested questions for a scope's documents: canned
+/// questions that point at real content (the three newest documents, the
+/// notes, the shared themes, the active module's data), at most five. The
+/// inventory notification and `GetSuggestedQuestions` both read this.
+let internal suggestedQuestions (activeModule: string option) (docs: KnowledgeDocument list) : string list =
+    let documents, notes = partitionInventory docs
+    let topDocs = documents |> List.sortByDescending _.UploadedAt |> List.truncate 3
+
+    [
+        for doc in topDocs do
+            sprintf "What's in \"%s\"?" doc.FileName
+
+        if not notes.IsEmpty then
+            "Summarise the team's notes."
+
+        if documents.Length >= 2 then
+            "What themes do these documents share?"
+
+        match activeModule with
+        | Some name when not documents.IsEmpty -> sprintf "How does our %s data look?" name
+        | _ -> ()
+    ]
+    |> List.distinct
+    |> List.truncate 5
 
 // ─── Inventory notification publisher ────────────────────────────
 
@@ -42,7 +59,7 @@ let publishInventoryUpdate
     : Async<unit> =
     async {
         try
-            let! docs = loadIndex storage container
+            let! docs = loadListing logger storage container
             let! aiContext = loadAIContext storage container
 
             // Heuristic-only suggested questions (WS4.4) — sample doc
@@ -53,22 +70,7 @@ let publishInventoryUpdate
             let documents, notes = partitionInventory docs
             let documentCount = documents.Length
             let noteCount = notes.Length
-
-            let topDocs = documents |> List.sortByDescending _.UploadedAt |> List.truncate 3
-
-            let suggestedQuestions =
-                [
-                    for doc in topDocs do
-                        sprintf "What's in \"%s\"?" doc.FileName
-
-                    if not notes.IsEmpty then
-                        "Summarise the team's notes."
-
-                    if documents.Length >= 2 then
-                        "What themes do these documents share?"
-                ]
-                |> List.distinct
-                |> List.truncate 5
+            let suggestedQuestions = suggestedQuestions None docs
 
             let payload: InventorySummary = {
                 DocumentCount = documentCount
@@ -167,7 +169,7 @@ let kbInventoryBuilder (storage: IBlobStorage) (logger: ILogger option) : System
                 match inventoryCache.TryGetValue scope.Container with
                 | true, (expiresAt, payload) when expiresAt > now -> return payload
                 | _ ->
-                    let! docs = loadIndex storage scope.Container
+                    let! docs = loadListing (logger |> Option.defaultValue indexLogger) storage scope.Container
                     let payload = formatInventory docs
 
                     inventoryCache.AddOrUpdate(

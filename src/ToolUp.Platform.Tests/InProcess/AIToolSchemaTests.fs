@@ -809,8 +809,46 @@ let private offsetCensusTests =
         }
     ]
 
+/// Every built-in tool runs on its typed executor over a declared schema: one
+/// case per tool, each sending an empty argument object and reading the fault
+/// that names the first required argument's path.
+let private builtInSchemaTests =
+    testList "every built-in tool decodes a declared schema" [
+        for tool in PlatformAITools.builtIn @ NarrativeTools.builtInTools do
+            let def = tool.Definition
+
+            testCase def.Name
+            <| fun () ->
+                let execute =
+                    tool.ExecuteTyped
+                    |> Option.defaultWith (fun () -> failtest "a built-in tool carries its typed executor")
+
+                match def.Parameters |> List.tryFind _.Required with
+                | None ->
+                    Expect.isTrue
+                        (def.Parameters |> List.forall (fun p -> not p.Required))
+                        "a tool with no required argument declares none"
+                | Some required ->
+                    let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+                    ctx.RequestServices <- ServiceCollection().BuildServiceProvider()
+
+                    let args =
+                        match ToolArgs.parse "{}" with
+                        | Ok args -> args
+                        | Error e -> failtest e
+
+                    let outcome = execute (ToolContext.ofRequest ctx) args |> Async.RunSynchronously
+
+                    match outcome with
+                    | ToolOutcome.Faulted(ToolFault.InvalidArguments(name, detail)) ->
+                        Expect.equal name def.Name "the fault names the tool"
+                        Expect.stringContains detail $"argument '{required.Name}'" "and the argument's path"
+                    | other -> failtest $"a missing required argument is an argument fault, not {other}"
+    ]
+
 let tests =
     testList "Phase 508 rich AI tool parameter schemas" [
+        builtInSchemaTests
         flatUnchangedTests
         rendererTests
         escapingTests

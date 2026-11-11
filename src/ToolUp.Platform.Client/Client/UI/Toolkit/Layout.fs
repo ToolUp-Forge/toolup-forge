@@ -10,33 +10,32 @@ open ToolUp.Platform
 open ToolUp.Platform.DataProp
 
 module Layout =
-    /// Phase 1069 — the header's identity action (an account / user
-    /// button), REGISTERED by the auth companion that owns it rather than
-    /// imported here: the shell bundle references no vendor UI package
-    /// (GP 2 / GP 13). The Clerk companion registers Clerk's `UserButton`
-    /// when its provider wraps the app (`ClerkAuthUI.wrapApp`); a
-    /// deployment without one renders nothing in the slot.
+    /// The header's identity action (an account / user button), REGISTERED
+    /// by the auth companion that owns it rather than imported here: the
+    /// shell bundle references no vendor UI package (GP 2 / GP 13). The Clerk
+    /// companion registers Clerk's `UserButton` when its provider wraps the
+    /// app (`ClerkAuthUI.wrapApp`); the shell reads it with
+    /// `headerIdentityAction` into `AppShellProps.IdentityAction`.
     ///
-    /// A documented client-side mutable, like the shell's other
-    /// companion registries: it is set once, when the auth UI wraps the
-    /// shell, before the header first renders.
-    let mutable private headerIdentityAction: (unit -> ReactElement) option = None
+    /// A documented client-side mutable, like the shell's other companion
+    /// registries: it is set once, when the auth UI wraps the shell, before
+    /// the header first renders.
+    let mutable private identityAction: (unit -> ReactElement) option = None
 
     /// Register (or replace) the header's identity action. Called by an
     /// auth companion when its provider mounts.
-    let registerHeaderIdentityAction (render: unit -> ReactElement) : unit = headerIdentityAction <- Some render
+    let registerHeaderIdentityAction (render: unit -> ReactElement) : unit = identityAction <- Some render
 
-    /// The registered identity action, or nothing when no companion
+    /// The registered identity action, rendered, or `None` when no companion
     /// registered one (Anonymous / dev modes, non-Clerk providers).
-    let userButton () : ReactElement =
-        match headerIdentityAction with
-        | Some render -> render ()
-        | None -> Html.none
+    let headerIdentityAction () : ReactElement option =
+        identityAction |> Option.map (fun render -> render ())
 
-    /// Page header with optional caller-supplied trailing action element
-    /// (e.g. an AI chat toggle button — the shell knows which feature owns
-    /// the slot; the toolkit stays feature-agnostic).
-    let pageHeader (title: string, icon) (headerAction: ReactElement option) =
+    /// Page header: the page's title and icon, then the trailing slots — the
+    /// caller's `headerAction` (e.g. the AI chat toggle; the shell knows which
+    /// feature owns it, the toolkit stays feature-agnostic) and the
+    /// `identityAction` an auth companion renders through.
+    let pageHeader (title: string, icon) (headerAction: ReactElement option) (identityAction: ReactElement option) =
         Html.div [
             prop.className "w-full h-20 bg-[var(--surface)] border-b border-separator px-6 flex items-center"
             prop.children [
@@ -53,7 +52,9 @@ module Layout =
                         match headerAction with
                         | Some el -> el
                         | None -> ()
-                        userButton ()
+                        match identityAction with
+                        | Some el -> el
+                        | None -> ()
                     ]
                 ]
             ]
@@ -224,10 +225,10 @@ module Layout =
                 ToolUp.Platform.Icons.spinner
         | CustomLoader render -> render ()
 
-    /// The shell frame both `AppShell` and `AppShellWith` render: the
-    /// empty-shell placeholder, or the sidebar beside the header, the
-    /// active page and the optional side panel. `sidebar` is a thunk so the
-    /// empty branch builds no sidebar element at all.
+    /// The shell frame `AppShell` renders: the empty-shell placeholder, or
+    /// the sidebar beside the header, the active page and the optional side
+    /// panel. `sidebar` is a thunk so the empty branch builds no sidebar
+    /// element at all.
     let private appShellFrame
         (messages: ShellMessages)
         (appName: string)
@@ -237,6 +238,7 @@ module Layout =
         (content: PageContent)
         (sidePanel: ReactElement option)
         (headerAction: ReactElement option)
+        (identityAction: ReactElement option)
         (inputsWidth: InputsPaneWidth)
         : ReactElement =
         let flatModules = Toolup.Sidebar.flatten sections
@@ -288,7 +290,7 @@ module Layout =
                                         "pr-[var(--toolup-ai-panel-width,_380px)]"
                                 ]
                                 prop.children [
-                                    pageHeader (selected.Name, selected.Icon) headerAction
+                                    pageHeader (selected.Name, selected.Icon) headerAction identityAction
 
                                     Html.div [
                                         prop.className "flex-1 overflow-auto"
@@ -306,66 +308,11 @@ module Layout =
                 ]
             ]
 
-    /// Application shell - combines sidebar, header, main content, and optional side panel.
-    /// `sections` is the structured sidebar layout (pinned / groups / other).
-    /// `selectedModule` is the id of the currently active module.
-    /// `content` is the active page's rendered body, whose `PageContent` case
-    /// determines the inner layout (split panel, stacked column, full-width,
-    /// named-area dashboard, or a custom element).
-    /// `onHideToggled` receives the sidebar id the user hid (or restored from the
-    /// "Hidden items" section) — a per-user preference, never an access change.
-    /// sidePanel: when Some, rendered as a fixed panel on the right side of the screen.
-    /// headerAction: when Some, rendered in the trailing position of the page header
-    /// (used by features such as the AI assistant toggle; the shell owns the markup,
-    /// the toolkit stays feature-agnostic).
-    [<ReactComponent>]
-    let AppShell
-        (appName: string)
-        (appLogo: string)
-        (sections: Toolup.Sidebar.SidebarSection list)
-        selectedModule
-        onModuleSelected
-        (onGroupToggled: string -> unit)
-        (onPinToggled: string -> unit)
-        (onModuleToggled: string -> unit)
-        (onHideToggled: string -> unit)
-        (onReorder: string -> string list -> unit)
-        (content: PageContent)
-        (sidePanel: ReactElement option)
-        (headerAction: ReactElement option)
-        (inputsWidth: InputsPaneWidth)
-        =
-        // Phase 767 — read unconditionally, ahead of the empty-shell
-        // branch below, because it is a hook.
-        let messages = (MessageCatalogProvider.useMessages ()).Shell
-
-        appShellFrame
-            messages
-            appName
-            sections
-            selectedModule
-            (fun () ->
-                Toolup.Sidebar.Sidebar
-                    appName
-                    appLogo
-                    sections
-                    selectedModule
-                    onModuleSelected
-                    onGroupToggled
-                    onPinToggled
-                    onModuleToggled
-                    onHideToggled
-                    onReorder)
-            content
-            sidePanel
-            headerAction
-            inputsWidth
-
-    // ─── Phase 883 — the sidebar is its own memo boundary ────────────────
+    // ─── The sidebar is its own memo boundary ────────────────────────────
     //
-    // `AppShell` builds the sidebar inline, so the sidebar renders every
-    // time the shell does: a toast, a theme flip or a header badge redrew
-    // the whole navigation tree. `AppShellWith` takes the sidebar's inputs
+    // A sidebar built inline renders every time the shell does: a toast, a
+    // theme flip or a header badge would redraw the whole navigation tree.
+    // `AppShell` takes the sidebar's inputs
     // as ONE value and renders them behind a `React.memo` whose comparer
     // asks whether anything the sidebar renders from has changed — so a
     // shell render that leaves those inputs alone renders no sidebar.
@@ -387,11 +334,10 @@ module Layout =
     // (the SDK shell builds them once per Elmish loop, in `Client.Dispatchers`
     // through `Program.withStableDispatch`), and the icons must be the elements the
     // modules declared rather than fresh ones. A caller that passes fresh
-    // closures gets a correct sidebar that renders every time, as
-    // `AppShell` does.
+    // closures gets a correct sidebar that renders every time.
 
     /// Everything the sidebar renders from, as one value — the unit the
-    /// sidebar's memo boundary compares (`AppShellWith`).
+    /// sidebar's memo boundary compares (`AppShell`).
     /// `Sections` is the structured sidebar layout (pinned / groups /
     /// other); `SelectedModule` is the sidebar id of the active entry
     /// (bare module id, or the composite page id of a multi-page module).
@@ -491,34 +437,43 @@ module Layout =
         // returned closure as "equal".
         reactMemo (box renderSidebar, box (System.Func<obj, obj, bool>(fun a b -> sameRendered a b)))
 
-    /// Application shell with the sidebar behind its own memo boundary
-    /// (Phase 883): the same frame `AppShell` renders — sidebar, header,
-    /// the active page's `content` and the optional `sidePanel` — but the
-    /// sidebar re-renders only when a value in `sidebar` changes, not every
-    /// time the shell does. The header reads the active entry's name and
-    /// icon from `sidebar.Sections`, as `AppShell` does.
-    /// `headerAction`: when Some, rendered in the trailing position of the
-    /// page header. `inputsWidth` sizes a split panel's inputs pane.
+    /// Everything the application shell renders from, as one value.
+    type AppShellProps = {
+        /// The sidebar's inputs — the unit its memo boundary compares.
+        Sidebar: SidebarProps
+        /// The active page; its `PageContent` case decides the inner layout.
+        Content: PageContent
+        /// A fixed panel on the right of the screen (the AI assistant).
+        SidePanel: ReactElement option
+        /// The trailing action of the page header (the AI chat toggle).
+        HeaderAction: ReactElement option
+        /// The header's identity slot, which an auth companion renders
+        /// through (Clerk's `UserButton`); read it with `headerIdentityAction`.
+        IdentityAction: ReactElement option
+        /// How wide a split panel's inputs pane is.
+        InputsWidth: InputsPaneWidth
+    }
+
+    /// Application shell: the sidebar behind its own memo boundary, the page
+    /// header with its two trailing slots, the active page's content and the
+    /// optional side panel. The sidebar re-renders only when a value in
+    /// `props.Sidebar` changes, not every time the shell does; the header
+    /// reads the active entry's name and icon from `props.Sidebar.Sections`.
     [<ReactComponent>]
-    let AppShellWith
-        (sidebar: SidebarProps)
-        (content: PageContent)
-        (sidePanel: ReactElement option)
-        (headerAction: ReactElement option)
-        (inputsWidth: InputsPaneWidth)
-        =
+    let AppShell (props: AppShellProps) =
         let messages = (MessageCatalogProvider.useMessages ()).Shell
 
         appShellFrame
             messages
-            sidebar.AppName
-            sidebar.Sections
-            sidebar.SelectedModule
-            (fun () -> ReactLegacy.createElement (unbox<ReactElement> memoisedSidebar, box sidebar))
-            content
-            sidePanel
-            headerAction
-            inputsWidth
+            props.Sidebar.AppName
+            props.Sidebar.Sections
+            props.Sidebar.SelectedModule
+            (fun () -> ReactLegacy.createElement (unbox<ReactElement> memoisedSidebar, box props.Sidebar))
+            props.Content
+            props.SidePanel
+            props.HeaderAction
+            props.IdentityAction
+            props.InputsWidth
 
     /// Panel component - container with background
     module Panel =

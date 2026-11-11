@@ -218,10 +218,11 @@ type RiskAcknowledgements = {
     /// Phase 9m.B — explicit opt-in to running RAG with no durable
     /// backing (neither an `IBlobStorage` nor an `IVectorStore`
     /// override) in a deployment that otherwise carries persistent
-    /// authenticated storage. The in-memory vector store writes through
-    /// a null blob store that DISCARDS bytes, so the corpus starts
-    /// EMPTY after every process restart with no further signal.
-    /// Default `false` — `RagPersistenceValidator` refuses startup on a
+    /// authenticated storage. The in-process index then persists only
+    /// through the deployment's default local file store (`./data`), which
+    /// a container restart or a replacement instance does not keep, so the
+    /// corpus starts EMPTY there with no further signal.
+    /// Default `false` — `ragPersistenceValidator` refuses startup on a
     /// persistent deployment. Set `true` (or
     /// `TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=1`) for a deployment that
     /// deliberately re-ingests its corpus on boot (a build-time-seeded

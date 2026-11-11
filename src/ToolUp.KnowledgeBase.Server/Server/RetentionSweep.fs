@@ -15,7 +15,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
 
-// ─── Phase 512 — per-scope age-based KB retention sweep ──────────────
+// ─── Per-scope age-based KB retention sweep ──────────────
 //
 // The purge half of Phase 512 (the quota half lives at the upload
 // boundary in `Api/Documents.fs`). A composed `KnowledgeRetentionPolicy`
@@ -160,171 +160,180 @@ let sweepScope
         if KnowledgeRetentionPolicy.isInert policy then
             return RetentionSweepReport.noOp scopeId container 0
         else
-            let! index = loadIndex storage container
-            let expired = KnowledgeRetentionPolicy.selectExpired now policy index
+            match! loadIndex storage container with
+            | Error error ->
+                return {
+                    RetentionSweepReport.noOp scopeId container 0 with
+                        Failures = [ IndexReadError.describe error ]
+                }
+            | Ok index ->
+                let expired = KnowledgeRetentionPolicy.selectExpired now policy index
 
-            if expired.IsEmpty then
-                return RetentionSweepReport.noOp scopeId container index.Length
-            else
-                let vectorScope = vectorScopeOf container
-                let hashIndex = contentHashIndex storage container
+                if expired.IsEmpty then
+                    return RetentionSweepReport.noOp scopeId container index.Length
+                else
+                    let vectorScope = vectorScopeOf container
+                    let hashIndex = contentHashIndex storage container
 
-                // Remove ONE expired document. `Ok doc` when its retrieval
-                // entries, raw blob and hash ref all went; `Error (orphans,
-                // reason)` when the Phase 115 fan-out was not clean or
-                //  a blob delete was refused — the caller then
-                // leaves it listed so the next sweep retries it.
-                let purgeOne (doc: KnowledgeDocument) : Async<Result<KnowledgeDocument, int * string>> = async {
-                    let! report =
-                        match lifecycle with
-                        | Some l -> l.DeleteDocument vectorScope doc.Id doc.ChunkCount
-                        | None -> async.Return IIndexLifecycle.IndexLifecycleReport.empty
+                    // Remove ONE expired document. `Ok doc` when its retrieval
+                    // entries, raw blob and hash ref all went; `Error (orphans,
+                    // reason)` when the Phase 115 fan-out was not clean or
+                    //  a blob delete was refused — the caller then
+                    // leaves it listed so the next sweep retries it.
+                    let purgeOne (doc: KnowledgeDocument) : Async<Result<KnowledgeDocument, int * string>> = async {
+                        let! report =
+                            match lifecycle with
+                            | Some l -> l.DeleteDocument vectorScope doc.Id doc.ChunkCount
+                            | None -> async.Return IIndexLifecycle.IndexLifecycleReport.empty
 
-                    if IIndexLifecycle.IndexLifecycleReport.isClean report then
-                        let rawBlobName = sprintf "knowledge/%s/%s" doc.Id doc.FileName
+                        if IIndexLifecycle.IndexLifecycleReport.isClean report then
+                            let rawBlobName = sprintf "knowledge/%s/%s" doc.Id doc.FileName
 
-                        // A note's body is not at the
-                        // convention path (see `noteBodyBlobName`); the
-                        // same branch `deleteDocument` takes, so an
-                        // expired note leaves no residual blob either.
-                        let blobs = [
-                            rawBlobName
-                            match doc.Source with
-                            | Note _ -> noteBodyBlobName doc.Id
-                            | UploadedFile
-                            | FromNarrative _ -> ()
-                        ]
+                            // A note's body is not at the
+                            // convention path (see `noteBodyBlobName`); the
+                            // same branch `deleteDocument` takes, so an
+                            // expired note leaves no residual blob either.
+                            let blobs = [
+                                rawBlobName
+                                match doc.Source with
+                                | Note _ -> noteBodyBlobName doc.Id
+                                | UploadedFile
+                                | FromNarrative _ -> ()
+                            ]
 
-                        // A refused delete leaves the bytes at
-                        // rest, so the document is NOT purged: it stays
-                        // listed (with its hash ref) and the next sweep
-                        // retries it, exactly as for an unclean fan-out.
-                        let refused = ResizeArray<string>()
+                            // A refused delete leaves the bytes at
+                            // rest, so the document is NOT purged: it stays
+                            // listed (with its hash ref) and the next sweep
+                            // retries it, exactly as for an unclean fan-out.
+                            let refused = ResizeArray<string>()
 
-                        for blob in List.distinct blobs do
-                            match! storage.Delete(container, blob) with
-                            | Ok() -> ()
-                            | Error e -> refused.Add(sprintf "%s (%s)" blob e)
+                            for blob in List.distinct blobs do
+                                match! storage.Delete(container, blob) with
+                                | Ok() -> ()
+                                | Error e -> refused.Add(sprintf "%s (%s)" blob e)
 
-                        if refused.Count > 0 then
-                            let stillAtRest = String.concat "; " refused
+                            if refused.Count > 0 then
+                                let stillAtRest = String.concat "; " refused
+
+                                logger.Warn(
+                                    sprintf
+                                        "[KnowledgeBase] Retention sweep left %s in scope %s — blobs at rest: %s. The document stays listed and the next sweep retries it."
+                                        doc.Id
+                                        scopeId
+                                        stillAtRest
+                                )
+
+                                return Error(0, sprintf "%s (%s) — blobs at rest: %s" doc.Id doc.FileName stillAtRest)
+                            else
+                                match doc.ContentHash with
+                                | Some hash -> do! hashIndex.Remove hash doc.Id
+                                | None -> ()
+
+                                clearStatus doc.Id
+                                do! forgetIngestionAttempt storage container doc.Id
+                                return Ok doc
+                        else
+                            let survivors = IIndexLifecycle.IndexLifecycleReport.summarise report
 
                             logger.Warn(
                                 sprintf
-                                    "[KnowledgeBase] Retention sweep left %s in scope %s — blobs at rest: %s. The document stays listed and the next sweep retries it."
+                                    "[KnowledgeBase] Retention sweep left %s in scope %s — %s. The document stays listed and the next sweep retries it."
                                     doc.Id
                                     scopeId
-                                    stillAtRest
+                                    survivors
                             )
 
-                            return Error(0, sprintf "%s (%s) — blobs at rest: %s" doc.Id doc.FileName stillAtRest)
-                        else
-                            match doc.ContentHash with
-                            | Some hash -> do! hashIndex.Remove hash doc.Id
-                            | None -> ()
-
-                            clearStatus doc.Id
-                            do! forgetIngestionAttempt storage container doc.Id
-                            return Ok doc
-                    else
-                        let survivors = IIndexLifecycle.IndexLifecycleReport.summarise report
-
-                        logger.Warn(
-                            sprintf
-                                "[KnowledgeBase] Retention sweep left %s in scope %s — %s. The document stays listed and the next sweep retries it."
-                                doc.Id
-                                scopeId
-                                survivors
-                        )
-
-                        return
-                            Error(report.SurvivingChunkIds.Length, sprintf "%s (%s) — %s" doc.Id doc.FileName survivors)
-                }
-
-                // Sequential by design: the fan-out mutates shared
-                // retrieval indexes and `index.json` is rewritten once at
-                // the end, so concurrency here would buy little and race
-                // the container lock.
-                let rec purgeEach
-                    (remaining: KnowledgeDocument list)
-                    (acc: Result<KnowledgeDocument, int * string> list)
-                    : Async<Result<KnowledgeDocument, int * string> list> =
-                    async {
-                        match remaining with
-                        | [] -> return List.rev acc
-                        | doc :: rest ->
-                            let! outcome = purgeOne doc
-                            return! purgeEach rest (outcome :: acc)
+                            return
+                                Error(
+                                    report.SurvivingChunkIds.Length,
+                                    sprintf "%s (%s) — %s" doc.Id doc.FileName survivors
+                                )
                     }
 
-                let! outcomes = purgeEach expired []
+                    // Sequential by design: the fan-out mutates shared
+                    // retrieval indexes and `index.json` is rewritten once at
+                    // the end, so concurrency here would buy little and race
+                    // the container lock.
+                    let rec purgeEach
+                        (remaining: KnowledgeDocument list)
+                        (acc: Result<KnowledgeDocument, int * string> list)
+                        : Async<Result<KnowledgeDocument, int * string> list> =
+                        async {
+                            match remaining with
+                            | [] -> return List.rev acc
+                            | doc :: rest ->
+                                let! outcome = purgeOne doc
+                                return! purgeEach rest (outcome :: acc)
+                        }
 
-                let purgedDocs = outcomes |> List.choose Result.toOption
+                    let! outcomes = purgeEach expired []
 
-                let failedOutcomes =
-                    outcomes
-                    |> List.choose (function
-                        | Error e -> Some e
-                        | Ok _ -> None)
+                    let purgedDocs = outcomes |> List.choose Result.toOption
 
-                let orphanChunks = failedOutcomes |> List.sumBy fst
-                let failures = failedOutcomes |> List.map snd
-                let purgedIds = purgedDocs |> List.map _.Id
+                    let failedOutcomes =
+                        outcomes
+                        |> List.choose (function
+                            | Error e -> Some e
+                            | Ok _ -> None)
 
-                if not purgedIds.IsEmpty then
-                    // The purged entries are removed from the index
-                    // as it stands at the write, through the guarded writer.
-                    // The snapshot read at the top of the sweep is stale by now:
-                    // writing it back dropped every document uploaded while the
-                    // fan-out ran.
-                    do! removeIndexEntries storage container purgedIds
-                    KnowledgeBase.ServerInventory.invalidateInventoryCache container
+                    let orphanChunks = failedOutcomes |> List.sumBy fst
+                    let failures = failedOutcomes |> List.map snd
+                    let purgedIds = purgedDocs |> List.map _.Id
 
-                let reclaimed = purgedDocs |> List.sumBy _.SizeBytes
+                    if not purgedIds.IsEmpty then
+                        // The purged entries are removed from the index
+                        // as it stands at the write, through the guarded writer.
+                        // The snapshot read at the top of the sweep is stale by now:
+                        // writing it back dropped every document uploaded while the
+                        // fan-out ran.
+                        do! removeIndexEntries storage container purgedIds
+                        KnowledgeBase.ServerInventory.invalidateInventoryCache container
 
-                let maxAgeSeconds =
-                    policy.MaxAge
-                    |> Option.map (fun a -> int64 a.TotalSeconds)
-                    |> Option.defaultValue 0L
+                    let reclaimed = purgedDocs |> List.sumBy _.SizeBytes
 
-                // GP 6 — one row per run that removed something. A run
-                // that expired nothing writes no row: a purge trail
-                // records deletions, not the absence of them.
-                if not purgedIds.IsEmpty then
-                    do!
-                        auditLog.Record(
-                            AuditScope.shard scopeId,
-                            AuditSubject.system "KnowledgeRetentionSweep",
-                            KnowledgeAuditEvent.event (
-                                KnowledgeDocumentsPurged {
-                                    ScopeId = scopeId
-                                    DocumentIds = purgedIds
-                                    PurgedCount = purgedIds.Length
-                                    ReclaimedBytes = reclaimed
-                                    MaxAgeSeconds = maxAgeSeconds
-                                    OrphanChunkCount = orphanChunks
-                                }
+                    let maxAgeSeconds =
+                        policy.MaxAge
+                        |> Option.map (fun a -> int64 a.TotalSeconds)
+                        |> Option.defaultValue 0L
+
+                    // GP 6 — one row per run that removed something. A run
+                    // that expired nothing writes no row: a purge trail
+                    // records deletions, not the absence of them.
+                    if not purgedIds.IsEmpty then
+                        do!
+                            auditLog.Record(
+                                AuditScope.shard scopeId,
+                                AuditSubject.system "KnowledgeRetentionSweep",
+                                KnowledgeAuditEvent.event (
+                                    KnowledgeDocumentsPurged {
+                                        ScopeId = scopeId
+                                        DocumentIds = purgedIds
+                                        PurgedCount = purgedIds.Length
+                                        ReclaimedBytes = reclaimed
+                                        MaxAgeSeconds = maxAgeSeconds
+                                        OrphanChunkCount = orphanChunks
+                                    }
+                                )
                             )
+                            |> AuditRow.orRefuse
+
+                        logger.Info(
+                            sprintf
+                                "[KnowledgeBase] Retention sweep purged %d document(s) from scope %s (%d bytes reclaimed)."
+                                purgedIds.Length
+                                scopeId
+                                reclaimed
                         )
-                        |> AuditRow.orRefuse
 
-                    logger.Info(
-                        sprintf
-                            "[KnowledgeBase] Retention sweep purged %d document(s) from scope %s (%d bytes reclaimed)."
-                            purgedIds.Length
-                            scopeId
-                            reclaimed
-                    )
-
-                return {
-                    ScopeId = scopeId
-                    Container = container
-                    Examined = index.Length
-                    Purged = purgedIds
-                    ReclaimedBytes = reclaimed
-                    OrphanChunkCount = orphanChunks
-                    Failures = failures
-                }
+                    return {
+                        ScopeId = scopeId
+                        Container = container
+                        Examined = index.Length
+                        Purged = purgedIds
+                        ReclaimedBytes = reclaimed
+                        OrphanChunkCount = orphanChunks
+                        Failures = failures
+                    }
     }
 
 /// Handler name the sweep job registers under. Namespaced against the

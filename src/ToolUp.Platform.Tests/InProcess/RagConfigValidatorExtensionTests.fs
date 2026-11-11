@@ -87,14 +87,14 @@ let private expectErrorNaming (fragments: string list) (result: ValidationResult
 // ─── Gap 3 — RAG durability + its escape hatch ──────────────────────
 
 let private persistenceTests =
-    testList "Gap 3 — RagPersistenceValidator: the ephemeral-index escape hatch" [
+    testList "Gap 3 — ragPersistenceValidator: the ephemeral-index escape hatch" [
         test "persistent deployment, no durable backing → Error (the refusal is unchanged)" {
             let cfg = configWith Surfaces.individual
 
-            RagPersistenceValidator(cfg, false, false)
+            ragPersistenceValidator (cfg, false, false)
             |> run
             |> expectErrorNaming [
-                "DISCARDS bytes"
+                "does not keep"
                 // The refusal must now also name the way past it —
                 // before this phase there was none, so a deliberately
                 // ephemeral deployment simply could not boot.
@@ -119,22 +119,22 @@ let private persistenceTests =
             // stays legible in /dev/inspect afterwards. A hatch that
             // returned Ok would make a deployment that loses its corpus
             // on every restart indistinguishable from one that does not.
-            RagPersistenceValidator(cfg, false, false)
+            ragPersistenceValidator (cfg, false, false)
             |> run
             |> expectWarningNaming [ "EPHEMERAL by explicit operator opt-in"; "re-ingested after every restart" ]
         }
 
         test "GREEN — blob storage supplied → Ok, hatch or no hatch" {
             let cfg = configWith Surfaces.individual
-            Expect.equal (run (RagPersistenceValidator(cfg, true, false))) Ok "IBlobStorage is durable backing"
-            Expect.equal (run (RagPersistenceValidator(cfg, false, true))) Ok "an IVectorStore override is too"
+            Expect.equal (run (ragPersistenceValidator (cfg, true, false))) Ok "IBlobStorage is durable backing"
+            Expect.equal (run (ragPersistenceValidator (cfg, false, true))) Ok "an IVectorStore override is too"
         }
 
         test "GATING — an ephemeral deployment still gets a Warning, never the refusal" {
             // Anonymous is non-persistent BY DESIGN: refusing it would
             // be refusing the shape working as intended.
             configWith Surfaces.anonymous
-            |> fun cfg -> RagPersistenceValidator(cfg, false, false)
+            |> fun cfg -> ragPersistenceValidator (cfg, false, false)
             |> run
             |> expectWarningNaming [ "Surfaces are ephemeral" ]
         }
@@ -143,9 +143,9 @@ let private persistenceTests =
 // ─── Gap 4 — the dev-only embedder in a production shape ────────────
 
 let private localEmbedderTests =
-    testList "Gap 4 — LocalEmbeddingProviderInProductionModeValidator" [
+    testList "Gap 4 — localEmbeddingProviderInProductionModeValidator" [
         test "RED — local embedder in an Individual deployment → Warning naming the remedy" {
-            LocalEmbeddingProviderInProductionModeValidator(configWith Surfaces.individual, localEmbedder)
+            localEmbeddingProviderInProductionModeValidator (configWith Surfaces.individual, localEmbedder)
             |> run
             |> expectWarningNaming [
                 "Individual"
@@ -156,14 +156,14 @@ let private localEmbedderTests =
         }
 
         test "RED — AuthenticatedEphemeral (trial) is production-shaped too" {
-            LocalEmbeddingProviderInProductionModeValidator(configWith Surfaces.trial, localEmbedder)
+            localEmbeddingProviderInProductionModeValidator (configWith Surfaces.trial, localEmbedder)
             |> run
             |> expectWarningNaming [ "AuthenticatedEphemeral" ]
         }
 
         test "GREEN — a hosted, stateless embedder is silent in the same deployment" {
             Expect.equal
-                (run (LocalEmbeddingProviderInProductionModeValidator(configWith Surfaces.individual, hostedEmbedder)))
+                (run (localEmbeddingProviderInProductionModeValidator (configWith Surfaces.individual, hostedEmbedder)))
                 Ok
                 "the concern is the local embedder's statefulness, not the deployment shape"
         }
@@ -180,19 +180,19 @@ let private localEmbedderTests =
             }
 
             Expect.equal
-                (run (LocalEmbeddingProviderInProductionModeValidator(cfg, localEmbedder)))
+                (run (localEmbeddingProviderInProductionModeValidator (cfg, localEmbedder)))
                 Ok
                 "explicit, named opt-in"
         }
 
         test "GATING — an Anonymous-only deployment is not nagged" {
             Expect.equal
-                (run (LocalEmbeddingProviderInProductionModeValidator(configWith Surfaces.anonymous, localEmbedder)))
+                (run (localEmbeddingProviderInProductionModeValidator (configWith Surfaces.anonymous, localEmbedder)))
                 Ok
                 "a public demo has no per-user corpus whose quality could drift"
         }
 
-        test "GATING — Team mode belongs to TeamModeLocalEmbedderValidator, and ONLY to it" {
+        test "GATING — Team mode belongs to teamModeLocalEmbedderValidator, and ONLY to it" {
             // The load-bearing case for the whole gating story: the two
             // validators name the same remedy, so if both fired on a
             // team deployment the operator would be told once to swap
@@ -202,11 +202,11 @@ let private localEmbedderTests =
             let cfg = configWith Surfaces.team
 
             Expect.equal
-                (run (LocalEmbeddingProviderInProductionModeValidator(cfg, localEmbedder)))
+                (run (localEmbeddingProviderInProductionModeValidator (cfg, localEmbedder)))
                 Ok
                 "this validator stands down on team shapes"
 
-            TeamModeLocalEmbedderValidator(cfg, localEmbedder, false)
+            teamModeLocalEmbedderValidator (cfg, localEmbedder, false)
             |> run
             |> expectWarningNaming [ "IDF dictionary is shared across all teams" ]
         }
@@ -225,7 +225,7 @@ let private localEmbedderTests =
                     }
             }
 
-            Expect.equal (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, false))) Ok "same flag, team half"
+            Expect.equal (run (teamModeLocalEmbedderValidator (cfg, localEmbedder, false))) Ok "same flag, team half"
         }
 
         // ── Phase 14z — the scope-keyed lift (red / green / gating) ──
@@ -237,7 +237,7 @@ let private localEmbedderTests =
             // so the finding is still live and the message must now point
             // at the cheaper fix (compose the scoped family) as well as
             // the expensive one (swap embedder).
-            TeamModeLocalEmbedderValidator(configWith Surfaces.team, localEmbedder, false)
+            teamModeLocalEmbedderValidator (configWith Surfaces.team, localEmbedder, false)
             |> run
             |> expectWarningNaming [ "IDF dictionary is shared across all teams"; "createScopedPersistent" ]
         }
@@ -253,7 +253,7 @@ let private localEmbedderTests =
                 "the lift must not lean on the escape hatch"
 
             Expect.equal
-                (run (TeamModeLocalEmbedderValidator(cfg, localEmbedder, true)))
+                (run (teamModeLocalEmbedderValidator (cfg, localEmbedder, true)))
                 Ok
                 "per-scope IDF state closes the leak structurally"
         }
@@ -265,23 +265,23 @@ let private localEmbedderTests =
             // that the new argument narrowed exactly one condition and
             // widened nothing.
             Expect.equal
-                (run (TeamModeLocalEmbedderValidator(configWith Surfaces.team, hostedEmbedder, false)))
+                (run (teamModeLocalEmbedderValidator (configWith Surfaces.team, hostedEmbedder, false)))
                 Ok
                 "a stateless embedder has no IDF dictionary to share"
 
             Expect.equal
-                (run (TeamModeLocalEmbedderValidator(configWith Surfaces.individual, localEmbedder, false)))
+                (run (teamModeLocalEmbedderValidator (configWith Surfaces.individual, localEmbedder, false)))
                 Ok
-                "the non-team half belongs to LocalEmbeddingProviderInProductionModeValidator"
+                "the non-team half belongs to localEmbeddingProviderInProductionModeValidator"
         }
     ]
 
 // ─── Gap 6 — nothing will ever be indexed ───────────────────────────
 
 let private handlerTests =
-    testList "Gap 6 — RAGHandlersRegisteredValidator" [
+    testList "Gap 6 — ragHandlersRegisteredValidator" [
         test "RED — data types registered, no handlers → Warning listing the unhandled ids" {
-            RAGHandlersRegisteredValidator([ "SalesData"; "OptimisationData" ], [], false)
+            ragHandlersRegisteredValidator ([ "SalesData"; "OptimisationData" ], [], false)
             |> run
             |> expectWarningNaming [
                 // The ids are the actionable part — "add a handler" is
@@ -295,7 +295,7 @@ let private handlerTests =
 
         test "GREEN — one handler present → Ok" {
             Expect.equal
-                (run (RAGHandlersRegisteredValidator([ "SalesData" ], [ "SalesData" ], false)))
+                (run (ragHandlersRegisteredValidator ([ "SalesData" ], [ "SalesData" ], false)))
                 Ok
                 "the deployment indexes something"
         }
@@ -306,13 +306,13 @@ let private handlerTests =
             // exactly this condition. Warning here would fire on every
             // static-doc deployment, forever.
             Expect.equal
-                (run (RAGHandlersRegisteredValidator([ "SalesData" ], [], true)))
+                (run (ragHandlersRegisteredValidator ([ "SalesData" ], [], true)))
                 Ok
                 "withRetrievalPipeline is the documented no-handler shape"
         }
 
         test "GATING — no data types at all → Ok (a document-only / KB-only deployment)" {
-            Expect.equal (run (RAGHandlersRegisteredValidator([], [], false))) Ok "nothing to vectorise"
+            Expect.equal (run (ragHandlersRegisteredValidator ([], [], false))) Ok "nothing to vectorise"
         }
     ]
 
@@ -332,13 +332,13 @@ let private inBounds: RagConfigBounds = {
 }
 
 let private boundsTests =
-    testList "Gap 7 — RAGConfigBoundsValidator" [
+    testList "Gap 7 — ragConfigBoundsValidator" [
         test "GREEN — the shipped defaults are silent" {
-            Expect.equal (run (RAGConfigBoundsValidator inBounds)) Ok "an untuned deployment must never be nagged"
+            Expect.equal (run (ragConfigBoundsValidator inBounds)) Ok "an untuned deployment must never be nagged"
         }
 
         test "RED — withTopK 200 refuses boot with a bounds message (the acceptance criterion)" {
-            RAGConfigBoundsValidator { inBounds with TopK = 200 }
+            ragConfigBoundsValidator { inBounds with TopK = 200 }
             |> run
             |> expectErrorNaming [ "TopK = 200"; "outside [1, 100]"; "RagOptions.withTopK" ]
         }
@@ -347,7 +347,7 @@ let private boundsTests =
             // The severity split is the interesting part: 60 is a real
             // (if unusual) choice, so refusing it would be the SDK
             // overruling an operator. 200 is not.
-            RAGConfigBoundsValidator { inBounds with TopK = 60 }
+            ragConfigBoundsValidator { inBounds with TopK = 60 }
             |> run
             |> expectWarningNaming [ "TopK = 60"; "legal but unusually high" ]
         }
@@ -355,13 +355,13 @@ let private boundsTests =
         test "RED — SnippetCharLimit below 32 (the setter clamps only to 16)" {
             // Precisely the hole this validator exists to close: the
             // setter's `max 16` accepts 20, so nothing today rejects it.
-            RAGConfigBoundsValidator { inBounds with SnippetCharLimit = 20 }
+            ragConfigBoundsValidator { inBounds with SnippetCharLimit = 20 }
             |> run
             |> expectErrorNaming [ "SnippetCharLimit = 20"; "outside [32, 8192]" ]
         }
 
         test "RED — IngestionConcurrency above 64" {
-            RAGConfigBoundsValidator {
+            ragConfigBoundsValidator {
                 inBounds with
                     IngestionConcurrency = 500
             }
@@ -370,7 +370,7 @@ let private boundsTests =
         }
 
         test "RED — IngestionQueueCapacity below 100" {
-            RAGConfigBoundsValidator {
+            ragConfigBoundsValidator {
                 inBounds with
                     IngestionQueueCapacity = 10
             }
@@ -379,14 +379,14 @@ let private boundsTests =
         }
 
         test "RED — MinScore outside the cosine range" {
-            RAGConfigBoundsValidator { inBounds with MinScore = Some 1.5 }
+            ragConfigBoundsValidator { inBounds with MinScore = Some 1.5 }
             |> run
             |> expectErrorNaming [ "MinScore = 1.5"; "outside [0.0, 1.0]" ]
         }
 
         test "GREEN — MinScore = None is not a bound violation" {
             Expect.equal
-                (run (RAGConfigBoundsValidator { inBounds with MinScore = None }))
+                (run (ragConfigBoundsValidator { inBounds with MinScore = None }))
                 Ok
                 "None disables the gate; it is not an out-of-range value"
         }
@@ -397,7 +397,7 @@ let private boundsTests =
             // that has no effect.
             Expect.equal
                 (run (
-                    RAGConfigBoundsValidator {
+                    ragConfigBoundsValidator {
                         inBounds with
                             MmrLambda = 7.0
                             MmrEnabled = false
@@ -406,7 +406,7 @@ let private boundsTests =
                 Ok
                 "λ is not read unless MMR is on"
 
-            RAGConfigBoundsValidator {
+            ragConfigBoundsValidator {
                 inBounds with
                     MmrLambda = 7.0
                     MmrEnabled = true
@@ -419,7 +419,7 @@ let private boundsTests =
             // An operator fixing a config should learn everything wrong
             // with it in one cycle. Reporting the first violation only
             // turns a three-knob typo into three restarts.
-            RAGConfigBoundsValidator {
+            ragConfigBoundsValidator {
                 inBounds with
                     TopK = 0
                     SnippetCharLimit = 99999
@@ -477,9 +477,9 @@ let private clampTests =
                 |> ToolUp.RAG.RAGCompose.RagOptions.withMmrLambda -2.0
                 |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionConcurrency 0
 
-            Expect.equal (run (RAGConfigBoundsValidator(boundsOf app))) Ok "the clamped values are in bounds"
+            Expect.equal (run (ragConfigBoundsValidator (boundsOf app))) Ok "the clamped values are in bounds"
 
-            match run (RetrievalDefaultsValidator app.RetrievalDefaultsClampLog) with
+            match run (retrievalDefaultsValidator app.RetrievalDefaultsClampLog) with
             | Warning message ->
                 for knob in [ "TopK"; "MinScore"; "MmrLambda"; "IngestionConcurrency" ] do
                     Expect.stringContains message knob (sprintf "the %s clamp is reported" knob)
@@ -496,7 +496,7 @@ let private clampTests =
                     EnableMmr = true
             }
 
-            RAGConfigBoundsValidator(boundsOf app)
+            ragConfigBoundsValidator (boundsOf app)
             |> run
             |> expectErrorNaming [ "IngestionConcurrency = 0"; "MmrLambda = 5" ]
         }
@@ -508,7 +508,7 @@ let private clampTests =
                 |> ToolUp.RAG.RAGCompose.RagOptions.withSnippetCharLimit 99999
                 |> ToolUp.RAG.RAGCompose.RagOptions.withIngestionQueueCapacity 10
 
-            RAGConfigBoundsValidator(boundsOf app)
+            ragConfigBoundsValidator (boundsOf app)
             |> run
             |> expectErrorNaming [ "TopK = 200"; "SnippetCharLimit = 99999"; "IngestionQueueCapacity = 10" ]
         }
@@ -581,8 +581,43 @@ let private contributorTests =
         }
     ]
 
+// The `Refuse` overflow policy's saturation window is a validator finding at
+// `Error`, read wherever validators are read, not an exception raised from the
+// fire-and-forget post-save hook.
+let private refuseWindowTests =
+    let single = {
+        ServerConfig.defaults with
+            MultiInstance = {
+                ServerConfig.defaults.MultiInstance with
+                    ReplicaCount = 1
+            }
+    }
+
+    let validate policy dropped =
+        run (ragIngestionInstanceValidator (single, false, policy, (fun () -> dropped)))
+
+    testList "Refuse overflow: the saturation window is an Error finding" [
+        testCase "Refuse at the threshold reports the dropped count at Error"
+        <| fun _ ->
+            validate ToolUp.RAG.IngestionTypes.Refuse RefuseSaturationThreshold
+            |> expectErrorNaming [ "sustainedly saturated"; string RefuseSaturationThreshold; "Refuse" ]
+
+        testCase "Refuse below the threshold is Ok"
+        <| fun _ ->
+            Expect.equal
+                (validate ToolUp.RAG.IngestionTypes.Refuse (RefuseSaturationThreshold - 1))
+                Ok
+                "a spike below the window is not sustained saturation"
+
+        testCase "DropWrite and Block never report the window"
+        <| fun _ ->
+            Expect.equal (validate ToolUp.RAG.IngestionTypes.DropWrite 100) Ok "DropWrite drops quietly by contract"
+            Expect.equal (validate ToolUp.RAG.IngestionTypes.Block 100) Ok "Block never drops"
+    ]
+
 let tests =
     testList "Phase 9m.B — RAG-specific config validators (extension)" [
+        refuseWindowTests
         persistenceTests
         localEmbedderTests
         handlerTests

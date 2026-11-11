@@ -21,7 +21,7 @@ open ToolUp.Platform.Compose
 // the in-memory default the `IngestionQueue` is a process-local
 // `System.Threading.Channels` channel with nothing to redeliver from
 // (see `IngestionTypes.IngestionQueue`'s XML doc +
-// `RagConfigValidator.RagIngestionInstanceValidator`). On a crash
+// `RagConfigValidator.ragIngestionInstanceValidator`). On a crash
 // mid-ingestion, the document stays in the index in a non-terminal
 // status (`Queued`, `ExtractingText`, or `Embedding(n, m)`); the KB UI
 // shows it as still-progressing; retrieval misses its un-indexed chunks;
@@ -72,7 +72,7 @@ let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
         member _.Name = "knowledge-base-index"
 
         member _.ListInterrupted(scope) = async {
-            let! docs = loadIndex storage scope
+            let! docs = loadListing indexLogger storage scope
 
             return
                 docs

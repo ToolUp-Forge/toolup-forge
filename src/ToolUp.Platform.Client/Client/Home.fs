@@ -383,16 +383,8 @@ let private renderOverview (msgs: HomeMessages) (model: Model) (dispatch: Msg ->
         ]
     ]
 
-/// Phase 751 — the view body as a React COMPONENT, for the same reason
-/// `HealthMonitorUI.HealthMonitorBody` / `AdminHome.AdminHomeHeader` are
-/// one: `view` is invoked inline by the shell's own render, so a hook
-/// called there would join the shell's hook order and break the moment
-/// the active module changed. `view` keeps its exact public signature
-/// and delegates.
-[<ReactComponent>]
-let private HomeBody (model: Model) (dispatch: Msg -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).Home
-
+/// The module's page, over the catalog section the view hands it.
+let private body (msgs: HomeMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
         prop.className "p-4"
         prop.children [
@@ -422,7 +414,8 @@ let private HomeBody (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) : ReactElement = HomeBody model dispatch
+let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(body ctx.Messages.Home model ctx.Dispatch)
 
 // ─── Module creation ─────────────────────────────────────────────
 
@@ -440,24 +433,18 @@ let moduleId = "_sdk.home"
 /// `ClientConfig.Shell.HomeRecents` — captured here and threaded into `init`
 /// so the per-user recents/pinning fetch + widget only activate when
 /// opted in (GP 13).
-let create (recents: bool) (config: ModuleLabel option) : ErasedModule =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Home"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.home
-
-    ToolUp.Platform.ClientModule.create {
-        Init = init recents
-        Update = update
-        Name = name
-        Icon = icon
+let builtIn (recents: bool) : BuiltIn<Model, Msg> = {
+    Id = moduleId
+    Defaults = {
+        Name = "Home"
+        Icon = ToolUp.Platform.Icons.home
     }
-    |> ToolUp.Platform.ClientModule.withId moduleId
-    // Phase 611 — the landing declares its rail slot rather than being
-    // recognised by id inside `buildSections`. Ungrouped no longer implies
-    // a position, so "renders as the leading sidebar entry" is now said
-    // here, at the construction site, instead of being a consequence of
-    // the sidebar's bucketing plus a hardcoded id list.
-    |> ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
-    |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.register
+    Group = None
+    NavRole = None
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAll
+    Init = fun _ -> init recents ()
+    Update = update
+    View = BuiltInView.Page view
+    Extend = ToolUp.Platform.ClientModule.withPlacement Toolup.Sidebar.LeadingSlot
+}

@@ -133,7 +133,8 @@ let tests =
                     singlePage "Reports" "Reports" (Some "Analytics")
                 ]
 
-                let sections = buildSections views (hiding [ "Sales" ])
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])
 
                 Expect.equal (railIds sections) [ "Reports" ] "only the un-hidden module is on the rail"
 
@@ -150,7 +151,8 @@ let tests =
                     ]
                 ]
 
-                let sections = buildSections views (hiding [ "Sales/sku" ])
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales/sku" ])
 
                 match moduleIn sections "Analytics" "Sales" with
                 | Some m ->
@@ -162,7 +164,10 @@ let tests =
 
             testCase "hiding a whole multi-page module takes its pages with it" (fun () ->
                 let views = [ multiPage "Sales" "Sales" (Some "Analytics") [ "/a", "A"; "/b", "B" ] ]
-                let sections = buildSections views (hiding [ "Sales" ])
+
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])
+
                 Expect.isEmpty (railIds sections) "no rail entries left")
 
             testCase "an empty HiddenEntryIds list changes nothing" (fun () ->
@@ -171,8 +176,12 @@ let tests =
                     singlePage "Reports" "Reports" None
                 ]
 
-                let before = buildSections views UserSidebarPreferences.empty
-                let after = buildSections views (hiding [])
+                let before =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views UserSidebarPreferences.empty
+
+                let after =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [])
+
                 Expect.equal (railIds after) (railIds before) "byte-for-byte the pre-572 rail (GP 11)")
 
             testCase "Home and the area switchers can never be hidden" (fun () ->
@@ -184,7 +193,12 @@ let tests =
                     singlePage "Sales" "Sales" None
                 ]
 
-                let sections = buildSections views (hiding [ HomeId; AdminAreaId; "Sales" ])
+                let sections =
+                    buildSections
+                        ToolUp.Platform.MessageCatalog.english.Sidebar
+                        views
+                        (hiding [ HomeId; AdminAreaId; "Sales" ])
+
                 let ids = railIds sections
 
                 Expect.isTrue (List.contains HomeId ids) "Home survives a hostile blob"
@@ -199,13 +213,17 @@ let tests =
         testList "buildSections — the Hidden items reveal section" [
             testCase "no hidden entries means no Hidden items section" (fun () ->
                 let views = [ singlePage "Sales" "Sales" None ]
-                let sections = buildSections views UserSidebarPreferences.empty
+
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views UserSidebarPreferences.empty
 
                 Expect.isFalse (sectionKeys sections |> List.contains HiddenKey) "the section is absent, not empty")
 
             testCase "a hidden entry is listed for restore, with its own name" (fun () ->
                 let views = [ singlePage "Sales" "Sales" (Some "Analytics") ]
-                let sections = buildSections views (hiding [ "Sales" ])
+
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])
 
                 match moduleIn sections HiddenKey "Sales" with
                 | Some entry ->
@@ -216,7 +234,9 @@ let tests =
 
             testCase "a hidden PAGE resolves to its page name, not its module's" (fun () ->
                 let views = [ multiPage "Sales" "Sales" (Some "Analytics") [ "/a", "Alpha"; "/b", "Beta" ] ]
-                let sections = buildSections views (hiding [ "Sales/b" ])
+
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales/b" ])
 
                 match moduleIn sections HiddenKey "Sales/b" with
                 | Some entry -> Expect.equal entry.Name "Beta" "the composite id resolved through the page index"
@@ -228,7 +248,9 @@ let tests =
                     singlePage "Reports" "Reports" (Some "Analytics")
                 ]
 
-                let sections = buildSections views (hiding [ "Sales" ])
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])
+
                 let keys = sectionKeys sections
 
                 Expect.equal (List.last keys) HiddenKey "rendered after every rail section"
@@ -247,7 +269,10 @@ let tests =
                         ExpandedGroups = Set.ofList [ HiddenKey ]
                 }
 
-                match buildSections views prefs |> List.tryFind (fun s -> s.Key = HiddenKey) with
+                match
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views prefs
+                    |> List.tryFind (fun s -> s.Key = HiddenKey)
+                with
                 | Some s -> Expect.isFalse s.IsCollapsed "expanded via the same overlay every section uses"
                 | None -> failwith "expected the Hidden items section")
 
@@ -257,7 +282,9 @@ let tests =
                 // nothing and reappears if the module does), but there is
                 // nothing to render.
                 let views = [ singlePage "Sales" "Sales" None ]
-                let sections = buildSections views (hiding [ "Ghost" ])
+
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Ghost" ])
 
                 Expect.isFalse
                     (sectionKeys sections |> List.contains HiddenKey)
@@ -269,7 +296,9 @@ let tests =
                     singlePage "Reports" "Reports" (Some "Analytics")
                 ]
 
-                let sections = buildSections views (hiding [ "Sales" ])
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])
+
                 let everyId = sections |> List.collect _.Modules |> List.map _.Id
 
                 Expect.equal
@@ -285,7 +314,11 @@ let tests =
                 // reading must not lose the header — the page is still
                 // theirs to read, it just has no row.
                 let views = [ multiPage "Sales" "Sales" None [ "/a", "Alpha"; "/b", "Beta" ] ]
-                let flat = buildSections views (hiding [ "Sales/b" ]) |> flatten
+
+                let flat =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales/b" ])
+                    |> flatten
+
                 let ids = flat |> List.map _.Id
 
                 Expect.isTrue (List.contains "Sales/b" ids) "the hidden page still resolves for the header"
@@ -302,7 +335,9 @@ let tests =
                 // and the palette — both derived upstream — unaffected.
                 let views = [ singlePage "Sales" "Sales" None; singlePage "Reports" "Reports" None ]
 
-                let sections = buildSections views (hiding [ "Sales" ])
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])
+
                 Expect.equal (railIds sections) [ "Reports" ] "the rail shrank"
 
                 Expect.equal
@@ -352,7 +387,8 @@ let tests =
                     singlePage "Reports" "Reports" (Some "Analytics")
                 ]
 
-                let sections = buildSections views loaded
+                let sections =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views loaded
 
                 Expect.isTrue (railIds sections |> List.contains "Sales") "the whole rail is intact"
 
@@ -414,16 +450,31 @@ let tests =
 
             testCase "the same preferences, re-derived, are the same rail" (fun () ->
                 Expect.isTrue
-                    (same (buildSections views (hiding [ "Sales" ])) (buildSections views (hiding [ "Sales" ])))
+                    (same
+                        (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ]))
+                        (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])))
                     "a fresh list of fresh records with the same content: no sidebar render")
 
             testCase "hiding a module, a page, and restoring each, is a change" (fun () ->
-                let none = buildSections views (hiding [])
-                Expect.isFalse (same none (buildSections views (hiding [ "Sales" ]))) "hiding a module"
-                Expect.isFalse (same none (buildSections views (hiding [ "Reports/b" ]))) "hiding a page"
+                let none =
+                    buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [])
 
                 Expect.isFalse
-                    (same (buildSections views (hiding [ "Sales" ])) none)
+                    (same
+                        none
+                        (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ])))
+                    "hiding a module"
+
+                Expect.isFalse
+                    (same
+                        none
+                        (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Reports/b" ])))
+                    "hiding a page"
+
+                Expect.isFalse
+                    (same
+                        (buildSections ToolUp.Platform.MessageCatalog.english.Sidebar views (hiding [ "Sales" ]))
+                        none)
                     "restoring it from the Hidden items section")
         ]
     ]

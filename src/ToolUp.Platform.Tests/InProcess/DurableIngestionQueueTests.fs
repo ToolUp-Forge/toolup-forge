@@ -4,7 +4,7 @@ module ToolUp.Platform.Tests.InProcess.DurableIngestionQueueTests
 //
 // The shipped ingestion queue is a process-local `Channels` channel, so
 // a restart mid-ingestion loses every queued document and
-// `RagIngestionInstanceValidator` refuses `ReplicaCount > 1`. Phase 509
+// `ragIngestionInstanceValidator` refuses `ReplicaCount > 1`. Phase 509
 // puts an `IIngestionQueue` seam over the queue and an
 // `IIngestionQueueStore` under it, so a durable backing can be composed.
 //
@@ -365,7 +365,7 @@ let private cfg (replicaCount: int) (escapeHatch: bool) : ServerConfig = {
 
 let private validate (config: ServerConfig) (durableQueue: bool) : ValidationResult =
     let v =
-        ToolUp.RAG.RagConfigValidator.RagIngestionInstanceValidator(config, durableQueue) :> IConfigValidator
+        ToolUp.RAG.RagConfigValidator.ragIngestionInstanceValidator (config, durableQueue, DropWrite, (fun () -> 0))
 
     v.Validate() |> Async.RunSynchronously
 

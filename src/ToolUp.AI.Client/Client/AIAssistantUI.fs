@@ -1011,31 +1011,19 @@ let private view model dispatch =
 
 // ─── Module creation ──────────────────────────────────────────────
 
-/// Create the built-in AI assistant as an ErasedModule.
-/// Mirrors the FileManagerUI.create pattern exactly.
-let create (branding: AIAssistantClientBranding option) : ErasedModule =
-    let name = branding |> Option.map _.Name |> Option.defaultValue "AI Assistant"
-
-    let icon =
-        branding |> Option.map _.Icon |> Option.defaultValue ToolUp.AI.Icons.aiAssistant
-
-    let route = "/" + name.ToLower().Replace(" ", "-")
-
-    // Companion-provided built-in — `Id` is reserved under the `_ai.`
-    // namespace so it can never collide with an app's RBAC-managed
-    // `ServerConfig.ModuleNames` key.
-    ToolUp.Platform.ClientModule.create {
-        Init = init
-        Update = update
-        Name = name
-        Icon = icon
+/// The built-in AI assistant (`ShellSlots.builtIn` builds its module).
+let builtIn (branding: AIAssistantClientBranding option) : BuiltIn<Model, Msg> = {
+    Id = "_ai.AIAssistant"
+    Defaults = {
+        Name = branding |> Option.map _.Name |> Option.defaultValue "AI Assistant"
+        Icon = branding |> Option.map _.Icon |> Option.defaultValue ToolUp.AI.Icons.aiAssistant
     }
-    |> ToolUp.Platform.ClientModule.withId "_ai.AIAssistant"
-    |> ToolUp.Platform.ClientModule.withView view
-    // Declared "AI" group so the assistant lands in a positionable
-    // section between the app's work groups and the Admin block —
-    // ungrouped (`_other`) would force it to the very bottom of the
-    // sidebar, below Admin.
-    |> ToolUp.Platform.ClientModule.withGroup "AI"
-    |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
-    |> ToolUp.Platform.ClientModule.register
+    Group = Some "AI"
+    NavRole = None
+    Area = Product
+    Visibility = ToolUp.Platform.Visibility.visibleToAuthenticated
+    Init = fun _ -> init ()
+    Update = update
+    View = BuiltInView.Page(fun model ctx -> PageContent.SplitPanel(view model ctx.Dispatch))
+    Extend = id
+}

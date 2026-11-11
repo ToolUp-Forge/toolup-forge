@@ -71,12 +71,8 @@ let localisedLabel (msgs: BootSourceMessages) (source: string) (fallback: string
 /// with a per-source Retry affordance. Returns `Html.none` when the
 /// list is empty (GP 13 — zero footprint on a clean boot).
 ///
-/// Phase 444 — localised through `msgs`. This is a NEW entry point
-/// rather than a parameter added to `banner`: `banner` is public
-/// surface, and widening its arity would read as a removal in the
-/// public-API baseline and break every caller. `banner` delegates here
-/// with the built-in English catalog, so its behaviour is unchanged.
-let bannerWith
+/// Localised through `msgs`, the resolved catalog's section.
+let banner
     (msgs: BootDegradationMessages)
     (degradations: BootDegradation list)
     (onRetry: string -> unit)
@@ -125,9 +121,3 @@ let bannerWith
                 ]
             ]
         ]
-
-/// Back-compat entry point — the pre-444 signature, rendering the
-/// built-in English catalog. Kept so existing callers (and the public
-/// surface) are unchanged; the shell calls `bannerWith`.
-let banner (degradations: BootDegradation list) (onRetry: string -> unit) (onDismiss: unit -> unit) : ReactElement =
-    bannerWith MessageCatalog.english.BootDegradation degradations onRetry onDismiss
