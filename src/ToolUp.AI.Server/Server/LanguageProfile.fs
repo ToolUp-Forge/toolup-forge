@@ -28,9 +28,10 @@ open ToolUp.Remoting.Json
 // not have.
 //
 // **The fragment is rendered once.** `register` renders the profile into a
-// prompt fragment and keeps it; `SystemPromptBuilder.languageProfile` serves
-// that one string on every turn. A deployment with no profile composes
-// nothing, and its prompt is byte-identical to what it was before.
+// prompt fragment and keeps it; `SystemPromptBuilder.promptFragments` serves
+// that one string on every turn (`PromptFragment.ofLanguageProfile`). A
+// deployment with no profile composes nothing, and its prompt is
+// byte-identical to what it was before.
 //
 // **The profile is the grammar.** `LanguageProfile.check` reads a
 // model-composed block, as wire JSON, and refuses, naming the node:

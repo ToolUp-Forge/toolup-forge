@@ -123,6 +123,31 @@ module PromptContext =
             member _.GetService(_) = null
         }
 
+/// A prompt fragment a registration rendered once: a language profile's, a
+/// pipeline profile's. Served by `SystemPromptBuilder.promptFragments`.
+type PromptFragment = {
+    /// What the fragment is, as the boot log names it.
+    Name: string
+    /// The fragment, as registration rendered it.
+    Text: string
+}
+
+[<RequireQualifiedAccess>]
+module PromptFragment =
+
+    /// A fragment named `name`, holding `text`.
+    let create (name: string) (text: string) : PromptFragment = { Name = name; Text = text }
+
+    /// A registered language profile's fragment.
+    let ofLanguageProfile (registered: RegisteredLanguageProfile) : PromptFragment =
+        create
+            (sprintf "Language profile '%s': %d kind(s)" registered.Profile.Name registered.Profile.Kinds.Count)
+            registered.Fragment
+
+    /// The fragment's size in UTF-8 bytes.
+    let bytes (fragment: PromptFragment) : int =
+        System.Text.Encoding.UTF8.GetByteCount fragment.Text
+
 /// Builds the system prompt sent to the AI provider for a given request.
 /// Async so builders can pull from cloud secret stores, team config stores,
 /// blob storage, or third-party knowledge APIs without blocking the agent
@@ -185,28 +210,21 @@ module SystemPromptBuilder =
             return parts |> Array.filter (fun s -> s <> "") |> String.concat "\n\n"
         }
 
-    /// Built-in builder that serves a registered language profile's prompt
-    /// fragment: the one string `LanguageProfile.register` rendered, on every
-    /// turn. Construct it once at boot; construction reports the fragment's
-    /// size to `logger`. With no profile it contributes `""`, which `compose`
-    /// drops, so a deployment that registers none sends the prompt it sent
-    /// before, byte for byte.
-    let languageProfile (logger: ILogger option) (profile: RegisteredLanguageProfile option) : SystemPromptBuilder =
-        match profile with
-        | None -> fun _ -> async.Return ""
-        | Some registered ->
-            logger
-            |> Option.iter (fun l ->
-                l.Info(
-                    sprintf
-                        "Language profile '%s': %d kind(s), prompt fragment %d bytes."
-                        registered.Profile.Name
-                        registered.Profile.Kinds.Count
-                        registered.FragmentBytes
-                ))
+    /// Built-in builder that serves registered prompt fragments: the strings
+    /// their registrations rendered once (a language profile's, a pipeline
+    /// profile's), joined in list order into one layer, the same string on
+    /// every turn. Construct it once at boot; construction reports each
+    /// fragment's size to `logger`. With no fragment it contributes `""`,
+    /// which `compose` drops, so a deployment that registers none sends the
+    /// prompt it sent before, byte for byte.
+    let promptFragments (logger: ILogger option) (fragments: PromptFragment list) : SystemPromptBuilder =
+        logger
+        |> Option.iter (fun l ->
+            for fragment in fragments do
+                l.Info(sprintf "%s, prompt fragment %d bytes." fragment.Name (PromptFragment.bytes fragment)))
 
-            let fragment = registered.Fragment
-            fun _ -> async.Return fragment
+        let layer = fragments |> List.map _.Text |> String.concat "\n\n"
+        fun _ -> async.Return layer
 
 /// What a prompt builder contributed to one turn: the prompt text and the
 /// side data a RAG-style builder reports beside it. The turn reads this

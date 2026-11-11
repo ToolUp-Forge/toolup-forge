@@ -409,12 +409,28 @@ module PipelineAssertion =
     let factIdOf (d: FactDraft) : string =
         Fact.compute d.Subject d.Metric d.Period d.Method (Fact.effectiveInputHashes d.Method d.Evidence d.Value)
 
-    /// The executor composed with derived assertions: the evaluation exactly as
-    /// `PipelineTool.answerWith` answers it, and, when the arguments carry
+    /// The position of the first join in an evaluated pipeline. A figure is
+    /// asserted only from the facts of the table the request reads, whose
+    /// inputs the draft names; a joined table's are not among them.
+    let private joinStep (result: PipelineToolResult) : int option =
+        PipelineTool.decode result.Request.Pipeline
+        |> Result.toOption
+        |> Option.bind (
+            List.tryFindIndex (function
+                | Join _ -> true
+                | _ -> false)
+        )
+        |> Option.map ((+) 1)
+
+    /// The executor composed with derived assertions, under the deployment's
+    /// pipeline profile (`None`: the full algebra): the evaluation exactly as
+    /// `PipelineTool.answerUnder` answers it, and, when the arguments carry
     /// `assert`, the drafts asserted through `AssertBatch` in `scope`, read
     /// back and judged at the tool-result door for `principal`. The facts'
-    /// trigger ref names the tool and the principal.
-    let answerWith
+    /// trigger ref names the tool and the principal. A pipeline with a join is
+    /// evaluated and never asserted.
+    let answerUnder
+        (profile: RegisteredPipelineProfile option)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
@@ -424,9 +440,17 @@ module PipelineAssertion =
             match PipelineTool.assertionOf argsJson with
             | Error refusal -> return Error refusal
             | Ok assertion ->
-                match! PipelineTool.evaluateSliced deps scope principal argsJson with
+                match! PipelineTool.evaluateSlicedUnder profile deps scope principal argsJson with
                 | Error refusal -> return Error refusal
                 | Ok(_, result) when Option.isNone assertion -> return Ok(result, None)
+                | Ok(_, result) when (joinStep result).IsSome ->
+                    return
+                        Error(
+                            PipelineRefusal.JoinRefused(
+                                (joinStep result).Value,
+                                "a figure is asserted only from the facts of the table the request reads, so a pipeline with a join is evaluated and not asserted; evaluate it without 'assert'"
+                            )
+                        )
                 | Ok(slice, result) ->
                     let request = Option.get assertion
                     let trigger = Some(sprintf "%s:%s" PipelineTool.Name principal)
@@ -492,6 +516,15 @@ module PipelineAssertion =
                                     }
                                 )
         }
+
+    /// `answerUnder` with no profile: the full algebra and no join.
+    let answerWith
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<Result<PipelineToolResult * PipelineAssertionResult option, PipelineRefusal>> =
+        answerUnder None deps scope principal argsJson
 
     /// The text the model reads for an assertion: the evaluation's summary and
     /// the asserted facts as JSON, each with its id and, where the model may

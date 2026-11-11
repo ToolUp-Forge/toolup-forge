@@ -155,6 +155,10 @@
              its value. After the certificate files (it certifies a published
              narrative through the issuer) and the fact tools it offers. -->
         <Compile Include="Server\NarrativeGroundingGate.fs" />
+        <!-- The pipeline profile: the Fuaran.Compute subset the assistant may
+             write, its prompt fragment and the grammar the pipeline tool reads.
+             Before the compose module, which registers it. -->
+        <Compile Include="Server\PipelineProfile.fs" />
         <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 1145 — evaluate_pipeline: a Fuaran.Compute pipeline the
              model writes, evaluated over the fact browse's gated view slice.

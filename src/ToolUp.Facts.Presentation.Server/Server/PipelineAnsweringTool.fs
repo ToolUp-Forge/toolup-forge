@@ -91,19 +91,43 @@ module PipelineAnsweringTool =
             Parts = [ BlockPart(Fuaran.UI.Generated.encodeNode block.Node, block.Provenance) ]
           }
 
-    /// The executor over explicit dependencies: the slice read under `scope`
-    /// for `principal`, with the gate asked at `FactToolResult`, answered as
-    /// the summary and the block part. Arguments carrying `assert` are refused.
-    let answerWith
+    let private answerUnder
+        (profile: RegisteredPipelineProfile option)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
         (argsJson: string)
         : Async<ToolHelpers.ToolAnswer> =
         async {
-            match! PipelineTool.answerWith deps scope principal argsJson with
+            match! PipelineTool.answerUnder profile deps scope principal argsJson with
             | Error refused -> return refusal refused
             | Ok result -> return answered (PipelineTool.summary result) result
+        }
+
+    /// The executor over explicit dependencies: the slice read under `scope`
+    /// for `principal`, with the gate asked at `FactToolResult`, answered as
+    /// the summary and the block part. Arguments carrying `assert` are refused.
+    /// No pipeline profile: the full algebra.
+    let answerWith
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<ToolHelpers.ToolAnswer> =
+        answerUnder None deps scope principal argsJson
+
+    let private answerAssertingUnder
+        (profile: RegisteredPipelineProfile option)
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (argsJson: string)
+        : Async<ToolHelpers.ToolAnswer> =
+        async {
+            match! PipelineAssertion.answerUnder profile deps scope principal argsJson with
+            | Error refused -> return refusal refused
+            | Ok(result, Some asserted) -> return answered (PipelineAssertion.text asserted) result
+            | Ok(result, None) -> return answered (PipelineTool.summary result) result
         }
 
     /// The executor composed with derived assertions: the answer `answerWith`
@@ -116,17 +140,10 @@ module PipelineAnsweringTool =
         (principal: string)
         (argsJson: string)
         : Async<ToolHelpers.ToolAnswer> =
-        async {
-            match! PipelineAssertion.answerWith deps scope principal argsJson with
-            | Error refused -> return refusal refused
-            | Ok(result, Some asserted) -> return answered (PipelineAssertion.text asserted) result
-            | Ok(result, None) -> return answered (PipelineTool.summary result) result
-        }
+        answerAssertingUnder None deps scope principal argsJson
 
-    /// A persisted request evaluated again for `principal` under `scope`, with
-    /// the gate asked at `FactBrowse`: the result a reader draws, or the
-    /// executor's refusal by cause.
-    let rerun
+    let private rerunUnder
+        (profile: RegisteredPipelineProfile option)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
@@ -140,8 +157,31 @@ module PipelineAnsweringTool =
                     Gate = FactBrowseHandler.atSurface FactBrowse deps.Gate
             }
 
-            let! result = PipelineTool.answerWith atBrowse scope principal requestJson
+            let! result = PipelineTool.answerUnder profile atBrowse scope principal requestJson
             return result |> Result.map resultOf
+        }
+
+    /// A persisted request evaluated again for `principal` under `scope`, with
+    /// the gate asked at `FactBrowse`: the result a reader draws, or the
+    /// executor's refusal by cause. No pipeline profile: the full algebra.
+    let rerun
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (requestJson: string)
+        : Async<Result<PipelineBlockResult, PipelineRefusal>> =
+        rerunUnder None deps scope principal requestJson
+
+    let private rerunWithUnder
+        (profile: RegisteredPipelineProfile option)
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (requestJson: string)
+        : Async<Result<PipelineBlockResult, string>> =
+        async {
+            let! result = rerunUnder profile deps scope principal requestJson
+            return result |> Result.mapError PipelineRefusal.describe
         }
 
     /// `rerun`, refused in the executor's own words: the result a reader's
@@ -152,10 +192,17 @@ module PipelineAnsweringTool =
         (principal: string)
         (requestJson: string)
         : Async<Result<PipelineBlockResult, string>> =
-        async {
-            let! result = rerun deps scope principal requestJson
-            return result |> Result.mapError PipelineRefusal.describe
-        }
+        rerunWithUnder None deps scope principal requestJson
+
+    /// The pipeline profile the deployment registered
+    /// (`FactsCompose.withPipelineProfile`), if any.
+    let private profileOf (ctx: HttpContext) : RegisteredPipelineProfile option =
+        match ctx.RequestServices with
+        | null -> None
+        | services ->
+            match services.GetService typeof<RegisteredPipelineProfile> with
+            | :? RegisteredPipelineProfile as profile -> Some profile
+            | _ -> None
 
     let private userIdOf (ctx: HttpContext) : string =
         match AccessContext.callerIdOf ctx.Items with
@@ -170,7 +217,13 @@ module PipelineAnsweringTool =
     /// the request's user as the principal.
     let answer (ctx: HttpContext) (argsJson: string) : Async<ToolHelpers.ToolAnswer> =
         match FactBrowseHandler.factBrowseDeps ctx with
-        | Some deps -> answerWith deps (StorageScopeResolver.ScopeResolution.forRequest ctx) (userIdOf ctx) argsJson
+        | Some deps ->
+            answerUnder
+                (profileOf ctx)
+                deps
+                (StorageScopeResolver.ScopeResolution.forRequest ctx)
+                (userIdOf ctx)
+                argsJson
         | None ->
             async.Return {
                 Text = sprintf "%s refused the request: %s." PipelineTool.Name notComposed
@@ -185,7 +238,12 @@ module PipelineAnsweringTool =
     let answerAsserting (ctx: HttpContext) (argsJson: string) : Async<ToolHelpers.ToolAnswer> =
         match FactBrowseHandler.factBrowseDeps ctx with
         | Some deps ->
-            answerAssertingWith deps (StorageScopeResolver.ScopeResolution.forRequest ctx) (userIdOf ctx) argsJson
+            answerAssertingUnder
+                (profileOf ctx)
+                deps
+                (StorageScopeResolver.ScopeResolution.forRequest ctx)
+                (userIdOf ctx)
+                argsJson
         | None ->
             async.Return {
                 Text = sprintf "%s refused the request: %s." PipelineTool.Name notComposed
@@ -203,7 +261,12 @@ module PipelineAnsweringTool =
             fun requestJson ->
                 match FactBrowseHandler.factBrowseDeps ctx with
                 | Some deps ->
-                    rerunWith deps (StorageScopeResolver.ScopeResolution.forRequest ctx) (userIdOf ctx) requestJson
+                    rerunWithUnder
+                        (profileOf ctx)
+                        deps
+                        (StorageScopeResolver.ScopeResolution.forRequest ctx)
+                        (userIdOf ctx)
+                        requestJson
                 | None -> async.Return(Error notComposed)
     }
 
