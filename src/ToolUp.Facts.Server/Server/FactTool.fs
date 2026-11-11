@@ -178,7 +178,8 @@ module FactTool =
     // fabricate: an unresolved request reads the anonymous shard, which holds
     // only what was asserted anonymously.
 
-    let private userIdOf (ctx: HttpContext) : string =
+    /// The request's user, or `anonymous`: the principal a fact tool reads for.
+    let internal userIdOf (ctx: HttpContext) : string =
         match AccessContext.callerIdOf ctx.Items with
         | Some id -> id
         | _ -> "anonymous"

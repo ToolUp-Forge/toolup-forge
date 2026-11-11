@@ -5,7 +5,6 @@ namespace ToolUp.Facts
 
 open System
 open System.Globalization
-open System.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -63,7 +62,8 @@ open ToolUp.Platform.Infra.Metrics
 // denied at every door until a declassification routine registered for
 // `OperationId` clears it.
 //
-// **The write** (`answerWith`). Through `IFactStore.AssertBatch`: one tool
+// **The write** (`answerWith`, through the spec-tool door's `assertRows`).
+// Through `IFactStore.AssertBatch`: one tool
 // call is one audited batch with its receipt. The facts are read back and
 // judged at the tool-result door, so the model is told the rendering of each
 // fact it may be shown and the policy that withholds each it may not.
@@ -80,16 +80,11 @@ module PipelineAssertion =
     /// derived metric's `ProducingOperation` names, and a declassification
     /// routine is registered under.
     [<Literal>]
-    let OperationId = "fuaran.compute.pipeline"
+    let OperationId = PipelineTool.OperationId
 
     /// The version of the evaluator the pipeline ran under: the
     /// `Fuaran.Compute.DataFrame` package version.
-    let ComputeVersion: string =
-        let assembly = typeof<Transform>.Assembly
-
-        match assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>() with
-        | null -> string (assembly.GetName().Version)
-        | attribute -> attribute.InformationalVersion.Split('+').[0]
+    let ComputeVersion: string = PipelineTool.ComputeVersion
 
     /// The method an asserted fact carries for a pipeline of hash
     /// `pipelineHash`.
@@ -97,7 +92,7 @@ module PipelineAssertion =
         Computed(OperationId, ComputeVersion, pipelineHash)
 
     /// The most facts one asserted value may name as its inputs.
-    let MaxInputs: int = PopulationQuery.MaxTopK
+    let MaxInputs: int = SpecTool.MaxInputs
 
     // ── Subject locality ──────────────────────────────────────────
 
@@ -205,17 +200,17 @@ module PipelineAssertion =
         | Some v -> Ok v
         | None -> Error refusal
 
-    /// The drafts asserting `request.Column` of `result`, evaluated over
+    /// The rows asserting `request.Column` of `result`, evaluated over
     /// `slice`, as `request.AsMetric` — one per result row, in result order —
-    /// or the refusal naming what to repair. Pure. `trigger` is the evidence's
-    /// trigger ref.
-    let draft
+    /// or the refusal naming what to repair. Pure. `operationId` is the
+    /// operation the metric must be registered as produced by.
+    let internal rowsOf
+        (operationId: string)
         (registry: IMetricRegistry option)
         (slice: FactSlice)
         (evaluation: PipelineToolResult)
         (request: PipelineAssertionRequest)
-        (trigger: string option)
-        : Result<FactDraft list, PipelineRefusal> =
+        : Result<SpecFactRow list, PipelineRefusal> =
         let column = request.Column
 
         let require (holds: bool) (refusal: PipelineRefusal) : Result<unit, PipelineRefusal> =
@@ -250,15 +245,9 @@ module PipelineAssertion =
                      <> Some Exactness.HostRounded)
                     (PipelineRefusal.AssertedColumnHostRounded column)
 
-            let! metric =
-                registry
-                |> Option.bind (fun r -> r.TryGetMetric request.AsMetric)
-                |> orRefuse (PipelineRefusal.UnregisteredMetric request.AsMetric)
-
-            do!
-                require
-                    (metric.ProducingOperation = Some OperationId)
-                    (PipelineRefusal.NotADerivedMetric(request.AsMetric, metric.ProducingOperation))
+            let! _ =
+                SpecTool.derivedMetric registry operationId request.AsMetric
+                |> Result.mapError PipelineRefusal.ofDoor
 
             do!
                 require
@@ -328,7 +317,7 @@ module PipelineAssertion =
 
             let everyRow = [ 0 .. Table.rowCount source - 1 ]
 
-            let rowDraft (keyCell: Cell) (valueCell: Cell) : Result<FactDraft, PipelineRefusal> = result {
+            let rowOf (keyCell: Cell) (valueCell: Cell) : Result<SpecFactRow, PipelineRefusal> = result {
                 let! keyValue =
                     textOf keyCell
                     |> orRefuse (
@@ -363,38 +352,27 @@ module PipelineAssertion =
                     |> List.distinct
                     |> List.sort
 
-                do! require (not (List.isEmpty inputs)) (PipelineRefusal.InputsUnnamed named)
-
-                do!
-                    require
-                        (List.length inputs <= MaxInputs)
-                        (PipelineRefusal.InputsOverCap(named, List.length inputs, MaxInputs))
-
-                return {
+                let row: SpecFactRow = {
                     Subject = subject
-                    Metric = MetricRef request.AsMetric
-                    Value = Scalar value
+                    Metric = request.AsMetric
                     Period = {
                         From = evaluation.Request.PeriodFrom
                         To = evaluation.Request.PeriodTo
                         Label = None
                     }
-                    Method = methodOf evaluation.PipelineHash
-                    Evidence = {
-                        ResultRef = None
-                        InputHashes = inputs |> List.map FactInput.ofFactId
-                        TriggerRef = trigger
-                    }
-                    Confidence = None
-                    Disclosure = Surfaceable
+                    Value = value
+                    Inputs = inputs
                 }
+
+                do! SpecTool.checkRow row |> Result.mapError PipelineRefusal.ofDoor
+                return row
             }
 
-            let rec collect (seen: Set<SubjectRef>) (acc: FactDraft list) (rows: (Cell * Cell) list) =
+            let rec collect (seen: Set<SubjectRef>) (acc: SpecFactRow list) (rows: (Cell * Cell) list) =
                 match rows with
                 | [] -> Ok(List.rev acc)
                 | (keyCell, valueCell) :: rest ->
-                    match rowDraft keyCell valueCell with
+                    match rowOf keyCell valueCell with
                     | Error e -> Error e
                     | Ok d when seen.Contains d.Subject ->
                         Error(PipelineRefusal.SubjectRepeated(SubjectRef.toString d.Subject))
@@ -403,24 +381,93 @@ module PipelineAssertion =
             return! collect Set.empty [] (List.zip (PipelineTool.cellsOf key table) (PipelineTool.cellsOf column table))
         }
 
+    /// The drafts asserting `request.Column` of `result`, evaluated over
+    /// `slice`, as `request.AsMetric` — one per result row, in result order —
+    /// or the refusal naming what to repair. Pure. `trigger` is the evidence's
+    /// trigger ref.
+    let draft
+        (registry: IMetricRegistry option)
+        (slice: FactSlice)
+        (evaluation: PipelineToolResult)
+        (request: PipelineAssertionRequest)
+        (trigger: string option)
+        : Result<FactDraft list, PipelineRefusal> =
+        rowsOf OperationId registry slice evaluation request
+        |> Result.map (List.map (SpecTool.draftOf (methodOf evaluation.PipelineHash) trigger))
+
     // ── The write ─────────────────────────────────────────────────
 
     /// The content address a draft is stored under.
-    let factIdOf (d: FactDraft) : string =
-        Fact.compute d.Subject d.Metric d.Period d.Method (Fact.effectiveInputHashes d.Method d.Evidence d.Value)
+    let factIdOf (d: FactDraft) : string = SpecTool.factIdOf d
 
     /// The position of the first join in an evaluated pipeline. A figure is
     /// asserted only from the facts of the table the request reads, whose
     /// inputs the draft names; a joined table's are not among them.
-    let private joinStep (result: PipelineToolResult) : int option =
-        PipelineTool.decode result.Request.Pipeline
-        |> Result.toOption
-        |> Option.bind (
-            List.tryFindIndex (function
-                | Join _ -> true
-                | _ -> false)
-        )
+    let private joinStep (pipeline: Transform list) : int option =
+        pipeline
+        |> List.tryFindIndex (function
+            | Join _ -> true
+            | _ -> false)
         |> Option.map ((+) 1)
+
+    /// An evaluation with the rows its `assert` argument asks for.
+    type internal Asserting = {
+        Evaluation: PipelineToolResult
+        Rows: (PipelineAssertionRequest * SpecFactRow list) option
+    }
+
+    /// The evaluation over the door's gated read, and, when the arguments
+    /// carry `assert`, the rows to assert. A pipeline with a join is evaluated
+    /// and never asserted.
+    let private evaluateAsserting
+        (read: SpecRead)
+        (request: SpecRequest<PipelineTool.Spec>)
+        : Async<Result<Asserting, PipelineRefusal>> =
+        async {
+            match! PipelineTool.evaluateRead read request with
+            | Error refusal -> return Error refusal
+            | Ok evaluation ->
+                match request.Spec.Assert, joinStep request.Spec.Pipeline with
+                | None, _ -> return Ok { Evaluation = evaluation; Rows = None }
+                | Some _, Some step ->
+                    return
+                        Error(
+                            PipelineRefusal.JoinRefused(
+                                step,
+                                "a figure is asserted only from the facts of the table the request reads, so a pipeline with a join is evaluated and not asserted; evaluate it without 'assert'"
+                            )
+                        )
+                | Some assertion, None ->
+                    return
+                        rowsOf OperationId read.Registry read.Slice evaluation assertion
+                        |> Result.map (fun rows -> {
+                            Evaluation = evaluation
+                            Rows = Some(assertion, rows)
+                        })
+        }
+
+    /// `evaluate_pipeline` with derived assertions over the spec-tool door.
+    let internal specToolUnder
+        (profile: RegisteredPipelineProfile option)
+        : SpecTool<PipelineTool.Spec, PipelineRefusal, Asserting> =
+        let plain = PipelineTool.specToolUnder profile
+
+        {
+            Definition = PipelineTool.definitionWithAssertions
+            OperationId = plain.OperationId
+            Version = plain.Version
+            Decode = PipelineTool.decodeRoot true
+            Validate = plain.Validate
+            Evaluate = evaluateAsserting
+            Hash = plain.Hash
+            Project =
+                fun a -> {
+                    plain.Project a.Evaluation with
+                        Facts = a.Rows |> Option.map snd |> Option.defaultValue []
+                }
+            Summary = fun a -> plain.Summary a.Evaluation
+            OfDoor = plain.OfDoor
+        }
 
     /// The executor composed with derived assertions, under the deployment's
     /// pipeline profile (`None`: the full algebra): the evaluation exactly as
@@ -437,84 +484,36 @@ module PipelineAssertion =
         (argsJson: string)
         : Async<Result<PipelineToolResult * PipelineAssertionResult option, PipelineRefusal>> =
         async {
-            match PipelineTool.assertionOf argsJson with
-            | Error refusal -> return Error refusal
-            | Ok assertion ->
-                match! PipelineTool.evaluateSlicedUnder profile deps scope principal argsJson with
+            let tool = specToolUnder profile
+
+            match! SpecTool.evaluateSliced tool deps scope principal argsJson with
+            | Error refusals -> return Error(List.head refusals)
+            | Ok(_, _, { Evaluation = result; Rows = None }) -> return Ok(result, None)
+            | Ok(_,
+                 request,
+                 {
+                     Evaluation = result
+                     Rows = Some(assertion, rows)
+                 }) ->
+                // Asserted even when the result has no row, as one empty batch
+                // with its receipt.
+                match! SpecTool.assertRows tool deps scope principal request.Spec rows with
                 | Error refusal -> return Error refusal
-                | Ok(_, result) when Option.isNone assertion -> return Ok(result, None)
-                | Ok(_, result) when (joinStep result).IsSome ->
+                | Ok asserted ->
                     return
-                        Error(
-                            PipelineRefusal.JoinRefused(
-                                (joinStep result).Value,
-                                "a figure is asserted only from the facts of the table the request reads, so a pipeline with a join is evaluated and not asserted; evaluate it without 'assert'"
-                            )
+                        Ok(
+                            result,
+                            Some {
+                                Evaluation = result
+                                Column = assertion.Column
+                                Metric = assertion.AsMetric
+                                Facts = asserted.Facts
+                                AssertedCount = asserted.AssertedCount
+                                SupersedingCount = asserted.SupersedingCount
+                                IdempotentCount = asserted.IdempotentCount
+                                ReceiptDigest = asserted.ReceiptDigest
+                            }
                         )
-                | Ok(slice, result) ->
-                    let request = Option.get assertion
-                    let trigger = Some(sprintf "%s:%s" PipelineTool.Name principal)
-
-                    match draft deps.Registry slice result request trigger with
-                    | Error refusal -> return Error refusal
-                    | Ok drafts ->
-                        match! deps.Store.AssertBatch(scope, drafts) with
-                        | Error reason -> return Error(PipelineRefusal.AssertionFailed(FactStoreError.describe reason))
-                        | Ok receipt ->
-                            let ids = drafts |> List.map factIdOf
-
-                            let! stored =
-                                ids
-                                |> List.map (fun id -> deps.Store.Get(scope, id) |> FactStoreResult.orRaiseAsync)
-                                |> Async.Sequential
-
-                            let held = stored |> Array.choose id |> List.ofArray
-
-                            let! verdicts =
-                                (FactBrowseHandler.atSurface FactToolResult deps.Gate)
-                                    .CheckHeld(scope, principal, FactToolResult, ids, held)
-
-                            let displayFormat =
-                                deps.Registry
-                                |> Option.bind (fun r -> r.TryGetMetric request.AsMetric)
-                                |> Option.map _.DisplayFormat
-                                |> Option.defaultValue ""
-
-                            let facts =
-                                List.zip ids drafts
-                                |> List.map (fun (factId, d) ->
-                                    let withheld =
-                                        match verdicts.TryFind factId with
-                                        | Some FactDisclosable -> None
-                                        | Some(FactNotDisclosable policy) -> Some policy
-                                        | None -> Some "unknown-fact"
-
-                                    {
-                                        FactId = factId
-                                        Subject = SubjectRef.toString d.Subject
-                                        Metric = request.AsMetric
-                                        Rendering =
-                                            match withheld with
-                                            | None -> Some(FactRendering.render displayFormat d.Value)
-                                            | Some _ -> None
-                                        WithheldPolicy = withheld
-                                        InputCount = List.length d.Evidence.InputHashes
-                                    })
-
-                            return
-                                Ok(
-                                    result,
-                                    Some {
-                                        Evaluation = result
-                                        Column = request.Column
-                                        Metric = request.AsMetric
-                                        Facts = facts
-                                        AssertedCount = receipt.AssertedCount
-                                        SupersedingCount = receipt.SupersedingCount
-                                        IdempotentCount = receipt.IdempotentCount
-                                        ReceiptDigest = receipt.Digest
-                                    }
-                                )
         }
 
     /// `answerUnder` with no profile: the full algebra and no join.
@@ -530,38 +529,16 @@ module PipelineAssertion =
     /// the asserted facts as JSON, each with its id and, where the model may
     /// be shown it, its rendering, which is what the answer verifier reads.
     let text (assertion: PipelineAssertionResult) : string =
-        let facts: obj list =
-            assertion.Facts
-            |> List.map (fun f ->
-                match f.Rendering with
-                | Some rendering ->
-                    box {|
-                        factId = f.FactId
-                        subject = f.Subject
-                        metric = f.Metric
-                        rendering = rendering
-                        inputs = f.InputCount
-                    |}
-                | None ->
-                    box {|
-                        factId = f.FactId
-                        subject = f.Subject
-                        metric = f.Metric
-                        withheld = f.WithheldPolicy |> Option.defaultValue ""
-                        inputs = f.InputCount
-                    |})
-
         FactTool.serialize {|
             summary = PipelineTool.summary assertion.Evaluation
             asserted = {|
                 column = assertion.Column
                 metric = assertion.Metric
-                facts = facts
+                facts = SpecTool.factsJson assertion.Facts
                 newFacts = assertion.AssertedCount
                 superseding = assertion.SupersedingCount
                 unchanged = assertion.IdempotentCount
                 receiptDigest = assertion.ReceiptDigest
             |}
-            note =
-                "Each asserted figure is a fact: quote it by its rendering, which verifies. State no other figure from the result."
+            note = SpecTool.AssertedNote
         |}

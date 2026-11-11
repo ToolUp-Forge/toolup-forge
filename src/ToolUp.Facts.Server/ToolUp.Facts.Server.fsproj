@@ -159,6 +159,10 @@
              write, its prompt fragment and the grammar the pipeline tool reads.
              Before the compose module, which registers it. -->
         <Compile Include="Server\PipelineProfile.fs" />
+        <!-- The spec-tool door: decode, validate, the gated slice read, the
+             cap and the assertion door, written once for every "spec in,
+             Facts out" tool. Before the compose module, which registers one. -->
+        <Compile Include="Server\SpecTool.fs" />
         <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 1145 — evaluate_pipeline: a Fuaran.Compute pipeline the
              model writes, evaluated over the fact browse's gated view slice.

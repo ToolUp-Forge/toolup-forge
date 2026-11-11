@@ -1472,6 +1472,7 @@ ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.Compose.Comp
 ToolUp.Facts.FactsCompose.withNarrativeCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withPipelineProfile(ToolUp.Facts.RegisteredPipelineProfile, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.FactsCompose.withSpecTool`3(ToolUp.Facts.SpecTool`3[Spec, Refusal, Result], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withTeamOutputVisibility(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withToleranceTriggers(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ToleranceTrigger], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withWithholdingSurface(System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -1877,7 +1878,9 @@ ToolUp.Facts.PipelineProfileRefusalModule (class)
 ToolUp.Facts.PipelineProfileRefusalModule.describe(ToolUp.Facts.PipelineProfileRefusal) : System.String
 ToolUp.Facts.PipelineTool (class)
 ToolUp.Facts.PipelineTool.AssertArgument : System.String (literal)
+ToolUp.Facts.PipelineTool.ComputeVersion : System.String { get }
 ToolUp.Facts.PipelineTool.Name : System.String (literal)
+ToolUp.Facts.PipelineTool.OperationId : System.String (literal)
 ToolUp.Facts.PipelineTool.answerUnder(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.RegisteredPipelineProfile], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]
 ToolUp.Facts.PipelineTool.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]
 ToolUp.Facts.PipelineTool.assertionOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionRequest], ToolUp.Facts.PipelineRefusal]
@@ -1888,7 +1891,13 @@ ToolUp.Facts.PipelineTool.evaluate(ToolUp.Facts.PipelineToolRequest, Microsoft.F
 ToolUp.Facts.PipelineTool.evaluateJoined(ToolUp.Facts.PipelineToolRequest, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.FactSlice, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.FactSlice]], System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]
 ToolUp.Facts.PipelineTool.refusalText(ToolUp.Facts.PipelineRefusal) : System.String
 ToolUp.Facts.PipelineTool.requestOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolRequest, ToolUp.Facts.PipelineRefusal]
+ToolUp.Facts.PipelineTool.specToolUnder(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.RegisteredPipelineProfile]) : ToolUp.Facts.SpecTool`3[ToolUp.Facts.PipelineTool+Spec, ToolUp.Facts.PipelineRefusal, ToolUp.Facts.PipelineToolResult]
 ToolUp.Facts.PipelineTool.summary(ToolUp.Facts.PipelineToolResult) : System.String
+ToolUp.Facts.PipelineTool+Spec (class)
+ToolUp.Facts.PipelineTool+Spec..ctor(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionRequest], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineJoin])
+ToolUp.Facts.PipelineTool+Spec.Assert : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineAssertionRequest] { get }
+ToolUp.Facts.PipelineTool+Spec.Joins : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineJoin] { get }
+ToolUp.Facts.PipelineTool+Spec.Pipeline : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform] { get }
 ToolUp.Facts.PlanEvents (class)
 ToolUp.Facts.PlanEvents.RecordedType : System.String (literal)
 ToolUp.Facts.PopulationQueryTool (class)
@@ -1936,6 +1945,56 @@ ToolUp.Facts.RegisteredPipelineProfile.Fragment : System.String { get }
 ToolUp.Facts.RegisteredPipelineProfile.FragmentBytes : System.Int32 { get }
 ToolUp.Facts.RegisteredPipelineProfile.FragmentTokens : System.Int32 { get }
 ToolUp.Facts.RegisteredPipelineProfile.Profile : ToolUp.Facts.PipelineProfile { get }
+ToolUp.Facts.SpecAssertion (class)
+ToolUp.Facts.SpecAssertion..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineAssertedFact], System.Int32, System.Int32, System.Int32, System.String)
+ToolUp.Facts.SpecAssertion.AssertedCount : System.Int32 { get }
+ToolUp.Facts.SpecAssertion.Facts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineAssertedFact] { get }
+ToolUp.Facts.SpecAssertion.IdempotentCount : System.Int32 { get }
+ToolUp.Facts.SpecAssertion.ReceiptDigest : System.String { get }
+ToolUp.Facts.SpecAssertion.SupersedingCount : System.Int32 { get }
+ToolUp.Facts.SpecRead (class)
+ToolUp.Facts.SpecRead..ctor(ToolUp.Facts.FactSlice, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSlice, ToolUp.Facts.SpecDoorRefusal]]]])
+ToolUp.Facts.SpecRead.Read : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSlice, ToolUp.Facts.SpecDoorRefusal]]]] { get }
+ToolUp.Facts.SpecRead.ReadAt : System.DateTime { get }
+ToolUp.Facts.SpecRead.Registry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry] { get }
+ToolUp.Facts.SpecRead.Slice : ToolUp.Facts.FactSlice { get }
+ToolUp.Facts.SpecRequest`1 (class)
+ToolUp.Facts.SpecRequest`1..ctor(ToolUp.Facts.FactSliceQuery, Spec)
+ToolUp.Facts.SpecRequest`1.Slice : ToolUp.Facts.FactSliceQuery { get }
+ToolUp.Facts.SpecRequest`1.Spec : Spec { get }
+ToolUp.Facts.SpecTool (class)
+ToolUp.Facts.SpecTool.AssertedNote : System.String (literal)
+ToolUp.Facts.SpecTool.MaxInputs : System.Int32 { get }
+ToolUp.Facts.SpecTool.answerText`3(ToolUp.Facts.SpecTool`3[Spec, Refusal, Result], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.SpecTool.answer`3(ToolUp.Facts.SpecTool`3[Spec, Refusal, Result], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[Result, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SpecAssertion]], Microsoft.FSharp.Collections.FSharpList`1[Refusal]]]
+ToolUp.Facts.SpecTool.assertRows`3(ToolUp.Facts.SpecTool`3[Spec, Refusal, Result], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, Spec, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.SpecFactRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.SpecAssertion, Refusal]]
+ToolUp.Facts.SpecTool.checkRow(ToolUp.Facts.SpecFactRow) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Facts.SpecDoorRefusal]
+ToolUp.Facts.SpecTool.derivedMetric(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.MetricDefinition, ToolUp.Facts.SpecDoorRefusal]
+ToolUp.Facts.SpecTool.draftOf(ToolUp.Facts.MethodRef, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Facts.SpecFactRow) : ToolUp.Facts.FactDraft
+ToolUp.Facts.SpecTool.evaluateSliced`3(ToolUp.Facts.SpecTool`3[Spec, Refusal, Result], ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`3[ToolUp.Facts.FactSlice, ToolUp.Facts.SpecRequest`1[Spec], Result], Microsoft.FSharp.Collections.FSharpList`1[Refusal]]]
+ToolUp.Facts.SpecTool.executor`3(ToolUp.Facts.SpecTool`3[Spec, Refusal, Result], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.SpecTool.factIdOf(ToolUp.Facts.FactDraft) : System.String
+ToolUp.Facts.SpecTool.factsJson(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineAssertedFact]) : Microsoft.FSharp.Collections.FSharpList`1[System.Object]
+ToolUp.Facts.SpecTool.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.Text.Json.JsonElement, ToolUp.Facts.SpecDoorRefusal]
+ToolUp.Facts.SpecTool.readable(System.String, ToolUp.Facts.FactSlice) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSlice, ToolUp.Facts.SpecDoorRefusal]
+ToolUp.Facts.SpecTool.refusalText`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[Refusal]) : System.String
+ToolUp.Facts.SpecTool.sliceOf(System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSliceQuery, ToolUp.Facts.SpecDoorRefusal]
+ToolUp.Facts.SpecTool.sliceParameters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ToolParameterSchema] { get }
+ToolUp.Facts.SpecTool.textOf(System.String, System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.SpecDoorRefusal]
+ToolUp.Facts.SpecTool.text`3(ToolUp.Facts.SpecTool`3[Spec, Refusal, Result], Result, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SpecAssertion]) : System.String
+ToolUp.Facts.SpecTool.withinCap(System.Int32) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Facts.SpecDoorRefusal]
+ToolUp.Facts.SpecTool`3 (class)
+ToolUp.Facts.SpecTool`3..ctor(ToolUp.Platform.AIToolDefinition, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Text.Json.JsonElement, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.SpecRequest`1[Spec], Refusal]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRequest`1[Spec], Microsoft.FSharp.Core.FSharpResult`2[Spec, Microsoft.FSharp.Collections.FSharpList`1[Refusal]]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRead, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRequest`1[Spec], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Result, Refusal]]]], Microsoft.FSharp.Core.FSharpFunc`2[Spec, System.String], Microsoft.FSharp.Core.FSharpFunc`2[Result, ToolUp.Facts.SpecResult], Microsoft.FSharp.Core.FSharpFunc`2[Result, System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecDoorRefusal, Refusal])
+ToolUp.Facts.SpecTool`3.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Text.Json.JsonElement, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.SpecRequest`1[Spec], Refusal]] { get }
+ToolUp.Facts.SpecTool`3.Definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.SpecTool`3.Evaluate : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRead, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRequest`1[Spec], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Result, Refusal]]]] { get }
+ToolUp.Facts.SpecTool`3.Hash : Microsoft.FSharp.Core.FSharpFunc`2[Spec, System.String] { get }
+ToolUp.Facts.SpecTool`3.OfDoor : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecDoorRefusal, Refusal] { get }
+ToolUp.Facts.SpecTool`3.OperationId : System.String { get }
+ToolUp.Facts.SpecTool`3.Project : Microsoft.FSharp.Core.FSharpFunc`2[Result, ToolUp.Facts.SpecResult] { get }
+ToolUp.Facts.SpecTool`3.Summary : Microsoft.FSharp.Core.FSharpFunc`2[Result, System.String] { get }
+ToolUp.Facts.SpecTool`3.Validate : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRequest`1[Spec], Microsoft.FSharp.Core.FSharpResult`2[Spec, Microsoft.FSharp.Collections.FSharpList`1[Refusal]]]]] { get }
+ToolUp.Facts.SpecTool`3.Version : System.String { get }
 ToolUp.Facts.SubjectBranch (class)
 ToolUp.Facts.SubjectBranch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }

@@ -5,6 +5,7 @@ namespace ToolUp.Facts
 
 open System
 open System.Globalization
+open System.Reflection
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -38,6 +39,13 @@ open ToolUp.Platform.Infra
 //      no source resolver;
 //   6. applies the withheld rule (below), bounds the result by the slice's
 //      cell cap, hashes the pipeline and answers the result record.
+//
+// The tool is the first instance of the spec-tool door (`SpecTool`): the
+// argument parse, the slice arguments, the gated slice read, the empty and
+// all-withheld refusals, the cap, the refusal framing and the assertion write
+// are the door's; the pipeline decode, the profile and preflight checks, the
+// schema walk, the lineage, the withheld rule and the evaluation are this
+// tool's (`specToolUnder`).
 //
 // **The withheld rule.** A withheld cell is a null the evaluator would
 // otherwise skip, so a sum over it is a partial sum wearing the whole's
@@ -77,36 +85,32 @@ module PipelineTool =
     [<Literal>]
     let Name = "evaluate_pipeline"
 
+    /// The `Computed` operation id every fact asserted from a pipeline
+    /// carries: the identity a derived metric's `ProducingOperation` names,
+    /// and a declassification routine is registered under.
+    [<Literal>]
+    let OperationId = "fuaran.compute.pipeline"
+
+    /// The version of the evaluator a pipeline runs under: the
+    /// `Fuaran.Compute.DataFrame` package version.
+    let ComputeVersion: string =
+        let assembly = typeof<Transform>.Assembly
+
+        match assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>() with
+        | null -> string (assembly.GetName().Version)
+        | attribute -> attribute.InformationalVersion.Split('+').[0]
+
     // ── The definition ────────────────────────────────────────────
 
-    let private parameters: ToolParameterSchema list = [
-        ToolSchema.parameter "table" "The fact table to read." true ToolSchema.text
-        ToolSchema.parameter
-            "period_from"
-            "The first instant of the slice, yyyy-MM-dd or an ISO-8601 UTC instant (inclusive): a fact is read when its period overlaps the range."
-            true
-            ToolSchema.text
-        ToolSchema.parameter
-            "period_to"
-            "The end of the slice, yyyy-MM-dd or an ISO-8601 UTC instant (exclusive)."
-            true
-            ToolSchema.text
-        ToolSchema.parameter
-            "path_prefix"
-            "Member ids from the hierarchy root narrowing the subjects. Omit for every subject of the table."
-            false
-            (ToolSchema.arrayOf ToolSchema.text)
-        ToolSchema.parameter
-            "metrics"
-            "The metric columns of the table to read. Omit for all of them."
-            false
-            (ToolSchema.arrayOf ToolSchema.text)
-        ToolSchema.parameter
-            "pipeline"
-            "The computation: a JSON array of transform steps, each an object tagged by \"$type\"."
-            true
-            (ToolSchema.arrayOf (ToolSchema.objectOf []))
-    ]
+    let private parameters: ToolParameterSchema list =
+        SpecTool.sliceParameters
+        @ [
+            ToolSchema.parameter
+                "pipeline"
+                "The computation: a JSON array of transform steps, each an object tagged by \"$type\"."
+                true
+                (ToolSchema.arrayOf (ToolSchema.objectOf []))
+        ]
 
     let private description =
         "Compute over the deployment's verified facts without typing a number. Name one fact table, a period range and optionally a subject path prefix and a metric set: the server reads that slice under the disclosure gate and evaluates your pipeline over it. The slice has one row per subject and period, with the columns row, subject, subject_path, period_from, period_to and period_label, then for each metric m the columns m (the value), m/fact_id, m/as_of, m/freshness, m/rendering, m/withheld, m/rank_desc and m/rank_asc. The pipeline is a JSON array of Fuaran.Compute transform steps, each tagged by \"$type\": filter, project, derive, groupBy (with aggregates sum, mean, min, max, count, median, stddev, first, last, countDistinct), window, unpivot, sort, distinct and limit, with expressions over columns by name and literal constants. The slice is the only source, so join, union, intersect and except are refused; so is pivot, whose columns the data would name, and so are parameters and now. The table, metric and level ids come from the deployment's standing context (the fact tables its modules declared); use ids given in the conversation or system context, since this tool cannot list them. A malformed step, an unknown column or a result over the cap is refused by name: repair it from the message. An output column computed from a metric with a withheld cell in the slice is withheld, with its count: narrow the slice to a region with none and evaluate again. The result tells you its shape, its columns and what was withheld, and carries none of its values: its figures are shown to the user in the result block and are never retyped, so present the block and state no number from it."
@@ -164,122 +168,67 @@ module PipelineTool =
 
     // ── The request ───────────────────────────────────────────────
 
-    let private malformed (reason: string) =
-        Error(PipelineRefusal.MalformedArguments reason)
+    /// The request `root` names: the door's slice arguments and the pipeline,
+    /// carried as the arguments wrote it.
+    let private requestOfRoot (root: JsonElement) : Result<PipelineToolRequest, PipelineRefusal> =
+        let pipeline =
+            match root.TryGetProperty "pipeline" with
+            | true, v when v.ValueKind = JsonValueKind.Array -> Ok(v.GetRawText())
+            | _ -> Error(PipelineRefusal.MalformedArguments "'pipeline' is required: a JSON array of transform steps")
 
-    let private instantOf (name: string) (text: string) : Result<DateTime, PipelineRefusal> =
-        let styles = DateTimeStyles.AssumeUniversal ||| DateTimeStyles.AdjustToUniversal
-
-        match DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, styles) with
-        | true, day -> Ok day
-        | false, _ ->
-            match DateTime.TryParse(text, CultureInfo.InvariantCulture, styles) with
-            | true, instant -> Ok instant
-            | false, _ -> malformed (sprintf "'%s' is not a date (yyyy-MM-dd) or an ISO-8601 instant: '%s'" name text)
-
-    let private textsOf (name: string) (root: JsonElement) : Result<string list, PipelineRefusal> =
-        match root.TryGetProperty name with
-        | false, _ -> Ok []
-        | true, v when v.ValueKind = JsonValueKind.Null -> Ok []
-        | true, v when v.ValueKind = JsonValueKind.Array ->
-            let items = v.EnumerateArray() |> List.ofSeq
-
-            if items |> List.forall (fun i -> i.ValueKind = JsonValueKind.String) then
-                Ok(items |> List.map _.GetString())
-            else
-                malformed (sprintf "'%s' must be an array of strings" name)
-        | true, _ -> malformed (sprintf "'%s' must be an array of strings" name)
-
-    let private textOf (name: string) (root: JsonElement) : Result<string, PipelineRefusal> =
-        match root.TryGetProperty name with
-        | true, v when
-            v.ValueKind = JsonValueKind.String
-            && not (String.IsNullOrWhiteSpace(v.GetString()))
-            ->
-            Ok(v.GetString())
-        | _ -> malformed (sprintf "'%s' is required: a non-empty string" name)
+        match SpecTool.sliceOf root |> Result.mapError PipelineRefusal.ofDoor, pipeline with
+        | Ok slice, Ok pipeline ->
+            Ok {
+                TableId = slice.TableId
+                PeriodFrom = slice.PeriodFrom
+                PeriodTo = slice.PeriodTo
+                PathPrefix = slice.SubjectPrefix
+                Metrics = slice.Metrics
+                Pipeline = pipeline
+            }
+        | Error e, _
+        | _, Error e -> Error e
 
     /// The request the tool's arguments name. The pipeline is carried as the
     /// arguments wrote it; `answerWith` re-encodes it canonically.
     let requestOf (argsJson: string) : Result<PipelineToolRequest, PipelineRefusal> =
-        let parsed =
-            try
-                Ok((JsonDocument.Parse argsJson).RootElement.Clone())
-            with _ ->
-                malformed "the arguments are not valid JSON"
+        SpecTool.parse argsJson
+        |> Result.mapError PipelineRefusal.ofDoor
+        |> Result.bind requestOfRoot
 
-        match parsed with
-        | Error e -> Error e
-        | Ok root when root.ValueKind <> JsonValueKind.Object -> malformed "the arguments must be a JSON object"
-        | Ok root ->
-            let pipeline =
-                match root.TryGetProperty "pipeline" with
-                | true, v when v.ValueKind = JsonValueKind.Array -> Ok(v.GetRawText())
-                | _ -> malformed "'pipeline' is required: a JSON array of transform steps"
+    let private assertionOfRoot (root: JsonElement) : Result<PipelineAssertionRequest option, PipelineRefusal> =
+        match root.TryGetProperty AssertArgument with
+        | false, _ -> Ok None
+        | true, v when v.ValueKind = JsonValueKind.Null -> Ok None
+        | true, v when v.ValueKind = JsonValueKind.Object ->
+            let member' (name: string) =
+                match SpecTool.textOf name v with
+                | Ok text -> Ok text
+                | Error _ ->
+                    Error(PipelineRefusal.MalformedAssertion(sprintf "'%s' is required: a non-empty string" name))
 
-            match
-                textOf "table" root,
-                textOf "period_from" root |> Result.bind (instantOf "period_from"),
-                textOf "period_to" root |> Result.bind (instantOf "period_to"),
-                textsOf "path_prefix" root,
-                textsOf "metrics" root,
-                pipeline
-            with
-            | Ok table, Ok from, Ok until, Ok prefix, Ok metrics, Ok pipeline ->
-                Ok {
-                    TableId = table
-                    PeriodFrom = from
-                    PeriodTo = until
-                    PathPrefix = prefix
-                    Metrics = metrics
-                    Pipeline = pipeline
-                }
-            | Error e, _, _, _, _, _
-            | _, Error e, _, _, _, _
-            | _, _, Error e, _, _, _
-            | _, _, _, Error e, _, _
-            | _, _, _, _, Error e, _
-            | _, _, _, _, _, Error e -> Error e
+            match member' "column", member' "as_metric", member' "level" with
+            | Ok column, Ok metric, Ok level ->
+                Ok(
+                    Some {
+                        Column = column
+                        AsMetric = metric
+                        Level = level
+                    }
+                )
+            | Error e, _, _
+            | _, Error e, _
+            | _, _, Error e -> Error e
+        | true, _ ->
+            Error(PipelineRefusal.MalformedAssertion "it must be an object naming 'column', 'as_metric' and 'level'")
 
     /// The assertion the arguments ask for, when they carry the `assert`
     /// argument. Arguments that are not a JSON object carry none; `requestOf`
     /// refuses them.
     let assertionOf (argsJson: string) : Result<PipelineAssertionRequest option, PipelineRefusal> =
-        let root =
-            try
-                Some((JsonDocument.Parse argsJson).RootElement.Clone())
-            with _ ->
-                None
-
-        match root with
-        | Some root when root.ValueKind = JsonValueKind.Object ->
-            match root.TryGetProperty AssertArgument with
-            | false, _ -> Ok None
-            | true, v when v.ValueKind = JsonValueKind.Null -> Ok None
-            | true, v when v.ValueKind = JsonValueKind.Object ->
-                let member' (name: string) =
-                    match textOf name v with
-                    | Ok text -> Ok text
-                    | Error _ ->
-                        Error(PipelineRefusal.MalformedAssertion(sprintf "'%s' is required: a non-empty string" name))
-
-                match member' "column", member' "as_metric", member' "level" with
-                | Ok column, Ok metric, Ok level ->
-                    Ok(
-                        Some {
-                            Column = column
-                            AsMetric = metric
-                            Level = level
-                        }
-                    )
-                | Error e, _, _
-                | _, Error e, _
-                | _, _, Error e -> Error e
-            | true, _ ->
-                Error(
-                    PipelineRefusal.MalformedAssertion "it must be an object naming 'column', 'as_metric' and 'level'"
-                )
-        | _ -> Ok None
+        match SpecTool.parse argsJson with
+        | Ok root -> assertionOfRoot root
+        | Error _ -> Ok None
 
     // ── The pipeline, step by step ────────────────────────────────
 
@@ -755,9 +704,9 @@ module PipelineTool =
                     let rows = Table.rowCount result
                     let cells = rows * List.length result.Columns
 
-                    if cells > FactBrowseApi.MaxSliceCells then
-                        Error(PipelineRefusal.ResultOverCap(cells, FactBrowseApi.MaxSliceCells))
-                    else
+                    match SpecTool.withinCap cells with
+                    | Error refusal -> Error(PipelineRefusal.ofDoor refusal)
+                    | Ok() ->
                         // Every withheld metric of every slice: its label, the
                         // lineage columns it is read through, its counts.
                         let withheld =
@@ -896,29 +845,7 @@ module PipelineTool =
             withheld
 
     /// The text a refusal answers with.
-    let refusalText (refusal: PipelineRefusal) : string =
-        sprintf "%s refused the request: %s." Name (PipelineRefusal.describe refusal)
-
-    /// The slices refused before evaluation: a table with no fact in range,
-    /// or one every cell of which is withheld from the caller.
-    let private readable (table: string) (slice: FactSlice) : Result<FactSlice, PipelineRefusal> =
-        if slice.CellCount = 0 then
-            Error(PipelineRefusal.NoFacts table)
-        elif slice.WithheldCount >= slice.CellCount then
-            Error(
-                PipelineRefusal.NothingDisclosable(
-                    slice.CellCount,
-                    slice.Withheld
-                    |> List.map (fun w ->
-                        ({
-                            PolicyRef = w.PolicyRef
-                            Count = w.Count
-                        }
-                        : PipelineWithheldCount))
-                )
-            )
-        else
-            Ok slice
+    let refusalText (refusal: PipelineRefusal) : string = SpecTool.refusalText Name [ refusal ]
 
     /// The steps checked before anything is read: against the deployment's
     /// profile when it registered one (answering the joins its relation check
@@ -935,85 +862,142 @@ module PipelineTool =
             PipelineProfile.admit registered caller table pipeline
             |> Result.bind (fun joins -> preflight (not joins.IsEmpty) pipeline |> Result.map (fun () -> joins))
 
-    /// The evaluation under `profile` (none: the full algebra, no join), with
-    /// the gated slice it was computed over. The `assert` argument is not read
-    /// here. A joined table is read over the request's period range and
-    /// subject prefix, every metric of it, through the same gated read.
-    let internal evaluateSlicedUnder
-        (profile: RegisteredPipelineProfile option)
-        (deps: FactBrowseHandler.FactBrowseDeps)
-        (scope: ResolvedScope)
-        (principal: string)
-        (argsJson: string)
-        : Async<Result<FactSlice * PipelineToolResult, PipelineRefusal>> =
+    // ── Over the spec-tool door ───────────────────────────────────
+
+    /// `evaluate_pipeline`'s spec: the decoded pipeline, the assertion its
+    /// arguments ask for, and the joins the profile's relation check admitted
+    /// (filled by validation).
+    type Spec = {
+        /// The pipeline, decoded step by step.
+        Pipeline: Transform list
+        /// The `assert` argument, when the arguments carry one.
+        Assert: PipelineAssertionRequest option
+        /// The joins the deployment's profile admitted.
+        Joins: PipelineJoin list
+    }
+
+    /// The request the arguments name, the pipeline decoded. `asserting`:
+    /// whether the deployment composes derived assertions; where it does not,
+    /// arguments carrying `assert` are refused before anything else.
+    let internal decodeRoot (asserting: bool) (root: JsonElement) : Result<SpecRequest<Spec>, PipelineRefusal> =
+        match assertionOfRoot root with
+        | Ok(Some _)
+        | Error _ when not asserting -> Error PipelineRefusal.AssertionNotOffered
+        | Error refusal -> Error refusal
+        | Ok assertion ->
+            requestOfRoot root
+            |> Result.bind (fun request ->
+                decode request.Pipeline
+                |> Result.map (fun pipeline -> {
+                    Slice = {
+                        TableId = request.TableId
+                        PeriodFrom = request.PeriodFrom
+                        PeriodTo = request.PeriodTo
+                        SubjectPrefix = request.PathPrefix
+                        Metrics = request.Metrics
+                    }
+                    Spec = {
+                        Pipeline = pipeline
+                        Assert = assertion
+                        Joins = []
+                    }
+                }))
+
+    /// The request record a decoded request is evaluated as.
+    let internal requestRecord (request: SpecRequest<Spec>) : PipelineToolRequest = {
+        TableId = request.Slice.TableId
+        PeriodFrom = request.Slice.PeriodFrom
+        PeriodTo = request.Slice.PeriodTo
+        PathPrefix = request.Slice.SubjectPrefix
+        Metrics = request.Slice.Metrics
+        Pipeline = DataFrameCodec.encodePipeline request.Spec.Pipeline
+    }
+
+    /// The evaluation over the door's gated read: the joined tables read over
+    /// the request's period range and subject prefix, every metric of each,
+    /// through the same gated read, then the pure evaluation. A joined table
+    /// withheld whole is read, not refused: its columns are withheld through
+    /// the join's lineage.
+    let internal evaluateRead
+        (read: SpecRead)
+        (request: SpecRequest<Spec>)
+        : Async<Result<PipelineToolResult, PipelineRefusal>> =
         async {
-            let caller: PipelineCaller = { Scope = scope; Principal = principal }
+            let rec readJoined (acc: (string * FactSlice) list) (tables: string list) = async {
+                match tables with
+                | [] -> return Ok(List.rev acc)
+                | table :: rest ->
+                    match! read.Read table [] with
+                    | Error refusal -> return Error(PipelineRefusal.ofDoor refusal)
+                    | Ok slice when slice.CellCount = 0 -> return Error(PipelineRefusal.NoFacts table)
+                    | Ok slice -> return! readJoined ((table, slice) :: acc) rest
+            }
 
-            match
-                requestOf argsJson
-                |> Result.bind (fun request ->
-                    decode request.Pipeline
-                    |> Result.bind (fun p ->
-                        admitted profile caller request.TableId p
-                        |> Result.map (fun joins -> request, p, joins)))
-            with
+            match! readJoined [] (request.Spec.Joins |> List.map _.Joined |> List.distinct) with
             | Error refusal -> return Error refusal
-            | Ok(request, pipeline, joins) ->
-                let gated = {
-                    deps with
-                        Gate = FactBrowseHandler.atSurface FactToolResult deps.Gate
-                }
-
-                let readAt = deps.Clock()
-
-                let read (table: string) (metrics: string list) = async {
-                    match!
-                        FactBrowseHandler.querySlice gated scope principal {
-                            TableId = table
-                            PeriodFrom = request.PeriodFrom
-                            PeriodTo = request.PeriodTo
-                            SubjectPrefix = request.PathPrefix
-                            Metrics = metrics
-                        }
-                    with
-                    | Error reason -> return Error(PipelineRefusal.SliceRefused reason)
-                    | Ok slice -> return Ok slice
-                }
-
-                // A joined table withheld whole is read, not refused: its
-                // columns are withheld through the join's lineage.
-                let rec readJoined (acc: (string * FactSlice) list) (tables: string list) = async {
-                    match tables with
-                    | [] -> return Ok(List.rev acc)
-                    | table :: rest ->
-                        match! read table [] with
-                        | Error refusal -> return Error refusal
-                        | Ok slice when slice.CellCount = 0 -> return Error(PipelineRefusal.NoFacts table)
-                        | Ok slice -> return! readJoined ((table, slice) :: acc) rest
-                }
-
-                match! read request.TableId request.Metrics with
-                | Error refusal -> return Error refusal
-                | Ok slice ->
-                    match readable request.TableId slice with
-                    | Error refusal -> return Error refusal
-                    | Ok slice ->
-                        match! readJoined [] (joins |> List.map _.Joined |> List.distinct) with
-                        | Error refusal -> return Error refusal
-                        | Ok joined ->
-                            return
-                                evaluateJoined request pipeline slice joined readAt
-                                |> Result.map (fun r -> slice, r)
+            | Ok joined ->
+                return evaluateJoined (requestRecord request) request.Spec.Pipeline read.Slice joined read.ReadAt
         }
 
-    /// `evaluateSlicedUnder` with no profile: the full algebra and no join.
+    /// The steps checked before anything is read, as the door's validation.
+    let internal validateUnder
+        (profile: RegisteredPipelineProfile option)
+        (scope: ResolvedScope)
+        (principal: string)
+        (request: SpecRequest<Spec>)
+        : Result<Spec, PipelineRefusal list> =
+        admitted profile { Scope = scope; Principal = principal } request.Slice.TableId request.Spec.Pipeline
+        |> Result.map (fun joins -> { request.Spec with Joins = joins })
+        |> Result.mapError List.singleton
+
+    /// What the door reads of an evaluation: its table, shape and withheld
+    /// report, and no row declared as a fact.
+    let private projected (result: PipelineToolResult) : SpecResult = {
+        Table = result.Table
+        Rows = result.Rows
+        Columns = result.Columns
+        Withheld = result.Withheld
+        Facts = []
+    }
+
+    /// `evaluate_pipeline` over the spec-tool door, under the deployment's
+    /// pipeline profile (`None`: the full algebra, no join). Arguments carrying
+    /// `assert` are refused: asserting is offered only where a deployment
+    /// composes it (`PipelineAssertion`).
+    let specToolUnder
+        (profile: RegisteredPipelineProfile option)
+        : SpecTool<Spec, PipelineRefusal, PipelineToolResult> =
+        {
+            Definition = definition
+            OperationId = OperationId
+            Version = ComputeVersion
+            Decode = decodeRoot false
+            Validate = validateUnder profile
+            Evaluate = evaluateRead
+            Hash = fun spec -> IncrementalCodec.pipelineHash spec.Pipeline
+            Project = projected
+            Summary = summary
+            OfDoor = PipelineRefusal.ofDoor
+        }
+
+    /// The evaluation with the gated slice it was computed over, under no
+    /// profile; the `assert` argument is decoded and not acted on.
     let internal evaluateSliced
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
         (argsJson: string)
         : Async<Result<FactSlice * PipelineToolResult, PipelineRefusal>> =
-        evaluateSlicedUnder None deps scope principal argsJson
+        async {
+            let tool = {
+                specToolUnder None with
+                    Decode = decodeRoot true
+            }
+
+            match! SpecTool.evaluateSliced tool deps scope principal argsJson with
+            | Ok(slice, _, result) -> return Ok(slice, result)
+            | Error refusals -> return Error(List.head refusals)
+        }
 
     /// The executor over explicit dependencies, under the deployment's
     /// pipeline profile (`None`: the full algebra, as a deployment that
@@ -1029,12 +1013,9 @@ module PipelineTool =
         (argsJson: string)
         : Async<Result<PipelineToolResult, PipelineRefusal>> =
         async {
-            match assertionOf argsJson with
-            | Ok None ->
-                let! evaluated = evaluateSlicedUnder profile deps scope principal argsJson
-                return evaluated |> Result.map snd
-            | Ok(Some _)
-            | Error _ -> return Error PipelineRefusal.AssertionNotOffered
+            match! SpecTool.answer (specToolUnder profile) deps scope principal argsJson with
+            | Ok(result, _) -> return Ok result
+            | Error refusals -> return Error(List.head refusals)
         }
 
     /// `answerUnder` with no profile: the full algebra and no join.

@@ -687,6 +687,7 @@ let private registeredTests =
         FactTablesToolTests.tests
         AggregateMetricToolTests.tests
         PipelineAssertionTests.tests
+        SpecToolTests.tests
         PipelineProfileTests.tests
         PageRequestResolverTests.tests
         LayoutToolsTests.tests

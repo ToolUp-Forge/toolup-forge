@@ -1758,6 +1758,52 @@ A derived metric is registered before it is asserted, with its display format an
 
 Migration note: [`docs/migrations/1146-pipeline-assertion.md`](../migrations/1146-pipeline-assertion.md).
 
+#### A tool of your own over the same door: spec in, Facts out (Phase 1273)
+
+`evaluate_pipeline` is one instance of a pattern: the model writes a closed, hashable **spec** over
+one gated slice of one fact table; the server checks it before any fact is read and refuses by name;
+it evaluates it over the cells the gate admitted; the user sees the result and the model retypes
+none of it; and rows that name a subject, a metric and a period can be asserted as facts whose
+method names the spec's hash. `SpecTool` (in `ToolUp.Facts.Server`) is that pattern's door, written
+once, and a deployment's own spec tool supplies only what is particular to its spec:
+
+| Field of `SpecTool<'Spec, 'Refusal, 'Result>` | What the tool supplies |
+|---|---|
+| `Decode` | the JSON arguments to the slice and the spec (`SpecTool.sliceOf` reads the standard slice arguments, `SpecTool.sliceParameters` declares them) |
+| `Validate` | the static checks, run before any read; every refusal found is returned together |
+| `Evaluate` | the evaluation over the gated slice (`SpecRead`: the slice, when it was read, the registry, and `Read` for another table through the same gate) |
+| `Hash` | the spec's canonical hash, which every asserted fact's `Computed` method names |
+| `Project` | the result as the door reads it (`SpecResult`: the table, its shape, the withheld report, and the rows declared as facts) |
+| `Summary`, `OfDoor` | the text the model reads, and the door's refusals as the tool's own |
+
+The door owns the rest: the argument parse, the slice read under the caller's scope and principal at
+`FactToolResult`, the refusal of a slice with no fact or with every cell withheld, the cell cap
+(`FactBrowseApi.MaxSliceCells`), and the assertion write. Rows the result declares
+(`SpecResult.Facts`) are checked (each metric must be registered as produced by the tool's
+`OperationId`, each row must name its input facts, at most `SpecTool.MaxInputs`), minted with
+`Computed(OperationId, Version, Hash spec)`, asserted as one audited batch, read back and judged at
+`FactToolResult`. **A result that declares no row is a block only and never a fact.** The result
+budget is the definition's, applied by the AI tool registry like every tool's.
+
+**Refusals the model can repair.** The tool's refusal type implements `ISpecRefusal` (`Name`,
+`Remedy`, `Admissible`), and the door frames every answer one way: one refusal as
+`<tool> refused the request: <remedy>.`, several as
+`<tool> refused the request for N reasons: (1) …; (2) ….`, so a model repairs every fault the
+validator found in one call. The door's own refusals are `SpecDoorRefusal`. `PipelineRefusal`
+implements the interface, and its door cases read exactly as they did.
+
+`FactsCompose.withSpecTool tool` declares a tool beside the fact tools, as a string-returning tool on
+`ServerApp.AITools`; it arms where the AI companion is composed and refuses a second tool of the
+same name. `evaluate_pipeline` is `PipelineTool.specToolUnder profile`, behaviour-preserving: its
+refusal text, summary, block part and asserted facts are unchanged.
+
+**What the door does not carry yet: the block part.** `evaluate_pipeline`'s block part
+(`PipelineAnsweringTool`, Phase 1156) persists the request and is drawn again by re-running it under
+the reader's gate, so it is a function of the pipeline spec and its own re-run endpoint, not of the
+result alone. A deployment's spec tool registered through `withSpecTool` answers text; a block part
+for it needs a spec-generic block request and re-run, which is not built here. Migration note:
+[`docs/migrations/1273-spec-tool-pattern.md`](../migrations/1273-spec-tool-pattern.md).
+
 #### The question compiler (Phase 986)
 
 The planner takes its compiler from the first of these that the

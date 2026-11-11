@@ -25,6 +25,7 @@
         <!-- Phase 897 — team-to-team fact publication: the grant, the two
              consents, the target's declaration and the refusals. -->
         <Compile Include="Shared\PublicationTypes.fs" />
+        <Compile Include="Shared\SpecToolTypes.fs" />
         <!-- Phase 1145 — evaluate_pipeline: the request, the result, the
              withheld report and the refusals, carrying the pipeline and the
              result table as codec strings. -->

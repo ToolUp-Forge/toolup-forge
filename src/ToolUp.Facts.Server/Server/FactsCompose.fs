@@ -1004,6 +1004,31 @@ module FactsCompose =
                 else
                     s.AddSingleton<RegisteredPipelineProfile>(profile))
 
+    /// **Adds** a "spec in, Facts out" tool (`SpecTool`): its declaration
+    /// and the door's executor ride `ServerApp.AITools` beside the fact tools,
+    /// so the tool arms where the AI companion is composed. With no fact store
+    /// composed it changes nothing; a tool named like one already declared is
+    /// refused.
+    let withSpecTool (tool: SpecTool<'Spec, 'Refusal, 'Result>) (app: ServerApp) : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled ->
+            if
+                app.AITools
+                |> List.exists (fun (definition, _) -> definition.Name = tool.Definition.Name)
+            then
+                ServiceComposition.refuse (
+                    CompositionRefusal.InvalidDeclaration(
+                        "FactsCompose.withSpecTool",
+                        sprintf "a tool named '%s' is already declared" tool.Definition.Name
+                    )
+                )
+            else
+                {
+                    app with
+                        AITools = app.AITools @ [ tool.Definition, SpecTool.executor tool ]
+                }
+
     /// Declare what `list_fact_tables` lists: the cap on the distinct members
     /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
     /// turns member listing off). Call it after `withFactStore`, which declares

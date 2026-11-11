@@ -45,26 +45,8 @@ type PipelineToolRequest = {
     Pipeline: string
 }
 
-/// Withheld cells an output column read, counted by the disclosure policy
-/// that withheld them.
-type PipelineWithheldCount = {
-    /// The disclosure policy that withheld the cells.
-    PolicyRef: string
-    /// How many cells it withheld.
-    Count: int
-}
-
-/// One output column the withheld rule withheld: its cells are empty in the
-/// result table.
-type PipelineWithheldColumn = {
-    /// The output column.
-    Column: string
-    /// The slice's metrics, each with at least one withheld cell, that the
-    /// column's lineage reads.
-    Metrics: string list
-    /// Those metrics' withheld cells, by policy.
-    Withheld: PipelineWithheldCount list
-}
+// The withheld report (`PipelineWithheldCount`, `PipelineWithheldColumn`) is
+// the spec-tool seam's, in `SpecToolTypes.fs`.
 
 /// What an evaluation answers. Nothing here is a value the model typed: the
 /// table is the evaluator's, over cells the gate admitted.
@@ -234,123 +216,175 @@ type PipelineRefusal =
     /// it joins a table written into the pipeline.
     | JoinRefused of step: int * reason: string
 
-/// Reading a `PipelineRefusal`.
-[<RequireQualifiedAccess>]
-module PipelineRefusal =
-
-    let private quoted (names: string list) : string =
+    static member private Quoted(names: string list) : string =
         match names with
         | [] -> "none"
         | names -> names |> List.map (sprintf "'%s'") |> String.concat ", "
 
+    interface ISpecRefusal with
+        member this.Name =
+            match this with
+            | PipelineRefusal.MalformedArguments _ -> "MalformedArguments"
+            | PipelineRefusal.SliceRefused _ -> "SliceRefused"
+            | PipelineRefusal.NoFacts _ -> "NoFacts"
+            | PipelineRefusal.NothingDisclosable _ -> "NothingDisclosable"
+            | PipelineRefusal.MalformedPipeline _ -> "MalformedPipeline"
+            | PipelineRefusal.NamedSource _ -> "NamedSource"
+            | PipelineRefusal.UnboundParameter _ -> "UnboundParameter"
+            | PipelineRefusal.UnpinnedClock _ -> "UnpinnedClock"
+            | PipelineRefusal.UnknownColumn _ -> "UnknownColumn"
+            | PipelineRefusal.OpenSchema _ -> "OpenSchema"
+            | PipelineRefusal.EvaluationFailed _ -> "EvaluationFailed"
+            | PipelineRefusal.ResultOverCap _ -> "ResultOverCap"
+            | PipelineRefusal.AssertionNotOffered -> "AssertionNotOffered"
+            | PipelineRefusal.MalformedAssertion _ -> "MalformedAssertion"
+            | PipelineRefusal.AssertedColumnUnknown _ -> "AssertedColumnUnknown"
+            | PipelineRefusal.AssertedColumnWithheld _ -> "AssertedColumnWithheld"
+            | PipelineRefusal.AssertedColumnNotNumeric _ -> "AssertedColumnNotNumeric"
+            | PipelineRefusal.AssertedColumnHostRounded _ -> "AssertedColumnHostRounded"
+            | PipelineRefusal.UnregisteredMetric _ -> "UnregisteredMetric"
+            | PipelineRefusal.NotADerivedMetric _ -> "NotADerivedMetric"
+            | PipelineRefusal.SubjectKeyUnresolved _ -> "SubjectKeyUnresolved"
+            | PipelineRefusal.SubjectRepeated _ -> "SubjectRepeated"
+            | PipelineRefusal.ValueMissing _ -> "ValueMissing"
+            | PipelineRefusal.InputsUnnamed _ -> "InputsUnnamed"
+            | PipelineRefusal.InputsOverCap _ -> "InputsOverCap"
+            | PipelineRefusal.AssertionFailed _ -> "AssertionFailed"
+            | PipelineRefusal.OutsideProfile _ -> "OutsideProfile"
+            | PipelineRefusal.JoinRefused _ -> "JoinRefused"
+
+        member this.Remedy =
+            match this with
+            | PipelineRefusal.MalformedArguments reason ->
+                SpecDoorRefusal.describe (SpecDoorRefusal.MalformedArguments reason)
+            | PipelineRefusal.SliceRefused reason -> SpecDoorRefusal.describe (SpecDoorRefusal.SliceRefused reason)
+            | PipelineRefusal.NoFacts tableId -> SpecDoorRefusal.describe (SpecDoorRefusal.NoFacts tableId)
+            | PipelineRefusal.NothingDisclosable(cells, withheld) ->
+                SpecDoorRefusal.describe (SpecDoorRefusal.NothingDisclosable(cells, withheld))
+            | PipelineRefusal.MalformedPipeline(None, reason) ->
+                sprintf "the pipeline is not a JSON array of transform steps: %s" reason
+            | PipelineRefusal.MalformedPipeline(Some step, reason) ->
+                sprintf "step %d of the pipeline does not decode: %s" step reason
+            | PipelineRefusal.NamedSource(step, verb) ->
+                sprintf
+                    "step %d is a %s, which reads another source; the slice is the only source, so derive what you need from its columns"
+                    step
+                    verb
+            | PipelineRefusal.UnboundParameter(step, names) ->
+                sprintf
+                    "step %d names the parameter(s) %s, and nothing binds a parameter here; write each value literally"
+                    step
+                    (PipelineRefusal.Quoted names)
+            | PipelineRefusal.UnpinnedClock step ->
+                sprintf
+                    "step %d reads the clock ('now'), and the evaluation pins none; write the instant literally"
+                    step
+            | PipelineRefusal.UnknownColumn(step, column, available) ->
+                sprintf
+                    "step %d reads column '%s', which its input does not have (its columns: %s)"
+                    step
+                    column
+                    (PipelineRefusal.Quoted available)
+            | PipelineRefusal.OpenSchema(step, reason) ->
+                sprintf
+                    "after step %d the result's columns can no longer be named (%s); every output column must be named by the pipeline"
+                    step
+                    reason
+            | PipelineRefusal.EvaluationFailed reason -> sprintf "the pipeline failed over the slice: %s" reason
+            | PipelineRefusal.ResultOverCap(cells, cap) ->
+                sprintf
+                    "the result would hold %d cells, over the cap of %d; end the pipeline with a limit step or keep fewer columns"
+                    cells
+                    cap
+            | PipelineRefusal.AssertionNotOffered ->
+                "this deployment does not assert derived figures as facts; evaluate without the 'assert' argument"
+            | PipelineRefusal.MalformedAssertion reason -> sprintf "the 'assert' argument is malformed: %s" reason
+            | PipelineRefusal.AssertedColumnUnknown(column, available) ->
+                sprintf
+                    "the result has no column '%s' to assert (its columns: %s)"
+                    column
+                    (PipelineRefusal.Quoted available)
+            | PipelineRefusal.AssertedColumnWithheld(column, withheld) ->
+                sprintf
+                    "column '%s' is withheld (%s), so its values are partial and none is asserted; narrow the slice to a region with nothing withheld"
+                    column
+                    (PipelineWithheldCount.Phrase withheld)
+            | PipelineRefusal.AssertedColumnNotNumeric(column, columnType) ->
+                sprintf "column '%s' holds %s values, and only a number is asserted" column columnType
+            | PipelineRefusal.AssertedColumnHostRounded column ->
+                sprintf
+                    "column '%s' passes through a host-rounded function (exp, ln, log10 or a non-integer power), so two hosts may differ in its last place and it is not one fact"
+                    column
+            | PipelineRefusal.UnregisteredMetric metric ->
+                SpecDoorRefusal.describe (SpecDoorRefusal.UnregisteredMetric metric)
+            | PipelineRefusal.NotADerivedMetric(metric, producing) ->
+                sprintf
+                    "metric '%s' is registered as produced by %s, not by the pipeline operation, so the assistant does not assert it"
+                    metric
+                    (match producing with
+                     | Some operation -> sprintf "'%s'" operation
+                     | None -> "no declared operation")
+            | PipelineRefusal.SubjectKeyUnresolved reason -> sprintf "the result's rows do not name subjects: %s" reason
+            | PipelineRefusal.SubjectRepeated subject ->
+                sprintf
+                    "two rows of the result name subject '%s'; group by the subject so each row is one subject"
+                    subject
+            | PipelineRefusal.ValueMissing subject ->
+                sprintf "the asserted column has no value for subject '%s'" subject
+            | PipelineRefusal.InputsUnnamed subject -> SpecDoorRefusal.describe (SpecDoorRefusal.InputsUnnamed subject)
+            | PipelineRefusal.InputsOverCap(subject, inputs, cap) ->
+                SpecDoorRefusal.describe (SpecDoorRefusal.InputsOverCap(subject, inputs, cap))
+            | PipelineRefusal.AssertionFailed reason ->
+                SpecDoorRefusal.describe (SpecDoorRefusal.AssertionFailed reason)
+            | PipelineRefusal.OutsideProfile(step, kind, name, admitted) ->
+                sprintf
+                    "step %d uses the %s '%s', which this deployment's pipeline profile does not admit; the %ss it admits are %s, so rewrite the step with those"
+                    step
+                    kind
+                    name
+                    kind
+                    (PipelineRefusal.Quoted admitted)
+            | PipelineRefusal.JoinRefused(step, reason) ->
+                sprintf "step %d is a join this deployment refuses: %s" step reason
+
+        member this.Admissible =
+            match this with
+            | PipelineRefusal.UnknownColumn(_, _, available)
+            | PipelineRefusal.AssertedColumnUnknown(_, available)
+            | PipelineRefusal.OutsideProfile(_, _, _, available) -> available
+            | _ -> []
+
+/// Reading a `PipelineRefusal`.
+[<RequireQualifiedAccess>]
+module PipelineRefusal =
+
     /// Withheld counts, by policy, as one phrase.
-    let withheldPhrase (withheld: PipelineWithheldCount list) : string =
-        match withheld with
-        | [] -> "none withheld"
-        | [ w ] -> sprintf "%d withheld under %s" w.Count w.PolicyRef
-        | many ->
-            sprintf
-                "%d withheld (%s)"
-                (many |> List.sumBy _.Count)
-                (many
-                 |> List.map (fun w -> sprintf "%d under %s" w.Count w.PolicyRef)
-                 |> String.concat ", ")
+    let withheldPhrase (withheld: PipelineWithheldCount list) : string = PipelineWithheldCount.Phrase withheld
 
     /// The sentence a refusal answers with, naming what to repair. It carries
     /// counts and names, never a value.
-    let describe (refusal: PipelineRefusal) : string =
+    let describe (refusal: PipelineRefusal) : string = (refusal :> ISpecRefusal).Remedy
+
+    /// The refusal's name: its case.
+    let name (refusal: PipelineRefusal) : string = (refusal :> ISpecRefusal).Name
+
+    /// What the refusal names as admissible: the columns a step may read, the
+    /// columns an assertion may name, or what the profile admits.
+    let admissible (refusal: PipelineRefusal) : string list = (refusal :> ISpecRefusal).Admissible
+
+    /// The pipeline refusal a door refusal is: every door case is one of the
+    /// pipeline's own, so `evaluate_pipeline` reads exactly as it did before
+    /// the door was shared.
+    let ofDoor (refusal: SpecDoorRefusal) : PipelineRefusal =
         match refusal with
-        | PipelineRefusal.MalformedArguments reason -> reason
-        | PipelineRefusal.SliceRefused reason -> sprintf "the slice read refused it: %s" reason
-        | PipelineRefusal.NoFacts tableId ->
-            sprintf "no fact of table '%s' answers the slice; widen the period range or the subject prefix" tableId
-        | PipelineRefusal.NothingDisclosable(cells, withheld) ->
-            sprintf
-                "no cell of the slice carries a value you may be shown: %d cell(s) read, %s"
-                cells
-                (withheldPhrase withheld)
-        | PipelineRefusal.MalformedPipeline(None, reason) ->
-            sprintf "the pipeline is not a JSON array of transform steps: %s" reason
-        | PipelineRefusal.MalformedPipeline(Some step, reason) ->
-            sprintf "step %d of the pipeline does not decode: %s" step reason
-        | PipelineRefusal.NamedSource(step, verb) ->
-            sprintf
-                "step %d is a %s, which reads another source; the slice is the only source, so derive what you need from its columns"
-                step
-                verb
-        | PipelineRefusal.UnboundParameter(step, names) ->
-            sprintf
-                "step %d names the parameter(s) %s, and nothing binds a parameter here; write each value literally"
-                step
-                (quoted names)
-        | PipelineRefusal.UnpinnedClock step ->
-            sprintf "step %d reads the clock ('now'), and the evaluation pins none; write the instant literally" step
-        | PipelineRefusal.UnknownColumn(step, column, available) ->
-            sprintf
-                "step %d reads column '%s', which its input does not have (its columns: %s)"
-                step
-                column
-                (quoted available)
-        | PipelineRefusal.OpenSchema(step, reason) ->
-            sprintf
-                "after step %d the result's columns can no longer be named (%s); every output column must be named by the pipeline"
-                step
-                reason
-        | PipelineRefusal.EvaluationFailed reason -> sprintf "the pipeline failed over the slice: %s" reason
-        | PipelineRefusal.ResultOverCap(cells, cap) ->
-            sprintf
-                "the result would hold %d cells, over the cap of %d; end the pipeline with a limit step or keep fewer columns"
-                cells
-                cap
-        | PipelineRefusal.AssertionNotOffered ->
-            "this deployment does not assert derived figures as facts; evaluate without the 'assert' argument"
-        | PipelineRefusal.MalformedAssertion reason -> sprintf "the 'assert' argument is malformed: %s" reason
-        | PipelineRefusal.AssertedColumnUnknown(column, available) ->
-            sprintf "the result has no column '%s' to assert (its columns: %s)" column (quoted available)
-        | PipelineRefusal.AssertedColumnWithheld(column, withheld) ->
-            sprintf
-                "column '%s' is withheld (%s), so its values are partial and none is asserted; narrow the slice to a region with nothing withheld"
-                column
-                (withheldPhrase withheld)
-        | PipelineRefusal.AssertedColumnNotNumeric(column, columnType) ->
-            sprintf "column '%s' holds %s values, and only a number is asserted" column columnType
-        | PipelineRefusal.AssertedColumnHostRounded column ->
-            sprintf
-                "column '%s' passes through a host-rounded function (exp, ln, log10 or a non-integer power), so two hosts may differ in its last place and it is not one fact"
-                column
-        | PipelineRefusal.UnregisteredMetric metric ->
-            sprintf
-                "metric '%s' is not registered; a derived metric is registered, with its display format and roll-up, before it is asserted"
-                metric
-        | PipelineRefusal.NotADerivedMetric(metric, producing) ->
-            sprintf
-                "metric '%s' is registered as produced by %s, not by the pipeline operation, so the assistant does not assert it"
-                metric
-                (match producing with
-                 | Some operation -> sprintf "'%s'" operation
-                 | None -> "no declared operation")
-        | PipelineRefusal.SubjectKeyUnresolved reason -> sprintf "the result's rows do not name subjects: %s" reason
-        | PipelineRefusal.SubjectRepeated subject ->
-            sprintf "two rows of the result name subject '%s'; group by the subject so each row is one subject" subject
-        | PipelineRefusal.ValueMissing subject -> sprintf "the asserted column has no value for subject '%s'" subject
-        | PipelineRefusal.InputsUnnamed subject ->
-            sprintf
-                "the value for subject '%s' reads no fact of the slice, so its inputs cannot be named and it is not asserted"
-                subject
-        | PipelineRefusal.InputsOverCap(subject, inputs, cap) ->
-            sprintf
-                "the value for subject '%s' reads %d facts, over the %d one fact may name; narrow the slice"
-                subject
-                inputs
-                cap
-        | PipelineRefusal.AssertionFailed reason -> sprintf "the fact store refused the assertion: %s" reason
-        | PipelineRefusal.OutsideProfile(step, kind, name, admitted) ->
-            sprintf
-                "step %d uses the %s '%s', which this deployment's pipeline profile does not admit; the %ss it admits are %s, so rewrite the step with those"
-                step
-                kind
-                name
-                kind
-                (quoted admitted)
-        | PipelineRefusal.JoinRefused(step, reason) ->
-            sprintf "step %d is a join this deployment refuses: %s" step reason
+        | SpecDoorRefusal.MalformedArguments reason -> PipelineRefusal.MalformedArguments reason
+        | SpecDoorRefusal.SliceRefused reason -> PipelineRefusal.SliceRefused reason
+        | SpecDoorRefusal.NoFacts tableId -> PipelineRefusal.NoFacts tableId
+        | SpecDoorRefusal.NothingDisclosable(cells, withheld) -> PipelineRefusal.NothingDisclosable(cells, withheld)
+        | SpecDoorRefusal.ResultOverCap(cells, cap) -> PipelineRefusal.ResultOverCap(cells, cap)
+        | SpecDoorRefusal.UnregisteredMetric metric -> PipelineRefusal.UnregisteredMetric metric
+        | SpecDoorRefusal.NotADerivedMetric(metric, producing, _) ->
+            PipelineRefusal.NotADerivedMetric(metric, producing)
+        | SpecDoorRefusal.InputsUnnamed subject -> PipelineRefusal.InputsUnnamed subject
+        | SpecDoorRefusal.InputsOverCap(subject, inputs, cap) -> PipelineRefusal.InputsOverCap(subject, inputs, cap)
+        | SpecDoorRefusal.AssertionFailed reason -> PipelineRefusal.AssertionFailed reason

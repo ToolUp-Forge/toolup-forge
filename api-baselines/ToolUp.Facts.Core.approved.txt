@@ -618,6 +618,10 @@ ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
 ToolUp.Facts.FreshnessHistogram.StaleCount : System.Int32 { get }
 ToolUp.Facts.IDisclosureTaintIndexSource (interface)
 ToolUp.Facts.IDisclosureTaintIndexSource.ReadTaintIndex(ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.DisclosureTaintIndex]
+ToolUp.Facts.ISpecRefusal (interface)
+ToolUp.Facts.ISpecRefusal.Admissible : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ISpecRefusal.Name : System.String { get }
+ToolUp.Facts.ISpecRefusal.Remedy : System.String { get }
 ToolUp.Facts.IndexDelta (class)
 ToolUp.Facts.IndexDelta..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.Facts.IndexDelta.Head : System.String { get }
@@ -818,7 +822,10 @@ ToolUp.Facts.PipelineRefusal+UnregisteredMetric.metric : System.String { get }
 ToolUp.Facts.PipelineRefusal+ValueMissing (class)
 ToolUp.Facts.PipelineRefusal+ValueMissing.subject : System.String { get }
 ToolUp.Facts.PipelineRefusalModule (class)
+ToolUp.Facts.PipelineRefusalModule.admissible(ToolUp.Facts.PipelineRefusal) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.PipelineRefusalModule.describe(ToolUp.Facts.PipelineRefusal) : System.String
+ToolUp.Facts.PipelineRefusalModule.name(ToolUp.Facts.PipelineRefusal) : System.String
+ToolUp.Facts.PipelineRefusalModule.ofDoor(ToolUp.Facts.SpecDoorRefusal) : ToolUp.Facts.PipelineRefusal
 ToolUp.Facts.PipelineRefusalModule.withheldPhrase(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount]) : System.String
 ToolUp.Facts.PipelineToolRequest (class)
 ToolUp.Facts.PipelineToolRequest..ctor(System.String, System.DateTime, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
@@ -849,6 +856,7 @@ ToolUp.Facts.PipelineWithheldColumn.Withheld : Microsoft.FSharp.Collections.FSha
 ToolUp.Facts.PipelineWithheldCount (class)
 ToolUp.Facts.PipelineWithheldCount..ctor(System.String, System.Int32)
 ToolUp.Facts.PipelineWithheldCount.Count : System.Int32 { get }
+ToolUp.Facts.PipelineWithheldCount.Phrase(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount]) : System.String
 ToolUp.Facts.PipelineWithheldCount.PolicyRef : System.String { get }
 ToolUp.Facts.PlanRefusalReason (class)
 ToolUp.Facts.PlanRefusalReason.IsInvalidSubjectPath : System.Boolean { get }
@@ -1209,6 +1217,72 @@ ToolUp.Facts.RankedFactRef (class)
 ToolUp.Facts.RankedFactRef..ctor(System.Int32, System.String)
 ToolUp.Facts.RankedFactRef.FactId : System.String { get }
 ToolUp.Facts.RankedFactRef.Rank : System.Int32 { get }
+ToolUp.Facts.SpecDoorRefusal (class)
+ToolUp.Facts.SpecDoorRefusal.IsAssertionFailed : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsInputsOverCap : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsInputsUnnamed : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsMalformedArguments : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsNoFacts : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsNotADerivedMetric : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsNothingDisclosable : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsResultOverCap : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsSliceRefused : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.IsUnregisteredMetric : System.Boolean { get }
+ToolUp.Facts.SpecDoorRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.SpecDoorRefusal+AssertionFailed (class)
+ToolUp.Facts.SpecDoorRefusal+AssertionFailed.reason : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+InputsOverCap (class)
+ToolUp.Facts.SpecDoorRefusal+InputsOverCap.cap : System.Int32 { get }
+ToolUp.Facts.SpecDoorRefusal+InputsOverCap.inputs : System.Int32 { get }
+ToolUp.Facts.SpecDoorRefusal+InputsOverCap.subject : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+InputsUnnamed (class)
+ToolUp.Facts.SpecDoorRefusal+InputsUnnamed.subject : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+MalformedArguments (class)
+ToolUp.Facts.SpecDoorRefusal+MalformedArguments.reason : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+NoFacts (class)
+ToolUp.Facts.SpecDoorRefusal+NoFacts.tableId : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+NotADerivedMetric (class)
+ToolUp.Facts.SpecDoorRefusal+NotADerivedMetric.metric : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+NotADerivedMetric.operation : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+NotADerivedMetric.producingOperation : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.SpecDoorRefusal+NothingDisclosable (class)
+ToolUp.Facts.SpecDoorRefusal+NothingDisclosable.cells : System.Int32 { get }
+ToolUp.Facts.SpecDoorRefusal+NothingDisclosable.withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount] { get }
+ToolUp.Facts.SpecDoorRefusal+ResultOverCap (class)
+ToolUp.Facts.SpecDoorRefusal+ResultOverCap.cap : System.Int32 { get }
+ToolUp.Facts.SpecDoorRefusal+ResultOverCap.cells : System.Int32 { get }
+ToolUp.Facts.SpecDoorRefusal+SliceRefused (class)
+ToolUp.Facts.SpecDoorRefusal+SliceRefused.reason : System.String { get }
+ToolUp.Facts.SpecDoorRefusal+Tags (class)
+ToolUp.Facts.SpecDoorRefusal+Tags.AssertionFailed : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.InputsOverCap : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.InputsUnnamed : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.MalformedArguments : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.NoFacts : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.NotADerivedMetric : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.NothingDisclosable : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.ResultOverCap : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.SliceRefused : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+Tags.UnregisteredMetric : System.Int32 (literal)
+ToolUp.Facts.SpecDoorRefusal+UnregisteredMetric (class)
+ToolUp.Facts.SpecDoorRefusal+UnregisteredMetric.metric : System.String { get }
+ToolUp.Facts.SpecDoorRefusalModule (class)
+ToolUp.Facts.SpecDoorRefusalModule.describe(ToolUp.Facts.SpecDoorRefusal) : System.String
+ToolUp.Facts.SpecDoorRefusalModule.name(ToolUp.Facts.SpecDoorRefusal) : System.String
+ToolUp.Facts.SpecFactRow (class)
+ToolUp.Facts.SpecFactRow..ctor(ToolUp.Facts.SubjectRef, System.String, ToolUp.Facts.TemporalExtent, System.Decimal, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.SpecFactRow.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.SpecFactRow.Metric : System.String { get }
+ToolUp.Facts.SpecFactRow.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.SpecFactRow.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.SpecFactRow.Value : System.Decimal { get }
+ToolUp.Facts.SpecResult (class)
+ToolUp.Facts.SpecResult..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldColumn], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.SpecFactRow])
+ToolUp.Facts.SpecResult.Columns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.SpecResult.Facts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.SpecFactRow] { get }
+ToolUp.Facts.SpecResult.Rows : System.Int32 { get }
+ToolUp.Facts.SpecResult.Table : System.String { get }
+ToolUp.Facts.SpecResult.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldColumn] { get }
 ToolUp.Facts.SubjectRef (class)
 ToolUp.Facts.SubjectRef..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.SubjectRef.Hierarchy : System.String { get }
