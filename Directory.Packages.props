@@ -8,6 +8,7 @@
          released versions on nuget.org, never a local-feed build. -->
     <FuaranRestorePath>public</FuaranRestorePath>
     <FuaranCoreVersion>0.40.2</FuaranCoreVersion>
+    <!-- cohort-lag(0.44.0): held at 0.43.0 with the Fuaran.Core 0.40.2 / Fuaran.UI 0.98.1 line: Compute 0.44.0 carries a Fuaran.Core floor of 0.41.0, so it moves only with a Core and UI raise (UI 0.98.1 is built on Core 0.40.2), which is forge phase work, not a sweep -->
     <FuaranComputeVersion>0.43.0</FuaranComputeVersion>
   </PropertyGroup>
   <PropertyGroup>
