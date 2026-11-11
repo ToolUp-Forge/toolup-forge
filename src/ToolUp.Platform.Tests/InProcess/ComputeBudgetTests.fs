@@ -955,6 +955,32 @@ let private storeTests =
                 Expect.equal read budget "the whole budget round-trips, including the class override"
             })
 
+        test "a stored budget names its window by the seam period's label, and reads back to the same window" {
+            for period, label in
+                [
+                    ComputeBudgetPeriod.Perpetual, "perpetual"
+                    ComputeBudgetPeriod.Daily, "daily"
+                    ComputeBudgetPeriod.Monthly, "monthly"
+                ] do
+                let budget = ComputeBudget.create period (ComputeBudgetLimits.concurrency 2)
+                let bytes = ComputeBudgetJson.serialiseBudget budget
+
+                Expect.equal
+                    (Text.Encoding.UTF8.GetString bytes)
+                    $"{{\"SchemaVersion\":1,\"Period\":\"{label}\",\"Limits\":{{\"MaxConcurrent\":2,\"MaxRunDurationSeconds\":null,\"PeriodAllowance\":0}},\"ClassLimits\":{{}}}}"
+                    $"{label}: the stored bytes"
+
+                Expect.equal
+                    (BudgetPeriod.label (ComputeBudgetPeriod.toBudgetPeriod period))
+                    label
+                    $"{label}: the seam label"
+
+                Expect.equal
+                    (ComputeBudgetJson.deserialiseBudget bytes |> Option.map _.Period)
+                    (Some period)
+                    $"{label}: reads back to the same window"
+        }
+
         testCaseAsync
             "a corrupt budget blob degrades to unrestricted rather than throwing"
             (async {

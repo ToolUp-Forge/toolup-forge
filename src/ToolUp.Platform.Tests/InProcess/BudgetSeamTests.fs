@@ -327,6 +327,73 @@ let private reExpressionTests =
             Expect.equal (concurrencyOnly |> List.map _.Dimension) [ "concurrency" ] "only the configured ceiling"
         }
 
+        test "a compute period's label and key are the seam period's, for every compute window" {
+            let instant = DateTime(2026, 8, 5, 14, 30, 0, DateTimeKind.Utc)
+
+            for period, label, key in
+                [
+                    ComputeBudgetPeriod.Perpetual, "perpetual", "perpetual"
+                    ComputeBudgetPeriod.Daily, "daily", "2026-08-05"
+                    ComputeBudgetPeriod.Monthly, "monthly", "2026-08"
+                ] do
+                let seam = ComputeBudgetPeriod.toBudgetPeriod period
+                Expect.equal (BudgetPeriod.label seam) label $"{label}: the stored label"
+                Expect.equal (BudgetPeriod.key seam instant) key $"{label}: the ledger key"
+                Expect.equal (ComputeBudgetPeriod.label period) (BudgetPeriod.label seam) $"{label}: compute agrees"
+                Expect.equal (ComputeBudgetPeriod.key period instant) key $"{label}: compute agrees on the key"
+        }
+
+        test "a compute refusal is the seam's denial in the compute domain, figure for figure" {
+            let limits = ComputeBudgetLimits.concurrency 4
+
+            let usage = {
+                BudgetUsage.empty ComputeBudget.Domain scope "2026-08" with
+                    InFlight = 4
+            }
+
+            let expected: BudgetDenial = {
+                Domain = ComputeBudget.Domain
+                ScopeId = scope
+                ClassLabel = "agent"
+                Dimension = "concurrency"
+                Quota = 4M
+                Spent = 4M
+                Requested = 1M
+                PeriodKey = "2026-08"
+            }
+
+            Expect.equal
+                (ComputeBudgetPolicy.claims limits (ComputeBudgetUsage.ofBudgetUsage usage) None 1M
+                 |> BudgetPolicy.check (BudgetSubject.create ComputeBudget.Domain scope "agent") "2026-08")
+                (Error expected)
+                "the claims decide through the seam"
+
+            match
+                ComputeBudgetPolicy.admit
+                    scope
+                    SubmitterClass.AgentInitiated
+                    limits
+                    (ComputeBudgetUsage.ofBudgetUsage usage)
+                    None
+                    1M
+            with
+            | Error denial ->
+                Expect.equal (ComputeBudgetDenial.toBudgetDenial denial) expected "admit refuses with the seam's denial"
+
+                Expect.equal
+                    (ComputeBudgetDenial.describe denial)
+                    "compute budget exceeded for scope 'team-42': concurrency limit 4 reached by a 'agent' submission (already consumed 4, this request needs 1) in period '2026-08'"
+                    "and the operator-facing description is the compute wording"
+            | Ok() -> failtest "expected a concurrency refusal"
+        }
+
+        test "the empty compute usage row is the seam's empty row in the compute domain" {
+            Expect.equal
+                (ComputeBudgetUsage.toBudgetUsage (ComputeBudgetUsage.empty scope "2026-08"))
+                (BudgetUsage.empty ComputeBudget.Domain scope "2026-08")
+                "same zero row, same epoch, same domain"
+        }
+
         test "a compute denial round-trips through the seam's shape" {
             let denial: ComputeBudgetDenial = {
                 ScopeId = scope
