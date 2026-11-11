@@ -12,6 +12,7 @@ open ToolUp.AI
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
+open ToolUp.Platform.Compose
 
 // ─── evaluate_pipeline in the answering form ────────────────────────
 //
@@ -199,10 +200,7 @@ module PipelineAnsweringTool =
     let private profileOf (ctx: HttpContext) : RegisteredPipelineProfile option =
         match ctx.RequestServices with
         | null -> None
-        | services ->
-            match services.GetService typeof<RegisteredPipelineProfile> with
-            | :? RegisteredPipelineProfile as profile -> Some profile
-            | _ -> None
+        | services -> ServiceComposition.tryService<RegisteredPipelineProfile> services
 
     let private userIdOf (ctx: HttpContext) : string =
         match AccessContext.callerIdOf ctx.Items with
