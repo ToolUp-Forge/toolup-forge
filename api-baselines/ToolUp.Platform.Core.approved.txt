@@ -2254,6 +2254,32 @@ ToolUp.Platform.BindingOutcome+Rejected.reason : System.String { get }
 ToolUp.Platform.BindingOutcome+Tags (class)
 ToolUp.Platform.BindingOutcome+Tags.Allowed : System.Int32 (literal)
 ToolUp.Platform.BindingOutcome+Tags.Rejected : System.Int32 (literal)
+ToolUp.Platform.BindingRefusal (class)
+ToolUp.Platform.BindingRefusal.IsDuplicateName : System.Boolean { get }
+ToolUp.Platform.BindingRefusal.IsInvalidName : System.Boolean { get }
+ToolUp.Platform.BindingRefusal.IsMissingParameter : System.Boolean { get }
+ToolUp.Platform.BindingRefusal.IsUnbindableKind : System.Boolean { get }
+ToolUp.Platform.BindingRefusal.IsUnusedParameter : System.Boolean { get }
+ToolUp.Platform.BindingRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.BindingRefusal+DuplicateName (class)
+ToolUp.Platform.BindingRefusal+DuplicateName.name : System.String { get }
+ToolUp.Platform.BindingRefusal+InvalidName (class)
+ToolUp.Platform.BindingRefusal+InvalidName.name : System.String { get }
+ToolUp.Platform.BindingRefusal+MissingParameter (class)
+ToolUp.Platform.BindingRefusal+MissingParameter.name : System.String { get }
+ToolUp.Platform.BindingRefusal+Tags (class)
+ToolUp.Platform.BindingRefusal+Tags.DuplicateName : System.Int32 (literal)
+ToolUp.Platform.BindingRefusal+Tags.InvalidName : System.Int32 (literal)
+ToolUp.Platform.BindingRefusal+Tags.MissingParameter : System.Int32 (literal)
+ToolUp.Platform.BindingRefusal+Tags.UnbindableKind : System.Int32 (literal)
+ToolUp.Platform.BindingRefusal+Tags.UnusedParameter : System.Int32 (literal)
+ToolUp.Platform.BindingRefusal+UnbindableKind (class)
+ToolUp.Platform.BindingRefusal+UnbindableKind.kind : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.BindingRefusal+UnbindableKind.name : System.String { get }
+ToolUp.Platform.BindingRefusal+UnusedParameter (class)
+ToolUp.Platform.BindingRefusal+UnusedParameter.name : System.String { get }
+ToolUp.Platform.BindingRefusalModule (class)
+ToolUp.Platform.BindingRefusalModule.describe(ToolUp.Platform.BindingRefusal) : System.String
 ToolUp.Platform.BindingRevocationList (class)
 ToolUp.Platform.BindingRevocationList.none : ToolUp.Platform.IBindingRevocationList { get }
 ToolUp.Platform.BindingTransparencyLog (class)
@@ -2377,6 +2403,55 @@ ToolUp.Platform.BootVerificationReading+Tags (class)
 ToolUp.Platform.BootVerificationReading+Tags.BootRejected : System.Int32 (literal)
 ToolUp.Platform.BootVerificationReading+Tags.BootUnsealed : System.Int32 (literal)
 ToolUp.Platform.BootVerificationReading+Tags.BootVerified : System.Int32 (literal)
+ToolUp.Platform.BoundParameter (class)
+ToolUp.Platform.BoundParameter..ctor(System.String, ToolUp.Platform.BoundValue)
+ToolUp.Platform.BoundParameter.Name : System.String { get }
+ToolUp.Platform.BoundParameter.Value : ToolUp.Platform.BoundValue { get }
+ToolUp.Platform.BoundStatement (class)
+ToolUp.Platform.BoundStatement..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BoundParameter], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.BoundStatement.Parameters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BoundParameter] { get }
+ToolUp.Platform.BoundStatement.Text : System.String { get }
+ToolUp.Platform.BoundStatement.Timeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.Platform.BoundStatementModule (class)
+ToolUp.Platform.BoundStatementModule.bind(System.String, ToolUp.Platform.BoundValue, ToolUp.Platform.BoundStatement) : ToolUp.Platform.BoundStatement
+ToolUp.Platform.BoundStatementModule.check(Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DatasetDType], ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BindingRefusal]
+ToolUp.Platform.BoundStatementModule.isValidName(System.String) : System.Boolean
+ToolUp.Platform.BoundStatementModule.marker(System.String) : System.String
+ToolUp.Platform.BoundStatementModule.ofText(System.String) : ToolUp.Platform.BoundStatement
+ToolUp.Platform.BoundValue (class)
+ToolUp.Platform.BoundValue.IsBool : System.Boolean { get }
+ToolUp.Platform.BoundValue.IsCategorical : System.Boolean { get }
+ToolUp.Platform.BoundValue.IsFloat : System.Boolean { get }
+ToolUp.Platform.BoundValue.IsInt : System.Boolean { get }
+ToolUp.Platform.BoundValue.IsNull : System.Boolean { get }
+ToolUp.Platform.BoundValue.IsText : System.Boolean { get }
+ToolUp.Platform.BoundValue.IsTimestamp : System.Boolean { get }
+ToolUp.Platform.BoundValue.Tag : System.Int32 { get }
+ToolUp.Platform.BoundValue+Bool (class)
+ToolUp.Platform.BoundValue+Bool.Item : System.Boolean { get }
+ToolUp.Platform.BoundValue+Categorical (class)
+ToolUp.Platform.BoundValue+Categorical.Item : System.String { get }
+ToolUp.Platform.BoundValue+Float (class)
+ToolUp.Platform.BoundValue+Float.Item : System.Double { get }
+ToolUp.Platform.BoundValue+Int (class)
+ToolUp.Platform.BoundValue+Int.Item : System.Int64 { get }
+ToolUp.Platform.BoundValue+Null (class)
+ToolUp.Platform.BoundValue+Null.kind : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.BoundValue+Tags (class)
+ToolUp.Platform.BoundValue+Tags.Bool : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Tags.Float : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Tags.Int : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Tags.Null : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Tags.Text : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Tags.Timestamp : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Text (class)
+ToolUp.Platform.BoundValue+Text.Item : System.String { get }
+ToolUp.Platform.BoundValue+Timestamp (class)
+ToolUp.Platform.BoundValue+Timestamp.Item : System.DateTimeOffset { get }
+ToolUp.Platform.BoundValueModule (class)
+ToolUp.Platform.BoundValueModule.kind(ToolUp.Platform.BoundValue) : ToolUp.Platform.DatasetDType
+ToolUp.Platform.BoundValueModule.kinds : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetDType] { get }
 ToolUp.Platform.Branding (class)
 ToolUp.Platform.Branding..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.Branding.AppName : System.String { get }
@@ -4767,10 +4842,12 @@ ToolUp.Platform.DatasetColumnRoleModule.parse(System.String) : Microsoft.FSharp.
 ToolUp.Platform.DatasetDType (class)
 ToolUp.Platform.DatasetDType.Bool : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.Categorical : ToolUp.Platform.DatasetDType { get }
+ToolUp.Platform.DatasetDType.Decimal : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.Float : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.Int : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType.IsBool : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsCategorical : System.Boolean { get }
+ToolUp.Platform.DatasetDType.IsDecimal : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsFloat : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsInt : System.Boolean { get }
 ToolUp.Platform.DatasetDType.IsText : System.Boolean { get }
@@ -4781,6 +4858,7 @@ ToolUp.Platform.DatasetDType.Timestamp : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.DatasetDType+Tags (class)
 ToolUp.Platform.DatasetDType+Tags.Bool : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.DatasetDType+Tags.Decimal : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Float : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Int : System.Int32 (literal)
 ToolUp.Platform.DatasetDType+Tags.Text : System.Int32 (literal)
@@ -4788,6 +4866,12 @@ ToolUp.Platform.DatasetDType+Tags.Timestamp : System.Int32 (literal)
 ToolUp.Platform.DatasetDTypeModule (class)
 ToolUp.Platform.DatasetDTypeModule.name(ToolUp.Platform.DatasetDType) : System.String
 ToolUp.Platform.DatasetDTypeModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DatasetDType]
+ToolUp.Platform.DatasetDecimal (class)
+ToolUp.Platform.DatasetDecimal.compare(System.String, System.String) : System.Int32
+ToolUp.Platform.DatasetDecimal.isCanonical(System.String) : System.Boolean
+ToolUp.Platform.DatasetDecimal.ofDecimal(System.Decimal) : System.String
+ToolUp.Platform.DatasetDecimal.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.DatasetDecimal.tryToDecimal(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
 ToolUp.Platform.DatasetDeclassifiedPayload (class)
 ToolUp.Platform.DatasetDeclassifiedPayload..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.Int32, System.String)
 ToolUp.Platform.DatasetDeclassifiedPayload.Actor : System.String { get }
@@ -4933,6 +5017,7 @@ ToolUp.Platform.DatasetStoreMode+Tags.NoDatasets : System.Int32 (literal)
 ToolUp.Platform.DatasetValue (class)
 ToolUp.Platform.DatasetValue.IsBool : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsCategorical : System.Boolean { get }
+ToolUp.Platform.DatasetValue.IsDecimal : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsFloat : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsInt : System.Boolean { get }
 ToolUp.Platform.DatasetValue.IsNull : System.Boolean { get }
@@ -4944,6 +5029,8 @@ ToolUp.Platform.DatasetValue+Bool (class)
 ToolUp.Platform.DatasetValue+Bool.Item : System.Boolean { get }
 ToolUp.Platform.DatasetValue+Categorical (class)
 ToolUp.Platform.DatasetValue+Categorical.Item : System.String { get }
+ToolUp.Platform.DatasetValue+Decimal (class)
+ToolUp.Platform.DatasetValue+Decimal.digits : System.String { get }
 ToolUp.Platform.DatasetValue+Float (class)
 ToolUp.Platform.DatasetValue+Float.Item : System.Double { get }
 ToolUp.Platform.DatasetValue+Int (class)
@@ -4951,6 +5038,7 @@ ToolUp.Platform.DatasetValue+Int.Item : System.Int64 { get }
 ToolUp.Platform.DatasetValue+Tags (class)
 ToolUp.Platform.DatasetValue+Tags.Bool : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.DatasetValue+Tags.Decimal : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Float : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Int : System.Int32 (literal)
 ToolUp.Platform.DatasetValue+Tags.Null : System.Int32 (literal)

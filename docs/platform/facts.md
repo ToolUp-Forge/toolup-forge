@@ -1623,6 +1623,78 @@ refusal, never an empty grid. Migration notes: [`docs/migrations/1145-pipeline-t
 (the executor) and [`docs/migrations/1156-pipeline-tool-composed.md`](../migrations/1156-pipeline-tool-composed.md)
 (the composition).
 
+#### The pipeline profile: the grammar the assistant writes in (Phase 1147)
+
+The tool's description teaches the `Transform` and `ColExpr` algebra in one paragraph. A model that
+has not seen a `window` step's field names guesses them, and every guess costs a refused call. A
+deployment can instead register a **pipeline profile**: the verbs, expressions, binary operators and
+functions its assistant may write, and per verb the fields a step of it may write. It is the
+[language profile](../migrations/1138-language-profile.md)'s mechanism, applied to computations, so the trade
+between prompt size and what the model can write is the deployment's to make.
+
+```fsharp skip=fragment
+let profile =
+    match PipelineProfile.register PipelineProfile.defaultProfile with
+    | Ok registered -> registered
+    | Error refusals -> failwithf "%A" (refusals |> List.map PipelineProfileRefusal.describe)
+
+let app = app |> FactsCompose.withPipelineProfile profile
+
+let prompt =
+    SystemPromptBuilder.promptFragments
+        (Some logger)
+        [ PromptFragment.create profile.Description profile.Fragment ]
+```
+
+- **The vocabulary is the codec's.** Every name is a wire spelling read off `DataFrameCodec`'s own
+  encoding of an example of each case (`PipelineProfile.knownSteps`, `knownExpressions`,
+  `knownOperators`, `knownFunctions`, `knownFields`). Registration refuses an unknown verb, expression,
+  operator, function or field by name (`PipelineProfileRefusal`), so a profile cannot name a spelling
+  the decoder does not know.
+- **The default profile** (`PipelineProfile.defaultProfile`) admits `filter`, `project`, `derive`,
+  `groupBy`, `sort`, `limit` and `window`; `col`, `lit`, `binary`, `coalesce`, `case`, `cast`,
+  `isNull`, `in` and `apply`; every binary operator; and the arithmetic and string functions (not the
+  host-rounded `exp`, `ln` and `log10`, nor the date functions). It admits no `join`, no set operation,
+  no `param` and no `now`. Widen or narrow it with `withSteps` / `withoutSteps`, `withExpressions` /
+  `withoutExpressions`, `withOperators` / `withoutOperators`, `withFunctions` / `withoutFunctions` and
+  `withFields`. No profile can admit `union`, `intersect`, `except` or `predict` (they read another
+  source), or `param` and `now` (nothing binds them).
+- **The fragment is rendered once**, at registration: one line per admitted verb and expression with
+  its wire spelling and an example, then the operators, the functions and any narrowed fields. Every
+  example decodes through `DataFrameCodec` and encodes back to the same bytes, which a test holds. The
+  AI tier serves it through `SystemPromptBuilder.promptFragments`, the seam the language profile's
+  fragment also uses (`PromptFragment.ofLanguageProfile`), and boot logs each fragment's size. The
+  default fragment is 2,746 bytes, about 690 tokens at four characters a token.
+- **The profile is the grammar.** With a profile registered, `evaluate_pipeline` reads every pipeline
+  against it before any fact is read (`PipelineProfile.admit`). A verb, expression, operator, function
+  or field outside it is refused naming the step, the case and what the profile admits
+  (`PipelineRefusal.OutsideProfile`), so the model's correction is one call:
+
+  > `evaluate_pipeline refused the request: step 3 uses the verb 'pivot', which this deployment's pipeline profile does not admit; the verbs it admits are 'filter', 'project', 'derive', 'groupBy', 'sort', 'limit', 'window', so rewrite the step with those.`
+
+  The answering form (`PipelineAnsweringTool`), the asserting form and a reader's re-run read the
+  profile the deployment registered. With no profile, nothing changes: the full algebra, refused as
+  before.
+- **A join only through a relation check.** A profile admits `join` only with a relation check
+  (`PipelineProfile.withRelationCheck`): a function from the caller and the join step
+  (`PipelineJoin`: its position, the request's table, the joined table, the keys and the kind) to
+  admit or refuse with a reason. Registration refuses `join` without one. The walk asks the check about
+  every join step and refuses a join it refuses, in its own words (`PipelineRefusal.JoinRefused`),
+  before anything is read. A join names another fact table by its id (a `Ref` source); a table written
+  into the pipeline is refused. The joined table is read through the same gated slice read, over the
+  request's period range and subject prefix, every metric of it. A joined table whose every cell is
+  withheld is read rather than refused, and its columns are withheld. Withholding propagates through
+  the join's lineage: the keys of both sides join the row lineage, and a right column reads its own
+  joined column, so a withheld cell on either side withholds exactly the columns that read it. A
+  pipeline with a join is evaluated and never asserted. The first check is the dataset model's
+  ("joins along declared relations only").
+
+The measurement behind the default: over fourteen scripted analysis pipelines, the full algebra
+refuses two (a `pivot`, a parameter) and the default profile six (also `distinct`, `ln`, `not` and
+`unpivot`). A scripted turn does not read the prompt, so this is the cost side only: what the profile
+refuses of an unchanged script. Whether the fragment lowers a live model's refusal rate is measured
+with a live provider. Migration note: [`docs/migrations/1147-compute-profile.md`](../migrations/1147-compute-profile.md).
+
 #### Asserting a result: a derived figure becomes a fact (Phase 1146)
 
 A figure the pipeline computes is shown and never retyped, so it can appear in no answer and no

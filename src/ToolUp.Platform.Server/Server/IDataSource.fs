@@ -44,11 +44,11 @@ type DataSourceCallContext = {
     /// pre-resolution missed (the connector may still attempt its
     /// own resolution, or fail with `CredentialMissing`), and always
     /// `None` for a connector declaring `CredentialNeed.NoCredential`,
-    /// whose store is never read (Phase 1017).
+    /// whose store is never read.
     Credential: string option
 }
 
-/// Phase 834 — the format of the bytes a connector's `IDataSource.Query`
+/// The format of the bytes a connector's `IDataSource.Query`
 /// returns. Names what the shipped connector family actually emits.
 [<RequireQualifiedAccess>]
 type PayloadFormat =
@@ -63,7 +63,7 @@ type PayloadFormat =
     /// persisted, rather than storing bytes no reader can parse.
     | Other of name: string
 
-// ─── ConnectorCapabilities — what a connector can do (Phase 1095) ───
+// ─── ConnectorCapabilities — what a connector can do ───
 //
 // A connector's abilities beyond the five `IDataSource` members used to be
 // discovered by probing its runtime type for a companion interface. A probe
@@ -79,8 +79,8 @@ type PayloadFormat =
 // so a capability a later SDK version adds reads as "not declared" in your
 // connector without an edit.
 
-/// One object at a file source's location, as a watched delivery sees it
-/// (Phase 1015): the table it is, the blob it is stored as, and the
+/// One object at a file source's location, as a watched delivery sees it:
+/// the table it is, the blob it is stored as, and the
 /// identity that says whether it is new.
 type WatchedObject = {
     /// The table name the connector reads the object as.
@@ -104,7 +104,7 @@ type IWatchableFileSource =
     /// identities. `Error` when the location cannot be read.
     abstract ListObjects: ctx: DataSourceCallContext -> Async<Result<WatchedObject list, IngestionError>>
 
-/// Phase 837 — a connector that can also emit its source's native format,
+/// A connector that can also emit its source's native format,
 /// declared as `ConnectorCapabilities.Native`. The ingestor calls
 /// `QueryNative` only when a reader for `NativeFormat` is composed, and
 /// falls back to `IDataSource.Query` (the connector's declared format)
@@ -117,7 +117,72 @@ type IEmitsNativePayload =
     /// unconverted. Same dialect and error contract as `IDataSource.Query`.
     abstract QueryNative: ctx: DataSourceCallContext * sql: string -> Async<Result<byte[], IngestionError>>
 
-/// Phase 1095 — what a connector can do beyond the five `IDataSource`
+/// One capability a connector may declare, as a refusal names it.
+[<RequireQualifiedAccess>]
+type ConnectorCapability =
+    /// `ConnectorCapabilities.Watchable`.
+    | Watchable
+    /// `ConnectorCapabilities.Native`.
+    | Native
+    /// `ConnectorCapabilities.Binds`.
+    | Binds
+    /// `ConnectorCapabilities.NativeBound`.
+    | NativeBound
+
+/// A capability was asked of a connector that does not declare
+/// it, named by the connector's `Kind` and the capability.
+type CapabilityNotDeclared = {
+    /// The connector's `IDataSource.Kind`.
+    Kind: string
+    /// The capability asked for.
+    Capability: ConnectorCapability
+}
+
+/// Why a bound statement did not run. A connector answers `Refused` or
+/// `Failed`; `NotDeclared` is the reader's, for a connector that does not
+/// declare the capability (`BoundQuery.run`).
+[<RequireQualifiedAccess>]
+type BoundStatementError =
+    /// The connector does not declare the capability asked for.
+    | NotDeclared of CapabilityNotDeclared
+    /// The statement was refused before it reached the source.
+    | Refused of BindingRefusal
+    /// The source failed, under the same contract as `IDataSource.Query`.
+    | Failed of IngestionError
+
+/// A connector that binds what it is given: a statement whose values travel
+/// beside its text and are bound by the provider, never rendered into it.
+/// Declared as `ConnectorCapabilities.Binds`, and called through
+/// `BoundQuery.run`, which refuses a connector that does not declare it and
+/// runs `BoundStatement.check` against `BindableKinds` before the connector
+/// sees the statement.
+type IBindsStatements =
+    /// The kinds this connector binds. A parameter of any other kind, a
+    /// typed null included, is refused `UnbindableKind`. A constant of the
+    /// connector.
+    abstract BindableKinds: Set<DatasetDType>
+
+    /// Run a bound statement and return the bytes, in the format the
+    /// connector declares for `IDataSource.Query`
+    /// (`PayloadFormat.declaredBy`). Same context and dialect as `Query`;
+    /// the connector refuses `UnusedParameter` for a parameter its text does
+    /// not use and `MissingParameter` for a marker no parameter supplies.
+    abstract QueryBound:
+        ctx: DataSourceCallContext * statement: BoundStatement -> Async<Result<byte[], BoundStatementError>>
+
+/// A connector that can emit its source's native format for a bound
+/// statement, declared as `ConnectorCapabilities.NativeBound` beside
+/// `Binds`: the bound twin of `IEmitsNativePayload`.
+type IEmitsNativeBoundPayload =
+    /// The native format `QueryBoundNative` emits. A constant of the connector.
+    abstract NativeFormat: PayloadFormat
+
+    /// `IBindsStatements.QueryBound`, returning the source's bytes in
+    /// `NativeFormat`, unconverted.
+    abstract QueryBoundNative:
+        ctx: DataSourceCallContext * statement: BoundStatement -> Async<Result<byte[], BoundStatementError>>
+
+/// What a connector can do beyond the five `IDataSource`
 /// members, declared once. `None` in a field means the connector does not
 /// offer that capability, and a consumer that needs it refuses by name
 /// (`ConnectorCapabilities.require`) rather than probing the connector's type.
@@ -126,6 +191,10 @@ type ConnectorCapabilities = {
     Watchable: IWatchableFileSource option
     /// The connector can emit its source's native format.
     Native: IEmitsNativePayload option
+    /// The connector binds a statement's parameters.
+    Binds: IBindsStatements option
+    /// The connector can emit its native format for a bound statement.
+    NativeBound: IEmitsNativeBoundPayload option
 }
 
 type IDataSource =
@@ -161,7 +230,7 @@ type IDataSource =
     /// Run a query and return the raw bytes the source produced.
     /// The ingestor writes the bytes through `IDataObjectStore.Save`
     /// with `Versioned` policy, opaque to the storage layer. **The
-    /// format of those bytes is DECLARED, not documented** (Phase 834):
+    /// format of those bytes is DECLARED, not documented**:
     /// a connector states it by also implementing
     /// `IDeclaresPayloadFormat`, `PayloadFormat.declaredBy` reads it
     /// (a connector that declares nothing is `PayloadFormat.Csv`), and
@@ -175,56 +244,53 @@ type IDataSource =
     /// Connectors document their dialect.
     abstract Query: ctx: DataSourceCallContext * sql: string -> Async<Result<byte[], IngestionError>>
 
-    /// What this connector can do beyond the members above (Phase 1095):
+    /// What this connector can do beyond the members above:
     /// a constant of the connector, read at boot. A connector that offers
     /// nothing more answers `ConnectorCapabilities.none`; a decorator
     /// answers its inner connector's record.
     abstract Capabilities: ConnectorCapabilities
 
-/// Phase 1095 — one capability a connector may declare, as a refusal names it.
-[<RequireQualifiedAccess>]
-type ConnectorCapability =
-    /// `ConnectorCapabilities.Watchable`.
-    | Watchable
-    /// `ConnectorCapabilities.Native`.
-    | Native
-
-/// Phase 1095 — a capability was asked of a connector that does not declare
-/// it, named by the connector's `Kind` and the capability.
-type CapabilityNotDeclared = {
-    /// The connector's `IDataSource.Kind`.
-    Kind: string
-    /// The capability asked for.
-    Capability: ConnectorCapability
-}
-
-/// Phase 1095 — naming capabilities.
+/// Naming capabilities.
 [<RequireQualifiedAccess>]
 module ConnectorCapability =
 
     /// Every capability, in declaration order.
-    let all: ConnectorCapability list = [ ConnectorCapability.Watchable; ConnectorCapability.Native ]
+    let all: ConnectorCapability list = [
+        ConnectorCapability.Watchable
+        ConnectorCapability.Native
+        ConnectorCapability.Binds
+        ConnectorCapability.NativeBound
+    ]
 
     /// The capability's name, as the record field spells it.
     let name (capability: ConnectorCapability) : string =
         match capability with
         | ConnectorCapability.Watchable -> "Watchable"
         | ConnectorCapability.Native -> "Native"
+        | ConnectorCapability.Binds -> "Binds"
+        | ConnectorCapability.NativeBound -> "NativeBound"
 
-/// Phase 1095 — reading a connector's declared capabilities. The one place a
+/// Reading a connector's declared capabilities. The one place a
 /// capability is asked for: every consumer goes through these readers, never
 /// through a type probe.
 [<RequireQualifiedAccess>]
 module ConnectorCapabilities =
 
     /// Nothing beyond the five `IDataSource` members.
-    let none: ConnectorCapabilities = { Watchable = None; Native = None }
+    let none: ConnectorCapabilities = {
+        Watchable = None
+        Native = None
+        Binds = None
+        NativeBound = None
+    }
 
     /// Whether `capabilities` declares `capability`.
     let declares (capability: ConnectorCapability) (capabilities: ConnectorCapabilities) : bool =
         match capability with
         | ConnectorCapability.Watchable -> capabilities.Watchable.IsSome
         | ConnectorCapability.Native -> capabilities.Native.IsSome
+        | ConnectorCapability.Binds -> capabilities.Binds.IsSome
+        | ConnectorCapability.NativeBound -> capabilities.NativeBound.IsSome
 
     /// The capabilities `capabilities` declares, in declaration order.
     let declared (capabilities: ConnectorCapabilities) : ConnectorCapability list =
@@ -234,6 +300,11 @@ module ConnectorCapabilities =
         Kind = source.Kind
         Capability = capability
     }
+
+    let private read (capability: ConnectorCapability) (declared: 'T option) (source: IDataSource) =
+        match declared with
+        | Some declared -> Ok declared
+        | None -> Error(refused source capability)
 
     /// `Ok` when `source` declares `capability`; otherwise the refusal naming
     /// the connector and the capability.
@@ -245,17 +316,22 @@ module ConnectorCapabilities =
 
     /// The connector's declared watch, or the refusal naming it.
     let watchable (source: IDataSource) : Result<IWatchableFileSource, CapabilityNotDeclared> =
-        match source.Capabilities.Watchable with
-        | Some watchable -> Ok watchable
-        | None -> Error(refused source ConnectorCapability.Watchable)
+        read ConnectorCapability.Watchable source.Capabilities.Watchable source
 
     /// The connector's declared native emission, or the refusal naming it.
     let native (source: IDataSource) : Result<IEmitsNativePayload, CapabilityNotDeclared> =
-        match source.Capabilities.Native with
-        | Some native -> Ok native
-        | None -> Error(refused source ConnectorCapability.Native)
+        read ConnectorCapability.Native source.Capabilities.Native source
 
-/// Phase 1095 — rendering `CapabilityNotDeclared`.
+    /// The connector's declared binding, or the refusal naming it.
+    let binds (source: IDataSource) : Result<IBindsStatements, CapabilityNotDeclared> =
+        read ConnectorCapability.Binds source.Capabilities.Binds source
+
+    /// The connector's declared native emission for a bound statement, or the
+    /// refusal naming it.
+    let nativeBound (source: IDataSource) : Result<IEmitsNativeBoundPayload, CapabilityNotDeclared> =
+        read ConnectorCapability.NativeBound source.Capabilities.NativeBound source
+
+/// Rendering `CapabilityNotDeclared`.
 [<RequireQualifiedAccess>]
 module CapabilityNotDeclared =
 
@@ -263,7 +339,67 @@ module CapabilityNotDeclared =
     let describe (refusal: CapabilityNotDeclared) : string =
         $"connector '{refusal.Kind}' does not declare the {ConnectorCapability.name refusal.Capability} capability"
 
-// ─── PayloadFormat — what `IDataSource.Query` bytes ARE (Phase 834) ───
+/// Rendering `BoundStatementError`.
+[<RequireQualifiedAccess>]
+module BoundStatementError =
+
+    /// A sentence naming what stopped the statement.
+    let describe (error: BoundStatementError) : string =
+        match error with
+        | BoundStatementError.NotDeclared refusal -> CapabilityNotDeclared.describe refusal
+        | BoundStatementError.Refused refusal -> BindingRefusal.describe refusal
+        | BoundStatementError.Failed failure -> $"the source failed: %A{failure}"
+
+/// Running a bound statement. The one entry point: a connector that does
+/// not declare the capability is refused by name and nothing falls back to
+/// rendering a value into text, and every statement is checked against the
+/// connector's declared kinds before the connector sees it.
+[<RequireQualifiedAccess>]
+module BoundQuery =
+
+    let private checkedBy (binds: IBindsStatements) (statement: BoundStatement) =
+        BoundStatement.check binds.BindableKinds statement
+        |> Result.mapError BoundStatementError.Refused
+
+    /// Run `statement` on `source`, the bytes in the connector's declared
+    /// format.
+    let run
+        (source: IDataSource)
+        (ctx: DataSourceCallContext)
+        (statement: BoundStatement)
+        : Async<Result<byte[], BoundStatementError>> =
+        match ConnectorCapabilities.binds source with
+        | Error refusal -> async { return Error(BoundStatementError.NotDeclared refusal) }
+        | Ok binds ->
+            match checkedBy binds statement with
+            | Error refusal -> async { return Error refusal }
+            | Ok() -> binds.QueryBound(ctx, statement)
+
+    /// Run `statement` on `source` in its native format, the bytes with the
+    /// format they are in. Refuses a connector that does not declare both
+    /// `Binds` (whose kinds the statement is checked against) and
+    /// `NativeBound`.
+    let runNative
+        (source: IDataSource)
+        (ctx: DataSourceCallContext)
+        (statement: BoundStatement)
+        : Async<Result<PayloadFormat * byte[], BoundStatementError>> =
+        let declared =
+            ConnectorCapabilities.binds source
+            |> Result.bind (fun binds -> ConnectorCapabilities.nativeBound source |> Result.map (fun n -> binds, n))
+            |> Result.mapError BoundStatementError.NotDeclared
+
+        match declared with
+        | Error refusal -> async { return Error refusal }
+        | Ok(binds, nativeBound) ->
+            match checkedBy binds statement with
+            | Error refusal -> async { return Error refusal }
+            | Ok() -> async {
+                let! result = nativeBound.QueryBoundNative(ctx, statement)
+                return result |> Result.map (fun bytes -> nativeBound.NativeFormat, bytes)
+              }
+
+// ─── PayloadFormat — what `IDataSource.Query` bytes ARE ───
 //
 // "The bytes are CSV" used to live in a doc comment: nothing recorded it
 // and nothing enforced it, so a connector returning anything else failed
@@ -281,7 +417,7 @@ module CapabilityNotDeclared =
 // type existed — so an existing implementation, recompiled or not, keeps
 // working with no edit (GP 11).
 
-/// Phase 834 — implemented alongside `IDataSource` by a connector that
+/// Implemented alongside `IDataSource` by a connector that
 /// declares the format of its `Query` bytes. Optional by design: a
 /// connector that does not implement it is read as `PayloadFormat.Csv`
 /// (see `PayloadFormat.declaredBy`).
@@ -290,7 +426,7 @@ type IDeclaresPayloadFormat =
     /// of the connector, not a per-call answer.
     abstract PayloadFormat: PayloadFormat
 
-/// Phase 834 — reading a connector's declared format and its stored token.
+/// Reading a connector's declared format and its stored token.
 module PayloadFormat =
 
     /// The token recorded in payload metadata: `"csv"`, `"json"`, or the
@@ -316,7 +452,7 @@ module PayloadFormat =
         | :? IDeclaresPayloadFormat as declared -> declared.PayloadFormat
         | _ -> PayloadFormat.Csv
 
-// ─── CredentialNeed — whether a connector takes a credential (Phase 1017) ───
+// ─── CredentialNeed — whether a connector takes a credential ───
 //
 // `DataIngestor` used to read `ISecretStore` for EVERY connector before
 // `Connect`, so a connector that reads no credential (the file connectors
@@ -331,7 +467,7 @@ module PayloadFormat =
 // `Optional`, which is exactly what the ingestor did before the type
 // existed, so no existing connector changes meaning.
 
-/// Phase 1017 — whether a connector consults the credential stored under
+/// Whether a connector consults the credential stored under
 /// `DataSourceConfig.CredentialKey`.
 [<RequireQualifiedAccess>]
 type CredentialNeed =
@@ -349,7 +485,7 @@ type CredentialNeed =
     /// a connector that declares nothing.
     | Optional
 
-/// Phase 1017 — implemented alongside `IDataSource` by a connector that
+/// Implemented alongside `IDataSource` by a connector that
 /// declares its credential need. Optional by design: a connector that does
 /// not implement it is read as `CredentialNeed.Optional` (see
 /// `CredentialNeed.declaredBy`).
@@ -358,7 +494,7 @@ type IDeclaresCredentialNeed =
     /// connector, not a per-call answer.
     abstract CredentialNeed: CredentialNeed
 
-/// Phase 1017 — reading a connector's declared credential need.
+/// Reading a connector's declared credential need.
 module CredentialNeed =
 
     /// The need a connector declares — its `IDeclaresCredentialNeed`
@@ -368,7 +504,7 @@ module CredentialNeed =
         | :? IDeclaresCredentialNeed as declared -> declared.CredentialNeed
         | _ -> CredentialNeed.Optional
 
-// ─── IngestedPayload — the schema an ingested payload carries (Phase 832) ───
+// ─── IngestedPayload — the schema an ingested payload carries ───
 //
 // `DataIngestor` persists the connector's `GetSchema` answer as its own
 // data object and stamps the payload's metadata with a `schema-ref` (the
@@ -382,7 +518,7 @@ module CredentialNeed =
 // accessor answers `None` for it — the honest answer, and the one a
 // reader's fallback (re-inference) keys on.
 
-/// Phase 832 — reading and writing the schema an ingested payload carries.
+/// Reading and writing the schema an ingested payload carries.
 module IngestedPayload =
 
     open System.IO
@@ -409,7 +545,7 @@ module IngestedPayload =
     let SchemaDriftKey = "schema-drift"
 
     /// Payload metadata key naming the declared format of the payload's
-    /// bytes (Phase 834) — `PayloadFormat.token` of the connector's
+    /// bytes — `PayloadFormat.token` of the connector's
     /// `PayloadFormat.declaredBy`. Distinct from `PayloadFormatKey`, which
     /// versions the metadata convention rather than naming the bytes.
     [<Literal>]
@@ -417,7 +553,7 @@ module IngestedPayload =
 
     /// The payload-format token this SDK version writes. `"1"` (Phase
     /// 832): schema-carrying payloads, empty CSV fields ambiguous
-    /// between NULL and the empty string. `"2"` (Phase 833): the same,
+    /// between NULL and the empty string. `"2"`: the same,
     /// plus the null convention — an unquoted empty field is NULL, a
     /// quoted `""` is the empty string (read it with
     /// `ConnectorSupport.Csv.distinguishesNull` / `readField`).
@@ -460,7 +596,7 @@ module IngestedPayload =
                 writer.WriteString("dataType", column.DataType)
                 writer.WriteBoolean("nullable", column.Nullable)
 
-                // Phase 838 — written only when declared, so a connector
+                // Written only when declared, so a connector
                 // that declares no sentinels serialises to exactly the
                 // bytes it did before (same content hash, no spurious
                 // schema drift). `Set` iterates in sorted order, so the
@@ -523,7 +659,7 @@ module IngestedPayload =
     let payloadFormat (payload: DataObject) : string option =
         Map.tryFind PayloadFormatKey payload.Metadata
 
-    /// The declared format of the payload's bytes (Phase 834). `None` for a
+    /// The declared format of the payload's bytes. `None` for a
     /// payload written before Phase 834, whose bytes were CSV by convention
     /// rather than by declaration.
     let contentFormat (payload: DataObject) : PayloadFormat option =
@@ -555,7 +691,7 @@ module IngestedPayload =
             | Error _ -> return None
     }
 
-    /// Phase 838 — whether `text` is one of the sentinels `column`
+    /// Whether `text` is one of the sentinels `column`
     /// declares as meaning "absent". A column declaring none (`None`, the
     /// default for every connector without such a vocabulary) has no
     /// sentinels, so this is `false` for every text.
@@ -564,7 +700,7 @@ module IngestedPayload =
         | Some sentinels -> sentinels.Contains text
         | None -> false
 
-    /// Phase 838 — THE boundary where a declared sentinel becomes absence:
+    /// THE boundary where a declared sentinel becomes absence:
     /// read one payload cell of column `columnName` under the payload's
     /// schema (`readSchema`'s answer). `None` when the column declares
     /// `text` as a sentinel; `Some text` otherwise — including when there
@@ -581,7 +717,7 @@ module IngestedPayload =
         | Some column when isAbsentSentinel column text -> None
         | _ -> Some text
 
-    /// Phase 838 — `readCell` over one row's `(column, text)` cells.
+    /// `readCell` over one row's `(column, text)` cells.
     let readRow (schema: TableSchema option) (cells: (string * string) seq) : Map<string, string option> =
         cells
         |> Seq.map (fun (columnName, text) -> columnName, readCell schema columnName text)

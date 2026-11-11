@@ -36,7 +36,7 @@ type ColumnInfo = {
     Name: string
     DataType: string
     Nullable: bool
-    /// Phase 838 — cell texts that mean "absent" for THIS column, as the
+    /// Cell texts that mean "absent" for THIS column, as the
     /// connector knows them (GA4 answers a missing dimension value with
     /// the literal `(not set)` rather than a null). Per column and per
     /// source by design: the same text in a column that declares nothing
@@ -149,7 +149,7 @@ type CredentialStatus =
     /// re-authorisation.
     | NeedsReauthorization of reason: string
 
-/// Phase 10h — last terminal outcome of a background OAuth refresh
+/// Last terminal outcome of a background OAuth refresh
 /// attempt, surfaced to the admin-UI Token-status column. One case per
 /// `OAuthRefreshResult` terminal tag — the `Refreshed` case carries the
 /// freshly-minted access-token expiry so the UI can render "valid
@@ -172,7 +172,7 @@ type OAuthRefreshOutcome =
     /// `OAuthRefreshDeadLetteredPayload.FinalReason`.
     | DeadLetteredOutcome of finalReason: string
 
-/// Phase 10h — token-refresh snapshot for a single OAuth data source,
+/// Token-refresh snapshot for a single OAuth data source,
 /// surfaced to the admin-UI Token-status column.
 /// `IDataIngestionApi.GetTokenStatus` returns `None` when no
 /// `IOAuthTokenRefresher` descriptor is registered for the source (the
@@ -231,3 +231,154 @@ type IngestionRun = {
     /// job's history to the matching ingestion run.
     JobId: Guid option
 }
+// ─── Bound statements ──────────────────────────────────
+//
+// `IDataSource.Query` takes a statement as text and nothing else, so a
+// caller with a value to supply had one option: render the value into the
+// text. A BOUND STATEMENT carries its values beside the text, named and
+// typed, for the connector's provider to bind; a value never becomes part
+// of the statement. The types are identity by value (portability rule 1):
+// no provider type appears, and they cross the wire as data.
+//
+// **One marker form.** A statement names a parameter as `@name`
+// (`BoundStatement.marker`), where a name is an ASCII letter or `_`
+// followed by letters, digits and `_`. A connector rewrites the markers to
+// its backend's own form; the caller writes one form for every connector.
+
+/// One parameter value, over the scalar kinds the dataset model
+/// names (`DatasetDType`). `Null` carries its declared kind, because a
+/// provider must be told the type of an absent value.
+[<RequireQualifiedAccess>]
+type BoundValue =
+    | Float of float
+    | Int of int64
+    | Bool of bool
+    | Text of string
+    | Timestamp of DateTimeOffset
+    | Categorical of string
+    /// An absent value of the declared kind.
+    | Null of kind: DatasetDType
+
+/// A parameter: the name the statement uses it by (without the
+/// `@`), and its value.
+type BoundParameter = { Name: string; Value: BoundValue }
+
+/// A statement with its parameters. The values travel beside
+/// `Text` and are bound by the connector's provider, never rendered into it.
+type BoundStatement = {
+    /// The statement, in the connector's dialect, naming each parameter as
+    /// `@name`.
+    Text: string
+    /// The parameters, each named once and each used by `Text`.
+    Parameters: BoundParameter list
+    /// How long the connector may run the statement. `None` leaves it to the
+    /// connector's own default.
+    Timeout: TimeSpan option
+}
+
+/// Why a bound statement was refused before it ran. Every case
+/// names the parameter it is about.
+[<RequireQualifiedAccess>]
+type BindingRefusal =
+    /// The name is not a parameter name (`BoundStatement.isValidName`).
+    | InvalidName of name: string
+    /// Two parameters carry the same name.
+    | DuplicateName of name: string
+    /// A parameter the statement text does not use.
+    | UnusedParameter of name: string
+    /// A marker in the statement text that no parameter supplies.
+    | MissingParameter of name: string
+    /// A parameter of a kind the connector declares it cannot bind.
+    | UnbindableKind of name: string * kind: DatasetDType
+
+/// Reading a bound value.
+[<RequireQualifiedAccess>]
+module BoundValue =
+
+    /// The kind a value is bound as; a `Null` is its declared kind.
+    let kind (value: BoundValue) : DatasetDType =
+        match value with
+        | BoundValue.Float _ -> DatasetDType.Float
+        | BoundValue.Int _ -> DatasetDType.Int
+        | BoundValue.Bool _ -> DatasetDType.Bool
+        | BoundValue.Text _ -> DatasetDType.Text
+        | BoundValue.Timestamp _ -> DatasetDType.Timestamp
+        | BoundValue.Categorical _ -> DatasetDType.Categorical
+        | BoundValue.Null kind -> kind
+
+    /// Every kind a bound value can carry, in declaration order.
+    let kinds: DatasetDType list = [
+        DatasetDType.Float
+        DatasetDType.Int
+        DatasetDType.Bool
+        DatasetDType.Text
+        DatasetDType.Timestamp
+        DatasetDType.Categorical
+    ]
+
+/// Building and checking a bound statement.
+[<RequireQualifiedAccess>]
+module BoundStatement =
+
+    /// A statement with no parameters and no timeout.
+    let ofText (text: string) : BoundStatement = {
+        Text = text
+        Parameters = []
+        Timeout = None
+    }
+
+    /// `statement` with `name` bound to `value`, after the parameters it has.
+    let bind (name: string) (value: BoundValue) (statement: BoundStatement) : BoundStatement = {
+        statement with
+            Parameters = statement.Parameters @ [ { Name = name; Value = value } ]
+    }
+
+    let private isLetter (c: char) =
+        (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '_'
+
+    let private isDigit (c: char) = c >= '0' && c <= '9'
+
+    /// Whether `name` is a parameter name: an ASCII letter or `_`, then
+    /// letters, digits and `_`.
+    let isValidName (name: string) : bool =
+        not (String.IsNullOrEmpty name)
+        && isLetter name[0]
+        && name |> Seq.forall (fun c -> isLetter c || isDigit c)
+
+    /// The marker the statement text names `name` by.
+    let marker (name: string) : string = "@" + name
+
+    /// The refusals a statement earns before any connector reads it: a name
+    /// that is not a parameter name, a name given twice, and a value of a
+    /// kind outside `bindable`. The first refusal in parameter order. Whether
+    /// the text uses each parameter is the connector's to say, because only
+    /// its dialect knows where a marker can stand.
+    let check (bindable: Set<DatasetDType>) (statement: BoundStatement) : Result<unit, BindingRefusal> =
+        let rec go (seen: Set<string>) (parameters: BoundParameter list) =
+            match parameters with
+            | [] -> Ok()
+            | p :: rest ->
+                if not (isValidName p.Name) then
+                    Error(BindingRefusal.InvalidName p.Name)
+                elif seen.Contains p.Name then
+                    Error(BindingRefusal.DuplicateName p.Name)
+                elif not (bindable.Contains(BoundValue.kind p.Value)) then
+                    Error(BindingRefusal.UnbindableKind(p.Name, BoundValue.kind p.Value))
+                else
+                    go (seen.Add p.Name) rest
+
+        go Set.empty statement.Parameters
+
+/// Rendering a `BindingRefusal`.
+[<RequireQualifiedAccess>]
+module BindingRefusal =
+
+    /// A sentence naming the parameter and what is wrong with it.
+    let describe (refusal: BindingRefusal) : string =
+        match refusal with
+        | BindingRefusal.InvalidName name -> $"'{name}' is not a parameter name"
+        | BindingRefusal.DuplicateName name -> $"parameter '{name}' is given more than once"
+        | BindingRefusal.UnusedParameter name -> $"parameter '{name}' is not used by the statement"
+        | BindingRefusal.MissingParameter name -> $"the statement uses '@{name}' and no parameter supplies it"
+        | BindingRefusal.UnbindableKind(name, kind) ->
+            $"parameter '{name}' is of kind {kind}, which the connector cannot bind"

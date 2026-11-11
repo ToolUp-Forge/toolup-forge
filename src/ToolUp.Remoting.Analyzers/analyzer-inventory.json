@@ -244,6 +244,13 @@
       }
     },
     {
+      "rule": "TUA001",
+      "reason": "The pipeline answering tool's executor: an answering tool is composed before any container exists and receives only the request's HttpContext, so it reads ONE value, the pipeline profile FactsCompose.withPipelineProfile registered, and treats its absence as the full algebra. The fact browse's dependencies are read through FactBrowseHandler, as the other fact tools read them.",
+      "sites": {
+        "src/ToolUp.Facts.Presentation.Server/Server/PipelineAnsweringTool.fs": 1
+      }
+    },
+    {
       "rule": "TUA002",
       "reason": "KNOWN EGRESS BYPASS: the directory companion's process-wide client predates the egress seam.",
       "sites": {

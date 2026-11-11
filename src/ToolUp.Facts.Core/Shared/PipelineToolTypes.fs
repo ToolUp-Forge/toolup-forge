@@ -225,6 +225,14 @@ type PipelineRefusal =
     | InputsOverCap of subject: string * inputs: int * cap: int
     /// The fact store refused the batch.
     | AssertionFailed of reason: string
+    /// A step uses a verb, expression, operator, function or field outside
+    /// the deployment's pipeline profile. `kind` says which (`verb`,
+    /// `expression`, `operator`, `function`, or `<verb> field`), `name` is its
+    /// wire spelling and `admitted` what the profile admits of that kind.
+    | OutsideProfile of step: int * kind: string * name: string * admitted: string list
+    /// A join step is refused: by the deployment's relation check, or because
+    /// it joins a table written into the pipeline.
+    | JoinRefused of step: int * reason: string
 
 /// Reading a `PipelineRefusal`.
 [<RequireQualifiedAccess>]
@@ -336,3 +344,13 @@ module PipelineRefusal =
                 inputs
                 cap
         | PipelineRefusal.AssertionFailed reason -> sprintf "the fact store refused the assertion: %s" reason
+        | PipelineRefusal.OutsideProfile(step, kind, name, admitted) ->
+            sprintf
+                "step %d uses the %s '%s', which this deployment's pipeline profile does not admit; the %ss it admits are %s, so rewrite the step with those"
+                step
+                kind
+                name
+                kind
+                (quoted admitted)
+        | PipelineRefusal.JoinRefused(step, reason) ->
+            sprintf "step %d is a join this deployment refuses: %s" step reason

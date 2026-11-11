@@ -1,6 +1,8 @@
 module ToolUp.Platform.Infra.InMemoryDataSource
 
+open System
 open System.Collections.Concurrent
+open System.Globalization
 open System.Text
 open ToolUp.Platform
 
@@ -25,6 +27,118 @@ open ToolUp.Platform
 // Connect / ListTables / GetSchema / Query never touch `ISecretStore`
 // — there are no credentials to resolve. Tests that exercise the
 // credential-missing failure mode must use a connector that does.
+//
+// **The reference binder.** The source binds every kind a bound value
+// carries, and its bound dialect has two forms, each a keyword followed by
+// markers and nothing else:
+//
+//   select @a, @b   one CSV row, a column per marker, holding the bound values
+//   table @t        the bytes seeded for the table the value of `t` names
+//
+// A value is substituted into the source's own lookup or its result row,
+// never into text: the statement text is read for its markers and is never
+// rebuilt. The result is CSV under the family's null convention (an
+// unquoted empty field is an absent value, `""` the empty string). A
+// statement costs nothing here, so `Timeout` is not consulted.
+
+/// The bound statement forms the in-memory source reads.
+[<RequireQualifiedAccess>]
+module InMemoryBinding =
+
+    /// The `select` statement over `names`, each as its marker.
+    let select (names: string list) : string =
+        "select " + String.Join(", ", names |> List.map BoundStatement.marker)
+
+    /// The `table` statement over the parameter `name`.
+    let table (name: string) : string = "table " + BoundStatement.marker name
+
+    /// A bound value as the source writes it into a result cell: invariant
+    /// culture, round-trippable, `null` for an absent value.
+    let internal render (value: BoundValue) : string =
+        match value with
+        | BoundValue.Float f -> f.ToString("R", CultureInfo.InvariantCulture)
+        | BoundValue.Int i -> i.ToString(CultureInfo.InvariantCulture)
+        | BoundValue.Bool b -> if b then "true" else "false"
+        | BoundValue.Text s
+        | BoundValue.Categorical s -> s
+        | BoundValue.Timestamp t -> t.ToString("O", CultureInfo.InvariantCulture)
+        | BoundValue.Null _ -> null
+
+    // The family's CSV field rule: an absent value is the unquoted empty
+    // field, the empty string is `""`, and a field holding a separator, a
+    // quote or a line break is quoted with its quotes doubled. The family's
+    // writer lives in a companion this assembly cannot reference.
+    let private field (text: string) : string =
+        if isNull text then
+            ""
+        elif text.Length = 0 then
+            "\"\""
+        elif text.IndexOfAny [| ','; '"'; '\n'; '\r' |] >= 0 then
+            "\"" + text.Replace("\"", "\"\"") + "\""
+        else
+            text
+
+    let private row (cells: string list) =
+        String.Join(",", cells |> List.map field) + "\r\n"
+
+    /// The one CSV row `select` returns: a header of `names`, then each
+    /// name's bound value, in marker order.
+    let internal selectRow (names: string list) (values: Map<string, BoundValue>) : byte[] =
+        let header = row names
+        let body = row (names |> List.map (fun n -> render values[n]))
+        Encoding.UTF8.GetBytes(header + body)
+
+    /// A statement form the source reads.
+    type internal Form =
+        /// `select @a, @b`.
+        | Select of names: string list
+        /// `table @t`.
+        | Table of name: string
+
+    let private markerName (term: string) =
+        if term.StartsWith "@" && BoundStatement.isValidName (term.Substring 1) then
+            Some(term.Substring 1)
+        else
+            None
+
+    /// The form a statement text takes, or `None` when it is neither.
+    let internal parse (text: string) : Form option =
+        let text = if isNull text then "" else text.Trim()
+        let space = text.IndexOfAny [| ' '; '\t'; '\r'; '\n' |]
+
+        if space < 0 then
+            None
+        else
+            let keyword = text.Substring(0, space)
+
+            let terms =
+                text.Substring(space + 1).Split(',') |> Array.map _.Trim() |> List.ofArray
+
+            let names = terms |> List.choose markerName
+
+            if names.Length <> terms.Length then
+                None
+            elif String.Equals(keyword, "select", StringComparison.OrdinalIgnoreCase) then
+                Some(Select names)
+            elif
+                String.Equals(keyword, "table", StringComparison.OrdinalIgnoreCase)
+                && names.Length = 1
+            then
+                Some(Table names.Head)
+            else
+                None
+
+    /// The first parameter refusal a statement using `names` earns: a marker
+    /// no parameter supplies, then a parameter no marker uses.
+    let internal unbound (names: string list) (parameters: BoundParameter list) : BindingRefusal option =
+        let supplied = parameters |> List.map _.Name |> Set.ofList
+
+        match names |> List.tryFind (supplied.Contains >> not) with
+        | Some missing -> Some(BindingRefusal.MissingParameter missing)
+        | None ->
+            parameters
+            |> List.tryFind (fun p -> not (List.contains p.Name names))
+            |> Option.map (fun p -> BindingRefusal.UnusedParameter p.Name)
 
 type InMemoryDataSource() =
 
@@ -44,7 +158,7 @@ type InMemoryDataSource() =
     member this.SeedText(sourceId: DataSourceId, table: string, text: string) =
         this.Seed(sourceId, table, Encoding.UTF8.GetBytes text)
 
-    // Phase 1017 — no credential: the ingestor does not read the secret
+    // No credential: the ingestor does not read the secret
     // store for this source.
     interface IDeclaresCredentialNeed with
         member _.CredentialNeed = CredentialNeed.NoCredential
@@ -83,12 +197,46 @@ type InMemoryDataSource() =
                 return Error(SchemaMismatch $"InMemoryDataSource: no content seeded for ({ctx.Config.Id}, {sql})")
         }
 
-        // Phase 1095 — the reference record: an in-memory source has no
-        // location to watch and no format richer than the bytes it was
-        // seeded with, so it declares nothing beyond the five members.
-        member _.Capabilities = ConnectorCapabilities.none
+        // The reference record: an in-memory source has no location to
+        // watch and no format richer than the bytes it was seeded with, and
+        // it binds what it is given.
+        member this.Capabilities = {
+            ConnectorCapabilities.none with
+                Binds = Some(this :> IBindsStatements)
+        }
 
-    // Phase 834 — seeded bytes are returned verbatim and the family's
+    interface IBindsStatements with
+        member _.BindableKinds = Set.ofList BoundValue.kinds
+
+        member _.QueryBound(ctx, statement) = async {
+            let failed message =
+                Error(BoundStatementError.Failed(SchemaMismatch $"InMemoryDataSource: {message}"))
+
+            let values =
+                statement.Parameters |> List.map (fun p -> p.Name, p.Value) |> Map.ofList
+
+            match InMemoryBinding.parse statement.Text with
+            | None -> return failed $"'{statement.Text}' is not a statement this source reads"
+            | Some form ->
+                let names =
+                    match form with
+                    | InMemoryBinding.Select names -> names
+                    | InMemoryBinding.Table name -> [ name ]
+
+                match InMemoryBinding.unbound names statement.Parameters, form with
+                | Some refusal, _ -> return Error(BoundStatementError.Refused refusal)
+                | None, InMemoryBinding.Select names -> return Ok(InMemoryBinding.selectRow names values)
+                | None, InMemoryBinding.Table name ->
+                    match values[name] with
+                    | BoundValue.Text table
+                    | BoundValue.Categorical table ->
+                        match content.TryGetValue((ctx.Config.Id, table)) with
+                        | true, (bytes, _) -> return Ok bytes
+                        | false, _ -> return failed $"no content seeded for ({ctx.Config.Id}, {table})"
+                    | other -> return failed $"a table is named by text, and '{name}' is {BoundValue.kind other}"
+        }
+
+    // Seeded bytes are returned verbatim and the family's
     // convention is CSV, so this source declares `Csv` explicitly rather
     // than by omission.
     interface IDeclaresPayloadFormat with

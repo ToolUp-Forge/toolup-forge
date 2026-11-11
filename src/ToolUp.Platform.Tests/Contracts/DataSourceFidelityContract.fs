@@ -12,7 +12,7 @@ open ToolUp.Platform
 open DataManagementTypes
 open ToolUp.Platform.Infra
 
-// ─── IDataSource null-and-type fidelity contract pack (Phase 836) ───
+// ─── IDataSource null-and-type fidelity contract pack ───
 //
 // `IDataSourceContract` proves a connector answers its five members.
 // This pack proves it answers them WITHOUT LOSING anything: that the
@@ -36,12 +36,12 @@ open ToolUp.Platform.Infra
 //
 // **The laws** (each one a named test; `Law` holds the names):
 //
-//   - the payload IS the format the connector declares (Phase 834) —
+//   - the payload IS the format the connector declares —
 //     for `Csv`, strict UTF-8 without a BOM, well-formed RFC 4180, and
 //     rectangular; for `Json`, a parseable document; any other format
 //     is refused as unverifiable rather than passed on trust;
 //   - NULL and the empty string in the same column read back as
-//     DISTINGUISHABLE values (Phase 833's convention: an unquoted empty
+//     DISTINGUISHABLE values (the null convention: an unquoted empty
 //     field is NULL, a quoted `""` is the empty string);
 //   - a hyphen is a value, a quoted comma stays in its field, the wide
 //     row is intact, and every fixture cell round-trips;
@@ -51,6 +51,10 @@ open ToolUp.Platform.Infra
 //   - where the connector's schema is DECLARED by the source (a catalogue,
 //     a file footer) rather than inferred from sampled text, its
 //     nullability and coarse type are the source's own.
+//
+// `DecimalFidelityContract` (below) adds the exact-decimal laws over a
+// fixture of its own: a decimal column's payload carries every digit the
+// source held, and `GetSchema` declares the column an exact decimal.
 //
 // **The payload is read with the pack's own parser**, never the
 // connector family's: a round trip read back through the writer's own
@@ -933,6 +937,333 @@ let fixtureTarget (defect: Defect) () : FidelityTarget = {
     EmptyString = EmptyStringSupport.Distinguishes
 }
 
+// ─── The exact-decimal laws ───────────────────────────
+//
+// A database `DECIMAL` is what money is held in, and a float cannot hold
+// it: past 15 to 17 significant digits a float rounds, and well inside
+// them it cannot state `0.1`. These laws hold a connector to the digits:
+// a decimal column's payload text is every digit the source held, and
+// `GetSchema` declares the column an exact decimal, so a reader reads the
+// text as `DatasetValue.Decimal` and never guesses a float.
+//
+// The fixture is its own small table, not a column added to
+// `Fixture.standard`: a source that cannot hold an exact decimal (SQLite
+// stores `DECIMAL` as `REAL`) records that as `unbound` here without
+// losing the null-and-type laws above.
+
+/// The exact-decimal fidelity laws, their fixture, and their
+/// proof of themselves.
+module DecimalFidelityContract =
+
+    /// The context the null-and-type fixture source answers under, reused.
+    let private fixtureContext = (fixtureTarget Defect.Honest ()).Context
+
+    /// One fixture row: its case name (also its `id`) and the decimal the
+    /// source holds, in canonical text, or `None` for NULL.
+    type DecimalRow = { Case: string; Amount: string option }
+
+    /// The table a binding seeds: columns `id` (text, the case name) and
+    /// `amount` (an exact decimal, nullable), one row per case.
+    [<Literal>]
+    let Table = "fidelity_decimal"
+
+    /// The amount column's name.
+    [<Literal>]
+    let AmountColumn = "amount"
+
+    /// The widest value: 38 significant digits, the `DECIMAL(38, s)` limit
+    /// of the SQL backends — more than a float (15 to 17) and more than
+    /// `System.Decimal` (28 to 29) holds.
+    let wide = "12345678901234567890.123456789012345678"
+
+    /// The rows. `sum-a` + `sum-b` is the sum a float gets wrong
+    /// (`0.1 + 0.2`); `tiny` is a negative value below every float-printing
+    /// shortcut; `whole` has no fractional part.
+    let rows: DecimalRow list = [
+        { Case = "wide"; Amount = Some wide }
+        { Case = "sum-a"; Amount = Some "0.1" }
+        { Case = "sum-b"; Amount = Some "0.2" }
+        {
+            Case = "tiny"
+            Amount = Some "-0.0000000005"
+        }
+        {
+            Case = "whole"
+            Amount = Some "1000000"
+        }
+        { Case = "null"; Amount = None }
+    ]
+
+    /// The exact sum of `sum-a` and `sum-b`.
+    [<Literal>]
+    let ExpectedSum = "0.3"
+
+    /// Everything a binding supplies. The factory that returns it must
+    /// already have seeded the backend with `rows`.
+    type DecimalTarget = {
+        Source: IDataSource
+        Context: DataSourceCallContext
+        /// The name `GetSchema` is given for the table.
+        Table: string
+        /// What `Query` is given to read the whole table.
+        Statement: string
+        /// The connector family's answer to "is this native type an exact
+        /// decimal?" (`TypeMap.isExactDecimal` for the shipped family).
+        IsExactDecimal: string -> bool
+    }
+
+    /// The law names — the go-red asserts refusals BY these names.
+    module Law =
+        [<Literal>]
+        let DigitsRoundTrip =
+            "a decimal with more digits than a float holds round-trips exactly"
+
+        [<Literal>]
+        let SumIsExact = "a sum of decimals a float gets wrong is right"
+
+        [<Literal>]
+        let DeclaredExact = "GetSchema declares the decimal column an exact decimal"
+
+        let all = [ DigitsRoundTrip; SumIsExact; DeclaredExact ]
+
+    type private Observation = {
+        Schema: Result<TableSchema, string>
+        Table: Result<string list * Cell list list, string>
+    }
+
+    let private observe (target: DecimalTarget) : Async<Observation> = async {
+        let! schema = target.Source.GetSchema(target.Context, target.Table)
+        let! bytes = target.Source.Query(target.Context, target.Statement)
+
+        return {
+            Schema = schema |> Result.mapError (sprintf "GetSchema failed: %A")
+            Table =
+                bytes
+                |> Result.mapError (sprintf "Query failed: %A")
+                |> Result.bind (decode (PayloadFormat.declaredBy target.Source))
+        }
+    }
+
+    /// The emitted amount cell for each case, keyed by the `id` column.
+    let private amounts (header: string list, cells: Cell list list) : Result<Map<string, Cell>, string> =
+        let indexOf name =
+            header |> List.tryFindIndex (fun h -> sameName h name)
+
+        match indexOf "id", indexOf AmountColumn with
+        | Some idIndex, Some amountIndex ->
+            cells
+            |> List.choose (fun row ->
+                match List.tryItem idIndex row, List.tryItem amountIndex row with
+                | Some(Cell.Text id), Some amount -> Some(id, amount)
+                | _ -> None)
+            |> Map.ofList
+            |> Ok
+        | _ -> Error $"the payload header %A{header} does not carry 'id' and '%s{AmountColumn}'"
+
+    let private evaluate (target: DecimalTarget) (observation: Observation) (law: string) : string list =
+        let withAmounts check =
+            match observation.Table |> Result.bind amounts with
+            | Error reason -> [ reason ]
+            | Ok emitted -> check emitted
+
+        match law with
+        | Law.DigitsRoundTrip ->
+            withAmounts (fun emitted ->
+                rows
+                |> List.choose (fun row ->
+                    match row.Amount, Map.tryFind row.Case emitted with
+                    | _, None -> Some $"row '%s{row.Case}' is missing from the payload"
+                    | None, Some Cell.Null -> None
+                    | None, Some other -> Some $"row '%s{row.Case}' is NULL at the source; the payload has %A{other}"
+                    | Some expected, Some(Cell.Text text) ->
+                        match DatasetDecimal.tryParse text with
+                        | Some digits when digits = expected -> None
+                        | Some digits ->
+                            Some $"row '%s{row.Case}': the source holds %s{expected}; the payload says %s{digits}"
+                        | None -> Some $"row '%s{row.Case}': the payload's '%s{text}' is not a plain decimal"
+                    | Some expected, Some Cell.Null ->
+                        Some $"row '%s{row.Case}': the source holds %s{expected}; the payload has NULL"))
+        | Law.SumIsExact ->
+            withAmounts (fun emitted ->
+                let addend case =
+                    match Map.tryFind case emitted with
+                    | Some(Cell.Text text) -> DatasetDecimal.tryToDecimal text
+                    | _ -> None
+
+                match addend "sum-a", addend "sum-b" with
+                | Some a, Some b when DatasetDecimal.ofDecimal (a + b) = ExpectedSum -> []
+                | Some a, Some b -> [
+                    $"sum-a + sum-b is %s{DatasetDecimal.ofDecimal (a + b)}; the source's values sum to %s{ExpectedSum}"
+                  ]
+                | _ -> [ "sum-a and sum-b are not both exact decimals in the payload" ])
+        | Law.DeclaredExact ->
+            match observation.Schema with
+            | Error reason -> [ reason ]
+            | Ok schema ->
+                match schema.Columns |> List.tryFind (fun c -> sameName c.Name AmountColumn) with
+                | None -> [ $"GetSchema names no '%s{AmountColumn}' column" ]
+                | Some column when target.IsExactDecimal column.DataType -> []
+                | Some column -> [
+                    $"GetSchema declares '%s{AmountColumn}' as '%s{column.DataType}', not an exact decimal"
+                  ]
+        | other -> [ $"unknown law '%s{other}'" ]
+
+    /// The laws a target breaks, with their violations.
+    let refusals (target: DecimalTarget) : Async<(string * string list) list> = async {
+        let! observation = observe target
+
+        return
+            Law.all
+            |> List.map (fun law -> law, evaluate target observation law)
+            |> List.filter (fun (_, violations) -> not violations.IsEmpty)
+    }
+
+    /// The pack. `factory` is called fresh per law and must return a target
+    /// whose backend already holds `rows`.
+    let tests (name: string) (factory: unit -> DecimalTarget) =
+        testList $"{name} — exact-decimal fidelity contract" [
+            for law in Law.all do
+                testCaseAsync law
+                <| async {
+                    let target = factory ()
+                    let! observation = observe target
+
+                    match evaluate target observation law with
+                    | [] -> ()
+                    | violations ->
+                        failtest (
+                            $"%s{name} ('%s{target.Source.Kind}') breaks '%s{law}':\n  - "
+                            + String.Join("\n  - ", violations)
+                        )
+                }
+        ]
+
+    /// Record a connector that cannot be bound to the decimal laws, and why.
+    let unbound (name: string) (reason: string) =
+        if String.IsNullOrWhiteSpace reason then
+            test $"{name} — exact-decimal fidelity contract" {
+                failtest "an unbound connector must say why it cannot be bound"
+            }
+        else
+            ptestCase $"{name} — exact-decimal fidelity contract: NOT BOUND — %s{reason}" ignore
+
+    /// How the decimal fixture source misbehaves — `Honest` is the reference.
+    [<RequireQualifiedAccess>]
+    type Defect =
+        | Honest
+        /// Carries every value through a float and prints it in full
+        /// (`G17`) — the loss these laws exist for.
+        | ThroughFloat
+        /// Declares the amount column `double`.
+        | DeclaresFloat
+
+    /// The fixture source's own exact-decimal classification.
+    let isFixtureExactDecimal (dataType: string) = dataType = "decimal(38, 18)"
+
+    /// A connector-shaped double emitting `rows`, honestly or with a defect.
+    type DecimalFixtureSource(defect: Defect) =
+        let render (amount: string option) =
+            match defect, amount with
+            | _, None -> ""
+            | Defect.ThroughFloat, Some digits ->
+                (Double.Parse(digits, CultureInfo.InvariantCulture)).ToString("G17", CultureInfo.InvariantCulture)
+            | _, Some digits -> digits
+
+        let payload () =
+            "id,amount\r\n"
+            + (rows
+               |> List.map (fun row -> $"%s{row.Case},%s{render row.Amount}\r\n")
+               |> String.concat "")
+            |> Encoding.UTF8.GetBytes
+
+        let schema () : TableSchema = {
+            TableName = Table
+            Columns = [
+                {
+                    Name = "id"
+                    DataType = "text"
+                    Nullable = false
+                    AbsentSentinels = None
+                }
+                {
+                    Name = AmountColumn
+                    DataType =
+                        match defect with
+                        | Defect.DeclaresFloat -> "double"
+                        | _ -> "decimal(38, 18)"
+                    Nullable = true
+                    AbsentSentinels = None
+                }
+            ]
+        }
+
+        let kind = $"DecimalFixture.%A{defect}"
+
+        let missing (table: string) =
+            Error(SchemaMismatch $"%s{kind}: no table '%s{table}'")
+
+        interface IDataSource with
+            member _.Kind = kind
+            member _.Capabilities = ConnectorCapabilities.none
+            member _.Connect _ = async { return Ok() }
+            member _.ListTables _ = async { return Ok [ Table ] }
+
+            member _.GetSchema(_, table) = async { return if table = Table then Ok(schema ()) else missing table }
+
+            member _.Query(_, sql) = async { return if sql = Table then Ok(payload ()) else missing sql }
+
+        interface IDeclaresPayloadFormat with
+            member _.PayloadFormat = PayloadFormat.Csv
+
+    /// A target over a `DecimalFixtureSource` with the given defect.
+    let fixtureTarget (defect: Defect) () : DecimalTarget = {
+        Source = DecimalFixtureSource defect :> IDataSource
+        Context = fixtureContext
+        Table = Table
+        Statement = Table
+        IsExactDecimal = isFixtureExactDecimal
+    }
+
+    /// The laws' proof of themselves: the honest source passes, each lossy
+    /// twin is refused by the law it breaks, and the sum case is sharp — a
+    /// float really does get it wrong.
+    let selfTests =
+        let refusedBy (defect: Defect) (law: string) =
+            testCaseAsync $"%A{defect} is refused by '%s{law}'"
+            <| async {
+                let! refused = refusals (fixtureTarget defect ())
+                let names = refused |> List.map fst
+                Expect.contains names law $"the laws must refuse the %A{defect} source by name; they refused %A{names}"
+            }
+
+        testList "DecimalFidelityContract — the laws prove themselves" [
+            tests "DecimalFixtureSource (honest)" (fixtureTarget Defect.Honest)
+
+            testCaseAsync "the honest decimal source is refused by no law"
+            <| async {
+                let! refused = refusals (fixtureTarget Defect.Honest ())
+                Expect.isEmpty refused "the reference source passes every decimal law"
+            }
+
+            refusedBy Defect.ThroughFloat Law.DigitsRoundTrip
+            refusedBy Defect.ThroughFloat Law.SumIsExact
+            refusedBy Defect.DeclaresFloat Law.DeclaredExact
+
+            test "the sum case is one a float gets wrong" {
+                Expect.notEqual (0.1 + 0.2) 0.3 "0.1 + 0.2 is not 0.3 in a float"
+                Expect.equal (DatasetDecimal.ofDecimal (0.1M + 0.2M)) ExpectedSum "and is in a decimal"
+            }
+
+            test "the wide value is wider than a float and than System.Decimal" {
+                Expect.isNone (DatasetDecimal.tryToDecimal wide) "System.Decimal cannot hold it exactly"
+
+                Expect.notEqual
+                    ((Double.Parse(wide, CultureInfo.InvariantCulture)).ToString("R", CultureInfo.InvariantCulture))
+                    wide
+                    "a float cannot hold it"
+            }
+        ]
+
 /// The pack's proof of itself: the honest fixture source passes every
 /// law, and each lossy twin is refused by the law it breaks, by name.
 let selfTests =
@@ -982,6 +1313,9 @@ let selfTests =
                     "NULL, empty, and a quoted field with a comma, quotes and a break"
             | other -> failtestf "unexpected parse: %A" other
         }
+
+        // The exact-decimal laws prove themselves alongside.
+        DecimalFidelityContract.selfTests
 
         test "the pack's reader refuses malformed Csv rather than guessing" {
             Expect.isError (parseCsv "a\r\n\"open") "an unterminated quote"

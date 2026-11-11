@@ -22,3 +22,9 @@ ToolUp.DataSources.Parquet.ParquetDataSource+ParquetSourceSettings..ctor(ToolUp.
 ToolUp.DataSources.Parquet.ParquetDataSource+ParquetSourceSettings.File : ToolUp.DataSources.Common.Files+FileSourceSettings { get }
 ToolUp.DataSources.Parquet.ParquetDatasetCodec (class)
 ToolUp.DataSources.Parquet.ParquetDatasetCodec..ctor()
+ToolUp.DataSources.Parquet.ParquetDecimal (class)
+ToolUp.DataSources.Parquet.ParquetDecimal.MaxWritablePrecision : System.Int32 (literal)
+ToolUp.DataSources.Parquet.ParquetDecimal.ofText(System.Int32, System.Int32, System.String) : Parquet.Data.BigDecimal
+ToolUp.DataSources.Parquet.ParquetDecimal.readerOptions() : Parquet.ParquetOptions
+ToolUp.DataSources.Parquet.ParquetDecimal.shapeOf(System.Collections.Generic.IEnumerable`1[System.String]) : System.Tuple`2[System.Int32, System.Int32]
+ToolUp.DataSources.Parquet.ParquetDecimal.toText(Parquet.Data.BigDecimal) : System.String

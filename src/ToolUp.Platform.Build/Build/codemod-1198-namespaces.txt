@@ -34,6 +34,7 @@ case ToolUp.Platform AutoPromote ToolUp.Platform.Jobs
 case ToolUp.Platform AutoSuffix ToolUp.Platform.Compose
 case ToolUp.Platform BeatsChampion ToolUp.Platform.Infra
 case ToolUp.Platform BelowVerificationFloor ToolUp.Platform.Compose
+case ToolUp.Platform Binds ToolUp.Platform.Infra
 case ToolUp.Platform Block ToolUp.Platform.Audit
 case ToolUp.Platform BootSealRejected ToolUp.Platform.Compose
 case ToolUp.Platform BootSealUnsealed ToolUp.Platform.Compose
@@ -332,6 +333,7 @@ case ToolUp.Platform NarrativeIngestFailed ToolUp.Platform.Infra
 case ToolUp.Platform NarrativeIngestRefused ToolUp.Platform.Infra
 case ToolUp.Platform NarrativeIngested ToolUp.Platform.Infra
 case ToolUp.Platform Native ToolUp.Platform.Infra
+case ToolUp.Platform NativeBound ToolUp.Platform.Infra
 case ToolUp.Platform NeedsFacet ToolUp.Platform.Compose
 case ToolUp.Platform NetworkError ToolUp.Platform.Infra
 case ToolUp.Platform NoAuthorizationDrift ToolUp.Platform.Compose
@@ -349,6 +351,7 @@ case ToolUp.Platform NoWorkProvenanceSource ToolUp.Platform.Infra
 case ToolUp.Platform NoWorseThanIncumbentBy ToolUp.Platform.Jobs
 case ToolUp.Platform NotApplicable ToolUp.Platform.Compose
 case ToolUp.Platform NotApproved ToolUp.Platform.Infra
+case ToolUp.Platform NotDeclared ToolUp.Platform.Infra
 case ToolUp.Platform NotFound ToolUp.Platform.Infra
 case ToolUp.Platform NotInDocument ToolUp.Platform.Compose
 case ToolUp.Platform NotRun ToolUp.Platform.Compose
@@ -428,6 +431,7 @@ case ToolUp.Platform Reflection ToolUp.Platform.Compose
 case ToolUp.Platform Refuse ToolUp.Platform.Infra
 case ToolUp.Platform RefuseOnDrift ToolUp.Platform.Compose
 case ToolUp.Platform Refused ToolUp.Platform.Compose
+case ToolUp.Platform Refused ToolUp.Platform.Infra
 case ToolUp.Platform RefusedOnStoreFailure ToolUp.Platform.Infra
 case ToolUp.Platform Refuses ToolUp.Platform.Compose
 case ToolUp.Platform RegistryFailure ToolUp.Platform.Infra
@@ -773,6 +777,8 @@ type ToolUp.Platform BootVerificationResult ToolUp.Platform.Compose
 type ToolUp.Platform BootVerificationVerdict ToolUp.Platform.Compose
 type ToolUp.Platform BootstrapTeam ToolUp.Platform.Scope
 type ToolUp.Platform BootstrapTeamValidator ToolUp.Platform.Scope
+type ToolUp.Platform BoundQuery ToolUp.Platform.Infra
+type ToolUp.Platform BoundStatementError ToolUp.Platform.Infra
 type ToolUp.Platform BoundedMemoIndex ToolUp.Platform.Infra
 type ToolUp.Platform BoundedWorkProvenanceSource ToolUp.Platform.Infra
 type ToolUp.Platform BudgetAmendment ToolUp.Platform.Compose
@@ -1263,6 +1269,7 @@ type ToolUp.Platform IArtifactSigner ToolUp.Platform.Audit
 type ToolUp.Platform IArtifactVerifier ToolUp.Platform.Audit
 type ToolUp.Platform IAuditSink ToolUp.Platform.Audit
 type ToolUp.Platform IBackgroundExportStore ToolUp.Platform.Audit
+type ToolUp.Platform IBindsStatements ToolUp.Platform.Infra
 type ToolUp.Platform IBudgetLedger ToolUp.Platform.Infra
 type ToolUp.Platform IBuildOrchestrator ToolUp.Platform.Infra
 type ToolUp.Platform ICallerLabelledIngestor ToolUp.Platform.Infra
@@ -1307,6 +1314,7 @@ type ToolUp.Platform IEgressEvidence ToolUp.Platform.Compose
 type ToolUp.Platform IEgressGate ToolUp.Platform.Audit
 type ToolUp.Platform IEmbeddingCache ToolUp.Platform.Infra
 type ToolUp.Platform IEmbeddingProvider ToolUp.Platform.Infra
+type ToolUp.Platform IEmitsNativeBoundPayload ToolUp.Platform.Infra
 type ToolUp.Platform IEmitsNativePayload ToolUp.Platform.Infra
 type ToolUp.Platform IEntityLockStore ToolUp.Platform.Jobs
 type ToolUp.Platform IEntityStore ToolUp.Platform.Infra
