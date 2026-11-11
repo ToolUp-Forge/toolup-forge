@@ -440,13 +440,7 @@ let private decimalTests =
             match! source.Query(context "src", "money") with
             | Ok bytes ->
                 let lines =
-                    Text.Encoding.UTF8
-                        .GetString(bytes)
-                        .Split(
-                            "
-",
-                            StringSplitOptions.RemoveEmptyEntries
-                        )
+                    Text.Encoding.UTF8.GetString(bytes).Split("\r\n", StringSplitOptions.RemoveEmptyEntries)
 
                 Expect.sequenceEqual
                     lines
