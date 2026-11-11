@@ -120,8 +120,248 @@ let contractTests =
         // factory, so the directory behind it is not disposed here.
         (fun () -> parquetStore (TempDir.forRun "parquet-test"))
 
+// ─── The exact decimal ──────────────────────────────────────
+//
+// `DatasetValue.Decimal` is canonical decimal text (`DatasetDecimal`). These
+// cases pin the canonical form, the exact ordering, the refusal at the host
+// decimal's edge, and that a decimal column survives both codecs with every
+// digit — including values wider than a float and than `System.Decimal`.
+
+let private decimalSchema: DatasetSchema = {
+    Columns = [
+        {
+            Name = "id"
+            DType = DatasetDType.Int
+            Nullable = false
+            Role = DatasetColumnRole.Plain
+        }
+        {
+            Name = "amount"
+            DType = DatasetDType.Decimal
+            Nullable = true
+            Role = DatasetColumnRole.Plain
+        }
+    ]
+}
+
+/// 38 digits (the SQL `DECIMAL(38, s)` limit), 76 digits with scale 38
+/// (BigQuery `BIGNUMERIC`), a tiny negative, zero, a whole number, a value a
+/// float misprints, and a NULL.
+let private decimalAmounts = [
+    Some "12345678901234567890.123456789012345678"
+    Some "-12345678901234567890123456789012345678.12345678901234567890123456789012345678"
+    Some "-0.0000000005"
+    Some "0"
+    Some "1000000"
+    Some "0.1"
+    None
+]
+
+let private decimalRows: DatasetRow list =
+    decimalAmounts
+    |> List.mapi (fun i amount -> {
+        Cells = [
+            DatasetValue.Int(int64 i)
+            (match amount with
+             | Some digits -> DatasetValue.Decimal digits
+             | None -> DatasetValue.Null)
+        ]
+    })
+
+let private decimalTests =
+    testList "DatasetValue.Decimal — the exact decimal" [
+        test "tryParse answers the canonical form, and refuses what is not a plain decimal" {
+            for input, expected in
+                [
+                    "007.500", Some "7.5"
+                    "-0.000", Some "0"
+                    "+12", Some "12"
+                    ".5", Some "0.5"
+                    "5.", Some "5"
+                    "-12.340", Some "-12.34"
+                    "1e3", None
+                    "1,000", None
+                    "", None
+                    "-", None
+                    ".", None
+                    " 1", None
+                    "NaN", None
+                ] do
+                Expect.equal (DatasetDecimal.tryParse input) expected $"tryParse %A{input}"
+        }
+
+        test "compare is numeric order, exact at any width" {
+            let ordered = [
+                "-12345678901234567890123456789012345678.1"
+                "-100"
+                "-0.0000000005"
+                "0"
+                "0.0000000000000000000000000000000000001"
+                "0.1"
+                "0.10000000000000001"
+                "9.99"
+                "10"
+                "12345678901234567890.123456789012345678"
+                "12345678901234567890.123456789012345679"
+            ]
+
+            let shuffled = List.rev ordered @ []
+            Expect.equal (List.sortWith DatasetDecimal.compare shuffled) ordered "sorted by value"
+
+            for a in ordered do
+                Expect.equal (DatasetDecimal.compare a a) 0 $"%s{a} = itself"
+        }
+
+        test "tryToDecimal is exact or refuses — it never rounds" {
+            Expect.equal (DatasetDecimal.tryToDecimal "0.1") (Some 0.1M) "0.1 fits"
+
+            Expect.equal
+                (DatasetDecimal.tryToDecimal "79228162514264337593543950335")
+                (Some Decimal.MaxValue)
+                "the edge fits"
+
+            Expect.isNone (DatasetDecimal.tryToDecimal "79228162514264337593543950336") "one past the edge"
+
+            Expect.isNone
+                (DatasetDecimal.tryToDecimal "0.12345678901234567890123456789")
+                "29 fractional digits: System.Decimal would round"
+
+            Expect.equal (DatasetDecimal.ofDecimal 12.50M) "12.5" "a host decimal's trailing zero is not a digit"
+        }
+
+        test "a Decimal cell fits only a Decimal column, and only in canonical form" {
+            Expect.isTrue (DatasetValue.fits DatasetDType.Decimal false (DatasetValue.Decimal "7.5")) "canonical"
+
+            Expect.isFalse
+                (DatasetValue.fits DatasetDType.Decimal false (DatasetValue.Decimal "7.50"))
+                "a second spelling"
+
+            Expect.isFalse (DatasetValue.fits DatasetDType.Float false (DatasetValue.Decimal "7.5")) "not a float"
+            Expect.equal (DatasetValue.dtypeOf (DatasetValue.Decimal "1")) (Some DatasetDType.Decimal) "dtypeOf"
+
+            Expect.equal
+                (DatasetDType.parse (DatasetDType.name DatasetDType.Decimal))
+                (Some DatasetDType.Decimal)
+                "name/parse"
+        }
+
+        test "every digit round-trips through the Parquet codec" {
+            let codec = ParquetDatasetCodec() :> IDatasetCodec
+
+            match codec.Decode(codec.Encode(decimalSchema, decimalRows)) with
+            | Error e -> failtestf "decode failed: %s" e
+            | Ok(schema, rows) ->
+                Expect.equal schema decimalSchema "schema"
+                Expect.equal rows decimalRows "rows, digit for digit"
+        }
+
+        testCaseAsync "a plain Parquet reader sees the decimal logical type, at the shape the values need"
+        <| async {
+            // Every row but the 76-digit one: 38 digits is the widest a
+            // Parquet.Net decimal holds.
+            let rows = decimalRows |> List.filter (fun r -> r.Cells[0] <> DatasetValue.Int 1L)
+            let codec = ParquetDatasetCodec() :> IDatasetCodec
+            let bytes = codec.Encode(decimalSchema, rows)
+            use stream = new MemoryStream(bytes)
+
+            let! reader =
+                ParquetReader.CreateAsync(stream, ParquetOptions(UseBigDecimal = true))
+                |> Async.AwaitTask
+
+            match reader.Schema.DataFields[1] with
+            | :? Schema.DecimalDataField as field ->
+                Expect.equal field.Scale 18 "the widest scale the column needs"
+                Expect.equal field.Precision 38 "the widest precision the column needs"
+            | other -> failtestf "the amount column is %s, not a Parquet decimal" (other.GetType().Name)
+
+            match codec.Decode bytes with
+            | Ok(_, decoded) -> Expect.equal decoded rows "and the codec reads it back digit for digit"
+            | Error e -> failtestf "decode failed: %s" e
+        }
+
+        testCaseAsync "a decimal column wider than 38 digits is carried as its canonical text"
+        <| async {
+            let codec = ParquetDatasetCodec() :> IDatasetCodec
+            let bytes = codec.Encode(decimalSchema, decimalRows)
+            use stream = new MemoryStream(bytes)
+            let! reader = ParquetReader.CreateAsync stream |> Async.AwaitTask
+            let field = reader.Schema.DataFields[1]
+            Expect.equal field.ClrType typeof<string> "a string column, since no Parquet.Net decimal holds 76 digits"
+            use rowGroup = reader.OpenRowGroupReader 0
+            let texts = Array.zeroCreate<string> decimalRows.Length
+            do! rowGroup.ReadAsync(field, Memory texts) |> _.AsTask() |> Async.AwaitTask
+
+            Expect.equal
+                texts[1]
+                "-12345678901234567890123456789012345678.12345678901234567890123456789012345678"
+                "the digits, as a plain reader sees them"
+        }
+
+        testCaseAsync "every digit round-trips through the default JSON-frame store, and filters order exactly"
+        <| async {
+            use dir = TempDir.create "decimal-test"
+            let store = BlobDatasetStore.create (baseDataObjects dir)
+
+            let! created =
+                store.Create("scope-d", "money", decimalSchema, decimalRows, "u1", Map.empty, StrictlyVersioned)
+
+            match created with
+            | Error e -> failtestf "create failed: %s" (DatasetError.describe e)
+            | Ok version ->
+                let! page = store.ReadPage("scope-d", "money", version.Version, DatasetPageQuery.firstPage 100)
+
+                match page with
+                | Error e -> failtestf "read failed: %s" (DatasetError.describe e)
+                | Ok page -> Expect.equal page.Rows decimalRows "rows, digit for digit"
+
+                let above = {
+                    DatasetPageQuery.firstPage 100 with
+                        Filters = [
+                            {
+                                Column = "amount"
+                                Op = DatasetFilterOp.Gt
+                                Value = DatasetValue.Decimal "0.1"
+                            }
+                        ]
+                }
+
+                let! filtered = store.ReadPage("scope-d", "money", version.Version, above)
+
+                match filtered with
+                | Error e -> failtestf "filtered read failed: %s" (DatasetError.describe e)
+                | Ok page ->
+                    Expect.equal
+                        (page.Rows |> List.map (fun r -> r.Cells[1]))
+                        [
+                            DatasetValue.Decimal "12345678901234567890.123456789012345678"
+                            DatasetValue.Decimal "1000000"
+                        ]
+                        "amount > 0.1, compared as numbers"
+        }
+
+        testCaseAsync "the store refuses a non-canonical decimal cell"
+        <| async {
+            use dir = TempDir.create "decimal-test"
+            let store = BlobDatasetStore.create (baseDataObjects dir)
+
+            let rows = [
+                {
+                    Cells = [ DatasetValue.Int 1L; DatasetValue.Decimal "7.50" ]
+                }
+            ]
+
+            let! created = store.Create("scope-d", "bad", decimalSchema, rows, "u1", Map.empty, StrictlyVersioned)
+
+            match created with
+            | Error(DatasetError.SchemaMismatch _) -> ()
+            | other -> failtestf "expected SchemaMismatch, got %A" other
+        }
+    ]
+
 let codecTests =
     testList "ParquetDatasetCodec — codec-specific" [
+        decimalTests
+
         testCase "All six dtypes + nullability + roles round-trip through the codec"
         <| fun () ->
             let codec = ParquetDatasetCodec() :> IDatasetCodec

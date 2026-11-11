@@ -112,6 +112,7 @@ let toColumnType (clrType: Type) : ColumnType =
             || underlying = typeof<float32>
             || underlying = typeof<float>
             || underlying = typeof<decimal>
+            || underlying = typeof<Parquet.Data.BigDecimal>
         then
             NumberColumn
         else
@@ -232,6 +233,10 @@ let private decoderFor (field: DataField) : (ParquetRowGroupReader -> DataField 
             pick readStruct<float> readNullableStruct<float>
         elif clrType = typeof<decimal> then
             pick readStruct<decimal> readNullableStruct<decimal>
+        elif clrType = typeof<Parquet.Data.BigDecimal> then
+            // Every Parquet decimal reads as `BigDecimal`
+            // (`ParquetDecimal.readerOptions`), so no width is truncated.
+            pick readStruct<Parquet.Data.BigDecimal> readNullableStruct<Parquet.Data.BigDecimal>
         elif clrType = typeof<DateTime> then
             pick readStruct<DateTime> readNullableStruct<DateTime>
         elif clrType = typeof<DateTimeOffset> then
@@ -296,6 +301,14 @@ let private readColumn
                         )
     }
 
+/// One decoded cell as CSV text. A Parquet decimal renders as its exact
+/// canonical digits; everything else through the family's
+/// shared renderer.
+let private renderCell (cell: obj) : string =
+    match cell with
+    | :? Parquet.Data.BigDecimal as v -> ParquetDecimal.toText v
+    | other -> CsvWire.renderValue other
+
 /// Decode the whole file to RFC 4180 CSV, one row group at a time.
 /// Only one row group's decoded columns are ever resident.
 let private toCsv (reader: ParquetReader) : Task<Result<byte[], IngestionError>> = task {
@@ -323,8 +336,7 @@ let private toCsv (reader: ParquetReader) : Task<Result<byte[], IngestionError>>
 
             if failure.IsNone then
                 for rowIndex in 0 .. rowCount - 1 do
-                    let cells =
-                        columns |> Array.map (fun column -> CsvWire.renderValue column[rowIndex])
+                    let cells = columns |> Array.map (fun column -> renderCell column[rowIndex])
 
                     builder.Append(CsvWire.renderRow cells).Append("\r\n") |> ignore
 
@@ -352,10 +364,10 @@ let private toCsv (reader: ParquetReader) : Task<Result<byte[], IngestionError>>
 let NativeFormat = PayloadFormat.Other "parquet"
 
 /// The `DatasetDType` a Parquet field's declared CLR type reads as. Integer
-/// widths collapse to `Int` (int64), floating and decimal types to `Float`
-/// (`DatasetDType` has no decimal: a `decimal` column narrows to double),
-/// date/time instants to `Timestamp`; durations, times of day, GUIDs, byte
-/// arrays (base64) and strings to `Text`.
+/// widths collapse to `Int` (int64), floating types to `Float`, the decimal
+/// logical type to `Decimal` (exact, every digit), date/time
+/// instants to `Timestamp`; durations, times of day, GUIDs, byte arrays
+/// (base64) and strings to `Text`.
 let datasetDType (field: DataField) : DatasetDType =
     let clrType =
         match field.ClrType with
@@ -380,12 +392,10 @@ let datasetDType (field: DataField) : DatasetDType =
         || clrType = typeof<uint64>
     then
         DatasetDType.Int
-    elif
-        clrType = typeof<float32>
-        || clrType = typeof<float>
-        || clrType = typeof<decimal>
-    then
+    elif clrType = typeof<float32> || clrType = typeof<float> then
         DatasetDType.Float
+    elif clrType = typeof<decimal> || clrType = typeof<Parquet.Data.BigDecimal> then
+        DatasetDType.Decimal
     elif
         clrType = typeof<DateTime>
         || clrType = typeof<DateTimeOffset>
@@ -412,7 +422,8 @@ let private toDatasetValue (column: string) (cell: obj) : Result<DatasetValue, s
     | :? uint64 as v -> Error $"column '%s{column}': UInt64 value %d{v} exceeds the Int64 range of DatasetValue.Int"
     | :? float32 as v -> Ok(DatasetValue.Float(float v))
     | :? float as v -> Ok(DatasetValue.Float v)
-    | :? decimal as v -> Ok(DatasetValue.Float(float v))
+    | :? decimal as v -> Ok(DatasetValue.Decimal(DatasetDecimal.ofDecimal v))
+    | :? Parquet.Data.BigDecimal as v -> Ok(DatasetValue.Decimal(ParquetDecimal.toText v))
     | :? DateTime as v ->
         let utc =
             match v.Kind with
@@ -508,7 +519,7 @@ let private readBytes
     task {
         try
             use stream = new MemoryStream(bytes, writable = false)
-            use! reader = ParquetReader.CreateAsync stream
+            use! reader = ParquetReader.CreateAsync(stream, ParquetDecimal.readerOptions ())
             return! body reader
         with ex ->
             return Error(SchemaMismatch $"%s{context}: not a readable Parquet file: %s{ex.Message}")

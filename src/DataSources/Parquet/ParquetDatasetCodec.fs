@@ -5,14 +5,16 @@ namespace ToolUp.DataSources.Parquet
 
 open System
 open System.IO
+open System.Numerics
 open System.Text.Json
 open Parquet
+open Parquet.Data
 open Parquet.Schema
 open ToolUp.Platform
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Infra
 
-// ─── Phase 598 — ParquetDatasetCodec ────────────────────────────────────
+// ─── ParquetDatasetCodec ────────────────────────────────────
 //
 // The Parquet companion implementation of the `IDatasetCodec` seam (Phase
 // 448): encodes a typed dataset vintage as **native Parquet**, so a
@@ -25,7 +27,13 @@ open ToolUp.Platform.Infra
 //
 // **Column mapping.** `Float` → double, `Int` → int64, `Bool` → bool,
 // `Text` / `Categorical` → UTF-8 string, `Timestamp` → Parquet timestamp
-// (micros, UTC-adjusted). Nullability maps to Parquet optional columns.
+// (micros, UTC-adjusted), `Decimal` → the Parquet decimal logical type
+// (precision and scale are the widest the column's values need,
+// so every digit round-trips). A decimal column needing more than 38 digits
+// of precision is written as its canonical text in a UTF-8 string column
+// instead: Parquet.Net writes a decimal of at most 16 bytes (38 digits), and
+// a narrower type would lose digits. Nullability maps to Parquet optional
+// columns.
 // `Text` vs `Categorical` (and the column `Role`s) are not distinguishable
 // from the Parquet physical schema alone, so the full declared
 // `DatasetSchema` travels in the file's custom key/value metadata under
@@ -40,6 +48,87 @@ open ToolUp.Platform.Infra
 // which compares instants, is preserved). Sub-microsecond ticks truncate.
 // Documented in this companion's README.
 
+/// The bridge between the Parquet decimal logical type
+/// (`Parquet.Data.BigDecimal`: an unscaled integer and a scale) and the
+/// canonical exact-decimal text of `DatasetValue.Decimal`. Shared by the
+/// dataset codec and the Parquet connector, so the two directions cannot
+/// drift. Read Parquet decimals with `ParquetOptions.UseBigDecimal = true`:
+/// without it Parquet.Net reads through `System.Decimal` and SILENTLY
+/// truncates a value wider than 29 digits.
+module ParquetDecimal =
+
+    /// The widest precision Parquet.Net 6 writes as a decimal logical type
+    /// (a 16-byte unscaled value). Measured: a 76-digit value is refused
+    /// with `NotSupportedException` ("result must fit into 16 bytes").
+    [<Literal>]
+    let MaxWritablePrecision = 38
+
+    /// Reader options that read every Parquet decimal as a `BigDecimal`.
+    let readerOptions () = ParquetOptions(UseBigDecimal = true)
+
+    /// The canonical decimal text of a Parquet decimal. Exact at any
+    /// precision: the digits are the unscaled integer's, the point is
+    /// placed by the scale.
+    let toText (value: BigDecimal) : string =
+        let unscaled = value.UnscaledValue
+
+        let digits =
+            BigInteger.Abs(unscaled).ToString(Globalization.CultureInfo.InvariantCulture)
+
+        let scale = value.Scale
+        let padded = digits.PadLeft(scale + 1, '0')
+        let point = padded.Length - scale
+
+        let magnitude =
+            if scale = 0 then
+                padded
+            else
+                padded.Substring(0, point) + "." + padded.Substring point
+
+        let text = if unscaled.Sign < 0 then "-" + magnitude else magnitude
+
+        match DatasetDecimal.tryParse text with
+        | Some canonical -> canonical
+        | None -> failwith $"a Parquet decimal rendered as non-decimal text: {text}"
+
+    /// The (precision, scale) a Parquet decimal column needs to hold every
+    /// one of `values` (canonical texts) exactly: the widest scale, and
+    /// the widest integer part beside it. At least `(1, 0)`.
+    let shapeOf (values: string seq) : int * int =
+        let integerAndScale (text: string) =
+            let magnitude = text.TrimStart '-'
+
+            let integerPart, fractionPart =
+                match magnitude.IndexOf '.' with
+                | -1 -> magnitude, ""
+                | i -> magnitude.Substring(0, i), magnitude.Substring(i + 1)
+
+            (if integerPart = "0" then 0 else integerPart.Length), fractionPart.Length
+
+        let shapes = values |> Seq.map integerAndScale |> List.ofSeq
+        let integerDigits = shapes |> List.fold (fun acc (i, _) -> max acc i) 0
+        let scale = shapes |> List.fold (fun acc (_, f) -> max acc f) 0
+        max 1 (integerDigits + scale), scale
+
+    /// A canonical decimal text as a Parquet decimal of the given shape.
+    /// The shape must hold it (`shapeOf` guarantees that for its inputs).
+    let ofText (precision: int) (scale: int) (text: string) : BigDecimal =
+        let negative = text.StartsWith "-"
+        let magnitude = text.TrimStart '-'
+
+        let integerPart, fractionPart =
+            match magnitude.IndexOf '.' with
+            | -1 -> magnitude, ""
+            | i -> magnitude.Substring(0, i), magnitude.Substring(i + 1)
+
+        let unscaled =
+            BigInteger.Parse(
+                integerPart + fractionPart.PadRight(scale, '0'),
+                Globalization.CultureInfo.InvariantCulture
+            )
+
+        BigDecimal((if negative then BigInteger.Negate unscaled else unscaled), precision, scale)
+
 module private ParquetMapping =
 
     /// The custom key/value metadata key carrying the declared
@@ -50,8 +139,17 @@ module private ParquetMapping =
 
     let jsonOptions = PlatformJson.options
 
-    /// The Parquet field for one declared dataset column.
-    let toParquetField (col: DatasetColumn) : Field =
+    /// The canonical texts of a decimal column's present cells.
+    let decimalTexts (colIndex: int) (rows: DatasetRow list) : string list =
+        rows
+        |> List.choose (fun r ->
+            match List.item colIndex r.Cells with
+            | DatasetValue.Decimal digits -> Some digits
+            | _ -> None)
+
+    /// The Parquet field for one declared dataset column. A `Decimal`
+    /// column's precision and scale come from its values (`ParquetDecimal.shapeOf`).
+    let toParquetField (rows: DatasetRow list) (colIndex: int) (col: DatasetColumn) : Field =
         match col.DType with
         | DatasetDType.Float -> DataField(col.Name, typeof<float>, isNullable = col.Nullable) :> Field
         | DatasetDType.Int -> DataField(col.Name, typeof<int64>, isNullable = col.Nullable) :> Field
@@ -64,8 +162,19 @@ module private ParquetMapping =
             DataField(col.Name, typeof<string>, isNullable = true) :> Field
         | DatasetDType.Timestamp ->
             DateTimeDataField(col.Name, DateTimeFormat.DateAndTimeMicros, isNullable = col.Nullable) :> Field
+        | DatasetDType.Decimal ->
+            let precision, scale = ParquetDecimal.shapeOf (decimalTexts colIndex rows)
 
-    /// The CLR value type a declared dtype maps to in the physical schema.
+            if precision <= ParquetDecimal.MaxWritablePrecision then
+                BigDecimalDataField(col.Name, precision, scale, isNullable = col.Nullable) :> Field
+            else
+                // Wider than Parquet.Net writes as a decimal: the canonical
+                // text, exactly (strings are physically optional, as above).
+                DataField(col.Name, typeof<string>, isNullable = true) :> Field
+
+    /// The CLR value type a declared dtype maps to in the physical schema
+    /// (a `Decimal` column may also be the canonical-text string column
+    /// `toParquetField` writes past `MaxWritablePrecision`).
     let expectedClrType (dtype: DatasetDType) : Type =
         match dtype with
         | DatasetDType.Float -> typeof<float>
@@ -74,6 +183,7 @@ module private ParquetMapping =
         | DatasetDType.Text
         | DatasetDType.Categorical -> typeof<string>
         | DatasetDType.Timestamp -> typeof<DateTime>
+        | DatasetDType.Decimal -> typeof<BigDecimal>
 
     /// Cell extraction failure — raised inside `Encode` (whose seam
     /// contract is "throws only on caller error"; the store validates rows
@@ -207,6 +317,42 @@ module private ParquetMapping =
                         |> List.toArray
 
                     do! rowGroup.WriteAsync(field, ReadOnlyMemory arr)
+            | DatasetDType.Decimal when not (field :? DecimalDataField) ->
+                let arr: string[] =
+                    cells
+                    |> List.map (fun v ->
+                        match v with
+                        | DatasetValue.Decimal digits -> digits
+                        | DatasetValue.Null when col.Nullable -> null
+                        | other -> badCell col other)
+                    |> List.toArray
+
+                do! rowGroup.WriteAsync(field, (arr :> System.Collections.Generic.IReadOnlyCollection<string>))
+            | DatasetDType.Decimal ->
+                let declared = field :?> DecimalDataField
+                let toBig = ParquetDecimal.ofText declared.Precision declared.Scale
+
+                if col.Nullable then
+                    let arr =
+                        cells
+                        |> List.map (fun v ->
+                            match v with
+                            | DatasetValue.Decimal digits -> Nullable(toBig digits)
+                            | DatasetValue.Null -> Nullable()
+                            | other -> badCell col other)
+                        |> List.toArray
+
+                    do! rowGroup.WriteAsync(field, ReadOnlyMemory arr)
+                else
+                    let arr =
+                        cells
+                        |> List.map (fun v ->
+                            match v with
+                            | DatasetValue.Decimal digits -> toBig digits
+                            | other -> badCell col other)
+                        |> List.toArray
+
+                    do! rowGroup.WriteAsync(field, ReadOnlyMemory arr)
         }
 
     /// A decoded UTC timestamp cell.
@@ -327,6 +473,47 @@ module private ParquetMapping =
                     let arr = Array.zeroCreate<DateTime> rowCount
                     do! rowGroup.ReadAsync(field, Memory arr)
                     return Ok(arr |> Array.map timestampValue)
+            | DatasetDType.Decimal when field.ClrType = typeof<string> ->
+                let arr = Array.zeroCreate<string> rowCount
+                do! rowGroup.ReadAsync(field, Memory arr)
+
+                if not col.Nullable && arr |> Array.exists isNull then
+                    return nullRefused ()
+                else
+                    match arr |> Array.tryFind (fun s -> not (isNull s || DatasetDecimal.isCanonical s)) with
+                    | Some bad ->
+                        return Error $"column '{col.Name}' is Decimal but holds '{bad}', not canonical decimal text"
+                    | None ->
+                        return
+                            Ok(
+                                arr
+                                |> Array.map (fun s ->
+                                    if isNull s then
+                                        DatasetValue.Null
+                                    else
+                                        DatasetValue.Decimal s)
+                            )
+            | DatasetDType.Decimal ->
+                let decimalValue (v: BigDecimal) =
+                    DatasetValue.Decimal(ParquetDecimal.toText v)
+
+                if col.Nullable then
+                    let arr = Array.zeroCreate<Nullable<BigDecimal>> rowCount
+                    do! rowGroup.ReadAsync(field, Memory arr)
+
+                    return
+                        Ok(
+                            arr
+                            |> Array.map (fun v ->
+                                if v.HasValue then
+                                    decimalValue v.Value
+                                else
+                                    DatasetValue.Null)
+                        )
+                else
+                    let arr = Array.zeroCreate<BigDecimal> rowCount
+                    do! rowGroup.ReadAsync(field, Memory arr)
+                    return Ok(arr |> Array.map decimalValue)
         }
 
     /// Verify the physical Parquet schema matches the declared dataset
@@ -341,7 +528,10 @@ module private ParquetMapping =
             |> List.tryPick (fun (col, field) ->
                 if field.Name <> col.Name then
                     Some $"content column '{field.Name}' does not match declared column '{col.Name}'"
-                elif field.ClrType <> expectedClrType col.DType then
+                elif
+                    field.ClrType <> expectedClrType col.DType
+                    && not (col.DType = DatasetDType.Decimal && field.ClrType = typeof<string>)
+                then
                     Some
                         $"content column '{col.Name}' has physical type {field.ClrType.Name}; the declared dtype is {DatasetDType.name col.DType}"
                 else
@@ -350,7 +540,7 @@ module private ParquetMapping =
                 | Some reason -> Error reason
                 | None -> Ok()
 
-/// Parquet implementation of the Phase 448 `IDatasetCodec` seam
+/// Parquet implementation of the `IDatasetCodec` seam
 /// (`Format = "parquet"`). Stateless and pure with respect to its inputs
 /// (GP 12 rule 4). Compose via `BlobDatasetStore.createWithCodec`.
 type ParquetDatasetCodec() =
@@ -359,7 +549,7 @@ type ParquetDatasetCodec() =
         member _.Format = "parquet"
 
         member _.Encode(schema: DatasetSchema, rows: DatasetRow list) : byte[] =
-            let fields = schema.Columns |> List.map ParquetMapping.toParquetField
+            let fields = schema.Columns |> List.mapi (ParquetMapping.toParquetField rows)
             let parquetSchema = ParquetSchema(fields |> List.toArray)
 
             use stream = new MemoryStream()
@@ -388,7 +578,7 @@ type ParquetDatasetCodec() =
             try
                 let read = task {
                     use stream = new MemoryStream(content)
-                    use! reader = ParquetReader.CreateAsync(stream)
+                    use! reader = ParquetReader.CreateAsync(stream, ParquetDecimal.readerOptions ())
 
                     // The declared schema travels in the custom metadata; its
                     // absence means the bytes are not a ToolUp-tagged Parquet

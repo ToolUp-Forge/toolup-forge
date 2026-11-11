@@ -59,7 +59,7 @@ module Errors =
         // `AggregateException` (the class the first armed cloud-parity
         // run proved live in the AWS companions, 2026-08-27), which
         // would degrade every type test below to `UnexpectedFailure` —
-        // so unwrap first, through the shared Phase 972 unwrap; a bare
+        // so unwrap first, through the shared unwrap; a bare
         // exception passes through unchanged.
         let ex = unwrap ex
 
@@ -166,7 +166,7 @@ module ConnectionScope =
 /// The shipped `DataIngestor` pre-resolves the credential and hands it
 /// through `DataSourceCallContext.Credential`, so the common path
 /// costs nothing — unless the connector declares
-/// `CredentialNeed.NoCredential`, when nothing is read (Phase 1017). A connector constructed with an `ISecretStore`
+/// `CredentialNeed.NoCredential`, when nothing is read. A connector constructed with an `ISecretStore`
 /// still re-reads on every call when the context carries none — that
 /// is what makes rotation take effect without reconstructing the
 /// connector (the `ClaudeAIProvider` thunk pattern).
@@ -209,7 +209,7 @@ module Credentials =
             | Error _ -> None
     }
 
-    /// Phase 1017 — resolve as `source` declares its `CredentialNeed`,
+    /// Resolve as `source` declares its `CredentialNeed`,
     /// the same rule the shipped `DataIngestor` applies: `NoCredential`
     /// is `Ok None` without touching the store (or `ctx.Credential`),
     /// `Required` is `resolve` (`CredentialMissing` when absent), and
@@ -341,7 +341,7 @@ module CredentialJson =
 /// a per-connector translation the operator has to know about. Types
 /// are recovered from `GetSchema`, not from the payload.
 ///
-/// **NULL is not the empty string (Phase 833).** The family writes the
+/// **NULL is not the empty string.** The family writes the
 /// PostgreSQL `COPY ... WITH (FORMAT csv)` convention inside plain RFC
 /// 4180 bytes: an UNQUOTED empty field is NULL, a QUOTED empty field
 /// (`""`) is the empty string. On the write side a cell's absence is the
@@ -421,6 +421,39 @@ module Csv =
 
         Encoding.UTF8.GetBytes(sb.ToString())
 
+    /// One cell of a `DbDataReader` row, rendered. A database
+    /// `DECIMAL(38, s)` holds more digits than `System.Decimal`, and an
+    /// ADO provider's `GetValue` answers such a value by THROWING
+    /// (`OverflowException`) — or, for a provider that rounds instead,
+    /// by losing digits no caller sees. So a decimal column that `GetValue`
+    /// cannot carry falls back to the provider's own exact value
+    /// (`GetProviderSpecificValue`: `SqlDecimal` for SQL Server), whose
+    /// text is used when it is a plain decimal. A provider with no exact
+    /// value is a named failure, never a rounded number.
+    let renderCell (reader: DbDataReader) (ordinal: int) : string =
+        try
+            renderValue (reader.GetValue ordinal)
+        with
+        | :? OverflowException
+        | :? InvalidCastException as ex when reader.GetFieldType ordinal = typeof<decimal> ->
+            let exact =
+                try
+                    match reader.GetProviderSpecificValue ordinal with
+                    | null -> None
+                    | value -> DatasetDecimal.tryParse (string value)
+                with _ ->
+                    None
+
+            match exact with
+            | Some digits -> digits
+            | None ->
+                raise (
+                    InvalidOperationException(
+                        $"column '{reader.GetName ordinal}' holds an exact decimal wider than System.Decimal, and the provider offers no exact text for it",
+                        ex
+                    )
+                )
+
     /// Drain a `DbDataReader`'s current result set into CSV bytes.
     /// Shared by every ADO-shaped connector in the family (Sql,
     /// Synapse, Snowflake) — `System.Data.Common` is BCL, so this
@@ -438,7 +471,7 @@ module Csv =
             let! hasRow = reader.ReadAsync ct |> Async.AwaitTask
 
             if hasRow then
-                let cells = [ for i in 0 .. reader.FieldCount - 1 -> renderValue (reader.GetValue i) ]
+                let cells = [ for i in 0 .. reader.FieldCount - 1 -> renderCell reader i ]
                 sb.Append(renderRow cells).Append("\r\n") |> ignore
             else
                 go <- false
@@ -448,8 +481,8 @@ module Csv =
 
     /// The first `payload-format` token whose payloads carry the
     /// null convention (unquoted empty = NULL, quoted empty = the
-    /// empty string). Payloads without the key (written before Phase
-    /// 832) and `"1"` payloads (Phase 832) predate it.
+    /// empty string). Payloads without the key (written before the key
+    /// existed) and `"1"` payloads predate it.
     [<Literal>]
     let NullDistinguishingPayloadFormat = 2
 
@@ -494,6 +527,22 @@ module Csv =
             PayloadField.Value ""
         else
             PayloadField.Null
+
+    /// Read one payload field of a column the schema object
+    /// declares an exact decimal (`TypeMap.isExactDecimal`). The digits are
+    /// read as written — `DatasetDecimal.tryParse`, never through a float —
+    /// and an empty field is NULL whatever the payload's convention, because
+    /// a decimal cannot be the empty string. Text that is not a plain
+    /// decimal is a named refusal.
+    let readDecimal (payloadFormat: string option) (text: string) (quoted: bool) : Result<DatasetValue, string> =
+        match readField payloadFormat text quoted with
+        | PayloadField.Null
+        | PayloadField.AmbiguousEmpty -> Ok DatasetValue.Null
+        | PayloadField.Value "" -> Ok DatasetValue.Null
+        | PayloadField.Value digits ->
+            match DatasetDecimal.tryParse digits with
+            | Some canonical -> Ok(DatasetValue.Decimal canonical)
+            | None -> Error $"'{digits}' is not a plain decimal"
 
 /// Native-type-name → coarse `ColumnType` classification.
 ///
@@ -566,6 +615,29 @@ module TypeMap =
             NumberColumn
         else
             StringColumn
+
+    /// Does a native type name declare an EXACT decimal? The
+    /// SQL family's `DECIMAL` / `NUMERIC` (SQL Server, Synapse, PostgreSQL,
+    /// Redshift, Athena, MySQL), SQL Server's `MONEY` / `SMALLMONEY`,
+    /// Snowflake's `NUMBER` / `FIXED`, BigQuery's `NUMERIC` / `BIGNUMERIC` /
+    /// `BIGDECIMAL`, and the Parquet connector's `Decimal` / `BigDecimal`. A column so declared reads as
+    /// `DatasetDType.Decimal`, and its CSV text is read with
+    /// `Csv.readDecimal`, never through a float. Floating types (`FLOAT`,
+    /// `DOUBLE`, `REAL`) and integers are not exact decimals.
+    let isExactDecimal (nativeType: string) : bool =
+        // `TrimEnd '?'`: the Parquet connector marks a nullable column's
+        // CLR type name so (`Decimal?`, `BigDecimal?`).
+        match (normalise nativeType).TrimEnd '?' with
+        | "decimal"
+        | "numeric"
+        | "dec"
+        | "money"
+        | "smallmoney"
+        | "number"
+        | "fixed"
+        | "bignumeric"
+        | "bigdecimal" -> true
+        | _ -> false
 
     /// Compose a connector's own overrides in front of the ANSI
     /// table: `classify myOverrides "VARIANT"`. An override returning

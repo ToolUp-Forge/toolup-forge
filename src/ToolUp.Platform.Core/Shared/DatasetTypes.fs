@@ -5,7 +5,7 @@ namespace ToolUp.Platform
 
 open System
 
-// ─── Phase 448 — dataset substrate types (Fable-safe) ───────────────────
+// ─── Dataset substrate types (Fable-safe) ───────────────────
 //
 // Rectangular typed datasets as first-class, immutable, versioned platform
 // objects. A dataset *version* ("vintage") is the addressable unit a
@@ -25,8 +25,8 @@ open System
 // shape here.
 
 /// Closed dtype for a dataset column. `[<RequireQualifiedAccess>]` — `Float`
-/// / `Int` / `Bool` / `Text` / `Timestamp` / `Categorical` are far too
-/// generic to sit unqualified in the widely-opened `ToolUp.Platform`
+/// / `Int` / `Bool` / `Text` / `Timestamp` / `Categorical` / `Decimal` are
+/// far too generic to sit unqualified in the widely-opened `ToolUp.Platform`
 /// namespace.
 [<RequireQualifiedAccess>]
 type DatasetDType =
@@ -36,6 +36,10 @@ type DatasetDType =
     | Text
     | Timestamp
     | Categorical
+    /// An exact decimal: a database `DECIMAL` / `NUMERIC`, the
+    /// Parquet decimal logical type. Its values are `DatasetValue.Decimal`,
+    /// canonical decimal text (`DatasetDecimal`), never a float.
+    | Decimal
 
 module DatasetDType =
     /// Stable case-name string (metadata sidecar, telemetry, companion-codec
@@ -48,6 +52,7 @@ module DatasetDType =
         | DatasetDType.Text -> "Text"
         | DatasetDType.Timestamp -> "Timestamp"
         | DatasetDType.Categorical -> "Categorical"
+        | DatasetDType.Decimal -> "Decimal"
 
     /// Inverse of `name`. `None` for an unknown tag (forward-compat: a newer
     /// producer's dtype the reader does not model).
@@ -59,6 +64,7 @@ module DatasetDType =
         | "Text" -> Some DatasetDType.Text
         | "Timestamp" -> Some DatasetDType.Timestamp
         | "Categorical" -> Some DatasetDType.Categorical
+        | "Decimal" -> Some DatasetDType.Decimal
         | _ -> None
 
 /// The role a column plays in the long-format shape (D8). `Plain` is an
@@ -105,11 +111,148 @@ type DatasetColumn = {
 /// `Columns` — cell `i` is a value of `Columns[i].DType`.
 type DatasetSchema = { Columns: DatasetColumn list }
 
+// ─── The exact decimal is canonical decimal text ─────────────
+//
+// **Decision (measured 2026-11-11; the migration doc carries the table).**
+// The widest exact-decimal column the shipped SQL backends declare is 38
+// significant digits (SQL Server / Synapse / Redshift / Athena
+// `DECIMAL(38, s)`, Snowflake `NUMBER(38, s)`, BigQuery `NUMERIC(38, 9)`);
+// BigQuery's `BIGNUMERIC` reaches 76 digits with scale 38, PostgreSQL's
+// unconstrained `NUMERIC` is unbounded, and the Parquet decimal logical type
+// over a byte array is unbounded too. `System.Decimal` holds 28 to 29
+// significant digits: on .NET a 38-digit integer is REFUSED and a 38-digit
+// fraction is silently ROUNDED to 28 places; under Fable the host decimal
+// (big.js) rounds at 29 significant digits, so the two hosts round the SAME
+// text to DIFFERENT values. A host decimal therefore cannot be the value: it
+// holds less than the sources produce, and disagrees with itself across the
+// wire. Canonical decimal text holds every digit on both hosts. What would
+// overturn this: a host decimal of at least 76 significant digits that .NET
+// and Fable implement identically.
+//
+// **The canonical form** is what `DatasetDecimal.tryParse` returns: an
+// optional `-`, the integer digits with no leading zero (a lone `0` when
+// there are none), and — only when a non-zero fractional digit exists — a
+// `.` and the fractional digits with no trailing zero. No exponent, no `+`,
+// no `-0`. So textual equality IS numeric equality, and every codec round
+// trip is the identity. A column's declared scale is schema information (the
+// connector's raw `ColumnInfo.DataType`, `NUMERIC(10, 2)`), not a property of
+// each cell.
+
+/// Canonical exact-decimal text: parsing, ordering, and the
+/// bridge to the host decimal where a value fits it. Fable-safe: string
+/// work only, except `tryToDecimal`, which is the host decimal by intent.
+module DatasetDecimal =
+
+    let private isDigit (c: char) = c >= '0' && c <= '9'
+
+    /// The canonical text for `text`, or `None` when `text` is not a plain
+    /// decimal: `[+-]?digits[.digits]` (either side of the point may be
+    /// empty, not both). No exponent, separator or whitespace is accepted —
+    /// a source that writes those is not handing over exact digits.
+    let tryParse (text: string) : string option =
+        if isNull text || text.Length = 0 then
+            None
+        else
+            let negative = text[0] = '-'
+
+            let body =
+                if text[0] = '-' || text[0] = '+' then
+                    text.Substring 1
+                else
+                    text
+
+            let point = body.IndexOf '.'
+
+            let integerPart, fractionPart =
+                if point < 0 then
+                    body, ""
+                else
+                    body.Substring(0, point), body.Substring(point + 1)
+
+            let wellFormed =
+                (integerPart.Length + fractionPart.Length) > 0
+                && Seq.forall isDigit integerPart
+                && Seq.forall isDigit fractionPart
+
+            if not wellFormed then
+                None
+            else
+                let trimmed = integerPart.TrimStart '0'
+                let integerDigits = if trimmed.Length = 0 then "0" else trimmed
+                let fractionDigits = fractionPart.TrimEnd '0'
+
+                let magnitude =
+                    if fractionDigits.Length = 0 then
+                        integerDigits
+                    else
+                        integerDigits + "." + fractionDigits
+
+                if negative && magnitude <> "0" then
+                    Some("-" + magnitude)
+                else
+                    Some magnitude
+
+    /// Is `text` already in canonical form? A `DatasetValue.Decimal` cell
+    /// that is not fits no column (`DatasetValue.fits`).
+    let isCanonical (text: string) : bool = tryParse text = Some text
+
+    /// Numeric order of two CANONICAL texts (`-1` / `0` / `1`). Exact at any
+    /// width: sign, then integer-digit count, then the digits themselves.
+    let compare (a: string) (b: string) : int =
+        let split (s: string) =
+            match s.IndexOf '.' with
+            | -1 -> s, ""
+            | i -> s.Substring(0, i), s.Substring(i + 1)
+
+        let magnitudeOrder (x: string) (y: string) =
+            let xi, xf = split x
+            let yi, yf = split y
+
+            if xi.Length <> yi.Length then
+                Operators.compare xi.Length yi.Length
+            else
+                let byInteger = sign (String.CompareOrdinal(xi, yi))
+
+                if byInteger <> 0 then
+                    byInteger
+                else
+                    let width = max xf.Length yf.Length
+                    sign (String.CompareOrdinal(xf.PadRight(width, '0'), yf.PadRight(width, '0')))
+
+        match a.StartsWith "-", b.StartsWith "-" with
+        | false, true -> 1
+        | true, false -> -1
+        | false, false -> magnitudeOrder a b
+        | true, true -> magnitudeOrder (b.Substring 1) (a.Substring 1)
+
+    /// The canonical text of a host decimal. Exact: every host decimal is a
+    /// plain decimal the canonical form holds.
+    let ofDecimal (value: decimal) : string =
+        match tryParse (string value) with
+        | Some canonical -> canonical
+        | None -> failwith $"host decimal rendered as non-decimal text: {value}"
+
+    /// The host decimal holding exactly `text`'s value, or `None` when it
+    /// cannot: more significant digits than the host decimal holds, or a
+    /// magnitude beyond its range. Never rounds — the refusal is the point,
+    /// because the host decimal is narrower than a database column.
+    let tryToDecimal (text: string) : decimal option =
+        match tryParse text with
+        | None -> None
+        | Some canonical ->
+            try
+                let value = decimal canonical
+
+                if ofDecimal value = canonical then Some value else None
+            with _ ->
+                None
+
 /// A single typed cell value. Positionally aligned to a `DatasetSchema`
 /// column. `[<RequireQualifiedAccess>]` for the same namespace-hygiene reason
 /// as `DatasetDType`. `Int` is `int64` (dataset counts / ids routinely exceed
 /// `int32`); `Timestamp` is `DateTimeOffset` (identical precision contract to
-/// `TimeSeriesPoint`).
+/// `TimeSeriesPoint`); `Decimal` is canonical decimal text (
+/// `DatasetDecimal`).
 [<RequireQualifiedAccess>]
 type DatasetValue =
     | Float of float
@@ -119,6 +262,10 @@ type DatasetValue =
     | Timestamp of DateTimeOffset
     | Categorical of string
     | Null
+    /// An exact decimal, as canonical decimal text
+    /// (`DatasetDecimal.tryParse`): every digit the source held, never a
+    /// float.
+    | Decimal of digits: string
 
 module DatasetValue =
     /// The dtype a non-null value carries; `None` for `Null` (a null cell is
@@ -131,16 +278,20 @@ module DatasetValue =
         | DatasetValue.Text _ -> Some DatasetDType.Text
         | DatasetValue.Timestamp _ -> Some DatasetDType.Timestamp
         | DatasetValue.Categorical _ -> Some DatasetDType.Categorical
+        | DatasetValue.Decimal _ -> Some DatasetDType.Decimal
         | DatasetValue.Null -> None
 
-    /// Does `value` fit a column of `dtype` with the given nullability?
+    /// Does `value` fit a column of `dtype` with the given nullability? A
+    /// `Decimal` fits only in canonical form, so a store never holds two
+    /// spellings of one number.
     let fits (dtype: DatasetDType) (nullable: bool) (value: DatasetValue) : bool =
         match value with
         | DatasetValue.Null -> nullable
+        | DatasetValue.Decimal digits -> dtype = DatasetDType.Decimal && DatasetDecimal.isCanonical digits
         | _ -> dtypeOf value = Some dtype
 
     /// Total-ish comparison for filtering. `Some sign` when the two values
-    /// are of the same, ordered case (numeric / timestamp / text /
+    /// are of the same, ordered case (numeric / decimal / timestamp / text /
     /// categorical); `Some 0` / non-zero for `Bool` and `Null` equality; and
     /// `None` when the two are of different cases (incomparable — the store
     /// rejects a filter whose literal dtype does not match its column, so an
@@ -153,6 +304,7 @@ module DatasetValue =
         | DatasetValue.Text x, DatasetValue.Text y -> Some(String.CompareOrdinal(x, y))
         | DatasetValue.Categorical x, DatasetValue.Categorical y -> Some(String.CompareOrdinal(x, y))
         | DatasetValue.Timestamp x, DatasetValue.Timestamp y -> Some(compare x y)
+        | DatasetValue.Decimal x, DatasetValue.Decimal y -> Some(DatasetDecimal.compare x y)
         | DatasetValue.Null, DatasetValue.Null -> Some 0
         | DatasetValue.Null, _
         | _, DatasetValue.Null -> None
@@ -255,7 +407,7 @@ type DatasetPage = {
     TotalRows: int64
 }
 
-/// Phase 482 — a privacy-provenance label carried by a dataset version.
+/// A privacy-provenance label carried by a dataset version.
 /// Labels **travel with the data** so a downstream reader can tell gated
 /// data from ordinary data long after it leaves the gate. The DU shape is
 /// forge's; the tag vocabulary in `Classified` is the caller's.
@@ -299,7 +451,7 @@ module DataProvenanceLabel =
         |> snd
         |> List.rev
 
-/// Phase 487 — how faithfully a virtual source reproduces a past read at a
+/// How faithfully a virtual source reproduces a past read at a
 /// pinned watermark. `Exact` — the source has snapshot semantics (a snapshot
 /// id / MVCC read) so the same watermark re-reads byte-identical rows;
 /// `Approximate` — the watermark is a best-effort high-water mark (a
@@ -311,7 +463,7 @@ type SnapshotFidelity =
     | Exact
     | Approximate
 
-/// Phase 487 — a virtual dataset version's binding: the data stays in the
+/// A virtual dataset version's binding: the data stays in the
 /// deployment's own store and is read through at page time, so the "vintage"
 /// is a **source watermark**, not copied bytes. Immutable *as a definition*
 /// (GP 5): re-binding at a new watermark is a new version; the same watermark
@@ -329,8 +481,8 @@ type VirtualBinding = {
     Fidelity: SnapshotFidelity
 }
 
-/// Phase 487 — the materiality of a dataset version. `Materialised` — the
-/// default: rows live as encoded content in `IBlobStorage` (Phase 448).
+/// The materiality of a dataset version. `Materialised` — the
+/// default: rows live as encoded content in `IBlobStorage`.
 /// `Virtual` — the rows stay in the deployment's own store and are read
 /// through a `VirtualBinding` at page time (no durable copy). A deployment
 /// that never binds a virtual version is byte-for-byte unchanged (GP 13).
@@ -356,7 +508,7 @@ type DatasetVersion = {
     CreatedAt: DateTimeOffset
     CreatedBy: string
     Metadata: Map<string, string>
-    /// Phase 482 — privacy-provenance labels carried by this version. Empty
+    /// Privacy-provenance labels carried by this version. Empty
     /// for ordinary (unlabelled) data — the default, so a deployment that
     /// never labels is byte-for-byte unchanged (GP 13). Populated by the
     /// store from the reserved label sidecar; propagated automatically by the
