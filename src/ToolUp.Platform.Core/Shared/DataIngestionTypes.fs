@@ -247,7 +247,10 @@ type IngestionRun = {
 
 /// One parameter value, over the scalar kinds the dataset model
 /// names (`DatasetDType`). `Null` carries its declared kind, because a
-/// provider must be told the type of an absent value.
+/// provider must be told the type of an absent value. `Decimal` is exact:
+/// its digits are canonical decimal text (`DatasetDecimal`), the form a
+/// `DatasetValue.Decimal` cell holds, so a value read exactly binds back
+/// without passing through a float.
 [<RequireQualifiedAccess>]
 type BoundValue =
     | Float of float
@@ -256,6 +259,11 @@ type BoundValue =
     | Text of string
     | Timestamp of DateTimeOffset
     | Categorical of string
+    /// An exact decimal, as canonical decimal text
+    /// (`DatasetDecimal.tryParse`). Text that is not canonical is refused
+    /// by `BoundStatement.check` (`BindingRefusal.NonCanonicalDecimal`)
+    /// before any connector reads it.
+    | Decimal of digits: string
     /// An absent value of the declared kind.
     | Null of kind: DatasetDType
 
@@ -290,6 +298,10 @@ type BindingRefusal =
     | MissingParameter of name: string
     /// A parameter of a kind the connector declares it cannot bind.
     | UnbindableKind of name: string * kind: DatasetDType
+    /// A `BoundValue.Decimal` whose text is not canonical decimal text
+    /// (`DatasetDecimal.isCanonical`). The text is not carried: a refusal
+    /// names the parameter, never echoes its value.
+    | NonCanonicalDecimal of name: string
 
 /// Reading a bound value.
 [<RequireQualifiedAccess>]
@@ -304,6 +316,7 @@ module BoundValue =
         | BoundValue.Text _ -> DatasetDType.Text
         | BoundValue.Timestamp _ -> DatasetDType.Timestamp
         | BoundValue.Categorical _ -> DatasetDType.Categorical
+        | BoundValue.Decimal _ -> DatasetDType.Decimal
         | BoundValue.Null kind -> kind
 
     /// Every kind a bound value can carry, in declaration order.
@@ -314,6 +327,7 @@ module BoundValue =
         DatasetDType.Text
         DatasetDType.Timestamp
         DatasetDType.Categorical
+        DatasetDType.Decimal
     ]
 
 /// Building and checking a bound statement.
@@ -349,8 +363,9 @@ module BoundStatement =
     let marker (name: string) : string = "@" + name
 
     /// The refusals a statement earns before any connector reads it: a name
-    /// that is not a parameter name, a name given twice, and a value of a
-    /// kind outside `bindable`. The first refusal in parameter order. Whether
+    /// that is not a parameter name, a name given twice, a value of a kind
+    /// outside `bindable`, and a decimal whose text is not canonical. The
+    /// first refusal in parameter order. Whether
     /// the text uses each parameter is the connector's to say, because only
     /// its dialect knows where a marker can stand.
     let check (bindable: Set<DatasetDType>) (statement: BoundStatement) : Result<unit, BindingRefusal> =
@@ -365,7 +380,10 @@ module BoundStatement =
                 elif not (bindable.Contains(BoundValue.kind p.Value)) then
                     Error(BindingRefusal.UnbindableKind(p.Name, BoundValue.kind p.Value))
                 else
-                    go (seen.Add p.Name) rest
+                    match p.Value with
+                    | BoundValue.Decimal digits when not (DatasetDecimal.isCanonical digits) ->
+                        Error(BindingRefusal.NonCanonicalDecimal p.Name)
+                    | _ -> go (seen.Add p.Name) rest
 
         go Set.empty statement.Parameters
 
@@ -382,3 +400,5 @@ module BindingRefusal =
         | BindingRefusal.MissingParameter name -> $"the statement uses '@{name}' and no parameter supplies it"
         | BindingRefusal.UnbindableKind(name, kind) ->
             $"parameter '{name}' is of kind {kind}, which the connector cannot bind"
+        | BindingRefusal.NonCanonicalDecimal name ->
+            $"parameter '{name}' is a decimal whose text is not canonical decimal text (DatasetDecimal.tryParse)"

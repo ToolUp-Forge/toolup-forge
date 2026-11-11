@@ -53,14 +53,16 @@ module InMemoryBinding =
     let table (name: string) : string = "table " + BoundStatement.marker name
 
     /// A bound value as the source writes it into a result cell: invariant
-    /// culture, round-trippable, `null` for an absent value.
+    /// culture, round-trippable, `null` for an absent value. A decimal is
+    /// its digits exactly, never a float.
     let internal render (value: BoundValue) : string =
         match value with
         | BoundValue.Float f -> f.ToString("R", CultureInfo.InvariantCulture)
         | BoundValue.Int i -> i.ToString(CultureInfo.InvariantCulture)
         | BoundValue.Bool b -> if b then "true" else "false"
         | BoundValue.Text s
-        | BoundValue.Categorical s -> s
+        | BoundValue.Categorical s
+        | BoundValue.Decimal s -> s
         | BoundValue.Timestamp t -> t.ToString("O", CultureInfo.InvariantCulture)
         | BoundValue.Null _ -> null
 
