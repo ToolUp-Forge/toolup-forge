@@ -285,7 +285,6 @@ module Chunking =
     val splitByTokens: ChunkingConfig -> ITokenCounter -> string -> string list
     val chunkSpreadsheet: SheetData -> ChunkingConfig -> ITokenCounter -> string list
     val formatRow: string list -> string -> string
-    val withContextualHeader: ITextSummariser option -> string -> string -> string
 ```
 
 ### Token-aware splitting
@@ -372,7 +371,7 @@ Trigger on operator action (model swap, scope reset, periodic refresh). The defa
 **Deployment contract — required for production:**
 
 - Set `ServerConfig.JobScheduler = InProcessJobScheduler` (or a distributed scheduler companion) **and** call `RagOptions.withVacuumSchedule`. Without both, memory does not stabilise: with the schedule but no scheduler the sweep never fires; with neither, tombstones are reclaimed only by a manual `IVectorStore.Vacuum` call from your own admin path.
-- The `VacuumScheduleValidator` warns at startup in both misconfigured cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel), so the gap is loud rather than silent.
+- The `vacuumScheduleValidator` warns at startup in both misconfigured cases (visible in the HealthMonitorUI admin tab / `/dev/inspect` Validators panel), so the gap is loud rather than silent.
 - `ListScopes()` on the in-memory default returns only scopes loaded so far this process lifetime — a cold scope is vacuumed on the first tick after it loads, not before. This is a latency, not a correctness, caveat: nothing is ever purged before its retention window elapses.
 
 ```fsharp skip=fragment

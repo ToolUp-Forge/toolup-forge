@@ -288,9 +288,8 @@ RAG-specific builders:
 > `RetrievalPipelineOptions.QueryRewriteTimeoutMs` (default 2000ms) — on overrun or fault the pipeline
 > searches the raw query and records `Failed` on the retrieval trace.
 >
-> `ITextSummariser` is **not composed at all**. `Chunking.withContextualHeader` takes one as an
-> `option` and no forge path calls it, so contextual-header summarisation is a helper a consumer wires
-> into its own ingestion, not a composition knob.
+> `ITextSummariser` is **not composed at all**: no forge path calls it, so contextual-header
+> summarisation is something a consumer wires into its own ingestion, not a composition knob.
 >
 > `VectorisationHandler` is a per-module DECLARATION, not a builder: a module lists its handlers on
 > `ServerModule.VectorisationHandlers` and the composition reads them from the module registry.
@@ -602,7 +601,6 @@ module Chunking =
     val splitByTokens: ChunkingConfig -> ITokenCounter -> string -> string list
     val chunkSpreadsheet: SheetData -> ChunkingConfig -> ITokenCounter -> string list
     val formatRow: string list -> string -> string
-    val withContextualHeader: ITextSummariser option -> string -> string -> string
 
 and SheetData = {
     SheetName: string

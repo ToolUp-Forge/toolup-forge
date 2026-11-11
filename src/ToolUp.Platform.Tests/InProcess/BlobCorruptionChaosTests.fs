@@ -295,7 +295,8 @@ let tests =
                         |> Async.Parallel
                         |> Async.Ignore
 
-                    let! index = loadIndex blob container
+                    let! read = loadIndex blob container
+                    let index = Expect.wantOk read "the index reads"
                     let ids = index |> List.map _.Id |> Set.ofList
                     let expected = docs |> List.map _.Id |> Set.ofList
 

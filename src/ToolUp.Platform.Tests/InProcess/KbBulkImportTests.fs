@@ -126,7 +126,7 @@ let private mkDeps
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = IngestionQueue()
+        Queue = Some(IngestionQueue())
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = notifications
@@ -150,18 +150,17 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = upload
-        DedupPolicy = KnowledgeDedupPolicy.enabled
-        VersioningPolicy = KnowledgeVersioningPolicy.disabled
+        Policies = {
+            KnowledgePolicies.defaults with
+                Upload = upload
+                Quota = quota
+                Archive = archivePolicy
+                Url = urlPolicy
+        }
         // Phase 105 — retention not composed: the pre-105 convention-blob path.
         DataObjectStore = None
-        QuotaPolicy = quota
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         ContentScanner = scanner
-        ScanPolicy = ContentScanPolicy.defaults
         DisclosureGate = None
-        ArchiveImportPolicy = archivePolicy
-        UrlIngestionPolicy = urlPolicy
         UrlFetcher = fetcher
     }
 
@@ -393,7 +392,8 @@ let tests =
 
             // The batch did not abort at the first refusal: `good-b.csv`
             // sits AFTER `blocked.exe` in the submission order.
-            let! index = loadIndex storage "team-mixed"
+            let! read = loadIndex storage "team-mixed"
+            let index = Expect.wantOk read "the index reads"
             Expect.equal (List.length index) 2 "both good documents persisted despite an intervening refusal"
         }
 
@@ -512,7 +512,8 @@ let tests =
                 "decompression-ratio"
                 "the refusal names the guard that fired, not a generic failure"
 
-            let! index = loadIndex storage "team-bomb"
+            let! read = loadIndex storage "team-bomb"
+            let index = Expect.wantOk read "the index reads"
             Expect.isEmpty index "a refused archive persists nothing"
         }
 
@@ -623,7 +624,8 @@ let tests =
                     "path traversal"
                     (sprintf "'%s' is refused by name with a traversal classification" fragment)
 
-            let! index = loadIndex storage "team-slip"
+            let! read = loadIndex storage "team-slip"
+            let index = Expect.wantOk read "the index reads"
             Expect.equal (List.length index) 1 "no traversal entry reached storage"
         }
 
@@ -702,7 +704,8 @@ let tests =
             let reason = refusalOf report "docs.example.com" |> Option.defaultValue ""
             Expect.stringContains reason "not enabled" "the refusal says the deployment has not opted in"
 
-            let! index = loadIndex storage "team-inert"
+            let! read = loadIndex storage "team-inert"
+            let index = Expect.wantOk read "the index reads"
             Expect.isEmpty index "and nothing was stored"
         }
 
@@ -742,7 +745,8 @@ let tests =
                 [ "https://docs.example.com/a.csv" ]
                 "the non-allowlisted host never reached the transport"
 
-            let! index = loadIndex storage "team-url"
+            let! read = loadIndex storage "team-url"
+            let index = Expect.wantOk read "the index reads"
             Expect.equal (List.length index) 1 "the fetched document persisted through the normal path"
         }
 
@@ -880,7 +884,8 @@ let tests =
                 "document quota"
                 "the refusal is the shipped Phase 512 message, not a bulk-specific one"
 
-            let! index = loadIndex storage "team-quota"
+            let! read = loadIndex storage "team-quota"
+            let index = Expect.wantOk read "the index reads"
             Expect.equal (List.length index) 2 "the corpus never exceeds its cap"
         }
 
@@ -929,7 +934,8 @@ let tests =
                     "test-signature"
                     (sprintf "'%s' carries the scanner's own reason" fragment)
 
-            let! index = loadIndex storage "team-scan"
+            let! read = loadIndex storage "team-scan"
+            let index = Expect.wantOk read "the index reads"
 
             Expect.equal
                 (List.length index)
@@ -963,7 +969,8 @@ let tests =
 
             Expect.equal (List.length ids) 2 "the two byte-identical entries resolve to the same document id"
 
-            let! index = loadIndex storage "team-dedup"
+            let! read = loadIndex storage "team-dedup"
+            let index = Expect.wantOk read "the index reads"
             Expect.equal (List.length index) 2 "and only two documents are stored"
         }
 

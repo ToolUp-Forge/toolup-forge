@@ -80,12 +80,12 @@ let private mkDeps
     (storage: IBlobStorage)
     (auditLog: CapturingAuditLog)
     (notifications: CapturingNotifications)
-    (dedupPolicy: KnowledgeDedupPolicy)
+    (dedupPolicy: bool)
     (container: string)
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = IngestionQueue()
+        Queue = Some(IngestionQueue())
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = notifications
@@ -109,25 +109,15 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = KnowledgeUploadPolicy.permissive
-        DedupPolicy = dedupPolicy
-        // Phase 510 — dedup is asserted independently of versioning, so
-        // this pack keeps the pre-510 upload path.
-        VersioningPolicy = KnowledgeVersioningPolicy.disabled
+        Policies = {
+            KnowledgePolicies.defaults with
+                Dedup = dedupPolicy
+        }
         // Phase 105 — retention not composed: the pre-105 convention-blob path.
         DataObjectStore = None
-        // Phase 512 — these packs pin pre-512 paths; the unlimited /
-        // retain-forever defaults keep them byte-identical.
-        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         // Phase 515 — no scanner composed: the pre-515 upload path.
         ContentScanner = None
-        ScanPolicy = ContentScanPolicy.defaults
         DisclosureGate = None
-        // Phase 511 — bulk import is not exercised here: archive guards at
-        // their shipped defaults, URL ingestion inert, no transport.
-        ArchiveImportPolicy = ArchiveImportPolicy.defaults
-        UrlIngestionPolicy = UrlIngestionPolicy.disabled
         UrlFetcher = None
     }
 
@@ -154,15 +144,15 @@ let tests =
             let audit = CapturingAuditLog()
             let notifications = CapturingNotifications()
 
-            let deps =
-                mkDeps storage audit notifications KnowledgeDedupPolicy.enabled "team-dedup-a"
+            let deps = mkDeps storage audit notifications true "team-dedup-a"
 
             let! first = uploadDocument deps csvBytes "scores.csv"
             let! second = uploadDocument deps csvBytes "scores-copy.csv"
 
             Expect.equal second.Id first.Id "the second upload returns the existing document (same docId)"
 
-            let! idx = loadIndex storage "team-dedup-a"
+            let! read = loadIndex storage "team-dedup-a"
+            let idx = Expect.wantOk read "the index reads"
             Expect.equal (idx |> List.map _.Id) [ first.Id ] "exactly one KnowledgeDocument in the scope"
 
             Expect.equal
@@ -194,8 +184,7 @@ let tests =
             let audit = CapturingAuditLog()
             let notifications = CapturingNotifications()
 
-            let deps =
-                mkDeps storage audit notifications KnowledgeDedupPolicy.enabled "team-dedup-b"
+            let deps = mkDeps storage audit notifications true "team-dedup-b"
 
             let! doc = uploadDocument deps csvBytes "scores.csv"
 
@@ -216,15 +205,15 @@ let tests =
             let audit = CapturingAuditLog()
             let notifications = CapturingNotifications()
 
-            let deps =
-                mkDeps storage audit notifications KnowledgeDedupPolicy.disabled "team-dedup-c"
+            let deps = mkDeps storage audit notifications false "team-dedup-c"
 
             let! first = uploadDocument deps csvBytes "scores.csv"
             let! second = uploadDocument deps csvBytes "scores.csv"
 
             Expect.notEqual second.Id first.Id "opt-out: every upload ingests as its own document"
 
-            let! idx = loadIndex storage "team-dedup-c"
+            let! read = loadIndex storage "team-dedup-c"
+            let idx = Expect.wantOk read "the index reads"
             Expect.hasLength idx 2 "both uploads are in the index"
             Expect.all idx (fun d -> d.ContentHash = None) "opt-out stamps no hash (byte-for-byte legacy shape)"
 
@@ -239,8 +228,7 @@ let tests =
             let audit = CapturingAuditLog()
             let notifications = CapturingNotifications()
 
-            let deps =
-                mkDeps storage audit notifications KnowledgeDedupPolicy.enabled "team-dedup-d"
+            let deps = mkDeps storage audit notifications true "team-dedup-d"
 
             let! first = uploadDocument deps csvBytes "scores.csv"
 
@@ -263,8 +251,7 @@ let tests =
             let audit = CapturingAuditLog()
             let notifications = CapturingNotifications()
 
-            let deps =
-                mkDeps storage audit notifications KnowledgeDedupPolicy.enabled "team-dedup-e"
+            let deps = mkDeps storage audit notifications true "team-dedup-e"
 
             // Seed a Failed document carrying the hash + its index ref —
             // the state a crashed / queue-full ingestion leaves behind.
@@ -299,9 +286,8 @@ let tests =
 
         testCaseAsync "a pre-14x index record (no ContentHash property) loads with ContentHash = None"
         <| async {
-            // `loadIndex` swallows deserialisation failures into an empty
-            // list, so a non-lenient reader would silently blank existing
-            // KBs on upgrade — this pin is the guard against that.
+            // `loadIndex` refuses an index that does not decode, so a
+            // non-lenient reader would refuse every existing KB on upgrade — this pin is the guard against that.
             let storage = InMemoryBlobStorage() :> IBlobStorage
 
             let legacyJson =
@@ -309,7 +295,8 @@ let tests =
 
             let! _ = storage.Upload("team-dedup-f", "knowledge/index.json", Encoding.UTF8.GetBytes legacyJson)
 
-            let! idx = loadIndex storage "team-dedup-f"
+            let! read = loadIndex storage "team-dedup-f"
+            let idx = Expect.wantOk read "the index reads"
 
             match idx with
             | [ doc ] ->

@@ -176,7 +176,7 @@ type KnowledgeDocument = {
     /// Lowercase SHA-256 hex of the raw uploaded bytes,
     /// stamped by `UploadDocument` so a scope-local re-upload of the
     /// same file short-circuits to this document instead of
-    /// re-ingesting (see `KnowledgeDedupPolicy`). `None` for notes,
+    /// re-ingesting (see `KnowledgePolicies.Dedup`). `None` for notes,
     /// narratives, and documents ingested before the dedup landed —
     /// legacy entries never match, so the first re-upload of a legacy
     /// document still re-ingests once and the new entry then carries
@@ -720,138 +720,6 @@ module KnowledgeUploadPolicy =
     let warnsUncappedInTeamMode (teamScoped: bool) (policy: KnowledgeUploadPolicy) : bool =
         teamScoped && policy.MaxUploadBytes.IsNone && not policy.AcceptUnboundedUploads
 
-// ─── Document dedup policy ───────────────────────────
-
-/// Compose-time content-hash dedup policy for KB uploads. When
-/// `DedupUploads` is `true` (the default a deployment gets without
-/// calling `withDocumentDedup`), `UploadDocument` SHA-256-hashes the
-/// raw uploaded bytes and — when the caller's scope already holds a
-/// document with the same hash — returns the existing document instead
-/// of re-ingesting: uploads are idempotent and the corpus never
-/// accumulates byte-identical duplicates. The dedup
-/// decision is audited (`KnowledgeDocumentDeduplicated`) and surfaced
-/// to the user as an Info `SystemMessage`.
-///
-/// `KnowledgeBase.Server.withDocumentDedup false` opts a deployment out
-/// for cases where byte-identical re-uploads should legitimately stay
-/// separate documents (e.g. contract revisions where each upload is its
-/// own record); the opt-out restores the pre-14x upload path
-/// byte-for-byte (GP 11).
-type KnowledgeDedupPolicy = { DedupUploads: bool }
-
-module KnowledgeDedupPolicy =
-    /// The default: dedup on. Resolved when a deployment never calls
-    /// `withDocumentDedup`.
-    let enabled: KnowledgeDedupPolicy = { DedupUploads = true }
-
-    /// The opt-out: pre-14x behaviour byte-for-byte — no hashing, no
-    /// lookup, every upload ingests.
-    let disabled: KnowledgeDedupPolicy = { DedupUploads = false }
-
-// ─── Document versioning policy ──────────────────────
-
-/// Compose-time lever for KB upload **versioning**. When
-/// `VersionUploads` is `true`, re-uploading an *edited* file under a
-/// name the caller's scope already holds supersedes that document in
-/// place — same `Id`, `Version + 1`, the prior version preserved as an
-/// immutable `KnowledgeDocumentVersion` — instead of landing a second,
-/// unrelated document beside the first.
-///
-/// **The default is `false`, and deliberately so.** Versioning is not a
-/// bug fix that can be switched on under a deployment: it changes what
-/// a re-upload MEANS. A corpus where every revision is its own record
-/// (a contracts archive, an evidence bundle) is a legitimate and common
-/// shape, and silently collapsing those records into one lineage would
-/// destroy the distinction the deployment was relying on. So an
-/// existing deployment keeps the pre-510 behaviour exactly — two
-/// documents, two chunk namespaces, nothing superseded, no version
-/// sidecar written, no extra blob read on the upload path (GP 11 /
-/// GP 13) — until it opts in with
-/// `KnowledgeBase.Server.withDocumentVersioning true`.
-///
-/// Versioning composes *after* content-hash dedup rather than
-/// replacing it: a byte-IDENTICAL re-upload still dedups onto the
-/// existing document (nothing changed, so there is no new version to
-/// mint), and only a byte-DIFFERENT upload under a name already held
-/// reaches the supersede path. The two levers answer different
-/// questions — "is this the same bytes?" and "is this a new revision of
-/// the same document?".
-type KnowledgeVersioningPolicy = {
-    /// `true` to supersede a same-named document in place on re-upload.
-    VersionUploads: bool
-}
-
-module KnowledgeVersioningPolicy =
-    /// The default a deployment gets without calling
-    /// `withDocumentVersioning`: no lineage, no version sidecar —
-    /// pre-510 upload behaviour byte-for-byte (GP 11).
-    let disabled: KnowledgeVersioningPolicy = { VersionUploads = false }
-
-    /// The opt-in: a re-upload under an existing name becomes the next
-    /// version of that document.
-    let enabled: KnowledgeVersioningPolicy = { VersionUploads = true }
-
-// ─── Original-document retention policy ──────────────
-
-/// Compose-time lever for routing KB **original documents** through
-/// `IDataObjectStore` instead of writing them as a raw `IBlobStorage`
-/// blob at the `knowledge/{docId}/{fileName}` convention path. The
-/// object store already provides content-addressable dedup at rest, a
-/// metadata envelope carrying scope / lineage, a version chain, and the
-/// Phase 9h `Erase` surface — so an original saved through it costs one
-/// copy of the bytes per distinct content within a scope, and is
-/// matched by a data-subject erasure demand rather than being invisible
-/// to it.
-///
-/// **The objectId IS the `KnowledgeDocument.Id`, and this record
-/// carries no field to change that.** `(scopeId, objectId)` is the
-/// store's identity and `docId` is already unique within the scope,
-/// already stamped into chunk metadata, and already the key
-/// `GetOriginalDocument` receives — so retrieval becomes a direct
-/// `Get(scopeId, docId)` with no wire change and no persisted-record
-/// widening. It also makes the two version axes AGREE rather than
-/// compete: Phase 510 supersedes a lineage **in place** under the same
-/// `Id`, and the object store's own chain is keyed by `objectId`, so
-/// deriving `objectId = docId` means version N of the lineage is
-/// version N of the object. Minting a separate objectId would force a
-/// choice between breaking the lineage (a new objectId per version) and
-/// reproducing the docId with extra indirection.
-///
-/// **The default is OFF, and it has to be.** Unlike every other KB
-/// substrate dependency, `IDataObjectStore` is registered by
-/// `ComposeRuntimeServices` for **every** composed deployment, so
-/// "is one registered?" cannot be the opt-in signal — probing DI would
-/// silently move every existing deployment's originals to a new
-/// location on upgrade, and their previously-uploaded documents would
-/// then be served only by the compatibility fallback. An explicit
-/// policy makes the migration a deployment decision (GP 11 / GP 13).
-type KnowledgeObjectRetentionPolicy = {
-    /// `true` to save new originals through `IDataObjectStore` and to
-    /// read originals store-first. Reads always fall back to the
-    /// convention blob, so documents uploaded before the opt-in stay
-    /// retrievable forever — that fallback IS the migration, and there
-    /// is no backfill step.
-    RetainOriginalsInObjectStore: bool
-}
-
-module KnowledgeObjectRetentionPolicy =
-    /// The default a deployment gets without calling
-    /// `withObjectStoreRetention`: originals are written to, read from
-    /// and deleted at the `knowledge/{docId}/{fileName}` convention
-    /// path, with no store call on
-    /// any path (GP 11 / GP 13).
-    let disabled: KnowledgeObjectRetentionPolicy = { RetainOriginalsInObjectStore = false }
-
-    /// The opt-in: new originals are saved through `IDataObjectStore`
-    /// under `objectId = docId` with the `Versioned` policy.
-    let enabled: KnowledgeObjectRetentionPolicy = { RetainOriginalsInObjectStore = true }
-
-    /// `DataType` stamped on every KB original saved through the store,
-    /// so `ListObjects` / `IDataCatalog` can select exactly the KB's
-    /// originals out of a scope that also holds other object kinds.
-    [<Literal>]
-    let ObjectDataType = "knowledge-document"
-
 // ─── Per-scope quota + retention ─────────────────────
 
 /// Compose-time per-scope Knowledge Base storage quota — the corpus-level
@@ -1199,6 +1067,84 @@ module UrlIngestionPolicy =
     /// compose time. An inert policy is never broad.
     let isBroadAllowlist (policy: UrlIngestionPolicy) : bool =
         Set.count policy.AllowedHosts >= BroadAllowlistThreshold
+
+// ─── The knowledge base's policies, as one record ────
+
+/// Which extractor a `.docx` upload goes through. `Flat` reads a document as
+/// per-heading text; `Structured` reads the OpenXml model: the full heading
+/// path keys each chunk, list items keep their bullet shape, and tables
+/// become citable table chunks.
+[<RequireQualifiedAccess>]
+type DocxExtractionMode =
+    | Flat
+    | Structured
+
+/// Every compose-time policy the knowledge base reads, as one value. Each
+/// `KnowledgeBase.Server.with*` builder sets its field on the one registered
+/// record; a deployment that calls none of them reads `KnowledgePolicies.defaults`,
+/// which is the behaviour of a deployment that composed nothing (GP 11).
+/// The seams some policies drive (the content scanner, the URL transport)
+/// are services, not policy, and are resolved beside this record.
+type KnowledgePolicies = {
+    /// Size cap, extension allowlist and unsupported-type handling for one upload.
+    Upload: KnowledgeUploadPolicy
+    /// Content-hash dedup. When `true` (the default), an upload whose
+    /// SHA-256 matches a document the scope already holds returns that
+    /// document instead of ingesting a second copy; the decision is audited
+    /// (`KnowledgeDocumentDeduplicated`) and announced as an Info message.
+    /// `false` keeps byte-identical uploads as separate documents.
+    Dedup: bool
+    /// Upload versioning. When `true`, re-uploading an edited file under a
+    /// name the scope already holds supersedes that document in place (same
+    /// `Id`, `Version + 1`, the prior version preserved). `false` by default,
+    /// because versioning changes what a re-upload means: a corpus where
+    /// every revision is its own record is a legitimate shape. It composes
+    /// after dedup: a byte-identical re-upload still dedups.
+    Versioning: bool
+    /// Original retention in `IDataObjectStore`. When `true`, new originals
+    /// are saved through the store under `objectId = docId` with the
+    /// `Versioned` policy, and reads go store-first with the
+    /// `knowledge/{docId}/{fileName}` blob as the fallback. `false` by
+    /// default: a store is registered for every composed deployment, so its
+    /// presence cannot be the opt-in signal.
+    ObjectRetention: bool
+    /// The per-scope corpus quota.
+    Quota: KnowledgeQuotaPolicy
+    /// Age-based retention.
+    Retention: KnowledgeRetentionPolicy
+    /// What the upload boundary does when the composed scanner is unavailable.
+    Scan: ContentScanPolicy
+    /// The `.docx` extractor.
+    DocxMode: DocxExtractionMode
+    /// The archive-expansion resource guards for a bulk import.
+    Archive: ArchiveImportPolicy
+    /// The URL-ingestion host allowlist (empty: URL ingestion is inert).
+    Url: UrlIngestionPolicy
+}
+
+module KnowledgePolicies =
+    /// What a deployment that composed no policy reads: uploads uncapped,
+    /// dedup on, versioning and object retention off, no quota, retained
+    /// forever, scanning fail-closed, the flat DOCX extractor, the shipped
+    /// archive guards, URL ingestion inert.
+    let defaults: KnowledgePolicies = {
+        Upload = KnowledgeUploadPolicy.permissive
+        Dedup = true
+        Versioning = false
+        ObjectRetention = false
+        Quota = KnowledgeQuotaPolicy.unlimited
+        Retention = KnowledgeRetentionPolicy.retainForever
+        Scan = ContentScanPolicy.defaults
+        DocxMode = DocxExtractionMode.Flat
+        Archive = ArchiveImportPolicy.defaults
+        Url = UrlIngestionPolicy.disabled
+    }
+
+    /// `DataType` stamped on every original saved through `IDataObjectStore`,
+    /// so `ListObjects` / `IDataCatalog` can select the knowledge base's
+    /// originals out of a scope that also holds other object kinds.
+    [<Literal>]
+    let OriginalObjectDataType = "knowledge-document"
 
 /// One thing to import. `Archive` expands into many items server-side;
 /// `Url` is fetched only when the deployment allowlisted its host.

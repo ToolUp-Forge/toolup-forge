@@ -89,7 +89,7 @@ let private executeList (ctx: HttpContext) (_argsJson: string) : Async<string> =
             |}
     | Some storage ->
         let scope = resolveScope ctx
-        let! docs = loadIndex storage scope.Container
+        let! docs = loadListing indexLogger storage scope.Container
 
         let summaries =
             docs
@@ -158,7 +158,7 @@ let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = a
                 |}
         | Some storage ->
             let scope = resolveScope ctx
-            let! docs = loadIndex storage scope.Container
+            let! docs = loadListing indexLogger storage scope.Container
 
             match docs |> List.tryFind (fun d -> d.Id = id) with
             | None ->

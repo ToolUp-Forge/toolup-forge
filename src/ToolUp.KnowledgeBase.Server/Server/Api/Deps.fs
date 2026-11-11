@@ -34,7 +34,9 @@ open ToolUp.Platform.Compose
 /// and threaded into each handler invocation.
 type KnowledgeApiDeps = {
     Storage: IBlobStorage
-    Queue: IngestionQueue
+    /// The ingestion queue, `None` when no RAG tier is composed (the knowledge
+    /// base then stores documents without indexing them).
+    Queue: IngestionQueue option
     OcrProvider: IOcrProvider
     TableExtractor: ITableExtractor
     Notifications: INotificationChannel
@@ -109,61 +111,23 @@ type KnowledgeApiDeps = {
     /// user id, no `StorageScope`) keep `false` here but stay tenant-
     /// isolated, so they pass the guard.
     ScopeResolvedFromRequest: bool
-    /// Compose-time upload policy (size cap, type allowlist,
-    /// unsupported-type handling). Resolved from DI when a deployment
-    /// composed `withUploadPolicy`; otherwise `KnowledgeUploadPolicy.permissive`
-    /// (no caps; pre-119 behaviour modulo always-on filename sanitisation
-    /// and the `UnsupportedFormat` status fix). Enforced by `uploadDocument`.
-    UploadPolicy: KnowledgeUploadPolicy
-    /// Compose-time content-hash dedup policy. Resolved from
-    /// DI when a deployment composed `withDocumentDedup`; otherwise
-    /// `KnowledgeDedupPolicy.enabled` (uploads dedup by default; the
-    /// opt-out restores pre-14x behaviour byte-for-byte, GP 11).
-    /// Consulted by `uploadDocument` before anything is persisted.
-    DedupPolicy: KnowledgeDedupPolicy
-    /// Compose-time upload versioning, registered by
-    /// `withDocumentVersioning`; `KnowledgeVersioningPolicy.disabled`
-    /// when absent, which is what every deployment that has not opted in
-    /// gets. `uploadDocument` reads it before looking for a predecessor,
-    /// so a deployment without it takes no extra index read at all
-    /// (GP 11 / GP 13).
-    VersioningPolicy: KnowledgeVersioningPolicy
-    /// The versioned object store KB originals are retained
-    /// in, present **only** when the deployment composed
-    /// `withObjectStoreRetention true`.
-    ///
-    /// `None` is not "no store is registered" — one always is, for every
-    /// composed deployment (`ComposeRuntimeServices`). It means the
-    /// deployment did not opt in, and every original-bytes path then
-    /// takes the pre-105 `knowledge/{docId}/{fileName}` convention
-    /// branch with no store call at all (GP 11 / GP 13). Resolving the
-    /// singleton behind the policy rather than probing for it is what
-    /// makes that guarantee structural: there is no path from an
-    /// un-opted-in deployment to a store write.
+    /// Every compose-time policy the deployment set through the
+    /// `KnowledgeBase.Server.with*` builders, as one record;
+    /// `KnowledgePolicies.defaults` when it set none.
+    Policies: KnowledgePolicies
+    /// The versioned object store KB originals are retained in, present
+    /// **only** when `Policies.ObjectRetention` is on. A store is registered
+    /// for every composed deployment, so `None` means the deployment did not
+    /// opt in, and every original-bytes path then takes the
+    /// `knowledge/{docId}/{fileName}` convention branch with no store call at
+    /// all (GP 11 / GP 13).
     DataObjectStore: IDataObjectStore option
-    /// Compose-time per-scope corpus quota, registered by
-    /// `withKnowledgeQuota`; `KnowledgeQuotaPolicy.unlimited` when absent
-    /// (no tally taken, no upload refusable — pre-512 behaviour, GP 11).
-    /// Enforced by `uploadDocument` and projected by `getScopeUsage`.
-    QuotaPolicy: KnowledgeQuotaPolicy
-    /// Compose-time age-based retention, registered by
-    /// `withKnowledgeRetention`; `KnowledgeRetentionPolicy.retainForever`
-    /// when absent. Carried on `deps` for read paths that want to report
-    /// the policy; the sweep itself runs off the request path in
-    /// `Server/RetentionSweep.fs` on the composed `IJobScheduler`.
-    RetentionPolicy: KnowledgeRetentionPolicy
-    /// The composed content scanner, registered by
-    /// `withContentScanning`. `None` when the deployment composed none,
-    /// which is a stronger guarantee than substituting
-    /// `AllowAllContentScanner`: the upload path skips the scan branch
-    /// entirely, so no digest is computed and no audit row is written —
-    /// the pre-515 path byte-for-byte (GP 11 / GP 13).
+    /// The composed content scanner, registered by `withContentScanning`.
+    /// `None` when the deployment composed none: the upload path skips the
+    /// scan branch entirely, so no digest is computed and no audit row is
+    /// written (GP 11 / GP 13). `Policies.Scan` says what an unavailable
+    /// scanner means.
     ContentScanner: IContentScanner option
-    /// What the upload boundary does with a
-    /// `ScanUnavailable` verdict. `ContentScanPolicy.defaults`
-    /// (fail-closed) when absent; unreachable on a deployment with no
-    /// scanner, because a deployment with none never scans at all.
-    ScanPolicy: ContentScanPolicy
     /// The fact-disclosure egress gate, registered in DI by
     /// the fact companion's compose whenever the fact store is enabled.
     /// `ingestNarrative` refuses to commit a narrative whose Metric spans
@@ -173,24 +137,10 @@ type KnowledgeApiDeps = {
     /// paired with it — the request's, or the one a server-side producer
     /// committed under — never one derived from a string.
     DisclosureGate: (IFactDisclosureGate * ResolvedScope) option
-    /// Archive-expansion resource guards for `importBatch`,
-    /// registered by `withArchiveImportPolicy`. `ArchiveImportPolicy.defaults`
-    /// when absent — the one KB policy whose uncomposed default is NOT
-    /// permissive, because an unguarded archive expander is not a
-    /// defensible default for a new surface. Read only by `importBatch`;
-    /// the single-file upload path never sees it (GP 11).
-    ArchiveImportPolicy: ArchiveImportPolicy
-    /// The URL-ingestion host allowlist, registered by
-    /// `withUrlIngestion`. `UrlIngestionPolicy.disabled` when absent,
-    /// whose allowlist is empty, so no URL is fetchable at all: URL
-    /// ingestion is inert unless a deployment names a host.
-    UrlIngestionPolicy: UrlIngestionPolicy
-    /// The transport behind an allowlisted URL fetch,
-    /// registered alongside the policy by `withUrlIngestion` (or replaced
-    /// by `withUrlContentFetcher`). `None` when URL ingestion was never
-    /// composed — which is redundant with the empty allowlist above, and
-    /// deliberately so: the gate refuses before a transport is consulted,
-    /// and no transport exists to consult (GP 13).
+    /// The transport behind an allowlisted URL fetch, registered alongside
+    /// the allowlist by `withUrlIngestion` (or replaced by
+    /// `withUrlContentFetcher`). `None` when URL ingestion was never
+    /// composed: the gate refuses before a transport is consulted (GP 13).
     UrlFetcher: KnowledgeBase.ServerBulkImport.IUrlContentFetcher option
 }
 
@@ -220,57 +170,54 @@ module KnowledgeApiDeps =
         (resolvedScope: StorageScope option)
         (userId: string)
         : KnowledgeApiDeps =
-        let storage = services.GetService(typeof<IBlobStorage>) :?> IBlobStorage
+        let storage =
+            ServiceComposition.tryService<IBlobStorage> services
+            |> Option.defaultWith (fun () ->
+                invalidOp
+                    "KnowledgeApiDeps: no IBlobStorage is registered. The ServerApp composition registers one unconditionally; a host that bypasses it must register one.")
 
-        let queue = services.GetService(typeof<IngestionQueue>) :?> IngestionQueue
+        let queue = ServiceComposition.tryService<IngestionQueue> services
 
         // Telemetry sink resolved per-request so KB enqueue paths feed the
         // same `/health/rag` snapshot as the post-save vectorisation hook.
-        // Falls back to a no-op when `composeWithRAG` hasn't registered one
-        // (deployments using KB without RAG, or test harnesses).
+        // A no-op when `composeWithRAG` hasn't registered one.
         let ragTelemetry =
-            match services.GetService(typeof<ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry>) with
-            | :? ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry as t -> t
-            | _ -> ToolUp.RAG.RagTelemetry.createNoOp ()
+            ServiceComposition.tryService<ToolUp.Platform.Infra.IRagTelemetry.IRagTelemetry> services
+            |> Option.defaultWith ToolUp.RAG.RagTelemetry.createNoOp
 
         let recordEnqueue (accepted: bool) =
-            if not (isNull (box queue)) then
-                ragTelemetry.RecordEnqueue(queue.Count, queue.Capacity, accepted)
+            queue
+            |> Option.iter (fun q -> ragTelemetry.RecordEnqueue(q.Count, q.Capacity, accepted))
 
-        // Document-understanding providers. `composeWithRAG` registers no-op
-        // defaults; companion-equipped deployments register a real OCR /
-        // table extractor before composeWithRAG runs and the no-ops are
-        // skipped. Either way `GetService` returns a non-null implementation.
+        // Document-understanding providers: `composeWithRAG` registers no-op
+        // defaults and a companion's own provider wins.
         let ocrProvider =
-            match services.GetService(typeof<IOcrProvider>) with
-            | :? IOcrProvider as p -> p
-            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
+            ServiceComposition.tryService<IOcrProvider> services
+            |> Option.defaultWith ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider
 
         let tableExtractor =
-            match services.GetService(typeof<ITableExtractor>) with
-            | :? ITableExtractor as t -> t
-            | _ -> ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
+            ServiceComposition.tryService<ITableExtractor> services
+            |> Option.defaultWith ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor
 
         // The base composition registers a channel unconditionally (a no-op
         // one when notifications are off), so an absent one is a
         // composition fault, refused here rather than carried as a null.
         let notifications =
-            match services.GetService(typeof<INotificationChannel>) with
-            | :? INotificationChannel as channel -> channel
-            | _ ->
+            ServiceComposition.tryService<INotificationChannel> services
+            |> Option.defaultWith (fun () ->
                 invalidOp
-                    "KnowledgeApiDeps: no INotificationChannel is registered. The ServerApp composition registers one unconditionally (a no-op channel when notifications are off); a host that bypasses it must register one."
+                    "KnowledgeApiDeps: no INotificationChannel is registered. The ServerApp composition registers one unconditionally (a no-op channel when notifications are off); a host that bypasses it must register one.")
 
         let logger =
-            match services.GetService(typeof<ILogger>) with
-            | :? ILogger as l -> l
-            | _ ->
+            ServiceComposition.tryService<ILogger> services
+            |> Option.defaultValue (
                 { new ILogger with
                     member _.Debug _ = ()
                     member _.Info _ = ()
                     member _.Warn _ = ()
                     member _.Error(_, _) = ()
                 }
+            )
 
         // Scope resolution. A middleware-resolved the principal's `StorageScope`
         // is the authoritative tenant boundary (GP 4). When it's absent
@@ -315,161 +262,44 @@ module KnowledgeApiDeps =
         // deployment-wide shared content only.
         let vectorScope = VectorScope.ofContainer scope
 
-        // Vector store and event store are resolved lazily — only the Notes
-        // and AI-context paths need them, and tests bypassing `composeWithRAG`
-        // may not have them registered. `box _ <> null` guards each use.
-        let vectorStore =
-            match services.GetService(typeof<IVectorStore>) with
-            | :? IVectorStore as v -> Some v
-            | _ -> None
+        let vectorStore = ServiceComposition.tryService<IVectorStore> services
 
-        // The composed lifecycle seam wins (it fans out
-        // across vector store + sparse index + embedding cache).
-        // Deployments with a vector store but no registered seam
-        // (KB-without-RAG composition, older composition roots) get a
-        // vector-only wrapper so the handlers have exactly one deletion
-        // path — never the raw `vs.DeleteChunk` loop.
+        // The composed lifecycle seam wins (it fans out across vector store +
+        // sparse index + embedding cache). A deployment with a vector store
+        // but no registered seam gets a vector-only wrapper, so the handlers
+        // have exactly one deletion path.
         let indexLifecycle =
-            match services.GetService(typeof<ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle>) with
-            | :? ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle as il -> Some il
-            | _ ->
+            match ServiceComposition.tryService<ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle> services with
+            | Some lifecycle -> Some lifecycle
+            | None ->
                 vectorStore
                 |> Option.map (fun vs ->
                     ToolUp.Platform.Infra.IIndexLifecycle.DefaultIndexLifecycle(vs, None, None, logger)
                     :> ToolUp.Platform.Infra.IIndexLifecycle.IIndexLifecycle)
 
-        let eventStore =
-            match services.GetService(typeof<IEventStore>) with
-            | :? IEventStore as e -> Some e
-            | _ -> None
+        let policies =
+            ServiceComposition.tryService<KnowledgePolicies> services
+            |> Option.defaultValue KnowledgePolicies.defaults
 
-        // `composeWithRAG` registers the (cache-wrapped)
-        // embedder as an `IEmbeddingProvider` singleton; the wrapper
-        // forwards the scope-keyed capability, so probing the resolved
-        // singleton is equivalent to probing what the operator composed.
-        let embeddingProvider =
-            match services.GetService(typeof<IEmbeddingProvider>) with
-            | :? IEmbeddingProvider as e -> Some e
-            | _ -> None
-
-        let narrativeStore =
-            match services.GetService(typeof<INarrativeStore>) with
-            | :? INarrativeStore as n -> Some n
-            | _ -> None
-
-        // Original-source resolver. Same probe-with-default
-        // shape as the OCR / table-extractor providers above: a custom
-        // resolver registered before compose wins; otherwise the
-        // per-`KnowledgeSource` default applies.
-        let originalResolver =
-            match services.GetService(typeof<KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver>) with
-            | :? KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver as r -> r
-            | _ -> KnowledgeBase.ServerOriginalSourceResolver.createDefault ()
-
-        let auditLog = ToolUp.Platform.Config.Background.resolveAuditLog services
-
-        // Upload policy registered by `withUploadPolicy`;
-        // the permissive default when absent (no caps, pre-119 behaviour).
-        let uploadPolicy =
-            match services.GetService(typeof<KnowledgeUploadPolicy>) with
-            | :? KnowledgeUploadPolicy as p -> p
-            | _ -> KnowledgeUploadPolicy.permissive
-
-        // Dedup policy registered by `withDocumentDedup`;
-        // dedup enabled when absent.
-        let dedupPolicy =
-            match services.GetService(typeof<KnowledgeDedupPolicy>) with
-            | :? KnowledgeDedupPolicy as p -> p
-            | _ -> KnowledgeDedupPolicy.enabled
-
-        // Versioning policy registered by
-        // `withDocumentVersioning`; OFF when absent (pre-510 behaviour).
-        let versioningPolicy =
-            match services.GetService(typeof<KnowledgeVersioningPolicy>) with
-            | :? KnowledgeVersioningPolicy as p -> p
-            | _ -> KnowledgeVersioningPolicy.disabled
-
-        // Original retention in the versioned object store.
         // The POLICY is the gate, not the presence of a store: one is
-        // registered for every composed deployment, so probing DI would
-        // silently move every existing deployment's originals on
-        // upgrade. Un-opted-in ⇒ `None` ⇒ no store call on any path.
-        let objectRetentionPolicy =
-            match services.GetService(typeof<KnowledgeObjectRetentionPolicy>) with
-            | :? KnowledgeObjectRetentionPolicy as p -> p
-            | _ -> KnowledgeObjectRetentionPolicy.disabled
-
+        // registered for every composed deployment, so probing DI alone would
+        // silently move every existing deployment's originals on upgrade.
         let dataObjectStore =
-            if not objectRetentionPolicy.RetainOriginalsInObjectStore then
+            if not policies.ObjectRetention then
                 None
             else
-                match services.GetService(typeof<IDataObjectStore>) with
-                | :? IDataObjectStore as s -> Some s
-                | _ ->
+                match ServiceComposition.tryService<IDataObjectStore> services with
+                | Some store -> Some store
+                | None ->
                     logger.Warn(
                         "[KnowledgeBase] withObjectStoreRetention is composed but no IDataObjectStore is registered; originals fall back to the knowledge/{docId}/{fileName} blob convention."
                     )
 
                     None
 
-        // Corpus quota + retention policies registered by
-        // `withKnowledgeQuota` / `withKnowledgeRetention`; the unlimited /
-        // retain-forever defaults when absent.
-        let quotaPolicy =
-            match services.GetService(typeof<KnowledgeQuotaPolicy>) with
-            | :? KnowledgeQuotaPolicy as p -> p
-            | _ -> KnowledgeQuotaPolicy.unlimited
-
-        let retentionPolicy =
-            match services.GetService(typeof<KnowledgeRetentionPolicy>) with
-            | :? KnowledgeRetentionPolicy as p -> p
-            | _ -> KnowledgeRetentionPolicy.retainForever
-
-        // The composed content scanner + its error policy.
-        // `None` rather than a substituted no-op: a deployment that never
-        // called `withContentScanning` has no scanner singleton at all,
-        // and the upload path skips the whole branch (GP 13).
-        let contentScanner =
-            match services.GetService(typeof<IContentScanner>) with
-            | :? IContentScanner as s -> Some s
-            | _ -> None
-
-        let scanPolicy =
-            match services.GetService(typeof<ContentScanPolicy>) with
-            | :? ContentScanPolicy as p -> p
-            | _ -> ContentScanPolicy.defaults
-
-        // The fact-disclosure egress gate, present exactly
-        // when the fact companion's compose registered the fact store.
-        let disclosureGate =
-            match services.GetService(typeof<IFactDisclosureGate>) with
-            | :? IFactDisclosureGate as g -> Some(g, factScope)
-            | _ -> None
-
-        // Bulk-import policies. The archive guards default to
-        // `ArchiveImportPolicy.defaults` (real caps, not permissive — see
-        // the type); URL ingestion defaults to an EMPTY allowlist, so an
-        // uncomposed deployment cannot fetch anything and no transport is
-        // resolved for it either.
-        let archiveImportPolicy =
-            match services.GetService(typeof<ArchiveImportPolicy>) with
-            | :? ArchiveImportPolicy as p -> p
-            | _ -> ArchiveImportPolicy.defaults
-
-        let urlIngestionPolicy =
-            match services.GetService(typeof<UrlIngestionPolicy>) with
-            | :? UrlIngestionPolicy as p -> p
-            | _ -> UrlIngestionPolicy.disabled
-
-        let urlFetcher =
-            match services.GetService(typeof<KnowledgeBase.ServerBulkImport.IUrlContentFetcher>) with
-            | :? KnowledgeBase.ServerBulkImport.IUrlContentFetcher as f -> Some f
-            | _ -> None
-
         let accessContext =
-            match services.GetService(typeof<AccessContext>) with
-            | :? AccessContext as ac -> ac
-            | _ -> AccessContext.unresolved "Deps"
+            ServiceComposition.tryService<AccessContext> services
+            |> Option.defaultWith (fun () -> AccessContext.unresolved "Deps")
 
         let publishInventory () =
             publishInventoryUpdate storage notifications logger userId scope.Container
@@ -477,8 +307,8 @@ module KnowledgeApiDeps =
         let ensureContextWriteAllowed () : Async<Result<unit, string>> = async {
             match accessContext.Subject with
             | TeamMember(userId, teamId) ->
-                match services.GetService(typeof<ITeamStore>) with
-                | :? ITeamStore as ts ->
+                match ServiceComposition.tryService<ITeamStore> services with
+                | Some ts ->
                     let! role = ts.GetMemberRole(TeamId teamId, UserId userId)
 
                     match role with
@@ -488,7 +318,7 @@ module KnowledgeApiDeps =
                             Error
                                 $"Only team owners and admins can edit standing AI context. Your role: {TeamRoles.displayName r}."
                     | None -> return Error "You are not a member of this team."
-                | _ -> return Error "Team management is not available in this deployment."
+                | None -> return Error "Team management is not available in this deployment."
             | _ -> return Ok()
         }
 
@@ -504,28 +334,26 @@ module KnowledgeApiDeps =
             VectorScope = vectorScope
             VectorStore = vectorStore
             IndexLifecycle = indexLifecycle
-            EventStore = eventStore
-            EmbeddingProvider = embeddingProvider
-            NarrativeStore = narrativeStore
+            EventStore = ServiceComposition.tryService<IEventStore> services
+            EmbeddingProvider = ServiceComposition.tryService<IEmbeddingProvider> services
+            NarrativeStore = ServiceComposition.tryService<INarrativeStore> services
             AccessContext = accessContext
-            OriginalResolver = originalResolver
-            AuditLog = auditLog
+            OriginalResolver =
+                ServiceComposition.tryService<KnowledgeBase.ServerOriginalSourceResolver.IOriginalSourceResolver>
+                    services
+                |> Option.defaultWith KnowledgeBase.ServerOriginalSourceResolver.createDefault
+            AuditLog = ToolUp.Platform.Config.Background.resolveAuditLog services
             RecordEnqueue = recordEnqueue
             PublishInventory = publishInventory
             EnsureContextWriteAllowed = ensureContextWriteAllowed
             ScopeResolvedFromRequest = scopeResolvedFromRequest
-            UploadPolicy = uploadPolicy
-            DedupPolicy = dedupPolicy
-            VersioningPolicy = versioningPolicy
+            Policies = policies
             DataObjectStore = dataObjectStore
-            QuotaPolicy = quotaPolicy
-            RetentionPolicy = retentionPolicy
-            ContentScanner = contentScanner
-            ScanPolicy = scanPolicy
-            DisclosureGate = disclosureGate
-            ArchiveImportPolicy = archiveImportPolicy
-            UrlIngestionPolicy = urlIngestionPolicy
-            UrlFetcher = urlFetcher
+            ContentScanner = ServiceComposition.tryService<IContentScanner> services
+            DisclosureGate =
+                ServiceComposition.tryService<IFactDisclosureGate> services
+                |> Option.map (fun gate -> gate, factScope)
+            UrlFetcher = ServiceComposition.tryService<KnowledgeBase.ServerBulkImport.IUrlContentFetcher> services
         }
 
     /// Resolve all DI values + build the four local closures for the
@@ -601,9 +429,10 @@ module KnowledgeIngest =
         (chunkPairs: (string * TextChunk) list)
         : Async<Result<IngestionAttempt option, EnqueueRefused>> =
         async {
-            if isNull (box deps.Queue) || List.isEmpty chunkPairs then
-                return Ok None
-            else
+            match deps.Queue with
+            | None -> return Ok None
+            | Some _ when List.isEmpty chunkPairs -> return Ok None
+            | Some queue ->
                 let attempt: IngestionAttempt = {
                     AttemptId = Guid.NewGuid().ToString("N")
                     EnqueuedChunks = chunkPairs.Length
@@ -630,13 +459,13 @@ module KnowledgeIngest =
                     Attempt = Some attempt
                 }
 
-                let! accepted = deps.Queue.EnqueueAsync(job)
+                let! accepted = queue.EnqueueAsync(job)
                 deps.RecordEnqueue accepted
 
                 if accepted then
                     return Ok(Some attempt)
                 else
-                    let refused = QueueFull(deps.Queue.Count, deps.Queue.Capacity)
+                    let refused = QueueFull(queue.Count, queue.Capacity)
                     do! settle deps doc.Id (Failed(EnqueueRefused.describe refused))
                     return Error refused
         }

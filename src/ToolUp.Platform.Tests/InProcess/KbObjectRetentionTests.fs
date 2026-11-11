@@ -126,13 +126,13 @@ let private mkDeps
     (queue: IngestionQueue)
     (lifecycle: IIndexLifecycle option)
     (objectStore: IDataObjectStore option)
-    (dedup: KnowledgeDedupPolicy)
-    (versioning: KnowledgeVersioningPolicy)
+    (dedup: bool)
+    (versioning: bool)
     (container: string)
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = queue
+        Queue = Some queue
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = noopNotifications
@@ -156,17 +156,14 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = KnowledgeUploadPolicy.permissive
-        DedupPolicy = dedup
-        VersioningPolicy = versioning
+        Policies = {
+            KnowledgePolicies.defaults with
+                Dedup = dedup
+                Versioning = versioning
+        }
         DataObjectStore = objectStore
-        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         ContentScanner = None
-        ScanPolicy = ContentScanPolicy.defaults
         DisclosureGate = None
-        ArchiveImportPolicy = ArchiveImportPolicy.defaults
-        UrlIngestionPolicy = UrlIngestionPolicy.disabled
         UrlFetcher = None
     }
 
@@ -190,7 +187,8 @@ let private waitForIngest (storage: IBlobStorage) (container: string) (docId: st
     let mutable result = None
 
     while result.IsNone && DateTimeOffset.UtcNow < deadline do
-        let! index = loadIndex storage container
+        let! read = loadIndex storage container
+        let index = Expect.wantOk read "the index reads"
 
         match index |> List.tryFind (fun d -> d.Id = docId) with
         | Some doc ->
@@ -224,15 +222,7 @@ let tests =
             let store = newStore storage
             let container = "team-ret-a"
 
-            let deps =
-                mkDeps
-                    storage
-                    queue
-                    None
-                    (Some store)
-                    KnowledgeDedupPolicy.enabled
-                    KnowledgeVersioningPolicy.disabled
-                    container
+            let deps = mkDeps storage queue None (Some store) true false container
 
             let bytes = csvOf 40 "0039"
             let! doc = uploadDocument deps bytes "scores.csv"
@@ -245,7 +235,7 @@ let tests =
 
                 Expect.equal
                     stored.DataType
-                    KnowledgeObjectRetentionPolicy.ObjectDataType
+                    KnowledgePolicies.OriginalObjectDataType
                     "the envelope's DataType selects KB originals out of a mixed scope"
 
                 Expect.equal
@@ -288,15 +278,7 @@ let tests =
             let store = newStore storage
             let container = "team-ret-b"
 
-            let deps =
-                mkDeps
-                    storage
-                    queue
-                    None
-                    (Some store)
-                    KnowledgeDedupPolicy.disabled
-                    KnowledgeVersioningPolicy.disabled
-                    container
+            let deps = mkDeps storage queue None (Some store) false false container
 
             let bytes = csvOf 40 "0039"
             let! first = uploadDocument deps bytes "a.csv"
@@ -309,7 +291,8 @@ let tests =
                 first.Id
                 "withDocumentDedup false keeps its documented meaning — the second upload is its own document"
 
-            let! index = loadIndex storage container
+            let! read = loadIndex storage container
+            let index = Expect.wantOk read "the index reads"
             Expect.hasLength index 2 "both documents are in the index"
 
             let! blobs = contentBlobs storage container
@@ -363,15 +346,7 @@ let tests =
             do! saveIndex storage container [ legacyDoc ]
             let! _ = storage.Upload(container, "knowledge/doc-legacy/old.csv", legacyBytes)
 
-            let deps =
-                mkDeps
-                    storage
-                    queue
-                    None
-                    (Some store)
-                    KnowledgeDedupPolicy.enabled
-                    KnowledgeVersioningPolicy.disabled
-                    container
+            let deps = mkDeps storage queue None (Some store) true false container
 
             // Precondition, so the assertion below cannot pass by the
             // store happening to hold the object.
@@ -403,14 +378,7 @@ let tests =
             let container = "team-ret-d"
 
             let deps =
-                mkDeps
-                    storage
-                    queue
-                    (Some(lifecycle :> IIndexLifecycle))
-                    (Some store)
-                    KnowledgeDedupPolicy.enabled
-                    KnowledgeVersioningPolicy.disabled
-                    container
+                mkDeps storage queue (Some(lifecycle :> IIndexLifecycle)) (Some store) true false container
 
             let! doc = uploadDocument deps (csvOf 40 "0039") "gone.csv"
             let! ingested = waitForIngest storage container doc.Id
@@ -441,7 +409,8 @@ let tests =
                 ingested.ChunkCount
                 "every chunk was removed through the IIndexLifecycle fan-out — bytes AND chunks, which is the phase's acceptance"
 
-            let! index = loadIndex storage container
+            let! read = loadIndex storage container
+            let index = Expect.wantOk read "the index reads"
             Expect.isEmpty index "the index entry is gone"
         }
 
@@ -460,15 +429,7 @@ let tests =
             let store = newStore storage
             let container = "team-ret-e"
 
-            let retained =
-                mkDeps
-                    storage
-                    queue
-                    None
-                    (Some store)
-                    KnowledgeDedupPolicy.enabled
-                    KnowledgeVersioningPolicy.disabled
-                    container
+            let retained = mkDeps storage queue None (Some store) true false container
 
             let! doc = uploadDocument retained (csvOf 40 "0039") "personal.csv"
             let! _ = waitForIngest storage container doc.Id
@@ -477,15 +438,7 @@ let tests =
             // to the convention path and contributes nothing erasable.
             let legacyContainer = "team-ret-e-legacy"
 
-            let unretained =
-                mkDeps
-                    storage
-                    queue
-                    None
-                    None
-                    KnowledgeDedupPolicy.enabled
-                    KnowledgeVersioningPolicy.disabled
-                    legacyContainer
+            let unretained = mkDeps storage queue None None true false legacyContainer
 
             let! legacy = uploadDocument unretained (csvOf 40 "0039") "personal.csv"
             let! _ = waitForIngest storage legacyContainer legacy.Id
@@ -542,8 +495,7 @@ let tests =
             // that a real deployment HAS an IDataObjectStore registered,
             // which is exactly why the policy and not the registration is
             // the gate.
-            let deps =
-                mkDeps storage queue None None KnowledgeDedupPolicy.enabled KnowledgeVersioningPolicy.disabled container
+            let deps = mkDeps storage queue None None true false container
 
             let bytes = csvOf 40 "0039"
             let! doc = uploadDocument deps bytes "plain.csv"
@@ -582,15 +534,7 @@ let tests =
             let store = newStore storage
             let container = "team-ret-g"
 
-            let deps =
-                mkDeps
-                    storage
-                    queue
-                    None
-                    (Some store)
-                    KnowledgeDedupPolicy.enabled
-                    KnowledgeVersioningPolicy.enabled
-                    container
+            let deps = mkDeps storage queue None (Some store) true true container
 
             let v1 = csvOf 60 "0059"
             let! first = uploadDocument deps v1 "revised.csv"

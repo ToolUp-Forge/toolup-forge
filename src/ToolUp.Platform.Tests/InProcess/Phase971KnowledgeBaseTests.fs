@@ -45,7 +45,7 @@ let private noopNotifications =
 
 let private kbDeps (storage: IBlobStorage) (container: string) : KnowledgeApiDeps = {
     Storage = storage
-    Queue = ToolUp.RAG.IngestionTypes.IngestionQueue()
+    Queue = Some(ToolUp.RAG.IngestionTypes.IngestionQueue())
     OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
     Notifications = noopNotifications
@@ -69,17 +69,10 @@ let private kbDeps (storage: IBlobStorage) (container: string) : KnowledgeApiDep
     PublishInventory = fun () -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
-    UploadPolicy = KnowledgeUploadPolicy.permissive
-    DedupPolicy = KnowledgeDedupPolicy.enabled
-    VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    Policies = KnowledgePolicies.defaults
     DataObjectStore = None
-    QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-    RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     ContentScanner = None
-    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = None
-    ArchiveImportPolicy = ArchiveImportPolicy.defaults
-    UrlIngestionPolicy = UrlIngestionPolicy.disabled
     UrlFetcher = None
 }
 
@@ -128,7 +121,8 @@ let private seedNote (storage: IBlobStorage) (container: string) (uploadedAt: Da
 }
 
 let private isListed (storage: IBlobStorage) (container: string) (docId: string) = async {
-    let! index = loadIndex storage container
+    let! read = loadIndex storage container
+    let index = Expect.wantOk read "the index reads"
     return index |> List.exists (fun d -> d.Id = docId)
 }
 

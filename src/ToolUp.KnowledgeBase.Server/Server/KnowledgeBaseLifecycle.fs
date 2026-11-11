@@ -7,7 +7,7 @@ open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerInventory
 open ToolUp.Platform.Compose
 
-// ─── Phase 54d — first-party Knowledge Base lifecycle hook ───────────
+// ─── First-party Knowledge Base lifecycle hook ───────────
 //
 // On `OnDeprovisioned`, purges the offboarded scope's Knowledge Base —
 // every document blob, the index, extracted artefacts, and the
@@ -65,7 +65,7 @@ type KnowledgeBaseLifecycle(services: IServiceProvider) =
                 // Snapshot the index before deleting so the status /
                 // progress caches can be evicted for exactly this scope's
                 // docs. A missing index is an empty list, not an error.
-                let! docs = loadIndex storage container
+                let! docs = loadListing indexLogger storage container
 
                 let! blobs = storage.List(container, "knowledge/")
                 let errors = ResizeArray<string>()

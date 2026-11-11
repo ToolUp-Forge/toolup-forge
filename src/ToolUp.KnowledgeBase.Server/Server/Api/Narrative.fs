@@ -77,226 +77,222 @@ let ingestNarrative
         | None, _ -> return Error MissingProvenance
         | _, Some diagnostic -> return Error(IngestFailed diagnostic)
         | Some prov, None ->
-            let! existing = loadIndex deps.Storage deps.Scope.Container
+            match! loadIndex deps.Storage deps.Scope.Container with
+            | Error error -> return Error(IngestFailed(IndexReadError.describe error))
+            | Ok existing ->
 
-            let duplicate =
-                existing
-                |> List.tryFind (fun d ->
-                    match d.Source with
-                    | FromNarrative n -> n.ModuleId = prov.ModuleId && n.SettingsKey = prov.SettingsKey
-                    | UploadedFile
-                    | Note _ -> false)
+                let duplicate =
+                    existing
+                    |> List.tryFind (fun d ->
+                        match d.Source with
+                        | FromNarrative n -> n.ModuleId = prov.ModuleId && n.SettingsKey = prov.SettingsKey
+                        | UploadedFile
+                        | Note _ -> false)
 
-            match duplicate, request.Overwrite with
-            | Some existingDoc, false -> return Error(DuplicateExists existingDoc)
-            | _ ->
-                // Use existing docId on overwrite so vector-store upserts replace by
-                // chunkId; mint a new id otherwise.
-                let docId =
-                    match duplicate with
-                    | Some d -> d.Id
-                    | None -> Guid.NewGuid().ToString()
-
-                let fileName =
-                    let safeTitle =
-                        request.Document.Title
-                        |> String.map (fun c ->
-                            if Char.IsLetterOrDigit c || c = '-' || c = ' ' then
-                                c
-                            else
-                                '-')
-
-                    sprintf "%s.narrative.md" safeTitle
-
-                // One chunk per section so retrieval can cite the section
-                // that contributed — matches the per-page chunking we use
-                // for uploaded documents.
-                let chunks =
-                    request.Document.Sections
-                    |> List.mapi (fun i section ->
-                        let sectionDoc: NarrativeDocument = {
-                            Title = request.Document.Title
-                            Subtitle = request.Document.Subtitle
-                            Sections = [ section ]
-                            Provenance = request.Document.Provenance
-                            Lang = request.Document.Lang
-                            CanonicalUrl = request.Document.CanonicalUrl
-                        }
-
-                        let body = NarrativeMarkdown.render sectionDoc
-
-                        let src: SourceReference = {
-                            DocumentId = docId
-                            DocumentName = fileName
-                            FileType = "narrative"
-                            Location = Section section.Heading
-                            IndexedAt = DateTimeOffset.UtcNow
-                        }
-
-                        let header = sprintf "Section %d · %s" (i + 1) section.Heading
-                        let chunk = makeChunk Narrative fileName header body src
-
-                        // Record the fact ids this section's
-                        // metric spans reference in chunk metadata, so a
-                        // retrieval of the narrative chunk can surface its
-                        // underlying facts (transitive citation) and the
-                        // fact→narrative join can prefer this
-                        // chunk when one of those facts is resolved. Absent
-                        // any reference the chunk is stamped as before.
-                        match NarrativeFacts.factRefsInSection section |> Set.toList with
-                        | [] -> chunk
-                        | refs -> {
-                            chunk with
-                                Metadata = chunk.Metadata.Add(ChunkMetadata.FactRefsKey, String.concat "," refs)
-                          })
-
-                let fullMarkdown = NarrativeMarkdown.render request.Document
-                let sizeBytes = int64 (Encoding.UTF8.GetByteCount fullMarkdown)
-
-                let doc: KnowledgeDocument = {
-                    Id = docId
-                    FileName = fileName
-                    FileType = "narrative"
-                    UploadedAt = DateTimeOffset.UtcNow
-                    UploadedBy = deps.UserId.Value
-                    Status = Queued
-                    SizeBytes = sizeBytes
-                    ChunkCount = chunks.Length
-                    Source =
-                        FromNarrative {
-                            ModuleId = prov.ModuleId
-                            PageRoute = prov.PageRoute
-                            SettingsKey = prov.SettingsKey
-                            SettingsDisplay = prov.SettingsDisplay
-                            GeneratedAt = prov.GeneratedAt
-                        }
-                    // Narratives dedup by provenance
-                    // (`DuplicateExists` + `Overwrite`), not content hash.
-                    ContentHash = None
-                    // Narrative overwrite is an in-place
-                    // regeneration under an unchanged provenance key, not
-                    // a revision of an authored document, so it advances
-                    // no version lineage. (The orphan-tail cleanup this
-                    // path has run since Phase 115 is the same defect
-                    // Phase 510 closes for uploads — see the block below.)
-                    Version =
+                match duplicate, request.Overwrite with
+                | Some existingDoc, false -> return Error(DuplicateExists existingDoc)
+                | _ ->
+                    // Use existing docId on overwrite so vector-store upserts replace by
+                    // chunkId; mint a new id otherwise.
+                    let docId =
                         match duplicate with
-                        | Some existingDoc -> existingDoc.Version
-                        | None -> 1
-                    // Narrative documents carry no tags.
-                    // `SetDocumentTags` refuses them outright rather than
-                    // writing a tag that could never reach a retrieval
-                    // filter: these chunks are produced by the owning
-                    // module, so nothing here would re-stamp them.
-                    Tags = []
-                }
+                        | Some d -> d.Id
+                        | None -> Guid.NewGuid().ToString()
 
-                // Persist rendered markdown so the document can be re-read
-                // even if the embedding/store is rebuilt. FIRST,
-                // ahead of the tail cleanup, the index entry and the enqueue, so a
-                // refused write fails the commit with nothing else moved.
-                let rawBlobName = sprintf "knowledge/%s/%s" docId fileName
+                    let fileName =
+                        sprintf "%s.narrative.md" (KnowledgeBase.ServerNotes.sanitiseTitle request.Document.Title)
 
-                match! deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes fullMarkdown) with
-                | Error storageError ->
-                    return Error(IngestFailed(sprintf "The narrative could not be stored: %s" storageError))
-                | Ok _ ->
-                    // Vector-chunk cleanup on overwrite. When the regenerated
-                    // narrative has fewer sections than the prior version,
-                    // trailing chunks (indices chunks.Length..oldN-1) would
-                    // orphan in the vector store — the re-ingestion's
-                    // Upsert paths cover 0..N-1 but leave the tail untouched,
-                    // so RAG retrieval keeps surfacing stale section content
-                    // under the live document id. Delete the tail now while
-                    // we still know the old chunk count from the prior
-                    // KnowledgeDocument; falls through silently when no
-                    // vector store is wired (test harnesses) or when the
-                    // new section count meets or exceeds the old.
-                    //
-                    // 0.4.3 — per-chunk DeleteChunk failures are caught,
-                    // counted, and surfaced as a single summary log line.
-                    // Previously they were swallowed silently; a partial
-                    // failure left orphans in the store and RAG kept
-                    // surfacing them under the live document id with no
-                    // operator signal.
-                    //
-                    // The tail delete routes through the unified
-                    // lifecycle seam so the sparse index sheds the stale
-                    // sections too (pre-115 the `vs.DeleteChunk` loop left
-                    // them retrievable through the hybrid sparse leg). The
-                    // seam carries the per-chunk failure isolation + survivor
-                    // reporting this block used to hand-roll.
-                    match duplicate, deps.IndexLifecycle with
-                    | Some existingDoc, Some lifecycle when chunks.Length < existingDoc.ChunkCount ->
-                        let mutable orphanIds: string list = []
+                    // One chunk per section so retrieval can cite the section
+                    // that contributed — matches the per-page chunking we use
+                    // for uploaded documents.
+                    let chunks =
+                        request.Document.Sections
+                        |> List.mapi (fun i section ->
+                            let sectionDoc: NarrativeDocument = {
+                                Title = request.Document.Title
+                                Subtitle = request.Document.Subtitle
+                                Sections = [ section ]
+                                Provenance = request.Document.Provenance
+                                Lang = request.Document.Lang
+                                CanonicalUrl = request.Document.CanonicalUrl
+                            }
 
-                        for i in chunks.Length .. existingDoc.ChunkCount - 1 do
-                            let chunkId = ChunkId.render { DocumentId = docId; Ordinal = i }
-                            let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
+                            let body = NarrativeMarkdown.render sectionDoc
 
-                            if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
-                                orphanIds <- chunkId :: orphanIds
+                            let src: SourceReference = {
+                                DocumentId = docId
+                                DocumentName = fileName
+                                FileType = "narrative"
+                                Location = Section section.Heading
+                                IndexedAt = DateTimeOffset.UtcNow
+                            }
 
+                            let header = sprintf "Section %d · %s" (i + 1) section.Heading
+                            let chunk = makeChunk Narrative fileName header body src
+
+                            // Record the fact ids this section's
+                            // metric spans reference in chunk metadata, so a
+                            // retrieval of the narrative chunk can surface its
+                            // underlying facts (transitive citation) and the
+                            // fact→narrative join can prefer this
+                            // chunk when one of those facts is resolved. Absent
+                            // any reference the chunk is stamped as before.
+                            match NarrativeFacts.factRefsInSection section |> Set.toList with
+                            | [] -> chunk
+                            | refs -> {
+                                chunk with
+                                    Metadata = chunk.Metadata.Add(ChunkMetadata.FactRefsKey, String.concat "," refs)
+                              })
+
+                    let fullMarkdown = NarrativeMarkdown.render request.Document
+                    let sizeBytes = int64 (Encoding.UTF8.GetByteCount fullMarkdown)
+
+                    let doc: KnowledgeDocument = {
+                        Id = docId
+                        FileName = fileName
+                        FileType = "narrative"
+                        UploadedAt = DateTimeOffset.UtcNow
+                        UploadedBy = deps.UserId.Value
+                        Status = Queued
+                        SizeBytes = sizeBytes
+                        ChunkCount = chunks.Length
+                        Source =
+                            FromNarrative {
+                                ModuleId = prov.ModuleId
+                                PageRoute = prov.PageRoute
+                                SettingsKey = prov.SettingsKey
+                                SettingsDisplay = prov.SettingsDisplay
+                                GeneratedAt = prov.GeneratedAt
+                            }
+                        // Narratives dedup by provenance
+                        // (`DuplicateExists` + `Overwrite`), not content hash.
+                        ContentHash = None
+                        // Narrative overwrite is an in-place
+                        // regeneration under an unchanged provenance key, not
+                        // a revision of an authored document, so it advances
+                        // no version lineage. (The orphan-tail cleanup this
+                        // path has run since Phase 115 is the same defect
+                        // Phase 510 closes for uploads — see the block below.)
+                        Version =
+                            match duplicate with
+                            | Some existingDoc -> existingDoc.Version
+                            | None -> 1
+                        // Narrative documents carry no tags.
+                        // `SetDocumentTags` refuses them outright rather than
+                        // writing a tag that could never reach a retrieval
+                        // filter: these chunks are produced by the owning
+                        // module, so nothing here would re-stamp them.
+                        Tags = []
+                    }
+
+                    // Persist rendered markdown so the document can be re-read
+                    // even if the embedding/store is rebuilt. FIRST,
+                    // ahead of the tail cleanup, the index entry and the enqueue, so a
+                    // refused write fails the commit with nothing else moved.
+                    let rawBlobName = sprintf "knowledge/%s/%s" docId fileName
+
+                    match!
+                        deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes fullMarkdown)
+                    with
+                    | Error storageError ->
+                        return Error(IngestFailed(sprintf "The narrative could not be stored: %s" storageError))
+                    | Ok _ ->
+                        // Vector-chunk cleanup on overwrite. When the regenerated
+                        // narrative has fewer sections than the prior version,
+                        // trailing chunks (indices chunks.Length..oldN-1) would
+                        // orphan in the vector store — the re-ingestion's
+                        // Upsert paths cover 0..N-1 but leave the tail untouched,
+                        // so RAG retrieval keeps surfacing stale section content
+                        // under the live document id. Delete the tail now while
+                        // we still know the old chunk count from the prior
+                        // KnowledgeDocument; falls through silently when no
+                        // vector store is wired (test harnesses) or when the
+                        // new section count meets or exceeds the old.
+                        //
+                        // 0.4.3 — per-chunk DeleteChunk failures are caught,
+                        // counted, and surfaced as a single summary log line.
+                        // Previously they were swallowed silently; a partial
+                        // failure left orphans in the store and RAG kept
+                        // surfacing them under the live document id with no
+                        // operator signal.
+                        //
+                        // The tail delete routes through the unified
+                        // lifecycle seam so the sparse index sheds the stale
+                        // sections too (pre-115 the `vs.DeleteChunk` loop left
+                        // them retrievable through the hybrid sparse leg). The
+                        // seam carries the per-chunk failure isolation + survivor
+                        // reporting this block used to hand-roll.
+                        match duplicate, deps.IndexLifecycle with
+                        | Some existingDoc, Some lifecycle when chunks.Length < existingDoc.ChunkCount ->
+                            let mutable orphanIds: string list = []
+
+                            for i in chunks.Length .. existingDoc.ChunkCount - 1 do
+                                let chunkId = ChunkId.render { DocumentId = docId; Ordinal = i }
+                                let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
+
+                                if not (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                                    orphanIds <- chunkId :: orphanIds
+
+                                    deps.Logger.Warn(
+                                        sprintf
+                                            "[KnowledgeBase] Orphan-chunk delete failed for %s (docId=%s scope=%s): %s"
+                                            chunkId
+                                            docId
+                                            deps.Scope.ScopeId
+                                            (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                                    )
+
+                            if not (List.isEmpty orphanIds) then
                                 deps.Logger.Warn(
                                     sprintf
-                                        "[KnowledgeBase] Orphan-chunk delete failed for %s (docId=%s scope=%s): %s"
-                                        chunkId
+                                        "[KnowledgeBase] %d orphan chunk(s) remain in the retrieval indexes for docId=%s after narrative overwrite; RAG may surface stale section content. Surviving chunk ids: %s"
+                                        orphanIds.Length
                                         docId
-                                        deps.Scope.ScopeId
-                                        (ToolUp.Platform.Infra.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                                        (orphanIds |> List.rev |> String.concat "; ")
                                 )
+                        | _ -> ()
 
-                        if not (List.isEmpty orphanIds) then
-                            deps.Logger.Warn(
-                                sprintf
-                                    "[KnowledgeBase] %d orphan chunk(s) remain in the retrieval indexes for docId=%s after narrative overwrite; RAG may surface stale section content. Surviving chunk ids: %s"
-                                    orphanIds.Length
-                                    docId
-                                    (orphanIds |> List.rev |> String.concat "; ")
+                        // Atomic index RMW (see `upsertIndexEntry`), released
+                        // before the enqueue, which takes the same lock. The
+                        // provenance duplicate-check above still reads outside the
+                        // lock; concurrent same-provenance commits remain a
+                        // last-writer race (residual, addressed by the deferred
+                        // ETag CAS), but neither write is lost from the index.
+                        do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+
+                        let chunkPairs =
+                            chunks
+                            |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
+
+                        let! enqueued = KnowledgeIngest.enqueue deps doc chunkPairs
+
+                        let returnedDoc =
+                            match enqueued with
+                            | Ok _ -> doc
+                            | Error refused -> {
+                                doc with
+                                    Status = IngestionStatus.Failed(EnqueueRefused.describe refused)
+                              }
+
+                        // Nothing to index, so no chunk callback will settle the
+                        // document: settle and announce it here.
+                        if chunks.IsEmpty then
+                            do! KnowledgeIngest.settle deps docId (Complete 0)
+
+                        // Nudge the KB client to reload its document list.
+                        // The notification scope is the user id (matches the
+                        // SSE subscription filter); the payload's `scopeId`
+                        // carries the storage scope for downstream consumers
+                        // that need it.
+                        do!
+                            deps.Notifications.Publish(
+                                deps.UserId.Value,
+                                DataRefreshed("KnowledgeBase", deps.Scope.ScopeId)
                             )
-                    | _ -> ()
 
-                    // Atomic index RMW (see `upsertIndexEntry`), released
-                    // before the enqueue, which takes the same lock. The
-                    // provenance duplicate-check above still reads outside the
-                    // lock; concurrent same-provenance commits remain a
-                    // last-writer race (residual, addressed by the deferred
-                    // ETag CAS), but neither write is lost from the index.
-                    do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+                        do! deps.PublishInventory()
 
-                    let chunkPairs =
-                        chunks
-                        |> List.mapi (fun i chunk -> ChunkId.render { DocumentId = docId; Ordinal = i }, chunk)
-
-                    let! enqueued = KnowledgeIngest.enqueue deps doc chunkPairs
-
-                    let returnedDoc =
-                        match enqueued with
-                        | Ok _ -> doc
-                        | Error refused -> {
-                            doc with
-                                Status = IngestionStatus.Failed(EnqueueRefused.describe refused)
-                          }
-
-                    // Nothing to index, so no chunk callback will settle the
-                    // document: settle and announce it here.
-                    if chunks.IsEmpty then
-                        do! KnowledgeIngest.settle deps docId (Complete 0)
-
-                    // Nudge the KB client to reload its document list.
-                    // The notification scope is the user id (matches the
-                    // SSE subscription filter); the payload's `scopeId`
-                    // carries the storage scope for downstream consumers
-                    // that need it.
-                    do!
-                        deps.Notifications.Publish(
-                            deps.UserId.Value,
-                            DataRefreshed("KnowledgeBase", deps.Scope.ScopeId)
-                        )
-
-                    do! deps.PublishInventory()
-
-                    return Ok returnedDoc
+                        return Ok returnedDoc
     }
 
 /// Wipe body for `resetIndex`. Authorization (owner/admin in Team /
@@ -332,13 +328,24 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
     do! lock.WaitAsync() |> Async.AwaitTask
 
     try
-        let! priorDocs = async {
-            try
-                let! existing = loadIndex deps.Storage deps.Scope.Container
-                return existing
-            with _ ->
-                return []
-        }
+        // A reset is how a scope recovers from an unreadable index, so it
+        // is not refused on one: the wipe proceeds, and the documents it
+        // cannot list are named as unreachable rather than decided on as
+        // absent.
+        let! priorRead = loadIndex deps.Storage deps.Scope.Container
+
+        let priorDocs =
+            match priorRead with
+            | Ok documents -> documents
+            | Error error ->
+                deps.Logger.Error(
+                    sprintf
+                        "[KnowledgeBase] ResetIndex: %s. The scope's blobs are wiped; chunks indexed under documents the index no longer lists stay retrievable until they are re-ingested or vacuumed."
+                        (IndexReadError.describe error),
+                    None
+                )
+
+                []
 
         documentCount <- priorDocs.Length
 

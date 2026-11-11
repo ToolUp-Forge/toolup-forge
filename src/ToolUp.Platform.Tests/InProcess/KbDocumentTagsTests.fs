@@ -73,12 +73,12 @@ type private RecordingIndexLifecycle() =
 let private mkDeps
     (storage: IBlobStorage)
     (queue: IngestionQueue)
-    (versioning: KnowledgeVersioningPolicy)
+    (versioning: bool)
     (container: string)
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = queue
+        Queue = Some queue
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = noopNotifications
@@ -102,17 +102,13 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = KnowledgeUploadPolicy.permissive
-        DedupPolicy = KnowledgeDedupPolicy.enabled
-        VersioningPolicy = versioning
+        Policies = {
+            KnowledgePolicies.defaults with
+                Versioning = versioning
+        }
         DataObjectStore = None
-        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         ContentScanner = None
-        ScanPolicy = ContentScanPolicy.defaults
         DisclosureGate = None
-        ArchiveImportPolicy = ArchiveImportPolicy.defaults
-        UrlIngestionPolicy = UrlIngestionPolicy.disabled
         UrlFetcher = None
     }
 
@@ -131,7 +127,8 @@ let private waitForIngest (storage: IBlobStorage) (container: string) (docId: st
     let mutable result = None
 
     while result.IsNone && DateTimeOffset.UtcNow < deadline do
-        let! index = loadIndex storage container
+        let! read = loadIndex storage container
+        let index = Expect.wantOk read "the index reads"
 
         match index |> List.tryFind (fun d -> d.Id = docId) with
         | Some doc ->
@@ -147,13 +144,14 @@ let private waitForIngest (storage: IBlobStorage) (container: string) (docId: st
 }
 
 let private drain (queue: IngestionQueue) : DocumentIngestionJob list =
-    let jobs = ResizeArray<DocumentIngestionJob>()
-    let mutable job = Unchecked.defaultof<DocumentIngestionJob>
+    let seam = queue :> IIngestionQueue
 
-    while queue.Reader.TryRead(&job) do
-        jobs.Add job
+    let rec drain acc =
+        match seam.TryDequeue() |> Async.RunSynchronously with
+        | Some lease -> drain (lease.Job :: acc)
+        | None -> List.rev acc
 
-    jobs |> List.ofSeq
+    drain []
 
 /// Every chunk the drained jobs carried — the set that actually reaches
 /// embedding and upsert, which is the only place a tag stamp matters.
@@ -178,7 +176,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
             let container = "team-tag-a"
-            let deps = mkDeps storage queue KnowledgeVersioningPolicy.disabled container
+            let deps = mkDeps storage queue false container
 
             let! doc = uploadDocument deps (csvOf 200 "0199") "handbook.csv"
             let! ingested = waitForIngest storage container doc.Id
@@ -224,7 +222,8 @@ let tests =
                 "and the stamped value is the one the filter compares against"
 
             // The persisted record agrees with what was stamped.
-            let! index = loadIndex storage container
+            let! read = loadIndex storage container
+            let index = Expect.wantOk read "the index reads"
 
             Expect.equal
                 (index |> List.head |> _.Tags)
@@ -237,7 +236,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
             let container = "team-tag-b"
-            let deps = mkDeps storage queue KnowledgeVersioningPolicy.disabled container
+            let deps = mkDeps storage queue false container
 
             let! doc = uploadDocument deps (csvOf 40 "0039") "n.csv"
             let! _ = waitForIngest storage container doc.Id
@@ -273,7 +272,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
             let container = "team-tag-c"
-            let deps = mkDeps storage queue KnowledgeVersioningPolicy.disabled container
+            let deps = mkDeps storage queue false container
 
             let! doc = uploadDocument deps (csvOf 100 "0099") "n.csv"
             let! _ = waitForIngest storage container doc.Id
@@ -303,7 +302,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
             let container = "team-tag-d"
-            let deps = mkDeps storage queue KnowledgeVersioningPolicy.disabled container
+            let deps = mkDeps storage queue false container
 
             let! doc = uploadDocument deps (csvOf 60 "0059") "n.csv"
             let! _ = waitForIngest storage container doc.Id
@@ -341,7 +340,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
             let container = "team-tag-e"
-            let deps = mkDeps storage queue KnowledgeVersioningPolicy.disabled container
+            let deps = mkDeps storage queue false container
 
             let narrativeDoc: KnowledgeDocument = {
                 Id = "doc-narrative"
@@ -381,7 +380,8 @@ let tests =
                     "narrative"
                     "the refusal names what was refused and why, rather than failing opaquely"
 
-            let! index = loadIndex storage container
+            let! read = loadIndex storage container
+            let index = Expect.wantOk read "the index reads"
 
             Expect.isEmpty
                 (index |> List.head |> _.Tags)
@@ -396,7 +396,7 @@ let tests =
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let queue = IngestionQueue()
             let container = "team-tag-f"
-            let deps = mkDeps storage queue KnowledgeVersioningPolicy.enabled container
+            let deps = mkDeps storage queue true container
 
             let! first = uploadDocument deps (csvOf 100 "0099") "revised.csv"
             let! _ = waitForIngest storage container first.Id
@@ -443,7 +443,8 @@ let tests =
 
             let! _ = storage.Upload("team-tag-g", "knowledge/index.json", Encoding.UTF8.GetBytes legacyJson)
 
-            let! index = loadIndex storage "team-tag-g"
+            let! read = loadIndex storage "team-tag-g"
+            let index = Expect.wantOk read "the index reads"
 
             match index with
             | [ doc ] ->

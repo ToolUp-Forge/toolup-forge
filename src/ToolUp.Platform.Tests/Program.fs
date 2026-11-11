@@ -268,6 +268,7 @@ let private registeredTests =
         ConversationRecordTests.tests
         AgentLoopRailsTests.tests
         TurnOutcomeStatusTests.tests
+        GatesAdmitOrderTests.tests
         ProviderProfileApiTests.tests
         TeamProviderTests.tests
         ProviderOAuthFlowTests.claudeOAuthContractTests
@@ -407,6 +408,7 @@ let private registeredTests =
         KbQuotaRetentionTests.tests
         KbVersioningTests.tests
         KbVersioningTests.ingestionStatusTruth
+        KnowledgeIndexReadTests.tests
         KbObjectRetentionTests.tests
         KbDocumentTagsTests.tests
         KbBulkImportTests.tests

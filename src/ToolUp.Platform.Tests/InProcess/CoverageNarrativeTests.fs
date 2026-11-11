@@ -1072,7 +1072,8 @@ let ingestorDoorTests =
                 (idOf first)
                 "the second commit REPLACED the first in place — same provenance key, same document id"
 
-            let! index = KnowledgeBase.ServerIndexStorage.loadIndex storage "team-a"
+            let! read = KnowledgeBase.ServerIndexStorage.loadIndex storage "team-a"
+            let index = Expect.wantOk read "the index reads"
 
             Expect.equal
                 (List.length index)
@@ -1116,7 +1117,8 @@ let ingestorDoorTests =
                 Expect.stringContains reason "policy Internal" "and the policy that denied it"
             | other -> failtestf "expected the Phase 525.D refusal to reach the door, got %A" other
 
-            let! index = KnowledgeBase.ServerIndexStorage.loadIndex storage "team-b"
+            let! read = KnowledgeBase.ServerIndexStorage.loadIndex storage "team-b"
+            let index = Expect.wantOk read "the index reads"
             Expect.isEmpty index "and nothing was persisted"
         }
 

@@ -6,7 +6,7 @@ module ToolUp.Platform.Tests.InProcess.IngestionBackpressureTests
 //   * `IngestionQueue` drop counters — `Dropped` (cumulative) + rolling
 //     60s window, bumped by `RecordDrop`; `Policy` default (`DropWrite`);
 //     `Block` policy + `EnqueueBlocking`.
-//   * `RAGCompose.emitIngestionDrop` — the drop-observability triple: a
+//   * `VectorisationHook.emitIngestionDrop` — the drop-observability triple: a
 //     `KnowledgeIngestionDropped` audit under `_platform.knowledge`, a
 //     Warning `SystemMessage` to the uploading user (when attributed), and
 //     the queue counter bump. This is the mechanism behind the acceptance
@@ -90,9 +90,9 @@ let private queueCounters =
     testList "IngestionQueue drop counters + policy" [
         test "Enqueue returns false past capacity; RecordDrop bumps cumulative + rolling 60s" {
             let q = IngestionQueue(2)
-            Expect.isTrue (q.Enqueue(mkJob "a")) "first accepted"
-            Expect.isTrue (q.Enqueue(mkJob "b")) "second accepted"
-            Expect.isFalse (q.Enqueue(mkJob "c")) "third rejected — at capacity"
+            Expect.isTrue (run (q.EnqueueAsync(mkJob "a"))) "first accepted"
+            Expect.isTrue (run (q.EnqueueAsync(mkJob "b"))) "second accepted"
+            Expect.isFalse (run (q.EnqueueAsync(mkJob "c"))) "third rejected — at capacity"
             Expect.equal q.Dropped 0L "no drops recorded until RecordDrop is called"
             q.RecordDrop()
             Expect.equal q.Dropped 1L "cumulative incremented"
@@ -118,7 +118,7 @@ let private dropEmission =
             let audit = CapturingAuditLog()
 
             run (
-                ToolUp.RAG.RAGCompose.emitIngestionDrop
+                ToolUp.RAG.VectorisationHook.emitIngestionDrop
                     ((audit :> IAuditLog))
                     None
                     q
@@ -147,7 +147,7 @@ let private dropEmission =
             let notifs = CapturingNotifications()
 
             run (
-                ToolUp.RAG.RAGCompose.emitIngestionDrop
+                ToolUp.RAG.VectorisationHook.emitIngestionDrop
                     (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q
@@ -171,7 +171,7 @@ let private dropEmission =
             let notifs = CapturingNotifications()
 
             run (
-                ToolUp.RAG.RAGCompose.emitIngestionDrop
+                ToolUp.RAG.VectorisationHook.emitIngestionDrop
                     (NoOpAuditLog())
                     (Some(notifs :> INotificationChannel))
                     q
@@ -663,11 +663,11 @@ let private ingestionPath =
                 |> Async.AwaitTask
 
             try
-                Expect.isTrue (q.Enqueue(mkJob "d1")) "the first document is accepted"
+                Expect.isTrue (run (q.EnqueueAsync(mkJob "d1"))) "the first document is accepted"
                 let! running = waitUntil 5000 (fun () -> started = 1 && q.Count = 0)
                 Expect.isTrue running "the one worker took the first document"
 
-                let accepted = [ for i in 2..10 -> q.Enqueue(mkJob (sprintf "d%d" i)) ]
+                let accepted = [ for i in 2..10 -> run (q.EnqueueAsync(mkJob (sprintf "d%d" i))) ]
 
                 Expect.equal
                     accepted
@@ -722,10 +722,10 @@ let private ingestionPath =
                 |> Async.AwaitTask
 
             try
-                Expect.isTrue (q.Enqueue(mkJob "a")) "a accepted"
+                Expect.isTrue (run (q.EnqueueAsync(mkJob "a"))) "a accepted"
                 let! failedOnce = waitUntil 5000 (fun () -> firstFailed = 1)
                 Expect.isTrue failedOnce "a's first attempt failed and its retry is sleeping"
-                Expect.isTrue (q.Enqueue(mkJob "b")) "b accepted"
+                Expect.isTrue (run (q.EnqueueAsync(mkJob "b"))) "b accepted"
 
                 let! bDone = waitUntil 1500 (fun () -> Seq.contains "b:chunk:0" indexed)
 
@@ -780,7 +780,7 @@ let private ingestionPath =
                         ]
                 }
 
-                Expect.isTrue (q.Enqueue doc) "accepted"
+                Expect.isTrue (run (q.EnqueueAsync doc)) "accepted"
                 let! done' = waitUntil 5000 (fun () -> indexedEvents = 3)
                 Expect.isTrue done' "every chunk is reported indexed"
                 Expect.equal batchingStore.Batches 1 "one batched round-trip for the document"
@@ -1105,7 +1105,7 @@ let private queueWaits =
                 do! Async.Sleep 150
                 Expect.isFalse waiting.IsCompleted "an empty queue keeps the waiter waiting"
 
-                Expect.isTrue (q.Enqueue(mkJob "a")) "accepted"
+                Expect.isTrue (run (q.EnqueueAsync(mkJob "a"))) "accepted"
                 let! woke = waiting |> Async.AwaitTask
                 Expect.isTrue woke "the waiter wakes for the job"
                 Expect.equal q.Count 1 "waiting took nothing: the job is still in the queue's accounting"

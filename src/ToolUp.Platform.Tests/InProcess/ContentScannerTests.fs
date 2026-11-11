@@ -151,7 +151,7 @@ let private mkDeps
     : KnowledgeApiDeps =
     {
         Storage = storage
-        Queue = IngestionQueue()
+        Queue = Some(IngestionQueue())
         OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
         TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
         Notifications = noopNotifications
@@ -175,20 +175,14 @@ let private mkDeps
         PublishInventory = fun () -> async.Return()
         EnsureContextWriteAllowed = fun () -> async { return Ok() }
         ScopeResolvedFromRequest = true
-        UploadPolicy = KnowledgeUploadPolicy.permissive
-        DedupPolicy = KnowledgeDedupPolicy.enabled
-        VersioningPolicy = KnowledgeVersioningPolicy.disabled
+        Policies = {
+            KnowledgePolicies.defaults with
+                Scan = policy
+        }
         // Phase 105 — retention not composed: the pre-105 convention-blob path.
         DataObjectStore = None
-        QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-        RetentionPolicy = KnowledgeRetentionPolicy.retainForever
         ContentScanner = scanner
-        ScanPolicy = policy
         DisclosureGate = None
-        // Phase 511 — bulk import is not exercised here: archive guards at
-        // their shipped defaults, URL ingestion inert, no transport.
-        ArchiveImportPolicy = ArchiveImportPolicy.defaults
-        UrlIngestionPolicy = UrlIngestionPolicy.disabled
         UrlFetcher = None
     }
 
@@ -279,7 +273,8 @@ let tests =
 
             // Nothing persisted: no index entry, no raw blob (GP 9 — a
             // refusal stores nothing).
-            let! index = loadIndex storage "team-scan"
+            let! read = loadIndex storage "team-scan"
+            let index = Expect.wantOk read "the index reads"
             Expect.isEmpty index "a scan refusal writes no index entry"
 
             let! raw = storage.Download("team-scan", sprintf "knowledge/%s/sample.txt" doc.Id)
@@ -349,7 +344,8 @@ let tests =
             let! closedDoc = uploadDocument closedDeps benignCsv "ok.csv"
             Expect.isTrue (isRejected closedDoc.Status) "fail-closed refuses an upload it could not scan"
 
-            let! closedIndex = loadIndex closedStorage "team-closed"
+            let! read = loadIndex closedStorage "team-closed"
+            let closedIndex = Expect.wantOk read "the index reads"
             Expect.isEmpty closedIndex "the fail-closed refusal persists nothing"
 
             match closedAudit.Scans with
@@ -400,7 +396,8 @@ let tests =
 
             Expect.isEmpty audit.Scans "no scanner composed ⇒ no ContentScanned row at all"
 
-            let! index = loadIndex storage "team-none"
+            let! read = loadIndex storage "team-none"
+            let index = Expect.wantOk read "the index reads"
             Expect.equal (index |> List.map _.Id) [ doc.Id ] "the document was indexed, as pre-515"
         }
 
@@ -418,7 +415,7 @@ let tests =
                     ContentScanPolicy.failClosed
                     (NoOpAuditLog())
                     "team-order" with
-                    UploadPolicy = {
+                    Policies.Upload = {
                         KnowledgeUploadPolicy.permissive with
                             MaxUploadBytes = Some 1L
                     }

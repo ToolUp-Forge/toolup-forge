@@ -718,7 +718,8 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             do! KnowledgeBase.ServerIndexStorage.upsertIndexEntry raw kbContainer added
             do! marking
 
-            let! index = KnowledgeBase.ServerIndexStorage.loadIndex raw kbContainer
+            let! read = KnowledgeBase.ServerIndexStorage.loadIndex raw kbContainer
+            let index = Expect.wantOk read "the index reads"
             let byId = index |> List.map (fun d -> d.Id, d.Status) |> Map.ofList
 
             Expect.equal
@@ -772,7 +773,8 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
             storage.Rendezvous(kbContainer, KnowledgeBase.ServerIndexStorage.indexBlobName, callers.Length)
             let! _ = callers |> Async.Parallel
 
-            let! index = KnowledgeBase.ServerIndexStorage.loadIndex raw kbContainer
+            let! read = KnowledgeBase.ServerIndexStorage.loadIndex raw kbContainer
+            let index = Expect.wantOk read "the index reads"
             let byId = index |> List.map (fun d -> d.Id, d) |> Map.ofList
 
             Expect.equal

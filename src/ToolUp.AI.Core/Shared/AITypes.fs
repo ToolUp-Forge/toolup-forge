@@ -402,11 +402,94 @@ module AIStreamEvent =
 // render a fault through the same function. Primitives only, so the
 // client tier shares it without importing the server.
 
-/// A gate refused a tool call before its body ran.
+/// A gate refused a tool call before its body ran: one case per gate in the
+/// order every door runs them (`Gates.admit`), so the value says which gate
+/// refused and `ToolOutcome.auditStream` says where the refusal is recorded.
 [<RequireQualifiedAccess>]
 type ToolRefusal =
-    /// The call is not permitted; `reason` is what the model is told.
+    /// g1 — the caller holds no `Read` on the module the call reaches.
+    | Unreadable of toolName: string * moduleName: string
+    /// g2 — the caller's grant on that module is not live (pending the
+    /// subject's acceptance, or its counterparty consent revoked).
+    | GrantNotLive of toolName: string * moduleName: string
+    /// g3 — the tool's declared effects are outside the deployment's tool
+    /// policy; `reason` names the effects.
+    | OutsideCeiling of toolName: string * reason: string
+    /// g4 — the client-resident allowlist refused the call.
+    | AllowlistDenied of toolName: string * reason: string
+    /// g5 — the human-in-the-loop approval refused, or was not answered.
+    | ApprovalRefused of toolName: string * reason: string
+    /// g6 — the module has not opted into the cross-module AI surface.
+    | Unqueryable of toolName: string * moduleName: string
+    /// g7 — the user did not allow the read from the module.
+    | ConsentRefused of toolName: string * moduleName: string * reason: string
+    /// Refused before any gate: the call is malformed for where the tool
+    /// runs. `reason` is what the model is told.
     | Denied of toolName: string * reason: string
+
+/// Where a refusal is recorded.
+[<RequireQualifiedAccess>]
+type ToolAuditStream =
+    /// The RBAC stream: the caller named a tool on a module it may not read.
+    | Unauthorized
+    /// The grant guard's own `UnconsentedGrantRefused` row.
+    | GrantGuard
+    /// The policy-denial stream: a policy the deployment authored (the
+    /// ceiling, the allowlist, the approval gate), which also feeds the
+    /// sustained-denial rate monitor.
+    | PolicyDenial
+    /// Not recorded beside the call's own trail: the module's opt-in and the
+    /// user's consent are recorded where they are decided.
+    | Unrecorded
+
+module ToolAuditStream =
+    /// The `SourceModule` an audit row on `stream` is written under.
+    let source (stream: ToolAuditStream) : string option =
+        match stream with
+        | ToolAuditStream.Unauthorized -> Some "_platform.ai.unauthorized_tool"
+        | ToolAuditStream.PolicyDenial -> Some "_platform.ai.tool_allowlist_denial"
+        | ToolAuditStream.GrantGuard
+        | ToolAuditStream.Unrecorded -> None
+
+    /// The `EventType` an audit row on `stream` carries.
+    let eventType (stream: ToolAuditStream) : string option =
+        match stream with
+        | ToolAuditStream.Unauthorized -> Some "UnauthorizedTool"
+        | ToolAuditStream.PolicyDenial -> Some "ToolAllowlistDenied"
+        | ToolAuditStream.GrantGuard
+        | ToolAuditStream.Unrecorded -> None
+
+module ToolRefusal =
+    /// The tool the refusal is about.
+    let toolName (refusal: ToolRefusal) : string =
+        match refusal with
+        | ToolRefusal.Unreadable(name, _)
+        | ToolRefusal.GrantNotLive(name, _)
+        | ToolRefusal.OutsideCeiling(name, _)
+        | ToolRefusal.AllowlistDenied(name, _)
+        | ToolRefusal.ApprovalRefused(name, _)
+        | ToolRefusal.Unqueryable(name, _)
+        | ToolRefusal.ConsentRefused(name, _, _)
+        | ToolRefusal.Denied(name, _) -> name
+
+    /// The explanation of a module that has not opted into the AI surface,
+    /// written for the model: the remedy is a deployment change.
+    let notOptedInMessage (moduleName: string) : string =
+        $"Module '{moduleName}' has not opted into the cross-module AI surface, so its data cannot be read through the _platform.ai.* tools. This is a deployment-level declaration, not a permission the current user can be granted — do not retry, and do not treat it as PermissionDenied. Use list_accessible_modules to see which modules report queryable: true."
+
+    /// What the model is told about the refusal.
+    let reason (refusal: ToolRefusal) : string =
+        match refusal with
+        | ToolRefusal.Unreadable(_, moduleName) ->
+            $"requires Read on module '{moduleName}', which you do not have access to"
+        | ToolRefusal.GrantNotLive(_, moduleName) ->
+            $"module '{moduleName}' requires a live grant under its declared policy; yours is not currently live"
+        | ToolRefusal.Unqueryable(_, moduleName) -> notOptedInMessage moduleName
+        | ToolRefusal.OutsideCeiling(_, reason)
+        | ToolRefusal.AllowlistDenied(_, reason)
+        | ToolRefusal.ApprovalRefused(_, reason)
+        | ToolRefusal.ConsentRefused(_, _, reason)
+        | ToolRefusal.Denied(_, reason) -> reason
 
 /// How a tool call faulted. Each case renders exactly the text the model
 /// has always been shown for it, so the case also fixes where the fault
@@ -496,7 +579,8 @@ module ToolOutcome =
     let toModel (outcome: ToolOutcome) : string =
         match outcome with
         | ToolOutcome.Produced content -> content
-        | ToolOutcome.Refused(ToolRefusal.Denied(name, reason)) -> $"Tool '{name}' was denied: {reason}"
+        | ToolOutcome.Refused refusal ->
+            $"Tool '{ToolRefusal.toolName refusal}' was denied: {ToolRefusal.reason refusal}"
         | ToolOutcome.Faulted fault ->
             match fault with
             | ToolFault.UnknownTool name -> $"Unknown tool: {name}"
@@ -506,6 +590,19 @@ module ToolOutcome =
             | ToolFault.ClientThrew(name, detail)
             | ToolFault.ClientTimedOut(name, detail)
             | ToolFault.ClientToolUnregistered(name, detail) -> clientEnvelope (ToolFault.kind fault) name detail
+
+    /// The stream a refusal is recorded on — a function of the value, so no
+    /// door chooses it.
+    let auditStream (refusal: ToolRefusal) : ToolAuditStream =
+        match refusal with
+        | ToolRefusal.Unreadable _ -> ToolAuditStream.Unauthorized
+        | ToolRefusal.GrantNotLive _ -> ToolAuditStream.GrantGuard
+        | ToolRefusal.OutsideCeiling _
+        | ToolRefusal.AllowlistDenied _
+        | ToolRefusal.ApprovalRefused _ -> ToolAuditStream.PolicyDenial
+        | ToolRefusal.Unqueryable _
+        | ToolRefusal.ConsentRefused _
+        | ToolRefusal.Denied _ -> ToolAuditStream.Unrecorded
 
     /// Whether the outcome counts as a failed call for the agent loop's
     /// rails. A body that returned no content at all has produced nothing.

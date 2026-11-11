@@ -50,7 +50,7 @@ Notes:
   plaintext).
 - The startup config validators (visible in `/dev/inspect`'s Validators panel)
   will **warn** when an authenticated deployment runs without a rate limiter —
-  see `RAGRateLimitConfiguredValidator` and `RateLimitModeValidator`. Rate
+  see `ragRateLimitConfiguredValidator` and `RateLimitModeValidator`. Rate
   limiting is a per-query cost control for retrieval, not just a connection
   guard; configure `ServerConfig.RateLimit` or accept the exposure explicitly.
 

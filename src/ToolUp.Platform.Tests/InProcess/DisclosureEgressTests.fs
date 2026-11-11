@@ -530,7 +530,7 @@ let redactionTests =
 
 let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) (container: string) : KnowledgeApiDeps = {
     Storage = storage
-    Queue = IngestionQueue()
+    Queue = Some(IngestionQueue())
     OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
     Notifications = noopNotifications
@@ -554,24 +554,12 @@ let private mkKbDeps (storage: IBlobStorage) (gate: IFactDisclosureGate option) 
     PublishInventory = fun () -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
-    UploadPolicy = KnowledgeUploadPolicy.permissive
-    DedupPolicy = KnowledgeDedupPolicy.enabled
-    // Phase 510 — this pack pins the pre-510 upload path; versioning off.
-    VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    Policies = KnowledgePolicies.defaults
     // Phase 105 — retention not composed: the pre-105 convention-blob path.
     DataObjectStore = None
-    // Phase 512 — these packs pin pre-512 paths; the unlimited /
-    // retain-forever defaults keep them byte-identical.
-    QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-    RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     // Phase 515 — no scanner composed: the pre-515 upload path.
     ContentScanner = None
-    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = gate |> Option.map (fun g -> g, TestScope.resolved container)
-    // Phase 511 — bulk import is not exercised here: archive guards at
-    // their shipped defaults, URL ingestion inert, no transport.
-    ArchiveImportPolicy = ArchiveImportPolicy.defaults
-    UrlIngestionPolicy = UrlIngestionPolicy.disabled
     UrlFetcher = None
 }
 

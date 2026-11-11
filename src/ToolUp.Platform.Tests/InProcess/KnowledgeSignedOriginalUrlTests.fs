@@ -79,7 +79,7 @@ let private mkDoc (docId: string) (fileName: string) (fileType: string) (source:
 
 let private mkDeps (storage: IBlobStorage) (container: string) : KnowledgeApiDeps = {
     Storage = storage
-    Queue = IngestionQueue()
+    Queue = Some(IngestionQueue())
     OcrProvider = ToolUp.RAG.NoOpDocUnderstanding.createOcrProvider ()
     TableExtractor = ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
     Notifications = Unchecked.defaultof<INotificationChannel>
@@ -103,21 +103,12 @@ let private mkDeps (storage: IBlobStorage) (container: string) : KnowledgeApiDep
     PublishInventory = fun () -> async.Return()
     EnsureContextWriteAllowed = fun () -> async { return Ok() }
     ScopeResolvedFromRequest = true
-    UploadPolicy = KnowledgeUploadPolicy.permissive
-    DedupPolicy = KnowledgeDedupPolicy.enabled
-    VersioningPolicy = KnowledgeVersioningPolicy.disabled
+    Policies = KnowledgePolicies.defaults
     // Phase 105 — retention not composed: the pre-105 convention-blob path.
     DataObjectStore = None
-    QuotaPolicy = KnowledgeQuotaPolicy.unlimited
-    RetentionPolicy = KnowledgeRetentionPolicy.retainForever
     // Phase 515 — no scanner composed: the pre-515 upload path.
     ContentScanner = None
-    ScanPolicy = ContentScanPolicy.defaults
     DisclosureGate = None
-    // Phase 511 — bulk import is not exercised here: archive guards at
-    // their shipped defaults, URL ingestion inert, no transport.
-    ArchiveImportPolicy = ArchiveImportPolicy.defaults
-    UrlIngestionPolicy = UrlIngestionPolicy.disabled
     UrlFetcher = None
 }
 

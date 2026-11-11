@@ -114,6 +114,15 @@ SharedTypes+ChunkOutcome+ChunkFailed.reason : System.String { get }
 SharedTypes+ChunkOutcome+Tags (class)
 SharedTypes+ChunkOutcome+Tags.ChunkFailed : System.Int32 (literal)
 SharedTypes+ChunkOutcome+Tags.ChunkIndexed : System.Int32 (literal)
+SharedTypes+DocxExtractionMode (class)
+SharedTypes+DocxExtractionMode.Flat : SharedTypes+DocxExtractionMode { get }
+SharedTypes+DocxExtractionMode.IsFlat : System.Boolean { get }
+SharedTypes+DocxExtractionMode.IsStructured : System.Boolean { get }
+SharedTypes+DocxExtractionMode.Structured : SharedTypes+DocxExtractionMode { get }
+SharedTypes+DocxExtractionMode.Tag : System.Int32 { get }
+SharedTypes+DocxExtractionMode+Tags (class)
+SharedTypes+DocxExtractionMode+Tags.Flat : System.Int32 (literal)
+SharedTypes+DocxExtractionMode+Tags.Structured : System.Int32 (literal)
 SharedTypes+IngestNarrativeError (class)
 SharedTypes+IngestNarrativeError.IsDuplicateExists : System.Boolean { get }
 SharedTypes+IngestNarrativeError.IsIngestFailed : System.Boolean { get }
@@ -217,12 +226,6 @@ SharedTypes+KnowledgeBaseError+Tags (class)
 SharedTypes+KnowledgeBaseError+Tags.NoOriginalAvailable : System.Int32 (literal)
 SharedTypes+KnowledgeBaseError+Tags.NotInScope : System.Int32 (literal)
 SharedTypes+KnowledgeBaseError+Tags.OriginalRetrievalFailed : System.Int32 (literal)
-SharedTypes+KnowledgeDedupPolicy (class)
-SharedTypes+KnowledgeDedupPolicy..ctor(System.Boolean)
-SharedTypes+KnowledgeDedupPolicy.DedupUploads : System.Boolean { get }
-SharedTypes+KnowledgeDedupPolicyModule (class)
-SharedTypes+KnowledgeDedupPolicyModule.disabled : SharedTypes+KnowledgeDedupPolicy { get }
-SharedTypes+KnowledgeDedupPolicyModule.enabled : SharedTypes+KnowledgeDedupPolicy { get }
 SharedTypes+KnowledgeDocument (class)
 SharedTypes+KnowledgeDocument..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String, SharedTypes+IngestionStatus, System.Int64, System.Int32, SharedTypes+KnowledgeSource, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 SharedTypes+KnowledgeDocument.ChunkCount : System.Int32 { get }
@@ -250,13 +253,21 @@ SharedTypes+KnowledgeDocumentVersion.SupersededAt : Microsoft.FSharp.Core.FSharp
 SharedTypes+KnowledgeDocumentVersion.UploadedAt : System.DateTimeOffset { get }
 SharedTypes+KnowledgeDocumentVersion.UploadedBy : System.String { get }
 SharedTypes+KnowledgeDocumentVersion.Version : System.Int32 { get }
-SharedTypes+KnowledgeObjectRetentionPolicy (class)
-SharedTypes+KnowledgeObjectRetentionPolicy..ctor(System.Boolean)
-SharedTypes+KnowledgeObjectRetentionPolicy.RetainOriginalsInObjectStore : System.Boolean { get }
-SharedTypes+KnowledgeObjectRetentionPolicyModule (class)
-SharedTypes+KnowledgeObjectRetentionPolicyModule.ObjectDataType : System.String (literal)
-SharedTypes+KnowledgeObjectRetentionPolicyModule.disabled : SharedTypes+KnowledgeObjectRetentionPolicy { get }
-SharedTypes+KnowledgeObjectRetentionPolicyModule.enabled : SharedTypes+KnowledgeObjectRetentionPolicy { get }
+SharedTypes+KnowledgePolicies (class)
+SharedTypes+KnowledgePolicies..ctor(SharedTypes+KnowledgeUploadPolicy, System.Boolean, System.Boolean, System.Boolean, SharedTypes+KnowledgeQuotaPolicy, SharedTypes+KnowledgeRetentionPolicy, ToolUp.Platform.ContentScanPolicy, SharedTypes+DocxExtractionMode, SharedTypes+ArchiveImportPolicy, SharedTypes+UrlIngestionPolicy)
+SharedTypes+KnowledgePolicies.Archive : SharedTypes+ArchiveImportPolicy { get }
+SharedTypes+KnowledgePolicies.Dedup : System.Boolean { get }
+SharedTypes+KnowledgePolicies.DocxMode : SharedTypes+DocxExtractionMode { get }
+SharedTypes+KnowledgePolicies.ObjectRetention : System.Boolean { get }
+SharedTypes+KnowledgePolicies.Quota : SharedTypes+KnowledgeQuotaPolicy { get }
+SharedTypes+KnowledgePolicies.Retention : SharedTypes+KnowledgeRetentionPolicy { get }
+SharedTypes+KnowledgePolicies.Scan : ToolUp.Platform.ContentScanPolicy { get }
+SharedTypes+KnowledgePolicies.Upload : SharedTypes+KnowledgeUploadPolicy { get }
+SharedTypes+KnowledgePolicies.Url : SharedTypes+UrlIngestionPolicy { get }
+SharedTypes+KnowledgePolicies.Versioning : System.Boolean { get }
+SharedTypes+KnowledgePoliciesModule (class)
+SharedTypes+KnowledgePoliciesModule.OriginalObjectDataType : System.String (literal)
+SharedTypes+KnowledgePoliciesModule.defaults : SharedTypes+KnowledgePolicies { get }
 SharedTypes+KnowledgeQuotaPolicy (class)
 SharedTypes+KnowledgeQuotaPolicy..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int64])
 SharedTypes+KnowledgeQuotaPolicy.MaxBytes : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
@@ -321,12 +332,6 @@ SharedTypes+KnowledgeUploadPolicyModule.allowsExtension(System.String, SharedTyp
 SharedTypes+KnowledgeUploadPolicyModule.exceedsSizeCap(System.Int64, SharedTypes+KnowledgeUploadPolicy) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 SharedTypes+KnowledgeUploadPolicyModule.permissive : SharedTypes+KnowledgeUploadPolicy { get }
 SharedTypes+KnowledgeUploadPolicyModule.warnsUncappedInTeamMode(System.Boolean, SharedTypes+KnowledgeUploadPolicy) : System.Boolean
-SharedTypes+KnowledgeVersioningPolicy (class)
-SharedTypes+KnowledgeVersioningPolicy..ctor(System.Boolean)
-SharedTypes+KnowledgeVersioningPolicy.VersionUploads : System.Boolean { get }
-SharedTypes+KnowledgeVersioningPolicyModule (class)
-SharedTypes+KnowledgeVersioningPolicyModule.disabled : SharedTypes+KnowledgeVersioningPolicy { get }
-SharedTypes+KnowledgeVersioningPolicyModule.enabled : SharedTypes+KnowledgeVersioningPolicy { get }
 SharedTypes+NarrativeDocSource (class)
 SharedTypes+NarrativeDocSource..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.DateTimeOffset)
 SharedTypes+NarrativeDocSource.GeneratedAt : System.DateTimeOffset { get }

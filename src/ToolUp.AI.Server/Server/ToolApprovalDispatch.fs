@@ -14,7 +14,7 @@ open ToolUp.AI
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
-/// Phase 503 — the human-in-the-loop approval gate.
+/// The human-in-the-loop approval gate.
 ///
 /// **What this is the fifth of, and why it is not a sixth mechanism.**
 /// A tool call already passes four gates before it runs: the caller's
@@ -26,7 +26,7 @@ open ToolUp.Platform.Compose
 /// one asks the person sitting in front of the conversation, about the
 /// invocation in front of them, with its arguments on screen.
 ///
-/// The round trip is Phase 6g.A's suspend/resume, generalised by
+/// The round trip is the suspend/resume, generalised by
 /// [`SuspendedPrompt`](SuspendedPrompt.fs) when this became its third
 /// caller: register, emit on the stream the user is already watching,
 /// park on a `TaskCompletionSource`, and resume when
@@ -49,14 +49,14 @@ open ToolUp.Platform.Compose
 // ─── Audit ───────────────────────────────────────────────────────
 
 /// The audit source every approval request and decision is recorded
-/// under. One source, four event types, for the reason Phase 36.A gave
+/// under. One source, four event types, for the reason the RBAC re-check gave
 /// the RBAC denial its own stream: an operator asking "what has the
 /// assistant been held for, and what did people say" reads one stream and
 /// gets every answer.
 ///
 /// A REFUSAL additionally writes the existing
 /// `_platform.ai.tool_allowlist_denial` row from the agent loop, so it
-/// reaches Phase 47's `/dev/ai-allowlist` rollup, the
+/// reaches the `/dev/ai-allowlist` rollup, the
 /// `IAIDenialRollupProbe` admin panel and the sustained-denial rate
 /// monitor. That is deliberately not a parallel denial family: the
 /// refusal rides the denial stream the estate already has, and this
@@ -88,7 +88,7 @@ let private jsonOptions = PlatformJson.options
 ///
 /// Recorded BEFORE the SSE event is emitted, so the decision POST can be
 /// authorised and attributed from this rather than from the client's
-/// body — the same reason Phase 36.A records a pending tool call's
+/// body — the same reason the RBAC re-check records a pending tool call's
 /// `SourceModule`.
 type PendingApproval = {
     /// The conversation the held turn belongs to. Audit attribution.
@@ -146,18 +146,6 @@ type ToolApprovalRegistry() =
     /// exactly the effect an explicit refusal has.
     member _.TryAbandon(approvalId: Guid) : bool = inner.TryAbandon(approvalId, Rejected)
 
-// ─── Outcome ─────────────────────────────────────────────────────
-
-/// Outcome of the approval gate at the dispatch site.
-type ApprovalOutcome =
-    /// Run the invocation — no policy composed, no requirement declared
-    /// for it, or a user who approved it.
-    | ApprovalGranted
-    /// Do not run it. `reason` is prose written for the MODEL: it has to
-    /// understand that the refusal is the user's and that re-planning the
-    /// same action will not help.
-    | ApprovalRefused of reason: string
-
 // ─── Helpers ─────────────────────────────────────────────────────
 
 /// `sha256:`-prefixed lowercase-hex digest of an argument blob.
@@ -182,16 +170,6 @@ let argumentsDigest (argsJson: string) : string =
 let resolvePolicy (ctx: HttpContext) : IToolApprovalPolicy option =
     match ctx.RequestServices.GetService typeof<IToolApprovalPolicy> with
     | :? IToolApprovalPolicy as policy -> Some policy
-    | _ -> None
-
-let private guidItem (ctx: HttpContext) (key: string) : Guid option =
-    match ctx.Items.TryGetValue key with
-    | true, (:? Guid as value) -> Some value
-    | _ -> None
-
-let private emitterOf (ctx: HttpContext) : AIConsentDispatch.StreamEmitter option =
-    match ctx.Items.TryGetValue AIConsentDispatch.ItemsKeys.StreamEmitter with
-    | true, (:? AIConsentDispatch.StreamEmitter as emitter) -> Some emitter
     | _ -> None
 
 /// The standing refusal text, written for the model.
@@ -267,195 +245,9 @@ let writeApprovalAudit
 
 // ─── The gate ────────────────────────────────────────────────────
 
-/// Hold `toolName` for the user's decision when `requirement` says so,
-/// on `budgetMs`, and run it otherwise. The one body behind both the
-/// policy-consulting entry and the Phase 793 class-keyed one.
-let private holdFor
-    (budgetMs: int)
-    (ctx: HttpContext)
-    (logger: ILogger)
-    (toolName: string)
-    (sourceModule: string)
-    (argsJson: string)
-    (activeModule: string option)
-    (activePage: string option)
-    (requirement: ToolApprovalRequirement)
-    : Async<ApprovalOutcome> =
-    async {
-        match requirement with
-        | ApprovalNotRequired -> return ApprovalGranted
-        | ApprovalRequired prompt ->
-            let registry =
-                match ctx.RequestServices.GetService typeof<ToolApprovalRegistry> with
-                | :? ToolApprovalRegistry as r -> Some r
-                | _ -> None
-
-            match guidItem ctx AIConsentDispatch.ItemsKeys.ConversationId, emitterOf ctx, registry with
-            | Some conversationId, Some emitter, Some registry ->
-                let store =
-                    match ctx.RequestServices.GetService typeof<IEventStore> with
-                    | :? IEventStore as s -> Some s
-                    | _ -> None
-
-                let access = AIToolRegistry.reconstructAccessContext ctx
-
-                let scopeId =
-                    match AccessContext.scopeOf ctx.Items with
-                    | Some s -> s.ScopeId
-                    | _ -> access.UserId
-
-                let approvalId = Guid.NewGuid()
-
-                let taskId =
-                    guidItem ctx AIConsentDispatch.ItemsKeys.TaskId
-                    |> Option.defaultValue Guid.Empty
-
-                // The same capped, control-stripped rendering the
-                // consent dialog uses. These are the MODEL's own
-                // arguments, not the module's data — nothing has run
-                // yet — but they are model-authored text of unbounded
-                // length, and a dialog is not a place to render one.
-                let preview = AIConsentDispatch.redactPayloadPreview argsJson
-
-                let pending: PendingApproval = {
-                    ConversationId = conversationId
-                    ToolName = toolName
-                    SourceModule = sourceModule
-                    ArgumentsDigest = argumentsDigest argsJson
-                    ArgumentsPreview = preview
-                    ScopeId = scopeId
-                    UserId = UserId access.UserId
-                }
-
-                // Register BEFORE emitting, so a decision that arrives
-                // on a fast local round trip cannot find an
-                // unregistered id.
-                let awaited = registry.RegisterPending(approvalId, pending)
-
-                do! writeApprovalAudit store logger ApprovalRequestedEvent pending
-
-                emitter.Emit(
-                    ToolApprovalRequired(
-                        taskId,
-                        approvalId,
-                        conversationId,
-                        toolName,
-                        sourceModule,
-                        prompt.Summary,
-                        prompt.Detail,
-                        preview
-                    )
-                )
-
-                let! answered =
-                    SuspendedPrompt.awaitDecisionWithin budgetMs awaited (fun () ->
-                        registry.TryAbandon approvalId |> ignore)
-
-                match answered with
-                | Some Approved -> return ApprovalGranted
-                | Some Rejected ->
-                    // The POST handler wrote the rejection row: it is
-                    // the party that knows a person pressed a button.
-                    return ApprovalRefused(userRejectedMessage toolName)
-                | None ->
-                    do! writeApprovalAudit store logger ApprovalExpiredEvent pending
-
-                    logger.Warn
-                        $"[ToolApproval] no decision for tool '{toolName}' (approvalId={approvalId}, conversation={conversationId}) within {budgetMs / 1000}s; the invocation was refused and did not run."
-
-                    return ApprovalRefused(unansweredMessage toolName budgetMs)
-            | _ ->
-                // No conversation stamped, no emitter, or no registry
-                // composed: there is nowhere to ask. See
-                // `noPromptChannelMessage` for why this refuses where
-                // the consent gate abstains.
-                logger.Warn
-                    $"[ToolApproval] tool '{toolName}' requires approval but this context has no way to ask (no conversation, emitter or registry). Refused rather than run."
-
-                return ApprovalRefused(noPromptChannelMessage toolName)
-    }
-
-/// Hold a tool invocation for the user's approval, if the deployment's
-/// policy says it needs one.
-///
-/// Call it at the agent loop's dispatch site, after the RBAC / grant /
-/// allowlist arms and before the tool runs. It resolves the policy, asks
-/// it about THIS invocation, and — only when the answer is
-/// `ApprovalRequired` — suspends, emits `ToolApprovalRequired` on the
-/// stream the user is watching, and waits on the one shared budget.
-///
-/// With no policy composed it does one failed `GetService` and returns
-/// `ApprovalGranted`, so the turn is byte-for-byte what it was before
-/// this phase (GP 11).
-let requireApprovalWithin
-    (budgetMs: int)
-    (ctx: HttpContext)
-    (logger: ILogger)
-    (toolName: string)
-    (sourceModule: string)
-    (argsJson: string)
-    (activeModule: string option)
-    (activePage: string option)
-    : Async<ApprovalOutcome> =
-    async {
-        match resolvePolicy ctx with
-        | None -> return ApprovalGranted
-        | Some policy ->
-            // A policy that raises must not take the turn down with it.
-            // It is documented as non-throwing; a defective one is
-            // treated the way a defective authorizer's malformed input
-            // is — as a reason to hold, never as a reason to run.
-            let requirement =
-                try
-                    policy.Requires(toolName, sourceModule, argsJson, activeModule, activePage)
-                with ex ->
-                    logger.Warn
-                        $"[ToolApproval] IToolApprovalPolicy.Requires raised for tool '{toolName}': {ex.Message}. Treating the invocation as approval-requiring — a policy that cannot answer must not be read as a yes."
-
-                    ApprovalRequired {
-                        Summary = $"Approve running '{toolName}'?"
-                        Detail =
-                            "The approval policy could not be evaluated for this action, so it is being held for your decision."
-                    }
-
-            return! holdFor budgetMs ctx logger toolName sourceModule argsJson activeModule activePage requirement
-    }
-
-/// Hold a tool invocation for the user's approval, on the one shared
-/// suspended-dispatch budget. This is what the agent loop calls.
-///
-/// `requireApprovalWithin` takes the budget as a parameter because the
-/// elapsed arm — an approval prompt nobody answers — is the one arm of
-/// this gate a test suite cannot afford to exercise at 90 s, and an
-/// untested refusal path is the one that rots. Production has exactly
-/// one value for it, and it is the value every other suspended dispatch
-/// in the tier waits on.
-let requireApproval
-    (ctx: HttpContext)
-    (logger: ILogger)
-    (toolName: string)
-    (sourceModule: string)
-    (argsJson: string)
-    (activeModule: string option)
-    (activePage: string option)
-    : Async<ApprovalOutcome> =
-    requireApprovalWithin
-        SuspendedPrompt.SuspendedDispatchTimeoutMs
-        ctx
-        logger
-        toolName
-        sourceModule
-        argsJson
-        activeModule
-        activePage
-
-// ─── Phase 793 — approval keyed on effect class ───────────────────────
-
-/// The Phase 793 hold: `ApprovalRequired` when the tool declares a class
-/// the deployment's `ToolPolicy.RequireApproval` names, with a prompt
-/// that names the classes; `ApprovalNotRequired` otherwise. Pure — what
-/// the agent loop passes to `requireApprovalKeyed`, and what a test can
-/// assert on without a server.
+/// The class-keyed hold: `ApprovalRequired` when `policy` names a class `def`
+/// declares, with a prompt naming the classes; `ApprovalNotRequired`
+/// otherwise. Pure.
 let requirementByClass (policy: AIToolRegistry.ToolPolicy) (def: AIToolDefinition) : ToolApprovalRequirement =
     match AIToolRegistry.ToolGate.approvalClasses policy def with
     | [] -> ApprovalNotRequired
@@ -469,47 +261,117 @@ let requirementByClass (policy: AIToolRegistry.ToolPolicy) (def: AIToolDefinitio
                 $"This tool declares effects of a class this deployment holds for your decision ({named}): {effects}. It runs only if you approve."
         }
 
-/// `requireApprovalWithin` with a class-keyed requirement in front of it:
-/// an `ApprovalRequired` from `requirementByClass` holds the invocation
-/// on that prompt without consulting the deployment's
-/// `IToolApprovalPolicy`; `ApprovalNotRequired` falls through to it, so
-/// a deployment that composes no `ToolPolicy` is on exactly the path it
-/// was on (GP 11).
-let requireApprovalKeyedWithin
-    (byClass: ToolApprovalRequirement)
-    (budgetMs: int)
-    (ctx: HttpContext)
+/// What the deployment requires of a call: the class-keyed hold first, else
+/// whatever the composed `IToolApprovalPolicy` answers. A policy that raises
+/// holds the invocation — a policy that cannot answer must not be read as a
+/// yes.
+let requirementFor
+    (policy: AIToolRegistry.ToolPolicy)
     (logger: ILogger)
-    (toolName: string)
-    (sourceModule: string)
-    (argsJson: string)
     (activeModule: string option)
     (activePage: string option)
-    : Async<ApprovalOutcome> =
-    match byClass with
-    | ApprovalRequired _ -> holdFor budgetMs ctx logger toolName sourceModule argsJson activeModule activePage byClass
-    | ApprovalNotRequired ->
-        requireApprovalWithin budgetMs ctx logger toolName sourceModule argsJson activeModule activePage
+    (call: AIToolRegistry.GateCall)
+    : ToolApprovalRequirement =
+    let def = call.Tool
 
-/// `requireApprovalKeyedWithin` on the one shared suspended-dispatch
-/// budget. What the agent loop calls since Phase 793.
-let requireApprovalKeyed
-    (byClass: ToolApprovalRequirement)
-    (ctx: HttpContext)
+    match requirementByClass policy def, resolvePolicy call.Request with
+    | ApprovalRequired _ as held, _ -> held
+    | ApprovalNotRequired, None -> ApprovalNotRequired
+    | ApprovalNotRequired, Some approvals ->
+        try
+            approvals.Requires(def.Name, def.SourceModule, call.Arguments, activeModule, activePage)
+        with ex ->
+            logger.Warn
+                $"[ToolApproval] IToolApprovalPolicy.Requires raised for tool '{def.Name}': {ex.Message}. Treating the invocation as approval-requiring — a policy that cannot answer must not be read as a yes."
+
+            ApprovalRequired {
+                Summary = $"Approve running '{def.Name}'?"
+                Detail =
+                    "The approval policy could not be evaluated for this action, so it is being held for your decision."
+            }
+
+/// The approval gate (g5), on a budget of `budgetMs`: hold the invocation
+/// for the user's decision when the deployment requires it, and admit it
+/// otherwise. The held call is registered BEFORE `ToolApprovalRequired` is
+/// emitted on `channel`, so a decision on a fast round trip finds it; an
+/// unanswered prompt is a refusal, and so is a requirement with no channel
+/// or registry to ask through — the deployment declared this invocation
+/// consequential enough to need a person. The budget is a parameter because
+/// the elapsed arm is the one a test cannot afford at the production value
+/// (`SuspendedPrompt.SuspendedDispatchTimeoutMs`, what the loop passes).
+let approve
+    (budgetMs: int)
+    (policy: AIToolRegistry.ToolPolicy)
     (logger: ILogger)
-    (toolName: string)
-    (sourceModule: string)
-    (argsJson: string)
+    (channel: PromptChannel option)
     (activeModule: string option)
     (activePage: string option)
-    : Async<ApprovalOutcome> =
-    requireApprovalKeyedWithin
-        byClass
-        SuspendedPrompt.SuspendedDispatchTimeoutMs
-        ctx
-        logger
-        toolName
-        sourceModule
-        argsJson
-        activeModule
-        activePage
+    : AIToolRegistry.GateCheck =
+    fun call -> async {
+        let toolName = call.Tool.Name
+
+        let refuse reason =
+            Error(ToolRefusal.ApprovalRefused(toolName, reason))
+
+        match requirementFor policy logger activeModule activePage call with
+        | ApprovalNotRequired -> return Ok()
+        | ApprovalRequired prompt ->
+            match channel, call.Request.RequestServices.GetService typeof<ToolApprovalRegistry> with
+            | Some channel, (:? ToolApprovalRegistry as registry) ->
+                let store =
+                    match call.Request.RequestServices.GetService typeof<IEventStore> with
+                    | :? IEventStore as s -> Some s
+                    | _ -> None
+
+                let approvalId = Guid.NewGuid()
+                let preview = AIConsentDispatch.redactPayloadPreview call.Arguments
+
+                let pending: PendingApproval = {
+                    ConversationId = channel.ConversationId
+                    ToolName = toolName
+                    SourceModule = call.Tool.SourceModule
+                    ArgumentsDigest = argumentsDigest call.Arguments
+                    ArgumentsPreview = preview
+                    ScopeId = (AIRequest.scopeOf call.Access).ScopeId
+                    UserId = UserId call.Access.UserId
+                }
+
+                let awaited = registry.RegisterPending(approvalId, pending)
+
+                do! writeApprovalAudit store logger ApprovalRequestedEvent pending
+
+                channel.Emit(
+                    ToolApprovalRequired(
+                        channel.TaskId,
+                        approvalId,
+                        channel.ConversationId,
+                        toolName,
+                        call.Tool.SourceModule,
+                        prompt.Summary,
+                        prompt.Detail,
+                        preview
+                    )
+                )
+
+                let! answered =
+                    SuspendedPrompt.awaitDecisionWithin budgetMs awaited (fun () ->
+                        registry.TryAbandon approvalId |> ignore)
+
+                match answered with
+                | Some Approved -> return Ok()
+                // The POST handler wrote the rejection row: it is the party
+                // that knows a person pressed a button.
+                | Some Rejected -> return refuse (userRejectedMessage toolName)
+                | None ->
+                    do! writeApprovalAudit store logger ApprovalExpiredEvent pending
+
+                    logger.Warn
+                        $"[ToolApproval] no decision for tool '{toolName}' (approvalId={approvalId}, conversation={channel.ConversationId}) within {budgetMs / 1000}s; the invocation was refused and did not run."
+
+                    return refuse (unansweredMessage toolName budgetMs)
+            | _ ->
+                logger.Warn
+                    $"[ToolApproval] tool '{toolName}' requires approval but this context has no way to ask (no conversation, emitter or registry). Refused rather than run."
+
+                return refuse (noPromptChannelMessage toolName)
+    }

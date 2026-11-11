@@ -63,6 +63,7 @@
              RAGCompose, which registers it under EnabledTenantLifecycle. -->
         <Compile Include="Server\RagVectorStoreLifecycle.fs" />
         <Compile Include="Server\RagAuditEvents.fs" />
+        <Compile Include="Server\VectorisationHook.fs" />
         <Compile Include="Server\RAGCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server +

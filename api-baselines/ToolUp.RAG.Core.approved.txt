@@ -94,13 +94,10 @@ ToolUp.RAG.IngestionTypes+IngestionQueue.Capacity : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Count : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Dropped : System.Int64 { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.DroppedLast60s : System.Int32 { get }
-ToolUp.RAG.IngestionTypes+IngestionQueue.Enqueue(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : System.Boolean
 ToolUp.RAG.IngestionTypes+IngestionQueue.EnqueueAsync(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.RAG.IngestionTypes+IngestionQueue.EnqueueBlocking(ToolUp.RAG.IngestionTypes+DocumentIngestionJob) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.RAG.IngestionTypes+IngestionQueue.IsDurable : System.Boolean { get }
 ToolUp.RAG.IngestionTypes+IngestionQueue.Policy : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
-ToolUp.RAG.IngestionTypes+IngestionQueue.Reader : System.Threading.Channels.ChannelReader`1[ToolUp.RAG.IngestionTypes+DocumentIngestionJob] { get }
-ToolUp.RAG.IngestionTypes+IngestionQueue.RecordDequeue() : System.Void
 ToolUp.RAG.IngestionTypes+IngestionQueue.RecordDrop() : System.Void
 ToolUp.RAG.IngestionTypes+IngestionRetryPayload (class)
 ToolUp.RAG.IngestionTypes+IngestionRetryPayload..ctor(System.String, System.String, System.String, System.Int32, ToolUp.Platform.VectorKnowledgeTypes+TextChunk, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UserId], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt])

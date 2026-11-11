@@ -237,16 +237,16 @@ let chunksOf (origin: ChunkOrigin) (source: PartSource) (parts: Part list) : (Te
 type ExtractDeps = {
     Ocr: IOcrProvider
     Tables: ITableExtractor
-    Docx: DocxExtraction.DocxExtractionMode
+    Docx: DocxExtractionMode
 }
 
 module ExtractDeps =
     /// The deps for these companions, with the DOCX mode the deployment
-    /// composed (`DocxExtraction.enableStructuredDocxExtraction`).
-    let composed (ocr: IOcrProvider) (tables: ITableExtractor) : ExtractDeps = {
+    /// composed (`KnowledgePolicies.DocxMode`).
+    let composed (ocr: IOcrProvider) (tables: ITableExtractor) (docx: DocxExtractionMode) : ExtractDeps = {
         Ocr = ocr
         Tables = tables
-        Docx = DocxExtraction.composedMode ()
+        Docx = docx
     }
 
 /// The document an extractor reads.
@@ -723,12 +723,12 @@ let private txt: Extractor = {
 /// The searchable formats' extractors, with the DOCX extractor `docx`
 /// selects. An image is not among them: without an OCR companion it is not
 /// searchable, and the upload policy reads this list.
-let extractors (docx: DocxExtraction.DocxExtractionMode) : Extractor list = [
+let extractors (docx: DocxExtractionMode) : Extractor list = [
     pdf
     pptx
     (match docx with
-     | DocxExtraction.DocxExtractionMode.Flat -> docxFlat
-     | DocxExtraction.DocxExtractionMode.Structured -> docxStructured)
+     | DocxExtractionMode.Flat -> docxFlat
+     | DocxExtractionMode.Structured -> docxStructured)
     xlsx
     csv
     txt
@@ -739,9 +739,7 @@ let extractors (docx: DocxExtraction.DocxExtractionMode) : Extractor list = [
 /// unrecognised type (stored but unsearchable, or rejected) from a
 /// recognised but empty file.
 let supportedExtensions: Set<string> =
-    extractors DocxExtraction.DocxExtractionMode.Flat
-    |> List.collect _.Formats
-    |> Set.ofList
+    extractors DocxExtractionMode.Flat |> List.collect _.Formats |> Set.ofList
 
 /// `true` when an extractor recognises `ext` (lower-case, no leading
 /// dot). Unrecognised types yield no parts.
@@ -786,17 +784,16 @@ let extract
         return parts, chunksOf Document source parts
     }
 
-/// The chunks of an uploaded document, with the deployment's composed DOCX
-/// mode: the entry every caller that needs no parts reads.
+/// The chunks of an uploaded document: the entry every caller that needs no
+/// parts reads.
 let extractChunks
-    (ocr: IOcrProvider)
-    (tables: ITableExtractor)
+    (deps: ExtractDeps)
     (docId: string)
     (fileName: string)
     (bytes: byte[])
     : Async<(TextChunk * SourceReference) list> =
     async {
-        let! _, chunks = extract (ExtractDeps.composed ocr tables) docId fileName bytes
+        let! _, chunks = extract deps docId fileName bytes
         return chunks
     }
 

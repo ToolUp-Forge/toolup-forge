@@ -14,7 +14,7 @@ open KnowledgeBase.ServerOriginalSourceResolver
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
-// ─── Phase 200 — anchor-highlighting original-document preview ───
+// ─── Anchor-highlighting original-document preview ───
 //
 // Phase 102 returns the original's bytes. Phase 104 decides which
 // source kinds *have* an original. Phase 106 stamps a citation with a
@@ -85,7 +85,7 @@ type PreviewSignedUrlOptions = {
 
 module PreviewSignedUrlOptions =
     /// One hour, matching the `IMediaLibrary` `SignedUrlDefaultTtl`
-    /// default (Phase 88) so a deployment running both tiers does not
+    /// default so a deployment running both tiers does not
     /// have to reconcile two different link lifetimes.
     let defaults: PreviewSignedUrlOptions = {
         Ttl = TimeSpan.FromHours 1.0
@@ -185,7 +185,7 @@ type SignedUrlOriginalPreviewSeam
                 return Error(OriginalRetrievalFailed ex.Message)
         }
 
-/// Phase 108 — signed-URL delivery minted from the composed
+/// Signed-URL delivery minted from the composed
 /// `IBlobStorage` itself, with a transparent fall back to proxying.
 ///
 /// This is the seam `SignedUrlOriginalPreviewSeam` above wanted and
@@ -216,7 +216,7 @@ type SignedUrlOriginalPreviewSeam
 ///                                   storage fault.
 ///
 /// **Byte-light on BOTH sides.** Resolution goes through
-/// `ResolveMetadata` (Phase 108), so establishing that the original
+/// `ResolveMetadata`, so establishing that the original
 /// exists costs a properties read rather than a full download —
 /// closing the limitation Phase 200 recorded and could only describe.
 /// The inline fallback path pays the download, because inline delivery
@@ -303,7 +303,7 @@ type BlobSignedUrlOriginalPreviewSeam(resolver: IOriginalSourceResolver, options
 let createDefault (resolver: IOriginalSourceResolver) : IOriginalPreviewSeam =
     DefaultOriginalPreviewSeam(resolver) :> _
 
-/// Phase 108 — construct the blob-backed signed-URL seam over a
+/// Construct the blob-backed signed-URL seam over a
 /// resolver. Raises at **construction** (compose time, not on a request
 /// path) if the TTL is not strictly positive.
 let createBlobSignedUrl (resolver: IOriginalSourceResolver) (options: PreviewSignedUrlOptions) : IOriginalPreviewSeam =
@@ -337,9 +337,10 @@ let previewOriginal
         try
             let! index = loadIndex storage container
 
-            match index |> List.tryFind (fun d -> d.Id = docId) with
-            | None -> return Error NotInScope
-            | Some doc -> return! seam.Preview(storage, container, doc, locator)
+            match index |> Result.map (List.tryFind (fun d -> d.Id = docId)) with
+            | Error error -> return Error(OriginalRetrievalFailed(IndexReadError.describe error))
+            | Ok None -> return Error NotInScope
+            | Ok(Some doc) -> return! seam.Preview(storage, container, doc, locator)
         with ex ->
             return Error(OriginalRetrievalFailed ex.Message)
     }
@@ -362,7 +363,7 @@ let withOriginalPreviewSeam (seam: IOriginalPreviewSeam) (app: ServerApp) : Serv
 
     app |> ServerApp.addServiceConfig register
 
-/// Phase 108 — opt into time-bound direct-download URLs for originals.
+/// Opt into time-bound direct-download URLs for originals.
 /// One call, no signer to write: the seam mints through whatever
 /// `IBlobStorage` the deployment composed, and falls back to proxying
 /// the bytes on any backend that cannot sign (local filesystem,

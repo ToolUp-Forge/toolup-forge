@@ -821,6 +821,24 @@ ToolUp.AI.ToolApprovalRequirement+ApprovalRequired.prompt : ToolUp.AI.ApprovalPr
 ToolUp.AI.ToolApprovalRequirement+Tags (class)
 ToolUp.AI.ToolApprovalRequirement+Tags.ApprovalNotRequired : System.Int32 (literal)
 ToolUp.AI.ToolApprovalRequirement+Tags.ApprovalRequired : System.Int32 (literal)
+ToolUp.AI.ToolAuditStream (class)
+ToolUp.AI.ToolAuditStream.GrantGuard : ToolUp.AI.ToolAuditStream { get }
+ToolUp.AI.ToolAuditStream.IsGrantGuard : System.Boolean { get }
+ToolUp.AI.ToolAuditStream.IsPolicyDenial : System.Boolean { get }
+ToolUp.AI.ToolAuditStream.IsUnauthorized : System.Boolean { get }
+ToolUp.AI.ToolAuditStream.IsUnrecorded : System.Boolean { get }
+ToolUp.AI.ToolAuditStream.PolicyDenial : ToolUp.AI.ToolAuditStream { get }
+ToolUp.AI.ToolAuditStream.Tag : System.Int32 { get }
+ToolUp.AI.ToolAuditStream.Unauthorized : ToolUp.AI.ToolAuditStream { get }
+ToolUp.AI.ToolAuditStream.Unrecorded : ToolUp.AI.ToolAuditStream { get }
+ToolUp.AI.ToolAuditStream+Tags (class)
+ToolUp.AI.ToolAuditStream+Tags.GrantGuard : System.Int32 (literal)
+ToolUp.AI.ToolAuditStream+Tags.PolicyDenial : System.Int32 (literal)
+ToolUp.AI.ToolAuditStream+Tags.Unauthorized : System.Int32 (literal)
+ToolUp.AI.ToolAuditStream+Tags.Unrecorded : System.Int32 (literal)
+ToolUp.AI.ToolAuditStreamModule (class)
+ToolUp.AI.ToolAuditStreamModule.eventType(ToolUp.AI.ToolAuditStream) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.AI.ToolAuditStreamModule.source(ToolUp.AI.ToolAuditStream) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.AI.ToolCallRecord (class)
 ToolUp.AI.ToolCallRecord..ctor(System.Guid, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.ToolCallStatus)
 ToolUp.AI.ToolCallRecord.Arguments : System.String { get }
@@ -913,12 +931,57 @@ ToolUp.AI.ToolOutcome+Tags.Faulted : System.Int32 (literal)
 ToolUp.AI.ToolOutcome+Tags.Produced : System.Int32 (literal)
 ToolUp.AI.ToolOutcome+Tags.Refused : System.Int32 (literal)
 ToolUp.AI.ToolOutcomeModule (class)
+ToolUp.AI.ToolOutcomeModule.auditStream(ToolUp.AI.ToolRefusal) : ToolUp.AI.ToolAuditStream
 ToolUp.AI.ToolOutcomeModule.isError(ToolUp.AI.ToolOutcome) : System.Boolean
 ToolUp.AI.ToolOutcomeModule.toModel(ToolUp.AI.ToolOutcome) : System.String
 ToolUp.AI.ToolRefusal (class)
+ToolUp.AI.ToolRefusal.IsAllowlistDenied : System.Boolean { get }
+ToolUp.AI.ToolRefusal.IsApprovalRefused : System.Boolean { get }
+ToolUp.AI.ToolRefusal.IsConsentRefused : System.Boolean { get }
+ToolUp.AI.ToolRefusal.IsDenied : System.Boolean { get }
+ToolUp.AI.ToolRefusal.IsGrantNotLive : System.Boolean { get }
+ToolUp.AI.ToolRefusal.IsOutsideCeiling : System.Boolean { get }
+ToolUp.AI.ToolRefusal.IsUnqueryable : System.Boolean { get }
+ToolUp.AI.ToolRefusal.IsUnreadable : System.Boolean { get }
 ToolUp.AI.ToolRefusal.Tag : System.Int32 { get }
-ToolUp.AI.ToolRefusal.reason : System.String { get }
-ToolUp.AI.ToolRefusal.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+AllowlistDenied (class)
+ToolUp.AI.ToolRefusal+AllowlistDenied.reason : System.String { get }
+ToolUp.AI.ToolRefusal+AllowlistDenied.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+ApprovalRefused (class)
+ToolUp.AI.ToolRefusal+ApprovalRefused.reason : System.String { get }
+ToolUp.AI.ToolRefusal+ApprovalRefused.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+ConsentRefused (class)
+ToolUp.AI.ToolRefusal+ConsentRefused.moduleName : System.String { get }
+ToolUp.AI.ToolRefusal+ConsentRefused.reason : System.String { get }
+ToolUp.AI.ToolRefusal+ConsentRefused.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+Denied (class)
+ToolUp.AI.ToolRefusal+Denied.reason : System.String { get }
+ToolUp.AI.ToolRefusal+Denied.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+GrantNotLive (class)
+ToolUp.AI.ToolRefusal+GrantNotLive.moduleName : System.String { get }
+ToolUp.AI.ToolRefusal+GrantNotLive.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+OutsideCeiling (class)
+ToolUp.AI.ToolRefusal+OutsideCeiling.reason : System.String { get }
+ToolUp.AI.ToolRefusal+OutsideCeiling.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+Tags (class)
+ToolUp.AI.ToolRefusal+Tags.AllowlistDenied : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Tags.ApprovalRefused : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Tags.ConsentRefused : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Tags.Denied : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Tags.GrantNotLive : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Tags.OutsideCeiling : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Tags.Unqueryable : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Tags.Unreadable : System.Int32 (literal)
+ToolUp.AI.ToolRefusal+Unqueryable (class)
+ToolUp.AI.ToolRefusal+Unqueryable.moduleName : System.String { get }
+ToolUp.AI.ToolRefusal+Unqueryable.toolName : System.String { get }
+ToolUp.AI.ToolRefusal+Unreadable (class)
+ToolUp.AI.ToolRefusal+Unreadable.moduleName : System.String { get }
+ToolUp.AI.ToolRefusal+Unreadable.toolName : System.String { get }
+ToolUp.AI.ToolRefusalModule (class)
+ToolUp.AI.ToolRefusalModule.notOptedInMessage(System.String) : System.String
+ToolUp.AI.ToolRefusalModule.reason(ToolUp.AI.ToolRefusal) : System.String
+ToolUp.AI.ToolRefusalModule.toolName(ToolUp.AI.ToolRefusal) : System.String
 ToolUp.AI.ToolResult (class)
 ToolUp.AI.ToolResult..ctor(System.String, System.String, System.String)
 ToolUp.AI.ToolResult.Content : System.String { get }

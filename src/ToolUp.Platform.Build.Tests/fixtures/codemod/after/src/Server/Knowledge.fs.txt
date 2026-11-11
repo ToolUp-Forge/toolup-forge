@@ -1,0 +1,22 @@
+module Consumer.Knowledge
+
+let dataType = KnowledgePolicies.OriginalObjectDataType
+
+let drop = ToolUp.RAG.VectorisationHook.emitIngestionDrop audit None queue logger scope docId 0 reason None
+
+let mode = DocxExtractionMode.Structured
+
+let dedup = KnowledgeDedupPolicy.disabled
+
+let deps = {
+    Storage = storage
+    QuotaPolicy = quota
+}
+
+KnowledgeBase.DocxExtraction.enableStructuredDocxExtraction ()
+
+let persistence = RagPersistenceValidator(config, true, false)
+
+let conversations = RagOptions.withIndexConversations true options
+
+let index = loadIndex storage container

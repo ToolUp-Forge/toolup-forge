@@ -103,11 +103,11 @@ type IngestionOverflowPolicy =
     /// document. Suited to bulk backfills where completeness beats latency.
     | Block
     /// Compliance-grade fail-loud. Behaves like `DropWrite` (drop + audit +
-    /// notify) but additionally raises `ConfigPreflightFailedException` once
-    /// sustained saturation is observed in the rolling 60s window — a loud,
-    /// operator-visible signal (logged by the post-save-hook error path)
-    /// that the deployment is losing documents, for deployments that prefer
-    /// a screaming error over a quiet drop.
+    /// notify), and once sustained saturation is observed in the rolling 60s
+    /// window the `rag-ingestion-instance` validator reports it at `Error` —
+    /// a loud, operator-visible finding that the deployment is losing
+    /// documents, for deployments that prefer a screaming error over a quiet
+    /// drop.
     | Refuse
 
 // ─── durable ingestion-queue seam ─────────────────────
@@ -179,7 +179,7 @@ type IIngestionQueueStore =
 /// behaviour byte for byte).
 type IIngestionQueue =
     /// `true` when the queue is backed by a store that outlives this
-    /// process. Read by `RagIngestionInstanceValidator` — the
+    /// process. Read by `ragIngestionInstanceValidator` — the
     /// multi-replica refusal is lifted only for a durable queue.
     abstract IsDurable: bool
     abstract Capacity: int
@@ -460,30 +460,11 @@ type IngestionQueue
     /// gives saturation) and for emitting `Retry-After` hints to clients.
     member _.Capacity = cap
 
-    /// Try to enqueue a document. Returns `true` on success, `false` when the
-    /// queue is at capacity. Callers that need user-visible feedback should
-    /// surface the failure (KB marks the doc `Failed`); fire-and-forget hooks
-    /// log a warning and move on.
-    member _.Enqueue(job: DocumentIngestionJob) : bool =
-        match store with
-        | Some _ ->
-            // Durable arm. The synchronous shape is preserved for the
-            // existing call sites (KB's upload handlers); the round-trip
-            // is one store append. New call sites should prefer
-            // `EnqueueAsync`.
-            enqueueAsync job |> Async.RunSynchronously
-        | None ->
-            if channel.Writer.TryWrite(job) then
-                Interlocked.Increment(&depth) |> ignore
-                true
-            else
-                false
-
-    /// Async `Enqueue`. Identical semantics; the only correct shape on
-    /// the durable arm, where the append is I/O.
+    /// Enqueue a document. `true` on success, `false` when the queue is at
+    /// capacity. Callers that need user-visible feedback should surface the
+    /// failure (KB marks the doc `Failed`); fire-and-forget hooks log a
+    /// warning and move on.
     member _.EnqueueAsync(job: DocumentIngestionJob) : Async<bool> = enqueueAsync job
-
-    member _.Reader = channel.Reader
 
     /// `true` when a durable store backs this queue. Drives the
     /// multi-replica validator lift.
@@ -524,13 +505,6 @@ type IngestionQueue
         evictDropWindow ()
         dropWindow.Count
 
-    /// Called by `IngestionBackgroundService` after a successful `ReadAsync`
-    /// to keep the depth counter consistent with the underlying channel.
-    /// Not part of the public surface for outside callers — kept `internal`
-    /// in spirit by being undocumented in the README.
-    member _.RecordDequeue() =
-        System.Threading.Interlocked.Decrement(&depth) |> ignore
-
     // ─── the drainer-facing seam ──────────────────────
     //
     // The in-memory arm reproduces the historical loop exactly: read one
@@ -539,7 +513,7 @@ type IngestionQueue
     // identical either way, but `Ack` / `Abandon` have nothing to act on
     // — a process-local channel cannot redeliver, which is precisely the
     // gap the durable arm closes and the reason
-    // `RagIngestionInstanceValidator` refuses multi-replica without it.
+    // `ragIngestionInstanceValidator` refuses multi-replica without it.
     interface IIngestionQueue with
         member _.IsDurable = store.IsSome
         member _.Capacity = cap

@@ -158,7 +158,10 @@ let private indexWritesFor (documents: int) (chunks: int) =
     for chunk in 0 .. chunks - 1 do
         run (observer.OnChunkIndexed(chunkJob container "doc-1" attempt chunk))
 
-    let settled = run (loadIndex blobs container) |> List.find (fun d -> d.Id = "doc-1")
+    let read = run (loadIndex blobs container)
+
+    let settled =
+        Expect.wantOk read "the index reads" |> List.find (fun d -> d.Id = "doc-1")
 
     Expect.equal settled.Status (Complete chunks) "the document completed"
     storage.UploadsOf indexBlobName
