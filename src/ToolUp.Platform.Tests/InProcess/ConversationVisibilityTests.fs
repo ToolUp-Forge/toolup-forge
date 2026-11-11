@@ -124,6 +124,10 @@ let private newWorld (settings: TeamConversationVisibilitySettings option) = asy
     }
 }
 
+/// The task-status registry every request in this file shares, as one
+/// composed server's requests do.
+let private taskRegistry = AITaskStatusRegistry()
+
 /// What the assistant handler resolves unconditionally, over `storage`.
 let private chatServices (storage: IBlobStorage) : ServiceCollection =
     let services = ServiceCollection()
@@ -143,6 +147,7 @@ let private chatServices (storage: IBlobStorage) : ServiceCollection =
     )
     |> ignore
 
+    services.AddSingleton<AITaskStatusRegistry>(taskRegistry) |> ignore
     services
 
 /// A request by `userId` in `teamId`'s scope, with `extra` registered last
@@ -391,7 +396,7 @@ let private matrixCase (level: Level) (label: string, userId: string, teamId: st
             CompletedAt = None
         }
 
-        AITaskStatusRegistry.Shared.Register(containerOf "alpha", "alice", task, DateTime.UtcNow)
+        taskRegistry.Register(containerOf "alpha", "alice", task, DateTime.UtcNow)
         let! status = api.GetTaskStatus task.TaskId
         Expect.equal status.IsSome (userId = "alice") $"task status — {what}"
 

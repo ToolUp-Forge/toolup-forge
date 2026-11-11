@@ -636,6 +636,9 @@ let private chatServices (model: IAIProvider) : ServiceProvider =
     )
     |> ignore
 
+    services.AddSingleton<AIAssistantHandler.AITaskStatusRegistry>(AIAssistantHandler.AITaskStatusRegistry())
+    |> ignore
+
     let services =
         match ServerApp.serviceConfig app with
         | Some configure -> configure services

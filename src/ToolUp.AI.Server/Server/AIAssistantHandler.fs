@@ -155,9 +155,9 @@ let private unwritten (logger: ILogger) (conversationId: Guid) (err: Conversatio
 // that process is the only one that can say where it got to. Bounded two
 // ways so a long-lived process never accumulates history — a terminal
 // task is forgotten `retention` after it finished, and past `capacity`
-// the oldest entries go first. Erasure reaches it too: `deleteSiblings`
-// forgets a deleted or purged conversation's tasks, because an `AITask`
-// carries the prompt the user typed.
+// the oldest entries go first. Erasure reaches it too: a deleted or purged
+// conversation's tasks are forgotten, because an `AITask` carries the
+// prompt the user typed.
 
 type private TrackedTask = {
     Container: string
@@ -165,9 +165,9 @@ type private TrackedTask = {
     Task: AITask
 }
 
-/// The per-process record of each chat task's latest status.
-/// `AITaskStatusRegistry.Shared` is the instance the handler uses;
-/// construct one directly only in a test.
+/// The per-process record of each chat task's latest status. `AICompose`
+/// registers one per composed server as a DI singleton, and the handler
+/// resolves it from the request's services.
 type AITaskStatusRegistry(capacity: int, retention: TimeSpan) =
     let tasks = System.Collections.Concurrent.ConcurrentDictionary<Guid, TrackedTask>()
 
@@ -199,9 +199,9 @@ type AITaskStatusRegistry(capacity: int, retention: TimeSpan) =
             |> Seq.toList
             |> List.iter (fun t -> tasks.TryRemove t.Task.TaskId |> ignore)
 
-    /// The process-wide instance: 10 000 tasks, terminal ones kept for an
-    /// hour — ample for a client that reconnects after a dropped stream.
-    static member val Shared = AITaskStatusRegistry(10_000, TimeSpan.FromHours 1.0)
+    /// The default bounds: 10 000 tasks, terminal ones kept for an hour —
+    /// ample for a client that reconnects after a dropped stream.
+    new() = AITaskStatusRegistry(10_000, TimeSpan.FromHours 1.0)
 
     /// Record a task the moment it is accepted. `container` and `owner`
     /// are the storage container and user id that submitted it; a read
@@ -336,19 +336,12 @@ module ConversationRetention =
                 |> List.map (fun name -> storage.Delete(container, name))
                 |> Async.Sequential
 
-            let outcome =
+            return
                 results
                 |> Array.tryPick (function
                     | Error e -> Some(Error e)
                     | Ok() -> None)
                 |> Option.defaultValue (Ok())
-
-            // The task-status registry holds each task's prompt; an erased
-            // conversation takes those entries with it.
-            if Result.isOk outcome then
-                AITaskStatusRegistry.Shared.ForgetConversation(container, conversationId)
-
-            return outcome
         }
 
     /// Resolve the blob container for a scope id, mirroring the
@@ -559,6 +552,14 @@ type ConversationRetentionSweepJobHandler(services: IServiceProvider, policy: Co
                             policy
                             ctx.ScopeId
                             (ConversationRetention.containerOf ctx.ScopeId)
+
+                    // The task-status registry holds each task's prompt; a
+                    // purged conversation takes those entries with it.
+                    match services.GetService typeof<AITaskStatusRegistry> with
+                    | :? AITaskStatusRegistry as registry ->
+                        for id in report.Purged do
+                            registry.ForgetConversation(report.Container, id)
+                    | _ -> ()
 
                     if ConversationPurgeReport.isClean report then
                         return Success
@@ -1247,8 +1248,13 @@ let aiAssistantApi
         | :? ConversationTitlingPolicy as p -> p
         | _ -> ConversationTitlingPolicy.firstMessage
 
-    // Where every task's latest status is recorded.
-    let taskRegistry = AITaskStatusRegistry.Shared
+    // Where every task's latest status is recorded: the composed server's
+    // registry. A context composed without one tracks no task, and every
+    // status read answers as for an unknown id.
+    let taskRegistry =
+        match ctx.RequestServices.GetService(typeof<AITaskStatusRegistry>) with
+        | :? AITaskStatusRegistry as registry -> Some registry
+        | _ -> None
 
     let sha256OfText (text: string) : string =
         let bytes = System.Text.Encoding.UTF8.GetBytes text
@@ -1543,7 +1549,9 @@ let aiAssistantApi
     // with the stream without touching an emit site.
     let trackTaskStatus (sink: AIStreamEvent -> unit) (event: AIStreamEvent) =
         match event with
-        | TaskStatusChanged(taskId, status) -> taskRegistry.Transition(taskId, status, DateTime.UtcNow)
+        | TaskStatusChanged(taskId, status) ->
+            taskRegistry
+            |> Option.iter (fun registry -> registry.Transition(taskId, status, DateTime.UtcNow))
         | _ -> ()
 
         sink event
@@ -2113,7 +2121,9 @@ let aiAssistantApi
                     CompletedAt = None
                 }
 
-                taskRegistry.Register(scope.Container, userId, task, task.CreatedAt)
+                taskRegistry
+                |> Option.iter (fun registry -> registry.Register(scope.Container, userId, task, task.CreatedAt))
+
                 let! contribution = contributePrompt request
 
                 // A background context with its own DI scope: the request's
@@ -2225,7 +2235,11 @@ let aiAssistantApi
         // allows (the author always sees their own), so another member's
         // task is `None` under every level without consulting the policy.
         GetTaskStatus =
-            fun taskId -> async { return taskRegistry.TryGet(scope.Container, userId, taskId, DateTime.UtcNow) }
+            fun taskId -> async {
+                return
+                    taskRegistry
+                    |> Option.bind (fun registry -> registry.TryGet(scope.Container, userId, taskId, DateTime.UtcNow))
+            }
 
         DeleteConversation =
             fun conversationId -> async {
@@ -2244,7 +2258,17 @@ let aiAssistantApi
                 // elevated role; one the caller cannot see is a no-op, as
                 // a missing id is.
                 match! authoriseWrite conversationId with
-                | Ok true -> return! ConversationRetention.deleteSiblings storage scope.Container conversationId
+                | Ok true ->
+                    match! ConversationRetention.deleteSiblings storage scope.Container conversationId with
+                    | Ok() ->
+                        // The task-status registry holds each task's
+                        // prompt; an erased conversation takes those
+                        // entries with it.
+                        taskRegistry
+                        |> Option.iter (fun registry -> registry.ForgetConversation(scope.Container, conversationId))
+
+                        return Ok()
+                    | Error e -> return Error e
                 | Ok false -> return Ok()
                 | Error refusal -> return Error refusal
             }

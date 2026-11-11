@@ -144,6 +144,11 @@ type AIOptions = {
     /// model (`AIOptions.withReflectionTools`). `false` (the default)
     /// offers exactly the module tools (GP 11).
     ReflectionTools: bool
+    /// What the token and spend budgets do when they cannot read their
+    /// policy or their window: `FailOpen` (the default) admits the call,
+    /// `FailClosed` refuses it. Either way the failure is recorded as a
+    /// `BudgetWindowUnreadable` event. Set via `AIOptions.withBudgetPosture`.
+    BudgetPosture: BudgetPosture
 }
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
@@ -344,6 +349,11 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
     // completion via try/finally.
     let cancellationRegistry = AICancellationRegistry.AICancellationRegistry()
 
+    // Per-server record of each chat task's latest status, read by the
+    // polling fallback. One per composed server: two servers in one
+    // process keep two records.
+    let taskStatusRegistry = AITaskStatusRegistry()
+
     // Dev-only telemetry endpoints. Runtime-gated via
     // `ServerConfig.EnableDevEndpoints` (default `false`). The previous
     // `#if DEBUG` belt-and-suspenders gate was removed when ToolUp.Platform
@@ -438,7 +448,8 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
                 s
                     .AddSingleton<AIBudgetEnforcer.AIBudgetWindowCache>(budgetCache)
                     .AddSingleton<IDevDiagnosticsContributor>(
-                        AIBudgetEnforcer.AITokenBudgetContributor(budgetCache) :> IDevDiagnosticsContributor
+                        AIBudgetEnforcer.AITokenBudgetContributor(budgetCache, options.BudgetPosture)
+                        :> IDevDiagnosticsContributor
                     )
             else
                 s
@@ -473,7 +484,8 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
                     AIBudgetEnforcer.AISpendBudgetContributor(
                         sp.GetService(typeof<AIBudgetEnforcer.AISpendWindowCache>)
                         :?> AIBudgetEnforcer.AISpendWindowCache,
-                        table
+                        table,
+                        options.BudgetPosture
                     )
                     :> IDevDiagnosticsContributor)
 
@@ -559,7 +571,11 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
                 // read as the default anyway, so registering it always is
                 // what makes `TrustEverything` actually reachable.
                 .AddSingleton<AIConsentMode>(options.ConsentMode)
+                // The budgets' declared posture, read where
+                // `wrapFactoryForDI` builds the enforcers.
+                .AddSingleton<BudgetPosture>(options.BudgetPosture)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
+                .AddSingleton<AITaskStatusRegistry>(taskStatusRegistry)
                 // The services an agent turn reads, resolved once per turn
                 // (transient: one resolution each time a turn asks), so the
                 // loop holds one record instead of probing the container.
@@ -723,6 +739,14 @@ module AIOptions =
         ToolEffects = None
         AIAnsweringTools = []
         ReflectionTools = false
+        BudgetPosture = BudgetPosture.FailOpen
+    }
+
+    /// **Sets** what the budgets do when they cannot read their policy or
+    /// their window; a later call replaces it.
+    let withBudgetPosture (posture: BudgetPosture) (options: AIOptions) : AIOptions = {
+        options with
+            BudgetPosture = posture
     }
 
     /// **Sets** the assistant's server config; a later call replaces it.

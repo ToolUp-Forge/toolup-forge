@@ -528,7 +528,7 @@ let tests =
 
             enforcer.Check(scopeId, alice, 10M) |> Async.RunSynchronously |> ignore
 
-            let panel = AIBudgetEnforcer.AITokenBudgetContributor(cache)
+            let panel = AIBudgetEnforcer.AITokenBudgetContributor(cache, BudgetPosture.FailOpen)
 
             let name, _payload =
                 (panel :> IDevDiagnosticsContributor).Contribute() |> Async.RunSynchronously
@@ -749,5 +749,44 @@ let tests =
                 Expect.isFalse
                     (Regex.IsMatch(body, @"\bwith\s+_\s*->"))
                     (sprintf "%s decides nothing by a discarded exception; a failed read goes to the posture" name)
+        }
+
+        test "the panel tells an unreadable window from an unbounded one by the posture and the last unreadable time" {
+            let cache = AIBudgetEnforcer.AIBudgetWindowCache(30)
+
+            let panel () =
+                let _, payload =
+                    (AIBudgetEnforcer.AITokenBudgetContributor(cache, BudgetPosture.FailOpen)
+                    :> IDevDiagnosticsContributor)
+                        .Contribute()
+                    |> Async.RunSynchronously
+
+                (JsonDocument.Parse(JsonSerializer.Serialize(payload, jsonOptions))).RootElement
+
+            let before = panel ()
+            Expect.equal (before.GetProperty("posture").GetString()) "fail-open" "the panel names the posture"
+
+            Expect.equal
+                (before.GetProperty("lastUnreadableAt").ValueKind)
+                JsonValueKind.Null
+                "a budget whose reads have never failed shows no unreadable time"
+
+            let enforcer =
+                AIBudgetEnforcer.AIBudgetEnforcer(
+                    configStoreOver (fun () -> capOf (Some 1000)),
+                    unreadableWindowStore (),
+                    cache,
+                    BudgetAccount.silent,
+                    fun () -> noon
+                )
+
+            enforcer.Check(scopeId, alice, 10M) |> Async.RunSynchronously |> ignore
+
+            Expect.equal cache.LastUnreadableAt (Some noon) "the failed read is stamped on the shared cache"
+
+            Expect.notEqual
+                (panel().GetProperty("lastUnreadableAt").ValueKind)
+                JsonValueKind.Null
+                "and the panel shows it, so an unreadable window does not read as an unbounded one"
         }
     ]

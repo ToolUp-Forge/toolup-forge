@@ -230,9 +230,8 @@ type AITokenBudgetPolicy = {
 [<RequireQualifiedAccess>]
 module AITokenBudgetPolicy =
     /// The unbounded policy — what a scope with no configuration has,
-    /// and what every parse failure degrades to. An unreadable cap
-    /// must never become a refusal: a config store that hiccups would
-    /// otherwise deny every AI call in the deployment.
+    /// and what every parse failure degrades to. A policy that cannot be
+    /// READ is not this: it is decided by `BudgetPosture`.
     let unbounded: AITokenBudgetPolicy = { PerUserPerHour = None }
 
     /// `BudgetSubject.Domain` every claim, denial and ledger key in
@@ -360,7 +359,10 @@ module AITokenBudgetExceeded =
     /// what a user reads when their work stops, and "quota exceeded"
     /// with no numbers tells them nothing about when to try again.
     let message (denial: BudgetDenial) : string =
-        sprintf "Token budget exceeded for this user this hour — %M tokens used vs %M cap" denial.Spent denial.Quota
+        if BudgetWindowUnreadable.isDenial denial then
+            BudgetWindowUnreadable.message denial
+        else
+            sprintf "Token budget exceeded for this user this hour — %M tokens used vs %M cap" denial.Spent denial.Quota
 // ─── Phase 499 — monetary AI cost budgets ────────────────────────
 //
 // Phase 9s above bounds a user's TOKENS. This is the currency-
@@ -610,8 +612,8 @@ type AISpendBudgetPolicy = {
 [<RequireQualifiedAccess>]
 module AISpendBudgetPolicy =
     /// The unbounded policy — what a scope with no configuration has,
-    /// and what every parse failure degrades to. An unreadable ceiling
-    /// must never become a refusal.
+    /// and what every parse failure degrades to. A policy that cannot be
+    /// READ is not this: it is decided by `BudgetPosture`.
     let unbounded: AISpendBudgetPolicy = { PerUser = None; PerScope = None }
 
     /// `BudgetSubject.Domain` every claim, denial and refusal record in
@@ -804,20 +806,23 @@ module AISpendBudgetExceeded =
     /// wording is pinned by a test because a refusal with no numbers
     /// tells a user nothing about when to try again.
     let message (currency: string) (windowLabel: string) (denial: BudgetDenial) : string =
-        let whose =
-            if denial.Dimension = AISpendBudgetPolicy.PerScopeDimension then
-                "this team"
-            else
-                "this user"
+        if BudgetWindowUnreadable.isDenial denial then
+            BudgetWindowUnreadable.message denial
+        else
+            let whose =
+                if denial.Dimension = AISpendBudgetPolicy.PerScopeDimension then
+                    "this team"
+                else
+                    "this user"
 
-        sprintf
-            "AI spend budget exceeded for %s (%s) — %s %M spent against a %s %M cap, and this request is estimated at a further %s %M. The budget refills at the start of the next %s window."
-            whose
-            denial.Dimension
-            currency
-            denial.Spent
-            currency
-            denial.Quota
-            currency
-            denial.Requested
-            windowLabel
+            sprintf
+                "AI spend budget exceeded for %s (%s) — %s %M spent against a %s %M cap, and this request is estimated at a further %s %M. The budget refills at the start of the next %s window."
+                whose
+                denial.Dimension
+                currency
+                denial.Spent
+                currency
+                denial.Quota
+                currency
+                denial.Requested
+                windowLabel

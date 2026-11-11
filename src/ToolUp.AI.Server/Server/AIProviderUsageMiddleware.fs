@@ -636,8 +636,11 @@ type private SpendEnforcingProvider
 
         match verdict with
         | BudgetVerdict.Refused denial ->
+            // The policy only labels the refusal's window; an unreadable
+            // one leaves the default label, which an unreadable denial's
+            // message does not use.
             let! policy = enforcer.ReadPolicy scopeId
-            return refusal denial policy
+            return refusal denial (policy |> Result.defaultValue AISpendBudgetPolicy.unbounded)
         | BudgetVerdict.Allowed
         | BudgetVerdict.NearLimit _ -> return! proceed ()
     }
@@ -833,6 +836,13 @@ let wrapFactoryForDI
         // cannot read its policy would refuse everything or allow
         // everything, and the honest form of "I cannot enforce this" is
         // not to compose the enforcement.
+        // The posture `AICompose` registered; a composition that did not
+        // declare one gets the default.
+        let posture =
+            match sp.GetService(typeof<BudgetPosture>) with
+            | :? BudgetPosture as declared -> declared
+            | _ -> BudgetPosture.FailOpen
+
         let tokenBudgetGated =
             match
                 sp.GetService(typeof<AIBudgetEnforcer.AIBudgetWindowCache>),
@@ -848,6 +858,8 @@ let wrapFactoryForDI
                         eventStore,
                         cache,
                         AIBudgetEnforcer.eventStoreAccount eventStore (fun () -> DateTime.UtcNow),
+                        posture,
+                        AIBudgetEnforcer.unreadableRecorder eventStore,
                         fun () -> DateTime.UtcNow
                     )
 
@@ -900,6 +912,8 @@ let wrapFactoryForDI
                     spendCache,
                     AIBudgetEnforcer.spendEventStoreAccount eventStore table.Currency (fun () -> DateTime.UtcNow),
                     warn,
+                    posture,
+                    AIBudgetEnforcer.unreadableRecorder eventStore,
                     fun () -> DateTime.UtcNow
                 )
 
