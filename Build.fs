@@ -1842,7 +1842,11 @@ let main args =
         // `obj/`; once that worktree was removed, every `dotnet fable` on the
         // machine answered "Run dotnet tool restore" while restore kept reporting
         // success. The cache lives in the scratch directory instead, and goes
-        // with it.
+        // with it. A fresh CLI home also makes the SDK's first run append
+        // `<home>/.dotnet/tools` to the USER-scope PATH, where it outlives the
+        // scratch directory: one entry per run, until the PATH passed cmd.exe's
+        // 8,191-character limit and npm postinstall scripts could not find
+        // `node`. DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false stops the write.
         let cliHome = Path.Combine(scratch, "cli-home")
 
         let run (workDir: string) (exe: string) (argv: string list) =
@@ -1850,7 +1854,11 @@ let main args =
                 Proc.execWith
                     {
                         Proc.options with
-                            Environment = [ "NUGET_PACKAGES", packages; "DOTNET_CLI_HOME", cliHome ]
+                            Environment = [
+                                "NUGET_PACKAGES", packages
+                                "DOTNET_CLI_HOME", cliHome
+                                "DOTNET_ADD_GLOBAL_TOOLS_TO_PATH", "false"
+                            ]
                             Redirect = true
                     }
                     exe
