@@ -284,8 +284,6 @@ JobsAdminUI Starting
 JobsAdminUI StillRunning
 JobsAdminUI Succeeded
 JobsAdminUI ToggleAttempts
-KnowledgeBase.DocxExtraction Flat
-KnowledgeBase.DocxExtraction Structured
 KnowledgeBase.ServerApiDeps QueueFull
 KnowledgeBase.ServerBulkImport Body
 KnowledgeBase.ServerBulkImport Expanded
@@ -302,6 +300,8 @@ KnowledgeBase.ServerExtractors Titled
 KnowledgeBase.ServerExtractors Unread
 KnowledgeBase.ServerExtractors Verbatim
 KnowledgeBase.ServerExtractors Workbook
+KnowledgeBase.ServerIndexStorage Corrupt
+KnowledgeBase.ServerIndexStorage Unreadable
 KnowledgeBase.ServerKnowledgeAuditEvents ContentScanned
 KnowledgeBase.ServerKnowledgeAuditEvents KnowledgeDocumentDeduplicated
 KnowledgeBase.ServerKnowledgeAuditEvents KnowledgeDocumentsPurged
@@ -551,6 +551,7 @@ SharedTypes ExtractingText
 SharedTypes Failed
 SharedTypes File
 SharedTypes FileBase64
+SharedTypes Flat
 SharedTypes FromNarrative
 SharedTypes IngestFailed
 SharedTypes Inline
@@ -570,6 +571,7 @@ SharedTypes Section
 SharedTypes Sheet
 SharedTypes SignedUrl
 SharedTypes Slide
+SharedTypes Structured
 SharedTypes UnsupportedFormat
 SharedTypes UploadRejected
 SharedTypes UploadedFile
@@ -650,9 +652,11 @@ ToolUp.AI AITaskFailed
 ToolUp.AI Allow
 ToolUp.AI AllowForConversation
 ToolUp.AI AllowOnce
+ToolUp.AI AllowlistDenied
 ToolUp.AI AlwaysAsk
 ToolUp.AI AnswerVerified
 ToolUp.AI ApprovalNotRequired
+ToolUp.AI ApprovalRefused
 ToolUp.AI ApprovalRequired
 ToolUp.AI Approved
 ToolUp.AI ArgumentsRefused
@@ -664,11 +668,14 @@ ToolUp.AI ClientTimedOut
 ToolUp.AI ClientToolInvoke
 ToolUp.AI ClientToolUnregistered
 ToolUp.AI Completed
+ToolUp.AI ConsentRefused
 ToolUp.AI Decode
 ToolUp.AI Denied
 ToolUp.AI Deny
 ToolUp.AI DeriveFromCookie
 ToolUp.AI Dismissed
+ToolUp.AI FailClosed
+ToolUp.AI FailOpen
 ToolUp.AI Failed
 ToolUp.AI Faulted
 ToolUp.AI FieldNotInProfile
@@ -676,6 +683,8 @@ ToolUp.AI FullPage
 ToolUp.AI GateFailed
 ToolUp.AI GatePassed
 ToolUp.AI Grammar
+ToolUp.AI GrantGuard
+ToolUp.AI GrantNotLive
 ToolUp.AI InProgress
 ToolUp.AI InlineRows
 ToolUp.AI InlineRowsField
@@ -702,9 +711,12 @@ ToolUp.AI NumberVerified
 ToolUp.AI NumberWord
 ToolUp.AI Open
 ToolUp.AI Opened
+ToolUp.AI OutsideCeiling
 ToolUp.AI Pending
 ToolUp.AI PermissiveWithPlatformFallback
 ToolUp.AI PlatformOnly
+ToolUp.AI Policy
+ToolUp.AI PolicyDenial
 ToolUp.AI Produced
 ToolUp.AI Queued
 ToolUp.AI Refused
@@ -726,16 +738,21 @@ ToolUp.AI ToolCallCompleted
 ToolUp.AI ToolCallStarted
 ToolUp.AI TrustClient
 ToolUp.AI TrustEverything
+ToolUp.AI Unauthorized
 ToolUp.AI UnknownField
 ToolUp.AI UnknownKind
 ToolUp.AI UnknownNodeProperty
 ToolUp.AI UnknownProvider
 ToolUp.AI UnknownRequest
 ToolUp.AI UnknownTool
+ToolUp.AI Unqueryable
+ToolUp.AI Unreadable
+ToolUp.AI Unrecorded
 ToolUp.AI UnreferencedNumber
 ToolUp.AI UnverifiedTagged
 ToolUp.AI User
 ToolUp.AI ViaPrompt
+ToolUp.AI Window
 ToolUp.AI Withheld
 ToolUp.AI.AIAgentEngine CallBudgetExceeded
 ToolUp.AI.AIAgentEngine Cancelled
@@ -967,8 +984,6 @@ ToolUp.AI.McpHost ToolNotFound
 ToolUp.AI.McpHost Unauthorized
 ToolUp.AI.McpHost.McpCompose EnabledMcpHost
 ToolUp.AI.McpHost.McpCompose NoMcpHost
-ToolUp.AI.ToolApprovalDispatch ApprovalGranted
-ToolUp.AI.ToolApprovalDispatch ApprovalRefused
 ToolUp.Algorithms.AlgorithmOperations CentredAligned
 ToolUp.Algorithms.AlgorithmOperations CentredMean
 ToolUp.Algorithms.AlgorithmOperations DescriptiveOutcome
@@ -2030,6 +2045,7 @@ ToolUp.Platform BearerOrCookie
 ToolUp.Platform BearerTokenKind
 ToolUp.Platform BindingDecision
 ToolUp.Platform BindingOutcome
+ToolUp.Platform BindingRefusal
 ToolUp.Platform BindingResolutionFault
 ToolUp.Platform BindingRevocationList
 ToolUp.Platform BindingTransparencyLog
@@ -2056,6 +2072,9 @@ ToolUp.Platform BootVerificationReading
 ToolUp.Platform BootVerified
 ToolUp.Platform Bootstrap
 ToolUp.Platform Both
+ToolUp.Platform BoundParameter
+ToolUp.Platform BoundStatement
+ToolUp.Platform BoundValue
 ToolUp.Platform Bounded
 ToolUp.Platform BrandMarkLoader
 ToolUp.Platform Branding
@@ -2087,6 +2106,7 @@ ToolUp.Platform BuildToolchain
 ToolUp.Platform BuildTranscript
 ToolUp.Platform Building
 ToolUp.Platform BuiltIn
+ToolUp.Platform BuiltInView
 ToolUp.Platform BundleClaimQualifier
 ToolUp.Platform BundleConstants
 ToolUp.Platform BundleIntegrity
@@ -2183,14 +2203,12 @@ ToolUp.Platform CompositionVerificationRecorded
 ToolUp.Platform CompositionVerificationRecordedPayload
 ToolUp.Platform CompositionView
 ToolUp.Platform ComputeBudget
-ToolUp.Platform ComputeBudgetDenial
 ToolUp.Platform ComputeBudgetDenied
+ToolUp.Platform ComputeBudgetDeniedFigures
 ToolUp.Platform ComputeBudgetDeniedPayload
 ToolUp.Platform ComputeBudgetDimension
 ToolUp.Platform ComputeBudgetLimits
-ToolUp.Platform ComputeBudgetPeriod
 ToolUp.Platform ComputeBudgetPolicy
-ToolUp.Platform ComputeBudgetUsage
 ToolUp.Platform ComputeBudgetWarning
 ToolUp.Platform ComputeBudgetWarningPayload
 ToolUp.Platform ComputeFacts
@@ -2509,6 +2527,7 @@ ToolUp.Platform DualControlSignal
 ToolUp.Platform Duplicate
 ToolUp.Platform DuplicateAuditKind
 ToolUp.Platform DuplicateDomain
+ToolUp.Platform DuplicateName
 ToolUp.Platform DurationKnob
 ToolUp.Platform ES256
 ToolUp.Platform EU
@@ -2943,6 +2962,7 @@ ToolUp.Platform InteractiveSignIn
 ToolUp.Platform Internal
 ToolUp.Platform InvalidContainerSpec
 ToolUp.Platform InvalidCron
+ToolUp.Platform InvalidName
 ToolUp.Platform InvalidPage
 ToolUp.Platform InvalidQuery
 ToolUp.Platform InvalidRange
@@ -3120,6 +3140,7 @@ ToolUp.Platform MintedServiceAccountTokenView
 ToolUp.Platform Minute
 ToolUp.Platform MissingCapabilities
 ToolUp.Platform MissingCredential
+ToolUp.Platform MissingParameter
 ToolUp.Platform MissingPersistedField
 ToolUp.Platform MissingProvenance
 ToolUp.Platform MissingRequiredField
@@ -3460,6 +3481,7 @@ ToolUp.Platform PS256
 ToolUp.Platform PackSigned
 ToolUp.Platform PackUnsigned
 ToolUp.Platform PackWithheld
+ToolUp.Platform Page
 ToolUp.Platform PageConfig
 ToolUp.Platform PageContent
 ToolUp.Platform PageDetached
@@ -3471,6 +3493,7 @@ ToolUp.Platform PageSaved
 ToolUp.Platform PageSavedPayload
 ToolUp.Platform PageWriteRefused
 ToolUp.Platform PageWriteRefusedPayload
+ToolUp.Platform Pages
 ToolUp.Platform PanelPeriod
 ToolUp.Platform PanelUnit
 ToolUp.Platform PartialFailure
@@ -3730,6 +3753,7 @@ ToolUp.Platform RemotingMethodAuditedPayload
 ToolUp.Platform RemoveField
 ToolUp.Platform Removed
 ToolUp.Platform RenameField
+ToolUp.Platform RenderContext
 ToolUp.Platform RenderFault
 ToolUp.Platform RenderTimeExceeded
 ToolUp.Platform Rendered
@@ -4196,6 +4220,7 @@ ToolUp.Platform UnattestedReason
 ToolUp.Platform UnattributedProposer
 ToolUp.Platform Unavailable
 ToolUp.Platform UnbackedGrant
+ToolUp.Platform UnbindableKind
 ToolUp.Platform UnconsentedGrantRefused
 ToolUp.Platform UnconsentedGrantRefusedPayload
 ToolUp.Platform UndeclaredEffects
@@ -4224,6 +4249,7 @@ ToolUp.Platform UnrestrictedEgress
 ToolUp.Platform UnrestrictedSeams
 ToolUp.Platform UnsupportedSchemaVersion
 ToolUp.Platform UnsupportedSubject
+ToolUp.Platform UnusedParameter
 ToolUp.Platform Unversioned
 ToolUp.Platform UpdateExternalContactRequest
 ToolUp.Platform Upstream
@@ -6351,6 +6377,7 @@ ToolUp.Platform.Config.ConfigStore toRawMap
 ToolUp.Platform.Config.ConfigStore tryProjectExact
 ToolUp.Platform.Config.ConfigValidator BlobStorageValidator
 ToolUp.Platform.Config.ConfigValidator SecretStoreValidator
+ToolUp.Platform.Config.ConfigValidator create
 ToolUp.Platform.Config.ConfigValidator gatedAuthValidation
 ToolUp.Platform.Config.ConfigValidator secretStorePreflightTimeout
 ToolUp.Platform.Config.ConsoleLogger ConsoleLogger
@@ -6723,6 +6750,9 @@ ToolUp.Platform.Infra.BlobProviderProfile create
 ToolUp.Platform.Infra.BlobSnapshot read
 ToolUp.Platform.Infra.BlobStorage trySignedUrl
 ToolUp.Platform.Infra.BlobUserSchemaStore BlobUserSchemaStore
+ToolUp.Platform.Infra.BoundQuery run
+ToolUp.Platform.Infra.BoundQuery runNative
+ToolUp.Platform.Infra.BoundStatementError describe
 ToolUp.Platform.Infra.BudgetContention Dimension
 ToolUp.Platform.Infra.BudgetContention denial
 ToolUp.Platform.Infra.BudgetLedgerKey cacheKey
@@ -6763,7 +6793,6 @@ ToolUp.Platform.Infra.ComputeBudgetJson SchemaVersion
 ToolUp.Platform.Infra.ComputeBudgetJson deserialiseBudget
 ToolUp.Platform.Infra.ComputeBudgetJson deserialiseUsage
 ToolUp.Platform.Infra.ComputeBudgetJson serialiseBudget
-ToolUp.Platform.Infra.ComputeBudgetJson serialiseUsage
 ToolUp.Platform.Infra.ComputeBudgetLayout BlobPrefix
 ToolUp.Platform.Infra.ComputeBudgetLayout DefaultContainer
 ToolUp.Platform.Infra.ComputeBudgetLayout budgetBlob
@@ -6798,9 +6827,11 @@ ToolUp.Platform.Infra.ComputeMemoization defaultTtl
 ToolUp.Platform.Infra.ConditionalDataObjectStore deleteIfVersion
 ToolUp.Platform.Infra.ConditionalDataObjectStore isAtomic
 ToolUp.Platform.Infra.ConditionalDataObjectStore saveIfVersion
+ToolUp.Platform.Infra.ConnectorCapabilities binds
 ToolUp.Platform.Infra.ConnectorCapabilities declared
 ToolUp.Platform.Infra.ConnectorCapabilities declares
 ToolUp.Platform.Infra.ConnectorCapabilities native
+ToolUp.Platform.Infra.ConnectorCapabilities nativeBound
 ToolUp.Platform.Infra.ConnectorCapabilities none
 ToolUp.Platform.Infra.ConnectorCapabilities require
 ToolUp.Platform.Infra.ConnectorCapabilities watchable
@@ -7079,6 +7110,7 @@ ToolUp.Platform.Infra.IVectorStore Shared
 ToolUp.Platform.Infra.IVectorStore VectorIndexLocality
 ToolUp.Platform.Infra.IVectorStore eraseSubject
 ToolUp.Platform.Infra.IVectorStore upsertBatch
+ToolUp.Platform.Infra.InMemoryDataSource InMemoryBinding
 ToolUp.Platform.Infra.InMemoryDataSource InMemoryDataSource
 ToolUp.Platform.Infra.InMemoryDataSource create
 ToolUp.Platform.Infra.InMemoryEventStore InMemoryEventStore
@@ -7968,6 +8000,13 @@ ToolUp.Platform.Narrative.NarrativeHtml Eager
 ToolUp.Platform.Narrative.NarrativeHtml Lazy
 ToolUp.Platform.Narrative.NarrativeMarkdown Blockquote
 ToolUp.Platform.Narrative.NarrativeMarkdown Directive
+ToolUp.Platform.NoActiveTeamLandingUI CheckInvites
+ToolUp.Platform.NoActiveTeamLandingUI Checking
+ToolUp.Platform.NoActiveTeamLandingUI Failed
+ToolUp.Platform.NoActiveTeamLandingUI Idle
+ToolUp.Platform.NoActiveTeamLandingUI InvitesChecked
+ToolUp.Platform.NoActiveTeamLandingUI Joined
+ToolUp.Platform.NoActiveTeamLandingUI NothingPending
 ToolUp.Platform.Payments ActiveSubscription
 ToolUp.Platform.Payments Canceled
 ToolUp.Platform.Payments NoSubscription
