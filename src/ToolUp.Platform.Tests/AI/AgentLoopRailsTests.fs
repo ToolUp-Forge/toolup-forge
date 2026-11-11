@@ -625,7 +625,13 @@ let private assistantWith (storage: IBlobStorage) (provider: IAIProvider) (tools
     AccessContexts.stampScope ctx.Items (scope)
     AccessContexts.stampUserId ctx.Items ("alice")
     AccessContexts.stampPermissions ctx.Items []
-    AIAssistantHandler.aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx
+
+    AIAssistantHandler.aiAssistantApi
+        None
+        Map.empty
+        (new SSEConnectionManager())
+        (AIAssistantHandler.AITaskStatusRegistry())
+        ctx
 
 let private collectStream (stream: System.Collections.Generic.IAsyncEnumerable<AIStreamEvent>) = async {
     use cts = new CancellationTokenSource(TimeSpan.FromSeconds 10.0)

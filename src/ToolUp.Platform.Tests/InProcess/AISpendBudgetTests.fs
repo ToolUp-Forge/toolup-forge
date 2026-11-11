@@ -345,11 +345,9 @@ let private enforcerUnder (posture: BudgetPosture) (config: IConfigStore) (store
         config,
         store,
         rateCard,
-        AIBudgetEnforcer.AISpendWindowCache(30),
+        AIBudgetEnforcer.AISpendWindowCache(30, posture),
         AIBudgetEnforcer.spendEventStoreAccount store rateCard.Currency (fun () -> noon),
         ignore,
-        posture,
-        AIBudgetEnforcer.unreadableRecorder store,
         fun () -> noon
     )
 

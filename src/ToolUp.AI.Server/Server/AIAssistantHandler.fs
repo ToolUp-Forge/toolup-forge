@@ -166,8 +166,9 @@ type private TrackedTask = {
 }
 
 /// The per-process record of each chat task's latest status. `AICompose`
-/// registers one per composed server as a DI singleton, and the handler
-/// resolves it from the request's services.
+/// creates one per composed server, registers it as a DI singleton (the
+/// retention sweep resolves it there) and hands the same instance to the
+/// handler.
 type AITaskStatusRegistry(capacity: int, retention: TimeSpan) =
     let tasks = System.Collections.Concurrent.ConcurrentDictionary<Guid, TrackedTask>()
 
@@ -1171,6 +1172,7 @@ let aiAssistantApi
     (config: SystemPromptBuilder.AIAssistantServerConfig option)
     (moduleContexts: Map<string, ModuleAIContext>)
     (sseManager: SSEConnectionManager)
+    (taskRegistry: AITaskStatusRegistry)
     (ctx: HttpContext)
     : AIAssistantApi * AIStreamingApi =
     let providerFactory =
@@ -1247,14 +1249,6 @@ let aiAssistantApi
         match ctx.RequestServices.GetService(typeof<ConversationTitlingPolicy>) with
         | :? ConversationTitlingPolicy as p -> p
         | _ -> ConversationTitlingPolicy.firstMessage
-
-    // Where every task's latest status is recorded: the composed server's
-    // registry. A context composed without one tracks no task, and every
-    // status read answers as for an unknown id.
-    let taskRegistry =
-        match ctx.RequestServices.GetService(typeof<AITaskStatusRegistry>) with
-        | :? AITaskStatusRegistry as registry -> Some registry
-        | _ -> None
 
     let sha256OfText (text: string) : string =
         let bytes = System.Text.Encoding.UTF8.GetBytes text
@@ -1549,9 +1543,7 @@ let aiAssistantApi
     // with the stream without touching an emit site.
     let trackTaskStatus (sink: AIStreamEvent -> unit) (event: AIStreamEvent) =
         match event with
-        | TaskStatusChanged(taskId, status) ->
-            taskRegistry
-            |> Option.iter (fun registry -> registry.Transition(taskId, status, DateTime.UtcNow))
+        | TaskStatusChanged(taskId, status) -> taskRegistry.Transition(taskId, status, DateTime.UtcNow)
         | _ -> ()
 
         sink event
@@ -2121,8 +2113,7 @@ let aiAssistantApi
                     CompletedAt = None
                 }
 
-                taskRegistry
-                |> Option.iter (fun registry -> registry.Register(scope.Container, userId, task, task.CreatedAt))
+                taskRegistry.Register(scope.Container, userId, task, task.CreatedAt)
 
                 let! contribution = contributePrompt request
 
@@ -2235,11 +2226,7 @@ let aiAssistantApi
         // allows (the author always sees their own), so another member's
         // task is `None` under every level without consulting the policy.
         GetTaskStatus =
-            fun taskId -> async {
-                return
-                    taskRegistry
-                    |> Option.bind (fun registry -> registry.TryGet(scope.Container, userId, taskId, DateTime.UtcNow))
-            }
+            fun taskId -> async { return taskRegistry.TryGet(scope.Container, userId, taskId, DateTime.UtcNow) }
 
         DeleteConversation =
             fun conversationId -> async {
@@ -2264,8 +2251,7 @@ let aiAssistantApi
                         // The task-status registry holds each task's
                         // prompt; an erased conversation takes those
                         // entries with it.
-                        taskRegistry
-                        |> Option.iter (fun registry -> registry.ForgetConversation(scope.Container, conversationId))
+                        taskRegistry.ForgetConversation(scope.Container, conversationId)
 
                         return Ok()
                     | Error e -> return Error e

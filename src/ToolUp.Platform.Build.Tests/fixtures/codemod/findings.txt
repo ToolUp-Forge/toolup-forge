@@ -131,8 +131,8 @@ Codemod: 154 site(s) in 27 file(s) need human review (not rewritten):
       -> Phase 1081: a match over a compute budget's period is a match over `BudgetPeriod`, which has a fourth case, `Hourly`: give it an arm
     L32 [1081-read-policy] let policy = enforcer.ReadPolicy scopeId
       -> Phase 1081: if this is an `AIBudgetEnforcer` / `AISpendEnforcer`, `ReadPolicy` returns `Result<policy, string>`: a config-store failure is an `Error`, decided by the declared `BudgetPosture` (`AIOptions.withBudgetPosture`), never read as unbounded
-    L34 [1081-budget-panel] let panel = AITokenBudgetContributor(cache)
-      -> Phase 1081: the budget panels show the posture beside the cached figures: pass the deployment's `BudgetPosture` as the last argument
+    L34 [1081-assistant-api] let api = aiAssistantApi None Map.empty manager ctx
+      -> Phase 1081: `aiAssistantApi` takes the server's `AITaskStatusRegistry` after the SSE manager: `aiAssistantApi config contexts sseManager taskRegistry ctx` — pass the composed one, or one `AITaskStatusRegistry()` shared by the requests that must see each other's tasks
     L36 [1081-task-registry] let registry = AITaskStatusRegistry.Shared
       -> Phase 1081: `AITaskStatusRegistry.Shared` is gone: `AICompose` registers one registry per composed server; resolve it from DI (`services.GetService(typeof<AITaskStatusRegistry>)`), or register `AITaskStatusRegistry()` in a hand-built container
   src/Server/Config.fs

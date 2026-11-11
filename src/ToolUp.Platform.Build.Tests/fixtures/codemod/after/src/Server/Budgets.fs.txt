@@ -31,6 +31,6 @@ let window =
 
 let policy = enforcer.ReadPolicy scopeId
 
-let panel = AITokenBudgetContributor(cache)
+let api = aiAssistantApi None Map.empty manager ctx
 
 let registry = AITaskStatusRegistry.Shared

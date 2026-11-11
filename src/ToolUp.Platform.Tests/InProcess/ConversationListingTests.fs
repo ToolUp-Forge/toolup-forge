@@ -181,7 +181,6 @@ let private buildContext
     )
     |> ignore
 
-    services.AddSingleton<AITaskStatusRegistry>(taskRegistry) |> ignore
 
     titling
     |> Option.iter (fun p -> services.AddSingleton<ConversationTitlingPolicy>(p) |> ignore)
@@ -200,7 +199,7 @@ let private buildContext
 
 let private apiFor (ctx: HttpContext) : AIAssistantApi =
     let manager = new SSEConnectionManager()
-    fst (aiAssistantApi None Map.empty manager ctx)
+    fst (aiAssistantApi None Map.empty manager taskRegistry ctx)
 
 /// Poll `GetTaskStatus` until the task is terminal — bounded, so a hang
 /// fails the test instead of the run.

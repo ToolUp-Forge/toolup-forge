@@ -374,12 +374,16 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
 
     let aiHandlers =
         [
-            makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> fst)
+            makeApi (fun ctx ->
+                aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) taskStatusRegistry ctx
+                |> fst)
             // The typed streaming companion (StreamChatV2).
             // Same per-request closure; the dispatcher auto-frames its
             // IAsyncEnumerable<AIStreamEvent> method as SSE. Legacy
             // SubmitMessage + /api/ai/events (below) stay mounted unchanged.
-            makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> snd)
+            makeApi (fun ctx ->
+                aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) taskStatusRegistry ctx
+                |> snd)
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
             // The active team's conversation visibility level.
             makeApi TeamConversationPolicyStore.teamConversationVisibilityApi
@@ -443,13 +447,14 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
         // header on the rule-4 split).
         let s =
             if DeploymentConfig.hasTeamScope config then
-                let budgetCache = AIBudgetEnforcer.AIBudgetWindowCache()
+                let budgetCache =
+                    AIBudgetEnforcer.AIBudgetWindowCache(AIBudgetEnforcer.WindowCacheTtlSeconds, options.BudgetPosture)
+
 
                 s
                     .AddSingleton<AIBudgetEnforcer.AIBudgetWindowCache>(budgetCache)
                     .AddSingleton<IDevDiagnosticsContributor>(
-                        AIBudgetEnforcer.AITokenBudgetContributor(budgetCache, options.BudgetPosture)
-                        :> IDevDiagnosticsContributor
+                        AIBudgetEnforcer.AITokenBudgetContributor(budgetCache) :> IDevDiagnosticsContributor
                     )
             else
                 s
@@ -474,7 +479,8 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
         // exactly that.
         let s =
             s
-                .AddSingleton<AIBudgetEnforcer.AISpendWindowCache>()
+                .AddSingleton<AIBudgetEnforcer.AISpendWindowCache>(fun (_: System.IServiceProvider) ->
+                    AIBudgetEnforcer.AISpendWindowCache(AIBudgetEnforcer.WindowCacheTtlSeconds, options.BudgetPosture))
                 .AddSingleton<IDevDiagnosticsContributor>(fun (sp: System.IServiceProvider) ->
                     let table =
                         match sp.GetService(typeof<ModelPriceTable>) with
@@ -484,8 +490,7 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
                     AIBudgetEnforcer.AISpendBudgetContributor(
                         sp.GetService(typeof<AIBudgetEnforcer.AISpendWindowCache>)
                         :?> AIBudgetEnforcer.AISpendWindowCache,
-                        table,
-                        options.BudgetPosture
+                        table
                     )
                     :> IDevDiagnosticsContributor)
 
@@ -571,9 +576,6 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
                 // read as the default anyway, so registering it always is
                 // what makes `TrustEverything` actually reachable.
                 .AddSingleton<AIConsentMode>(options.ConsentMode)
-                // The budgets' declared posture, read where
-                // `wrapFactoryForDI` builds the enforcers.
-                .AddSingleton<BudgetPosture>(options.BudgetPosture)
                 .AddSingleton<AICancellationRegistry.AICancellationRegistry>(cancellationRegistry)
                 .AddSingleton<AITaskStatusRegistry>(taskStatusRegistry)
                 // The services an agent turn reads, resolved once per turn

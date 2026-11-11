@@ -312,10 +312,8 @@ let private enforcerUnder (posture: BudgetPosture) (config: IConfigStore) (store
     AIBudgetEnforcer.AIBudgetEnforcer(
         config,
         store,
-        AIBudgetEnforcer.AIBudgetWindowCache(30),
+        AIBudgetEnforcer.AIBudgetWindowCache(30, posture),
         AIBudgetEnforcer.eventStoreAccount store (fun () -> noon),
-        posture,
-        AIBudgetEnforcer.unreadableRecorder store,
         fun () -> noon
     )
 
@@ -528,7 +526,7 @@ let tests =
 
             enforcer.Check(scopeId, alice, 10M) |> Async.RunSynchronously |> ignore
 
-            let panel = AIBudgetEnforcer.AITokenBudgetContributor(cache, BudgetPosture.FailOpen)
+            let panel = AIBudgetEnforcer.AITokenBudgetContributor(cache)
 
             let name, _payload =
                 (panel :> IDevDiagnosticsContributor).Contribute() |> Async.RunSynchronously
@@ -756,9 +754,7 @@ let tests =
 
             let panel () =
                 let _, payload =
-                    (AIBudgetEnforcer.AITokenBudgetContributor(cache, BudgetPosture.FailOpen)
-                    :> IDevDiagnosticsContributor)
-                        .Contribute()
+                    (AIBudgetEnforcer.AITokenBudgetContributor(cache) :> IDevDiagnosticsContributor).Contribute()
                     |> Async.RunSynchronously
 
                 (JsonDocument.Parse(JsonSerializer.Serialize(payload, jsonOptions))).RootElement

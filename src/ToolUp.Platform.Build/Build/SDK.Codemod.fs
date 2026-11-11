@@ -133,7 +133,7 @@ type CodemodMigration =
     /// One budget vocabulary: the compute budget's period, denial and usage
     /// twins and their four adapters are the seam's `BudgetPeriod`,
     /// `BudgetDenial` and `BudgetUsage`; the AI budgets declare a
-    /// `BudgetPosture`, and `AITaskStatusRegistry.Shared` is a DI singleton.
+    /// `BudgetPosture`, and the task-status registry is a DI singleton.
     | OneBudgetVocabulary
 
 /// Helpers over `CodemodMigration`.
@@ -2291,11 +2291,11 @@ module Codemod =
             @"\.ReadPolicy\b"
             "if this is an `AIBudgetEnforcer` / `AISpendEnforcer`, `ReadPolicy` returns `Result<policy, string>`: a config-store failure is an `Error`, decided by the declared `BudgetPosture` (`AIOptions.withBudgetPosture`), never read as unbounded"
         review
-            "1081-budget-panel"
+            "1081-assistant-api"
             CodemodMigration.OneBudgetVocabulary
             CodemodFileClass.Source
-            @"\b(?:AITokenBudgetContributor|AISpendBudgetContributor)\s*\("
-            "the budget panels show the posture beside the cached figures: pass the deployment's `BudgetPosture` as the last argument"
+            @"\baiAssistantApi\b"
+            "`aiAssistantApi` takes the server's `AITaskStatusRegistry` after the SSE manager: `aiAssistantApi config contexts sseManager taskRegistry ctx` — pass the composed one, or one `AITaskStatusRegistry()` shared by the requests that must see each other's tasks"
         review
             "1081-task-registry"
             CodemodMigration.OneBudgetVocabulary

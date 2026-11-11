@@ -82,16 +82,24 @@ type AIBudgetWindowEntry = {
 /// ledger relies on. Stale entries for elapsed hours are swept on
 /// write rather than by a timer, so the cache holds nothing a
 /// deployment is not still asking about.
-type AIBudgetWindowCache(ttlSeconds: int) =
+type AIBudgetWindowCache(ttlSeconds: int, posture: BudgetPosture) =
     let entries =
         ConcurrentDictionary<struct (string * string * string), AIBudgetWindowEntry>()
 
     let mutable lastUnreadable: DateTime option = None
 
-    /// The default TTL (`WindowCacheTtlSeconds`).
-    new() = AIBudgetWindowCache(WindowCacheTtlSeconds)
+    /// The default posture, `FailOpen`.
+    new(ttlSeconds: int) = AIBudgetWindowCache(ttlSeconds, BudgetPosture.FailOpen)
+
+    /// The default TTL (`WindowCacheTtlSeconds`) and posture.
+    new() = AIBudgetWindowCache(WindowCacheTtlSeconds, BudgetPosture.FailOpen)
 
     member _.TtlSeconds = ttlSeconds
+
+    /// The deployment's declared `BudgetPosture`. The cache is the one
+    /// per-deployment singleton the enforcer (built per resolution) and the
+    /// diagnostics panel share, so the posture rides it.
+    member _.Posture = posture
 
     /// The cached sum for this window, if one was computed within the
     /// TTL. `None` on a miss, on an expired entry, and always when
@@ -258,26 +266,8 @@ type AIBudgetEnforcer
         eventStore: IEventStore,
         cache: AIBudgetWindowCache,
         account: BudgetAccount,
-        posture: BudgetPosture,
-        recordUnreadable: BudgetWindowUnreadable -> Async<unit>,
         now: unit -> DateTime
     ) =
-
-    /// The default posture, `FailOpen`, recording unreadable reads in
-    /// `eventStore`.
-    new(configStore, eventStore, cache, account, now) =
-        AIBudgetEnforcer(
-            configStore,
-            eventStore,
-            cache,
-            account,
-            BudgetPosture.FailOpen,
-            unreadableRecorder eventStore,
-            now
-        )
-
-    /// The posture this enforcer applies when a read fails.
-    member _.Posture = posture
 
     /// The live window cache — the `/dev/inspect` contributor's read.
     member _.Cache = cache
@@ -322,14 +312,14 @@ type AIBudgetEnforcer
                     UserId = UserId userId
                     Domain = AITokenBudgetPolicy.Domain
                     Read = read
-                    Posture = posture
+                    Posture = cache.Posture
                     Reason = reason
                 }
 
                 cache.MarkUnreadable at
-                do! recordUnreadable record
+                do! unreadableRecorder eventStore record
 
-                match posture with
+                match cache.Posture with
                 | BudgetPosture.FailOpen -> return BudgetVerdict.Allowed
                 | BudgetPosture.FailClosed ->
                     let periodKey = BudgetPeriod.key AITokenBudgetPolicy.perUserPeriod at
@@ -387,7 +377,7 @@ type AIBudgetEnforcer
 /// of users to enumerate, and inventing one would be the load-bearing
 /// state rule 4 forbids. Side-effect-free and O(live windows) — no
 /// I/O, so it cannot slow the endpoint down.
-type AITokenBudgetContributor(cache: AIBudgetWindowCache, posture: BudgetPosture) =
+type AITokenBudgetContributor(cache: AIBudgetWindowCache) =
 
     interface IDevDiagnosticsContributor with
 
@@ -401,7 +391,7 @@ type AITokenBudgetContributor(cache: AIBudgetWindowCache, posture: BudgetPosture
                 // An unreadable policy or window admits (fail-open) or
                 // refuses (fail-closed); either way it is not "unbounded",
                 // and these two say which happened and when.
-                posture = BudgetPosture.label posture
+                posture = BudgetPosture.label cache.Posture
                 lastUnreadableAt = cache.LastUnreadableAt
                 cacheTtlSeconds = cache.TtlSeconds
                 liveWindows = List.length entries
@@ -417,7 +407,7 @@ type AITokenBudgetContributor(cache: AIBudgetWindowCache, posture: BudgetPosture
                         periodKey = e.PeriodKey
                         usedTokens = e.UsedTokens
                         capAtLastSum = e.CapAtLastSum
-                        posture = BudgetPosture.label posture
+                        posture = BudgetPosture.label cache.Posture
                         lastUnreadableAt = cache.LastUnreadableAt
                         computedAt = e.ComputedAt
                     |})
@@ -665,7 +655,7 @@ type AISpendWindowEntry = {
 /// every verdict is still computed from the event store. The policy is
 /// never cached, so lowering a ceiling mid-window is respected by the
 /// very next request.
-type AISpendWindowCache(ttlSeconds: int) =
+type AISpendWindowCache(ttlSeconds: int, posture: BudgetPosture) =
     let entries = ConcurrentDictionary<struct (string * string), AISpendWindowEntry>()
     let unpriced = ConcurrentDictionary<string, unit>()
     let mutable lastUnreadable: DateTime option = None
@@ -673,9 +663,17 @@ type AISpendWindowCache(ttlSeconds: int) =
     /// The default TTL (`WindowCacheTtlSeconds`, shared with the per-user token budget —
     /// the two caches accelerate scans of the same stream and a
     /// different staleness budget for each would be arbitrary).
-    new() = AISpendWindowCache(WindowCacheTtlSeconds)
+    new() = AISpendWindowCache(WindowCacheTtlSeconds, BudgetPosture.FailOpen)
+
+    /// The default posture, `FailOpen`.
+    new(ttlSeconds: int) = AISpendWindowCache(ttlSeconds, BudgetPosture.FailOpen)
 
     member _.TtlSeconds = ttlSeconds
+
+    /// The deployment's declared `BudgetPosture`. The cache is the one
+    /// per-deployment singleton the enforcer (built per resolution) and the
+    /// diagnostics panel share, so the posture rides it.
+    member _.Posture = posture
 
     /// The cached sums for these windows, if computed within the TTL
     /// and still covering BOTH period keys. `None` on a miss, an
@@ -897,28 +895,8 @@ type AISpendEnforcer
         cache: AISpendWindowCache,
         accountOf: AISpendBudgetPolicy -> BudgetAccount,
         warn: string -> unit,
-        posture: BudgetPosture,
-        recordUnreadable: BudgetWindowUnreadable -> Async<unit>,
         now: unit -> DateTime
     ) =
-
-    /// The default posture, `FailOpen`, recording unreadable reads in
-    /// `eventStore`.
-    new(configStore, eventStore, priceTable, cache, accountOf, warn, now) =
-        AISpendEnforcer(
-            configStore,
-            eventStore,
-            priceTable,
-            cache,
-            accountOf,
-            warn,
-            BudgetPosture.FailOpen,
-            unreadableRecorder eventStore,
-            now
-        )
-
-    /// The posture this enforcer applies when a read fails.
-    member _.Posture = posture
 
     /// The live window cache — the `/dev/inspect` contributor's read.
     member _.Cache = cache
@@ -965,14 +943,14 @@ type AISpendEnforcer
                     UserId = UserId caller
                     Domain = AISpendBudgetPolicy.Domain
                     Read = read
-                    Posture = posture
+                    Posture = cache.Posture
                     Reason = reason
                 }
 
                 cache.MarkUnreadable at
-                do! recordUnreadable record
+                do! unreadableRecorder eventStore record
 
-                match posture with
+                match cache.Posture with
                 | BudgetPosture.FailOpen -> return BudgetVerdict.Allowed
                 | BudgetPosture.FailClosed ->
                     let periodKey = BudgetPeriod.key AISpendBudgetPolicy.defaultPeriod at
@@ -1150,7 +1128,7 @@ type AISpendEnforcer
 /// enforcer is built per DI resolution inside `wrapFactoryForDI` and is
 /// not a service anything can resolve, and an absent rate card is the
 /// state an operator most wants this panel to report.
-type AISpendBudgetContributor(cache: AISpendWindowCache, priceTable: ModelPriceTable option, posture: BudgetPosture) =
+type AISpendBudgetContributor(cache: AISpendWindowCache, priceTable: ModelPriceTable option) =
 
     interface IDevDiagnosticsContributor with
 
@@ -1167,7 +1145,7 @@ type AISpendBudgetContributor(cache: AISpendWindowCache, priceTable: ModelPriceT
                 currency = priceTable |> Option.map _.Currency |> Option.defaultValue ""
                 pricedModels = priceTable |> Option.map (_.Rates >> Map.count) |> Option.defaultValue 0
                 unpricedModelsSeen = cache.UnpricedKeys
-                posture = BudgetPosture.label posture
+                posture = BudgetPosture.label cache.Posture
                 lastUnreadableAt = cache.LastUnreadableAt
                 cacheTtlSeconds = cache.TtlSeconds
                 liveWindows = List.length entries

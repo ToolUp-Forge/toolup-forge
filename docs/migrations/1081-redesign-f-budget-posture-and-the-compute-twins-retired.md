@@ -24,24 +24,24 @@ type BudgetPosture =
   `BudgetWindowUnreadable.SourceModule` (`_platform.ai.budget_unreadable`) per failed check, whichever posture is in
   force. It names the scope, the caller, the budget's domain, the read that failed and the posture that decided.
 - **The `/dev/inspect` panels** show the posture and the last unreadable time beside the cached figures.
-  `AITokenBudgetContributor` and `AISpendBudgetContributor` take the posture as their last argument.
 - **`ReadPolicy` returns a `Result`.** `AIBudgetEnforcer.ReadPolicy` and `AISpendEnforcer.ReadPolicy` answer
   `Async<Result<policy, string>>`; a config-store failure is an `Error`, never the unbounded policy.
-- **The enforcers' constructors.** The primary constructors take the posture and the recorder
-  (`AIBudgetEnforcer.unreadableRecorder eventStore`) before `now`; the constructors with the old parameter list remain
-  and mean `FailOpen` over the given event store.
+- **The posture rides the window caches.** `AIBudgetWindowCache(ttlSeconds, posture)` and
+  `AISpendWindowCache(ttlSeconds, posture)` carry it (the one-argument and no-argument constructors mean `FailOpen`),
+  because the cache is the per-deployment singleton the enforcer and the panel share. The enforcers' constructors are
+  unchanged, and they record through `AIBudgetEnforcer.unreadableRecorder` over the event store they are given.
 
 ## `AITaskStatusRegistry.Shared` is gone
 
-`AICompose` registers one `AITaskStatusRegistry` per composed server as a DI singleton (the other four AI registries
-already were), and the assistant handler resolves it from the request's services. Two servers composed in one process
+`AICompose` creates one `AITaskStatusRegistry` per composed server, registers it as a DI singleton (the other four AI
+registries already were) and hands the same instance to the assistant handler. Two servers composed in one process
 keep two registries.
 
 - **A consumer that read `AITaskStatusRegistry.Shared`** resolves it from DI:
   `services.GetService(typeof<AITaskStatusRegistry>) :?> AITaskStatusRegistry`.
-- **A hand-built test container** that drives a chat turn and polls `GetTaskStatus` registers one:
-  `services.AddSingleton<AITaskStatusRegistry>(AITaskStatusRegistry())`. A container without one tracks no task, and
-  every status read answers as for an unknown id.
+- **`aiAssistantApi` takes the registry** after the SSE manager:
+  `aiAssistantApi config contexts sseManager taskRegistry ctx`. A test that stands the handler up by hand passes one
+  (`AITaskStatusRegistry()`), shared across the requests that must see each other's tasks.
 - `AITaskStatusRegistry()` is the default bounds (10 000 tasks, terminal ones kept an hour); the two-argument
   constructor is unchanged.
 

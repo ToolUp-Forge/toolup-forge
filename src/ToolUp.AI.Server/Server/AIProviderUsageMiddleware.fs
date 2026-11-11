@@ -836,13 +836,6 @@ let wrapFactoryForDI
         // cannot read its policy would refuse everything or allow
         // everything, and the honest form of "I cannot enforce this" is
         // not to compose the enforcement.
-        // The posture `AICompose` registered; a composition that did not
-        // declare one gets the default.
-        let posture =
-            match sp.GetService(typeof<BudgetPosture>) with
-            | :? BudgetPosture as declared -> declared
-            | _ -> BudgetPosture.FailOpen
-
         let tokenBudgetGated =
             match
                 sp.GetService(typeof<AIBudgetEnforcer.AIBudgetWindowCache>),
@@ -858,8 +851,6 @@ let wrapFactoryForDI
                         eventStore,
                         cache,
                         AIBudgetEnforcer.eventStoreAccount eventStore (fun () -> DateTime.UtcNow),
-                        posture,
-                        AIBudgetEnforcer.unreadableRecorder eventStore,
                         fun () -> DateTime.UtcNow
                     )
 
@@ -912,8 +903,6 @@ let wrapFactoryForDI
                     spendCache,
                     AIBudgetEnforcer.spendEventStoreAccount eventStore table.Currency (fun () -> DateTime.UtcNow),
                     warn,
-                    posture,
-                    AIBudgetEnforcer.unreadableRecorder eventStore,
                     fun () -> DateTime.UtcNow
                 )
 
