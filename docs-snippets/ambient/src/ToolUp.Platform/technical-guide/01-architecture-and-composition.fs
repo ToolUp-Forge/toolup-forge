@@ -21,6 +21,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes
 open ToolUp.Platform.Providers
+open ToolUp.Platform.Scope
 open ToolUp.Platform.Scope.PermissionStore
 open ToolUp.Platform.Config.FlagEvaluator
 open ToolUp.Platform.Scope.StorageScopeResolver
