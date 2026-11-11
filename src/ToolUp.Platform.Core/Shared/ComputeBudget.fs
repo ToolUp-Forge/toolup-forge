@@ -5,10 +5,10 @@ namespace ToolUp.Platform
 
 open System
 
-// ─── Phase 451 — compute-budget governance ───────────────────────────────
+// ─── Compute-budget governance ───────────────────────────────
 //
-// Phase 318 gave the platform a portable way to hand work to compute that
-// is not this process, and Phase 449 gave it a way to enqueue a long fit.
+// The platform has a portable way to hand work to compute that is not
+// this process, and a way to enqueue a long fit.
 // Neither of them can say **no**. A submission is accepted because it is
 // well-formed, and a deployment whose work costs real money on a metered
 // backend has, until this phase, exactly one lever: hope.
@@ -23,7 +23,7 @@ open System
 // projection to `ExternalComputeError` lives Server-side rather than
 // here.** `ExternalWorkSpec` carries a `SubmitterClass`, so this file has
 // to precede it, and precedence cannot be mutual. Projecting a denial onto
-// the Phase 318 error shape is a decorator concern anyway — a Fable client
+// the error shape is a decorator concern anyway — a Fable client
 // receives the typed `BudgetDenial`, never the lossy string form —
 // so the split costs nothing and the helper sits with its one caller
 // (`ComputeBudgetGuard.toComputeError`).
@@ -40,7 +40,7 @@ open System
 // operator cannot reconcile.
 //
 // **Zero is unrestricted, everywhere.** Every numeric ceiling reads "no
-// limit" at `<= 0`, matching the Phase 9d quota fields an operator already
+// limit" at `<= 0`, matching the quota fields an operator already
 // knows (`MaxConcurrentJobs` / `MaxAITokensPerDay` default to `0` = no
 // ceiling). It also makes the *absent* budget and the *empty* budget the
 // same value, so a scope with no configuration is unrestricted by
@@ -54,7 +54,7 @@ open System
 // learning what an "agent exploration" is — which it must not, because the
 // distinction is a domain one and the substrate is not.
 
-/// Phase 451 — who (or what) asked for this unit of work.
+/// Who (or what) asked for this unit of work.
 ///
 /// A **closed** vocabulary, deliberately: policy keyed on an open string
 /// would let a submitter mint a class nobody wrote a limit for and be
@@ -70,7 +70,7 @@ open System
 [<RequireQualifiedAccess>]
 type SubmitterClass =
     /// An interactive request a person is waiting on. The most permissive
-    /// class by convention, and the default every pre-451 call site gets
+    /// class by convention, and the default every call site that declares no class gets
     /// (GP 11) — an existing deployment's submissions do not silently
     /// become agent traffic.
     | Human
@@ -130,7 +130,7 @@ module SubmitterClass =
     let ofLabelOrHuman (raw: string) : SubmitterClass =
         parse raw |> Option.defaultValue SubmitterClass.Human
 
-/// Phase 451 — one set of ceilings. The three dimensions the interface
+/// One set of ceilings. The three dimensions the interface
 /// plan named, and no more.
 ///
 /// Each is independently disableable at `<= 0` / `None`, so a deployment
@@ -196,7 +196,7 @@ module ComputeBudgetLimits =
             MaxRunDuration = Some longest
     }
 
-/// Phase 451 — one scope's whole budget: a period, a default set of
+/// One scope's whole budget: a period, a default set of
 /// ceilings, and per-submitter-class overrides.
 ///
 /// **An override REPLACES the default rather than layering on it.** A
@@ -222,12 +222,12 @@ type ComputeBudget = {
 
 [<RequireQualifiedAccess>]
 module ComputeBudget =
-    /// Phase 689 — this budget family's stable label in the platform
+    /// This budget family's stable label in the platform
     /// budget seam. Namespaces the ledger key, the blob prefix and the
     /// refusal, so a deployment running compute budgets alongside a token
     /// or spend budget can never have one read the other's consumption.
     ///
-    /// It is the string Phase 451 already used as its blob prefix, which
+    /// It is the string the compute budget already used as its blob prefix, which
     /// is what makes adopting the shared ledger a re-expression rather
     /// than a data migration.
     [<Literal>]
@@ -274,7 +274,7 @@ module ComputeBudget =
         && budget.ClassLimits
            |> Map.forall (fun _ l -> ComputeBudgetLimits.isUnrestricted l)
 
-/// Phase 451 — which ceiling a refusal hit. Enumerable data (interface plan
+/// Which ceiling a refusal hit. Enumerable data (interface plan
 /// decision D6), so a client branches on the dimension rather than
 /// string-matching a message.
 [<RequireQualifiedAccess>]
@@ -295,7 +295,7 @@ module ComputeBudgetDimension =
         | ComputeBudgetDimension.RunDuration -> "run-duration"
         | ComputeBudgetDimension.PeriodAllowance -> "period-allowance"
 
-/// Phase 451 — the admission decision, as a pure function.
+/// The admission decision, as a pure function.
 ///
 /// Separated from the store on purpose: the interesting part of a budget
 /// is the policy, and a policy expressed as a total function over
@@ -303,8 +303,7 @@ module ComputeBudgetDimension =
 /// a clock, or a container. The store's job is only to make the read and
 /// the reservation atomic.
 ///
-/// **Phase 689 — the decision itself now runs on the platform budget
-/// seam.** `claims` projects this domain's three ceilings onto
+/// **The decision runs on the platform budget seam.** `claims` projects this domain's three ceilings onto
 /// `BudgetClaim`s and `admit` is `BudgetPolicy.check` over them. The three
 /// dimensions look unrelated and are all `Spent + Requested > Ceiling`
 /// (see `Budget.fs`), so the projection is total and the behaviour is
@@ -317,7 +316,7 @@ module ComputeBudgetPolicy =
     /// Seconds of a `TimeSpan`, as the `decimal` a denial reports.
     let private seconds (span: TimeSpan) : decimal = decimal span.TotalSeconds
 
-    /// Phase 689 — this submission's ceilings as seam claims, in check
+    /// This submission's ceilings as seam claims, in check
     /// order.
     ///
     /// **Order is concurrency → duration → allowance, cheapest and

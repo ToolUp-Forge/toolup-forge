@@ -13,7 +13,7 @@ open System.Threading
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Infra
 
-// ─── Phase 451 — the blob-backed compute-budget store ────────────────────
+// ─── The blob-backed compute-budget store ────────────────────
 //
 // The default `IComputeBudgetStore`: budgets and usage rows as JSON blobs
 // under the reserved `_platform` container, keyed by scope and — for usage
@@ -63,7 +63,7 @@ open ToolUp.Platform.Infra
 // zero row rather than an exception out of an admission check, and the
 // on-disk shape is one an operator can read and edit.
 
-/// Phase 451 — JSON codec for the two stored shapes. Separated from the
+/// JSON codec for the two stored shapes. Separated from the
 /// store so a test can pin the wire form without a blob backend, and so a
 /// future admin surface writes exactly what the store reads.
 [<RequireQualifiedAccess>]
@@ -172,7 +172,7 @@ module ComputeBudgetJson =
     let deserialiseUsage (scopeId: string) (periodKey: string) (bytes: byte[]) : BudgetUsage option =
         BudgetUsageJson.deserialise (ComputeBudgetLayout.ledgerKey scopeId periodKey) bytes
 
-/// Phase 451 — the blob-backed `IComputeBudgetStore` registered when
+/// The blob-backed `IComputeBudgetStore` registered when
 /// `ServerConfig.ComputeBudget = FeatureMode.Enabled`.
 ///
 /// `blobs` is the composed `IBlobStorage`; when it also implements
@@ -189,7 +189,7 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
         | Some log -> log.Warn message
         | None -> ()
 
-    /// Phase 689 — the consumption half, on the shared ledger.
+    /// The consumption half, on the shared ledger.
     ///
     /// Every property this store's header described — the per-key
     /// semaphore, the ETag CAS with bounded retries, the fail-open read,
@@ -275,7 +275,7 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
             // settling means.
             ledger.Release(ComputeBudgetLayout.ledgerKey scopeId periodKey, costAdjustment)
 
-/// Phase 451 — an in-process `IComputeBudgetStore` for tests and
+/// An in-process `IComputeBudgetStore` for tests and
 /// single-node development.
 ///
 /// Genuinely atomic (one lock over a dictionary) and genuinely
@@ -285,7 +285,7 @@ type BlobComputeBudgetStore(blobs: IBlobStorage, ?logger: ILogger, ?container: s
 type InMemoryComputeBudgetStore(?clock: unit -> DateTime) =
     let budgets = ConcurrentDictionary<string, ComputeBudget>()
 
-    /// Phase 689 — the consumption half, on the shared in-memory ledger.
+    /// The consumption half, on the shared in-memory ledger.
     let ledger = InMemoryBudgetLedger(?clock = clock) :> IBudgetLedger
 
     interface IComputeBudgetStore with

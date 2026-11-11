@@ -9,7 +9,7 @@ open System
 open System.Collections.Concurrent
 open ToolUp.Platform.Usage
 
-// ─── Phase 451 — enforcing the budget ────────────────────────────────────
+// ─── Enforcing the budget ────────────────────────────────────
 //
 // Two enforcement points, one guard. `ComputeBudgetGuard` owns the whole
 // admit → audit → settle → meter cycle; `BudgetedComputeDispatcher` is a
@@ -30,19 +30,19 @@ open ToolUp.Platform.Usage
 // **A refusal never reaches the inner dispatcher.** The decorator decides
 // on the spec and, when the answer is no, does not touch `inner` — the
 // payload never leaves this process and no backend is asked to start work
-// the deployment cannot pay for. Same shape as Phase 478's profile gate,
+// the deployment cannot pay for. Same shape as the profile gate,
 // and for the same reason: a check performed after the backend accepted
 // the work is a check on something that has already left.
 //
 // **Composition order: memo OUTSIDE budget** —
-// `MemoizedComputeDispatcher(BudgetedComputeDispatcher(backend))`. Phase
-// 485 specified this before this phase existed, and it is load-bearing: a
+// `MemoizedComputeDispatcher(BudgetedComputeDispatcher(backend))`. This
+// is load-bearing: a
 // memo hit returns before the inner dispatcher is consulted at all, so it
 // spends no allowance and holds no concurrency slot. The reverse order
 // charges for every cache hit, which is the feature not working.
 //
 // **This decorator declares `BackendCapabilities.none`, and must claim no
-// posture.** It is not a backend and has no posture of its own; Phase 485's
+// posture.** It is not a backend and has no posture of its own; the profile gate's
 // header sets out why re-declaring the inner posture is wrong in both
 // directions. Claiming nothing is the honest reading.
 //
@@ -54,9 +54,9 @@ open ToolUp.Platform.Usage
 // the period rolls. Failing by holding a slot refuses work; it never
 // admits work it should have refused, which is the only direction this may
 // fail in. Making it durable would mean a blob write per submission and a
-// blob read per poll on a path Phase 485 deliberately kept free of both.
+// blob read per poll on a path the profile gate deliberately keeps free of both.
 
-/// Phase 451 — how a deployment converts one run into abstract cost units.
+/// How a deployment converts one run into abstract cost units.
 ///
 /// **A record of functions, not an interface** (GP 12 rule 3 — behaviour
 /// as data). A cost model is deployment policy that changes with a
@@ -133,7 +133,7 @@ module ComputeCostModel =
             Settle = fun hints _ -> read hints
         }
 
-/// Phase 451 — a reservation held against one admitted run, so its
+/// A reservation held against one admitted run, so its
 /// terminal outcome can release the right slot in the right period.
 type ComputeBudgetReservation = {
     ScopeId: string
@@ -150,7 +150,7 @@ type ComputeBudgetReservation = {
     AdmittedAt: DateTime
 }
 
-/// Phase 451 — the enforcement points' shared vocabulary for *which*
+/// The enforcement points' shared vocabulary for *which*
 /// surface refused, recorded on every audit row.
 [<RequireQualifiedAccess>]
 module ComputeBudgetSurface =
@@ -163,12 +163,12 @@ module ComputeBudgetSurface =
     [<Literal>]
     let ModelFitEnqueue = "model-fit-enqueue"
 
-/// Phase 451 — the admit → audit → settle → meter cycle, shared by both
+/// The admit → audit → settle → meter cycle, shared by both
 /// enforcement points so they cannot drift.
 ///
 /// `audit` is optional but effectively expected: a refusal nobody can see
 /// afterwards is a support ticket with no answer (GP 6). `meter` is the
-/// Phase 9d integration, supplied as `IUsageLog.Record` by composition —
+/// The team quota integration, supplied as `IUsageLog.Record` by composition —
 /// a function rather than the interface so this file does not have to
 /// compile after `IUsageLog.fs`, and so a deployment can meter somewhere
 /// else without implementing a store.
@@ -191,7 +191,7 @@ type ComputeBudgetGuard
     /// Fraction of the period allowance at which an admitted submission
     /// emits `ComputeBudgetWarning`. 0.8 — late enough not to cry wolf,
     /// early enough that an operator raising a budget still has a fifth
-    /// of it to do so in. Phase 689: the seam's default, so every budget
+    /// of it to do so in. The budget seam: the seam's default, so every budget
     /// domain warns at the same point unless a deployment says otherwise.
     let warnThreshold = defaultArg warnThreshold BudgetPolicy.defaultWarnThreshold
 
@@ -204,8 +204,8 @@ type ComputeBudgetGuard
     }
 
     /// Scopes already warned in a given period, so the crossing is
-    /// reported once rather than on every subsequent submission. Phase
-    /// 689: the seam's latch, keyed by the whole ledger key, so it
+    /// reported once rather than on every subsequent submission.
+    /// The seam's latch, keyed by the whole ledger key, so it
     /// self-expires when the period rolls (the new period is a key that
     /// has never been latched).
     let warned = BudgetWarningLatch()
@@ -275,7 +275,7 @@ type ComputeBudgetGuard
                 let decide (usage: BudgetUsage) =
                     ComputeBudgetPolicy.admit scopeId submitter limits usage declaredDuration cost
 
-                // Phase 689 — the two accounting effects as data
+                // The two accounting effects as data
                 // (`BudgetAccount`), closed over the surface and the
                 // submission facts the seam deliberately knows nothing
                 // about. What was inline branching in this method is now
@@ -370,7 +370,7 @@ type ComputeBudgetGuard
     /// anything, and a backend having a bad afternoon would consume a
     /// scope's whole period allowance in refusals.
     ///
-    /// Nothing is metered — the Phase 9d ledger records consumption, and
+    /// Nothing is metered — the ledger records consumption, and
     /// nothing was consumed.
     member _.Release(reservation: ComputeBudgetReservation) : Async<unit> = async {
         if reservation.ReservedCost = 0M then
@@ -380,7 +380,7 @@ type ComputeBudgetGuard
     }
 
     /// Release `reservation` on a terminal outcome, folding the actual
-    /// cost in and metering it (Phase 9d).
+    /// cost in and metering it.
     ///
     /// `elapsed` defaults to the wall-clock since admission. A caller that
     /// knows better — a fit provider reports its own deterministic
@@ -413,12 +413,12 @@ type ComputeBudgetGuard
             | None -> return ()
     }
 
-/// Phase 451 — an `IExternalComputeDispatcher` that refuses a submission
+/// An `IExternalComputeDispatcher` that refuses a submission
 /// the scope's compute budget cannot pay for, and settles the reservation
 /// when the run reaches a terminal outcome.
 ///
-/// Wraps ANY dispatcher — a companion backend, Phase 478's profile gate,
-/// Phase 484's router. Compose it **inside** Phase 485's memo
+/// Wraps ANY dispatcher — a companion backend, the profile gate,
+/// the router. Compose it **inside** the memo
 /// (`MemoizedComputeDispatcher(BudgetedComputeDispatcher(backend))`) so a
 /// cache hit costs no allowance; see the file header.
 type BudgetedComputeDispatcher(inner: IExternalComputeDispatcher, guard: ComputeBudgetGuard, ?maxTracked: int) =
@@ -457,8 +457,8 @@ type BudgetedComputeDispatcher(inner: IExternalComputeDispatcher, guard: Compute
                 // Cap-race: over cap with a momentarily empty queue.
                 // Accept the transient over-cap rather than spinning, and
                 // NEVER wipe — every entry discarded here is a
-                // concurrency slot leaked until the period rolls (Phase
-                // 328's discipline, learned on the idempotency store).
+                // concurrency slot leaked until the period rolls (the
+                // discipline learned on the idempotency store).
                 draining <- false
 
     interface IExternalComputeDispatcher with
@@ -510,7 +510,7 @@ type BudgetedComputeDispatcher(inner: IExternalComputeDispatcher, guard: Compute
 
             if ExternalOutcome.isTerminal outcome then
                 // `TryRemove` rather than a read-then-remove: a
-                // concurrent poll of the same handle — which Phase 319's
+                // concurrent poll of the same handle — which the dispatcher's
                 // reconciliation makes ordinary — must settle exactly
                 // once, and only the caller that wins the removal does.
                 match reservations.TryRemove handle.HandleId with

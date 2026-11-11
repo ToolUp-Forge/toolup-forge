@@ -268,7 +268,7 @@ let composeAI (options: AIOptions) (app: ServerApp) : ServerApp =
         // builder but forgot" message.
         if Set.ofList declaredIds <> Set.ofList factoryIds then
             failwithf
-                "AI platform-provider declaration mismatch. AIOptions.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution. (Phase 70 A.5)"
+                "AI platform-provider declaration mismatch. AIOptions.withPlatformProvider declared [%s] but the supplied IAIProviderFactory reports PlatformDescriptors = [%s]. Either pass the same providers to DefaultAIProviderFactory.create, or drop the withPlatformProvider calls — the factory is the source of truth for runtime resolution."
                 (System.String.Join(", ", declaredIds))
                 (System.String.Join(", ", factoryIds))
 

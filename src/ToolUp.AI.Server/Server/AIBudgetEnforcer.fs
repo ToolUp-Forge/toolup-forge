@@ -10,16 +10,16 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
 
-// ─── Phase 9s — the per-user token-budget check ──────────────────
+// ─── The per-user token-budget check ──────────────────
 //
 // The enforcement half of `AIBudgetTypes.fs`: read the scope's policy,
 // sum the caller's consumption in the current UTC hour out of the
-// Phase 6i.A `AILatencyRecord` stream, and hand back a Phase 689
+// `AILatencyRecord` stream, and hand back the budget seam's
 // `BudgetVerdict`. The provider decorator that consumes it lives in
-// `AIProviderUsageMiddleware.fs`, beside Phase 9d's
+// `AIProviderUsageMiddleware.fs`, beside the team quota's
 // `QuotaEnforcingProvider` — one chain, not two enforcement paths.
 //
-// **What is cached and what is not, because that split IS the Phase 9c
+// **What is cached and what is not, because that split IS the GP 12
 // rule-4 answer.** The expensive half is the event-store scan, and it
 // is cached per (scope, user, hour) for 30 s. The POLICY is not cached
 // at all: an admin who lowers a cap mid-hour is respected by the very
@@ -31,7 +31,7 @@ open ToolUp.Platform.Compose
 // (rule 4: no in-memory state between invocations that the answer
 // depends on). Its honest cost is stated rather than hidden: a user
 // can overshoot by up to one cache window's worth of spend, which is
-// the same class of slack Phase 9d's advisory pre-call estimate
+// the same class of slack the advisory pre-call estimate
 // already carries.
 //
 // A failed read is decided by the declared `BudgetPosture` (`AIOptions.BudgetPosture`, default `FailOpen`).
@@ -78,7 +78,7 @@ type AIBudgetWindowEntry = {
 /// Keyed by the period key as well as the identities, so an hour
 /// boundary evicts by construction — the next hour is a different key
 /// that has never been written, which is the same "the period is a
-/// storage key, not a counter with a reset job" property the Phase 689
+/// storage key, not a counter with a reset job" property the budget seam
 /// ledger relies on. Stale entries for elapsed hours are swept on
 /// write rather than by a timer, so the cache holds nothing a
 /// deployment is not still asking about.
@@ -149,16 +149,16 @@ let hourWindowStart (at: DateTime) : DateTime =
 
 /// Tokens one user consumed in `scopeId` since `windowStart`.
 ///
-/// Reads the Phase 6i.A latency stream — the always-on per-turn
-/// telemetry — rather than `IUsageLog`, which Phase 9d's team windows
+/// Reads the latency stream — the always-on per-turn
+/// telemetry — rather than `IUsageLog`, which the team windows
 /// use. Two reasons, and the first is decisive: the usage log is
 /// written only when `UsageMetering = FeatureMode.Enabled`, so a
 /// budget summing it would silently never refuse on a deployment that
 /// had not also enabled metering. The second is attribution: the usage
 /// record carries the user id in a metadata map, the latency record
-/// (since 9s) carries it as a typed field.
+/// carries it as a typed field.
 ///
-/// A record with no `UserId` — every record written before 9s — is
+/// A record with no `UserId` — every record written before the field existed — is
 /// UNATTRIBUTED and charged to nobody. Wrong in the safe direction,
 /// and self-healing within one hour of deploying.
 let sumUserWindow (store: IEventStore) (scopeId: string) (userId: string) (windowStart: DateTime) : Async<decimal> = async {
@@ -246,7 +246,7 @@ let unreadableRecorder (store: IEventStore) : BudgetWindowUnreadable -> Async<un
             ()
     }
 
-/// Phase 9s — the pre-call per-user token-budget check.
+/// The pre-call per-user token-budget check.
 ///
 /// Stateless between invocations except for the read-through cache,
 /// which the file header explains is not load-bearing (GP 12 rule 4).
@@ -380,7 +380,7 @@ type AIBudgetEnforcer
                     return verdict
     }
 
-/// `/dev/inspect` panel over the live windows (Phase 9s task 4).
+/// `/dev/inspect` panel over the live windows.
 ///
 /// Reports what the enforcer has actually evaluated recently, which is
 /// the honest thing a stateless enforcer can say: there is no registry
@@ -431,13 +431,13 @@ type AITokenBudgetContributor(cache: AIBudgetWindowCache, posture: BudgetPosture
 // The per-team config panel is schema-driven: a `ModuleConfigEntry`
 // declares the field and the existing Owner/Admin-gated config UI
 // renders, validates and persists it. Declaring the schema IS the
-// admin surface (the same route Phase 9d's `_platform.usage` quota tab
+// admin surface (the same route the `_platform.usage` quota tab
 // takes) — writing a bespoke Fable panel for one integer would be a
 // second editor for a value the generic one already edits, and a
 // second place for its validation to drift.
 
-/// Phase 499 — the monetary ceilings, appended to the same
-/// `_platform.ai.budget` schema Phase 9s declares.
+/// The monetary ceilings, appended to the same
+/// `_platform.ai.budget` schema the per-user token budget declares.
 ///
 /// Four fields, defaulting to `0` / `"daily"` so a deployment that
 /// surfaces the tab and sets nothing behaves exactly as it did (GP 11).
@@ -486,14 +486,14 @@ let spendBudgetFields: ConfigFieldSchema list = [
     }
 ]
 
-/// SDK-shipped default `_platform.ai.budget` schema (Phase 9s; the
-/// monetary ceilings appended by Phase 499).
+/// SDK-shipped default `_platform.ai.budget` schema (the per-user token budget; the
+/// monetary ceilings appended by the spend budget).
 ///
 /// Every field defaults to `0` (= unbounded) or to the default window,
 /// so a deployment that surfaces the tab and sets nothing behaves
 /// exactly as it did (GP 11).
 ///
-/// `DisplayName` says "AI Budgets" rather than 9s's "AI Token Budget"
+/// `DisplayName` says "AI Budgets" rather than the token budget's "AI Token Budget"
 /// because the tab now holds two units. It is an operator-facing label
 /// on a generated panel, not a contract: nothing keys on it.
 let sdkAIBudgetSchema: ModuleConfigEntry = {
@@ -514,7 +514,7 @@ let sdkAIBudgetSchema: ModuleConfigEntry = {
                 }
             ]
             @ spendBudgetFields
-        // Bumped from 9s's `1`: the schema gained four fields. Every
+        // Bumped from the token budget's `1`: the schema gained four fields. Every
         // one of them has a default, so a document persisted under
         // version 1 stays valid and reads identically — the version
         // records that the shape moved, it does not gate anything.
@@ -549,24 +549,24 @@ let mergeAIBudgetSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 
         appEntries
         |> List.map (fun e -> if e.ModuleKey = AIBudgetConfigKey.value then merged else e)
-// ─── Phase 499 — the monetary spend-budget check ─────────────────
+// ─── The monetary spend-budget check ─────────────────
 //
-// The enforcement half of the Phase 499 types: price the scope's
-// recent turns off the same always-on latency stream Phase 9s sums,
+// The enforcement half of the types: price the scope's
+// recent turns off the same always-on latency stream the per-user token budget sums,
 // compare against the operator's monetary ceilings, and hand back a
-// Phase 689 `BudgetVerdict`. The provider decorator that consumes it
-// lives beside 9s's in `AIProviderUsageMiddleware.fs` — one chain,
+// `BudgetVerdict`. The provider decorator that consumes it
+// lives beside the token budget's in `AIProviderUsageMiddleware.fs` — one chain,
 // three windows, not three enforcement paths.
 //
-// **Why the same stream and not `IUsageLog`.** Phase 9s's reasoning
+// **Why the same stream and not `IUsageLog`.** The reasoning
 // carries over unchanged and is decisive: the usage log is written
 // only when `UsageMetering = FeatureMode.Enabled`, so a spend ceiling
 // summing it would silently never refuse on a deployment that set a
 // budget but had not also enabled metering — a cost control that is
 // off when you think it is on. The latency stream is always-on and,
-// since Phase 6i.A / 6i.B, already carries the four token counts AND
-// the `(ProviderName, ProviderModel)` pair a price needs. Phase
-// 499.C's `IUsageLog` cost record is the BILLING artefact, written
+// now, already carries the four token counts AND
+// the `(ProviderName, ProviderModel)` pair a price needs. The
+// metering path's `IUsageLog` cost record is the BILLING artefact, written
 // beside the token records by the metering decorator; it is not what
 // the ceiling reads.
 //
@@ -576,7 +576,7 @@ let mergeAIBudgetSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 // it). `Spent` is never an estimate: it is the priced sum of what
 // providers actually reported. So the true-up is not a second write
 // that has to be reconciled — the next call's window sum IS the
-// settled figure, which is the shape Phase 689's substrate note calls
+// settled figure, which is the shape the substrate note calls
 // "the ledger's `Release` cost adjustment" on a domain whose
 // consumption is derived rather than reserved.
 //
@@ -588,8 +588,7 @@ let mergeAIBudgetSchema (appEntries: ModuleConfigEntry list) : ModuleConfigEntry
 // blocked on an unpriced model would turn adding a model into an
 // outage.
 //
-// **It fails OPEN**, for the reason 9s states: a spend ceiling is a
-// cost control, not an authorization control.
+// A failed read is decided by the declared `BudgetPosture`, as for the token budget.
 
 /// Output tokens the PRE-CALL estimate assumes a turn will generate.
 ///
@@ -619,7 +618,7 @@ let AssumedOutputTokens = 1_000
 ///
 /// `0.5` — fifty percent. Deliberately loose, and loose for a reason
 /// that is worth stating rather than tightening away: the character
-/// estimator is Phase 9d's advisory 4-chars-per-token ratio, which
+/// estimator is the advisory 4-chars-per-token ratio, which
 /// drifts materially on code-heavy or non-English prompts, and the
 /// output term is an assumption rather than a measurement. A tolerance
 /// tight enough to look impressive would be a test that fails on a
@@ -658,10 +657,10 @@ type AISpendWindowEntry = {
 /// so a key built from one of them would serve a stale figure for the
 /// other. Either window rolling misses the entry, which is the same
 /// "the period is a storage key, not a counter with a reset job"
-/// property Phase 9s's cache relies on.
+/// property the cache relies on.
 ///
-/// Exactly as in Phase 9s, the cache is a read-through accelerator
-/// over a DERIVED figure and is not part of the answer (Phase 9c rule
+/// Exactly as in the per-user token budget, the cache is a read-through accelerator
+/// over a DERIVED figure and is not part of the answer (GP 12 rule
 /// 4): drop it, restart, or run two replicas that never share it and
 /// every verdict is still computed from the event store. The policy is
 /// never cached, so lowering a ceiling mid-window is respected by the
@@ -671,7 +670,7 @@ type AISpendWindowCache(ttlSeconds: int) =
     let unpriced = ConcurrentDictionary<string, unit>()
     let mutable lastUnreadable: DateTime option = None
 
-    /// The default TTL (`WindowCacheTtlSeconds`, shared with Phase 9s —
+    /// The default TTL (`WindowCacheTtlSeconds`, shared with the per-user token budget —
     /// the two caches accelerate scans of the same stream and a
     /// different staleness budget for each would be arbitrary).
     new() = AISpendWindowCache(WindowCacheTtlSeconds)
@@ -767,7 +766,7 @@ let periodWindowStart (period: BudgetPeriod) (at: DateTime) : DateTime =
 
 /// One turn's priced contribution to the two windows.
 type private PricedTurn = {
-    /// `AILatencyRecord.UserId`, `""` when the record predates Phase 9s.
+    /// `AILatencyRecord.UserId`, `""` when the record predates the per-user token budget.
     UserId: UserId
     OccurredAt: DateTime
     /// The turn's cost under the rate card, or `None` when its
@@ -831,7 +830,7 @@ let private priceWindow
                 with _ ->
                     // One malformed payload must not blind the window to
                     // every other record in it — the same choice
-                    // `AILatencyHandler.decodePayload` and Phase 9s's
+                    // `AILatencyHandler.decodePayload` and the token budget's
                     // token sum both make.
                     None)
 
@@ -846,7 +845,7 @@ let private priceWindow
 /// The `BudgetAccount` that records a monetary refusal as an
 /// `AISpendBudgetExceeded` event under its own reserved source module.
 ///
-/// `OnNearLimit` is deliberately silent, for the reason Phase 9s gives:
+/// `OnNearLimit` is deliberately silent, for the reason the per-user token budget gives:
 /// writing a not-yet-refused request into the refusal stream would make
 /// the one query that stream exists to answer wrong.
 /// `policy` comes LAST so `spendEventStoreAccount store currency now`
@@ -882,7 +881,7 @@ let spendEventStoreAccount
             ()
     })
 
-/// Phase 499 — the pre-call monetary spend check.
+/// The pre-call monetary spend check.
 ///
 /// `warn` is the once-per-`(providerId, model)` unpriced-model sink,
 /// supplied as data rather than resolved here (GP 12 rule 3): the
@@ -929,7 +928,7 @@ type AISpendEnforcer
 
 
     /// The scope's configured monetary policy, read fresh. Never
-    /// cached: see the Phase 9s header on why ceiling changes must not
+    /// cached: see the header on why ceiling changes must not
     /// wait for an invalidation signal that does not exist.
     member _.ReadPolicy(scopeId: string) : Async<Result<AISpendBudgetPolicy, string>> = async {
         try
@@ -948,7 +947,7 @@ type AISpendEnforcer
     /// May `userId` spend an estimated `requested` (in the rate card's
     /// currency) in `scopeId` right now?
     ///
-    /// Returns the full Phase 689 verdict, so a caller can act on
+    /// Returns the full verdict, so a caller can act on
     /// `NearLimit` as well as `Refused`; the accounting has already run
     /// by the time it returns.
     member this.Check(scopeId: string, userId: string, requested: decimal) : Async<BudgetVerdict> = async {
@@ -1024,7 +1023,7 @@ type AISpendEnforcer
                                 if cache.TryMarkUnpriced key then
                                     warn (
                                         sprintf
-                                            "AI spend budget: no price declared for '%s'. Turns on this provider/model contribute nothing to the spend window and are counted only (Phase 499, GP 11). Declare a rate in the registered ModelPriceTable to include them."
+                                            "AI spend budget: no price declared for '%s'. Turns on this provider/model contribute nothing to the spend window and are counted only (GP 11). Declare a rate in the registered ModelPriceTable to include them."
                                             key
                                     )
 
@@ -1039,7 +1038,7 @@ type AISpendEnforcer
                                         0M)
 
                             // A record with no `UserId` (written before
-                            // Phase 9s) is UNATTRIBUTED and charged to
+                            // the per-user token budget) is UNATTRIBUTED and charged to
                             // nobody in the per-USER window — wrong in
                             // the safe direction. It still counts in the
                             // per-SCOPE window, where attribution is not
@@ -1073,7 +1072,7 @@ type AISpendEnforcer
                 | Ok entry ->
                     // Per-user first, then per-scope. `BudgetPolicy.breach`
                     // reports the FIRST ceiling hit and the order is the
-                    // caller's to choose (Phase 689): the member's own
+                    // caller's to choose: the member's own
                     // ceiling has a remedy they can act on, the team's
                     // monthly cap does not.
                     //
@@ -1139,7 +1138,7 @@ type AISpendEnforcer
                         return verdict
     }
 
-/// `/dev/inspect` panel over the live spend windows (Phase 499).
+/// `/dev/inspect` panel over the live spend windows.
 ///
 /// Reports what the enforcer has actually evaluated recently — the
 /// honest thing a stateless enforcer can say — plus the rate card's

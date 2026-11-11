@@ -23,7 +23,7 @@ open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Testing
 
-// ─── Phase 451 — compute-budget governance ───────────────────────────────
+// ─── Compute-budget governance ───────────────────────────────
 //
 // The claims, and the shape each is asserted in. Throughout, the assertion
 // is on **what the inner substrate was handed** rather than on what the
@@ -69,7 +69,7 @@ open ToolUp.Platform.Testing
 //      peer contract's `runOperation` calls.
 //
 //   8. **Metering** — a settled run emits one `compute.units` usage record
-//      (the Phase 9d integration), and the quantity is what the run
+//      (the integration), and the quantity is what the run
 //      actually cost rather than what admission reserved.
 
 // ── doubles ──────────────────────────────────────────────────────────────
@@ -803,7 +803,7 @@ let private auditTests =
             })
 
         test "both audit cases round-trip through the AuditLog registry" {
-            // The Phase 114 gate keys the decode registry on the emitted
+            // The gate keys the decode registry on the emitted
             // discriminator; a case with no codec silently stops archiving.
             for name in [ "ComputeBudgetDenied"; "ComputeBudgetWarning" ] do
                 Expect.isTrue
@@ -812,7 +812,7 @@ let private auditTests =
         }
     ]
 
-// ── metering (Phase 9d integration) ──────────────────────────────────────
+// ── metering ──────────────────────────────────────
 
 let private meteringTests =
     testList "Phase 451 — metering integration" [

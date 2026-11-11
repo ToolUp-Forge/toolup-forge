@@ -5,15 +5,15 @@ namespace ToolUp.Platform
 
 open System
 
-// ─── Phase 689 — the platform budget seam ────────────────────────────────
+// ─── The platform budget seam ────────────────────────────────
 //
 // Resource-exhaustion defence arrived one mechanism at a time, and each
-// one invented its own shape. Phase 451 governs external compute
+// one invented its own shape. The compute budget governs external compute
 // submissions; the render-cost gates bound a tree's size and time; the AI
 // token and monetary-spend budgets are still ahead. Read together they
 // are the same four sentences in four vocabularies — *this* subject may
 // spend *this much* of *this* resource in *this* window, and here is what
-// happens when it cannot. Phase 451 said as much in its own header ("shaped
+// happens when it cannot. The compute budget said as much in its own header ("shaped
 // like the AI token-budget model so operators learn one budget shape") and
 // left a note to extract a shared helper "only if it falls out naturally".
 // With two instances shipped it does, and this file is the extraction.
@@ -31,7 +31,7 @@ open System
 //   and none of that is Fable-safe).
 //
 // **A ceiling is a `BudgetClaim`, and that unification is the whole
-// design.** Phase 451's three dimensions look unrelated — a concurrency
+// design.** The three dimensions look unrelated — a concurrency
 // cap counts runs in flight, a run-duration cap is a property of one
 // submission and accumulates nothing, an allowance accumulates spend
 // across a period — and all three are `Spent + Requested > Ceiling`:
@@ -45,8 +45,8 @@ open System
 // refusal record, one ordering rule — which is what lets an operator learn
 // one budget shape and a reviewer audit exhaustion defence in one place.
 //
-// **`<= 0` is unrestricted on every ceiling**, carried forward from Phase
-// 451 because it is what makes the *absent* budget and the *empty* budget
+// **`<= 0` is unrestricted on every ceiling**, carried forward from the
+// compute budget because it is what makes the *absent* budget and the *empty* budget
 // the same value: a subject with no configuration is unrestricted by
 // construction rather than by a missing branch (GP 11), and a deployment
 // that composes nothing pays nothing (GP 13).
@@ -63,7 +63,7 @@ open System
 // next period is a different key that starts at zero by not existing yet,
 // so a reset is free and cannot fail to run — the failure mode where a
 // missed reset silently turns a budget into an outage. Inherited from
-// Phase 451, which inherited it from the differential-privacy ledger's
+// The compute budget, which inherited it from the differential-privacy ledger's
 // epoch key.
 //
 // **Fable-safe throughout** (GP 10): primitives, records, DUs and `Async`.
@@ -133,7 +133,7 @@ module BudgetPeriod =
         | BudgetPeriod.Daily -> utc.ToString "yyyy-MM-dd"
         | BudgetPeriod.Monthly -> utc.ToString "yyyy-MM"
 
-/// Phase 689 — who a budget decision is about.
+/// Who a budget decision is about.
 ///
 /// Three stable labels rather than typed identities, for the reason every
 /// wire-facing record in this codebase carries labels: the subject rides an
@@ -141,8 +141,8 @@ module BudgetPeriod =
 /// and a domain that needed its own principal type would be a domain the
 /// seam could not serve.
 ///
-/// `ClassLabel` is the axis policy discriminates on WITHIN a scope — Phase
-/// 451's `SubmitterClass.label`, a user id under a per-user token budget, a
+/// `ClassLabel` is the axis policy discriminates on WITHIN a scope — the
+/// compute budget's `SubmitterClass.label`, a user id under a per-user token budget, a
 /// model id under a per-model spend cap. `""` means the scope's default,
 /// which is what a domain with no such axis uses.
 type BudgetSubject = {
@@ -171,7 +171,7 @@ module BudgetSubject =
     /// domain with no per-class axis uses.
     let ofScope (domain: string) (scopeId: string) : BudgetSubject = create domain scopeId ""
 
-/// Phase 689 — one ceiling, and what is being measured against it.
+/// One ceiling, and what is being measured against it.
 ///
 /// The unit of the whole seam. A claim is deliberately self-contained:
 /// it carries the ceiling AND both halves of the measurement, so the check
@@ -282,7 +282,7 @@ module BudgetDenial =
             denial.Requested
             denial.PeriodKey
 
-/// Phase 689 — a leading indicator: the subject was admitted, and is now
+/// A leading indicator: the subject was admitted, and is now
 /// past the warning threshold on an accumulating ceiling.
 ///
 /// Distinct from a denial rather than a severity flag on one, because the
@@ -323,7 +323,7 @@ module BudgetWarning =
             (warning.Threshold * 100M)
             warning.PeriodKey
 
-/// Phase 689 — the typed answer to "may this request proceed?".
+/// The typed answer to "may this request proceed?".
 ///
 /// Three cases, not a `Result`: the middle one is the reason. A budget
 /// that could only say yes or no would have to express "yes, and you are
@@ -339,7 +339,7 @@ type BudgetVerdict =
     /// Do not proceed. The denial names which ceiling and by how much.
     | Refused of BudgetDenial
 
-/// Phase 689 — the check, as a pure function.
+/// The check, as a pure function.
 ///
 /// Separated from the ledger deliberately: the interesting part of a
 /// budget is the policy, and a policy expressed as a total function over
@@ -384,7 +384,7 @@ module BudgetPolicy =
     /// **Order is the caller's to choose and it is load-bearing.**
     /// Reporting the *first* ceiling hit rather than all of them is
     /// deliberate: a refusal naming three problems invites fixing the
-    /// wrong one. Phase 451 lists concurrency → duration → allowance,
+    /// wrong one. The compute budget lists concurrency → duration → allowance,
     /// cheapest and most-immediate first — the burst control an agent
     /// trips before it has spent anything, then the property of the
     /// submission alone, then the slow-moving allowance whose remedy
@@ -436,7 +436,7 @@ module BudgetPolicy =
             | Some claim -> BudgetVerdict.NearLimit(warn subject periodKey threshold claim)
             | None -> BudgetVerdict.Allowed
 
-/// Phase 689 — one subject's live consumption within one period.
+/// One subject's live consumption within one period.
 ///
 /// `InFlight` is a **reservation** count, not an observation: it is
 /// incremented when a request is admitted and decremented when the work
@@ -509,7 +509,7 @@ module BudgetUsage =
             UpdatedAt = at
     }
 
-/// Phase 689 — what a deployment does with a budget decision.
+/// What a deployment does with a budget decision.
 ///
 /// **A record of functions, not an interface** (GP 12 rule 3 — behaviour
 /// as data). Accounting is deployment policy: one domain writes a typed

@@ -10,9 +10,9 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 
-// ─── Phase 689 — the platform budget seam ────────────────────────────────
+// ─── The platform budget seam ────────────────────────────────
 //
-// Phase 451's pack pins the compute path and is deliberately untouched by
+// the pack pins the compute path and is deliberately untouched by
 // this phase: the extraction is a behavioural no-op, so *its* green run is
 // the evidence for that half and any edit to it would have destroyed the
 // evidence. This pack asserts the three things that pack cannot see.
@@ -20,7 +20,7 @@ open ToolUp.Platform.Infra
 //   1. **The unification is real, not a rename.** One predicate —
 //      `Spent + Requested > Ceiling` — decides a concurrency cap, a
 //      per-request duration cap and an accumulating allowance, and the
-//      claims Phase 451 projects onto it reproduce the exact denial fields
+//      claims the compute budget projects onto it reproduce the exact denial fields
 //      that phase reported before the seam existed. Asserted by
 //      constructing the claims through the SHIPPED projection
 //      (`ComputeBudgetPolicy.claims`) and reading the numbers back off the
@@ -28,11 +28,11 @@ open ToolUp.Platform.Infra
 //
 //   2. **The adoption is not a data migration.** The shared ledger reads
 //      and writes the byte-identical blob, at the byte-identical path,
-//      that Phase 451's store has been writing since it shipped —
+//      that the store has been writing since it shipped —
 //      asserted in both directions, because a codec that round-trips with
 //      itself proves nothing about the rows already on disk.
 //
-//   3. **The seam serves a domain Phase 451 is not.** A budget with an
+//   3. **The seam serves a domain the compute budget is not.** A budget with an
 //      hourly window, no concurrency dimension and its own units decides,
 //      warns and accounts through the same four parts — which is the claim
 //      the phase actually makes, and one no compute test can make for it.

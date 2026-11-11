@@ -16,16 +16,16 @@ open ToolUp.Platform.Infra.Usage
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
 
-// ─── Phase 9s — the per-user AI token budget ─────────────────────
+// ─── The per-user AI token budget ─────────────────────
 //
 // Six of these cases are the phase's own acceptance list; the other
 // three exist because the design made claims that would be invisible
 // if they were wrong:
 //
 //   * the read-through cache is a perf optimisation and NOT part of
-//     the answer (Phase 9c rule 4) — proved by running the same
+//     the answer — proved by running the same
 //     scenario with caching disabled and demanding the same verdicts;
-//   * a latency record written before 9s has no `UserId` and must be
+//   * a latency record written before the field existed has no `UserId` and must be
 //     charged to nobody rather than to whoever asks first — proved by
 //     feeding the enforcer a JSON payload that OMITS the field, which
 //     is the exact shape on disk in every deployment that upgrades;
@@ -88,7 +88,7 @@ type private CountingEventStore(inner: IEventStore) =
 let private newEventStore () =
     CountingEventStore(ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
 
-/// Write one Phase 6i.A latency record attributed to `userId`.
+/// Write one latency record attributed to `userId`.
 let private writeTurn
     (store: IEventStore)
     (scopeId: string)
@@ -190,7 +190,7 @@ let private factoryOver (provider: IAIProvider) =
     }
 
 /// An `ITeamQuotaPolicy` that refuses the token budget when told to —
-/// standing in for Phase 9d's per-team day / month windows.
+/// standing in for the per-team day / month windows.
 let private quotaPolicy (refuse: bool) =
     { new ITeamQuotaPolicy with
         member _.CheckJobConcurrency(_scopeId, _currentInFlight) = async { return Ok() }

@@ -18,7 +18,7 @@ open ToolUp.Platform.Infra.Usage
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
 
-// ─── Phase 499 — monetary AI cost budgets ────────────────────────
+// ─── Monetary AI cost budgets ────────────────────────
 //
 // The phase's own acceptance list is four cases: estimation vs true-up
 // drift within tolerance, an unpriced model degrading to count-only, a
@@ -33,12 +33,12 @@ open ToolUp.Platform.Compose
 //   * the per-user and per-scope ceilings sit on INDEPENDENT windows,
 //     so a cache keyed on one of them would serve a stale figure for
 //     the other;
-//   * the read-through cache must not be part of the ANSWER (Phase 9c
+//   * the read-through cache must not be part of the ANSWER (GP 12
 //     rule 4) — proved by running the same scenario with caching
 //     disabled and demanding identical verdicts;
 //   * "warn once" must mean once per process, not once per turn;
-//   * the monetary refusal must be distinguishable from Phase 9s's
-//     token refusal by LABEL, which is the whole of Phase 499.D.
+//   * the monetary refusal must be distinguishable from the token budget's
+//     token refusal by LABEL.
 
 let private jsonOptions = PlatformJson.options
 
@@ -95,7 +95,7 @@ type private CountingEventStore(inner: IEventStore) =
 let private newEventStore () =
     CountingEventStore(ToolUp.Platform.Infra.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
 
-/// Write one Phase 6i.A latency record with the full four-field token
+/// Write one latency record with the full four-field token
 /// report a priced turn needs.
 let private writeTurnOn
     (store: IEventStore)
@@ -438,8 +438,8 @@ let tests =
             Expect.equal denial.PeriodKey "2026-09-16" "…measured over the DAILY window, not the hourly one"
 
             // 499.D — distinct from token-quota exhaustion by LABEL, per
-            // the Phase 689 substrate note. These are the two strings a
-            // client branches on, and neither matches Phase 9s's.
+            // the substrate note. These are the two strings a
+            // client branches on, and neither matches the token budget's.
             Expect.notEqual denial.Domain AITokenBudgetPolicy.Domain "the two budgets are different domains"
 
             Expect.notEqual denial.Dimension AITokenBudgetPolicy.PerUserPerHourDimension "…and different dimensions"
@@ -523,7 +523,7 @@ let tests =
 
             match enforcer.Check(scopeId, alice, 0.01M) |> Async.RunSynchronously with
             | BudgetVerdict.Refused d ->
-                // Phase 689's ordering rule: report the ceiling whose
+                // the ordering rule: report the ceiling whose
                 // remedy the caller can act on, not the one whose remedy
                 // is "wait for the month to roll".
                 Expect.equal
@@ -786,7 +786,7 @@ let tests =
             ignore store
         }
 
-        // ─── The cache is not part of the answer (Phase 9c rule 4) ─
+        // ─── The cache is not part of the answer ─
 
         test "the same verdicts are reached with caching disabled" {
             let run (ttl: int) =
@@ -910,7 +910,7 @@ let tests =
                         "the window is a closed choice over the seam's own periods, never free text"
                 | other -> failwithf "%s should be a Choice, got %A" key other
 
-            // Phase 9s's field is untouched — this phase appended.
+            // the field is untouched — this phase appended.
             Expect.isTrue
                 (entry.Schema.Fields
                  |> List.exists (fun f -> f.Key = AIBudgetConfigKey.maxTokensPerUserPerHour))

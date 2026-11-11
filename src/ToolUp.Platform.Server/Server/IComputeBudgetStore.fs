@@ -7,7 +7,7 @@ open ToolUp.Platform
 
 open System
 
-// ─── Phase 451 — the compute-budget store seam ───────────────────────────
+// ─── The compute-budget store seam ───────────────────────────
 //
 // `ComputeBudgetPolicy.admit` (Core) is a pure function of a budget, a
 // usage row and a submission. This seam is the other half: where the budget
@@ -44,7 +44,7 @@ open System
 //    durations are `TimeSpan`. The period boundary is UTC-day / UTC-month
 //    granularity and is declared as such, never sub-second.
 
-/// Phase 451 — where a scope's compute budget and its live consumption
+/// Where a scope's compute budget and its live consumption
 /// live.
 ///
 /// Two concerns behind one seam, deliberately: the budget (rarely written,
@@ -115,11 +115,11 @@ type IComputeBudgetStore =
     /// grant extra concurrency, which is the wrong failure direction.
     abstract Settle: scopeId: string * periodKey: string * costAdjustment: decimal -> Async<unit>
 
-/// Phase 451 — where budget state lives in blob storage. Shared so a
+/// Where budget state lives in blob storage. Shared so a
 /// future admin surface or sweep enumerates exactly what the store writes,
 /// the reason `ComputeMemoLayout` exists.
 ///
-/// Phase 689: the usage half is `BudgetLedgerLayout` with this domain's
+/// The budget seam: the usage half is `BudgetLedgerLayout` with this domain's
 /// label, which is why the shared ledger reads and writes exactly the
 /// blobs this phase has been writing since it shipped — the adoption is a
 /// re-expression, not a data migration. The budget blob stays here,
