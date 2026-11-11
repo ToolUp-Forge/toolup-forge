@@ -363,6 +363,42 @@ type RateLimitRefusedPayload = {
     Reason: string
 }
 
+/// A compute refusal's figures, as the `ComputeBudgetDenied` audit row
+/// stores them: the seam's `BudgetDenial` without its domain (every such
+/// row is a compute refusal), with the class under the name the row has
+/// always carried. The row's bytes are frozen (archives, SIEM rules and the
+/// audit wire corpus hold them), which is why it is its own record rather
+/// than the denial itself.
+type ComputeBudgetDeniedFigures = {
+    /// Scope whose budget refused the submission.
+    ScopeId: string
+    /// `SubmitterClass.label` of the refused submission.
+    SubmitterClass: string
+    /// `ComputeBudgetDimension.label` of the ceiling that was hit.
+    Dimension: string
+    /// The configured ceiling, in the dimension's own unit.
+    Quota: decimal
+    /// What the scope had already consumed against `Quota`.
+    Spent: decimal
+    /// What this submission asked for on top of `Spent`.
+    Requested: decimal
+    /// `BudgetPeriod.key` of the period the refusal was measured in.
+    PeriodKey: string
+}
+
+[<RequireQualifiedAccess>]
+module ComputeBudgetDeniedFigures =
+    /// The row's figures for a compute refusal.
+    let ofDenial (denial: BudgetDenial) : ComputeBudgetDeniedFigures = {
+        ScopeId = denial.ScopeId
+        SubmitterClass = denial.ClassLabel
+        Dimension = denial.Dimension
+        Quota = denial.Quota
+        Spent = denial.Spent
+        Requested = denial.Requested
+        PeriodKey = denial.PeriodKey
+    }
+
 /// Phase 451 — a compute submission was refused by the scope's budget.
 /// Emitted by `ComputeBudgetGuard` on every denial, from both enforcement
 /// points (the `IExternalComputeDispatcher.Submit` decorator and the
@@ -375,9 +411,10 @@ type RateLimitRefusedPayload = {
 /// That is the same argument that made `RateLimitRefused` unconditional
 /// while `RateLimitWaited` is threshold-gated.
 type ComputeBudgetDeniedPayload = {
-    /// The typed refusal, verbatim — the same value the caller received,
-    /// so the audit row and the client's error cannot disagree.
-    Denial: ComputeBudgetDenial
+    /// The refusal's figures — the denial the caller received, projected
+    /// by `ComputeBudgetDeniedFigures.ofDenial`, so the audit row and the
+    /// client's error cannot disagree.
+    Denial: ComputeBudgetDeniedFigures
     /// Which enforcement point refused: `"external-compute"` (the
     /// dispatcher decorator) or `"model-fit-enqueue"`.
     Surface: string
@@ -411,7 +448,7 @@ type ComputeBudgetWarningPayload = {
     ScopeId: string
     /// `SubmitterClass.label` of the submission that crossed the threshold.
     SubmitterClass: string
-    /// `ComputeBudgetPeriod.key` of the accounting period.
+    /// `BudgetPeriod.key` of the accounting period.
     PeriodKey: string
     /// The configured period allowance, in abstract cost units.
     Quota: decimal

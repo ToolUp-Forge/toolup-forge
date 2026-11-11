@@ -232,29 +232,6 @@ let private periodTests =
                 "the same instant is the same period, whatever kind it carries"
         }
 
-        test "the compute periods project onto the seam's, key for key" {
-            // The no-op pin for the delegation: `ComputeBudgetPeriod.key`
-            // is now `BudgetPeriod.key` under a projection, so the two
-            // must agree on every case and every boundary.
-            let instants = [
-                DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                DateTime(2026, 8, 5, 23, 59, 59, DateTimeKind.Utc)
-                DateTime(2026, 12, 31, 23, 0, 0, DateTimeKind.Utc)
-            ]
-
-            for period in
-                [
-                    ComputeBudgetPeriod.Perpetual
-                    ComputeBudgetPeriod.Daily
-                    ComputeBudgetPeriod.Monthly
-                ] do
-                for instant in instants do
-                    Expect.equal
-                        (ComputeBudgetPeriod.key period instant)
-                        (BudgetPeriod.key (ComputeBudgetPeriod.toBudgetPeriod period) instant)
-                        $"{ComputeBudgetPeriod.label period} agrees with its seam projection"
-        }
-
         test "every period label parses back to itself" {
             for period in BudgetPeriod.all do
                 Expect.equal (BudgetPeriod.parse (BudgetPeriod.label period)) (Some period) "label round-trips"
@@ -281,7 +258,7 @@ let private reExpressionTests =
             }
 
             let usage = {
-                ComputeBudgetUsage.empty scope "2026-08" with
+                BudgetUsage.empty ComputeBudget.Domain scope "2026-08" with
                     InFlight = 3
                     Spent = 40M
             }
@@ -300,7 +277,7 @@ let private reExpressionTests =
                 Expect.equal denial.Quota 3M "the quota is the configured cap"
                 Expect.equal denial.Spent 3M "…the runs already in flight"
                 Expect.equal denial.Requested 1M "…and this one submission"
-                Expect.equal denial.SubmitterClass "agent" "the declared class rides the refusal"
+                Expect.equal denial.ClassLabel "agent" "the declared class rides the refusal"
                 Expect.equal denial.PeriodKey "2026-08" "in the row's own period"
             | Ok() -> failtest "expected a concurrency refusal"
         }
@@ -311,7 +288,7 @@ let private reExpressionTests =
             let built =
                 ComputeBudgetPolicy.claims
                     ComputeBudgetLimits.unrestricted
-                    (ComputeBudgetUsage.empty scope "perpetual")
+                    (BudgetUsage.empty ComputeBudget.Domain scope "perpetual")
                     (Some(TimeSpan.FromMinutes 5.0))
                     1M
 
@@ -320,7 +297,7 @@ let private reExpressionTests =
             let concurrencyOnly =
                 ComputeBudgetPolicy.claims
                     (ComputeBudgetLimits.concurrency 4)
-                    (ComputeBudgetUsage.empty scope "perpetual")
+                    (BudgetUsage.empty ComputeBudget.Domain scope "perpetual")
                     (Some(TimeSpan.FromMinutes 5.0))
                     1M
 
@@ -332,15 +309,17 @@ let private reExpressionTests =
 
             for period, label, key in
                 [
-                    ComputeBudgetPeriod.Perpetual, "perpetual", "perpetual"
-                    ComputeBudgetPeriod.Daily, "daily", "2026-08-05"
-                    ComputeBudgetPeriod.Monthly, "monthly", "2026-08"
+                    BudgetPeriod.Perpetual, "perpetual", "perpetual"
+                    BudgetPeriod.Daily, "daily", "2026-08-05"
+                    BudgetPeriod.Monthly, "monthly", "2026-08"
                 ] do
-                let seam = ComputeBudgetPeriod.toBudgetPeriod period
-                Expect.equal (BudgetPeriod.label seam) label $"{label}: the stored label"
-                Expect.equal (BudgetPeriod.key seam instant) key $"{label}: the ledger key"
-                Expect.equal (ComputeBudgetPeriod.label period) (BudgetPeriod.label seam) $"{label}: compute agrees"
-                Expect.equal (ComputeBudgetPeriod.key period instant) key $"{label}: compute agrees on the key"
+                Expect.equal (BudgetPeriod.label period) label $"{label}: the stored label"
+                Expect.equal (BudgetPeriod.key period instant) key $"{label}: the ledger key"
+
+                Expect.equal
+                    (BudgetPeriod.key (ComputeBudget.create period ComputeBudgetLimits.unrestricted).Period instant)
+                    key
+                    $"{label}: a compute budget keys its window by the seam period"
         }
 
         test "a compute refusal is the seam's denial in the compute domain, figure for figure" {
@@ -363,70 +342,31 @@ let private reExpressionTests =
             }
 
             Expect.equal
-                (ComputeBudgetPolicy.claims limits (ComputeBudgetUsage.ofBudgetUsage usage) None 1M
+                (ComputeBudgetPolicy.claims limits usage None 1M
                  |> BudgetPolicy.check (BudgetSubject.create ComputeBudget.Domain scope "agent") "2026-08")
                 (Error expected)
                 "the claims decide through the seam"
 
-            match
-                ComputeBudgetPolicy.admit
-                    scope
-                    SubmitterClass.AgentInitiated
-                    limits
-                    (ComputeBudgetUsage.ofBudgetUsage usage)
-                    None
-                    1M
-            with
+            match ComputeBudgetPolicy.admit scope SubmitterClass.AgentInitiated limits usage None 1M with
             | Error denial ->
-                Expect.equal (ComputeBudgetDenial.toBudgetDenial denial) expected "admit refuses with the seam's denial"
+                Expect.equal denial expected "admit refuses with the seam's denial"
 
                 Expect.equal
-                    (ComputeBudgetDenial.describe denial)
+                    (ComputeBudgetPolicy.describe denial)
                     "compute budget exceeded for scope 'team-42': concurrency limit 4 reached by a 'agent' submission (already consumed 4, this request needs 1) in period '2026-08'"
                     "and the operator-facing description is the compute wording"
             | Ok() -> failtest "expected a concurrency refusal"
         }
 
         test "the empty compute usage row is the seam's empty row in the compute domain" {
-            Expect.equal
-                (ComputeBudgetUsage.toBudgetUsage (ComputeBudgetUsage.empty scope "2026-08"))
-                (BudgetUsage.empty ComputeBudget.Domain scope "2026-08")
-                "same zero row, same epoch, same domain"
-        }
-
-        test "a compute denial round-trips through the seam's shape" {
-            let denial: ComputeBudgetDenial = {
-                ScopeId = scope
-                SubmitterClass = "agent"
-                Dimension = "period-allowance"
-                Quota = 250M
-                Spent = 249M
-                Requested = 5M
-                PeriodKey = "2026-08"
-            }
-
-            let projected = ComputeBudgetDenial.toBudgetDenial denial
-
-            Expect.equal projected.Domain ComputeBudget.Domain "the domain is compute's own label"
+            let row = BudgetUsage.empty ComputeBudget.Domain scope "2026-08"
+            Expect.equal row.Domain ComputeBudget.Domain "the compute domain"
+            Expect.equal (row.InFlight, row.Spent) (0, 0M) "nothing in flight, nothing spent"
 
             Expect.equal
-                (ComputeBudgetDenial.ofBudgetDenial projected)
-                denial
-                "and the projection loses nothing on the way back"
-        }
-
-        test "the usage row round-trips through the seam's shape" {
-            let usage = {
-                ComputeBudgetUsage.empty scope "2026-08" with
-                    InFlight = 2
-                    Spent = 7.5M
-                    UpdatedAt = DateTime(2026, 8, 5, 12, 0, 0, DateTimeKind.Utc)
-            }
-
-            Expect.equal
-                (ComputeBudgetUsage.ofBudgetUsage (ComputeBudgetUsage.toBudgetUsage usage))
-                usage
-                "the row survives the projection"
+                row.UpdatedAt
+                (DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+                "the epoch the row has always carried"
         }
 
         test "the ledger writes the blob Phase 451 has always written" {
@@ -450,19 +390,11 @@ let private reExpressionTests =
                     Spent = 12M
             }
 
-            // Both directions. A codec that round-trips with itself proves
-            // nothing about the rows already on disk, so the seam's bytes
-            // are read by the compute codec and vice versa.
+            // The compute store reads the rows the shared ledger writes,
+            // under its own scope and period key.
             match ComputeBudgetJson.deserialiseUsage scope "2026-08" (BudgetUsageJson.serialise row) with
-            | Some read -> Expect.equal read.Spent 12M "the compute codec reads a ledger row"
+            | Some read -> Expect.equal read row "the compute codec reads a ledger row"
             | None -> failtest "the compute codec could not read a row the shared ledger wrote"
-
-            let computeBytes =
-                ComputeBudgetJson.serialiseUsage (ComputeBudgetUsage.ofBudgetUsage row)
-
-            match BudgetUsageJson.deserialise key computeBytes with
-            | Some read -> Expect.equal read.Spent 12M "…and the ledger reads a compute row"
-            | None -> failtest "the shared ledger could not read a row the compute store wrote"
         }
 
         test "a row for another scope or period is refused, not adopted" {

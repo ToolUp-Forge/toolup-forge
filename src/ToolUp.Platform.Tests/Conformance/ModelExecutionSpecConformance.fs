@@ -1936,8 +1936,9 @@ module Bridge =
         | BudgetDenied(quota, spent, unit) ->
             Some(
                 ModelExecutionRefusal.BudgetDenied {
+                    Domain = ComputeBudget.Domain
                     ScopeId = ""
-                    SubmitterClass = ""
+                    ClassLabel = ""
                     Dimension = ""
                     Quota = decimal quota
                     Spent = decimal spent

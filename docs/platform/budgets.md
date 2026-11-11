@@ -292,13 +292,14 @@ figures, and why the decoders stay built at import, are beside the emitter in
 ## How refusals surface
 
 1. **To the caller, as a typed value.** A budget refusal is a `BudgetDenial` in the error channel,
-   never an exception, and — on the compute path — a `ComputeBudgetDenial` projected onto the
-   dispatcher's `ExternalComputeError` as a **terminal, non-retriable** failure. Terminal is the
+   never an exception, and — on the compute path — that same denial, in the `compute-budget`
+   domain, projected onto the dispatcher's `ExternalComputeError` as a **terminal, non-retriable** failure. Terminal is the
    point: re-submitting an identical over-budget request cannot succeed, because the allowance does
    not refill on the timescale a retry loop runs at, so a caller that retried would turn one refusal
    into a hot loop against a budget that is by definition already exhausted.
 2. **To an operator, as audit rows.** The compute path records `ComputeBudgetDenied` (carrying the
-   typed denial verbatim, plus which surface refused and what was submitted) and
+   denial's figures as `ComputeBudgetDeniedFigures`, the row shape the audit archives already hold,
+   plus which surface refused and what was submitted) and
    `ComputeBudgetWarning` (once per scope per period). Both are ordinary `AuditEvent` cases, so they
    reach every composed audit sink and are queryable per scope.
 3. **To a log, once.** A denial writes one warn-level line naming the scope, the dimension, the two
@@ -348,6 +349,19 @@ resolves the object graph it always did — no decorator, no config read, no all
 Both ceilings are set per scope in the `_platform.ai.budget` config tab: a token cap per user per
 hour, and monetary caps per user and per scope, each with its own window drawn from `BudgetPeriod`.
 Every one defaults to `0`, which the seam reads as unrestricted.
+
+**A read that fails is decided by the declared `BudgetPosture`.** Each check reads two things before
+it decides: the scope's policy from the config store, and the window from the telemetry stream.
+When either read fails, `AIOptions.BudgetPosture` decides the call — `FailOpen` (the default, the
+behaviour every deployment had before the posture existed) admits it, `FailClosed` refuses it with a
+`BudgetDenial` whose dimension names the read (`unreadable-policy` / `unreadable-window`). Either way
+the failure is recorded as one `BudgetWindowUnreadable` event under its own source module, and the
+`/dev/inspect` panels show the posture and the last unreadable time beside the cached figures, so a
+budget that is unbounded and one that could not be read never look alike:
+
+```fsharp skip=fragment
+AIOptions.create factory profile |> AIOptions.withBudgetPosture BudgetPosture.FailClosed
+```
 
 ---
 

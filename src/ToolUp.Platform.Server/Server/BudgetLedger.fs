@@ -10,13 +10,10 @@ open System.Collections.Concurrent
 open System.Text.Json
 open ToolUp.Platform.BlobStorage
 
-// ─── Phase 689 — the shipped budget ledgers ──────────────────────────────
+// ─── The shipped budget ledgers ──────────────────────────────────────────
 //
 // Two implementations of `IBudgetLedger` and the small latch that keeps a
-// threshold warning from becoming a per-request log line. All three were
-// Phase 451's, written against `ComputeBudgetUsage` and reachable only by
-// a compute submission; the code is unchanged and the types are the seam's,
-// which is the whole of what this phase did to them.
+// threshold warning from becoming a per-request log line.
 //
 // **Two tiers of atomicity, and the difference is honest rather than
 // hidden.** `Reserve` must make read → decide → reserve indivisible, or a

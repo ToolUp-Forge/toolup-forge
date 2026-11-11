@@ -186,7 +186,7 @@ type ModelExecutionRefusal =
     /// would fit, whereas a policy refusal carries a rule identifier and
     /// nothing to arithmetic against. Collapsing the two would throw away
     /// the only numbers that make the refusal actionable.
-    | BudgetDenied of ComputeBudgetDenial
+    | BudgetDenied of BudgetDenial
     /// Phase 640 — the peer declared a profile version this deployment does
     /// not read. Carries what arrived and the versions that are accepted,
     /// so the caller can re-aim without a second round trip.
@@ -260,7 +260,7 @@ module ModelExecutionRefusal =
         | ModelExecutionRefusal.NotFound w -> $"not found: {w}"
         | ModelExecutionRefusal.InvalidQuery r -> $"invalid query: {r}"
         | ModelExecutionRefusal.ScoreRefused _ -> "scoring refused (see typed reason)"
-        | ModelExecutionRefusal.BudgetDenied d -> ComputeBudgetDenial.describe d
+        | ModelExecutionRefusal.BudgetDenied d -> ComputeBudgetPolicy.describe d
         | ModelExecutionRefusal.EnvelopeVersionMismatch(received, accepted) ->
             let acceptedText = accepted |> List.map string |> String.concat separator
 

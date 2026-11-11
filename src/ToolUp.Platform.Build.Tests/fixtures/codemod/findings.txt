@@ -1,4 +1,4 @@
-Codemod: 147 site(s) in 26 file(s) need human review (not rewritten):
+Codemod: 154 site(s) in 27 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] Auth.DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -120,6 +120,21 @@ Codemod: 147 site(s) in 26 file(s) need human review (not rewritten):
       -> Phase 1079: the `CopilotAIProvider` constructors are gone: `(endpoint, apiKey[, model])` is `CopilotAIProvider.createWithApiKey` / `createWithApiKeyAndModel`, `(secretStore, endpoint[, model])` is `create` / `createWithModel`, `(endpoint, credential[, model])` is `createWithCredential` / `createWithCredentialAndModel`, and an explicit api-version is `createWithAuth endpoint apiVersion auth model`. `Microsoft365CopilotProvider` is gone too: use `Microsoft365CopilotAIProvider.create*`, or `createWithHttpClient` for a custom client
     L32 [1079-stop-reason-token] let finished (r: AIProviderResponse) = r.StopReason = "end_turn"
       -> Phase 1079: if this is an `AIProviderResponse`, `StopReason` is a union now: `"end_turn"` is `StopReason.EndTurn`, `"tool_use"` is `StopReason.ToolUse`, `"max_tokens"` is `StopReason.MaxTokens` and any other token is `StopReason.Other "…"`; `.Token` reads the string back. `AILatencyRecord.StopReason` is still the recorded string
+  src/Server/Budgets.fs
+    L11 [1081-record-literal] let row: BudgetUsage = { usage with InFlight = 1 }
+      -> Phase 1081: a literal of the seam's `BudgetDenial` / `BudgetUsage` that stood for a compute twin needs `Domain = ComputeBudget.Domain`, and a denial names the class `ClassLabel`; prefer `BudgetUsage.empty ComputeBudget.Domain scope period with …`
+    L23 [1081-denial-class] let who = denial.SubmitterClass
+      -> Phase 1081: a compute denial is a `BudgetDenial`: the submitter class is `.ClassLabel`, and the denial also carries `Domain` (`ComputeBudget.Domain`). An audit row's `ComputeBudgetDeniedPayload.Denial` keeps `SubmitterClass`: it is the frozen row shape, `ComputeBudgetDeniedFigures`
+    L25 [1081-audit-denial] let audited = ComputeBudgetDenied { Denial = refusal; Surface = "external-compute"; Kind = "fit"; SubmittedBy = ""; RefusedAt = now }
+      -> Phase 1081: `ComputeBudgetDeniedPayload.Denial` is the frozen row shape `ComputeBudgetDeniedFigures`: build it with `ComputeBudgetDeniedFigures.ofDenial denial` from the `BudgetDenial` the policy refused with
+    L29 [1081-period-match] | BudgetPeriod.Daily -> "day"
+      -> Phase 1081: a match over a compute budget's period is a match over `BudgetPeriod`, which has a fourth case, `Hourly`: give it an arm
+    L32 [1081-read-policy] let policy = enforcer.ReadPolicy scopeId
+      -> Phase 1081: if this is an `AIBudgetEnforcer` / `AISpendEnforcer`, `ReadPolicy` returns `Result<policy, string>`: a config-store failure is an `Error`, decided by the declared `BudgetPosture` (`AIOptions.withBudgetPosture`), never read as unbounded
+    L34 [1081-budget-panel] let panel = AITokenBudgetContributor(cache)
+      -> Phase 1081: the budget panels show the posture beside the cached figures: pass the deployment's `BudgetPosture` as the last argument
+    L36 [1081-task-registry] let registry = AITaskStatusRegistry.Shared
+      -> Phase 1081: `AITaskStatusRegistry.Shared` is gone: `AICompose` registers one registry per composed server; resolve it from DI (`services.GetService(typeof<AITaskStatusRegistry>)`), or register `AITaskStatusRegistry()` in a hand-built container
   src/Server/Config.fs
     L65 [877-record-update-unprovable] { (ServerConfig.fromEnv logger overrides) with LogLevel = LogLevel.Debug }
       -> Phase 877: this record update sets a field that moved into a concern record, and the codemod could not nest it: `(ServerConfig.fromEnv logger overrides)` is not named as the config and every moved label it sets (LogLevel) is one other records carry too; if it is a `ServerConfig`, nest by hand, otherwise nothing changes. Bind the base to a name and write `<Concern> = { <base>.<Concern> with <Field> = … }` by hand
@@ -334,6 +349,7 @@ Codemod: 147 site(s) in 26 file(s) need human review (not rewritten):
     Phase 1075 — docs/migrations/1075-redesign-e-one-view-contract-toolkit-locale-and-appshell.md
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
     Phase 1079 — docs/migrations/1079-redesign-f-the-connector-kernel.md
+    Phase 1081 — docs/migrations/1081-redesign-f-budget-posture-and-the-compute-twins-retired.md
     Phase 1085 — docs/migrations/1085-redesign-g-ingestion-attempt-and-its-lattice.md
     Phase 1087 — docs/migrations/1087-redesign-g-knowledge-policies-the-hook-and-the-deletions.md
     Phase 1094 — docs/migrations/1094-redesign-h-factscompose-options-modelling-dedup-and-fact-tools.md

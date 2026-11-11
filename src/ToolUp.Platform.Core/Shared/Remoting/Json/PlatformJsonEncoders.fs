@@ -1909,12 +1909,13 @@ module PlatformJsonEncoders =
         | ModelExecutionScoreRefusal.ProviderFailed(kind, message) -> JsonEncode.fields "ProviderFailed" [ JsonEncode.string kind; JsonEncode.string message ]
         | ModelExecutionScoreRefusal.StorageFailure field -> JsonEncode.payload "StorageFailure" (JsonEncode.string field)
 
-    /// Generated JSON encoder for `ComputeBudgetDenial` — members by name, cases by case name, as the writer emits them.
-    let encodeComputeBudgetDenial: JsonEncoder<ComputeBudgetDenial> =
-        fun (value: ComputeBudgetDenial) ->
+    /// Generated JSON encoder for `BudgetDenial` — members by name, cases by case name, as the writer emits them.
+    let encodeBudgetDenial: JsonEncoder<BudgetDenial> =
+        fun (value: BudgetDenial) ->
             JsonEncode.record [
+                "Domain", JsonEncode.string value.Domain
                 "ScopeId", JsonEncode.string value.ScopeId
-                "SubmitterClass", JsonEncode.string value.SubmitterClass
+                "ClassLabel", JsonEncode.string value.ClassLabel
                 "Dimension", JsonEncode.string value.Dimension
                 "Quota", JsonEncode.decimal value.Quota
                 "Spent", JsonEncode.decimal value.Spent
@@ -1945,7 +1946,7 @@ module PlatformJsonEncoders =
         | ModelExecutionRefusal.NotFound field -> JsonEncode.payload "NotFound" (JsonEncode.string field)
         | ModelExecutionRefusal.InvalidQuery field -> JsonEncode.payload "InvalidQuery" (JsonEncode.string field)
         | ModelExecutionRefusal.ScoreRefused field -> JsonEncode.payload "ScoreRefused" (encodeModelExecutionScoreRefusal field)
-        | ModelExecutionRefusal.BudgetDenied field -> JsonEncode.payload "BudgetDenied" (encodeComputeBudgetDenial field)
+        | ModelExecutionRefusal.BudgetDenied field -> JsonEncode.payload "BudgetDenied" (encodeBudgetDenial field)
         | ModelExecutionRefusal.EnvelopeVersionMismatch(received, accepted) -> JsonEncode.fields "EnvelopeVersionMismatch" [ JsonEncode.int32 received; (JsonEncode.list JsonEncode.int32) accepted ]
         | ModelExecutionRefusal.UnknownDocumentKind(kind, known) -> JsonEncode.fields "UnknownDocumentKind" [ JsonEncode.string kind; (JsonEncode.list JsonEncode.string) known ]
         | ModelExecutionRefusal.GateFailed field -> JsonEncode.payload "GateFailed" ((JsonEncode.list encodeModelExecutionGateVerdict) field)

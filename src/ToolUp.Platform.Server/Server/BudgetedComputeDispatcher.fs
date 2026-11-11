@@ -219,8 +219,8 @@ type ComputeBudgetGuard
     /// timescale a retry loop operates on, so a caller that retried would
     /// convert one refusal into a hot loop against a budget that is by
     /// definition already exhausted.
-    static member toComputeError(denial: ComputeBudgetDenial) : ExternalComputeError =
-        ExternalComputeError.terminal (ComputeBudgetDenial.describe denial)
+    static member toComputeError(denial: BudgetDenial) : ExternalComputeError =
+        ExternalComputeError.terminal (ComputeBudgetPolicy.describe denial)
 
     /// The cost model in force — exposed so a caller can reason about
     /// what a reservation will cost before making one.
@@ -245,7 +245,7 @@ type ComputeBudgetGuard
             surface: string,
             hints: Map<string, string>,
             declaredDuration: TimeSpan option
-        ) : Async<Result<ComputeBudgetReservation * TimeSpan option, ComputeBudgetDenial>> =
+        ) : Async<Result<ComputeBudgetReservation * TimeSpan option, BudgetDenial>> =
         async {
             let! budget = store.GetBudget scopeId
             let limits = ComputeBudget.limitsFor submitter budget
@@ -259,7 +259,7 @@ type ComputeBudgetGuard
                     Ok(
                         {
                             ScopeId = scopeId
-                            PeriodKey = ComputeBudgetPeriod.key budget.Period (now ())
+                            PeriodKey = BudgetPeriod.key budget.Period (now ())
                             ReservedCost = 0M
                             Hints = hints
                             AdmittedAt = now ()
@@ -268,11 +268,11 @@ type ComputeBudgetGuard
                     )
             else
 
-                let periodKey = ComputeBudgetPeriod.key budget.Period (now ())
+                let periodKey = BudgetPeriod.key budget.Period (now ())
                 let cost = costModel.Admit hints
                 let ledgerKey = ComputeBudgetLayout.ledgerKey scopeId periodKey
 
-                let decide (usage: ComputeBudgetUsage) =
+                let decide (usage: BudgetUsage) =
                     ComputeBudgetPolicy.admit scopeId submitter limits usage declaredDuration cost
 
                 // Phase 689 — the two accounting effects as data
@@ -284,13 +284,11 @@ type ComputeBudgetGuard
                 let account: BudgetAccount = {
                     OnRefused =
                         fun denial -> async {
-                            let refusal = ComputeBudgetDenial.ofBudgetDenial denial
-
                             do!
                                 record
                                     scopeId
                                     (ComputeBudgetDenied {
-                                        Denial = refusal
+                                        Denial = ComputeBudgetDeniedFigures.ofDenial denial
                                         Surface = surface
                                         Kind = kind
                                         SubmittedBy = submittedBy
@@ -301,7 +299,7 @@ type ComputeBudgetGuard
                             // seam's: this line is what an operator greps
                             // for and it predates the seam.
                             match logger with
-                            | Some log -> log.Warn(ComputeBudgetDenial.describe refusal)
+                            | Some log -> log.Warn(ComputeBudgetPolicy.describe denial)
                             | None -> ()
                         }
                     OnNearLimit =
@@ -324,7 +322,7 @@ type ComputeBudgetGuard
 
                 match! store.Admit(scopeId, periodKey, cost, decide) with
                 | Error denial ->
-                    do! account.OnRefused(ComputeBudgetDenial.toBudgetDenial denial)
+                    do! account.OnRefused denial
                     return Error denial
                 | Ok usage ->
                     // Threshold warning on the ADMITTED path — a leading

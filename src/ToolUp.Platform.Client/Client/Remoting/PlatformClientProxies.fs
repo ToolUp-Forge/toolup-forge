@@ -3281,19 +3281,21 @@ module PlatformClientProxies =
             | "StorageFailure" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ModelExecutionScoreRefusal.StorageFailure))
             | _ -> None)
 
-    /// Generated JSON decoder for `ComputeBudgetDenial` — members by name, cases by case name, read off the type's own shape.
-    let decodeComputeBudgetDenial: JsonDecoder<ComputeBudgetDenial> =
-        JsonDecode.succeed (fun scopeId submitterClass dimension quota spent requested periodKey -> ({
+    /// Generated JSON decoder for `BudgetDenial` — members by name, cases by case name, read off the type's own shape.
+    let decodeBudgetDenial: JsonDecoder<BudgetDenial> =
+        JsonDecode.succeed (fun domain scopeId classLabel dimension quota spent requested periodKey -> ({
+            Domain = domain
             ScopeId = scopeId
-            SubmitterClass = submitterClass
+            ClassLabel = classLabel
             Dimension = dimension
             Quota = quota
             Spent = spent
             Requested = requested
             PeriodKey = periodKey
-        }: ComputeBudgetDenial))
+        }: BudgetDenial))
+        |> JsonDecode.apply (JsonDecode.field "Domain" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "ScopeId" JsonDecode.asString)
-        |> JsonDecode.apply (JsonDecode.field "SubmitterClass" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "ClassLabel" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Dimension" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Quota" JsonDecode.asDecimal)
         |> JsonDecode.apply (JsonDecode.field "Spent" JsonDecode.asDecimal)
@@ -3328,7 +3330,7 @@ module PlatformClientProxies =
             | "NotFound" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ModelExecutionRefusal.NotFound))
             | "InvalidQuery" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ModelExecutionRefusal.InvalidQuery))
             | "ScoreRefused" -> Some(JsonDecode.payload (decodeModelExecutionScoreRefusal |> JsonDecode.map ModelExecutionRefusal.ScoreRefused))
-            | "BudgetDenied" -> Some(JsonDecode.payload (decodeComputeBudgetDenial |> JsonDecode.map ModelExecutionRefusal.BudgetDenied))
+            | "BudgetDenied" -> Some(JsonDecode.payload (decodeBudgetDenial |> JsonDecode.map ModelExecutionRefusal.BudgetDenied))
             | "EnvelopeVersionMismatch" ->
                 Some(
                     JsonDecode.fields

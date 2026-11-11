@@ -204,7 +204,7 @@ module ModelFitBatch =
         (guard: ComputeBudgetGuard)
         (submittedBy: string)
         (batch: FitRequestBatch)
-        : Async<Result<ComputeBudgetReservation list, ComputeBudgetDenial>> =
+        : Async<Result<ComputeBudgetReservation list, BudgetDenial>> =
         async {
             let taken = ResizeArray<ComputeBudgetReservation>()
             let mutable denial = None

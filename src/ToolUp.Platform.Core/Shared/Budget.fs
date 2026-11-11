@@ -71,15 +71,10 @@ open System
 // tier, so a client can hold and render a refusal without pulling any of
 // it in.
 
-/// Phase 689 — the window a budget's accumulating ceilings are measured
-/// over.
-///
-/// A superset of Phase 451's `ComputeBudgetPeriod`: `Hourly` is here
-/// because a per-user token budget is naturally hourly, and adding it to
-/// the compute DU would have been surface a compute deployment cannot use.
-/// The compute periods project onto these one-for-one, so a
-/// `ComputeBudgetPeriod.key` and the seam's key for the same window are
-/// the same string.
+/// The window a budget's accumulating ceilings are measured over: the
+/// compute budget's, the token budget's and the spend budget's alike.
+/// `Hourly` is there for a per-user token budget; a compute budget has no
+/// use for it.
 [<RequireQualifiedAccess>]
 type BudgetPeriod =
     /// One allowance for all time — a hard lifetime cap. Never refills.
@@ -239,11 +234,10 @@ module BudgetClaim =
         else
             max 0M (claim.Ceiling - claim.Spent)
 
-/// Phase 689 — a budget refusal, as data.
+/// A budget refusal, as data.
 ///
-/// Phase 451's `ComputeBudgetDenial` field-for-field, plus the `Domain`
-/// that tells a reader WHICH budget refused when a deployment runs more
-/// than one. A refusal that says only "over budget" leaves its recipient —
+/// The `Domain` tells a reader WHICH budget refused when a deployment runs
+/// more than one. A refusal that says only "over budget" leaves its recipient —
 /// often an agent deciding whether to narrow its search or wait — with
 /// nothing to decide on, so it names which ceiling, for which class, in
 /// which period, and how far over.

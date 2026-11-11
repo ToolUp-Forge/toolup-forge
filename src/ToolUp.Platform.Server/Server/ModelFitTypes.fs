@@ -463,7 +463,7 @@ type FitBatchError =
     /// until the budget runs out mid-batch — would produce a wave whose
     /// membership depended on how much allowance happened to be left,
     /// which is not a result anybody can interpret.
-    | BudgetDenied of ComputeBudgetDenial
+    | BudgetDenied of BudgetDenial
 
 module FitBatchError =
     let describe =
@@ -471,7 +471,7 @@ module FitBatchError =
         | FitBatchError.EmptyBatch -> "fit batch contains no requests"
         | FitBatchError.MissingBatchId -> "fit batch has no batch id"
         | FitBatchError.ScopeMismatch(i, s) -> sprintf "fit batch item %d declares scope '%s', not the batch scope" i s
-        | FitBatchError.BudgetDenied d -> ComputeBudgetDenial.describe d
+        | FitBatchError.BudgetDenied d -> ComputeBudgetPolicy.describe d
 
 /// Phase 640 — why one item of an accepted batch did not reach the queue.
 ///

@@ -251,6 +251,50 @@
 @@ L20 [1077-history-window-constant]
 -let window = AIAssistantServerConfig.DefaultMaxHistoryMessages
 +let window = AgentLoopLimits.DefaultHistoryWindow
+--- a/src/Server/Budgets.fs
++++ b/src/Server/Budgets.fs
+@@ L3 [1081-period-type]
+-let period: ComputeBudgetPeriod = ComputeBudgetPeriod.Daily
++let period: BudgetPeriod = BudgetPeriod.Daily
+@@ L5 [1081-adapter-applied]
+-let seamPeriod = ComputeBudgetPeriod.toBudgetPeriod period
++let seamPeriod = period
+@@ L7 [1081-adapter-point-free]
+-let periods = [ ComputeBudgetPeriod.Monthly ] |> List.map ComputeBudgetPeriod.toBudgetPeriod
++let periods = [ ComputeBudgetPeriod.Monthly ] |> List.map id
+@@ L7 [1081-period-type]
+-let periods = [ ComputeBudgetPeriod.Monthly ] |> List.map id
++let periods = [ BudgetPeriod.Monthly ] |> List.map id
+@@ L9 [1081-usage-empty]
+-let usage = ComputeBudgetUsage.empty "team-a" "2026-08"
++let usage = BudgetUsage.empty ComputeBudget.Domain "team-a" "2026-08"
+@@ L11 [1081-usage-type]
+-let row: ComputeBudgetUsage = { usage with InFlight = 1 }
++let row: BudgetUsage = { usage with InFlight = 1 }
+@@ L13 [1081-adapter-applied]
+-let bytes = ComputeBudgetJson.serialiseUsage (ComputeBudgetUsage.toBudgetUsage usage)
++let bytes = ComputeBudgetJson.serialiseUsage (usage)
+@@ L13 [1081-usage-json]
+-let bytes = ComputeBudgetJson.serialiseUsage (usage)
++let bytes = BudgetUsageJson.serialise (usage)
+@@ L15 [1081-adapter-point-free]
+-let back = rows |> List.map ComputeBudgetUsage.ofBudgetUsage
++let back = rows |> List.map id
+@@ L17 [1081-denial-describe]
+-let describe (denial: ComputeBudgetDenial) = ComputeBudgetDenial.describe denial
++let describe (denial: ComputeBudgetDenial) = ComputeBudgetPolicy.describe denial
+@@ L17 [1081-denial-type]
+-let describe (denial: ComputeBudgetDenial) = ComputeBudgetPolicy.describe denial
++let describe (denial: BudgetDenial) = ComputeBudgetPolicy.describe denial
+@@ L19 [1081-adapter-applied]
+-let seamDenial = ComputeBudgetDenial.toBudgetDenial refusal
++let seamDenial = refusal
+@@ L21 [1081-adapter-point-free]
+-let refused = result |> Result.mapError ComputeBudgetDenial.ofBudgetDenial
++let refused = result |> Result.mapError id
+@@ L29 [1081-period-type]
+-    | ComputeBudgetPeriod.Daily -> "day"
++    | BudgetPeriod.Daily -> "day"
 --- a/src/Server/Config.fs
 +++ b/src/Server/Config.fs
 @@ L7 [877-record-update]
@@ -578,4 +622,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 156 rewrite(s) across 24 file(s) pending.
+Codemod: 170 rewrite(s) across 25 file(s) pending.
