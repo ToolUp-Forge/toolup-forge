@@ -288,15 +288,11 @@ module Neutrality =
         |> Seq.filter (fun l -> l <> "" && not (l.StartsWith "#"))
         |> Seq.toList
 
-    /// The variable that makes an absent token source a failure rather than
-    /// a loud skip. The local gate sets it; a developer's run leaves it unset.
-    [<Literal>]
-    let RequiredVariable = "TOOLUP_NEUTRALITY_REQUIRED"
-
-    /// Whether `value`, read from `RequiredVariable`, asks for an absent
-    /// source to fail: `1` or `true`, in any case.
-    let isRequired (value: string) : bool =
-        match value with
+    /// Whether the environment variable `variable` (a development knob the
+    /// caller names, not a deployment setting) asks for an absent token
+    /// source to fail rather than skip: `1` or `true`, in any case.
+    let isRequired (variable: string) : bool =
+        match Environment.GetEnvironmentVariable variable with
         | null -> false
         | v -> v.Trim() = "1" || v.Trim().Equals("true", StringComparison.OrdinalIgnoreCase)
 

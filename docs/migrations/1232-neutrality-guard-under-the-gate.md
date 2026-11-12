@@ -19,7 +19,7 @@ reach `main` that way, and did.
   `git rev-parse --git-common-dir`; then the environment variable. `Neutrality.tokenFiles` and `Neutrality.searched`
   name those places, and the absent-source message names all of them.
 - **A skip is red under the gate.** `TOOLUP_NEUTRALITY_REQUIRED=1` (or `true`) turns the absent-source case from a
-  skip into a failure with the same message (`Neutrality.RequiredVariable`, `Neutrality.isRequired`). The local gate
+  skip into a failure with the same message (`Neutrality.isRequired`, which reads the variable the caller names). The local gate
   (`VerifyAll`, as `verify.ps1` runs it) sets the variable for the packs it launches unless it is already set or `CI`
   is set: a public CI runner holds no private list by construction and keeps the canary-only skip. The `Platform` and
   `Platform.Remoting` rows of the gate manifest now declare both variables as reads, so the scrubbed environment each
@@ -32,7 +32,7 @@ reach `main` that way, and did.
 
 ## Additive surface (`ToolUp.Platform.Build`)
 
-`Neutrality.RequiredVariable`, `Neutrality.isRequired`, `Neutrality.primaryRoot`, `Neutrality.tokenFiles`,
+`Neutrality.isRequired`, `Neutrality.primaryRoot`, `Neutrality.tokenFiles`,
 `Neutrality.searched`. `Neutrality.externalTokens` keeps its signature.
 
 ## Verification

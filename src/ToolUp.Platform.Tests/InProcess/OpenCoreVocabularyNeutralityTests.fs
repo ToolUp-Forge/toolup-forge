@@ -361,13 +361,23 @@ let private sourceTests =
 
             Expect.equal failure (Some NeutralityTokens.absentSourceMessage) "required, the absent source fails"
 
-        testCase "the required flag reads 1 or true and nothing else"
+        testCase "the required flag reads 1 or true and nothing else, from the variable the caller names"
         <| fun _ ->
+            let probe = "TOOLUP_NEUTRALITY_REQUIRED_PROBE"
+
+            let requiredWith (value: string) =
+                Environment.SetEnvironmentVariable(probe, value)
+
+                try
+                    ToolUp.Platform.Build.Neutrality.isRequired probe
+                finally
+                    Environment.SetEnvironmentVariable(probe, null)
+
             for value in [ "1"; "true"; "TRUE"; " 1 " ] do
-                Expect.isTrue (ToolUp.Platform.Build.Neutrality.isRequired value) $"'{value}' requires the list"
+                Expect.isTrue (requiredWith value) $"'{value}' requires the list"
 
             for value in [ null; ""; "0"; "false"; "yes" ] do
-                Expect.isFalse (ToolUp.Platform.Build.Neutrality.isRequired value) $"'{value}' does not"
+                Expect.isFalse (requiredWith value) $"'{value}' does not"
     ]
 
 let tests =

@@ -180,7 +180,13 @@ let optedOut () =
     | "0" -> false
     | _ -> true
 
-/// Whether a gated run sets `Neutrality.RequiredVariable` for the packs it
+/// Set to `1` by a gated run: under it the publication-boundary guard fails
+/// on an absent token list instead of skipping. The guard's packs read it
+/// under the same name (`NeutralityTokens.RequiredVariable`).
+[<Literal>]
+let NeutralityRequiredVariable = "TOOLUP_NEUTRALITY_REQUIRED"
+
+/// Whether a gated run sets `NeutralityRequiredVariable` for the packs it
 /// launches, given that variable's current value and `CI`'s. It does,
 /// unless the variable is already set (that value stands, `0` included)
 /// or the run is on a CI runner, which holds no private token list by
@@ -850,14 +856,14 @@ let around (workingDir: string) (argv: string[]) (body: unit -> int) : int =
         // run: under the gate an absent token list fails the suite.
         if
             requiresNeutralityList
-                (Environment.GetEnvironmentVariable Neutrality.RequiredVariable)
+                (Environment.GetEnvironmentVariable NeutralityRequiredVariable)
                 (Environment.GetEnvironmentVariable "CI")
         then
-            Environment.SetEnvironmentVariable(Neutrality.RequiredVariable, "1")
+            Environment.SetEnvironmentVariable(NeutralityRequiredVariable, "1")
 
             printfn
                 "VerifyAll gate: %s=1 — an absent neutrality token list fails the guard instead of skipping."
-                Neutrality.RequiredVariable
+                NeutralityRequiredVariable
 
         let key, commonDir =
             match commonGitDir workingDir with

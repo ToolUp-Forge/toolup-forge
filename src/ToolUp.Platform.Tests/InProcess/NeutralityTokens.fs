@@ -117,6 +117,12 @@ let repoRootPath = repoRoot ()
 [<Literal>]
 let TokensVariable = "TOOLUP_NEUTRALITY_TOKENS"
 
+/// The environment variable that makes an absent token source a failure
+/// rather than a loud skip. The local gate sets it; a developer's run
+/// leaves it unset.
+[<Literal>]
+let RequiredVariable = "TOOLUP_NEUTRALITY_REQUIRED"
+
 /// The private token list, when a non-public source supplies one.
 /// `None` means no token file and no environment variable supplies a
 /// token — guard tests must then skip loudly, or fail under the gate.
@@ -243,7 +249,7 @@ let absentSourceMessageFor (root: string) : string =
     sprintf
         "NEUTRALITY TOKEN SOURCE ABSENT — only the public-safe canary token was enforced. The private banned-vocabulary list was looked for, in order, at: %s. Supply it at any of them (a file holds one token per line, '#' comments allowed) to run the full OSS-boundary guard. Outside the gate this result is a SKIP, not a pass; under %s=1 it fails."
         (String.Join("; ", ToolUp.Platform.Build.Neutrality.searched root TokensVariable))
-        ToolUp.Platform.Build.Neutrality.RequiredVariable
+        RequiredVariable
 
 /// The absent-source message for this checkout.
 let absentSourceMessage: string = absentSourceMessageFor repoRootPath
@@ -270,10 +276,4 @@ let onAbsentSource (required: bool) (message: string) : unit =
 let skipUnlessExternalSource () =
     match externalTokens with
     | Some _ -> ()
-    | None ->
-        let required =
-            ToolUp.Platform.Build.Neutrality.isRequired (
-                Environment.GetEnvironmentVariable ToolUp.Platform.Build.Neutrality.RequiredVariable
-            )
-
-        onAbsentSource required absentSourceMessage
+    | None -> onAbsentSource (ToolUp.Platform.Build.Neutrality.isRequired RequiredVariable) absentSourceMessage
