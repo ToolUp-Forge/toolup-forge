@@ -7,7 +7,7 @@
 
 Six symbol families that were public only because F# defaults to public are now `internal`. Every
 one was measured to have no caller outside its own assembly — in this repo, in `samples/`,
-`templates/` and `docs-snippets/`, and in the 46 first-party consumer trees checked out beside it
+`templates/` and `docs-snippets/`, and in the 46 first-party consumer trees outside this repository
 — before it was hidden.
 
 | Package | Symbol (baseline tokens removed) | Why it was never contract |

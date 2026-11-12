@@ -127,7 +127,8 @@ order of preference:
 
 **Ruling (2026-10-27).** This repository may depend on, and name in any shipped file, the
 published Apache-2.0 Fuaran libraries — the `Fuaran.Core.*`, `Fuaran.Compute.*` and
-`Fuaran.UI.*` packages, their public repositories and their public specifications. The bare
+`Fuaran.UI.*` packages (and, from 2026-11-11, the `Fuaran.DB.*` packages), their public
+repositories and their public specifications. The bare
 `Fuaran` token is therefore not a banned word here. The first adopter is the fact browse's
 view slice, which carries a `Fuaran.Core.Column` table and refines it with
 `Fuaran.Compute.DataFrame` (see [Facts](facts.md)).
@@ -171,6 +172,29 @@ repository, and a released ToolUp package that carries them restores anonymously
   Core release it was not compiled against.
 - **Fable-clean.** Both packages ship their sources under `fable/`, so the builders compile
   in a browser as well as on a server.
+
+### The third instance: the dataset model (Phase 1348)
+
+`ToolUp.Facts.Server` checks a module's dataset model and its views with `Fuaran.DB`, the
+dataset model of the Fuaran-DB repository (`Fuaran-Data/fuaran-db`): tables, typed columns,
+declared relations and measures, the check of a `Fuaran.Compute` pipeline against a model,
+`ModelProjection` and its AI-tools surface. It is the ruling's third adopter (extended
+2026-11-11 to `Fuaran.DB.*`), under the same licence line: Apache-2.0, published on nuget.org
+from a public repository, so a released ToolUp package that carries it restores anonymously.
+
+- **The core package only.** `Fuaran.DB` holds the model, its rules and the pipeline check.
+  Its provider, session record and SQL dialects are not referenced: nothing here lowers a
+  pipeline to a statement or opens a connection.
+- **One pin for the producing repository**, `FuaranDbVersion`, beside the Core, Compute and
+  UI pins. The pinned release is built on the Core and Compute versions pinned above, so the
+  graph still resolves to one Core and one Compute version.
+- **The fact gate stays the disclosure authority.** A dataset model decides the shape and
+  cost of a read: which tables and columns exist, which joins are declared, how many rows,
+  joins and grouping keys a pipeline may use. It never decides disclosure. A module's model
+  declares no column grant, row policy or group floor; every cell a view or a pipeline reads
+  is judged by the fact gate exactly as any other read, and withholding propagates through
+  lineage. A pipeline must pass both the model check and the gate, and neither admits what
+  the other refuses. See [Fact tables](fact-tables.md#a-dataset-model-over-the-tables).
 
 ## Resolving beside the published Fuaran-UI tier
 
@@ -228,13 +252,13 @@ consumer shapes that break until it closes. The rule reads this table: an open r
 exactly its family at exactly its floor, a closed row excuses nothing, and an open row no
 comparison needs is refused until it is recorded closed. A new floor is a new row. An open lead
 reaches the release notes through the migration note of the release that declares it, which the
-CHANGELOG generator links (for the open row below,
+CHANGELOG generator links (for the first row below,
 [1133-fuaran-co-resolution](../migrations/1133-fuaran-co-resolution.md)).
 
 | Family | Floor here | Fuaran.UI release | Its floor | Status | Broken until closed |
 |---|---|---|---|---|---|
 | `Fuaran.Core` | `0.40.2` | `0.97.0` | `0.38.1` | closed by Fuaran.UI 0.98.1 | Every consumer composing the fact tier beside Fuaran-UI pages on Fuaran.UI 0.97.0 or older: the Core minors after 0.38 removed entities the UI tier calls (`Fuaran.Core.Canon` among them), so the server failed with FS0193 or a `TypeLoadException` for `Fuaran.Core.Canon`, and the Fable client failed compiling the UI tier's own sources. Recorded after the fact: this pin shipped in 0.35.0 before the rule existed. |
-| `Fuaran.Compute` | `0.43.0` | `0.99.1` | `0.41.0` | open | None observed: the co-build probe passes beside Fuaran.UI 0.99.1. `Fuaran.Compute.DataFrame` 0.43.0 widens the `Transform`, `ColExpr` and `EvalError` unions the UI tier's sources were compiled without, so a UI tier match over them that is not total is the shape to watch. This row supersedes the lead declared at `0.42.0` (the floor moved; no Fuaran.UI release closed it). Closes with the first Fuaran.UI release built on `Fuaran.Compute.DataFrame` 0.43.0 or later. |
+| `Fuaran.Compute` | `0.43.0` | `0.99.1` | `0.41.0` | closed by Fuaran.UI 0.102.0 | None observed: the co-build probe passes beside Fuaran.UI 0.99.1. `Fuaran.Compute.DataFrame` 0.43.0 widens the `Transform`, `ColExpr` and `EvalError` unions the UI tier's sources were compiled without, so a UI tier match over them that is not total is the shape to watch. This row supersedes the lead declared at `0.42.0` (the floor moved; no Fuaran.UI release closed it). Closed by Fuaran.UI 0.102.0, the first release built on `Fuaran.Compute.DataFrame` 0.43.0; Phase 1348 raised both floors to the line Fuaran.UI 0.104.0 is built on (Core 0.42.0, Compute 0.44.0), so no lead is open. |
 
 The first row is the worked example. The 0.35.0 release pinned `Fuaran.Core.Column` 0.40.2 while
 every published Fuaran.UI was built on Core 0.38.1, and Fuaran.UI 0.98.1, built on Core 0.40.2,

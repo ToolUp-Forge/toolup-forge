@@ -1,6 +1,6 @@
 {
   "profile": "server-app-host",
-  "profileVersion": "7.4",
+  "profileVersion": "7.5",
   "note": "forge's binding of the profile's registered tokens to its own composable surface. Not part of the wire format and not normative for any other evaluator: a token is a wire spelling, and this file says which forge type, field or builder each one reduces to. It also names the parts of forge's reflected surface the profile deliberately does not register, each with its reason, so a forge release that grows its surface fails the surface check until the profile either registers the addition or says here why it does not.",
   "bases": {
     "serverApp": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.Compose.ServerApp" },

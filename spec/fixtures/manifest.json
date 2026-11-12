@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "profile": "server-app-host",
   "profileKind": "vocabulary",
-  "profileVersion": "7.4",
+  "profileVersion": "7.5",
   "registry": "../registry.json",
   "conformanceFamilies": [
     "document",
@@ -2213,6 +2213,76 @@
         "OTHER_USER_ID": "user-other"
       },
       "description": "A pull and a watch run as a principal whose setting the environment does not supply, though it supplies another (section P4.83). The rule reads the setting the work names, and it is not only a narrative's."
+    },
+    {
+      "id": "profile-server-app-host/dataset-model",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/dataset-model.json",
+      "sha256": "ca63636e22b9e33312f7c2c6990f037dbf227d6dd686121bfb3275aabfa0a897",
+      "description": "A unit's dataset model (7.5, section P3.19): the Trade unit models its two described tables, relates them on subject and day, publishes total revenue as a sum measure, and declares one view joining revenue to margin along the declared relation, with its columns in result order. Every 7.5 rule is met; the restricted margin table stays restricted, because a model declares no grant. The member order is section P3.19's, and a view that takes no parameter omits parameters rather than writing it empty."
+    },
+    {
+      "id": "profile-server-app-host/reject-dataset-model-table-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-dataset-model-table-undeclared.json",
+      "sha256": "4ffd72670935e845521b5b54ae948e3bfa243ac1f7d8b219422fb6a22428f726",
+      "reject": "dataset-model-table-undeclared",
+      "detect": "profile",
+      "description": "A relation joining daily-trade to daily-cost, a table no unit declares (section P4.85). A relation naming no declared table joins nothing."
+    },
+    {
+      "id": "profile-server-app-host/reject-dataset-model-measure-metric-undeclared",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-dataset-model-measure-metric-undeclared.json",
+      "sha256": "0fef4795a03e4c459d4cab30bcfe39dd068e7ddfc93d609de784c6d48c6ee8bd",
+      "reject": "dataset-model-measure-metric-undeclared",
+      "detect": "profile",
+      "description": "A measure publishing net-revenue, a metric no unit registers (section P4.86). It would be published with no unit, direction or staleness."
+    },
+    {
+      "id": "profile-server-app-host/reject-dataset-model-table-undescribed",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-dataset-model-table-undescribed.json",
+      "sha256": "4cbcc6361c77cf7b23a1fa9470f5d228ef5bf053c0e8c6ab7bd49c400781a484",
+      "reject": "dataset-model-table-undescribed",
+      "detect": "profile",
+      "description": "A model naming daily-margin, a table that carries no description (section P4.87). A model takes a table's meaning from its own description and never restates it."
+    },
+    {
+      "id": "profile-server-app-host/reject-dataset-view-pipeline-refused",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-dataset-view-pipeline-refused.json",
+      "sha256": "e160570b80ad8b2731e4d96f4bf36cf218d470b8674a607e24ccbf5dc8557da8",
+      "reject": "dataset-view-pipeline-refused",
+      "detect": "profile",
+      "description": "A view joining daily-margin on subject_path, keys no declared relation names (section P4.88). A pipeline joins two tables only along a declared relation, on exactly its keys."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-dataset-aggregate",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-dataset-aggregate.json",
+      "sha256": "3d0d3969822adb6d529d29fc265fa84cc773baa986fa65db3d60dbd93ee96d15",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A measure whose aggregate is total, outside section P2.24's closed vocabulary."
     }
   ]
 }

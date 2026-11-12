@@ -699,6 +699,7 @@ let private registeredTests =
         MethodRegistryTests.tests
         ISpecRefusalContract.tests "MethodRefusal" typeof<ToolUp.Facts.MethodRefusal> MethodRegistryTests.methodRefusals
         PipelineProfileTests.tests
+        DatasetModelRegistryTests.tests
         PageRequestResolverTests.tests
         LayoutToolsTests.tests
         NarrativeCalculationTests.tests

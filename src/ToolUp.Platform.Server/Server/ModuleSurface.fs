@@ -322,6 +322,11 @@ module ModuleSurface =
             // What the module's declared tables are for — declared prose
             // beside the declarations, implying no substrate.
             c (nameof m.FactTableDescriptions) ProvidesFacet
+            // Phase 1348 — the dataset model the module states over its tables
+            // and the views over them: declared data on the same precedent,
+            // checked by the facts companion and implying no substrate.
+            c (nameof m.DatasetModel) ProvidesFacet
+            c (nameof m.Views) ProvidesFacet
             // Phase 1042 — the work the module runs once a delivery has
             // completed. `Provides` on the `JobHandlers` precedent: code the
             // module contributes for the platform to call.
@@ -513,6 +518,29 @@ module ModuleSurface =
             m.FactTables
             |> List.map (fun d -> entry (nameof m.FactTables) "fact-table" d.Id d.ProducingOperation None)
 
+        // Phase 1348 — one entry for the module's dataset model (keyed by the
+        // module, describing the tables it models) and one per view; a module
+        // that declares neither emits nothing.
+        let datasetModel =
+            m.DatasetModel
+            |> Option.map (fun model ->
+                entry
+                    (nameof m.DatasetModel)
+                    "dataset-model"
+                    m.Name
+                    (sprintf
+                        "%s; %d relation(s), %d measure(s)"
+                        (String.concat ", " model.Tables)
+                        model.Relations.Length
+                        model.Measures.Length)
+                    None)
+            |> Option.toList
+
+        let views =
+            m.Views
+            |> List.map (fun v ->
+                entry (nameof m.Views) "view" v.Id (sprintf "%s@%s over %s" v.Id v.Version v.Table) None)
+
         // Phase 1042 — one entry per registered hook, keyed by its name; a
         // module that registers none emits nothing.
         let deliveryHooks =
@@ -552,6 +580,8 @@ module ModuleSurface =
             subjects
             notificationCategories
             factTables
+            datasetModel
+            views
             deliveryHooks
             classifications
         ]

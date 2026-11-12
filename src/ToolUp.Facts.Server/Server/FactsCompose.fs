@@ -1068,6 +1068,56 @@ module FactsCompose =
                     else
                         s.AddSingleton<MethodProfile>(profile))
 
+    /// **Adds** the deployment's dataset models (`DatasetModelRegistry.register`,
+    /// or `ViewRegistry.register` for the models and views together): the
+    /// registry is registered, and `describe_dataset_model` rides
+    /// `ServerApp.AITools` beside the fact tools, answering each caller from
+    /// its projection of each model under `resolver`, the policy resolver the
+    /// deployment composes its gate with. Give `evaluate_pipeline` the joins
+    /// the models declare through the profile
+    /// (`PipelineProfile.withRelationCheck (DatasetModelRegistry.relationCheck
+    /// resolver registry)`), and the views through the one
+    /// `MethodRegistry.register` call (`ViewRegistry.bindings`). A registry
+    /// with no model changes nothing, as does a deployment with no fact store;
+    /// a second registry, or a tool named like one already declared, is
+    /// refused.
+    let withDatasetModels
+        (resolver: DisclosurePolicyResolver)
+        (registry: DatasetModelRegistry)
+        (app: ServerApp)
+        : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when registry.Models.IsEmpty -> app
+        | FeatureMode.Enabled ->
+            if
+                app.AITools
+                |> List.exists (fun (definition, _) -> definition.Name = DatasetModelTools.Name)
+            then
+                ServiceComposition.refuse (
+                    CompositionRefusal.InvalidDeclaration(
+                        "FactsCompose.withDatasetModels",
+                        sprintf "a tool named '%s' is already declared" DatasetModelTools.Name
+                    )
+                )
+            else
+                {
+                    app with
+                        AITools =
+                            app.AITools
+                            @ [ DatasetModelTools.definition, DatasetModelTools.executor registry resolver ]
+                }
+                |> contribute (fun s ->
+                    if s |> Seq.exists (fun d -> d.ServiceType = typeof<DatasetModelRegistry>) then
+                        ServiceComposition.refuse (
+                            CompositionRefusal.InvalidDeclaration(
+                                "FactsCompose.withDatasetModels",
+                                "a dataset model registry is already registered; register every model in one DatasetModelRegistry.register call"
+                            )
+                        )
+                    else
+                        s.AddSingleton<DatasetModelRegistry>(registry))
+
     /// Declare what `list_fact_tables` lists: the cap on the distinct members
     /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
     /// turns member listing off). Call it after `withFactStore`, which declares
