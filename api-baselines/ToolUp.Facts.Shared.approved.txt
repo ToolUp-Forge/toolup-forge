@@ -14,7 +14,9 @@ ToolUp.Facts.FactBrowseApi.MaxSliceCells : System.Int32 (literal)
 ToolUp.Facts.FactBrowseApi.clampPage(System.Int32) : System.Int32
 ToolUp.Facts.FactBrowseApi.clampPageSize(System.Int32) : System.Int32
 ToolUp.Facts.FactBrowseApi.clampSeriesPoints(System.Int32) : System.Int32
+ToolUp.Facts.FactBrowseApi.periodRangeRefusal(System.DateTime, System.DateTime) : System.String
 ToolUp.Facts.FactBrowseApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Facts.FactBrowseApi.seriesCapRefusal(System.Int32, System.Int32) : System.String
 ToolUp.Facts.FactBrowseSlice (class)
 ToolUp.Facts.FactBrowseSlice.FromColumn : System.String (literal)
 ToolUp.Facts.FactBrowseSlice.LabelColumn : System.String (literal)

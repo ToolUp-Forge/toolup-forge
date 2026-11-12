@@ -514,12 +514,7 @@ module ViewRegistry =
         elif request.SubjectLevel.IsSome then
             Error(sprintf "View '%s' decides its own rows, so a series over it takes no subject level." v.Id)
         elif request.PeriodFrom >= request.PeriodTo then
-            Error(
-                sprintf
-                    "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
-                    (request.PeriodFrom.ToString "o")
-                    (request.PeriodTo.ToString "o")
-            )
+            Error(FactBrowseApi.periodRangeRefusal request.PeriodFrom request.PeriodTo)
         elif not (List.contains request.Metric columns) then
             Error(sprintf "View '%s' answers no column '%s'; it answers %s." v.Id request.Metric (quoted columns))
         else
@@ -553,13 +548,7 @@ module ViewRegistry =
             let rows = Table.rowCount table
 
             if rows > cap then
-                Error(
-                    sprintf
-                        "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
-                        rows
-                        cap
-                        FactBrowseApi.MaxSeriesPoints
-                )
+                Error(FactBrowseApi.seriesCapRefusal rows cap)
             else
                 let at (column: string) (i: int) : Cell =
                     match cells.TryFind column with

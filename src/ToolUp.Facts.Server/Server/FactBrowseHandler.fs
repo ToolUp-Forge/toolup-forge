@@ -983,13 +983,7 @@ module FactBrowseHandler =
             | Ok table when not (List.contains request.Metric (FactTableDefinition.metrics table)) ->
                 return Error(sprintf "Table '%s' has no metric column '%s'." table.Id request.Metric)
             | Ok _ when request.PeriodFrom >= request.PeriodTo ->
-                return
-                    Error(
-                        sprintf
-                            "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
-                            (request.PeriodFrom.ToString "o")
-                            (request.PeriodTo.ToString "o")
-                    )
+                return Error(FactBrowseApi.periodRangeRefusal request.PeriodFrom request.PeriodTo)
             | Ok table ->
                 let level = request.SubjectLevel |> Option.defaultValue table.Level
 
@@ -1012,14 +1006,7 @@ module FactBrowseHandler =
                         heads |> List.sortBy (fun h -> h.Subject.Path, h.PeriodFrom, h.PeriodTo)
 
                     if List.length points > cap then
-                        return
-                            Error(
-                                sprintf
-                                    "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
-                                    (List.length points)
-                                    cap
-                                    FactBrowseApi.MaxSeriesPoints
-                            )
+                        return Error(FactBrowseApi.seriesCapRefusal (List.length points) cap)
                     else
                         let! verdictFor = judgeHeads deps scope principal points
 
@@ -1117,13 +1104,7 @@ module FactBrowseHandler =
                 match request.Metrics |> List.tryFind (fun m -> not (List.contains m tableMetrics)) with
                 | Some missing -> return Error(sprintf "Table '%s' has no metric column '%s'." table.Id missing)
                 | None when request.PeriodFrom >= request.PeriodTo ->
-                    return
-                        Error(
-                            sprintf
-                                "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
-                                (request.PeriodFrom.ToString "o")
-                                (request.PeriodTo.ToString "o")
-                        )
+                    return Error(FactBrowseApi.periodRangeRefusal request.PeriodFrom request.PeriodTo)
                 | None ->
                     let depth =
                         deps.Registry

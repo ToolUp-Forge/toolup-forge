@@ -747,6 +747,22 @@ module FactBrowseApi =
         elif requested > MaxSeriesPoints then MaxSeriesPoints
         else requested
 
+    /// The refusal of a period range that is not a half-open `[from, to)`
+    /// extent, in every series and slice read's words.
+    let periodRangeRefusal (from: DateTime) (until: DateTime) : string =
+        sprintf
+            "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
+            (from.ToString "o")
+            (until.ToString "o")
+
+    /// The refusal of a series of `points` points over the clamped `cap`.
+    let seriesCapRefusal (points: int) (cap: int) : string =
+        sprintf
+            "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
+            points
+            cap
+            MaxSeriesPoints
+
     /// Phase 1127 — the most cells (one head per subject, period and
     /// metric, withheld included) one slice carries. Part of the contract: a
     /// slice that would exceed it is refused by name before the gate, and
@@ -1479,25 +1495,14 @@ module FactBrowseSlice =
                     view.ViewId
             )
         | None when request.PeriodFrom >= request.PeriodTo ->
-            Error(
-                sprintf
-                    "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
-                    (request.PeriodFrom.ToString "o")
-                    (request.PeriodTo.ToString "o")
-            )
+            Error(FactBrowseApi.periodRangeRefusal request.PeriodFrom request.PeriodTo)
         | None ->
             evaluate held (seriesPoints request)
             |> Result.bind (fun table ->
                 let rows = rowsOf table
 
                 if List.length rows > cap then
-                    Error(
-                        sprintf
-                            "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
-                            (List.length rows)
-                            cap
-                            FactBrowseApi.MaxSeriesPoints
-                    )
+                    Error(FactBrowseApi.seriesCapRefusal (List.length rows) cap)
                 else
                     let withheld = rows |> List.choose (fun r -> str (r (col "withheld")))
 
