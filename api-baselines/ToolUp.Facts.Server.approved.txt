@@ -588,6 +588,43 @@ ToolUp.Facts.CoverageTool.DisclosureProbeK : System.Int32 (literal)
 ToolUp.Facts.CoverageTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.CoverageTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.CoverageTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.DatasetModelRefusal (class)
+ToolUp.Facts.DatasetModelRefusal.IsDeclaration : System.Boolean { get }
+ToolUp.Facts.DatasetModelRefusal.IsModelRule : System.Boolean { get }
+ToolUp.Facts.DatasetModelRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.DatasetModelRefusal+Declaration (class)
+ToolUp.Facts.DatasetModelRefusal+Declaration.message : System.String { get }
+ToolUp.Facts.DatasetModelRefusal+Declaration.rule : System.String { get }
+ToolUp.Facts.DatasetModelRefusal+ModelRule (class)
+ToolUp.Facts.DatasetModelRefusal+ModelRule.code : System.String { get }
+ToolUp.Facts.DatasetModelRefusal+ModelRule.message : System.String { get }
+ToolUp.Facts.DatasetModelRefusal+ModelRule.moduleName : System.String { get }
+ToolUp.Facts.DatasetModelRefusal+Tags (class)
+ToolUp.Facts.DatasetModelRefusal+Tags.Declaration : System.Int32 (literal)
+ToolUp.Facts.DatasetModelRefusal+Tags.ModelRule : System.Int32 (literal)
+ToolUp.Facts.DatasetModelRefusalModule (class)
+ToolUp.Facts.DatasetModelRefusalModule.code(ToolUp.Facts.DatasetModelRefusal) : System.String
+ToolUp.Facts.DatasetModelRefusalModule.describe(ToolUp.Facts.DatasetModelRefusal) : System.String
+ToolUp.Facts.DatasetModelRegistry (class)
+ToolUp.Facts.DatasetModelRegistry.Models : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredDatasetModel] { get }
+ToolUp.Facts.DatasetModelRegistry.TryDescription(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDescription]
+ToolUp.Facts.DatasetModelRegistry.TryModelOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.RegisteredDatasetModel]
+ToolUp.Facts.DatasetModelRegistryModule (class)
+ToolUp.Facts.DatasetModelRegistryModule.aggregateOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Core.AggFn]
+ToolUp.Facts.DatasetModelRegistryModule.check(ToolUp.Platform.Compose.FactTableComposition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DatasetModelRefusal]]
+ToolUp.Facts.DatasetModelRegistryModule.disclosureClass(ToolUp.Platform.Grounding.FactTableDisclosure) : System.String
+ToolUp.Facts.DatasetModelRegistryModule.existenceClass(System.String) : System.String
+ToolUp.Facts.DatasetModelRegistryModule.grantsFor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], Fuaran.DB.ModelNode) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.DB.Grant]
+ToolUp.Facts.DatasetModelRegistryModule.projectFor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Facts.RegisteredDatasetModel) : Fuaran.DB.ProjectedModel
+ToolUp.Facts.DatasetModelRegistryModule.register(ToolUp.Platform.Compose.ServerApp) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DatasetModelRefusal]]
+ToolUp.Facts.DatasetModelRegistryModule.relationCheck(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Facts.DatasetModelRegistry, ToolUp.Facts.PipelineCaller, ToolUp.Facts.PipelineJoin) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Facts.DatasetModelTools (class)
+ToolUp.Facts.DatasetModelTools.Name : System.String (literal)
+ToolUp.Facts.DatasetModelTools.answer(ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String) : System.String
+ToolUp.Facts.DatasetModelTools.definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.DatasetModelTools.describe(ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Facts.RegisteredDatasetModel) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Core.JVal]
+ToolUp.Facts.DatasetModelTools.executor(ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.DatasetModelTools.parts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.DeclassificationAmendmentConfig (class)
 ToolUp.Facts.DeclassificationAmendmentConfig..ctor(ToolUp.Platform.Compose.ICountersignatureRegistry, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.BudgetAmendment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDeclassificationAmendmentAudit])
 ToolUp.Facts.DeclassificationAmendmentConfig.Amendments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Compose.BudgetAmendment] { get }
@@ -1455,6 +1492,7 @@ ToolUp.Facts.FactsCompose (class)
 ToolUp.Facts.FactsCompose.withCoherenceChecks(ToolUp.Platform.Trigger, ToolUp.Platform.DeclaredPrincipal, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withCoherenceChecksConfig(ToolUp.Facts.CoherenceConfig, ToolUp.Platform.Trigger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredPrincipal], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withCoverageNarratives(ToolUp.Facts.CoverageNarrative+CoverageNarrativeOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.FactsCompose.withDatasetModels(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Facts.DatasetModelRegistry, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withDeclassificationBudgetConfig(ToolUp.Facts.DeclassificationBudgetConfig, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withDeclassificationBudgets(ToolUp.Platform.Compose.IPrivacyBudgetLedger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationBudget], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withDelegateFacts(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -2078,6 +2116,12 @@ ToolUp.Facts.RefusedFactJob.CreatedAt : System.DateTime { get }
 ToolUp.Facts.RefusedFactJob.CreatedBy : System.String { get }
 ToolUp.Facts.RefusedFactJob.Handler : System.String { get }
 ToolUp.Facts.RefusedFactJob.JobId : System.Guid { get }
+ToolUp.Facts.RegisteredDatasetModel (class)
+ToolUp.Facts.RegisteredDatasetModel..ctor(System.String, ToolUp.Platform.Grounding.DatasetModelDeclaration, Fuaran.DB.ModelNode, System.String)
+ToolUp.Facts.RegisteredDatasetModel.Declaration : ToolUp.Platform.Grounding.DatasetModelDeclaration { get }
+ToolUp.Facts.RegisteredDatasetModel.Hash : System.String { get }
+ToolUp.Facts.RegisteredDatasetModel.Model : Fuaran.DB.ModelNode { get }
+ToolUp.Facts.RegisteredDatasetModel.Module : System.String { get }
 ToolUp.Facts.RegisteredMethod (class)
 ToolUp.Facts.RegisteredMethod..ctor(ToolUp.Facts.MethodCard, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Facts.MethodToolBuild)
 ToolUp.Facts.RegisteredMethod.Card : ToolUp.Facts.MethodCard { get }
@@ -2089,6 +2133,14 @@ ToolUp.Facts.RegisteredPipelineProfile.Fragment : System.String { get }
 ToolUp.Facts.RegisteredPipelineProfile.FragmentBytes : System.Int32 { get }
 ToolUp.Facts.RegisteredPipelineProfile.FragmentTokens : System.Int32 { get }
 ToolUp.Facts.RegisteredPipelineProfile.Profile : ToolUp.Facts.PipelineProfile { get }
+ToolUp.Facts.RegisteredView (class)
+ToolUp.Facts.RegisteredView..ctor(System.String, ToolUp.Platform.Grounding.FactViewDefinition, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.RegisteredView.Definition : ToolUp.Platform.Grounding.FactViewDefinition { get }
+ToolUp.Facts.RegisteredView.Joins : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.RegisteredView.ModelHash : System.String { get }
+ToolUp.Facts.RegisteredView.Module : System.String { get }
+ToolUp.Facts.RegisteredView.Pipeline : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform] { get }
+ToolUp.Facts.RegisteredView.PipelineHash : System.String { get }
 ToolUp.Facts.SpecAssertion (class)
 ToolUp.Facts.SpecAssertion..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineAssertedFact], System.Int32, System.Int32, System.Int32, System.String)
 ToolUp.Facts.SpecAssertion.AssertedCount : System.Int32 { get }
@@ -2226,6 +2278,65 @@ ToolUp.Facts.UndescribedDeclarations.Metrics : Microsoft.FSharp.Collections.FSha
 ToolUp.Facts.UndescribedDeclarations.ModuleName : System.String { get }
 ToolUp.Facts.UndescribedDeclarations.Subjects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.UndescribedDeclarations.Tables : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ViewRefusal (class)
+ToolUp.Facts.ViewRefusal.IsColumnsDisagree : System.Boolean { get }
+ToolUp.Facts.ViewRefusal.IsModel : System.Boolean { get }
+ToolUp.Facts.ViewRefusal.IsModelCheck : System.Boolean { get }
+ToolUp.Facts.ViewRefusal.IsOpenResult : System.Boolean { get }
+ToolUp.Facts.ViewRefusal.IsParameterMismatch : System.Boolean { get }
+ToolUp.Facts.ViewRefusal.IsUndecodable : System.Boolean { get }
+ToolUp.Facts.ViewRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.ViewRefusal+ColumnsDisagree (class)
+ToolUp.Facts.ViewRefusal+ColumnsDisagree.declared : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ViewRefusal+ColumnsDisagree.view : System.String { get }
+ToolUp.Facts.ViewRefusal+ColumnsDisagree.walked : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ViewRefusal+Model (class)
+ToolUp.Facts.ViewRefusal+Model.Item : ToolUp.Facts.DatasetModelRefusal { get }
+ToolUp.Facts.ViewRefusal+ModelCheck (class)
+ToolUp.Facts.ViewRefusal+ModelCheck.code : System.String { get }
+ToolUp.Facts.ViewRefusal+ModelCheck.reason : System.String { get }
+ToolUp.Facts.ViewRefusal+ModelCheck.view : System.String { get }
+ToolUp.Facts.ViewRefusal+OpenResult (class)
+ToolUp.Facts.ViewRefusal+OpenResult.reason : System.String { get }
+ToolUp.Facts.ViewRefusal+OpenResult.view : System.String { get }
+ToolUp.Facts.ViewRefusal+ParameterMismatch (class)
+ToolUp.Facts.ViewRefusal+ParameterMismatch.undeclared : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ViewRefusal+ParameterMismatch.unused : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ViewRefusal+ParameterMismatch.view : System.String { get }
+ToolUp.Facts.ViewRefusal+Tags (class)
+ToolUp.Facts.ViewRefusal+Tags.ColumnsDisagree : System.Int32 (literal)
+ToolUp.Facts.ViewRefusal+Tags.Model : System.Int32 (literal)
+ToolUp.Facts.ViewRefusal+Tags.ModelCheck : System.Int32 (literal)
+ToolUp.Facts.ViewRefusal+Tags.OpenResult : System.Int32 (literal)
+ToolUp.Facts.ViewRefusal+Tags.ParameterMismatch : System.Int32 (literal)
+ToolUp.Facts.ViewRefusal+Tags.Undecodable : System.Int32 (literal)
+ToolUp.Facts.ViewRefusal+Undecodable (class)
+ToolUp.Facts.ViewRefusal+Undecodable.reason : System.String { get }
+ToolUp.Facts.ViewRefusal+Undecodable.view : System.String { get }
+ToolUp.Facts.ViewRefusalModule (class)
+ToolUp.Facts.ViewRefusalModule.describe(ToolUp.Facts.ViewRefusal) : System.String
+ToolUp.Facts.ViewRegistry (class)
+ToolUp.Facts.ViewRegistry.ArgumentCondition : System.String (literal)
+ToolUp.Facts.ViewRegistry.EvaluationCondition : System.String (literal)
+ToolUp.Facts.ViewRegistry.ViewTableCondition : System.String (literal)
+ToolUp.Facts.ViewRegistry.argumentCell(ToolUp.Platform.Grounding.FactViewParameter, System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.Cell, System.String]
+ToolUp.Facts.ViewRegistry.bindings(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodBinding]
+ToolUp.Facts.ViewRegistry.card(ToolUp.Facts.RegisteredView) : ToolUp.Facts.MethodCard
+ToolUp.Facts.ViewRegistry.check(ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactViewRegistration]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ViewRefusal]]
+ToolUp.Facts.ViewRegistry.checkView(ToolUp.Facts.RegisteredDatasetModel, ToolUp.Platform.Grounding.FactViewDefinition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.RegisteredView, ToolUp.Facts.ViewRefusal]
+ToolUp.Facts.ViewRegistry.evaluate(ToolUp.Facts.RegisteredView, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Fuaran.Core.Cell], ToolUp.Facts.PipelineToolRequest, ToolUp.Facts.FactSlice, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.FactSlice]], System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.ViewResult, ToolUp.Facts.PipelineRefusal]
+ToolUp.Facts.ViewRegistry.evaluator(ToolUp.Facts.RegisteredView) : ToolUp.Facts.MethodEvaluator
+ToolUp.Facts.ViewRegistry.joinedTables(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.ViewRegistry.register(ToolUp.Platform.Compose.ServerApp) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ViewRefusal]]
+ToolUp.Facts.ViewRegistry.registerOrRefuse(ToolUp.Platform.Compose.ServerApp) : System.Tuple`2[ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView]]
+ToolUp.Facts.ViewRegistry.summary(ToolUp.Facts.ViewResult) : System.String
+ToolUp.Facts.ViewResult (class)
+ToolUp.Facts.ViewResult..ctor(System.String, System.String, System.String, System.String, ToolUp.Facts.PipelineToolResult)
+ToolUp.Facts.ViewResult.ModelHash : System.String { get }
+ToolUp.Facts.ViewResult.PipelineHash : System.String { get }
+ToolUp.Facts.ViewResult.Result : ToolUp.Facts.PipelineToolResult { get }
+ToolUp.Facts.ViewResult.Version : System.String { get }
+ToolUp.Facts.ViewResult.View : System.String { get }
 ToolUp.Facts.ViewerAwareDisclosure (class)
 ToolUp.Facts.ViewerAwareDisclosure..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.DisclosureViewer, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]]], ToolUp.Facts.DisclosureViewerSources)
 ToolUp.Facts.ViewerAwareDisclosure.Resolver : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.DisclosureViewer, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]]] { get }

@@ -2,7 +2,7 @@
   "specification": "app-composition-wire",
   "coreVersion": 1,
   "profile": "server-app-host",
-  "profileVersion": "7.4",
+  "profileVersion": "7.5",
   "note": "The machine-readable rendering of composition-profile.md sections P2, P3 and P8. Normative; the composition-profile surface check in this repository compares the two renderings and fails when they disagree. Counts appear nowhere: this file is the enumeration.",
   "tokens": {
     "appRoot.base": {
@@ -193,6 +193,14 @@
     "clientShell.browserHistory": {
       "closure": "closed",
       "tokens": ["hash"]
+    },
+    "datasetModel.measures.aggregate": {
+      "closure": "closed",
+      "tokens": ["sum", "mean", "min", "max", "count", "median", "stddev", "first", "last", "countDistinct"]
+    },
+    "datasetModel.views.parameters.type": {
+      "closure": "closed",
+      "tokens": ["string", "integer", "decimal", "boolean"]
     }
   },
   "nodeKinds": {
@@ -351,6 +359,16 @@
         { "name": "allow", "type": "array of allow entry objects", "presence": "required; never empty" }
       ],
       "leaf": true
+    },
+    "datasetModel": {
+      "members": [
+        { "name": "module", "type": "string", "presence": "required" },
+        { "name": "tables", "type": "array of strings", "presence": "required; never empty" },
+        { "name": "relations", "type": "array of relation objects", "presence": "optional; absent when the model declares none, never empty" },
+        { "name": "measures", "type": "array of measure objects", "presence": "optional; absent when the model declares none, never empty" },
+        { "name": "views", "type": "array of view objects", "presence": "optional; absent when the unit declares none, never empty" }
+      ],
+      "leaf": true
     }
   },
   "containment": {
@@ -372,6 +390,7 @@
       "factBrowse",
       "theme",
       "uiControl",
+      "datasetModel",
       "extensionRef"
     ],
     "serverConfig": ["companionSelection", "connectorRef", "configKnob"],
@@ -492,6 +511,11 @@
     "content-path-collision",
     "content-hash-mismatch",
     "principal-user-malformed",
-    "principal-setting-unresolved"
+    "principal-setting-unresolved",
+    "dataset-model-malformed",
+    "dataset-model-table-undeclared",
+    "dataset-model-measure-metric-undeclared",
+    "dataset-model-table-undescribed",
+    "dataset-view-pipeline-refused"
   ]
 }

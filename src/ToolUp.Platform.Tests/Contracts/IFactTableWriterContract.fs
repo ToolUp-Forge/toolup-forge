@@ -2143,6 +2143,10 @@ let preflightTests =
                     FactTablePreflight.UnboundRequiredRule
                     FactTablePreflight.MetricTwoHomesRule
                     FactTablePreflight.UndeclaredBindingRule
+                    FactTablePreflight.ModelTableUndeclaredRule
+                    FactTablePreflight.MeasureMetricUndeclaredRule
+                    FactTablePreflight.ModelTableUndescribedRule
+                    FactTablePreflight.ModelMalformedRule
                 ])
                 "the published codes"
 
