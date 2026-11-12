@@ -355,6 +355,7 @@
         <Compile Include="InProcess\FactTablesToolTests.fs" />
         <Compile Include="InProcess\AggregateMetricToolTests.fs" />
         <Compile Include="InProcess\PipelineAssertionTests.fs" />
+        <Compile Include="Contracts\ISpecRefusalContract.fs" />
         <Compile Include="InProcess\SpecToolTests.fs" />
         <Compile Include="InProcess\PipelineProfileTests.fs" />
         <Compile Include="InProcess\DisclosureEgressTests.fs" />

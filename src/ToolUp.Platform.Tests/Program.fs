@@ -688,6 +688,14 @@ let private registeredTests =
         AggregateMetricToolTests.tests
         PipelineAssertionTests.tests
         SpecToolTests.tests
+        ISpecRefusalContract.tests
+            "PipelineRefusal"
+            typeof<ToolUp.Facts.PipelineRefusal>
+            ISpecRefusalContract.pipelineRefusals
+        ISpecRefusalContract.tests
+            "SpecDoorRefusal"
+            typeof<ToolUp.Facts.SpecDoorRefusal>
+            ISpecRefusalContract.doorRefusals
         PipelineProfileTests.tests
         PageRequestResolverTests.tests
         LayoutToolsTests.tests
