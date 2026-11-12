@@ -141,7 +141,7 @@
     <ToolUpCloudVersion Condition="'$(ToolUpCloudVersion)' == ''">0.39.0</ToolUpCloudVersion>
     <ToolUpContainerSchedulersVersion Condition="'$(ToolUpContainerSchedulersVersion)' == ''">0.39.2</ToolUpContainerSchedulersVersion>
     <ToolUpContentScannersVersion Condition="'$(ToolUpContentScannersVersion)' == ''">0.39.2</ToolUpContentScannersVersion>
-    <ToolUpDataSourcesVersion Condition="'$(ToolUpDataSourcesVersion)' == ''">0.39.2</ToolUpDataSourcesVersion>
+    <ToolUpDataSourcesVersion Condition="'$(ToolUpDataSourcesVersion)' == ''">0.40.0</ToolUpDataSourcesVersion>
     <ToolUpEmbeddingCachesVersion Condition="'$(ToolUpEmbeddingCachesVersion)' == ''">0.39.2</ToolUpEmbeddingCachesVersion>
     <ToolUpEmbeddingProvidersVersion Condition="'$(ToolUpEmbeddingProvidersVersion)' == ''">0.39.2</ToolUpEmbeddingProvidersVersion>
     <ToolUpEncryptionVersion Condition="'$(ToolUpEncryptionVersion)' == ''">0.39.2</ToolUpEncryptionVersion>

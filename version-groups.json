@@ -117,7 +117,7 @@
     {
       "id": "data-sources",
       "property": "ToolUpDataSourcesVersion",
-      "version": "0.39.2",
+      "version": "0.40.0",
       "projects": [
         "src/DataSources/**"
       ]

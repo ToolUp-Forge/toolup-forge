@@ -267,6 +267,7 @@ module RenderFixtures =
                 Gate = gate
                 Registry = Some registry
                 Clock = clock
+                Views = None
             }
             Gate = gate
             Scope =
@@ -323,6 +324,7 @@ module RenderFixtures =
                     PeriodFrom = day1
                     PeriodTo = day1.AddDays 3.0
                     MaxPoints = FactBrowseApi.MaxSeriesPoints
+                    View = None
                 })
 
         series.Points

@@ -330,6 +330,7 @@ module PresentationRequest =
             PeriodFrom = from
             PeriodTo = until
             MaxPoints = maxPoints
+            View = None
         }
 
         [

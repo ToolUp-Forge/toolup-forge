@@ -143,7 +143,10 @@ module PipelineAnsweringTool =
         : Async<ToolHelpers.ToolAnswer> =
         answerAssertingUnder None deps scope principal argsJson
 
-    let private rerunUnder
+    /// `rerun` under the deployment's registered pipeline profile, its
+    /// relation check included, so a stored request the deployment's
+    /// assistant could write re-runs as it ran.
+    let rerunUnder
         (profile: RegisteredPipelineProfile option)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)

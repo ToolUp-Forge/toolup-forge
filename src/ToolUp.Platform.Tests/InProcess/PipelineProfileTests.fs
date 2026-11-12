@@ -85,6 +85,7 @@ let private joinWorld () : World =
             Gate = gate
             Registry = Some registry
             Clock = clock
+            Views = None
         }
         Gate = gate
         Scope =
@@ -113,6 +114,7 @@ let private factIdOf (w: World) (table: string) (metric: string) (site: string) 
                 PeriodFrom = day1
                 PeriodTo = day1.AddDays 3.0
                 MaxPoints = FactBrowseApi.MaxSeriesPoints
+                View = None
             }
             |> Async.RunSynchronously
         with

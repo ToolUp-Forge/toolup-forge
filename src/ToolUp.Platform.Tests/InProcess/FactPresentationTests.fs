@@ -68,6 +68,7 @@ let private series (metric: string) (points: FactSeriesPoint list) : FactSeries 
         match points |> List.filter _.Withheld |> List.length with
         | 0 -> []
         | n -> [ { PolicyRef = "small-cells"; Count = n } ]
+    View = None
 }
 
 /// Revenue for north and south over three days; south's 2 October point is
