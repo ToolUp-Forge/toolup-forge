@@ -124,7 +124,7 @@ module PromptContext =
         }
 
 /// A prompt fragment a registration rendered once: a language profile's, a
-/// pipeline profile's. Served by `SystemPromptBuilder.promptFragments`.
+/// pipeline profile's, a method profile's. Served by `SystemPromptBuilder.promptFragments`.
 type PromptFragment = {
     /// What the fragment is, as the boot log names it.
     Name: string
@@ -212,12 +212,15 @@ module SystemPromptBuilder =
 
     /// Built-in builder that serves registered prompt fragments: the strings
     /// their registrations rendered once (a language profile's, a pipeline
-    /// profile's), joined in list order into one layer, the same string on
-    /// every turn. Construct it once at boot; construction reports each
-    /// fragment's size to `logger`. With no fragment it contributes `""`,
-    /// which `compose` drops, so a deployment that registers none sends the
-    /// prompt it sent before, byte for byte.
+    /// profile's, a method profile's), joined in list order into one layer,
+    /// the same string on every turn. Construct it once at boot; construction
+    /// reports each fragment's size to `logger`. An empty fragment (a method
+    /// profile with no method) is served as nothing and not reported. With no
+    /// fragment it contributes `""`, which `compose` drops, so a deployment
+    /// that registers none sends the prompt it sent before, byte for byte.
     let promptFragments (logger: ILogger option) (fragments: PromptFragment list) : SystemPromptBuilder =
+        let fragments = fragments |> List.filter (fun f -> f.Text <> "")
+
         logger
         |> Option.iter (fun l ->
             for fragment in fragments do

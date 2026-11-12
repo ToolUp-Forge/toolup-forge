@@ -275,6 +275,61 @@ let fragmentTests =
                 ("You are the assistant.\n\n" + language.Fragment + "\n\n" + pipeline.Fragment)
                 "both fragments, as one layer, language first"
         }
+
+        testAsync "a method profile's fragment is served beside the others; one with no method adds nothing" {
+            let language = registered pilotProfile
+
+            let methods =
+                match ToolUp.Facts.MethodRegistry.register [ ToolUp.Facts.PipelineCard.binding None false ] with
+                | Ok p -> p
+                | Error refusals -> failwithf "the pipeline card did not register: %A" refusals
+
+            let empty =
+                match ToolUp.Facts.MethodRegistry.register [] with
+                | Ok p -> p
+                | Error refusals -> failwithf "no card did not register: %A" refusals
+
+            let logger, lines = capturingLogger ()
+
+            let builder =
+                SystemPromptBuilder.promptFragments (Some logger) [
+                    PromptFragment.ofLanguageProfile language
+                    PromptFragment.create methods.Description methods.Fragment
+                    PromptFragment.create empty.Description empty.Fragment
+                ]
+
+            Expect.equal
+                (List.ofSeq lines)
+                [
+                    sprintf "Language profile 'pilot': 6 kind(s), prompt fragment %d bytes." language.FragmentBytes
+                    sprintf "Method profile: 1 method(s), prompt fragment %d bytes." methods.FragmentBytes
+                ]
+                "one size line per fragment served; the empty one is not reported"
+
+            let! prompt = builder context
+
+            Expect.equal
+                prompt
+                (language.Fragment
+                 + "
+
+"
+                 + methods.Fragment)
+                "the empty one adds nothing"
+
+            let! before = SystemPromptBuilder.promptFragments None [ PromptFragment.ofLanguageProfile language ] context
+
+            let! withEmpty =
+                SystemPromptBuilder.promptFragments
+                    None
+                    [
+                        PromptFragment.ofLanguageProfile language
+                        PromptFragment.create empty.Description empty.Fragment
+                    ]
+                    context
+
+            Expect.equal withEmpty before "byte-identical with no method"
+        }
     ]
 
 let grammarTests =

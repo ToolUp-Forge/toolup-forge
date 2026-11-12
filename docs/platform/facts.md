@@ -1804,6 +1804,76 @@ result alone. A deployment's spec tool registered through `withSpecTool` answers
 for it needs a spec-generic block request and re-run, which is not built here. Migration note:
 [`docs/migrations/1273-spec-tool-pattern.md`](../migrations/1273-spec-tool-pattern.md).
 
+#### Method cards: one tool per registered method, and the method profile (Phase 1275)
+
+A **method card** describes one analytical method in eight parts (`MethodCard`, in `ToolUp.Facts.Core`):
+its identity (id, version, the hash of the definition it binds to, its package and how reproducible it
+is), its meaning, when it applies (named preconditions, when it does not, the alternatives, and whether
+choosing it is a judgement), its signature (the tool name and each argument with a JSON Schema, a
+default, a range and a data role, plus the refusals its evaluator may answer), its outputs (tables,
+diagnostics with their healthy ranges, warnings, and the derived metrics it asserts), how its result is
+read, how it is shown by default, and worked examples. The records are forge's mirror of the published
+card specification; until that package ships the registry reads this shape.
+
+A deployment binds each card to what runs it and registers the set with `MethodRegistry.register`:
+
+| Binding | What it is for |
+|---|---|
+| `MethodTool.bind card evaluator` | a card read from a package, or built in code by another component, with a `MethodEvaluator` that component supplies: the definition hash it implements, the preconditions it checks before any read, and the evaluation over the gated slice |
+| `MethodTool.ofSpecTool card definitionHash grammar tool` | a card over an existing spec tool, which keeps its own decoding, validation and evaluation; the card's id and version are the tool's operation and version |
+| `PipelineCard.binding profile asserting` | `evaluate_pipeline`, the first card, generated from the shipped declaration |
+
+Registration refuses, each by name and all together, and registers nothing: a repeated id or tool name
+(`describe_method` included), a tool name that is not lower-case letters, digits and `_`, a parameter
+schema that does not decode or a default that does not fit it, a parameter named like a slice argument,
+a definition hash the binding does not implement, a condition name that is not an identifier or that
+the door already refuses with, a condition whose statement or remedy is not one line, and a check for a
+precondition the card does not declare (`MethodRegistrationRefusal`).
+
+What registration generates for each card, so nothing is written twice:
+
+- **One spec tool.** Its name is the card's tool name, its description the meaning paragraph, its
+  parameters the slice arguments followed by the card's own (each argument's range and default in its
+  description). Its validator refuses a missing, mistyped or unadmitted argument and a failed
+  precondition together, before any read; the evaluation refuses under a card condition's name. Every
+  refusal is a `MethodRefusal`, an `ISpecRefusal` whose name is the card's condition name and whose
+  remedy is the card's. The answer names the method, the evaluator's summary, the diagnostics with their
+  healthy ranges and the reading rules, never a figure.
+- **Facts under the card's identity.** Rows the result declares are asserted through the door as
+  `Computed(card id, card version, parameter hash)`, the parameter hash being SHA-256 over the card's
+  definition hash and the call's arguments in canonical JSON (defaults included). The metric must be
+  registered as produced by the card id.
+- **The method profile.** One prompt fragment, rendered once, with an entry per card: what it answers,
+  what it assumes, when it applies and when it does not, what to use instead, whether the choice is a
+  judgement, how to read the result, and the grammar its tool reads its spec under where it has one. The
+  examples are not in it. The profile is the tool list: a card not registered is neither in the
+  fragment nor callable.
+- **`describe_method`**, which answers a card's full text on demand, the examples included.
+
+Compose it with `FactsCompose.withMethods profile`, which declares every tool beside the fact tools
+and refuses a name already declared, and serve the fragment through the AI tier's fragment seam, whose
+builder reports its size at boot:
+
+```fsharp skip=fragment
+let methods =
+    match MethodRegistry.register [ PipelineCard.binding (Some pipelineProfile) false; meanBinding ] with
+    | Ok profile -> profile
+    | Error refusals -> failwith (refusals |> List.map MethodRegistrationRefusal.describe |> String.concat "; ")
+
+app |> FactsCompose.withMethods methods
+
+SystemPromptBuilder.promptFragments (Some logger) [ PromptFragment.create methods.Description methods.Fragment ]
+```
+
+A registration with no card has an empty fragment and no tool, and `promptFragments` serves an empty
+fragment as nothing, so a deployment that registers none sends the prompt it sent before. Under a
+pipeline profile the pipeline card's entry carries the profile's fragment, so a deployment serving the
+method profile does not serve the pipeline profile's fragment beside it. `PipelineCard.binding` binds
+the text-answering form; a deployment composing the presentation tier's block-answering
+`evaluate_pipeline` keeps that registration and does not register the pipeline card, whose tool name
+`withMethods` would refuse as already declared. Migration note:
+[`docs/migrations/1275-method-registry.md`](../migrations/1275-method-registry.md).
+
 #### The question compiler (Phase 986)
 
 The planner takes its compiler from the first of these that the

@@ -631,6 +631,103 @@ ToolUp.Facts.InputHash (class)
 ToolUp.Facts.InputHash.MinimumDigits : System.Int32 (literal)
 ToolUp.Facts.InputHash.isContentHash(System.String) : System.Boolean
 ToolUp.Facts.InputHash.named(ToolUp.Facts.Evidence) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.MethodAlternative (class)
+ToolUp.Facts.MethodAlternative..ctor(System.String, System.String)
+ToolUp.Facts.MethodAlternative.Method : System.String { get }
+ToolUp.Facts.MethodAlternative.PreferWhen : System.String { get }
+ToolUp.Facts.MethodApplicability (class)
+ToolUp.Facts.MethodApplicability..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodCondition], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodAlternative], ToolUp.Facts.MethodChoice)
+ToolUp.Facts.MethodApplicability.Alternatives : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodAlternative] { get }
+ToolUp.Facts.MethodApplicability.Choice : ToolUp.Facts.MethodChoice { get }
+ToolUp.Facts.MethodApplicability.DoesNotApply : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodApplicability.Preconditions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodCondition] { get }
+ToolUp.Facts.MethodCard (class)
+ToolUp.Facts.MethodCard..ctor(ToolUp.Facts.MethodIdentity, ToolUp.Facts.MethodMeaning, ToolUp.Facts.MethodApplicability, ToolUp.Facts.MethodSignature, ToolUp.Facts.MethodOutputs, ToolUp.Facts.MethodInterpretation, ToolUp.Facts.MethodPresentation, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodExample])
+ToolUp.Facts.MethodCard.Applicability : ToolUp.Facts.MethodApplicability { get }
+ToolUp.Facts.MethodCard.Examples : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodExample] { get }
+ToolUp.Facts.MethodCard.Identity : ToolUp.Facts.MethodIdentity { get }
+ToolUp.Facts.MethodCard.Interpretation : ToolUp.Facts.MethodInterpretation { get }
+ToolUp.Facts.MethodCard.Meaning : ToolUp.Facts.MethodMeaning { get }
+ToolUp.Facts.MethodCard.Outputs : ToolUp.Facts.MethodOutputs { get }
+ToolUp.Facts.MethodCard.Presentation : ToolUp.Facts.MethodPresentation { get }
+ToolUp.Facts.MethodCard.Signature : ToolUp.Facts.MethodSignature { get }
+ToolUp.Facts.MethodChoice (class)
+ToolUp.Facts.MethodChoice.IsJudgement : System.Boolean { get }
+ToolUp.Facts.MethodChoice.IsMechanical : System.Boolean { get }
+ToolUp.Facts.MethodChoice.Judgement : ToolUp.Facts.MethodChoice { get }
+ToolUp.Facts.MethodChoice.Mechanical : ToolUp.Facts.MethodChoice { get }
+ToolUp.Facts.MethodChoice.Tag : System.Int32 { get }
+ToolUp.Facts.MethodChoice+Tags (class)
+ToolUp.Facts.MethodChoice+Tags.Judgement : System.Int32 (literal)
+ToolUp.Facts.MethodChoice+Tags.Mechanical : System.Int32 (literal)
+ToolUp.Facts.MethodColumn (class)
+ToolUp.Facts.MethodColumn..ctor(System.String, System.String)
+ToolUp.Facts.MethodColumn.Meaning : System.String { get }
+ToolUp.Facts.MethodColumn.Name : System.String { get }
+ToolUp.Facts.MethodCondition (class)
+ToolUp.Facts.MethodCondition..ctor(System.String, System.String, System.String)
+ToolUp.Facts.MethodCondition.Name : System.String { get }
+ToolUp.Facts.MethodCondition.Remedy : System.String { get }
+ToolUp.Facts.MethodCondition.Statement : System.String { get }
+ToolUp.Facts.MethodDeterminism (class)
+ToolUp.Facts.MethodDeterminism.HostRounded : ToolUp.Facts.MethodDeterminism { get }
+ToolUp.Facts.MethodDeterminism.IsHostRounded : System.Boolean { get }
+ToolUp.Facts.MethodDeterminism.IsPinned : System.Boolean { get }
+ToolUp.Facts.MethodDeterminism.IsSeeded : System.Boolean { get }
+ToolUp.Facts.MethodDeterminism.Pinned : ToolUp.Facts.MethodDeterminism { get }
+ToolUp.Facts.MethodDeterminism.Seeded : ToolUp.Facts.MethodDeterminism { get }
+ToolUp.Facts.MethodDeterminism.Tag : System.Int32 { get }
+ToolUp.Facts.MethodDeterminism+Tags (class)
+ToolUp.Facts.MethodDeterminism+Tags.HostRounded : System.Int32 (literal)
+ToolUp.Facts.MethodDeterminism+Tags.Pinned : System.Int32 (literal)
+ToolUp.Facts.MethodDeterminism+Tags.Seeded : System.Int32 (literal)
+ToolUp.Facts.MethodDiagnostic (class)
+ToolUp.Facts.MethodDiagnostic..ctor(System.String, System.String, System.String)
+ToolUp.Facts.MethodDiagnostic.Healthy : System.String { get }
+ToolUp.Facts.MethodDiagnostic.Meaning : System.String { get }
+ToolUp.Facts.MethodDiagnostic.Name : System.String { get }
+ToolUp.Facts.MethodExample (class)
+ToolUp.Facts.MethodExample..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Facts.MethodExample.Call : System.String { get }
+ToolUp.Facts.MethodExample.Explanation : System.String { get }
+ToolUp.Facts.MethodExample.Result : System.String { get }
+ToolUp.Facts.MethodExample.Title : System.String { get }
+ToolUp.Facts.MethodIdentity (class)
+ToolUp.Facts.MethodIdentity..ctor(System.String, System.String, System.String, System.String, ToolUp.Facts.MethodDeterminism)
+ToolUp.Facts.MethodIdentity.DefinitionHash : System.String { get }
+ToolUp.Facts.MethodIdentity.Determinism : ToolUp.Facts.MethodDeterminism { get }
+ToolUp.Facts.MethodIdentity.Id : System.String { get }
+ToolUp.Facts.MethodIdentity.Package : System.String { get }
+ToolUp.Facts.MethodIdentity.Version : System.String { get }
+ToolUp.Facts.MethodInterpretation (class)
+ToolUp.Facts.MethodInterpretation..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.MethodInterpretation.NeverSay : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodInterpretation.Rules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodInterpretation.Say : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodMeaning (class)
+ToolUp.Facts.MethodMeaning..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.MethodMeaning.Answers : System.String { get }
+ToolUp.Facts.MethodMeaning.Assumes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodMeaning.Summary : System.String { get }
+ToolUp.Facts.MethodOutputs (class)
+ToolUp.Facts.MethodOutputs..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodTable], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodDiagnostic], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.MethodOutputs.Diagnostics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodDiagnostic] { get }
+ToolUp.Facts.MethodOutputs.Facts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodOutputs.Tables : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodTable] { get }
+ToolUp.Facts.MethodOutputs.Warnings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodParameter (class)
+ToolUp.Facts.MethodParameter..ctor(System.String, System.String, System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.MethodParameter.Default : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.MethodParameter.Meaning : System.String { get }
+ToolUp.Facts.MethodParameter.Name : System.String { get }
+ToolUp.Facts.MethodParameter.Range : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.MethodParameter.Required : System.Boolean { get }
+ToolUp.Facts.MethodParameter.Role : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.MethodParameter.Schema : System.String { get }
+ToolUp.Facts.MethodPresentation (class)
+ToolUp.Facts.MethodPresentation..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.MethodPresentation.BaseCard : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.MethodPresentation.Blocks : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.MethodRef (class)
 ToolUp.Facts.MethodRef.IsComputed : System.Boolean { get }
 ToolUp.Facts.MethodRef.IsHumanAsserted : System.Boolean { get }
@@ -648,6 +745,50 @@ ToolUp.Facts.MethodRef+Tags (class)
 ToolUp.Facts.MethodRef+Tags.Computed : System.Int32 (literal)
 ToolUp.Facts.MethodRef+Tags.HumanAsserted : System.Int32 (literal)
 ToolUp.Facts.MethodRef+Tags.Imported : System.Int32 (literal)
+ToolUp.Facts.MethodRefusal (class)
+ToolUp.Facts.MethodRefusal.IsArgumentMistyped : System.Boolean { get }
+ToolUp.Facts.MethodRefusal.IsArgumentNotAdmitted : System.Boolean { get }
+ToolUp.Facts.MethodRefusal.IsDoor : System.Boolean { get }
+ToolUp.Facts.MethodRefusal.IsMissingArgument : System.Boolean { get }
+ToolUp.Facts.MethodRefusal.IsUndeclared : System.Boolean { get }
+ToolUp.Facts.MethodRefusal.IsUnmet : System.Boolean { get }
+ToolUp.Facts.MethodRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.MethodRefusal+ArgumentMistyped (class)
+ToolUp.Facts.MethodRefusal+ArgumentMistyped.argument : System.String { get }
+ToolUp.Facts.MethodRefusal+ArgumentMistyped.expected : System.String { get }
+ToolUp.Facts.MethodRefusal+ArgumentMistyped.methodId : System.String { get }
+ToolUp.Facts.MethodRefusal+ArgumentNotAdmitted (class)
+ToolUp.Facts.MethodRefusal+ArgumentNotAdmitted.admissible : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodRefusal+ArgumentNotAdmitted.argument : System.String { get }
+ToolUp.Facts.MethodRefusal+ArgumentNotAdmitted.methodId : System.String { get }
+ToolUp.Facts.MethodRefusal+Door (class)
+ToolUp.Facts.MethodRefusal+Door.Item : ToolUp.Facts.SpecDoorRefusal { get }
+ToolUp.Facts.MethodRefusal+MissingArgument (class)
+ToolUp.Facts.MethodRefusal+MissingArgument.argument : System.String { get }
+ToolUp.Facts.MethodRefusal+MissingArgument.methodId : System.String { get }
+ToolUp.Facts.MethodRefusal+Tags (class)
+ToolUp.Facts.MethodRefusal+Tags.ArgumentMistyped : System.Int32 (literal)
+ToolUp.Facts.MethodRefusal+Tags.ArgumentNotAdmitted : System.Int32 (literal)
+ToolUp.Facts.MethodRefusal+Tags.Door : System.Int32 (literal)
+ToolUp.Facts.MethodRefusal+Tags.MissingArgument : System.Int32 (literal)
+ToolUp.Facts.MethodRefusal+Tags.Undeclared : System.Int32 (literal)
+ToolUp.Facts.MethodRefusal+Tags.Unmet : System.Int32 (literal)
+ToolUp.Facts.MethodRefusal+Undeclared (class)
+ToolUp.Facts.MethodRefusal+Undeclared.methodId : System.String { get }
+ToolUp.Facts.MethodRefusal+Undeclared.name : System.String { get }
+ToolUp.Facts.MethodRefusal+Unmet (class)
+ToolUp.Facts.MethodRefusal+Unmet.condition : ToolUp.Facts.MethodCondition { get }
+ToolUp.Facts.MethodRefusal+Unmet.methodId : System.String { get }
+ToolUp.Facts.MethodSignature (class)
+ToolUp.Facts.MethodSignature..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodParameter], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodCondition])
+ToolUp.Facts.MethodSignature.Parameters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodParameter] { get }
+ToolUp.Facts.MethodSignature.Refusals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodCondition] { get }
+ToolUp.Facts.MethodSignature.ToolName : System.String { get }
+ToolUp.Facts.MethodTable (class)
+ToolUp.Facts.MethodTable..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodColumn])
+ToolUp.Facts.MethodTable.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodColumn] { get }
+ToolUp.Facts.MethodTable.Meaning : System.String { get }
+ToolUp.Facts.MethodTable.Name : System.String { get }
 ToolUp.Facts.MetricRef (class)
 ToolUp.Facts.MetricRef.Item : System.String { get }
 ToolUp.Facts.MetricRef.Tag : System.Int32 { get }

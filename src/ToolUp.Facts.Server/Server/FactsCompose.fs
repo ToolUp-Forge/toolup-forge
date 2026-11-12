@@ -1029,6 +1029,45 @@ module FactsCompose =
                         AITools = app.AITools @ [ tool.Definition, SpecTool.executor tool ]
                 }
 
+    /// **Adds** the deployment's registered methods (`MethodRegistry.register`):
+    /// one tool per method card and `describe_method` ride `ServerApp.AITools`
+    /// beside the fact tools, and the profile is registered so its fragment
+    /// (`MethodProfile.Fragment`) can be served in the system prompt. A
+    /// profile with no method changes nothing, as does a deployment with no
+    /// fact store; a tool named like one already declared, or a second
+    /// profile, is refused.
+    let withMethods (profile: MethodProfile) (app: ServerApp) : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when profile.Methods.IsEmpty -> app
+        | FeatureMode.Enabled ->
+            let declared =
+                app.AITools |> List.map (fun (definition, _) -> definition.Name) |> Set.ofList
+
+            match profile.Tools |> List.tryFind (fun t -> declared.Contains t.Definition.Name) with
+            | Some taken ->
+                ServiceComposition.refuse (
+                    CompositionRefusal.InvalidDeclaration(
+                        "FactsCompose.withMethods",
+                        sprintf "a tool named '%s' is already declared" taken.Definition.Name
+                    )
+                )
+            | None ->
+                {
+                    app with
+                        AITools = app.AITools @ (profile.Tools |> List.map (fun t -> t.Definition, t.Executor))
+                }
+                |> contribute (fun s ->
+                    if s |> Seq.exists (fun d -> d.ServiceType = typeof<MethodProfile>) then
+                        ServiceComposition.refuse (
+                            CompositionRefusal.InvalidDeclaration(
+                                "FactsCompose.withMethods",
+                                "a method profile is already registered; register every method in one MethodRegistry.register call"
+                            )
+                        )
+                    else
+                        s.AddSingleton<MethodProfile>(profile))
+
     /// Declare what `list_fact_tables` lists: the cap on the distinct members
     /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
     /// turns member listing off). Call it after `withFactStore`, which declares

@@ -163,6 +163,12 @@
              cap and the assertion door, written once for every "spec in,
              Facts out" tool. Before the compose module, which registers one. -->
         <Compile Include="Server\SpecTool.fs" />
+        <!-- Method cards: one spec tool per registered card, the method
+             profile and describe_method, and the registry that checks and
+             registers them. Before the compose module, which composes them. -->
+        <Compile Include="Server\MethodTool.fs" />
+        <Compile Include="Server\MethodProfile.fs" />
+        <Compile Include="Server\MethodRegistry.fs" />
         <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 1145 — evaluate_pipeline: a Fuaran.Compute pipeline the
              model writes, evaluated over the fact browse's gated view slice.
