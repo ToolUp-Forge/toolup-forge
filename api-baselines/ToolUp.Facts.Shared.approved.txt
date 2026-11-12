@@ -31,6 +31,7 @@ ToolUp.Facts.FactBrowseSlice.decode(ToolUp.Facts.FactSlice) : Microsoft.FSharp.C
 ToolUp.Facts.FactBrowseSlice.encode(Fuaran.Core.Table) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
 ToolUp.Facts.FactBrowseSlice.hold(ToolUp.Facts.FactSlice) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactBrowseSlice+Held, System.String]
 ToolUp.Facts.FactBrowseSlice.metricColumn(System.String, System.String) : System.String
+ToolUp.Facts.FactBrowseSlice.parseDecimal(System.String) : System.Decimal
 ToolUp.Facts.FactBrowseSlice.parseTimestamp(System.String) : System.DateTime
 ToolUp.Facts.FactBrowseSlice.population(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
 ToolUp.Facts.FactBrowseSlice.rankingEnd(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
@@ -160,7 +161,7 @@ ToolUp.Facts.FactRunPage.Runs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp
 ToolUp.Facts.FactRunPage.TableId : System.String { get }
 ToolUp.Facts.FactRunPage.TotalRuns : System.Int32 { get }
 ToolUp.Facts.FactSeries (class)
-ToolUp.Facts.FactSeries..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSeriesPoint], System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount])
+ToolUp.Facts.FactSeries..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSeriesPoint], System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactSeriesViewIdentity])
 ToolUp.Facts.FactSeries.DisplayFormat : System.String { get }
 ToolUp.Facts.FactSeries.MaxPoints : System.Int32 { get }
 ToolUp.Facts.FactSeries.Metric : System.String { get }
@@ -170,6 +171,7 @@ ToolUp.Facts.FactSeries.Points : Microsoft.FSharp.Collections.FSharpList`1[ToolU
 ToolUp.Facts.FactSeries.SubjectLevel : System.String { get }
 ToolUp.Facts.FactSeries.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactSeries.TableId : System.String { get }
+ToolUp.Facts.FactSeries.View : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactSeriesViewIdentity] { get }
 ToolUp.Facts.FactSeries.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount] { get }
 ToolUp.Facts.FactSeries.WithheldCount : System.Int32 { get }
 ToolUp.Facts.FactSeriesPoint (class)
@@ -186,7 +188,7 @@ ToolUp.Facts.FactSeriesPoint.SubjectPath : Microsoft.FSharp.Collections.FSharpLi
 ToolUp.Facts.FactSeriesPoint.Value : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
 ToolUp.Facts.FactSeriesPoint.Withheld : System.Boolean { get }
 ToolUp.Facts.FactSeriesQuery (class)
-ToolUp.Facts.FactSeriesQuery..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.DateTime, System.Int32)
+ToolUp.Facts.FactSeriesQuery..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.DateTime, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactSeriesViewSource])
 ToolUp.Facts.FactSeriesQuery.MaxPoints : System.Int32 { get }
 ToolUp.Facts.FactSeriesQuery.Metric : System.String { get }
 ToolUp.Facts.FactSeriesQuery.PeriodFrom : System.DateTime { get }
@@ -194,6 +196,17 @@ ToolUp.Facts.FactSeriesQuery.PeriodTo : System.DateTime { get }
 ToolUp.Facts.FactSeriesQuery.SubjectLevel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.FactSeriesQuery.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactSeriesQuery.TableId : System.String { get }
+ToolUp.Facts.FactSeriesQuery.View : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactSeriesViewSource] { get }
+ToolUp.Facts.FactSeriesViewIdentity (class)
+ToolUp.Facts.FactSeriesViewIdentity..ctor(System.String, System.String, System.String, System.String)
+ToolUp.Facts.FactSeriesViewIdentity.ModelHash : System.String { get }
+ToolUp.Facts.FactSeriesViewIdentity.PipelineHash : System.String { get }
+ToolUp.Facts.FactSeriesViewIdentity.Version : System.String { get }
+ToolUp.Facts.FactSeriesViewIdentity.ViewId : System.String { get }
+ToolUp.Facts.FactSeriesViewSource (class)
+ToolUp.Facts.FactSeriesViewSource..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.FactViewArgument])
+ToolUp.Facts.FactSeriesViewSource.Arguments : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.FactViewArgument] { get }
+ToolUp.Facts.FactSeriesViewSource.ViewId : System.String { get }
 ToolUp.Facts.FactSlice (class)
 ToolUp.Facts.FactSlice..ctor(System.String, System.String, System.String, System.String, System.DateTime, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSliceMetric], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount])
 ToolUp.Facts.FactSlice.CellCount : System.Int32 { get }
@@ -291,6 +304,25 @@ ToolUp.Facts.FactTableRunView.RunId : System.String { get }
 ToolUp.Facts.FactTableRunView.Sequence : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.Facts.FactTableRunView.StagedRows : System.Int32 { get }
 ToolUp.Facts.FactTableRunView.Status : System.String { get }
+ToolUp.Facts.FactViewArgument (class)
+ToolUp.Facts.FactViewArgument.IsBoolean : System.Boolean { get }
+ToolUp.Facts.FactViewArgument.IsDecimal : System.Boolean { get }
+ToolUp.Facts.FactViewArgument.IsInteger : System.Boolean { get }
+ToolUp.Facts.FactViewArgument.IsText : System.Boolean { get }
+ToolUp.Facts.FactViewArgument.Tag : System.Int32 { get }
+ToolUp.Facts.FactViewArgument+Boolean (class)
+ToolUp.Facts.FactViewArgument+Boolean.Item : System.Boolean { get }
+ToolUp.Facts.FactViewArgument+Decimal (class)
+ToolUp.Facts.FactViewArgument+Decimal.Item : System.Decimal { get }
+ToolUp.Facts.FactViewArgument+Integer (class)
+ToolUp.Facts.FactViewArgument+Integer.Item : System.Int32 { get }
+ToolUp.Facts.FactViewArgument+Tags (class)
+ToolUp.Facts.FactViewArgument+Tags.Boolean : System.Int32 (literal)
+ToolUp.Facts.FactViewArgument+Tags.Decimal : System.Int32 (literal)
+ToolUp.Facts.FactViewArgument+Tags.Integer : System.Int32 (literal)
+ToolUp.Facts.FactViewArgument+Tags.Text : System.Int32 (literal)
+ToolUp.Facts.FactViewArgument+Text (class)
+ToolUp.Facts.FactViewArgument+Text.Item : System.String { get }
 ToolUp.Facts.FactWithheldCount (class)
 ToolUp.Facts.FactWithheldCount..ctor(System.String, System.Int32)
 ToolUp.Facts.FactWithheldCount.Count : System.Int32 { get }

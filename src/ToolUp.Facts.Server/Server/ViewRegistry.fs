@@ -5,6 +5,7 @@ namespace ToolUp.Facts
 
 open System
 open System.Text.Json
+open Microsoft.Extensions.DependencyInjection
 open Fuaran.Core
 open Fuaran.Compute
 open Fuaran.DB
@@ -214,24 +215,36 @@ module ViewRegistry =
                 )
             )
 
+    /// A typed argument as the cell its parameter's type takes, or why not.
+    /// An integer is admitted where a decimal is declared.
+    let argument (parameter: FactViewParameter) (value: FactViewArgument) : Result<Cell, string> =
+        match parameter.Type, value with
+        | "string", FactViewArgument.Text s -> Ok(Str s)
+        | "integer", FactViewArgument.Integer n -> Ok(Int n)
+        | "decimal", FactViewArgument.Decimal d -> Ok(Decimal(d.ToString(Globalization.CultureInfo.InvariantCulture)))
+        | "decimal", FactViewArgument.Integer n -> Ok(Decimal(n.ToString(Globalization.CultureInfo.InvariantCulture)))
+        | "boolean", FactViewArgument.Boolean b -> Ok(Bool b)
+        | _ -> Error(sprintf "parameter '%s' takes a %s" parameter.Name parameter.Type)
+
     /// A call's argument as the cell its parameter's type takes, or why not.
     let argumentCell (parameter: FactViewParameter) (value: JsonElement) : Result<Cell, string> =
-        let wrong () =
-            Error(sprintf "parameter '%s' takes a %s" parameter.Name parameter.Type)
+        let typed =
+            match value.ValueKind with
+            | JsonValueKind.String -> Some(FactViewArgument.Text(value.GetString()))
+            | JsonValueKind.Number ->
+                match value.TryGetInt32() with
+                | true, n -> Some(FactViewArgument.Integer n)
+                | _ ->
+                    match value.TryGetDecimal() with
+                    | true, d -> Some(FactViewArgument.Decimal d)
+                    | _ -> None
+            | JsonValueKind.True -> Some(FactViewArgument.Boolean true)
+            | JsonValueKind.False -> Some(FactViewArgument.Boolean false)
+            | _ -> None
 
-        match parameter.Type, value.ValueKind with
-        | "string", JsonValueKind.String -> Ok(Str(value.GetString()))
-        | "integer", JsonValueKind.Number ->
-            match value.TryGetInt32() with
-            | true, n -> Ok(Int n)
-            | _ -> wrong ()
-        | "decimal", JsonValueKind.Number ->
-            match value.TryGetDecimal() with
-            | true, d -> Ok(Decimal(d.ToString(Globalization.CultureInfo.InvariantCulture)))
-            | _ -> wrong ()
-        | "boolean", JsonValueKind.True -> Ok(Bool true)
-        | "boolean", JsonValueKind.False -> Ok(Bool false)
-        | _ -> wrong ()
+        match typed with
+        | Some a -> argument parameter a
+        | None -> Error(sprintf "parameter '%s' takes a %s" parameter.Name parameter.Type)
 
     /// Evaluate `view` with `arguments` bound, over the gated slice of its
     /// table and the gated slices of the tables it joins (`joined`, by table
@@ -437,3 +450,294 @@ module ViewRegistry =
     /// `MethodRegistry.register` call beside its other cards.
     let bindings (views: RegisteredView list) : MethodBinding list =
         views |> List.map (fun v -> MethodTool.bind (card v) (evaluator v))
+
+    // ── A series over a view ──────────────────────────────────────
+
+    /// The result columns a view answers for a series to draw one of its
+    /// columns: each row's subject, its path and its period.
+    let seriesColumns: string list = [
+        FactBrowseSlice.SubjectColumn
+        FactBrowseSlice.PathColumn
+        FactBrowseSlice.FromColumn
+        FactBrowseSlice.ToColumn
+    ]
+
+    let private quoted (xs: string list) =
+        if xs.IsEmpty then
+            "none"
+        else
+            xs |> List.map (sprintf "'%s'") |> String.concat ", "
+
+    /// The arguments a series names, bound to the view's parameters: a name
+    /// the view does not declare, a required parameter left unnamed or an
+    /// argument of the wrong type is refused by name.
+    let seriesArguments
+        (view: RegisteredView)
+        (given: Map<string, FactViewArgument>)
+        : Result<Map<string, Cell>, string> =
+        let v = view.Definition
+        let declared = v.Parameters |> List.map _.Name
+
+        match
+            given
+            |> Map.toList
+            |> List.map fst
+            |> List.filter (fun n -> not (List.contains n declared))
+        with
+        | unknown :: _ ->
+            Error(sprintf "View '%s' declares no parameter '%s'; it declares %s." v.Id unknown (quoted declared))
+        | [] ->
+            match
+                v.Parameters
+                |> List.tryFind (fun p -> p.Required && not (given.ContainsKey p.Name))
+            with
+            | Some p -> Error(sprintf "View '%s' needs the argument '%s'." v.Id p.Name)
+            | None ->
+                v.Parameters
+                |> List.choose (fun p -> given.TryFind p.Name |> Option.map (fun a -> p, a))
+                |> List.fold
+                    (fun bound (p, a) ->
+                        bound
+                        |> Result.bind (fun m ->
+                            argument p a
+                            |> Result.map (fun c -> Map.add p.Name c m)
+                            |> Result.mapError (sprintf "View '%s': %s." v.Id)))
+                    (Ok Map.empty)
+
+    /// Why a view cannot be drawn as `request` asks, before anything is read.
+    let private seriesShape (view: RegisteredView) (request: FactSeriesQuery) : Result<unit, string> =
+        let v = view.Definition
+        let columns = v.Columns |> List.map _.Name
+
+        if request.TableId <> v.Table then
+            Error(sprintf "View '%s' reads table '%s'; the series names table '%s'." v.Id v.Table request.TableId)
+        elif request.SubjectLevel.IsSome then
+            Error(sprintf "View '%s' decides its own rows, so a series over it takes no subject level." v.Id)
+        elif request.PeriodFrom >= request.PeriodTo then
+            Error(
+                sprintf
+                    "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
+                    (request.PeriodFrom.ToString "o")
+                    (request.PeriodTo.ToString "o")
+            )
+        elif not (List.contains request.Metric columns) then
+            Error(sprintf "View '%s' answers no column '%s'; it answers %s." v.Id request.Metric (quoted columns))
+        else
+            match seriesColumns |> List.filter (fun c -> not (List.contains c columns)) with
+            | [] -> Ok()
+            | missing ->
+                Error(
+                    sprintf
+                        "View '%s' cannot be drawn as a series: it answers no %s column (a series needs %s)."
+                        v.Id
+                        (quoted missing)
+                        (quoted seriesColumns)
+                )
+
+    /// The series drawn from one view evaluation: one point per result row,
+    /// ordered by subject path then period. The drawn column withheld marks
+    /// every point withheld, with no value and no rendering; a null cell is a
+    /// point with no value. Pure.
+    let seriesOf (request: FactSeriesQuery) (displayFormat: string) (result: ViewResult) : Result<FactSeries, string> =
+        let cap = FactBrowseApi.clampSeriesPoints request.MaxPoints
+
+        match ColumnCodec.decode result.Result.Table with
+        | Error e -> Error("The view's result could not be decoded: " + ColumnCodec.errorString e)
+        | Ok(Ref name) -> Error(sprintf "The view's result names a source '%s' rather than carrying its rows." name)
+        | Ok(Embedded table) ->
+            let cells =
+                table.Columns
+                |> List.map (fun c -> c.Name, Array.ofList (Column.toCells c))
+                |> Map.ofList
+
+            let rows = Table.rowCount table
+
+            if rows > cap then
+                Error(
+                    sprintf
+                        "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
+                        rows
+                        cap
+                        FactBrowseApi.MaxSeriesPoints
+                )
+            else
+                let at (column: string) (i: int) : Cell =
+                    match cells.TryFind column with
+                    | Some values -> values.[i]
+                    | None -> Null
+
+                let text (cell: Cell) =
+                    match cell with
+                    | Str s -> Some s
+                    | _ -> None
+
+                let instant (cell: Cell) =
+                    match cell with
+                    | Timestamp t -> FactBrowseSlice.parseTimestamp t
+                    | _ -> DateTime.MinValue
+
+                let withheldColumn =
+                    result.Result.Withheld |> List.tryFind (fun c -> c.Column = request.Metric)
+
+                let withheld = withheldColumn.IsSome
+
+                let points =
+                    List.init rows (fun i ->
+                        let value =
+                            if withheld then
+                                None
+                            else
+                                match at request.Metric i with
+                                | Decimal d -> Some(FactBrowseSlice.parseDecimal d)
+                                | Int n -> Some(decimal n)
+                                | Float f -> Some(decimal f)
+                                | _ -> None
+
+                        {
+                            Subject = text (at FactBrowseSlice.SubjectColumn i) |> Option.defaultValue ""
+                            SubjectPath =
+                                match text (at FactBrowseSlice.PathColumn i) with
+                                | None
+                                | Some "" -> []
+                                | Some path -> path.Split '>' |> List.ofArray
+                            PeriodFrom = instant (at FactBrowseSlice.FromColumn i)
+                            PeriodTo = instant (at FactBrowseSlice.ToColumn i)
+                            PeriodLabel = text (at FactBrowseSlice.LabelColumn i)
+                            Value = value
+                            Rendering = value |> Option.map (FactBrowseSlice.renderDerived displayFormat)
+                            FactId = ""
+                            AsOf = result.Result.ReadAt
+                            Freshness = ""
+                            Withheld = withheld
+                        })
+                    |> List.sortBy (fun p -> p.SubjectPath, p.PeriodFrom, p.PeriodTo)
+
+                Ok {
+                    TableId = request.TableId
+                    Metric = request.Metric
+                    SubjectPrefix = request.SubjectPrefix
+                    SubjectLevel = ""
+                    PeriodFrom = request.PeriodFrom
+                    PeriodTo = request.PeriodTo
+                    DisplayFormat = displayFormat
+                    Points = points
+                    MaxPoints = cap
+                    WithheldCount = if withheld then rows else 0
+                    Withheld =
+                        withheldColumn
+                        |> Option.map (fun c ->
+                            c.Withheld
+                            |> List.map (fun w -> {
+                                FactWithheldCount.PolicyRef = w.PolicyRef
+                                Count = w.Count
+                            }))
+                        |> Option.defaultValue []
+                    View =
+                        Some {
+                            ViewId = result.View
+                            Version = result.Version
+                            PipelineHash = result.PipelineHash
+                            ModelHash = result.ModelHash
+                        }
+                }
+
+    /// The series a view-sourced request asks for, over `views`: the view
+    /// found by id, its arguments bound, its own table and every table it
+    /// joins read through `readSlice` over the request's period range and
+    /// subject prefix, evaluated as the view's own tool evaluates it
+    /// (`evaluate`), and drawn by `seriesOf`. Refusals name what to repair.
+    let series
+        (views: RegisteredView list)
+        (readSlice: FactSliceQuery -> Async<Result<FactSlice, string>>)
+        (readAt: DateTime)
+        (request: FactSeriesQuery)
+        (source: FactSeriesViewSource)
+        : Async<Result<FactSeries, string>> =
+        async {
+            match views |> List.tryFind (fun v -> v.Definition.Id = source.ViewId) with
+            | None ->
+                return
+                    Error(
+                        sprintf
+                            "No view '%s' is registered; the registered views are %s."
+                            source.ViewId
+                            (quoted (views |> List.map _.Definition.Id))
+                    )
+            | Some view ->
+                match
+                    seriesShape view request
+                    |> Result.bind (fun () -> seriesArguments view source.Arguments)
+                with
+                | Error reason -> return Error reason
+                | Ok arguments ->
+                    let sliceOf (table: string) : FactSliceQuery = {
+                        TableId = table
+                        PeriodFrom = request.PeriodFrom
+                        PeriodTo = request.PeriodTo
+                        SubjectPrefix = request.SubjectPrefix
+                        Metrics = []
+                    }
+
+                    let rec readAll acc tables = async {
+                        match tables with
+                        | [] -> return Ok(List.rev acc)
+                        | table :: rest ->
+                            match! readSlice (sliceOf table) with
+                            | Error reason -> return Error reason
+                            | Ok slice -> return! readAll ((table, slice) :: acc) rest
+                    }
+
+                    match! readAll [] (view.Definition.Table :: view.Joins) with
+                    | Error reason -> return Error reason
+                    | Ok [] -> return Error(sprintf "View '%s': its table was not read." view.Definition.Id)
+                    | Ok((_, slice) :: joined) ->
+                        let pipelineRequest = {
+                            TableId = view.Definition.Table
+                            PeriodFrom = request.PeriodFrom
+                            PeriodTo = request.PeriodTo
+                            PathPrefix = request.SubjectPrefix
+                            Metrics = []
+                            Pipeline = view.Definition.Pipeline
+                        }
+
+                        let format =
+                            slice.Metrics
+                            |> List.tryFind (fun m -> m.Metric = request.Metric)
+                            |> Option.map _.DisplayFormat
+                            |> Option.defaultValue ""
+
+                        match evaluate view arguments pipelineRequest slice joined readAt with
+                        | Error refusal -> return Error(PipelineRefusal.describe refusal)
+                        | Ok result -> return seriesOf request format result
+        }
+
+    /// The reader the fact browse resolves view-sourced series through, over
+    /// the registered views.
+    let seriesReader (views: RegisteredView list) : IFactViewSeriesReader =
+        { new IFactViewSeriesReader with
+            member _.ReadSeries(readSlice, readAt, request, source) =
+                series views readSlice readAt request source
+        }
+
+    /// **Adds** the series reader over `views` (`registerOrRefuse`'s views), so
+    /// `QuerySeries` reads a registered view for every caller, and a page's
+    /// chart and an answer draw one number through one evaluation and one
+    /// gate. With no fact store composed, or no view, it changes nothing; a
+    /// second reader is refused.
+    let withSeries (views: RegisteredView list) (app: ServerApp) : ServerApp =
+        match app.Config.Stores.FactStore with
+        | FeatureMode.Disabled -> app
+        | FeatureMode.Enabled when views.IsEmpty -> app
+        | FeatureMode.Enabled ->
+            ServerApp.addContribution
+                (Contribution.service (ComponentId.forCompanionSlot "ToolUp.Facts") (fun s ->
+                    if s |> Seq.exists (fun d -> d.ServiceType = typeof<IFactViewSeriesReader>) then
+                        ServiceComposition.refuse (
+                            CompositionRefusal.InvalidDeclaration(
+                                "ViewRegistry.withSeries",
+                                "a view series reader is already registered; register every view in one ViewRegistry.withSeries call"
+                            )
+                        )
+                    else
+                        s.AddSingleton<IFactViewSeriesReader>(seriesReader views)))
+                app

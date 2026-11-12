@@ -222,6 +222,7 @@ let private worldOver
             Gate = gate
             Registry = Some registry
             Clock = clock
+            Views = None
         }
         Writer = writer
         Store = store
@@ -305,6 +306,7 @@ let private series (metric: string) (from: DateTime) (``to``: DateTime) : FactSe
     PeriodFrom = from
     PeriodTo = ``to``
     MaxPoints = FactBrowseApi.MaxSeriesPoints
+    View = None
 }
 
 let private jsonOptions = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
@@ -419,6 +421,7 @@ let private largeDeps (gate: IFactDisclosureGate) : FactBrowseHandler.FactBrowse
     Gate = FactDisclosureGate.held gate
     Registry = Some registry
     Clock = fun () -> t0
+    Views = None
 }
 
 let private boundedTests =
@@ -2899,6 +2902,361 @@ let private descriptionTests =
         }
     ]
 
+// ─── A series over a registered view ────────────────────────────────
+//
+// What this list pins: `QuerySeries` naming a view draws exactly the cells
+// and the withheld marks the view's own evaluation answers over the same
+// slices; a request naming an unknown view, argument or column is refused by
+// name; a table-sourced request is unchanged byte for byte, and decodes from
+// a wire shape with no view member; a stored joined pipeline re-resolves on a
+// page under the deployment's profile.
+
+module Dm = ToolUp.Platform.Tests.InProcess.DatasetModelRegistryTests
+module Rf = ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
+
+module private ViewSeries =
+    open Fuaran.Core
+    open Fuaran.Compute
+
+    /// Revenue, the restricted margin and revenue less margin, per site and
+    /// day, keeping the series columns.
+    let pipeline: Transform list = [
+        Join(Ref Rf.margins.Id, Dm.keys, Left)
+        Filter(Binary(Gt, Col "revenue", Param "min"))
+        Project [
+            FactBrowseSlice.SubjectColumn, FactBrowseSlice.SubjectColumn
+            FactBrowseSlice.PathColumn, FactBrowseSlice.PathColumn
+            FactBrowseSlice.FromColumn, FactBrowseSlice.FromColumn
+            FactBrowseSlice.ToColumn, FactBrowseSlice.ToColumn
+            "revenue", "revenue"
+            "margin", "margin"
+        ]
+        Derive("net", Binary(Sub, Col "revenue", Col "margin"))
+    ]
+
+    let definition: FactViewDefinition = {
+        Dm.view "trade_net" Rf.trade.Id pipeline with
+            Columns =
+                [
+                    "subject"
+                    "subject_path"
+                    "period_from"
+                    "period_to"
+                    "revenue"
+                    "margin"
+                    "net"
+                ]
+                |> List.map (fun name -> {
+                    Name = name
+                    Description = sprintf "The view's %s." name
+                })
+    }
+
+    let registered () : RegisteredView =
+        Dm.viewsOf (Dm.composition Dm.model Dm.described [ definition ])
+        |> List.exactlyOne
+
+    /// The join world, its browse reading the registered view.
+    let world () =
+        let w = Dm.joinWorld ()
+        let view = registered ()
+
+        let deps = {
+            w.Deps with
+                Views = Some(ViewRegistry.seriesReader [ view ])
+        }
+
+        w, deps, view
+
+    let source (arguments: (string * FactViewArgument) list) : FactSeriesViewSource = {
+        ViewId = "trade_net"
+        Arguments = Map.ofList arguments
+    }
+
+    let query (metric: string) (view: FactSeriesViewSource option) : FactSeriesQuery = {
+        TableId = Rf.trade.Id
+        Metric = metric
+        SubjectPrefix = []
+        SubjectLevel = None
+        PeriodFrom = Rf.day1
+        PeriodTo = Rf.day1.AddDays 3.0
+        MaxPoints = FactBrowseApi.MaxSeriesPoints
+        View = view
+    }
+
+    let atZero = Some(source [ "min", FactViewArgument.Integer 0 ])
+
+    let read deps scope (q: FactSeriesQuery) =
+        FactBrowseHandler.querySeries deps scope "u" q |> Async.RunSynchronously
+
+    let refusalOf deps scope (q: FactSeriesQuery) : string =
+        match read deps scope q with
+        | Ok _ -> failtest "the series was served, and should have been refused"
+        | Error reason -> reason
+
+    /// The view's own evaluation (the view tool's), over the slices the
+    /// series reads.
+    let evaluated (w: Rf.World) (view: RegisteredView) : ViewResult =
+        let slice table =
+            FactBrowseHandler.querySlice w.Deps w.Scope "u" {
+                TableId = table
+                PeriodFrom = Rf.day1
+                PeriodTo = Rf.day1.AddDays 3.0
+                SubjectPrefix = []
+                Metrics = []
+            }
+            |> Async.RunSynchronously
+            |> function
+                | Ok s -> s
+                | Error e -> failtestf "slice: %s" e
+
+        let request = {
+            TableId = Rf.trade.Id
+            PeriodFrom = Rf.day1
+            PeriodTo = Rf.day1.AddDays 3.0
+            PathPrefix = []
+            Metrics = []
+            Pipeline = view.Definition.Pipeline
+        }
+
+        match
+            ViewRegistry.evaluate
+                view
+                (Map.ofList [ "min", Decimal "0" ])
+                request
+                (slice Rf.trade.Id)
+                [ Rf.margins.Id, slice Rf.margins.Id ]
+                DateTime.UtcNow
+        with
+        | Ok r -> r
+        | Error refusal -> failtestf "evaluation: %s" (PipelineRefusal.describe refusal)
+
+    /// Each row of the evaluation as (subject path, period start, value).
+    let cellsOf (result: ViewResult) (column: string) : (string list * DateTime * decimal option) list =
+        match ColumnCodec.decode result.Result.Table with
+        | Ok(Embedded table) ->
+            let cells name =
+                table.Columns |> List.find (fun c -> c.Name = name) |> Column.toCells
+
+            List.zip3 (cells FactBrowseSlice.PathColumn) (cells FactBrowseSlice.FromColumn) (cells column)
+            |> List.map (fun (path, from, value) ->
+                let path =
+                    match path with
+                    | Str p -> p.Split '>' |> List.ofArray
+                    | _ -> []
+
+                let from =
+                    match from with
+                    | Timestamp t -> FactBrowseSlice.parseTimestamp t
+                    | _ -> DateTime.MinValue
+
+                let value =
+                    match value with
+                    | Decimal d -> Some(FactBrowseSlice.parseDecimal d)
+                    | _ -> None
+
+                path, from, value)
+            |> List.sortBy (fun (p, f, _) -> p, f)
+        | other -> failtestf "the evaluation's table: %A" other
+
+    let pointsOf (series: FactSeries) =
+        series.Points |> List.map (fun p -> p.SubjectPath, p.PeriodFrom, p.Value)
+
+let private viewSeriesTests =
+    testList "QuerySeries reads a registered view: a chart and an answer draw one number" [
+
+        test "the series draws the cells and the withheld marks the view's own evaluation answers" {
+            let w, deps, view = ViewSeries.world ()
+            let evaluation = ViewSeries.evaluated w view
+
+            for column in [ "revenue"; "net" ] do
+                match ViewSeries.read deps w.Scope (ViewSeries.query column ViewSeries.atZero) with
+                | Error e -> failtestf "%s: %s" column e
+                | Ok series ->
+                    Expect.equal
+                        (ViewSeries.pointsOf series)
+                        (ViewSeries.cellsOf evaluation column)
+                        (sprintf "'%s': one point per evaluated row, the same cell" column)
+
+                    let withheld =
+                        evaluation.Result.Withheld |> List.exists (fun c -> c.Column = column)
+
+                    Expect.isTrue
+                        (series.Points |> List.forall (fun p -> p.Withheld = withheld))
+                        (sprintf "'%s': every point is marked as the evaluation marks its column" column)
+
+                    Expect.equal
+                        series.View
+                        (Some {
+                            ViewId = evaluation.View
+                            Version = evaluation.Version
+                            PipelineHash = evaluation.PipelineHash
+                            ModelHash = evaluation.ModelHash
+                        })
+                        "the series names the evaluation it was drawn from"
+
+            let net =
+                match ViewSeries.read deps w.Scope (ViewSeries.query "net" ViewSeries.atZero) with
+                | Ok s -> s
+                | Error e -> failtest e
+
+            Expect.isNonEmpty net.Points "the restricted column still has its points"
+            Expect.isTrue (net.Points |> List.forall (fun p -> p.Value.IsNone && p.Rendering.IsNone)) "no number drawn"
+            Expect.equal net.WithheldCount (List.length net.Points) "every point counted withheld"
+            Expect.isNonEmpty net.Withheld "the withheld cells by policy"
+
+            let revenue =
+                match ViewSeries.read deps w.Scope (ViewSeries.query "revenue" ViewSeries.atZero) with
+                | Ok s -> s
+                | Error e -> failtest e
+
+            Expect.equal (List.length revenue.Points) 6 "one point per site and day"
+            Expect.isTrue (revenue.Points |> List.forall (fun p -> p.Value.IsSome)) "the open column draws numbers"
+            Expect.equal revenue.WithheldCount 0 "nothing of it withheld"
+        }
+
+        test "an unknown view, argument or column is refused by name" {
+            let w, deps, _ = ViewSeries.world ()
+            let refused = ViewSeries.refusalOf deps w.Scope
+
+            let unknownView =
+                refused (
+                    ViewSeries.query
+                        "revenue"
+                        (Some {
+                            ViewId = "nope"
+                            Arguments = Map.empty
+                        })
+                )
+
+            Expect.stringContains unknownView "'nope'" "the unknown view"
+            Expect.stringContains unknownView "'trade_net'" "the registered views"
+
+            let unknownArgument =
+                refused (
+                    ViewSeries.query
+                        "revenue"
+                        (Some(
+                            ViewSeries.source [ "min", FactViewArgument.Integer 0; "max", FactViewArgument.Integer 9 ]
+                        ))
+                )
+
+            Expect.stringContains unknownArgument "no parameter 'max'" "the unknown argument"
+
+            let missing = refused (ViewSeries.query "revenue" (Some(ViewSeries.source [])))
+            Expect.stringContains missing "'min'" "the required argument left unnamed"
+
+            let mistyped =
+                refused (ViewSeries.query "revenue" (Some(ViewSeries.source [ "min", FactViewArgument.Text "0" ])))
+
+            Expect.stringContains mistyped "parameter 'min' takes a decimal" "the argument of the wrong type"
+
+            let column = refused (ViewSeries.query "cost" ViewSeries.atZero)
+            Expect.stringContains column "no column 'cost'" "a column the view does not answer"
+
+            let unregistered =
+                ViewSeries.refusalOf { deps with Views = None } w.Scope (ViewSeries.query "revenue" ViewSeries.atZero)
+
+            Expect.stringContains unregistered "registers no views" "no views registered"
+        }
+
+        test "a view-sourced series keeps the point cap" {
+            let w, deps, _ = ViewSeries.world ()
+
+            let capped =
+                ViewSeries.refusalOf deps w.Scope {
+                    ViewSeries.query "revenue" ViewSeries.atZero with
+                        MaxPoints = 1
+                }
+
+            Expect.stringContains capped "over the cap of 1" "refused naming the cap"
+        }
+
+        test "a table-sourced request is unchanged byte for byte, and decodes with no view member" {
+            let w, deps, _ = ViewSeries.world ()
+            let table = ViewSeries.query "revenue" None
+
+            let bytes deps =
+                match ViewSeries.read deps w.Scope table with
+                | Ok s -> JsonSerializer.Serialize(s, jsonOptions)
+                | Error e -> failtest e
+
+            Expect.equal
+                (bytes deps)
+                (bytes { deps with Views = None })
+                "registering views changes no byte of a table read"
+
+            let wire =
+                Nodes.JsonNode.Parse(JsonSerializer.Serialize(table, jsonOptions)).AsObject()
+
+            Expect.isTrue (wire.Remove "View") "the request's view member, removed"
+
+            Expect.equal
+                (JsonSerializer.Deserialize<FactSeriesQuery>(wire.ToJsonString(), jsonOptions))
+                table
+                "a request with no view member reads the table"
+        }
+
+        test "a stored joined pipeline re-resolves on a page under the deployment's profile" {
+            let w = Dm.joinWorld ()
+            let registry = Dm.registryOf (Dm.composition Dm.model Dm.described [])
+
+            let profile =
+                PipelineProfile.defaultProfile
+                |> PipelineProfile.withSteps [ "join" ]
+                |> PipelineProfile.withRelationCheck (
+                    DatasetModelRegistry.relationCheck (Dm.permitting "none") registry
+                )
+                |> PipelineProfile.register
+                |> function
+                    | Ok p -> p
+                    | Error e -> failtestf "profile: %A" e
+
+            let joined: Fuaran.Compute.Transform list = [
+                Fuaran.Compute.Join(Fuaran.Core.Ref Dm.openMargins.Id, Dm.keys, Fuaran.Compute.Left)
+                Fuaran.Compute.Project [
+                    FactBrowseSlice.SubjectColumn, FactBrowseSlice.SubjectColumn
+                    FactBrowseSlice.FromColumn, FactBrowseSlice.FromColumn
+                    "revenue", "revenue"
+                    "margin", "margin"
+                ]
+            ]
+
+            let stored: ToolUp.Facts.Presentation.PipelineBlockRequest = {
+                TableId = Rf.trade.Id
+                PeriodFrom = Rf.day1
+                PeriodTo = Rf.day1.AddDays 3.0
+                PathPrefix = []
+                Metrics = []
+                Pipeline = Fuaran.Compute.DataFrameCodec.encodePipeline joined
+                PipelineHash = ""
+                RunStamp = None
+            }
+
+            let resolve profile =
+                let session =
+                    (ToolUp.Facts.Presentation.PageResolutionCache None).Session(w.Scope, "u")
+                    |> Async.RunSynchronously
+
+                let resolver =
+                    ToolUp.Facts.Presentation.PageRequestResolver.createUnder
+                        profile
+                        session
+                        (fun () -> async.Return "gate")
+                        w.Deps
+                        w.Scope
+                        "u"
+
+                resolver.ResolvePipeline stored |> Async.RunSynchronously
+
+            match resolve (Some profile) with
+            | Ok resolution -> Expect.equal resolution.Rows 6 "one row per site and day, joined"
+            | Error e -> failtestf "refused: %s" (ToolUp.Facts.Presentation.PageRefusal.describe e)
+
+            Expect.isError (resolve None) "with no profile the full algebra admits no join"
+        }
+    ]
+
 let tests =
     testList "Phase 895 — fact browse surface" [
         boundedTests
@@ -2917,4 +3275,5 @@ let tests =
         sliceTests
         sessionCostTests
         descriptionTests
+        viewSeriesTests
     ]

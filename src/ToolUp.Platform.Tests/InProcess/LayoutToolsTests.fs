@@ -101,6 +101,7 @@ let private facts () : FactBrowseHandler.FactBrowseDeps =
         Gate = FactDisclosureGate(store, events)
         Registry = Some registry
         Clock = clock
+        Views = None
     }
 
 let private rigWith (options: PageStoreOptions) : Rig =

@@ -31,5 +31,8 @@ let private factBrowseApi: IFactBrowseApi =
     )
 
 /// The series read over the fact browse proxy: one gated series per query,
-/// or the read's refusal verbatim.
+/// or the read's refusal verbatim. A query naming a registered view
+/// (`FactSeriesQuery.View`) is evaluated by the server, never from a slice the
+/// client holds, so the block draws the number the assistant's view tool
+/// answers.
 let resolve (query: FactSeriesQuery) : Async<Result<FactSeries, string>> = factBrowseApi.QuerySeries query

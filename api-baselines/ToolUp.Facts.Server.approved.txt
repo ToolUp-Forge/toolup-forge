@@ -885,12 +885,13 @@ ToolUp.Facts.FactBrowseHandler.runTrigger(System.String, System.String) : System
 ToolUp.Facts.FactBrowseHandler.tableMethod(ToolUp.Platform.Grounding.FactTableDefinition) : ToolUp.Facts.MethodRef
 ToolUp.Facts.FactBrowseHandler.withFactBrowse(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps (class)
-ToolUp.Facts.FactBrowseHandler+FactBrowseDeps..ctor(ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], ToolUp.Facts.IFactStore, ToolUp.Facts.IHeldFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps..ctor(ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], ToolUp.Facts.IFactStore, ToolUp.Facts.IHeldFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactViewSeriesReader])
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Clock : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime] { get }
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Gate : ToolUp.Facts.IHeldFactDisclosureGate { get }
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Registry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry] { get }
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Store : ToolUp.Facts.IFactStore { get }
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Tables : ToolUp.Platform.Grounding.IFactTableRegistry { get }
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Views : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactViewSeriesReader] { get }
 ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Writer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter] { get }
 ToolUp.Facts.FactDeclarationsAudit (class)
 ToolUp.Facts.FactDeclarationsAudit.Unattributed : System.String (literal)
@@ -1700,6 +1701,8 @@ ToolUp.Facts.IFactTableWriter.OpenRun(ToolUp.Platform.ResolvedScope, System.Stri
 ToolUp.Facts.IFactTableWriter.Runs(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRunRecord], ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Status(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableStatus, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.WriteRows(ToolUp.Platform.ResolvedScope, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
+ToolUp.Facts.IFactViewSeriesReader (interface)
+ToolUp.Facts.IFactViewSeriesReader.ReadSeries(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSliceQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSlice, System.String]]], System.DateTime, ToolUp.Facts.FactSeriesQuery, ToolUp.Facts.FactSeriesViewSource) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]
 ToolUp.Facts.IGroundingCertificateIssuer (interface)
 ToolUp.Facts.IGroundingCertificateIssuer.Issue(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Facts.CertificateError]]
 ToolUp.Facts.IHeldFactDisclosureGate (interface)
@@ -2319,6 +2322,7 @@ ToolUp.Facts.ViewRegistry (class)
 ToolUp.Facts.ViewRegistry.ArgumentCondition : System.String (literal)
 ToolUp.Facts.ViewRegistry.EvaluationCondition : System.String (literal)
 ToolUp.Facts.ViewRegistry.ViewTableCondition : System.String (literal)
+ToolUp.Facts.ViewRegistry.argument(ToolUp.Platform.Grounding.FactViewParameter, ToolUp.Facts.FactViewArgument) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.Cell, System.String]
 ToolUp.Facts.ViewRegistry.argumentCell(ToolUp.Platform.Grounding.FactViewParameter, System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.Cell, System.String]
 ToolUp.Facts.ViewRegistry.bindings(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodBinding]
 ToolUp.Facts.ViewRegistry.card(ToolUp.Facts.RegisteredView) : ToolUp.Facts.MethodCard
@@ -2329,7 +2333,13 @@ ToolUp.Facts.ViewRegistry.evaluator(ToolUp.Facts.RegisteredView) : ToolUp.Facts.
 ToolUp.Facts.ViewRegistry.joinedTables(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.ViewRegistry.register(ToolUp.Platform.Compose.ServerApp) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.ViewRefusal]]
 ToolUp.Facts.ViewRegistry.registerOrRefuse(ToolUp.Platform.Compose.ServerApp) : System.Tuple`2[ToolUp.Facts.DatasetModelRegistry, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView]]
+ToolUp.Facts.ViewRegistry.series(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSliceQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSlice, System.String]]], System.DateTime, ToolUp.Facts.FactSeriesQuery, ToolUp.Facts.FactSeriesViewSource) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]
+ToolUp.Facts.ViewRegistry.seriesArguments(ToolUp.Facts.RegisteredView, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.FactViewArgument]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Fuaran.Core.Cell], System.String]
+ToolUp.Facts.ViewRegistry.seriesColumns : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.ViewRegistry.seriesOf(ToolUp.Facts.FactSeriesQuery, System.String, ToolUp.Facts.ViewResult) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]
+ToolUp.Facts.ViewRegistry.seriesReader(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView]) : ToolUp.Facts.IFactViewSeriesReader
 ToolUp.Facts.ViewRegistry.summary(ToolUp.Facts.ViewResult) : System.String
+ToolUp.Facts.ViewRegistry.withSeries(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredView], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.ViewResult (class)
 ToolUp.Facts.ViewResult..ctor(System.String, System.String, System.String, System.String, ToolUp.Facts.PipelineToolResult)
 ToolUp.Facts.ViewResult.ModelHash : System.String { get }
