@@ -167,6 +167,8 @@ let private platformEnv =
         "TOOLUP_BUNDLE_FIXTURE_DIR"
         "TOOLUP_EMIT_WIRE_FIXTURES"
         "TOOLUP_HNSW_SCALE_CORPUS"
+        "TOOLUP_NEUTRALITY_REQUIRED"
+        "TOOLUP_NEUTRALITY_TOKENS"
         "TOOLUP_REDIS_CONNECTION"
         "TOOLUP_REGEN_AUDIT_EVENT_REFERENCE"
         "TOOLUP_REGEN_CONFIG_REFERENCE"
@@ -279,6 +281,8 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         ([ Input.Tree; Input.Git; Input.Docker ]
          @ env [
              "TOOLUP_MODEL_EXECUTION_CORPUS"
+             "TOOLUP_NEUTRALITY_REQUIRED"
+             "TOOLUP_NEUTRALITY_TOKENS"
              "TOOLUP_APPROVE"
              "TOOLUP_APPROVE_BRANDKIT"
              "TOOLUP_REGEN_ELMISH_PROOF_CORPUS"

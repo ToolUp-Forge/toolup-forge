@@ -279,5 +279,96 @@ let private goRedTests =
                 "the public-safe canary must be enforced even when no external source exists"
     ]
 
+// ─── Where the list is found, and what its absence does ───────────────
+//
+// A worktree checkout holds no copy of the untracked list, so the guard
+// also looks at the primary checkout's root; and under the gate an absent
+// list is red, not a skip. Both are proved here on a scratch repository
+// and a made-up token, never the private list.
+
+/// A variable no machine sets, so the environment leg stays out of the
+/// resolution under test.
+let private unsetVariable = "TOOLUP_NEUTRALITY_TOKENS_UNSET_PROBE"
+
+let private gitIn (cwd: string) (args: string list) =
+    let r = ToolUp.Platform.Build.Git.run cwd args
+    Expect.equal r.ExitCode 0 (sprintf "git %s failed: %s%s" (String.concat " " args) r.StdOut r.StdErr)
+
+let private sourceTests =
+    testList "the token source" [
+
+        testCase "a linked worktree finds the list at the primary checkout's root"
+        <| fun _ ->
+            use scratch = ToolUp.Platform.Testing.TempDir.create "neutrality-wt"
+            let primary = Path.Combine(scratch.Path, "primary")
+            let worktree = Path.Combine(scratch.Path, "linked")
+            Directory.CreateDirectory primary |> ignore
+            gitIn primary [ "init"; "-b"; "main" ]
+            gitIn primary [ "config"; "user.email"; "neutrality@example.invalid" ]
+            gitIn primary [ "config"; "user.name"; "Neutrality probe" ]
+            File.WriteAllText(Path.Combine(primary, "README.md"), "probe\n")
+            gitIn primary [ "add"; "README.md" ]
+            gitIn primary [ "commit"; "-m"; "base" ]
+            gitIn primary [ "worktree"; "add"; worktree; "-b"; "linked" ]
+
+            Expect.isNone
+                (ToolUp.Platform.Build.Neutrality.externalTokens worktree unsetVariable)
+                "falsifier: with no file anywhere the worktree resolves no list"
+
+            File.WriteAllLines(
+                Path.Combine(primary, ToolUp.Platform.Build.Neutrality.tokenFileName),
+                [| "# a made-up list"; "Imaginary Vendor" |]
+            )
+
+            Expect.isFalse
+                (File.Exists(Path.Combine(worktree, ToolUp.Platform.Build.Neutrality.tokenFileName)))
+                "the worktree itself holds no copy"
+
+            Expect.equal
+                (ToolUp.Platform.Build.Neutrality.externalTokens worktree unsetVariable)
+                (Some [ "Imaginary Vendor" ])
+                "the worktree reads the primary checkout's list"
+
+            Expect.equal
+                (ToolUp.Platform.Build.Neutrality.tokenFiles primary |> List.length)
+                1
+                "the primary checkout looks at its own root once"
+
+            let message = NeutralityTokens.absentSourceMessageFor worktree
+
+            for place in ToolUp.Platform.Build.Neutrality.searched worktree NeutralityTokens.TokensVariable do
+                Expect.stringContains message place "the absent-source message names each place"
+
+            Expect.equal
+                (ToolUp.Platform.Build.Neutrality.searched worktree unsetVariable |> List.length)
+                3
+                "a worktree is searched in three places: its root, the primary root, the variable"
+
+        testCase "outside the gate an absent list is a loud skip"
+        <| fun _ ->
+            Expect.throwsT<IgnoreException>
+                (fun () -> NeutralityTokens.onAbsentSource false NeutralityTokens.absentSourceMessage)
+                "unrequired, the absent source skips"
+
+        testCase "under the required flag an absent list fails with the same message"
+        <| fun _ ->
+            let failure =
+                try
+                    NeutralityTokens.onAbsentSource true NeutralityTokens.absentSourceMessage
+                    None
+                with :? AssertException as e ->
+                    Some e.Message
+
+            Expect.equal failure (Some NeutralityTokens.absentSourceMessage) "required, the absent source fails"
+
+        testCase "the required flag reads 1 or true and nothing else"
+        <| fun _ ->
+            for value in [ "1"; "true"; "TRUE"; " 1 " ] do
+                Expect.isTrue (ToolUp.Platform.Build.Neutrality.isRequired value) $"'{value}' requires the list"
+
+            for value in [ null; ""; "0"; "false"; "yes" ] do
+                Expect.isFalse (ToolUp.Platform.Build.Neutrality.isRequired value) $"'{value}' does not"
+    ]
+
 let tests =
-    testList "OpenCoreVocabularyNeutrality (Phase 477)" [ surfaceTests; goRedTests ]
+    testList "OpenCoreVocabularyNeutrality (Phase 477)" [ surfaceTests; goRedTests; sourceTests ]

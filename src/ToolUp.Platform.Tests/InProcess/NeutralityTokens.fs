@@ -12,19 +12,25 @@ module ToolUp.Platform.Tests.InProcess.NeutralityTokens
 // public repo, exactly what the guard exists to keep out of it. The
 // tests therefore load the list at run time from a non-public source:
 //
-//   1. `neutrality-tokens.local.txt` at the repo root — one token per
-//      line; blank lines and `#`-prefixed comment lines are ignored.
+//   1. `neutrality-tokens.local.txt` at the checkout root — one token
+//      per line; blank lines and `#`-prefixed comment lines are ignored.
 //      The file is untracked and gitignored; each dev / CI machine
 //      materialises it from its own private side.
-//   2. The `TOOLUP_NEUTRALITY_TOKENS` environment variable —
+//   2. The same file at the primary checkout's root (the parent of
+//      `git rev-parse --git-common-dir`), so every linked worktree of a
+//      clone finds the one list its primary checkout holds.
+//   3. The `TOOLUP_NEUTRALITY_TOKENS` environment variable —
 //      semicolon-separated tokens (the CI-friendly channel), consulted
-//      when the file is absent.
+//      when neither file exists.
 //
-// When neither source is present, the guard tests SKIP LOUDLY (Expecto
+// When no source is present, the guard tests SKIP LOUDLY (Expecto
 // `skiptest` — reported as ignored with a message, never silently
-// green). One public-safe canary token stays hardcoded and is always
-// enforced, so the scanning mechanism itself remains provable in
-// public CI even without the private list.
+// green), naming every place they looked. Under the local gate
+// (`TOOLUP_NEUTRALITY_REQUIRED=1`) the same case FAILS with the same
+// message, so a landing cannot pass a guard it did not run. One
+// public-safe canary token stays hardcoded and is always enforced, so
+// the scanning mechanism itself remains provable in public CI even
+// without the private list.
 //
 // ─── The matching rule (Phase 477 task C) ─────────────────────────────
 //
@@ -85,8 +91,8 @@ open Expecto
 [<Literal>]
 let Canary = ToolUp.Platform.Build.Neutrality.Canary
 
-/// Marker that takes a single line out of scope. Placed on the hit's
-/// own line or the line immediately above it.
+/// Marker that takes a block (a run of consecutive non-blank lines) out
+/// of scope, wherever in the block it appears.
 [<Literal>]
 let ExemptLineMarker = "OSS-BOUNDARY-EXEMPT"
 
@@ -107,15 +113,15 @@ let private repoRoot () =
 /// The forge repository root, resolved from the running test assembly.
 let repoRootPath = repoRoot ()
 
-/// Repo-root location of the untracked local token file.
-let tokenFilePath =
-    Path.Combine(repoRootPath, ToolUp.Platform.Build.Neutrality.tokenFileName)
+/// The environment variable that carries the list when no token file exists.
+[<Literal>]
+let TokensVariable = "TOOLUP_NEUTRALITY_TOKENS"
 
 /// The private token list, when a non-public source supplies one.
-/// `None` means neither the local file nor the environment variable is
-/// present (or both are empty) — guard tests must then skip loudly.
+/// `None` means no token file and no environment variable supplies a
+/// token — guard tests must then skip loudly, or fail under the gate.
 let externalTokens: string list option =
-    ToolUp.Platform.Build.Neutrality.externalTokens repoRootPath "TOOLUP_NEUTRALITY_TOKENS"
+    ToolUp.Platform.Build.Neutrality.externalTokens repoRootPath TokensVariable
 
 /// Every token the guard scans for: the hardcoded canary plus whatever
 /// the external source supplies.
@@ -231,11 +237,16 @@ let renderHits (hits: Hit list) : string =
         ]
     )
 
-/// The loud skip message emitted when no external token source exists.
-let absentSourceMessage: string =
+/// The message an absent token source reports, naming every place the
+/// list was looked for under the checkout at `root`.
+let absentSourceMessageFor (root: string) : string =
     sprintf
-        "NEUTRALITY TOKEN SOURCE ABSENT — only the public-safe canary token was enforced. Supply the private banned-vocabulary list via '%s' (one token per line, '#' comments allowed) or the TOOLUP_NEUTRALITY_TOKENS environment variable (semicolon-separated) to run the full OSS-boundary guard. This test result is a SKIP, not a pass."
-        tokenFilePath
+        "NEUTRALITY TOKEN SOURCE ABSENT — only the public-safe canary token was enforced. The private banned-vocabulary list was looked for, in order, at: %s. Supply it at any of them (a file holds one token per line, '#' comments allowed) to run the full OSS-boundary guard. Outside the gate this result is a SKIP, not a pass; under %s=1 it fails."
+        (String.Join("; ", ToolUp.Platform.Build.Neutrality.searched root TokensVariable))
+        ToolUp.Platform.Build.Neutrality.RequiredVariable
+
+/// The absent-source message for this checkout.
+let absentSourceMessage: string = absentSourceMessageFor repoRootPath
 
 /// Assert that `contents` carries none of the active tokens. `label`
 /// names the scanned artefact in failure messages.
@@ -244,10 +255,25 @@ let assertNoBannedTokens (label: string) (contents: string) =
     | [] -> ()
     | hits -> failtest (renderHits hits)
 
+/// What an absent token source does to the test reporting it: a failure
+/// when `required`, a loud skip otherwise. Never a pass.
+let onAbsentSource (required: bool) (message: string) : unit =
+    if required then
+        failtest message
+    else
+        Tests.skiptest message
+
 /// Call at the end of a guard test body: when no external token source
-/// is present, downgrade the (canary-only) run to a loud skip so the
-/// guard never reports silently green without the private list.
+/// is present, the (canary-only) run becomes a loud skip — or, when the
+/// required variable is set, a failure — so the guard never reports
+/// silently green without the private list.
 let skipUnlessExternalSource () =
     match externalTokens with
     | Some _ -> ()
-    | None -> Tests.skiptest absentSourceMessage
+    | None ->
+        let required =
+            ToolUp.Platform.Build.Neutrality.isRequired (
+                Environment.GetEnvironmentVariable ToolUp.Platform.Build.Neutrality.RequiredVariable
+            )
+
+        onAbsentSource required absentSourceMessage

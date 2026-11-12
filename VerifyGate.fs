@@ -180,6 +180,14 @@ let optedOut () =
     | "0" -> false
     | _ -> true
 
+/// Whether a gated run sets `Neutrality.RequiredVariable` for the packs it
+/// launches, given that variable's current value and `CI`'s. It does,
+/// unless the variable is already set (that value stands, `0` included)
+/// or the run is on a CI runner, which holds no private token list by
+/// construction and keeps the canary-only loud skip.
+let requiresNeutralityList (current: string) (ci: string) : bool =
+    String.IsNullOrEmpty current && String.IsNullOrEmpty ci
+
 /// The bound from the environment, or the default. A value that is not a
 /// positive whole number of minutes is IGNORED with the default in its
 /// place, never read as zero: a typo that produced a zero bound would make
@@ -838,6 +846,19 @@ let around (workingDir: string) (argv: string[]) (body: unit -> int) : int =
     if not (Set.contains target (GateManifest.gatedTargets rows)) then
         body ()
     else
+        // A landing cannot pass the publication-boundary guard it did not
+        // run: under the gate an absent token list fails the suite.
+        if
+            requiresNeutralityList
+                (Environment.GetEnvironmentVariable Neutrality.RequiredVariable)
+                (Environment.GetEnvironmentVariable "CI")
+        then
+            Environment.SetEnvironmentVariable(Neutrality.RequiredVariable, "1")
+
+            printfn
+                "VerifyAll gate: %s=1 — an absent neutrality token list fails the guard instead of skipping."
+                Neutrality.RequiredVariable
+
         let key, commonDir =
             match commonGitDir workingDir with
             | Ok dir -> keyFor dir, Some dir

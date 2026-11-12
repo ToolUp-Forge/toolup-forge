@@ -47,6 +47,29 @@ single hardcoded, public-safe canary token and then **skips loudly**: reported a
 with a message, never as a silent pass. The scanning mechanism stays provable in public
 CI; the policy stays private.
 
+## Where the list is looked for, and when its absence is red (Phase 1232)
+
+The list lives in ONE untracked file, `neutrality-tokens.local.txt`, at the root of the
+primary checkout of a clone. A linked worktree (`git worktree add`) has no copy of an
+untracked file, so the guard looks in three places, in order, and takes the first that
+supplies a token:
+
+1. `neutrality-tokens.local.txt` at the root of the checkout running the tests;
+2. the same file at the primary checkout's root, the parent of
+   `git rev-parse --git-common-dir`, which every worktree of the clone shares;
+3. the `TOOLUP_NEUTRALITY_TOKENS` environment variable, semicolon-separated.
+
+So one file at the primary checkout serves every worktree, and there is nothing to copy.
+When none of the three supplies a token, the message names all three places it looked.
+
+What an absent list does depends on `TOOLUP_NEUTRALITY_REQUIRED`. Unset, the guard skips
+loudly, as above. Set to `1` (or `true`), the same case **fails** with the same message.
+The local gate (`VerifyAll` under `verify.ps1`) sets it for the packs it runs, so a landing
+cannot pass a guard it did not run. It leaves an existing value alone, and it does not set
+the flag on a CI runner (`CI` set), which holds no private list by construction and keeps
+the canary-only skip. A developer's own run of a single pack keeps the skip. The
+migration note: [`1232-neutrality-guard-under-the-gate.md`](../migrations/1232-neutrality-guard-under-the-gate.md).
+
 ## How a token is matched
 
 Matching is case-insensitive. Beyond that:

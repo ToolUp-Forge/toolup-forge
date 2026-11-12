@@ -288,17 +288,75 @@ module Neutrality =
         |> Seq.filter (fun l -> l <> "" && not (l.StartsWith "#"))
         |> Seq.toList
 
-    /// The private token list for the repository at `root`: the token file
-    /// when it exists, else the semicolon-separated environment variable
-    /// `variable` (a development knob the caller names, not a deployment
-    /// setting); `None` when neither supplies a token.
-    let externalTokens (root: string) (variable: string) : string list option =
-        let file = IO.Path.Combine(root, tokenFileName)
+    /// The variable that makes an absent token source a failure rather than
+    /// a loud skip. The local gate sets it; a developer's run leaves it unset.
+    [<Literal>]
+    let RequiredVariable = "TOOLUP_NEUTRALITY_REQUIRED"
 
+    /// Whether `value`, read from `RequiredVariable`, asks for an absent
+    /// source to fail: `1` or `true`, in any case.
+    let isRequired (value: string) : bool =
+        match value with
+        | null -> false
+        | v -> v.Trim() = "1" || v.Trim().Equals("true", StringComparison.OrdinalIgnoreCase)
+
+    /// The root of the primary checkout when `root` is a LINKED worktree:
+    /// the parent of `git rev-parse --git-common-dir`, which every worktree
+    /// of a clone shares. `None` for the primary checkout itself, outside
+    /// git, for a bare layout, or when git cannot be run. Git answers both
+    /// directories, so a short and a long spelling of one path never read
+    /// as two checkouts.
+    let primaryRoot (root: string) : string option =
+        try
+            let r =
+                Git.within (TimeSpan.FromSeconds 15.) root [
+                    "rev-parse"
+                    "--path-format=absolute"
+                    "--git-common-dir"
+                    "--absolute-git-dir"
+                ]
+
+            let full (dir: string) =
+                IO.Path.TrimEndingDirectorySeparator(IO.Path.GetFullPath(dir.Trim()))
+
+            match r.ExitCode, r.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries) with
+            | 0, [| common; own |] ->
+                let common = full common
+
+                if
+                    IO.Path.GetFileName common <> ".git"
+                    || String.Equals(common, full own, StringComparison.OrdinalIgnoreCase)
+                then
+                    None
+                else
+                    Option.ofObj (IO.Path.GetDirectoryName common)
+            | _ -> None
+        with _ ->
+            None
+
+    /// The token files looked for, in order: `root`, then the primary
+    /// checkout's root when `root` is a linked worktree.
+    let tokenFiles (root: string) : string list =
+        IO.Path.Combine(root, tokenFileName)
+        :: (primaryRoot root
+            |> Option.map (fun primary -> IO.Path.Combine(primary, tokenFileName))
+            |> Option.toList)
+
+    /// Every place the list is looked for, in order, as a reader names them:
+    /// the token files, then the environment variable `variable`.
+    let searched (root: string) (variable: string) : string list =
+        tokenFiles root
+        @ [ sprintf "the %s environment variable (semicolon-separated)" variable ]
+
+    /// The private token list for the repository at `root`: the first token
+    /// file `tokenFiles` names that exists, else the semicolon-separated
+    /// environment variable `variable` (a development knob the caller names,
+    /// not a deployment setting); `None` when none supplies a token.
+    let externalTokens (root: string) (variable: string) : string list option =
         let tokens =
-            if IO.File.Exists file then
-                parseTokens (IO.File.ReadAllLines file)
-            else
+            match tokenFiles root |> List.tryFind IO.File.Exists with
+            | Some file -> parseTokens (IO.File.ReadAllLines file)
+            | None ->
                 match Environment.GetEnvironmentVariable variable with
                 | null
                 | "" -> []
