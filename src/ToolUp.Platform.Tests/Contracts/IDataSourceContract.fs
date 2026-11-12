@@ -244,7 +244,8 @@ module BindingHarness =
             )
         | other -> Error $"expected a header and one row, read {other.Length} records"
 
-    /// A cell read as invariant-culture text for `kind`.
+    /// A cell read as invariant-culture text for `kind`; a decimal cell is
+    /// read as its canonical text, so its digits compare exactly.
     let invariantRead (kind: DatasetDType) (cell: string) : BoundValue option =
         let parsed (ok, value) = if ok then Some value else None
 
@@ -269,6 +270,8 @@ module BindingHarness =
             Some(BoundValue.Text cell)
         elif kind = DatasetDType.Categorical then
             Some(BoundValue.Categorical cell)
+        elif kind = DatasetDType.Decimal then
+            DatasetDecimal.tryParse cell |> Option.map BoundValue.Decimal
         else
             None
 
@@ -280,6 +283,10 @@ module BindingHarness =
         Read = invariantRead
     }
 
+/// 38 significant digits, the width of a `DECIMAL(38, s)` column: more than
+/// a float (about 17) or `System.Decimal` (28 to 29) holds.
+let private wideDecimal = "1234567890123456789012345678.9012345678"
+
 let private samples: BoundValue list = [
     BoundValue.Float 0.1
     BoundValue.Float -2.5e10
@@ -290,6 +297,8 @@ let private samples: BoundValue list = [
     BoundValue.Text "plain"
     BoundValue.Timestamp(DateTimeOffset(2026, 11, 11, 9, 30, 15, 123, TimeSpan.FromHours 1.0))
     BoundValue.Categorical "level-a"
+    BoundValue.Decimal wideDecimal
+    BoundValue.Decimal "-0.000000000000000000000000000000000001"
 ]
 
 // Built from char values, so the source file holds no control byte.
@@ -391,6 +400,70 @@ let bindingLaws (name: string) (harness: BindingHarness) (factory: unit -> IData
             Expect.equal after before "the source's tables are what they were"
             let! read = source.Query(ctx, "kept")
             Expect.equal (read |> Result.toOption) (Some kept) "the seeded table is what it was"
+        }
+
+        testCaseAsync "a decimal wider than a float binds digit for digit, and the same value bound as a float does not"
+        <| async {
+            let source, _ = factory ()
+            let kinds = bindable source
+            let! result = select source [ "p", BoundValue.Decimal wideDecimal ] [ "p" ]
+
+            if kinds.Contains DatasetDType.Decimal then
+                match row result with
+                | [ Some cell ] ->
+                    Expect.equal
+                        (harness.Read DatasetDType.Decimal cell)
+                        (Some(BoundValue.Decimal wideDecimal))
+                        "every one of the 38 digits comes back"
+                | cells -> failtestf "expected one present cell, read %A" cells
+
+                if kinds.Contains DatasetDType.Float then
+                    let asFloat = Double.Parse(wideDecimal, CultureInfo.InvariantCulture)
+                    let! viaFloat = select source [ "p", BoundValue.Float asFloat ] [ "p" ]
+
+                    match row viaFloat with
+                    | [ Some cell ] ->
+                        Expect.notEqual
+                            (harness.Read DatasetDType.Decimal cell)
+                            (Some(BoundValue.Decimal wideDecimal))
+                            "a float does not hold the digits, which is why the decimal kind exists"
+                    | cells -> failtestf "expected one present cell, read %A" cells
+            else
+                refused
+                    (BindingRefusal.UnbindableKind("p", DatasetDType.Decimal))
+                    result
+                    "a connector that does not declare the decimal kind refuses it by name"
+        }
+
+        testCaseAsync "a decimal whose text is not canonical is refused by name before the connector runs"
+        <| async {
+            let source, _ = factory ()
+            let mutable calls = 0
+
+            // Declares the decimal kind whatever the connector does, so the
+            // refusal is the canonical-text check's and never the kind's.
+            let decimalOnly =
+                { new IBindsStatements with
+                    member _.BindableKinds = Set.singleton DatasetDType.Decimal
+
+                    member _.QueryBound(c, s) =
+                        calls <- calls + 1
+                        source.Capabilities.Binds.Value.QueryBound(c, s)
+                }
+
+            let decorated =
+                declaring
+                    {
+                        source.Capabilities with
+                            Binds = Some decimalOnly
+                    }
+                    source
+
+            for text in [ "1.50"; "+1"; "007"; "-0"; "1e3"; " 1"; "1,000"; ""; "." ] do
+                let! result = select decorated [ "p", BoundValue.Decimal text ] [ "p" ]
+                refused (BindingRefusal.NonCanonicalDecimal "p") result $"'{text}' is refused, naming the parameter"
+
+            Expect.equal calls 0 "the connector never saw a non-canonical decimal"
         }
 
         testCaseAsync "a parameter named twice is refused"

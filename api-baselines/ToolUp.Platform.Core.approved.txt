@@ -2258,6 +2258,7 @@ ToolUp.Platform.BindingRefusal (class)
 ToolUp.Platform.BindingRefusal.IsDuplicateName : System.Boolean { get }
 ToolUp.Platform.BindingRefusal.IsInvalidName : System.Boolean { get }
 ToolUp.Platform.BindingRefusal.IsMissingParameter : System.Boolean { get }
+ToolUp.Platform.BindingRefusal.IsNonCanonicalDecimal : System.Boolean { get }
 ToolUp.Platform.BindingRefusal.IsUnbindableKind : System.Boolean { get }
 ToolUp.Platform.BindingRefusal.IsUnusedParameter : System.Boolean { get }
 ToolUp.Platform.BindingRefusal.Tag : System.Int32 { get }
@@ -2267,10 +2268,13 @@ ToolUp.Platform.BindingRefusal+InvalidName (class)
 ToolUp.Platform.BindingRefusal+InvalidName.name : System.String { get }
 ToolUp.Platform.BindingRefusal+MissingParameter (class)
 ToolUp.Platform.BindingRefusal+MissingParameter.name : System.String { get }
+ToolUp.Platform.BindingRefusal+NonCanonicalDecimal (class)
+ToolUp.Platform.BindingRefusal+NonCanonicalDecimal.name : System.String { get }
 ToolUp.Platform.BindingRefusal+Tags (class)
 ToolUp.Platform.BindingRefusal+Tags.DuplicateName : System.Int32 (literal)
 ToolUp.Platform.BindingRefusal+Tags.InvalidName : System.Int32 (literal)
 ToolUp.Platform.BindingRefusal+Tags.MissingParameter : System.Int32 (literal)
+ToolUp.Platform.BindingRefusal+Tags.NonCanonicalDecimal : System.Int32 (literal)
 ToolUp.Platform.BindingRefusal+Tags.UnbindableKind : System.Int32 (literal)
 ToolUp.Platform.BindingRefusal+Tags.UnusedParameter : System.Int32 (literal)
 ToolUp.Platform.BindingRefusal+UnbindableKind (class)
@@ -2421,6 +2425,7 @@ ToolUp.Platform.BoundStatementModule.ofText(System.String) : ToolUp.Platform.Bou
 ToolUp.Platform.BoundValue (class)
 ToolUp.Platform.BoundValue.IsBool : System.Boolean { get }
 ToolUp.Platform.BoundValue.IsCategorical : System.Boolean { get }
+ToolUp.Platform.BoundValue.IsDecimal : System.Boolean { get }
 ToolUp.Platform.BoundValue.IsFloat : System.Boolean { get }
 ToolUp.Platform.BoundValue.IsInt : System.Boolean { get }
 ToolUp.Platform.BoundValue.IsNull : System.Boolean { get }
@@ -2431,6 +2436,8 @@ ToolUp.Platform.BoundValue+Bool (class)
 ToolUp.Platform.BoundValue+Bool.Item : System.Boolean { get }
 ToolUp.Platform.BoundValue+Categorical (class)
 ToolUp.Platform.BoundValue+Categorical.Item : System.String { get }
+ToolUp.Platform.BoundValue+Decimal (class)
+ToolUp.Platform.BoundValue+Decimal.digits : System.String { get }
 ToolUp.Platform.BoundValue+Float (class)
 ToolUp.Platform.BoundValue+Float.Item : System.Double { get }
 ToolUp.Platform.BoundValue+Int (class)
@@ -2440,6 +2447,7 @@ ToolUp.Platform.BoundValue+Null.kind : ToolUp.Platform.DatasetDType { get }
 ToolUp.Platform.BoundValue+Tags (class)
 ToolUp.Platform.BoundValue+Tags.Bool : System.Int32 (literal)
 ToolUp.Platform.BoundValue+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.BoundValue+Tags.Decimal : System.Int32 (literal)
 ToolUp.Platform.BoundValue+Tags.Float : System.Int32 (literal)
 ToolUp.Platform.BoundValue+Tags.Int : System.Int32 (literal)
 ToolUp.Platform.BoundValue+Tags.Null : System.Int32 (literal)
