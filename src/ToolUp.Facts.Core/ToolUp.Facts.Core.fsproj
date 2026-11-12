@@ -26,6 +26,9 @@
              consents, the target's declaration and the refusals. -->
         <Compile Include="Shared\PublicationTypes.fs" />
         <Compile Include="Shared\SpecToolTypes.fs" />
+        <!-- Method cards: the mirror of a card's eight parts, and the refusal
+             a method tool answers with. After the spec-tool vocabulary. -->
+        <Compile Include="Shared\MethodCardTypes.fs" />
         <!-- Phase 1145 — evaluate_pipeline: the request, the result, the
              withheld report and the refusals, carrying the pipeline and the
              result table as codec strings. -->

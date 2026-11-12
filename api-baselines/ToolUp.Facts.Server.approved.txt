@@ -1469,6 +1469,7 @@ ToolUp.Facts.FactsCompose.withFactTableWriter(ToolUp.Platform.Compose.ServerApp)
 ToolUp.Facts.FactsCompose.withFactTablesOptions(ToolUp.Facts.FactTablesOptions, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withFactTier(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withGroundingEnvelopeSeal(ToolUp.Platform.Compose.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Compose.GroundingEnvelope]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
+ToolUp.Facts.FactsCompose.withMethods(ToolUp.Facts.MethodProfile, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withNarrativeCalculations(ToolUp.Facts.NarrativeCalculations, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withPipelineProfile(ToolUp.Facts.RegisteredPipelineProfile, ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
 ToolUp.Facts.FactsCompose.withQuestionCompiler(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]], ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp
@@ -1702,6 +1703,140 @@ ToolUp.Facts.InvalidationOutcome+Tags.DeferredToQuery : System.Int32 (literal)
 ToolUp.Facts.InvalidationOutcome+Tags.Enqueued : System.Int32 (literal)
 ToolUp.Facts.InvalidationOutcome+Tags.ScheduleFailed : System.Int32 (literal)
 ToolUp.Facts.InvalidationOutcome+Tags.SurfacedOnly : System.Int32 (literal)
+ToolUp.Facts.MethodBinding (class)
+ToolUp.Facts.MethodBinding.Card : ToolUp.Facts.MethodCard { get }
+ToolUp.Facts.MethodBinding.Checks : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.MethodBinding.DefinitionHash : System.String { get }
+ToolUp.Facts.MethodBinding.Grammar : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.MethodBinding.Operation : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Facts.MethodCall (class)
+ToolUp.Facts.MethodCall..ctor(ToolUp.Facts.MethodIdentity, ToolUp.Facts.FactSliceQuery, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Text.Json.JsonElement], System.String)
+ToolUp.Facts.MethodCall.Arguments : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Text.Json.JsonElement] { get }
+ToolUp.Facts.MethodCall.Method : ToolUp.Facts.MethodIdentity { get }
+ToolUp.Facts.MethodCall.ParameterHash : System.String { get }
+ToolUp.Facts.MethodCall.Slice : ToolUp.Facts.FactSliceQuery { get }
+ToolUp.Facts.MethodEvaluation (class)
+ToolUp.Facts.MethodEvaluation..ctor(ToolUp.Facts.SpecResult, System.String)
+ToolUp.Facts.MethodEvaluation.Result : ToolUp.Facts.SpecResult { get }
+ToolUp.Facts.MethodEvaluation.Summary : System.String { get }
+ToolUp.Facts.MethodEvaluator (class)
+ToolUp.Facts.MethodEvaluator..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.MethodCall, System.Boolean]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRead, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.MethodCall, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.MethodEvaluation, System.String]]]])
+ToolUp.Facts.MethodEvaluator.Checks : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.MethodCall, System.Boolean]] { get }
+ToolUp.Facts.MethodEvaluator.DefinitionHash : System.String { get }
+ToolUp.Facts.MethodEvaluator.Evaluate : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SpecRead, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.MethodCall, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.MethodEvaluation, System.String]]]] { get }
+ToolUp.Facts.MethodProfile (class)
+ToolUp.Facts.MethodProfile.Description : System.String { get }
+ToolUp.Facts.MethodProfile.Fragment : System.String { get }
+ToolUp.Facts.MethodProfile.FragmentBytes : System.Int32 { get }
+ToolUp.Facts.MethodProfile.FragmentTokens : System.Int32 { get }
+ToolUp.Facts.MethodProfile.Methods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredMethod] { get }
+ToolUp.Facts.MethodProfile.Tools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodToolBuild] { get }
+ToolUp.Facts.MethodProfileModule (class)
+ToolUp.Facts.MethodProfileModule.DescribeName : System.String (literal)
+ToolUp.Facts.MethodProfileModule.describe(ToolUp.Facts.MethodCard) : System.String
+ToolUp.Facts.MethodProfileModule.describeAnswer(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredMethod], System.String) : System.String
+ToolUp.Facts.MethodProfileModule.describeTool(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredMethod]) : ToolUp.Facts.MethodToolBuild
+ToolUp.Facts.MethodProfileModule.entry(ToolUp.Facts.RegisteredMethod) : System.String
+ToolUp.Facts.MethodProfileModule.entryTokens(ToolUp.Facts.MethodProfile) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]]
+ToolUp.Facts.MethodProfileModule.fragment(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RegisteredMethod]) : System.String
+ToolUp.Facts.MethodRegistrationRefusal (class)
+ToolUp.Facts.MethodRegistrationRefusal.IsCheckUndeclared : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsConditionNameInvalid : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsConditionTextInvalid : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsDefaultDoesNotFit : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsDefinitionHashUnbound : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsDuplicateCondition : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsDuplicateId : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsDuplicateParameter : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsDuplicateToolName : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsIdentityUnbound : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsNoId : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsNoMeaning : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsParameterNameReserved : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsSchemaDoesNotDecode : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.IsToolNameInvalid : System.Boolean { get }
+ToolUp.Facts.MethodRegistrationRefusal.NoId : ToolUp.Facts.MethodRegistrationRefusal { get }
+ToolUp.Facts.MethodRegistrationRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.MethodRegistrationRefusal+CheckUndeclared (class)
+ToolUp.Facts.MethodRegistrationRefusal+CheckUndeclared.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+CheckUndeclared.name : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+ConditionNameInvalid (class)
+ToolUp.Facts.MethodRegistrationRefusal+ConditionNameInvalid.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+ConditionNameInvalid.name : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+ConditionTextInvalid (class)
+ToolUp.Facts.MethodRegistrationRefusal+ConditionTextInvalid.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+ConditionTextInvalid.name : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DefaultDoesNotFit (class)
+ToolUp.Facts.MethodRegistrationRefusal+DefaultDoesNotFit.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DefaultDoesNotFit.parameter : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DefaultDoesNotFit.reason : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DefinitionHashUnbound (class)
+ToolUp.Facts.MethodRegistrationRefusal+DefinitionHashUnbound.boundHash : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DefinitionHashUnbound.cardHash : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DefinitionHashUnbound.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateCondition (class)
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateCondition.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateCondition.name : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateId (class)
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateId.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateParameter (class)
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateParameter.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateParameter.parameter : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateToolName (class)
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateToolName.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+DuplicateToolName.toolName : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+IdentityUnbound (class)
+ToolUp.Facts.MethodRegistrationRefusal+IdentityUnbound.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+IdentityUnbound.operation : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+IdentityUnbound.operationVersion : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+IdentityUnbound.version : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+NoMeaning (class)
+ToolUp.Facts.MethodRegistrationRefusal+NoMeaning.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+ParameterNameReserved (class)
+ToolUp.Facts.MethodRegistrationRefusal+ParameterNameReserved.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+ParameterNameReserved.parameter : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+SchemaDoesNotDecode (class)
+ToolUp.Facts.MethodRegistrationRefusal+SchemaDoesNotDecode.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+SchemaDoesNotDecode.parameter : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+SchemaDoesNotDecode.reason : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+Tags (class)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.CheckUndeclared : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.ConditionNameInvalid : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.ConditionTextInvalid : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.DefaultDoesNotFit : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.DefinitionHashUnbound : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.DuplicateCondition : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.DuplicateId : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.DuplicateParameter : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.DuplicateToolName : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.IdentityUnbound : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.NoId : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.NoMeaning : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.ParameterNameReserved : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.SchemaDoesNotDecode : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+Tags.ToolNameInvalid : System.Int32 (literal)
+ToolUp.Facts.MethodRegistrationRefusal+ToolNameInvalid (class)
+ToolUp.Facts.MethodRegistrationRefusal+ToolNameInvalid.methodId : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusal+ToolNameInvalid.toolName : System.String { get }
+ToolUp.Facts.MethodRegistrationRefusalModule (class)
+ToolUp.Facts.MethodRegistrationRefusalModule.describe(ToolUp.Facts.MethodRegistrationRefusal) : System.String
+ToolUp.Facts.MethodRegistry (class)
+ToolUp.Facts.MethodRegistry.register(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodBinding]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.MethodProfile, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodRegistrationRefusal]]
+ToolUp.Facts.MethodRegistry.reservedNames : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Facts.MethodTool (class)
+ToolUp.Facts.MethodTool.bind(ToolUp.Facts.MethodCard, ToolUp.Facts.MethodEvaluator) : ToolUp.Facts.MethodBinding
+ToolUp.Facts.MethodTool.definitionOf(ToolUp.Facts.MethodCard, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.MethodParameter, ToolUp.Platform.ToolSchemaNode]], ToolUp.Platform.ToolEffectDeclaration) : ToolUp.Platform.AIToolDefinition
+ToolUp.Facts.MethodTool.effectsOf(ToolUp.Facts.MethodCard) : ToolUp.Platform.ToolEffectDeclaration
+ToolUp.Facts.MethodTool.ofSpecTool`3(ToolUp.Facts.MethodCard, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Facts.SpecTool`3[Spec, Refusal, Result]) : ToolUp.Facts.MethodBinding
+ToolUp.Facts.MethodTool.parameterHash(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Text.Json.JsonElement]) : System.String
+ToolUp.Facts.MethodTool.parameterText(ToolUp.Facts.MethodParameter) : System.String
+ToolUp.Facts.MethodTool.schemaOf(ToolUp.Facts.MethodParameter) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ToolSchemaNode, System.String]
+ToolUp.Facts.MethodTool.summaryOf(ToolUp.Facts.MethodCard, ToolUp.Facts.MethodEvaluation) : System.String
+ToolUp.Facts.MethodToolBuild (class)
+ToolUp.Facts.MethodToolBuild..ctor(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]])
+ToolUp.Facts.MethodToolBuild.Answer : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
+ToolUp.Facts.MethodToolBuild.Definition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Facts.MethodToolBuild.Executor : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]] { get }
 ToolUp.Facts.NarrativeCalculations (class)
 ToolUp.Facts.NarrativeCalculations.Declarations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CalculationDeclaration] { get }
 ToolUp.Facts.NarrativeCalculationsModule (class)
@@ -1786,6 +1921,10 @@ ToolUp.Facts.PipelineCaller (class)
 ToolUp.Facts.PipelineCaller..ctor(ToolUp.Platform.ResolvedScope, System.String)
 ToolUp.Facts.PipelineCaller.Principal : System.String { get }
 ToolUp.Facts.PipelineCaller.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Facts.PipelineCard (class)
+ToolUp.Facts.PipelineCard.DefinitionHash : System.String { get }
+ToolUp.Facts.PipelineCard.binding(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.RegisteredPipelineProfile], System.Boolean) : ToolUp.Facts.MethodBinding
+ToolUp.Facts.PipelineCard.cardOf(ToolUp.Platform.AIToolDefinition) : ToolUp.Facts.MethodCard
 ToolUp.Facts.PipelineJoin (class)
 ToolUp.Facts.PipelineJoin..ctor(System.Int32, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String)
 ToolUp.Facts.PipelineJoin.Joined : System.String { get }
@@ -1939,6 +2078,11 @@ ToolUp.Facts.RefusedFactJob.CreatedAt : System.DateTime { get }
 ToolUp.Facts.RefusedFactJob.CreatedBy : System.String { get }
 ToolUp.Facts.RefusedFactJob.Handler : System.String { get }
 ToolUp.Facts.RefusedFactJob.JobId : System.Guid { get }
+ToolUp.Facts.RegisteredMethod (class)
+ToolUp.Facts.RegisteredMethod..ctor(ToolUp.Facts.MethodCard, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Facts.MethodToolBuild)
+ToolUp.Facts.RegisteredMethod.Card : ToolUp.Facts.MethodCard { get }
+ToolUp.Facts.RegisteredMethod.Grammar : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.RegisteredMethod.Tool : ToolUp.Facts.MethodToolBuild { get }
 ToolUp.Facts.RegisteredPipelineProfile (class)
 ToolUp.Facts.RegisteredPipelineProfile.Description : System.String { get }
 ToolUp.Facts.RegisteredPipelineProfile.Fragment : System.String { get }

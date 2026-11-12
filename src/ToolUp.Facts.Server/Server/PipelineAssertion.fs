@@ -542,3 +542,130 @@ module PipelineAssertion =
             |}
             note = SpecTool.AssertedNote
         |}
+// ─── `evaluate_pipeline` as a method card ────────────────────────────
+//
+// The pipeline tool is the method registry's first card, so the general case
+// and the special one are one mechanism. Its card is generated from the
+// shipped tool's own declaration (the description is its meaning, its
+// arguments after the slice are its parameters), so the tool a registry
+// builds from it declares exactly what the tool always declared, and the
+// binding keeps the tool's decoding, validation, evaluation and asserting
+// form unchanged. Under a pipeline profile the profile's fragment is the
+// card's grammar, and the method profile carries it in the card's entry: a
+// deployment that serves the method profile does not serve the pipeline
+// profile's fragment beside it.
+
+/// The pipeline tool's method card and its binding.
+[<RequireQualifiedAccess>]
+module PipelineCard =
+
+    /// The definition the pipeline card binds to: SHA-256, lower-case hex,
+    /// over the pinned evaluator's package and version.
+    let DefinitionHash: string =
+        Text.Encoding.UTF8.GetBytes("Fuaran.Compute.DataFrame@" + PipelineTool.ComputeVersion)
+        |> Security.Cryptography.SHA256.HashData
+        |> Convert.ToHexString
+        |> _.ToLowerInvariant()
+
+    let private sliceArguments =
+        SpecTool.sliceParameters |> List.map _.Name |> Set.ofList
+
+    /// The card for the tool `definition` declares: `PipelineTool.definition`,
+    /// or `PipelineTool.definitionWithAssertions` where a deployment composes
+    /// derived assertions.
+    let cardOf (definition: AIToolDefinition) : MethodCard = {
+        Identity = {
+            Id = PipelineTool.OperationId
+            Version = PipelineTool.ComputeVersion
+            DefinitionHash = DefinitionHash
+            Package = "Fuaran.Compute.DataFrame"
+            Determinism = MethodDeterminism.HostRounded
+        }
+        Meaning = {
+            Summary = definition.Description
+            Answers =
+                "What a computation over one gated slice of one fact table gives: totals, rankings, filters, running and lagged values, bands and reshapes."
+            Assumes = [
+                "the slice has one row per subject and period, with a value column per metric"
+            ]
+        }
+        Applicability = {
+            Preconditions = []
+            DoesNotApply = [
+                "the question needs a fitted model or a forecast, which no pipeline step computes"
+                "the question is answered by one fact, which the fact tools read directly"
+            ]
+            Alternatives = []
+            Choice = MethodChoice.Mechanical
+        }
+        Signature = {
+            ToolName = definition.Name
+            Parameters =
+                definition.Parameters
+                |> List.filter (fun p -> not (sliceArguments.Contains p.Name))
+                |> List.map (fun p -> {
+                    Name = p.Name
+                    Meaning = p.Description
+                    Schema = p.Type
+                    Required = p.Required
+                    Default = p.Default
+                    Range = None
+                    Role = None
+                })
+            Refusals = []
+        }
+        Outputs = {
+            Tables = [
+                {
+                    Name = "result"
+                    Meaning = "The pipeline's output table, computed over the cells the gate admitted."
+                    Columns = []
+                }
+            ]
+            Diagnostics = []
+            Warnings = [ "an output column computed from a withheld cell is withheld, with its count" ]
+            Facts = []
+        }
+        Interpretation = {
+            Rules = [
+                "the answer names the result's shape, its columns and what was withheld, never its values"
+                "a withheld column reads a withheld cell: narrow the slice to a region with none and evaluate again"
+            ]
+            Say = [ "the result's shape and what it computed, presenting the result as shown" ]
+            NeverSay = [ "a figure from the result that is not an asserted fact" ]
+        }
+        Presentation = {
+            Blocks = [ "table" ]
+            BaseCard = None
+        }
+        Examples = [
+            {
+                Title = "Total per site"
+                Call =
+                    """{"table":"<fact table id>","period_from":"2026-01-01","period_to":"2026-02-01","metrics":["revenue"],"pipeline":[{"$type":"groupBy","keys":["subject"],"aggregates":[{"name":"total","fn":"sum","of":"revenue"}]}]}"""
+                Result = "One row per site, with the column 'total'."
+                Explanation =
+                    "Each row is a site's revenue summed over the month; present the result rather than restating its totals."
+            }
+        ]
+    }
+
+    /// `evaluate_pipeline` bound to its card, under the deployment's pipeline
+    /// profile (`None`: the full algebra), whose fragment becomes the card's
+    /// grammar. `asserting`: whether the deployment composes derived
+    /// assertions, which binds the asserting form and its declaration.
+    let binding (profile: RegisteredPipelineProfile option) (asserting: bool) : MethodBinding =
+        let grammar = profile |> Option.map _.Fragment
+
+        if asserting then
+            MethodTool.ofSpecTool
+                (cardOf PipelineTool.definitionWithAssertions)
+                DefinitionHash
+                grammar
+                (PipelineAssertion.specToolUnder profile)
+        else
+            MethodTool.ofSpecTool
+                (cardOf PipelineTool.definition)
+                DefinitionHash
+                grammar
+                (PipelineTool.specToolUnder profile)
