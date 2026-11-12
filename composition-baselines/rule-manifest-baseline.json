@@ -154,6 +154,34 @@
       "Version": "1.0.0",
       "Severity": "error",
       "RuleDescription": "A binding that names one table (ServerApp.bindFactTables, including a delegate-fact binding) must name a table some module declares; a binding to nothing would serve reads over a table that does not exist."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "dataset-model-table-undeclared",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A module's dataset model models only fact tables the module declares, and its relations, measures and views name only tables it models."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "dataset-model-measure-metric-undeclared",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A measure publishes a metric registered in the composition and aggregates a column its table carries."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "dataset-model-table-undescribed",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "Every modelled table carries a FactTableDescription: the model takes its descriptions from the table's own and never restates them."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "dataset-model-malformed",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A dataset model and its views are well formed: named, each name once, every relation with a key pair, every aggregate and parameter type in its vocabulary, every view with at least one described column."
     }
   ]
 }

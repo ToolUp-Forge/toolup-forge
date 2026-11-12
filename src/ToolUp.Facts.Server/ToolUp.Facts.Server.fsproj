@@ -159,6 +159,11 @@
              write, its prompt fragment and the grammar the pipeline tool reads.
              Before the compose module, which registers it. -->
         <Compile Include="Server\PipelineProfile.fs" />
+        <!-- The dataset model a module declares over its fact tables, lowered
+             to Fuaran.DB and checked, its caller projection and the relation
+             check the profile reads; then the assistant's tool over it. -->
+        <Compile Include="Server\DatasetModelRegistry.fs" />
+        <Compile Include="Server\DatasetModelTools.fs" />
         <!-- The spec-tool door: decode, validate, the gated slice read, the
              cap and the assertion door, written once for every "spec in,
              Facts out" tool. Before the compose module, which registers one. -->
@@ -174,11 +179,21 @@
              model writes, evaluated over the fact browse's gated view slice.
              After the browse handler, whose slice read it calls. -->
         <Compile Include="Server\PipelineTool.fs" />
+        <!-- Views over a module's dataset model: checked against it, evaluated
+             as the pipeline tool evaluates, and bound as method cards. After
+             the pipeline tool, whose evaluation it reuses. -->
+        <Compile Include="Server\ViewRegistry.fs" />
         <!-- A pipeline result's column asserted as facts of a registered
              derived metric. After the pipeline tool, whose evaluation it
              asserts from. -->
         <Compile Include="Server\PipelineAssertion.fs" />
     </ItemGroup>
-    <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
+    <!-- Phase 1348 — the dataset model a module declares over its fact
+         tables: Fuaran.DB (core package only), published Apache-2.0 on
+         nuget.org. It decides shape and cost, never disclosure. -->
+    <ItemGroup>
+        <PackageReference Include="Fuaran.DB" />
+    </ItemGroup>
+    <!-- Other PackageReferences flow transitively from ToolUp.Platform.Server.
          FSharp.Core is implicit via the .NET SDK. -->
 </Project>

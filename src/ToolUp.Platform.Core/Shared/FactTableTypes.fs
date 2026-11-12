@@ -233,6 +233,150 @@ type FactTableDescriptionRegistration = {
     Description: FactTableDescription
 }
 
+// ─── A dataset model over a module's fact tables (Phase 1348) ────────
+//
+// A module may say how its fact tables relate and what may be computed over
+// them: the tables it models, the relations a pipeline may join along, its
+// measures with the metrics they publish, and views — named, versioned
+// pipelines over the tables, with typed parameters and described result
+// columns. The declaration is plain data, Fable-safe and free of any server
+// or Compute type: a view's pipeline is carried as `Fuaran.Compute` wire JSON
+// and decoded, with everything else here, by the facts server's
+// `DatasetModelRegistry` and `ViewRegistry`, which refuse a declaration by
+// name at compose.
+//
+// **Descriptions are never restated.** A modelled table's description, and
+// its columns', are its `FactTableDescription`: the model adds relations,
+// measures and views and nothing else, so a table read with no model in
+// mind is described exactly as one read through the model.
+//
+// **Shape and cost, never disclosure.** Nothing here grants, withholds or
+// floors anything: every cell a view or a pipeline reads is judged by the
+// fact gate as any other read is.
+
+/// A relation between two of a module's modelled fact tables: the one way a
+/// pipeline may join them.
+type FactTableRelation = {
+    /// The relation's name, unique within the model.
+    Name: string
+    /// The left table's `FactTableDefinition.Id`.
+    Left: string
+    /// The right table's `FactTableDefinition.Id`.
+    Right: string
+    /// The `(left column, right column)` key pairs, by the column names a
+    /// pipeline reads the tables' slices under (`subject_path`,
+    /// `period_from`, a metric id, …). At least one.
+    On: (string * string) list
+}
+
+/// A measure: a named aggregate over one column of a modelled table, and the
+/// registered metric it publishes.
+type FactTableMeasure = {
+    /// The measure's name, unique within the model.
+    Name: string
+    /// The modelled table the measure aggregates.
+    Table: string
+    /// The column aggregated: one of the table's metric ids.
+    Column: string
+    /// The aggregate's wire spelling (`sum`, `mean`, `min`, `max`, `count`,
+    /// `median`, `stddev`, `first`, `last`, `countDistinct`).
+    Aggregate: string
+    /// The registered metric (`MetricDefinition.Id`) the measure publishes.
+    Publishes: string
+}
+
+/// A module's dataset model: which of its fact tables it models, how they
+/// relate and the measures over them. Tables, columns and descriptions are
+/// the fact tables' own.
+type DatasetModelDeclaration = {
+    /// The modelled tables, each a fact table the module declares.
+    Tables: string list
+    /// The relations a pipeline may join along.
+    Relations: FactTableRelation list
+    /// The measures and the metrics they publish.
+    Measures: FactTableMeasure list
+}
+
+/// The vocabularies a dataset model's declarations range over.
+[<RequireQualifiedAccess>]
+module DatasetModelDeclaration =
+
+    /// The aggregates a measure may name: `Fuaran.Compute`'s own wire
+    /// spellings, in its declaration order.
+    let aggregates: string list = [
+        "sum"
+        "mean"
+        "min"
+        "max"
+        "count"
+        "median"
+        "stddev"
+        "first"
+        "last"
+        "countDistinct"
+    ]
+
+    /// The types a view parameter may take.
+    let parameterTypes: string list = [ "string"; "integer"; "decimal"; "boolean" ]
+
+/// A view parameter: a value a caller supplies, bound into the view's
+/// pipeline where it names `param` of this name.
+type FactViewParameter = {
+    /// The parameter's name, as the pipeline's `param` names it.
+    Name: string
+    /// Its type's spelling: `string`, `integer`, `decimal` or `boolean`.
+    Type: string
+    /// What it means.
+    Description: string
+    /// Whether a call must supply it.
+    Required: bool
+}
+
+/// A described result column of a view.
+type FactViewColumn = {
+    /// The column's name, as the pipeline's output names it.
+    Name: string
+    /// What it holds.
+    Description: string
+}
+
+/// A view: a named, versioned pipeline over a module's modelled tables,
+/// checked against the module's model at compose and evaluated over the
+/// gated slice of the tables it reads.
+type FactViewDefinition = {
+    /// The view's stable id (lower-case letters, digits and `_`), unique in
+    /// the composition. Its tool is named after it.
+    Id: string
+    /// The view's version: the version a fact computed by it names.
+    Version: string
+    /// What the view answers: the tool's description.
+    Description: string
+    /// The modelled table the pipeline reads as its source.
+    Table: string
+    /// The parameters a call supplies.
+    Parameters: FactViewParameter list
+    /// The result's columns, in order, each described.
+    Columns: FactViewColumn list
+    /// The pipeline, as `Fuaran.Compute` wire JSON (a JSON array of steps).
+    Pipeline: string
+}
+
+/// A module's dataset model paired with the module that declared it.
+type DatasetModelRegistration = {
+    /// The `ServerModule.Name` that declared the model.
+    Module: string
+    /// The declared model.
+    Model: DatasetModelDeclaration
+}
+
+/// A view paired with the module that declared it.
+type FactViewRegistration = {
+    /// The `ServerModule.Name` that declared the view.
+    Module: string
+    /// The declared view.
+    View: FactViewDefinition
+}
+
 /// Where the composition binds a declared table's rows — the physical side
 /// of the logical declaration. `destination` is an opaque label naming the
 /// bound store for diagnostics (the default writer binds `"fact-store"`);

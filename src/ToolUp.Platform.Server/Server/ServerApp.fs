@@ -252,6 +252,20 @@ type ServerModule = {
     /// default) — the composition is byte-for-byte unchanged (GP 13).
     /// Register via `ServerModule.describeFactTables`.
     FactTableDescriptions: Grounding.FactTableDescription list
+    /// The dataset model this module declares over its fact tables
+    /// (Phase 1348): the tables it models, the relations a pipeline may
+    /// join along and its measures with the metrics they publish. `addModule`
+    /// fans it into the app; the facts companion's `DatasetModelRegistry`
+    /// checks it at compose. `None` (the default) — the composition is
+    /// byte-for-byte unchanged (GP 13). Declare via
+    /// `ServerModule.declareDatasetModel`.
+    DatasetModel: Grounding.DatasetModelDeclaration option
+    /// The views this module declares over its modelled tables
+    /// (Phase 1348): named, versioned pipelines with typed parameters and
+    /// described result columns, checked against the module's model at
+    /// compose (`ViewRegistry`). Empty (the default) — nothing changes.
+    /// Declare via `ServerModule.declareViews`.
+    Views: Grounding.FactViewDefinition list
     /// The work this module runs once a DELIVERY has
     /// completed: every table one request or one ingestion job attempt
     /// ingested has settled. `addModule` registers each with the app
@@ -295,6 +309,8 @@ module ServerModule =
         NotificationCategories = []
         FactTables = []
         FactTableDescriptions = []
+        DatasetModel = None
+        Views = []
         DeliveryCompletedHooks = []
         Classifications = []
     }
@@ -625,6 +641,30 @@ module ServerModule =
     let describeFactTables (descriptions: Grounding.FactTableDescription list) (m: ServerModule) : ServerModule = {
         m with
             FactTableDescriptions = m.FactTableDescriptions @ descriptions
+    }
+
+    /// Declare the dataset model this module states over its fact tables
+    /// (Phase 1348): the tables it models (each one it declares, each
+    /// described), the relations a pipeline may join along and its measures
+    /// with the registered metrics they publish. The model's tables, columns
+    /// and descriptions are the fact tables' own, so nothing is restated. A
+    /// module declares one model: a second call **replaces** the first. It
+    /// is checked at compose by the facts companion
+    /// (`DatasetModelRegistry.register`), which refuses it by name.
+    let declareDatasetModel (model: Grounding.DatasetModelDeclaration) (m: ServerModule) : ServerModule = {
+        m with
+            DatasetModel = Some model
+    }
+
+    /// Declare views over this module's modelled tables (Phase 1348): each a
+    /// named, versioned `Fuaran.Compute` pipeline with typed parameters and
+    /// described result columns. **Adds**. Each is checked at compose against
+    /// the module's model (`ViewRegistry.register`), and a view reading a
+    /// column the model does not name, or joining along a relation it does
+    /// not declare, is refused by name.
+    let declareViews (views: Grounding.FactViewDefinition list) (m: ServerModule) : ServerModule = {
+        m with
+            Views = m.Views @ views
     }
 
     /// Declare a per-route latency ceiling for one of this module's
@@ -1054,6 +1094,14 @@ type ServerApp = {
     /// `ServerModule` (`ServerModule.describeFactTables`), each paired with
     /// its describing module. Empty (the default) — nothing changes.
     RegisteredFactTableDescriptions: Grounding.FactTableDescriptionRegistration list
+    /// Accumulated dataset models across every registered `ServerModule`
+    /// (`ServerModule.declareDatasetModel`), each paired with its declaring
+    /// module (Phase 1348). Empty (the default) — nothing changes.
+    RegisteredDatasetModels: Grounding.DatasetModelRegistration list
+    /// Accumulated views across every registered `ServerModule`
+    /// (`ServerModule.declareViews`), each paired with its declaring module
+    /// (Phase 1348). Empty (the default) — nothing changes.
+    RegisteredViews: Grounding.FactViewRegistration list
     /// Where the composition binds declared tables
     /// (`ServerApp.bindFactTables`). The physical half of the logical
     /// declaration: a `Required` table no binding covers refuses to start.
@@ -1430,6 +1478,8 @@ module ServerApp =
         RegisteredSubjectDescriptions = []
         RegisteredFactTables = []
         RegisteredFactTableDescriptions = []
+        RegisteredDatasetModels = []
+        RegisteredViews = []
         FactTableBindings = []
         RegisteredPurposes = []
         ActivitySink = None
@@ -3320,6 +3370,21 @@ module ServerApp =
                         Description = d
                     })
 
+                let datasetModelRegistrations: Grounding.DatasetModelRegistration list =
+                    m.DatasetModel
+                    |> Option.map (fun model -> {
+                        Grounding.DatasetModelRegistration.Module = m.Name
+                        Grounding.DatasetModelRegistration.Model = model
+                    })
+                    |> Option.toList
+
+                let viewRegistrations: Grounding.FactViewRegistration list =
+                    m.Views
+                    |> List.map (fun v -> {
+                        Grounding.FactViewRegistration.Module = m.Name
+                        View = v
+                    })
+
                 // Permit the `component_id` correlation
                 // dimension on every module metric's tag allowlist so
                 // per-component telemetry can be keyed by the stable
@@ -3451,6 +3516,8 @@ module ServerApp =
                         RegisteredFactTables = app.RegisteredFactTables @ factTableRegistrations
                         RegisteredFactTableDescriptions =
                             app.RegisteredFactTableDescriptions @ factTableDescriptionRegistrations
+                        RegisteredDatasetModels = app.RegisteredDatasetModels @ datasetModelRegistrations
+                        RegisteredViews = app.RegisteredViews @ viewRegistrations
                         ModuleSurfaceDefaults = app.ModuleSurfaceDefaults @ surfaceDefaultsForModule
                         RouteSurfaceOverrides = app.RouteSurfaceOverrides @ m.RouteSurfaceRequirements
                         // The same declarations, keyed by
@@ -3700,13 +3767,17 @@ module ServerApp =
 
     /// The composition facts the fact-table preflight
     /// (`FactTablePreflight`) checks: every declared table, the metric and
-    /// subject registrations its columns and level resolve against, and
-    /// the composition's bindings. Pure and on demand.
+    /// subject registrations its columns and level resolve against, the
+    /// composition's bindings, and the descriptions, dataset models and views
+    /// declared over the tables (Phase 1348). Pure and on demand.
     let factTableComposition (app: ServerApp) : FactTableComposition = {
         Tables = app.RegisteredFactTables
         Metrics = app.RegisteredMetrics
         Subjects = app.RegisteredSubjects
         Bindings = app.FactTableBindings
+        Descriptions = app.RegisteredFactTableDescriptions
+        DatasetModels = app.RegisteredDatasetModels
+        Views = app.RegisteredViews
     }
 
     /// The `IMetricRegistry` `run` registers: the declared metrics and
