@@ -9,7 +9,7 @@ layers, companion slots and settings forge composes, registered as found on forg
 
 ## Which profile version this release satisfies
 
-**This release of forge satisfies `server-app-host` 7.4**, the version in `spec/composition-profile.md`, its
+**This release of forge satisfies `server-app-host` 7.5**, the version in `spec/composition-profile.md`, its
 registry and its fixture manifest. The profile is versioned with the surface it describes, so the version a forge
 release satisfies is the one in that release's own `spec/` folder. Pin a profile version, not a forge commit; a
 profile version moves only when its vocabulary does (§P1 of the profile).
@@ -31,6 +31,13 @@ which reduces to the `DeclaredPrincipal` a literal reduces to, with the setting'
 a composition with a literal encodes byte for byte as before and means what it did. An evaluator that reduces the new
 form declares the setting in its environment contract and refuses the start when the setting gives no user that
 resolves. It is distinct from a publication's reading principal, as §P3.13 states.
+
+7.5 lets a unit declare a dataset model over its fact tables, and views over it (§P3.19, §P2.24, §P2.25,
+§P4.84–§P4.88): the `datasetModel` node, which reduces to `ServerModule.declareDatasetModel` and
+`ServerModule.declareViews` on the unit it names. Its declaration rules are the ones forge's own fact-table preflight
+runs (`FactTablePreflight.datasetModelDefects`), and §P4.88 is the check `ViewRegistry.register` runs over each view. It
+is additive: a composition without the node encodes byte for byte as before. What it asks of a composition, and of an
+evaluator that reduces one: [`docs/migrations/1348-dataset-model-and-views.md`](../migrations/1348-dataset-model-and-views.md).
 
 ## How the check works
 

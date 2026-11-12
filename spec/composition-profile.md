@@ -1,6 +1,6 @@
 # forge composition profile — `server-app-host`
 
-**Profile version 7.4.** forge's evaluator profile of the **App-composition wire specification, format version 1**
+**Profile version 7.5.** forge's evaluator profile of the **App-composition wire specification, format version 1**
 (<https://github.com/Fuaran-Build/fuaran-app-composition-specification>, cited throughout as *core*). Sections §P1–§P8 are **normative** within this profile. §P0 and Appendix P-A
 are not.
 
@@ -47,7 +47,7 @@ Each shape this profile fills in is the core's, cited by its section: the root (
 | | |
 |---|---|
 | Profile identifier | `server-app-host` |
-| Profile version | 7.4 |
+| Profile version | 7.5 |
 | Profile kind | vocabulary (core §8.6) |
 | Core | App-composition wire specification, format version 1 — <https://github.com/Fuaran-Build/fuaran-app-composition-specification> |
 | Core version | 1 |
@@ -411,6 +411,18 @@ members, neither, or a name a setting cannot have, and `principal-setting-unreso
 deployment does not supply a user. §P4.58 and §P4.63 widen to the new form, and §P6 gives a vector the `environment` it
 runs under. Every 7.3 composition carries `userId` and no `userIdSetting`, so it encodes byte for byte as before and is
 valid at 7.4 with the same verdict; a literal means what it did.
+
+**7.4 → 7.5 lets a unit declare a dataset model over its fact tables, and views over it, additively.** Until 7.5 a
+composition could say which fact tables a unit writes and what each column holds, and nothing about how the tables
+relate or what may be computed over them: a question across two tables had no declared join to follow, and a view a
+unit published over its tables lived in the unit's body, where no composition could check it. 7.5 adds the node kind
+`datasetModel` (§P3.19): the unit it describes, the tables it models, the relations a pipeline may join them along,
+its measures with the metrics they publish, and its views — each an id, a version, a description, typed parameters,
+described result columns and a pipeline in the `Fuaran.Compute` wire form. Its two closed vocabularies are a measure's
+`aggregate` (§P2.24) and a view parameter's `type` (§P2.25), and its rules are §P4.84–§P4.88. A model decides the shape
+and the cost of a read, never its disclosure: it declares no grant, and a host judges every cell a view reads as it
+judges any other read. Every 7.4 composition carries no `datasetModel`, so it encodes byte for byte as before and is
+valid at 7.5 with the same verdict.
 
 ## §P2. Token vocabularies
 
@@ -933,6 +945,38 @@ Whether the bundled client's views have browser history (7.2, §P3.1).
 
 A token outside this set is `token-unregistered`. No token means "none": a client with no browser history is a shell
 without the member.
+
+### §P2.24 `datasetModel.measures.aggregate` — **closed**
+
+The aggregate a measure takes over its column (7.5, §P3.19): the `Fuaran.Compute` aggregate of the same spelling.
+
+| Token | The measure is |
+|---|---|
+| `sum` | The column's total. |
+| `mean` | Its arithmetic mean. |
+| `min` | Its least value. |
+| `max` | Its greatest value. |
+| `count` | How many rows carry a value. |
+| `median` | Its median. |
+| `stddev` | Its standard deviation. |
+| `first` | Its first value, in row order. |
+| `last` | Its last value, in row order. |
+| `countDistinct` | How many distinct values it holds. |
+
+A token outside this set is `token-unregistered`.
+
+### §P2.25 `datasetModel.views.parameters.type` — **closed**
+
+The type of a value a caller supplies to a view (7.5, §P3.19).
+
+| Token | A call supplies |
+|---|---|
+| `string` | Text. |
+| `integer` | A whole number. |
+| `decimal` | A decimal number, held exactly. |
+| `boolean` | `true` or `false`. |
+
+A token outside this set is `token-unregistered`.
 
 ## §P3. Profile-only node kinds
 
@@ -1596,6 +1640,48 @@ serves. It is stated in three parts so that an inventory of the stack's escape h
   inlined element runs only where the deployment admits it, by a nonce or by the hash of its bytes; that admission is
   the deployment's configuration, not this declaration's.
 
+### §P3.19 `datasetModel`
+
+| Member | Type | Presence |
+|---|---|---|
+| `module` | string | REQUIRED |
+| `tables` | array of strings | REQUIRED; never empty |
+| `relations` | array of relation objects | OPTIONAL; absent when the model declares none, never empty |
+| `measures` | array of measure objects | OPTIONAL; absent when the model declares none, never empty |
+| `views` | array of view objects | OPTIONAL; absent when the unit declares none, never empty |
+
+**A unit's dataset model** (7.5): what may be computed over the fact tables a `moduleRef` declares (core §5.4's
+`factTables`). `module` is the `id` of that unit, and `tables` the `id`s of the fact tables it models, each one it
+declares. The model restates nothing the tables say: a modelled table's columns are the table's, and their meaning is
+the table's own `description` (core §5.4), so a table read with no model in mind is described exactly as one read
+through it. A child of `appRoot` and a leaf; at most one per unit.
+
+A **relation object** is `{ "name", "left", "right", "on" }`, all REQUIRED, in that order: the relation's name, the
+`id`s of the two modelled tables it relates, and its key pairs, an array of `{ "left", "right" }` objects naming a
+column of each table. A pipeline joins two tables only along a declared relation, on exactly its keys. A column is named
+as a pipeline reads the table: by the table's metric `id` for a value, and by the host's names for the row's subject
+and period, which the host states with its evaluator.
+
+A **measure object** is `{ "name", "table", "column", "aggregate", "publishes" }`, all REQUIRED, in that order: the
+measure's name, the modelled table and the metric column it aggregates, the aggregate (§P2.24), and the `id` of the
+metric the measure publishes, which some `moduleRef` registers in its `metricDefinitions`.
+
+A **view object** is `{ "id", "version", "description", "table", "parameters", "columns", "pipeline" }`, in that order,
+every member REQUIRED but `parameters`, which is absent when the view takes none and never empty. `id` is the view's
+identity (lower-case letters, digits and `_`, unique in the composition) and `version` its version; `description` says
+what it answers; `table` is the modelled table its pipeline reads as its source. A parameter is
+`{ "name", "type", "description", "required" }`, all REQUIRED: its name as the pipeline's `param` names it, its type
+(§P2.25), what it means, and `"true"` or `"false"`. A column is `{ "name", "description" }`, both REQUIRED: a result
+column, in result order, and what it holds. `pipeline` is a string: the view's pipeline in the `Fuaran.Compute` wire
+form, a JSON array of steps.
+
+**What it obliges.** A host checks every view's pipeline against the unit's model before it serves anything (§P4.88)
+and refuses to start on one the model refuses. **A model decides the shape and the cost of a read, never its
+disclosure**: it declares no grant, row policy or group floor, and a host judges every cell a view or a pipeline reads
+as it judges any other read of the table, withholding through the lineage of the result. A host offers each view to an
+assistant as one tool whose result names the view, its version and the hash of the pipeline it ran, and may let an
+assistant's own pipelines join two modelled tables along a declared relation and along nothing else.
+
 ## §P4. Composition rules
 
 Each rule names the class it is refused under. All are profile classes (core §9.2) and none is
@@ -1605,7 +1691,7 @@ numbered into the core set.
 
 | Parent | Admissible children |
 |---|---|
-| `appRoot` (root) | `serverConfig`, `dataType`, `moduleRef`, `clientShell`, `portAllocation`, `layoutRef`, `pageRef`, `groundedNarrative`, `referenceData`, `dataDelivery`, `reportTemplate`, `reportProducer`, `subscriptionPrincipal`, `standingSubscription`, `factBrowse`, `theme`, `uiControl`, `extensionRef` |
+| `appRoot` (root) | `serverConfig`, `dataType`, `moduleRef`, `clientShell`, `portAllocation`, `layoutRef`, `pageRef`, `groundedNarrative`, `referenceData`, `dataDelivery`, `reportTemplate`, `reportProducer`, `subscriptionPrincipal`, `standingSubscription`, `factBrowse`, `theme`, `uiControl`, `datasetModel`, `extensionRef` |
 | `serverConfig` | `companionSelection`, `connectorRef`, `configKnob` |
 | `companionSelection` whose `slot` is `aiProvider` | `aiFunding` |
 | `companionSelection` whose `slot` is `vectorStore` or `embeddingProvider` | `entityReads` |
@@ -2254,6 +2340,44 @@ is detected at the `runtime` layer (core §12.4), and a vector of it states the 
 value resolves depends on the deployment's users, which no vector carries, so the vectors pin the absent and the blank
 setting, and the rule binds the third case all the same.
 
+### §P4.84 A dataset model is well formed — `dataset-model-malformed`
+
+A `datasetModel`'s `module` is the `id` of a `moduleRef` in the composition, and no two `datasetModel`s name one unit.
+Its `tables` name no table twice. No two relations, measures or views of it share a name, and a view's `id` is unique
+in the composition and made of lower-case letters, digits and `_`. Every name, `version` and `description` is not
+blank; every relation declares at least one key pair; every view declares at least one column, and every column a
+description; no view names one parameter or column twice; every `pipeline` decodes as a `Fuaran.Compute` pipeline, and
+the parameters its steps name are exactly the ones the view declares (7.5). A model or a view that cannot be read has
+said nothing a host could check.
+
+### §P4.85 A model names only what its unit declares — `dataset-model-table-undeclared`
+
+Every `tables` entry is the `id` of a fact table the model's unit declares in its `factTables`, and a relation's `left`
+and `right`, a measure's `table` and a view's `table` are each one of the model's `tables` (7.5). A relation naming a
+table no unit declares joins nothing, and a model naming another unit's table would describe output its unit does not
+write.
+
+### §P4.86 A measure publishes a registered metric — `dataset-model-measure-metric-undeclared`
+
+A measure's `publishes` is the `id` of a metric some `moduleRef` registers in its `metricDefinitions`, and its `column`
+is one of the metrics its table's columns carry (7.5). A measure publishing a metric nothing defines has no unit,
+direction or staleness to be published under.
+
+### §P4.87 A modelled table is described — `dataset-model-table-undescribed`
+
+Every table a model names in `tables` carries a `description` (core §5.4) (7.5). A model takes a table's meaning from
+the table's own description and never restates it, so an undescribed modelled table would reach an assistant with no
+meaning at all.
+
+### §P4.88 A view's pipeline passes its model — `dataset-view-pipeline-refused`
+
+A view's `pipeline`, read from its `table`, reads only columns the model's tables carry, as the steps before it rename,
+derive and aggregate them; brings in only modelled tables, by `id`, and never a table written into the pipeline; joins
+two tables only along a declared relation, on exactly its keys; and answers a closed column set that is exactly the
+view's `columns`, in order (7.5). A sort key a call would choose is refused: a request never chooses an identifier the
+model has not vouched for. The rule is the check of a pipeline against a dataset model, and a host runs it at start; a
+composition meeting it reduces to a host that starts.
+
 ## §P5. Extension
 
 This profile registers no extension declaration of its own. The core registry (core §7.4) applies
@@ -2274,7 +2398,7 @@ the profile by name. It carries every `core` obligation (core §2.1) and additio
   `referenceData`, `dataDelivery`, `entityReads`, `reportTemplate`, `reportProducer`,
   `subscriptionPrincipal`, `standingSubscription`, `factBrowse`, `theme` and `uiControl` (§P3), and the
   `content` member of `layoutRef` and `pageRef` (§P3.18);
-- enforces §P4.1–§P4.3, §P4.5, §P4.7–§P4.55 and §P4.57–§P4.83, builds each project the root declares as §P4.56 obliges,
+- enforces §P4.1–§P4.3, §P4.5, §P4.7–§P4.55 and §P4.57–§P4.88, builds each project the root declares as §P4.56 obliges,
   serves a page as §P3.3 obliges, a fact browse as §P3.15 obliges and a client shell's home entries and browser history as §P3.1 obliges,
   applies a declared theme as §P3.16 obliges, inlines and serves declared content as §P3.18 obliges, enforces a
   declared allowlist as §P3.17 obliges, verifies every reference dataset as §P3.6 obliges and every binary template

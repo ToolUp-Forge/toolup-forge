@@ -263,6 +263,8 @@ let private tokenSections = [
     "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "pageRef.content.mode"
     "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "layoutRef.content.mode"
     "§P2.23 `clientShell.browserHistory`", "clientShell.browserHistory"
+    "§P2.24 `datasetModel.measures.aggregate`", "datasetModel.measures.aggregate"
+    "§P2.25 `datasetModel.views.parameters.type`", "datasetModel.views.parameters.type"
     "§P2.8.1 A column's `shape`", "moduleRef.factTables.definition.columns.shape"
     "§P2.8.2 A definition's `historyMode`", "moduleRef.factTables.definition.historyMode"
     "§P2.8.3 A disclosure's `class`", "moduleRef.factTables.definition.disclosure.class"
