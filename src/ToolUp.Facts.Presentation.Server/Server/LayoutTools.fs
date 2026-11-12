@@ -24,6 +24,9 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs.SmokeTests
 open ToolUp.Platform.Compose
+// Fuaran.UI 0.104 publishes its own `PageRequest` / `PageRefusal`; this
+// namespace's own types are the ones this file means, so it is opened last.
+open ToolUp.Facts.Presentation
 
 // ─── The layout tools ──────────────────────────────────────────────
 //
@@ -2331,7 +2334,7 @@ module LayoutTools =
                             | Ok(_, table) ->
                                 let found =
                                     QueryBinding.check table.Schema n
-                                    |> List.map (fun d -> sprintf "%s on '%s': %s" d.Code d.NodeId d.Message)
+                                    |> List.map (fun d -> sprintf "%s on '%s': %s" d.Code d.Location.NodeId d.Message)
 
                                 return! check rest (defects @ found)
                     }
