@@ -681,6 +681,7 @@ let private doorTests =
                 Gate = FactDisclosureGate.held h.Armed
                 Registry = None
                 Clock = fun () -> DateTime.UtcNow
+                Views = None
             }
 
             let get viewer =

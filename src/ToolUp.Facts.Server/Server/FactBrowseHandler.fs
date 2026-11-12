@@ -115,6 +115,21 @@ module internal SeriesHead =
                 : HeldFactRow))
     }
 
+/// The registered views a series may read in place of its table's metric
+/// column (`FactSeriesQuery.View`). The browse resolves a view-sourced series
+/// through it; `ViewRegistry.seriesReader` is the implementation, over the
+/// views a deployment registers.
+type IFactViewSeriesReader =
+    /// The series `request` asks of the view `source` names, every slice read
+    /// through `readSlice`, the browse's own gated slice read for the caller,
+    /// at `readAt`: a refusal names what to repair.
+    abstract ReadSeries:
+        readSlice: (FactSliceQuery -> Async<Result<FactSlice, string>>) *
+        readAt: DateTime *
+        request: FactSeriesQuery *
+        source: FactSeriesViewSource ->
+            Async<Result<FactSeries, string>>
+
 /// The fact browse read surface over explicit dependencies, and its
 /// composition.
 module FactBrowseHandler =
@@ -141,6 +156,9 @@ module FactBrowseHandler =
         Registry: IMetricRegistry option
         /// The clock freshness is derived against.
         Clock: unit -> DateTime
+        /// The registered views a series may read. `None` when the deployment
+        /// registers none: a view-sourced series is then refused by name.
+        Views: IFactViewSeriesReader option
     }
 
     /// `inner` asked at `surface` whichever door a read names — the browse
@@ -953,7 +971,7 @@ module FactBrowseHandler =
     ///   ordered by their end (Phase 1127), as the view slice orders rows.
     /// - **The cap is checked before the gate**, so a refusal reveals only
     ///   a count — existence-level, like every count this surface serves.
-    let querySeries
+    let private tableSeries
         (deps: FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
@@ -965,13 +983,7 @@ module FactBrowseHandler =
             | Ok table when not (List.contains request.Metric (FactTableDefinition.metrics table)) ->
                 return Error(sprintf "Table '%s' has no metric column '%s'." table.Id request.Metric)
             | Ok _ when request.PeriodFrom >= request.PeriodTo ->
-                return
-                    Error(
-                        sprintf
-                            "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
-                            (request.PeriodFrom.ToString "o")
-                            (request.PeriodTo.ToString "o")
-                    )
+                return Error(FactBrowseApi.periodRangeRefusal request.PeriodFrom request.PeriodTo)
             | Ok table ->
                 let level = request.SubjectLevel |> Option.defaultValue table.Level
 
@@ -994,14 +1006,7 @@ module FactBrowseHandler =
                         heads |> List.sortBy (fun h -> h.Subject.Path, h.PeriodFrom, h.PeriodTo)
 
                     if List.length points > cap then
-                        return
-                            Error(
-                                sprintf
-                                    "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
-                                    (List.length points)
-                                    cap
-                                    FactBrowseApi.MaxSeriesPoints
-                            )
+                        return Error(FactBrowseApi.seriesCapRefusal (List.length points) cap)
                     else
                         let! verdictFor = judgeHeads deps scope principal points
 
@@ -1051,6 +1056,7 @@ module FactBrowseHandler =
                                 MaxPoints = cap
                                 WithheldCount = List.length withheld
                                 Withheld = withheldCounts withheld
+                                View = None
                             }
         }
 
@@ -1098,13 +1104,7 @@ module FactBrowseHandler =
                 match request.Metrics |> List.tryFind (fun m -> not (List.contains m tableMetrics)) with
                 | Some missing -> return Error(sprintf "Table '%s' has no metric column '%s'." table.Id missing)
                 | None when request.PeriodFrom >= request.PeriodTo ->
-                    return
-                        Error(
-                            sprintf
-                                "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
-                                (request.PeriodFrom.ToString "o")
-                                (request.PeriodTo.ToString "o")
-                        )
+                    return Error(FactBrowseApi.periodRangeRefusal request.PeriodFrom request.PeriodTo)
                 | None ->
                     let depth =
                         deps.Registry
@@ -1218,6 +1218,29 @@ module FactBrowseHandler =
         }
 
     /// The API record over explicit dependencies, for one caller.
+    /// One series. A table-sourced request is the table read above, unchanged.
+    /// A view-sourced one (`FactSeriesQuery.View`) is resolved by
+    /// the deployment's registered views (`FactBrowseDeps.Views`), every slice
+    /// read through `querySlice` for the same caller, so it passes the same
+    /// gate at the same door; with no views registered it is refused by name.
+    let querySeries
+        (deps: FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (request: FactSeriesQuery)
+        : Async<Result<FactSeries, string>> =
+        match request.View, deps.Views with
+        | None, _ -> tableSeries deps scope principal request
+        | Some source, None ->
+            async.Return(
+                Error(
+                    sprintf
+                        "The series names view '%s', and this deployment registers no views for series to read."
+                        source.ViewId
+                )
+            )
+        | Some source, Some views -> views.ReadSeries(querySlice deps scope principal, deps.Clock(), request, source)
+
     let api (deps: FactBrowseDeps) (scope: ResolvedScope) (principal: string) : IFactBrowseApi = {
         ListTables = fun () -> listTables deps scope
         GetTable = getTable deps scope
@@ -1275,6 +1298,7 @@ module FactBrowseHandler =
                     |> Option.defaultWith (fun () -> FactDisclosureGate.held gate)
                 Registry = serviceOf<IMetricRegistry> ctx
                 Clock = fun () -> DateTime.UtcNow
+                Views = serviceOf<IFactViewSeriesReader> ctx
             }
         | _ -> None
 

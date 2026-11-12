@@ -418,13 +418,57 @@ type FactDetailView = {
 // refused naming the cap, never silently truncated or paged — the caller
 // narrows the range or the prefix.
 
+// **Over a registered view.** A request may name a view
+// (`FactSeriesViewSource`) instead of reading its table's metric column
+// directly: the view is evaluated over the gated slices of the tables it
+// reads, exactly as the view's own tool evaluates it, and the series draws
+// one of its result columns. A page's chart and an answer then draw one
+// number through one pipeline and one gate. The series carries the view's
+// identity (`FactSeriesViewIdentity`), so the two figures can be shown to be
+// one evaluation. A view-sourced series is never answered from a table slice.
+
+/// One typed argument of a view a series reads.
+[<RequireQualifiedAccess>]
+type FactViewArgument =
+    /// A `string` parameter's value.
+    | Text of string
+    /// An `integer` parameter's value (also admitted by a `decimal` one).
+    | Integer of int
+    /// A `decimal` parameter's value.
+    | Decimal of decimal
+    /// A `boolean` parameter's value.
+    | Boolean of bool
+
+/// The view a series reads in place of its table's metric column.
+type FactSeriesViewSource = {
+    /// The registered view's id.
+    ViewId: string
+    /// The view's arguments by parameter name. Every required parameter is
+    /// named; a name the view does not declare is refused.
+    Arguments: Map<string, FactViewArgument>
+}
+
+/// The evaluation a view-sourced series was drawn from: what makes a page's
+/// figure and an answer's figure comparable.
+type FactSeriesViewIdentity = {
+    /// The view's id.
+    ViewId: string
+    /// The view's version.
+    Version: string
+    /// The view pipeline's canonical hash.
+    PipelineHash: string
+    /// The hash of the dataset model the view was checked against.
+    ModelHash: string
+}
+
 /// A series request: one table, one of its metric columns, the subjects
 /// under a path prefix at one hierarchy level, across a half-open period
 /// range.
 type FactSeriesQuery = {
-    /// The table to read.
+    /// The table to read. For a view-sourced request, the view's own table.
     TableId: string
-    /// The metric column to plot. Must be one of the table's columns.
+    /// The metric column to plot. Must be one of the table's columns; for a
+    /// view-sourced request, one of the view's result columns.
     Metric: string
     /// Subject path prefix (member ids from the hierarchy root). Empty
     /// admits every subject of the table.
@@ -442,6 +486,10 @@ type FactSeriesQuery = {
     /// `[1, FactBrowseApi.MaxSeriesPoints]`; a series that would exceed
     /// the clamped value is refused, naming it.
     MaxPoints: int
+    /// The view the series reads, in place of the table's metric column.
+    /// `None` (and a request with no such member on the wire) reads the
+    /// table, unchanged.
+    View: FactSeriesViewSource option
 }
 
 /// One point of a series: the head fact for one subject and one period.
@@ -462,11 +510,15 @@ type FactSeriesPoint = {
     /// The value rendered with the metric's display format. `None` when
     /// the point is withheld.
     Rendering: string option
-    /// The fact's id — what opens its provenance through `GetFact`.
+    /// The fact's id — what opens its provenance through `GetFact`. `""`
+    /// for a view-sourced point, a derived figure whose provenance is the
+    /// series' view identity.
     FactId: string
-    /// When the fact was asserted.
+    /// When the fact was asserted; for a view-sourced point, when the
+    /// slices were read.
     AsOf: DateTime
-    /// `fresh` or `stale`, under the metric's staleness policy.
+    /// `fresh` or `stale`, under the metric's staleness policy. `""` for a
+    /// view-sourced point.
     Freshness: string
     /// Whether the disclosure gate withheld this point from the viewer.
     Withheld: bool
@@ -482,7 +534,8 @@ type FactSeries = {
     Metric: string
     /// The subject prefix applied.
     SubjectPrefix: string list
-    /// The hierarchy level the points sit at.
+    /// The hierarchy level the points sit at. `""` for a view-sourced
+    /// series: the view's result decides its rows.
     SubjectLevel: string
     /// The period range applied (inclusive start).
     PeriodFrom: DateTime
@@ -498,8 +551,12 @@ type FactSeries = {
     MaxPoints: int
     /// Points withheld from the viewer.
     WithheldCount: int
-    /// The withheld points grouped by policy.
+    /// The withheld points grouped by policy. For a view-sourced series,
+    /// the withheld cells the drawn column read, by policy.
     Withheld: FactWithheldCount list
+    /// The view evaluation the series was drawn from. `None` for a table
+    /// read.
+    View: FactSeriesViewIdentity option
 }
 
 // ─── The view slice (Phase 1127) ─────────────────────────────────────
@@ -690,6 +747,22 @@ module FactBrowseApi =
         elif requested > MaxSeriesPoints then MaxSeriesPoints
         else requested
 
+    /// The refusal of a period range that is not a half-open `[from, to)`
+    /// extent, in every series and slice read's words.
+    let periodRangeRefusal (from: DateTime) (until: DateTime) : string =
+        sprintf
+            "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
+            (from.ToString "o")
+            (until.ToString "o")
+
+    /// The refusal of a series of `points` points over the clamped `cap`.
+    let seriesCapRefusal (points: int) (cap: int) : string =
+        sprintf
+            "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
+            points
+            cap
+            MaxSeriesPoints
+
     /// Phase 1127 — the most cells (one head per subject, period and
     /// metric, withheld included) one slice carries. Part of the contract: a
     /// slice that would exceed it is refused by name before the gate, and
@@ -865,7 +938,8 @@ module FactBrowseSlice =
 #endif
         Cell.decimal text |> Option.defaultValue Null
 
-    let private parseDecimal (text: string) : decimal =
+    /// A decimal cell's text as a number, the way the slice's reads parse it.
+    let parseDecimal (text: string) : decimal =
 #if FABLE_COMPILER
         System.Decimal.Parse text
 #else
@@ -1082,9 +1156,11 @@ module FactBrowseSlice =
 
     /// Whether a series request is answerable from the slice: same table, a
     /// metric it carries, a prefix inside its branch, a period range inside
-    /// its own, and the table's own level.
+    /// its own, and the table's own level. A view-sourced request is never
+    /// answerable from a slice.
     let coversSeries (slice: FactSlice) (query: FactSeriesQuery) : bool =
-        slice.TableId = query.TableId
+        query.View.IsNone
+        && slice.TableId = query.TableId
         && carries slice query.Metric
         && isPrefixOf slice.SubjectPrefix query.SubjectPrefix
         && query.PeriodFrom >= slice.PeriodFrom
@@ -1404,32 +1480,29 @@ module FactBrowseSlice =
                 }))
 
     /// One series answered from the slice: the same points, order, withheld
-    /// marks and cap refusal `QuerySeries` serves for the request.
+    /// marks and cap refusal `QuerySeries` serves for the request. A
+    /// view-sourced request is refused: only `QuerySeries` evaluates a view.
     let series (held: Held) (request: FactSeriesQuery) : Result<FactSeries, string> =
         let slice = held.Slice
         let cap = FactBrowseApi.clampSeriesPoints request.MaxPoints
         let col part = metricColumn request.Metric part
 
-        if request.PeriodFrom >= request.PeriodTo then
+        match request.View with
+        | Some view ->
             Error(
                 sprintf
-                    "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
-                    (request.PeriodFrom.ToString "o")
-                    (request.PeriodTo.ToString "o")
+                    "The series reads view '%s', which a table slice cannot answer: read it through QuerySeries."
+                    view.ViewId
             )
-        else
+        | None when request.PeriodFrom >= request.PeriodTo ->
+            Error(FactBrowseApi.periodRangeRefusal request.PeriodFrom request.PeriodTo)
+        | None ->
             evaluate held (seriesPoints request)
             |> Result.bind (fun table ->
                 let rows = rowsOf table
 
                 if List.length rows > cap then
-                    Error(
-                        sprintf
-                            "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
-                            (List.length rows)
-                            cap
-                            FactBrowseApi.MaxSeriesPoints
-                    )
+                    Error(FactBrowseApi.seriesCapRefusal (List.length rows) cap)
                 else
                     let withheld = rows |> List.choose (fun r -> str (r (col "withheld")))
 
@@ -1465,4 +1538,5 @@ module FactBrowseSlice =
                         MaxPoints = cap
                         WithheldCount = List.length withheld
                         Withheld = withheldCounts withheld
+                        View = None
                     })

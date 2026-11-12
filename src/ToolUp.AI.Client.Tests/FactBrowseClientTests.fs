@@ -633,6 +633,7 @@ let private sliceTests =
                 PeriodFrom = september
                 PeriodTo = october
                 MaxPoints = FactBrowseApi.MaxSeriesPoints
+                View = None
             }
 
             match FactBrowseSlice.series (heldFixture ()) request with
@@ -646,6 +647,37 @@ let private sliceTests =
             match FactBrowseSlice.series (heldFixture ()) { request with MaxPoints = 2 } with
             | Ok _ -> failwith "three points over a cap of two must be refused"
             | Error e -> Expect.isTrue (e.Contains "over the cap of 2") "the refusal names the cap"
+
+        testCase "a series over a view is never answered from a table slice"
+        <| fun _ ->
+            let held = heldFixture ()
+
+            let request: FactSeriesQuery = {
+                TableId = "t"
+                Metric = "revenue"
+                SubjectPrefix = []
+                SubjectLevel = None
+                PeriodFrom = september
+                PeriodTo = october
+                MaxPoints = FactBrowseApi.MaxSeriesPoints
+                View = None
+            }
+
+            let overView = {
+                request with
+                    View =
+                        Some {
+                            ViewId = "trade_net"
+                            Arguments = Map.ofList [ "min", FactViewArgument.Integer 0 ]
+                        }
+            }
+
+            Expect.isTrue (FactBrowseSlice.coversSeries held.Slice request) "the table read is the slice's"
+            Expect.isFalse (FactBrowseSlice.coversSeries held.Slice overView) "the view read is not"
+
+            match FactBrowseSlice.series held overView with
+            | Ok _ -> failwith "a slice must not answer a view-sourced series"
+            | Error e -> Expect.isTrue (e.Contains "view 'trade_net'") "the refusal names the view"
 
         testCase "a derived figure renders as .NET renders it"
         <| fun _ ->

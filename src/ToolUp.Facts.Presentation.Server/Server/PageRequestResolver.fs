@@ -27,9 +27,12 @@ open ToolUp.Platform.Compose
 //
 // **Two kinds, two existing paths.** A presentation request is read through
 // the fact browse's series read and drawn into rows by the presentation
-// builders' data step (`Presentation.data`), the rows a built block draws. A
+// builders' data step (`Presentation.data`), the rows a built block draws;
+// the read resolves a query naming a registered view through the views the
+// browse's dependencies carry, under the same gate. A
 // pipeline request is evaluated by the pipeline tool over the gated slice
-// (`PipelineAnsweringTool.rerun`), the re-run a pipeline block's panel draws.
+// (`PipelineAnsweringTool.rerunUnder`), the re-run a pipeline block's panel draws,
+// under the deployment's registered pipeline profile.
 // Both are judged at the `FactBrowse` door, the door a reader's browse is.
 //
 // **Data, never a node.** A resolution is the columnar table the page's node
@@ -447,8 +450,10 @@ module PageRequestResolver =
                                 })
         }
 
-    /// A pipeline request evaluated by the pipeline tool over the gated slice.
+    /// A pipeline request evaluated by the pipeline tool over the gated slice,
+    /// under the deployment's pipeline profile.
     let private pipeline
+        (profile: RegisteredPipelineProfile option)
         (deps: FactBrowseHandler.FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
@@ -458,7 +463,7 @@ module PageRequestResolver =
             match declared deps request.TableId with
             | Error refusal -> return Error refusal
             | Ok() ->
-                match! PipelineAnsweringTool.rerun deps scope principal (PipelineBlock.toJson request) with
+                match! PipelineAnsweringTool.rerunUnder profile deps scope principal (PipelineBlock.toJson request) with
                 | Error refused -> return Error(PageRefusal.ofPipeline refused)
                 | Ok result ->
                     return
@@ -476,9 +481,11 @@ module PageRequestResolver =
 
     /// The resolver for the caller `principal` in `scope`, over the fact
     /// browse's dependencies, caching in `session` under the fingerprint
-    /// `gate` answers for each resolution. `scope` is the one the platform
-    /// minted for the caller; nothing here builds one.
-    let create
+    /// `gate` answers for each resolution, a pipeline request re-run under
+    /// `profile`, the deployment's registered pipeline profile. `scope` is the
+    /// one the platform minted for the caller; nothing here builds one.
+    let createUnder
+        (profile: RegisteredPipelineProfile option)
         (session: PageResolutionSession)
         (gate: unit -> Async<string>)
         (deps: FactBrowseHandler.FactBrowseDeps)
@@ -499,7 +506,7 @@ module PageRequestResolver =
                     let! resolved =
                         match request with
                         | PageRequest.Presentation(r, _) -> presentation browse deps r
-                        | PageRequest.Pipeline(r, _) -> pipeline deps scope principal r
+                        | PageRequest.Pipeline(r, _) -> pipeline profile deps scope principal r
 
                     match resolved with
                     | Ok resolution -> session.Put hash fingerprint (PageRequest.tableId request) resolution
@@ -530,6 +537,17 @@ module PageRequestResolver =
             ByKind = byKind
         }
 
+    /// `createUnder` with no pipeline profile: the full algebra, which admits
+    /// no join.
+    let create
+        (session: PageResolutionSession)
+        (gate: unit -> Async<string>)
+        (deps: FactBrowseHandler.FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        : PageRequestResolver =
+        createUnder None session gate deps scope principal
+
     /// Each kind's resolver over canonical JSON, keyed by kind: the map a
     /// stored-page view takes.
     let byKind (resolver: PageRequestResolver) : Map<string, string -> Async<Result<string, PageRefusal>>> =
@@ -547,30 +565,36 @@ type PageRequestResolvers = {
 [<RequireQualifiedAccess>]
 module PageRequestResolvers =
 
-    /// The registration over a process's cache.
-    let create (cache: PageResolutionCache) (sources: PageGateSources) : PageRequestResolvers = {
-        ForRequest =
-            fun ctx -> async {
-                match FactBrowseHandler.factBrowseDeps ctx with
-                | None -> return Error PageRefusal.NoFactStore
-                | Some deps ->
-                    let scope = StorageScopeResolver.ScopeResolution.forRequest ctx
+    /// The registration over a process's cache, re-running a pipeline request
+    /// under `profile`, the deployment's registered pipeline profile.
+    let create
+        (cache: PageResolutionCache)
+        (sources: PageGateSources)
+        (profile: RegisteredPipelineProfile option)
+        : PageRequestResolvers =
+        {
+            ForRequest =
+                fun ctx -> async {
+                    match FactBrowseHandler.factBrowseDeps ctx with
+                    | None -> return Error PageRefusal.NoFactStore
+                    | Some deps ->
+                        let scope = StorageScopeResolver.ScopeResolution.forRequest ctx
 
-                    let principal =
-                        RequestViewer.ofItems ctx.Items
-                        |> Option.map _.UserId
-                        |> Option.defaultValue (UserId "anonymous")
+                        let principal =
+                            RequestViewer.ofItems ctx.Items
+                            |> Option.map _.UserId
+                            |> Option.defaultValue (UserId "anonymous")
 
-                    let! session = cache.Session(scope, principal.Value)
+                        let! session = cache.Session(scope, principal.Value)
 
-                    let gate () = async {
-                        let! viewer = PageGateViewer.forRequest sources ctx scope principal.Value
-                        return PageGateViewer.fingerprint viewer
-                    }
+                        let gate () = async {
+                            let! viewer = PageGateViewer.forRequest sources ctx scope principal.Value
+                            return PageGateViewer.fingerprint viewer
+                        }
 
-                    return Ok(PageRequestResolver.create session gate deps scope principal.Value)
-            }
-    }
+                        return Ok(PageRequestResolver.createUnder profile session gate deps scope principal.Value)
+                }
+        }
 
     /// Register the cache, the registration and the demand that arms the
     /// fact-table change signal. `FactsCompose.withFactStore` composes the
@@ -585,10 +609,13 @@ module PageRequestResolvers =
 
         services.AddSingleton<PageRequestResolvers>(
             Func<IServiceProvider, PageRequestResolvers>(fun sp ->
-                create (sp.GetRequiredService<PageResolutionCache>()) {
-                    Teams = ServiceComposition.tryService<ITeamStore> sp
-                    OutputVisibility = ServiceComposition.tryService<ITeamOutputVisibilitySource> sp
-                })
+                create
+                    (sp.GetRequiredService<PageResolutionCache>())
+                    {
+                        Teams = ServiceComposition.tryService<ITeamStore> sp
+                        OutputVisibility = ServiceComposition.tryService<ITeamOutputVisibilitySource> sp
+                    }
+                    (ServiceComposition.tryService<RegisteredPipelineProfile> sp))
         )
         |> ignore
 

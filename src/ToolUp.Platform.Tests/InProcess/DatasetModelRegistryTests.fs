@@ -39,7 +39,7 @@ open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
 
 // ─── Fixtures ───────────────────────────────────────────────────────
 
-let private openMargins: FactTableDefinition = {
+let openMargins: FactTableDefinition = {
     margins with
         Id = "daily-margin-open"
         Columns = [ FactTableDefinition.column "margin" FactTableValueShape.Scalar ]
@@ -69,12 +69,12 @@ let private describe (table: FactTableDefinition) (column: string) : FactTableDe
     }
 }
 
-let private keys = [
+let keys = [
     FactBrowseSlice.SubjectColumn, FactBrowseSlice.SubjectColumn
     FactBrowseSlice.FromColumn, FactBrowseSlice.FromColumn
 ]
 
-let private model: DatasetModelDeclaration = {
+let model: DatasetModelDeclaration = {
     Tables = [ trade.Id; openMargins.Id; margins.Id ]
     Relations = [
         {
@@ -120,7 +120,7 @@ let private column (name: string) : FactViewColumn = {
     Description = sprintf "The view's %s." name
 }
 
-let private view (id: string) (table: string) (pipeline: Transform list) : FactViewDefinition = {
+let view (id: string) (table: string) (pipeline: Transform list) : FactViewDefinition = {
     Id = id
     Version = "1.0.0"
     Description = "Revenue less margin per site and day."
@@ -137,7 +137,7 @@ let private view (id: string) (table: string) (pipeline: Transform list) : FactV
     Pipeline = DataFrameCodec.encodePipeline pipeline
 }
 
-let private composition
+let composition
     (model: DatasetModelDeclaration)
     (descriptions: FactTableDescriptionRegistration list)
     (views: FactViewDefinition list)
@@ -169,13 +169,13 @@ let private composition
             })
     }
 
-let private described = [
+let described = [
     describe trade "revenue"
     describe margins "margin"
     describe openMargins "margin"
 ]
 
-let private registryOf (c: FactTableComposition) : DatasetModelRegistry =
+let registryOf (c: FactTableComposition) : DatasetModelRegistry =
     match DatasetModelRegistry.check c with
     | Ok r -> r
     | Error refusals ->
@@ -191,7 +191,7 @@ let private viewRefusals (c: FactTableComposition) : ViewRefusal list =
     | Ok _ -> failtest "the views registered, and should have been refused"
     | Error refusals -> refusals
 
-let private viewsOf (c: FactTableComposition) : RegisteredView list =
+let viewsOf (c: FactTableComposition) : RegisteredView list =
     match ViewRegistry.check (registryOf c) c.Views with
     | Ok views -> views
     | Error refusals ->
@@ -199,7 +199,7 @@ let private viewsOf (c: FactTableComposition) : RegisteredView list =
 
 /// A world with the revenue table, the restricted margin table and the open
 /// one, each written for three days and two sites.
-let private joinWorld () : World =
+let joinWorld () : World =
     let storage =
         ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
 
@@ -238,6 +238,7 @@ let private joinWorld () : World =
             Gate = gate
             Registry = Some registry
             Clock = clock
+            Views = None
         }
         Gate = gate
         Scope =
@@ -271,6 +272,7 @@ let private factIdOf (w: World) (table: string) (metric: string) (site: string) 
             PeriodFrom = day1
             PeriodTo = day1.AddDays 3.0
             MaxPoints = FactBrowseApi.MaxSeriesPoints
+            View = None
         }
         |> Async.RunSynchronously
     with
@@ -280,7 +282,7 @@ let private factIdOf (w: World) (table: string) (metric: string) (site: string) 
         |> _.FactId
     | Error e -> failtestf "series: %A" e
 
-let private permitting (policy: string) : DisclosurePolicyResolver =
+let permitting (policy: string) : DisclosurePolicyResolver =
     fun p _ -> if p = policy then Some true else None
 
 let private tests1 =

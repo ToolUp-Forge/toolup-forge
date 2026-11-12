@@ -870,6 +870,58 @@ refuses anything else naming `compareTo`.
   offering is what the model is told, not what the vocabulary accepts: a stored request
   naming any offset in bounds is drawn either way.
 
+### A series over a registered view: a chart and an answer draw one number (Phase 1349)
+
+A module's views (Phase 1348, `ServerModule.declareViews`) reach the assistant as one tool
+each. A chart reads through `QuerySeries`, so a chart of a view's figure and an answer about
+it would otherwise take two paths, with room for a different filter, grouping or withheld
+set. `FactSeriesQuery.View` closes that: a series request may name a registered view and its
+arguments in place of reading its table's metric column, and `Metric` then names the view's
+result column to draw.
+
+- **One evaluation.** The browse resolves the view (`FactBrowseDeps.Views`, an
+  `IFactViewSeriesReader`), reads the view's table and every table it joins through
+  `QuerySlice` for the same caller over the request's period range and subject prefix, and
+  evaluates it with `ViewRegistry.evaluate`, the evaluation the view's tool runs. The
+  series carries the view's id and version, the pipeline hash and the model hash
+  (`FactSeries.View`), so a page's figure and an answer's figure can be shown to be one
+  evaluation.
+- **The same gate and the same gap rules.** Every cell passed the gate at `FactBrowse` in
+  the slice read. A result column whose lineage reads a withheld cell is withheld whole, as
+  `evaluate_pipeline` withholds it, so every point of a series drawn from it is marked
+  withheld with no value and no rendering, and the presentation builders draw a gap. A null
+  cell is a point with no value. The point cap applies as for a table read.
+- **What a view must answer.** A view drawn as a series answers `subject`, `subject_path`,
+  `period_from` and `period_to` (and `period_label` when it has one); its rows are the
+  points, in subject path then period order. A view-sourced point carries no fact id: it
+  is a derived figure, and its provenance is the series' view identity.
+- **Refused by name.** A view the deployment does not register, a parameter the view does
+  not declare, a required one left unnamed, an argument of the wrong type, a column the
+  view does not answer, a table other than the view's own and a subject level (a view
+  decides its own rows) are each refused naming what to repair. A deployment that
+  registers no views refuses every view-sourced request.
+- **Never from a slice.** `FactBrowseSlice.coversSeries` is false for a view-sourced
+  request and `FactBrowseSlice.series` refuses one, so a client's local reads never answer
+  a view from a table slice.
+- **A table read is unchanged.** A request with no `View` (or none on the wire) reads its
+  table exactly as before, and the series it answers is the same bytes whether or not the
+  deployment registers views.
+
+A deployment composes the reader once, over the views `ViewRegistry.registerOrRefuse`
+answers: `ViewRegistry.withSeries views`. With no fact store composed, or no view, it
+changes nothing.
+
+**Stored pipeline blocks re-run under the profile.** A page request holding a pipeline
+re-runs through `PipelineAnsweringTool.rerunUnder` with the deployment's registered
+pipeline profile (`PageRequestResolver.createUnder`; the composed `PageRequestResolvers`
+reads the profile from the container), so a stored pipeline that joins along a declared
+relation re-resolves as it ran, rather than being refused by the full algebra, which
+admits no join.
+
+**Not yet: a presentation request naming a view.** A stored page draws its charts from a
+`PresentationRequest`, which names a table and its metrics and has no view member, so a
+page's block cannot yet name a view; it reaches one only once that request can.
+
 ### A first upload leaves its metrics' surfaces warm (Phase 1124)
 
 `AssertBatch` loads the whole scope to find lineage heads whenever the
