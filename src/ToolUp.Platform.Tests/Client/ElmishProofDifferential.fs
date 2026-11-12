@@ -5,7 +5,7 @@
 /// and the proved models: the HOST-NEUTRAL half.
 ///
 /// `proofs/ElmishRing.fst` and `proofs/ElmishSub.fst` model
-/// `RingBuffer<'item>` and `Sub.Internal.diff` clause for clause and
+/// the kernel's `RingBuffer<'item>` and `Subscriptions.diff` clause for clause and
 /// prove the ring a FIFO queue and the diff exactly what its comment
 /// says. `proofs/check.ps1` extracts both to F# and byte-compares the
 /// result against the committed `proofs/oracle/ElmishRing.fs` /
@@ -51,6 +51,7 @@ module ToolUp.Platform.Tests.Client.ElmishProofDifferential
 
 open System
 open ToolUp.Elmish
+open ToolUp.Elmish.Kernel
 
 // ─── A deterministic generator ──────────────────────────────────────
 
@@ -390,12 +391,12 @@ let private shapeOf
 /// `ElmishLoopDifferential`'s.
 let private neverTerminated () = false
 
-/// Production `Sub.Internal.diff` + `Fx.change` over an input, as a
-/// shape.
+/// Production `Subscriptions.diff` + `Fx.change` (the kernel's; the client
+/// tier's `Sub.Internal` names delegate to them) over an input, as a shape.
 let productionDiffShape (input: DiffInput) : DiffShape =
     let active, requested, handleId, subscribeId = materialise input
-    let quad = Sub.Internal.diff active requested
-    let next = Sub.Internal.Fx.change (fun _ -> ()) ignore neverTerminated quad
+    let quad = Subscriptions.diff active requested
+    let next = Subscriptions.Fx.change (fun _ -> ()) ignore neverTerminated quad
     shapeOf handleId subscribeId quad next
 
 /// **Go-red.** A diff that computes `toStart` from the requested list
@@ -405,7 +406,7 @@ let productionDiffShape (input: DiffInput) : DiffShape =
 let brokenDiffShape (input: DiffInput) : DiffShape =
     let active, requested, handleId, subscribeId = materialise input
     let keys = active |> List.map fst |> Set.ofList
-    let dupes, newKeys, newSubs = Sub.Internal.NewSubs.calculate requested
+    let dupes, newKeys, newSubs = Subscriptions.NewSubs.calculate requested
 
     let quad =
         if keys = newKeys then
@@ -415,7 +416,7 @@ let brokenDiffShape (input: DiffInput) : DiffShape =
 
             dupes, toStop, toKeep, newSubs
 
-    let next = Sub.Internal.Fx.change (fun _ -> ()) ignore neverTerminated quad
+    let next = Subscriptions.Fx.change (fun _ -> ()) ignore neverTerminated quad
     shapeOf handleId subscribeId quad next
 
 /// One corpus case: the input, and the shape the PROVED MODEL produced.

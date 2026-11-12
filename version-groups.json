@@ -9,6 +9,7 @@
       "lockstep": true,
       "projects": [
         "src/ToolUp.Platform.*/**",
+        "src/ToolUp.Elmish.Kernel/**",
         "src/ToolUp.AI.*/**",
         "src/ToolUp.Algorithms.*/**",
         "src/ToolUp.ArtefactSigning/**",

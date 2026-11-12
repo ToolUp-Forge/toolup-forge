@@ -247,6 +247,7 @@
     <PackageVersion Include="ToolUp.DataSources.Snowflake" Version="$(ToolUpDataSourcesVersion)" />
     <PackageVersion Include="ToolUp.DataSources.Sql" Version="$(ToolUpDataSourcesVersion)" />
     <PackageVersion Include="ToolUp.DataSources.Synapse" Version="$(ToolUpDataSourcesVersion)" />
+    <PackageVersion Include="ToolUp.Elmish.Kernel" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.EmbeddingCaches.Redis" Version="$(ToolUpEmbeddingCachesVersion)" />
     <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpEmbeddingProvidersVersion)" />
     <PackageVersion Include="ToolUp.EmbeddingProviders.OpenAI" Version="$(ToolUpEmbeddingProvidersVersion)" />

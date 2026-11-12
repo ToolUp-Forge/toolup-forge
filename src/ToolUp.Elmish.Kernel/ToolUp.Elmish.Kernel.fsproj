@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ToolUp.Elmish.Kernel — the proved half of the ToolUp.Elmish runtime.
+
+    Phase 1114 carved it out of ToolUp.Platform.Client: the ring buffer
+    (Ring.fs, proofs/ElmishRing.fst), the subscription diff (Sub.fs,
+    proofs/ElmishSub.fst) and the dispatch loop's step machine (Loop.fs,
+    proofs/ElmishLoop.fst). The models abstract every impure callee as an
+    oracle, so nothing here is Fable, React or SDK: the project references
+    FSharp.Core and nothing else, and the host (ToolUp.Platform.Client's
+    `ToolUp.Elmish.Program`) supplies the update, the render hook, the
+    effect performer and the reporter. Every public name under
+    `ToolUp.Elmish` stays where it was; the client tier references this
+    project and wraps it.
+
+    The name is a working name inside this repository; the published
+    package's name is a later naming decision.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>ToolUp.Elmish.Kernel — the proved core of the ToolUp.Elmish runtime: the ring buffer, the subscription diff and the dispatch loop's step machine, each held to an F* model. FSharp.Core only; the host supplies the update, the render hook and the effect performer. Ships its source under fable/ for Fable consumers.</Description>
+    <PackageTags>fsharp;fable;elmish;mvu;verified</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Ring.fs" />
+    <Compile Include="Sub.fs" />
+    <Compile Include="Loop.fs" />
+  </ItemGroup>
+  <!-- Pack the source for Fable consumers under fable/, as
+       ToolUp.Platform.Core does: Fable's package loader compiles the
+       packed .fsproj and its .fs files directly. -->
+  <ItemGroup>
+    <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+  </ItemGroup>
+  <!-- The two differential hosts build a deliberately broken ring over the
+       internal `RingState` (the go-red case). Test-only visibility; the
+       shipped public surface is the ring, the diff and the step machine. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ToolUp.Platform.Tests.Remoting" />
+    <InternalsVisibleTo Include="ToolUp.AI.Client.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>

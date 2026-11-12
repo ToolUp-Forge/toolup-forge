@@ -5,7 +5,8 @@
 ///
 /// The .NET pack (`ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs`)
 /// runs the extracted `proofs/ElmishRing.fst` / `ElmishSub.fst` models
-/// live beside the production `RingBuffer` and `Sub.Internal.diff`, and
+/// live beside the production `RingBuffer` and `Subscriptions.diff` (the
+/// kernel's, `src/ToolUp.Elmish.Kernel/`), and
 /// writes the model's verdicts for its generated campaign to
 /// `tests/elmish-proof-corpus/` — every case carrying its inputs and the
 /// outputs the proved model produced. This pack replays that corpus
@@ -421,7 +422,7 @@ let private arrayRingTests =
                 |> Array.ofList
 
             let shippedAlone () =
-                let rb = ToolUp.Elmish.RingBuffer<int> MeasuredCapacity
+                let rb = ToolUp.Elmish.Kernel.RingBuffer<int> MeasuredCapacity
                 let mutable sum = 0
 
                 for step in steps do
@@ -475,7 +476,7 @@ let private arrayRingTests =
                 sum
 
             let shippedSteady () =
-                let rb = ToolUp.Elmish.RingBuffer<int> MeasuredCapacity
+                let rb = ToolUp.Elmish.Kernel.RingBuffer<int> MeasuredCapacity
                 walk rb.Push rb.Pop
 
             let arraySteady () =

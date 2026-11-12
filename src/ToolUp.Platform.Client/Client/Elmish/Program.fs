@@ -6,6 +6,7 @@ namespace ToolUp.Elmish
 
 open System
 open System.Collections.Generic
+open ToolUp.Elmish.Kernel
 
 /// `Program` — captures the runtime behaviour of an Elmish loop. Preserved
 /// from upstream Elmish v5.x at the existing field shape; new fields added
@@ -142,7 +143,7 @@ module Program =
     /// callback receives `(msg, newState, activeSubIds)`. Preserved from
     /// upstream as an opt-in tracing hook, and the per-message
     /// interceptor that replaced the upstream-shape `withConsoleTrace`
-    /// shim (removed in Phase 815): log bounded string reprs via
+    /// shim: log bounded string reprs via
     /// `safeMsgRepr`, never the live msg/model object — a message can
     /// carry a multi-MB payload, which `%A`-formats to a stack overflow on
     /// the .NET sink and pins memory in the Fable devtools sink.
@@ -158,8 +159,8 @@ module Program =
     /// Structured error reporter — receives the full `ErrorContext`
     /// including `Phase`, optional `ModuleId`, optional `CorrelationId`,
     /// the message-string the upstream `onError` would have passed, and
-    /// the raw exception. The one error hook since Phase 815 removed the
-    /// upstream-shape `withErrorHandler` shim: an upstream
+    /// the raw exception. The one error hook, since the upstream-shape
+    /// `withErrorHandler` shim was removed: an upstream
     /// `string * exn -> unit` callback composes as
     /// `withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))`.
     let withErrorReporter (reporter: ErrorContext -> unit) (program: Program<'arg, 'model, 'msg, 'view>) =
@@ -204,15 +205,13 @@ module Program =
     /// optimisation hint for apps whose `update` synchronously dispatches
     /// many follow-up messages from a single handler. Floored at
     /// `RingBuffer.MinimumCapacity` (2) — the same floor the constructor
-    /// applies and the one the Phase 788 proof's precondition needs; this
-    /// used to floor at 1, a value the constructor then silently overrode
-    /// with 10.
+    /// applies and the one the ring theorems' precondition needs.
     let withRingBufferCapacity (capacity: int) (program: Program<'arg, 'model, 'msg, 'view>) = {
         program with
             ringBufferCapacity = max RingBuffer<'msg>.MinimumCapacity capacity
     }
 
-    /// Return the configured ring-buffer capacity (Phase 788).
+    /// Return the configured ring-buffer capacity.
     let ringBufferCapacity (program: Program<'arg, 'model, 'msg, 'view>) = program.ringBufferCapacity
 
     /// Termination criteria and handler. Override the predicate to stop
@@ -313,7 +312,7 @@ module Program =
             effects = program.effects
         }
 
-    module Subs = Sub.Internal
+    module Subs = Subscriptions
 
     /// Internal effect-registry. Tracks live `EffectHandle` instances by
     /// id so HMR and module-reset can dispose them on lifetime boundaries.
@@ -325,7 +324,7 @@ module Program =
         /// the teardown while it was still running, so `DisposeAll` has
         /// already emptied the registry and nothing will ever dispose what
         /// the start returned. It is disposed here instead of registered
-        /// (Phase 871; `gated` in `proofs/ElmishLoop.fst`).
+        /// (`gated` in `proofs/ElmishLoop.fst`).
         member _.Register
             (handle: EffectHandle<'msg>)
             (dispatch: Dispatch<'msg>)
@@ -395,29 +394,25 @@ module Program =
             live.Clear()
 
     /// Start the program loop with a custom `syncDispatch` shape.
-    /// The upstream skeleton — ring, re-entrancy latch, termination
-    /// predicate — with one scheduling change since Phase 851: the
-    /// render hook (`setState`) runs once at the END of each drain with
-    /// the model the drain ended on, not after every `update`, so a
-    /// drain of N messages builds the view once. `withTrace` still sees
-    /// every message (it wraps `update`). The loop is the step machine
-    /// `proofs/ElmishLoop.fst` models clause for clause, held to it by
-    /// `ElmishLoopProofOracleTests`.
+    /// The skeleton — the ring, the re-entrancy latch, the termination
+    /// flag, the drain, the paint once per drain and the boot — is the
+    /// kernel's step machine (`ToolUp.Elmish.Kernel.Loop`), which
+    /// `proofs/ElmishLoop.fst` models clause for clause and
+    /// `ElmishLoopProofOracleTests` holds this function to. What is here
+    /// is the host the machine runs over: the update with its subscription
+    /// diff and command, the render hook (`setState`), the teardown's
+    /// callees, the reporter, the dispatcher handle and the effect
+    /// registry. `withTrace` still sees every message (it wraps `update`).
     ///
     /// Two things the model takes for granted are made true here by
     /// construction. The error reporter RETURNS: every call to the
     /// program's reporter goes through `guarded`, because a reporter
     /// that raised used to escape the drain with the latch still set,
     /// after which every dispatch queued its message and nothing was
-    /// processed again. And nothing the program supplied runs with the
-    /// latch clear at boot: the latch is set before the sinks and the
-    /// effects' start functions are called (`boot_paints_init_model`).
-    ///
-    /// And termination is total (Phase 871). Both routes to it run one
-    /// `teardown`, which cannot be left half-done by a handler that raises
-    /// or re-entered by one that calls `Terminate`; and once the program is
-    /// terminated the boot starts nothing further, and releases what a
-    /// start that terminated it returned (`terminated_holds_nothing`,
+    /// processed again. And the teardown's callees each run under their
+    /// own guard, with `MarkTerminated` in a `finally`, so a subscription,
+    /// an effect or a terminate handler that raises is reported and the
+    /// program still ends inactive (`terminated_holds_nothing`,
     /// `terminated_starts_nothing`).
     let runWithDispatch
         (syncDispatch: Dispatch<'msg> -> Dispatch<'msg>)
@@ -464,160 +459,89 @@ module Program =
         let model, cmd = program.init arg
         let sub = program.subscribe model
         let toTerminate, terminate = program.termination
-        let rb = RingBuffer program.ringBufferCapacity
-        let mutable reentered = false
-        let mutable state = model
         let mutable activeSubs = Subs.empty
-        let mutable terminated = false
-        // Phase 851 — the render hook runs once per DRAIN, not once per
-        // message. `dirty` is the fifth cell of the loop's step machine
-        // (`proofs/ElmishLoop.fst`, `st.dirty`): the model has moved since
-        // the hook last saw it. It is set by every `update` and cleared by
-        // the paint, and the drain exits only when the ring is empty AND
-        // nothing is dirty — so `painted_is_model` (the model on screen
-        // is the model whenever the loop is idle) is a theorem of the
-        // model, and `render_once_per_drain` says a dispatch from idle
-        // paints exactly once when the hook itself dispatches nothing.
-        // The init model is unpainted until the boot paints it below.
-        let mutable dirty = true
 
-        // F*: `terminate` — the ONE teardown, run by a message the
-        // termination predicate takes and by `IDispatcher.Terminate` alike
-        // (Phase 871). It is total, in three ways. The loop's flag is set
-        // FIRST, so nothing the callees below do can re-enter it (a handler
-        // that calls `Terminate` finds it set) or reach `update` (a dispatch
-        // they make is refused by `dispatch`'s own guard). Each callee runs
-        // under its own guard, so a subscription, an effect or the handler
-        // that raises is reported and the next step still runs. And
-        // `MarkTerminated` is in a `finally`, so `IsActive` goes false
-        // whatever happened above it — it still goes false LAST, so a
-        // handler that reads `IsActive` sees what it always saw. Until 871
-        // the message arm ran the handler inside its own `try` with both
-        // flags after it: a handler that raised left the program active,
-        // handing messages to `update` with every subscription stopped and
-        // every effect disposed.
-        let teardown () =
-            if not terminated then
-                terminated <- true
+        let host: LoopHost<'msg, 'model> = {
+            Terminates = toTerminate
+            // F*: `step`. The diff is gated between its starts: a
+            // subscription that terminates the program from its start
+            // function stops the rest of the diff starting, and
+            // `change` returns the empty set having stopped what it
+            // started (`start_all`). The message's command runs only
+            // while the program is still running after its diff.
+            Update =
+                fun dispatch isTerminated msg state ->
+                    let model', cmd' = program.update msg state
+                    let sub' = program.subscribe model'
 
-                try
+                    activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change onError dispatch isTerminated
+
+                    if not (isTerminated ()) then
+                        cmd'
+                        |> Cmd.exec
+                            (fun ex ->
+                                reportException
+                                    (ErrorPhase.Update(box msg))
+                                    ("Error handling the message: " + safeMsgRepr msg)
+                                    ex)
+                            dispatch
+
+                    model'
+            Render = fun dispatch state -> program.setState state dispatch
+            OnUpdateError =
+                fun msg ex ->
+                    reportException
+                        (ErrorPhase.Update(box msg))
+                        ("Unable to process the message: " + safeMsgRepr msg)
+                        ex
+            OnRenderError = fun ex -> reportException ErrorPhase.View "Error rendering the model" ex
+            // F*: `terminate` — the ONE teardown, run by a message the
+            // termination predicate takes and by `IDispatcher.Terminate`
+            // alike. The machine has set its flag before this runs, so
+            // nothing the callees do can re-enter it or reach `update`.
+            // Each callee runs under its own guard, and `MarkTerminated`
+            // is in a `finally`, so `IsActive` goes false whatever
+            // happened above it — and still goes false LAST, so a
+            // handler that reads `IsActive` sees what it always saw.
+            Teardown =
+                fun state ->
                     try
-                        Subs.Fx.stop onError activeSubs
-                    with ex ->
-                        reportRaw ex
+                        try
+                            Subs.Fx.stop onError activeSubs
+                        with ex ->
+                            reportRaw ex
 
-                    try
-                        effectRegistry.DisposeAll reportRaw
-                    with ex ->
-                        reportRaw ex
+                        try
+                            effectRegistry.DisposeAll reportRaw
+                        with ex ->
+                            reportRaw ex
 
-                    try
-                        terminate state
-                    with ex ->
-                        reportException ErrorPhase.Termination "The terminate handler raised" ex
-                finally
-                    dispatcherCore.MarkTerminated()
+                        try
+                            terminate state
+                        with ex ->
+                            reportException ErrorPhase.Termination "The terminate handler raised" ex
+                    finally
+                        dispatcherCore.MarkTerminated()
+        }
+
+        let loop = Loop(program.ringBufferCapacity, model, syncDispatch, host)
+
+        let dispatch' = loop.Dispatch
 
         // Read by `Subs.Fx.change` between the subscriptions one diff
         // starts, and by `EffectRegistry.Register` after an effect's start
-        // returns (Phase 871 / 900): a start that calls `Terminate` ran the
-        // teardown while it was still running, and nothing started after
-        // it would ever be stopped.
-        let isTerminated () = terminated
-
-        let rec dispatch msg =
-            if not terminated then
-                rb.Push msg
-
-                if not reentered then
-                    reentered <- true
-                    processMsgs ()
-                    reentered <- false
-
-        and dispatch' = syncDispatch dispatch
-
-        // F*: `paint`. The flag is cleared BEFORE the hook runs, so a
-        // dispatch the hook makes re-dirties the model (and the drain
-        // paints again once the ring is empty) rather than being lost or
-        // painted twice. The hook's synchronous dispatches land under the
-        // latch exactly as a command's do — `reentrant_no_loss`.
-        and paint () =
-            dirty <- false
-
-            try
-                program.setState state dispatch'
-            with ex ->
-                reportException ErrorPhase.View "Error rendering the model" ex
-
-        // F*: `process_msgs` / `loop`. The `while` runs while there is a
-        // message to process OR a model to paint; the `None` arm is the
-        // paint on an empty ring, followed by one more pop because the
-        // hook may have dispatched. A terminating message exits without
-        // painting: a torn-down program paints nothing further
-        // (`terminated_absorbing` covers `painted` and `renders` too).
-        and processMsgs () =
-            let mutable nextMsg = rb.Pop()
-
-            while not terminated && (Option.isSome nextMsg || dirty) do
-                match nextMsg with
-                | None ->
-                    paint ()
-                    nextMsg <- rb.Pop()
-                | Some msg ->
-                    try
-                        if toTerminate msg then
-                            teardown ()
-                        else
-                            // Dirty BEFORE the callees run: the model's `step`
-                            // marks every message it hands `update`, and an
-                            // exception from a callee is, to the model, a reply
-                            // carrying the old model — which is then painted
-                            // once at the end of the drain, as here.
-                            dirty <- true
-                            let model', cmd' = program.update msg state
-                            let sub' = program.subscribe model'
-
-                            // F*: `step`'s `start_all` — Phase 900. The diff
-                            // is gated between its starts: a subscription
-                            // that terminates the program from its start
-                            // function stops the rest of the diff starting,
-                            // and `change` returns the empty set having
-                            // stopped what it started. Until 900 the rest
-                            // started anyway and were assigned to the set
-                            // the teardown had already stopped.
-                            activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change onError dispatch' isTerminated
-
-                            // F*: `step`'s gated command — the message's
-                            // command runs only while the program is still
-                            // running after its diff (Phase 900).
-                            if not terminated then
-                                cmd'
-                                |> Cmd.exec
-                                    (fun ex ->
-                                        reportException
-                                            (ErrorPhase.Update(box msg))
-                                            ("Error handling the message: " + safeMsgRepr msg)
-                                            ex)
-                                    dispatch'
-
-                            state <- model'
-                    with ex ->
-                        reportException
-                            (ErrorPhase.Update(box msg))
-                            ("Unable to process the message: " + safeMsgRepr msg)
-                            ex
-
-                    nextMsg <- rb.Pop()
+        // returns: a start that calls `Terminate` ran the teardown while it
+        // was still running, and nothing started after it would ever be
+        // stopped.
+        let isTerminated () = loop.IsTerminated
 
         // Wire the dispatcher core BEFORE init's cmds run so background
         // callbacks captured during init can dispatch safely.
         dispatcherCore.Wire dispatch'
 
-        // Wire the terminate callback so `IDispatcher.Terminate()` runs the
-        // same teardown the termination predicate does — the one function,
-        // not a copy of it. Idempotent: `teardown` does nothing once the
-        // flag is set.
-        dispatcherCore.SetTerminateCallback teardown
+        // `IDispatcher.Terminate()` runs the machine's one teardown — the
+        // same one the termination predicate does. Idempotent.
+        dispatcherCore.SetTerminateCallback loop.Terminate
 
         let dispatcher = dispatcherCore.AsInterface reportRaw
 
@@ -629,78 +553,55 @@ module Program =
                     effectRegistry.DisposeByModule moduleId reportRaw
             }
 
-        // F*: `preboot`. The latch is set BEFORE anything the program
-        // supplied is called. A sink or an effect's start function that
-        // dispatches synchronously therefore only queues its message
-        // (`reentrant_no_loss`); the boot drain below hands it to `update`
-        // after the boot paint, ahead of `init`'s command's messages and
-        // in the order it was raised. Until this moved, the latch was set
-        // after them: such a dispatch found it clear and ran a whole
-        // drain — `update`, the subscription diff, the command, a paint
-        // — so the hook's first model was not the one `init` returned,
-        // and the boot's diff against `sub` (the init model's
-        // subscriptions, computed above) stopped what that drain started.
-        reentered <- true
-
-        // Fan out to every registered sink (in declaration order — sinks
-        // were prepended so reverse here). Each sink runs in its own try
-        // so a failing sink doesn't suppress the next.
-        for sink in List.rev program.dispatcherHandleSinks do
-            try
-                sink dispatcher
-            with ex ->
-                reportException ErrorPhase.Init "DispatcherHandle sink raised" ex
-
-        for sink in List.rev program.effectControllerHandleSinks do
-            try
-                sink effectController
-            with ex ->
-                reportException ErrorPhase.Init "EffectControllerHandle sink raised" ex
-
-        // F*: `gated` — Phase 871. A terminated program starts nothing: the
-        // boot checks the flag before every effect's registration, before
-        // the subscription start and before `init`'s command, because a
-        // sink or an effect's start function may already have called
-        // `Terminate`, and the teardown that ran then will never run again
-        // to dispose what a later start acquires. A start that terminates
-        // the program ITSELF has what it returned released as soon as it
-        // returns (`Register`'s check; the `Subs.Fx.stop` below), for the
-        // same reason. The sinks are not gated: they are handed handles and
-        // start nothing.
+        // F*: `boot`. The machine sets the latch BEFORE anything below is
+        // called, so a sink or an effect's start function that dispatches
+        // synchronously only queues its message (`reentrant_no_loss`); the
+        // boot drain hands it to `update` after the boot paint, ahead of
+        // `init`'s command's messages and in the order it was raised. The
+        // boot paint runs before `init`'s command: a hydrating renderer
+        // (`withReactHydrate`) must be handed the model the server rendered.
         //
-        // In ATTACH order (Phase 900): `withEffect` prepends, as the sink
-        // registrations do, and the sinks above are reversed on the way
-        // out; until 900 the effects were not, so they started in the
-        // reverse of the order they were attached, which is the order
-        // `effectIds` reports and the one a consumer reading its own
-        // composition expects. See `docs/migrations/900-effect-start-order.md`.
-        for effect in List.rev program.effects do
-            if not terminated then
-                effectRegistry.Register effect dispatch' reportRaw isTerminated
+        // The sinks fan out in declaration order (they were prepended, so
+        // reverse here), each in its own try so a failing sink doesn't
+        // suppress the next; they are handed handles and start nothing, so
+        // they are not gated. The effects start in ATTACH order (`withEffect`
+        // prepends too), each only while the program is not terminated
+        // (`gated`), and a start that terminates the program has what it
+        // returned released at once (`Register`'s check). See
+        // `docs/migrations/900-effect-start-order.md`.
+        let sinks = [
+            for sink in List.rev program.dispatcherHandleSinks ->
+                fun () ->
+                    try
+                        sink dispatcher
+                    with ex ->
+                        reportException ErrorPhase.Init "DispatcherHandle sink raised" ex
+            for sink in List.rev program.effectControllerHandleSinks ->
+                fun () ->
+                    try
+                        sink effectController
+                    with ex ->
+                        reportException ErrorPhase.Init "EffectControllerHandle sink raised" ex
+        ]
 
-        // F*: `boot_paint`, then the rest of `boot`. The boot paint is
-        // unconditional and runs BEFORE `init`'s command: a hydrating
-        // renderer (`withReactHydrate`) must be handed the model the
-        // server rendered, not one that synchronous dispatches — init's,
-        // a sink's, an effect's — have already moved on. Those dispatches
-        // are drained — and painted once — by `processMsgs` below.
-        paint ()
+        let effects = [
+            for effect in List.rev program.effects ->
+                fun () -> effectRegistry.Register effect dispatch' reportRaw isTerminated
+        ]
 
-        if not terminated then
-            // `activeSubs` is empty here, so what `change` returns is
-            // exactly what it started — and if one of those starts
-            // terminated the program, the teardown stopped the empty set
-            // and `change` itself stopped what it had started and returns
-            // nothing (Phase 900; until then the boot stopped what
-            // `change` returned, after it had started the lot).
-            activeSubs <- Subs.diff activeSubs sub |> Subs.Fx.change onError dispatch' isTerminated
+        // Each gated: the init model's subscriptions, then init's command.
+        // `activeSubs` is empty when the first runs, so what `change` returns
+        // is exactly what it started — and if one of those starts terminated
+        // the program, `change` itself stopped what it had started and
+        // returns nothing.
+        let starts = [
+            fun () -> activeSubs <- Subs.diff activeSubs sub |> Subs.Fx.change onError dispatch' isTerminated
+            fun () ->
+                cmd
+                |> Cmd.exec (fun ex -> reportException ErrorPhase.Init "Error initialising" ex) dispatch'
+        ]
 
-        if not terminated then
-            cmd
-            |> Cmd.exec (fun ex -> reportException ErrorPhase.Init "Error initialising" ex) dispatch'
-
-        processMsgs ()
-        reentered <- false
+        loop.Boot(sinks, effects, starts)
 
     /// Start the single-threaded dispatch loop.
     let runWith (arg: 'arg) (program: Program<'arg, 'model, 'msg, 'view>) = runWithDispatch id arg program

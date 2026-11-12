@@ -34,6 +34,13 @@
              toolkit component.
              See ToolUp.Platform.UI.fsproj's header. -->
         <ProjectReference Include="..\ToolUp.Platform.UI\ToolUp.Platform.UI.fsproj" />
+        <!-- The proved half of the ToolUp.Elmish runtime: the ring buffer,
+             the subscription diff and the dispatch loop's step machine.
+             This tier wraps it: `ToolUp.Elmish.Program` supplies the
+             update, the render hook, the command performer and the
+             reporter, and `Sub.Internal` keeps the diff's upstream names,
+             so no public name under `ToolUp.Elmish` moved. -->
+        <ProjectReference Include="..\ToolUp.Elmish.Kernel\ToolUp.Elmish.Kernel.fsproj" />
     </ItemGroup>
     <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
          under fable/. The library's own .fsproj + .fs files ship inside
@@ -81,7 +88,6 @@
         <Compile Include="Client\Elmish\Prefetch.fs" />
         <Compile Include="Client\Elmish\ErrorContext.fs" />
         <Compile Include="Client\Elmish\EffectHandle.fs" />
-        <Compile Include="Client\Elmish\Ring.fs" />
         <Compile Include="Client\Elmish\Memo.fs" />
         <Compile Include="Client\Elmish\Program.fs" />
         <Compile Include="Client\Elmish\React.fs" />
@@ -527,10 +533,8 @@
         <Compile Include="Client\Bootstrap\PrerenderExport.fs" />
     </ItemGroup>
   <ItemGroup>
-    <!-- Phase 788 — the two differential hosts drive the internal
-         `RingBuffer` beside its proved model (`proofs/ElmishRing.fst`),
-         on .NET and under Fable. Test-only visibility; no shipped public
-         surface (the OidcAuthProvider / ContentAuthoring precedent). -->
+    <!-- The test packs reach this tier's internal members, on .NET and
+         under Fable. Test-only visibility; no shipped public surface. -->
     <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
     <InternalsVisibleTo Include="ToolUp.Platform.Tests.Scope" />
     <InternalsVisibleTo Include="ToolUp.Platform.Tests.Infra" />

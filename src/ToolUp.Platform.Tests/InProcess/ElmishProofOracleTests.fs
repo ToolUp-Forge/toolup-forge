@@ -10,13 +10,15 @@ open System.Numerics
 open System.Reflection
 open Expecto
 open ToolUp.Elmish
+open ToolUp.Elmish.Kernel
 open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 
 // ─── Phase 788 — the proved Elmish runtime as oracle ─────────────────
 //
 // `proofs/ElmishRing.fst` models `RingBuffer<'item>` and proves it a
 // FIFO queue through every grow; `proofs/ElmishSub.fst` models
-// `Sub.Internal.diff` / `NewSubs.calculate` / `Fx.change` and proves the
+// the kernel's `Subscriptions.diff` / `NewSubs.calculate` / `Fx.change`
+// (`src/ToolUp.Elmish.Kernel/Sub.fs`) and proves the
 // four lists exactly what the source comment says, on the shortcut path
 // too. `proofs/check.ps1` extracts both to F# and byte-compares the
 // result against the committed `proofs/oracle/ElmishRing.fs` /
