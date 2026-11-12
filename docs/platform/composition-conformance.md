@@ -1,6 +1,6 @@
 # Composition conformance: what forge certifies against the App-composition specification
 
-The [App-composition wire specification](https://github.com/Fuaran-Build/fuaran-app-composition-specification)
+The [App-composition wire specification](https://github.com/Fuaran-Build/fuaran-app-composition-specification) <!-- OSS-BOUNDARY-EXEMPT: a citation of a public, Apache-2.0 specification by name and URL. -->
 (Apache-2.0, format version 1) defines the neutral composition document. forge's own composition profile,
 `server-app-host`, is published in [`spec/`](../../spec/README.md) and stated in
 [`composition-profile.md`](composition-profile.md). forge is the evaluator Fuaran app compositions reduce to. This
@@ -34,7 +34,7 @@ profile: `profile-placement/reject-vocabulary-unresolved`, which the profile pac
 copies certify against 18 scoped vectors, and that is expected. A pinned vector that is neither scoped nor
 enumerated fails.
 
-**Where the specification is found.** `TOOLUP_APP_COMPOSITION_SPEC_DIR`, when set; otherwise a checkout named
+**Where the specification is found.** `TOOLUP_APP_COMPOSITION_SPEC_DIR`, when set; otherwise a checkout named <!-- OSS-BOUNDARY-EXEMPT: the public, Apache-2.0 specification's clone, named by its repository. -->
 `fuaran-app-composition-specification` at the repository root (what CI clones); otherwise a bounded search from the
 repository's main working tree, the same search the other externally pinned corpora use. The search recognises a
 clone by its content and prefers the one holding the pinned commit. When none is found, or the pinned commit is absent

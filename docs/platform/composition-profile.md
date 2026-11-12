@@ -2,7 +2,7 @@
 
 forge publishes its own composition profile, `server-app-host`, in [`spec/`](../../spec/README.md) at the root of this
 repository. It is a vocabulary profile of the
-[App-composition wire specification](https://github.com/Fuaran-Build/fuaran-app-composition-specification) (format
+[App-composition wire specification](https://github.com/Fuaran-Build/fuaran-app-composition-specification) (format <!-- OSS-BOUNDARY-EXEMPT: a citation of a public, Apache-2.0 specification by name and URL. -->
 version 1), which registers it and names `spec/` as its home. forge is the evaluator Fuaran app compositions reduce
 to, and the profile is the vocabulary such a composition carries when forge evaluates it: the base hosts, capability
 layers, companion slots and settings forge composes, registered as found on forge's surface.

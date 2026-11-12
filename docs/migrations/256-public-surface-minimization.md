@@ -7,8 +7,8 @@
 
 Six symbol families that were public only because F# defaults to public are now `internal`. Every
 one was measured to have no caller outside its own assembly — in this repo, in `samples/`,
-`templates/` and `docs-snippets/`, and in the 46 first-party consumer trees under `Applications/`,
-`cookbook-apps/` and `Modules/` — before it was hidden.
+`templates/` and `docs-snippets/`, and in the 46 first-party consumer trees checked out beside it
+— before it was hidden.
 
 | Package | Symbol (baseline tokens removed) | Why it was never contract |
 |---|---|---|
@@ -101,7 +101,7 @@ dotnet build ToolUp.Forge.sln --nologo
 dotnet src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll --filter "ToolUp.Platform.Tests.Phase 175"
 # re-derive the triage
 pwsh ./dev-scripts/api-surface-triage.ps1 -Out triage.csv -Markdown docs/reference/public-surface-triage.md `
-    -ConsumerRoots ../../Applications,../cookbook-apps,../../Modules
+    -ConsumerRoots <consumer-root>,<consumer-root>
 ```
 
 ## Rollback
