@@ -13,7 +13,8 @@ records above in full (tests, mostly); a caller of `PageRequestResolvers.create`
 1. **ToolUp.Facts.Shared:** `FactSeriesQuery.View: FactSeriesViewSource option` (a view id and its arguments as
    `FactViewArgument` values); when it is set, `Metric` names the view's result column to draw. `FactSeries.View:
    FactSeriesViewIdentity option` (view id, version, pipeline hash, model hash). `FactBrowseSlice.coversSeries` is false
-   for a view-sourced request and `FactBrowseSlice.series` refuses one. `FactBrowseSlice.parseDecimal` is public.
+   for a view-sourced request and `FactBrowseSlice.series` refuses one. `FactBrowseSlice.parseDecimal` is public, and `FactBrowseApi.periodRangeRefusal` / `seriesCapRefusal` hold the series
+   reads' two refusal sentences.
 2. **ToolUp.Facts.Server:** `FactBrowseDeps.Views: IFactViewSeriesReader option`; `QuerySeries` resolves a view-sourced
    request through it and refuses one by name when it is `None`. `ViewRegistry` gains `argument`, `seriesArguments`,
    `seriesColumns`, `seriesOf`, `series`, `seriesReader` and `withSeries`.
