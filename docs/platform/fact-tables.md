@@ -400,3 +400,68 @@ the run that committed that sequence, and never guesses one. A second run finds 
 the point door as on the population door. It is never answered with fewer facts, and never with a
 refusal fact standing in for the fault. The `IFactStore` contract's read-fault law
 (`IFactStoreContract.readFaultTests`) holds the blob, Postgres and delegated stores to it.
+
+## A dataset model over the tables
+
+A module may say how its fact tables relate and what may be computed over them: a **dataset model**, checked by
+`Fuaran.DB` (the published dataset-model package, core only; see
+[the open-core boundary](open-core-boundary.md#the-third-instance-the-dataset-model-phase-1348)).
+
+```fsharp skip=fragment
+ServerModule.create "trade"
+|> ServerModule.declareFactTables [ dailyTrade; dailyMargin ]
+|> ServerModule.describeFactTables [ tradeDescription; marginDescription ]
+|> ServerModule.declareDatasetModel {
+    Tables = [ "daily-trade"; "daily-margin" ]
+    Relations = [
+        { Name = "trade-margin"; Left = "daily-trade"; Right = "daily-margin"
+          On = [ "subject", "subject"; "period_from", "period_from" ] }
+    ]
+    Measures = [
+        { Name = "total revenue"; Table = "daily-trade"; Column = "revenue"
+          Aggregate = "sum"; Publishes = "total-revenue" }
+    ]
+}
+|> ServerModule.declareViews [ revenueAndMargin ]
+```
+
+**The model adds relations, measures and views, and restates nothing.** Its tables are the module's fact tables, each
+column is the column a pipeline reads the table's slice under (`subject`, `subject_path`, `period_from`, a metric id,
+…), and every description is the table's own `FactTableDescription`. A table read with no model in mind is described
+exactly as one read through it: `list_fact_tables`, the fact browse, a slice read and `evaluate_pipeline` serve the
+description as before, modelled or not.
+
+**What the composition checks.** The fact-table preflight (`FactTablePreflight`) refuses, by rule:
+
+| Rule | When |
+|---|---|
+| `dataset-model-table-undeclared` | a modelled table the module does not declare; a relation, measure or view naming a table the model does not model; a view with no model |
+| `dataset-model-measure-metric-undeclared` | a measure publishing no registered metric, or aggregating a column its table does not carry |
+| `dataset-model-table-undescribed` | a modelled table with no `FactTableDescription` |
+| `dataset-model-malformed` | a blank or repeated name, a relation with no key pair, an aggregate or parameter type outside its vocabulary, a view with no column or an undescribed one |
+
+`DatasetModelRegistry.register app` runs the same checks, lowers each model to `Fuaran.DB` and runs its model rules;
+`ViewRegistry.register app` (or `registerOrRefuse`, which fails the composition) then checks every view's pipeline
+with `Fuaran.DB`'s pipeline check against its model. A view reading a column the model does not name, joining along a
+relation it does not declare, naming a parameter it does not declare, or answering columns other than the ones it
+declares is refused by name.
+
+**Shape and cost, never disclosure.** A model declares no grant, row policy or group floor. Every cell a view or a
+pipeline reads is judged by the fact gate exactly as before, and withholding propagates through the result's lineage
+(`evaluate_pipeline`'s rule): a view over a table the gate withholds answers withheld cells, not values. A pipeline
+must pass both the model check and the gate, and neither admits what the other refuses.
+
+**What the assistant reads.** `FactsCompose.withDatasetModels resolver registry` registers the registry and
+`describe_dataset_model`, which answers from each caller's projection of each model (`ModelProjection`): a
+classification is granted at the tool-result door as the deployment's policy resolver grants it, so a table whose every
+metric would be withheld there is not named. The tool serves the outline, the tables with their own descriptions, the
+relations and the measures with the metrics they publish. Give `evaluate_pipeline` the joins with
+`PipelineProfile.withRelationCheck (DatasetModelRegistry.relationCheck resolver registry)`: a join along a declared
+relation is admitted and any other is refused by name before anything is read. The join step is checked over the
+table's own columns, so a key an earlier step renamed is refused rather than guessed.
+
+**Views run as method tools.** `ViewRegistry.bindings views` gives one `MethodBinding` per view for the deployment's one
+`MethodRegistry.register` call: the description is the card's meaning, the parameters its signature, the columns its
+outputs, and the evaluator binds the parameters and evaluates the pipeline over the gated slice of the view's table and
+the tables it joins, as `evaluate_pipeline` does. The tool is `view_<id>`, listed in the method profile, and its answer
+names the view, its version, the pipeline hash and the model hash. There is no separate tool for running a view.

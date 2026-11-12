@@ -1032,6 +1032,12 @@ type FactTableComposition = {
     Subjects: Grounding.SubjectRegistration list
     /// Where the composition binds its tables.
     Bindings: Grounding.FactTableBinding list
+    /// The tables' descriptions, with their describing module.
+    Descriptions: Grounding.FactTableDescriptionRegistration list
+    /// Phase 1348 — the dataset models declared over the tables.
+    DatasetModels: Grounding.DatasetModelRegistration list
+    /// Phase 1348 — the views declared over the modelled tables.
+    Views: Grounding.FactViewRegistration list
 }
 
 /// Phase 887 — the compose-time checks over declared fact tables, as
@@ -1069,6 +1075,29 @@ module FactTablePreflight =
     /// Phase 946 — a binding naming a table no module declares.
     [<Literal>]
     let UndeclaredBindingRule = "fact-table-binding-undeclared"
+
+    /// Phase 1348 — a dataset model, a relation, a measure or a view naming a
+    /// table the module does not declare (for a model) or does not model
+    /// (for the rest).
+    [<Literal>]
+    let ModelTableUndeclaredRule = "dataset-model-table-undeclared"
+
+    /// Phase 1348 — a measure publishing no registered metric, or
+    /// aggregating a column its table does not carry.
+    [<Literal>]
+    let MeasureMetricUndeclaredRule = "dataset-model-measure-metric-undeclared"
+
+    /// Phase 1348 — a modelled table with no `FactTableDescription`: a model
+    /// takes its descriptions from the table's own, so an undescribed table
+    /// would reach the assistant undescribed.
+    [<Literal>]
+    let ModelTableUndescribedRule = "dataset-model-table-undescribed"
+
+    /// Phase 1348 — a model or a view that cannot be read at all: a blank or
+    /// repeated name, a relation with no key pair, an aggregate or a
+    /// parameter type outside its vocabulary, a view with no column.
+    [<Literal>]
+    let ModelMalformedRule = "dataset-model-malformed"
 
     /// Phase 294 — the introspectable rule manifest, in the descriptor
     /// shape `CompositionValidator.ruleManifest` uses.
@@ -1113,6 +1142,30 @@ module FactTablePreflight =
             Severity = DefectError
             Description =
                 "A binding that names one table (ServerApp.bindFactTables, including a delegate-fact binding) must name a table some module declares; a binding to nothing would serve reads over a table that does not exist."
+        }
+        {
+            Code = ModelTableUndeclaredRule
+            Severity = DefectError
+            Description =
+                "A module's dataset model models only fact tables the module declares, and its relations, measures and views name only tables it models."
+        }
+        {
+            Code = MeasureMetricUndeclaredRule
+            Severity = DefectError
+            Description =
+                "A measure publishes a metric registered in the composition and aggregates a column its table carries."
+        }
+        {
+            Code = ModelTableUndescribedRule
+            Severity = DefectError
+            Description =
+                "Every modelled table carries a FactTableDescription: the model takes its descriptions from the table's own and never restates them."
+        }
+        {
+            Code = ModelMalformedRule
+            Severity = DefectError
+            Description =
+                "A dataset model and its views are well formed: named, each name once, every relation with a key pair, every aggregate and parameter type in its vocabulary, every view with at least one described column."
         }
     ]
 
@@ -1348,6 +1401,206 @@ module FactTablePreflight =
                     (quoted (Set.toList declared))))
 
     /// Every fact-table defect in a composition. Pure.
+    /// Phase 1348 — the declaration-level checks of every dataset model and
+    /// view: what each names against what its module declares, the metrics
+    /// the composition registers and the descriptions it carries. The facts
+    /// companion's `DatasetModelRegistry` runs these first and then the
+    /// model's own rules and each view's pipeline check, so a declaration is
+    /// read by one implementation whichever door reaches it.
+    let datasetModelDefects (composition: FactTableComposition) : CompositionDefect list =
+        let registered = composition.Metrics |> List.map _.Definition.Id |> Set.ofList
+
+        let described =
+            composition.Descriptions |> List.map _.Description.TableId |> Set.ofList
+
+        let declaredBy (moduleName: string) =
+            composition.Tables
+            |> List.filter (fun r -> r.Module = moduleName)
+            |> List.map (fun r -> r.Definition.Id, r.Definition)
+            |> Map.ofList
+
+        let error code message = defect code DefectError message
+
+        let repeated (names: string list) =
+            names |> List.countBy id |> List.filter (fun (_, n) -> n > 1) |> List.map fst
+
+        let models = [
+            for r in composition.DatasetModels do
+                let declared = declaredBy r.Module
+                let model = r.Model
+                let modelled = Set.ofList model.Tables
+
+                let columnsOf (table: string) =
+                    declared.TryFind table
+                    |> Option.map Grounding.FactTableDefinition.metrics
+                    |> Option.defaultValue []
+
+                if model.Tables.IsEmpty then
+                    error
+                        ModelMalformedRule
+                        (sprintf "Module '%s' declares a dataset model that models no table." r.Module)
+
+                for t in repeated model.Tables do
+                    error ModelMalformedRule (sprintf "Module '%s' models table '%s' twice." r.Module t)
+
+                for t in model.Tables do
+                    if not (declared.ContainsKey t) then
+                        error
+                            ModelTableUndeclaredRule
+                            (sprintf
+                                "Module '%s' models table '%s', which it does not declare. Tables it declares: %s."
+                                r.Module
+                                t
+                                (quoted (declared |> Map.toList |> List.map fst)))
+                    elif not (described.Contains t) then
+                        error
+                            ModelTableUndescribedRule
+                            (sprintf
+                                "Module '%s' models table '%s', which carries no FactTableDescription. A model takes a table's description from its own; describe it (ServerModule.describeFactTables)."
+                                r.Module
+                                t)
+
+                for n in repeated (model.Relations |> List.map _.Name) do
+                    error ModelMalformedRule (sprintf "Module '%s' declares relation '%s' twice." r.Module n)
+
+                for rel in model.Relations do
+                    if String.IsNullOrWhiteSpace rel.Name then
+                        error ModelMalformedRule (sprintf "Module '%s' declares a relation with no name." r.Module)
+
+                    if rel.On.IsEmpty then
+                        error
+                            ModelMalformedRule
+                            (sprintf "Module '%s': relation '%s' declares no key pair." r.Module rel.Name)
+
+                    for t in [ rel.Left; rel.Right ] do
+                        if not (modelled.Contains t) then
+                            error
+                                ModelTableUndeclaredRule
+                                (sprintf
+                                    "Module '%s': relation '%s' names table '%s', which the model does not model. Modelled tables: %s."
+                                    r.Module
+                                    rel.Name
+                                    t
+                                    (quoted model.Tables))
+
+                for n in repeated (model.Measures |> List.map _.Name) do
+                    error ModelMalformedRule (sprintf "Module '%s' declares measure '%s' twice." r.Module n)
+
+                for m in model.Measures do
+                    if String.IsNullOrWhiteSpace m.Name then
+                        error ModelMalformedRule (sprintf "Module '%s' declares a measure with no name." r.Module)
+
+                    if not (List.contains m.Aggregate Grounding.DatasetModelDeclaration.aggregates) then
+                        error
+                            ModelMalformedRule
+                            (sprintf
+                                "Module '%s': measure '%s' names the aggregate '%s'. Aggregates: %s."
+                                r.Module
+                                m.Name
+                                m.Aggregate
+                                (quoted Grounding.DatasetModelDeclaration.aggregates))
+
+                    if not (modelled.Contains m.Table) then
+                        error
+                            ModelTableUndeclaredRule
+                            (sprintf
+                                "Module '%s': measure '%s' names table '%s', which the model does not model. Modelled tables: %s."
+                                r.Module
+                                m.Name
+                                m.Table
+                                (quoted model.Tables))
+                    elif not (List.contains m.Column (columnsOf m.Table)) then
+                        error
+                            MeasureMetricUndeclaredRule
+                            (sprintf
+                                "Module '%s': measure '%s' aggregates column '%s', which table '%s' does not carry. Its columns: %s."
+                                r.Module
+                                m.Name
+                                m.Column
+                                m.Table
+                                (quoted (columnsOf m.Table)))
+
+                    if not (registered.Contains m.Publishes) then
+                        error
+                            MeasureMetricUndeclaredRule
+                            (sprintf
+                                "Module '%s': measure '%s' publishes metric '%s', which no module registers. Register it (ServerModule.declareMetrics) or name a registered metric."
+                                r.Module
+                                m.Name
+                                m.Publishes)
+        ]
+
+        let modelOf =
+            composition.DatasetModels |> List.map (fun r -> r.Module, r.Model) |> Map.ofList
+
+        let isViewIdChar (c: char) =
+            (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c = '_'
+
+        let views = [
+            for n in repeated (composition.Views |> List.map _.View.Id) do
+                error ModelMalformedRule (sprintf "View '%s' is declared twice." n)
+
+            for r in composition.Views do
+                let v = r.View
+
+                match modelOf.TryFind r.Module with
+                | None ->
+                    error
+                        ModelTableUndeclaredRule
+                        (sprintf
+                            "Module '%s' declares view '%s' and no dataset model to check it against. Declare one (ServerModule.declareDatasetModel)."
+                            r.Module
+                            v.Id)
+                | Some model ->
+                    if not (List.contains v.Table model.Tables) then
+                        error
+                            ModelTableUndeclaredRule
+                            (sprintf
+                                "Module '%s': view '%s' reads table '%s', which the model does not model. Modelled tables: %s."
+                                r.Module
+                                v.Id
+                                v.Table
+                                (quoted model.Tables))
+
+                if String.IsNullOrEmpty v.Id || not (Seq.forall isViewIdChar v.Id) then
+                    error
+                        ModelMalformedRule
+                        (sprintf "Module '%s': view id '%s' must be lower-case letters, digits and '_'." r.Module v.Id)
+
+                if String.IsNullOrWhiteSpace v.Version || String.IsNullOrWhiteSpace v.Description then
+                    error
+                        ModelMalformedRule
+                        (sprintf "Module '%s': view '%s' must state a version and a description." r.Module v.Id)
+
+                if v.Columns.IsEmpty then
+                    error ModelMalformedRule (sprintf "Module '%s': view '%s' declares no column." r.Module v.Id)
+
+                for c in v.Columns do
+                    if String.IsNullOrWhiteSpace c.Description then
+                        error
+                            ModelMalformedRule
+                            (sprintf "Module '%s': view '%s' leaves column '%s' undescribed." r.Module v.Id c.Name)
+
+                for n in
+                    repeated (v.Columns |> List.map _.Name)
+                    @ repeated (v.Parameters |> List.map _.Name) do
+                    error ModelMalformedRule (sprintf "Module '%s': view '%s' names '%s' twice." r.Module v.Id n)
+
+                for p in v.Parameters do
+                    if not (List.contains p.Type Grounding.DatasetModelDeclaration.parameterTypes) then
+                        error
+                            ModelMalformedRule
+                            (sprintf
+                                "Module '%s': view '%s' gives parameter '%s' the type '%s'. Types: %s."
+                                r.Module
+                                v.Id
+                                p.Name
+                                p.Type
+                                (quoted Grounding.DatasetModelDeclaration.parameterTypes))
+        ]
+
+        models @ views
+
     let defects (composition: FactTableComposition) : CompositionDefect list =
         List.concat [
             duplicates composition
@@ -1357,6 +1610,7 @@ module FactTablePreflight =
             unboundRequired composition
             twoHomes composition
             undeclaredBindings composition
+            datasetModelDefects composition
         ]
 
     let private renderDefects (defects: CompositionDefect list) : string =
