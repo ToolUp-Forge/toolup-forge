@@ -6,6 +6,7 @@ module ToolUp.DataSources.Sql.SqlDataSource
 open System
 open System.Data
 open System.Data.Common
+open System.Globalization
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.DataSources.Common
@@ -21,8 +22,8 @@ open ToolUp.Platform.Infra
 // single inner exception a one-Task await carries; a bare exception
 // passes through unchanged.
 //
-// Phase 972: the private `(|Unwrapped|)` this note introduced is now the
-// shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
+// The match is the shared `ToolUp.Platform.ProviderExceptions`
+// (`ProviderException` / `Unwrapped`).
 
 // ─── ToolUp.DataSources.Sql ───────────────────────────────────────
 //
@@ -139,6 +140,192 @@ let private createConnection (backend: SqlBackend) (connectionString: string) : 
     | Oracle -> new OraConn(connectionString) :> DbConnection
     | ClickHouse -> new ChConn(connectionString) :> DbConnection
 
+// ─── Binding a value through each provider's own parameter type ──
+//
+// The provider type is set from the value's kind, never inferred by the
+// provider from a boxed object, and each value is converted to the exact
+// provider type here, so no provider guesses at a width or a scale.
+
+type private PgParam = global.Npgsql.NpgsqlParameter
+type private PgType = global.NpgsqlTypes.NpgsqlDbType
+type private MyParam = global.MySqlConnector.MySqlParameter
+type private MyType = global.MySqlConnector.MySqlDbType
+type private MsParam = global.Microsoft.Data.SqlClient.SqlParameter
+type private LiteParam = global.Microsoft.Data.Sqlite.SqliteParameter
+type private LiteType = global.Microsoft.Data.Sqlite.SqliteType
+type private OraParam = global.Oracle.ManagedDataAccess.Client.OracleParameter
+type private OraType = global.Oracle.ManagedDataAccess.Client.OracleDbType
+type private OraCommand = global.Oracle.ManagedDataAccess.Client.OracleCommand
+type private OraDecimal = global.Oracle.ManagedDataAccess.Types.OracleDecimal
+type private OraTimestampTz = global.Oracle.ManagedDataAccess.Types.OracleTimeStampTZ
+type private ChParam = global.ClickHouse.Client.ADO.Parameters.ClickHouseDbParameter
+type private ChDecimal = global.ClickHouse.Client.Numerics.ClickHouseDecimal
+
+/// The value a provider is handed for `value`: `DBNull` for a typed null,
+/// and otherwise what `convert` takes the present value to.
+let private providerValue (convert: BoundValue -> obj) (value: BoundValue) : obj =
+    match value with
+    | BoundValue.Null _ -> box DBNull.Value
+    | BoundValue.Float _
+    | BoundValue.Int _
+    | BoundValue.Bool _
+    | BoundValue.Text _
+    | BoundValue.Timestamp _
+    | BoundValue.Categorical _
+    | BoundValue.Decimal _ -> convert value
+
+/// The plain .NET value of a bound value; a decimal is its canonical text.
+let private plain (value: BoundValue) : obj =
+    match value with
+    | BoundValue.Float f -> box f
+    | BoundValue.Int i -> box i
+    | BoundValue.Bool b -> box b
+    | BoundValue.Text s
+    | BoundValue.Categorical s
+    | BoundValue.Decimal s -> box s
+    | BoundValue.Timestamp t -> box t
+    | BoundValue.Null _ -> box DBNull.Value
+
+/// The provider parameter for one binding on `backend`.
+let private providerParameter (backend: SqlBackend) (binding: ProviderBinding) : DbParameter =
+    let kind = BoundValue.kind binding.Value
+
+    let parameter: DbParameter =
+        match backend with
+        | PostgreSql ->
+            let p = PgParam()
+
+            // A decimal travels as its text into `CAST($n AS numeric)`
+            // (`SqlBinding.translate`); timestamptz takes a UTC offset only.
+            p.NpgsqlDbType <-
+                match kind with
+                | DatasetDType.Float -> PgType.Double
+                | DatasetDType.Int -> PgType.Bigint
+                | DatasetDType.Bool -> PgType.Boolean
+                | DatasetDType.Text
+                | DatasetDType.Categorical
+                | DatasetDType.Decimal -> PgType.Text
+                | DatasetDType.Timestamp -> PgType.TimestampTz
+
+            p.Value <-
+                binding.Value
+                |> providerValue (fun v ->
+                    match v with
+                    | BoundValue.Timestamp t -> box (t.ToUniversalTime())
+                    | _ -> plain v)
+
+            p
+        | MySql ->
+            let p = MyParam()
+
+            p.MySqlDbType <-
+                match kind with
+                | DatasetDType.Float -> MyType.Double
+                | DatasetDType.Int -> MyType.Int64
+                | DatasetDType.Bool -> MyType.Bool
+                | DatasetDType.Text
+                | DatasetDType.Categorical
+                | DatasetDType.Decimal -> MyType.VarChar
+                | DatasetDType.Timestamp -> MyType.DateTime
+
+            // MySQL's DATETIME holds no offset: the instant is bound in UTC.
+            p.Value <-
+                binding.Value
+                |> providerValue (fun v ->
+                    match v with
+                    | BoundValue.Timestamp t -> box t.UtcDateTime
+                    | _ -> plain v)
+
+            p
+        | SqlServer ->
+            let p = MsParam()
+
+            p.SqlDbType <-
+                match kind with
+                | DatasetDType.Float -> SqlDbType.Float
+                | DatasetDType.Int -> SqlDbType.BigInt
+                | DatasetDType.Bool -> SqlDbType.Bit
+                | DatasetDType.Text
+                | DatasetDType.Categorical -> SqlDbType.NVarChar
+                | DatasetDType.Timestamp -> SqlDbType.DateTimeOffset
+                | DatasetDType.Decimal -> SqlDbType.Decimal
+
+            // `SqlDecimal` holds 38 digits, where `System.Decimal` holds 28.
+            match binding.Value with
+            | BoundValue.Decimal digits ->
+                let exact = SqlTypes.SqlDecimal.Parse digits
+                p.Precision <- exact.Precision
+                p.Scale <- exact.Scale
+                p.SqlValue <- exact
+            | _ -> p.Value <- providerValue plain binding.Value
+
+            p
+        | Sqlite ->
+            let p = LiteParam()
+
+            // SQLite has no exact numeric and no timestamp: the decimal's
+            // digits and the timestamp's ISO 8601 text are bound as TEXT,
+            // which is how the provider stores a `System.Decimal` itself.
+            p.SqliteType <-
+                match kind with
+                | DatasetDType.Float -> LiteType.Real
+                | DatasetDType.Int
+                | DatasetDType.Bool -> LiteType.Integer
+                | DatasetDType.Text
+                | DatasetDType.Categorical
+                | DatasetDType.Decimal
+                | DatasetDType.Timestamp -> LiteType.Text
+
+            p.Value <-
+                binding.Value
+                |> providerValue (fun v ->
+                    match v with
+                    | BoundValue.Bool b -> box (if b then 1L else 0L)
+                    | BoundValue.Timestamp t -> box (t.ToString("O", CultureInfo.InvariantCulture))
+                    | _ -> plain v)
+
+            p
+        | Oracle ->
+            let p = new OraParam()
+
+            p.OracleDbType <-
+                match kind with
+                | DatasetDType.Float -> OraType.BinaryDouble
+                | DatasetDType.Int -> OraType.Int64
+                | DatasetDType.Bool -> OraType.Boolean
+                | DatasetDType.Text
+                | DatasetDType.Categorical -> OraType.NVarchar2
+                | DatasetDType.Timestamp -> OraType.TimeStampTZ
+                | DatasetDType.Decimal -> OraType.Decimal
+
+            // `OracleDecimal` holds 38 significant digits.
+            p.Value <-
+                binding.Value
+                |> providerValue (fun v ->
+                    match v with
+                    | BoundValue.Decimal digits -> box (OraDecimal digits)
+                    | BoundValue.Timestamp t -> box (OraTimestampTz(t.UtcDateTime, "+00:00"))
+                    | _ -> plain v)
+
+            p
+        | ClickHouse ->
+            let p = ChParam()
+            // The type the marker names (`{name:Type}`).
+            p.ClickHouseType <- SqlBinding.clickHouseType binding.Value
+
+            p.Value <-
+                binding.Value
+                |> providerValue (fun v ->
+                    match v with
+                    | BoundValue.Decimal digits -> box (ChDecimal.Parse(digits, CultureInfo.InvariantCulture))
+                    | BoundValue.Timestamp t -> box t.UtcDateTime
+                    | _ -> plain v)
+
+            p
+
+    parameter.ParameterName <- binding.Name |> Option.defaultValue ""
+    parameter
+
 /// A bare identifier handed to `Query` is expanded to
 /// `SELECT * FROM <schema>.<table>` — the documented convenience that
 /// lets an admin UI offer "ingest this whole table" without composing
@@ -185,11 +372,34 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
 
         command
 
+    /// A command running `statement`, each value bound through the
+    /// provider's own parameter. `timeout` overrides the source's default.
+    let newBoundCommand
+        (settings: SqlSourceSettings)
+        (connection: DbConnection)
+        (timeout: TimeSpan option)
+        (statement: BackendStatement)
+        =
+        let command = newCommand settings connection statement.Text
+
+        match command with
+        | :? OraCommand as oracle -> oracle.BindByName <- true
+        | _ -> ()
+
+        match timeout with
+        | Some span -> command.CommandTimeout <- max 1 (int (Math.Ceiling span.TotalSeconds))
+        | None -> ()
+
+        for binding in statement.Bindings do
+            command.Parameters.Add(providerParameter settings.Backend binding) |> ignore
+
+        command
+
     /// Run a catalogue query, projecting each row with `project`.
     let readCatalogue
         (ctx: DataSourceCallContext)
         (context: string)
-        (buildSql: SqlSourceSettings -> Result<string, IngestionError>)
+        (buildStatement: SqlSourceSettings -> Result<BoundStatement, IngestionError>)
         (project: DbDataReader -> 'T)
         : Async<Result<'T list, IngestionError>> =
         Errors.guard context (fun () -> async {
@@ -198,11 +408,20 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
             | Ok(settings, connection) ->
                 use connection = connection
 
-                match buildSql settings with
+                // The catalogue statements are the connector's own, so a
+                // translation refusal is a defect in them, never the caller's.
+                let translated =
+                    buildStatement settings
+                    |> Result.bind (fun statement ->
+                        SqlBinding.translate settings.Backend statement
+                        |> Result.mapError (fun refusal ->
+                            UnexpectedFailure $"%s{context}: %s{BoundStatementError.describe refusal}"))
+
+                match translated with
                 | Error err -> return Error err
-                | Ok sql ->
+                | Ok statement ->
                     let! ct = Async.CancellationToken
-                    use command = newCommand settings connection sql
+                    use command = newBoundCommand settings connection None statement
                     use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
 
                     let rows = ResizeArray<'T>()
@@ -247,7 +466,7 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
     }
 
 
-    /// Phase 1041 — the schema of a statement's result set, read without
+    /// The schema of a statement's result set, read without
     /// fetching rows (`CommandBehavior.SchemaOnly`). A column whose
     /// nullability the provider cannot say is recorded as nullable.
     let describeStatement (ctx: DataSourceCallContext) (statement: string) =
@@ -288,23 +507,80 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
                         )
         })
 
-    // Phase 834 — `Query` emits RFC 4180 CSV; declared, not implied.
+    /// Run `command` and drain its result set into CSV. The connection
+    /// opened, so the source is reachable: a provider failure here is the
+    /// statement or the schema, which is the operator's to fix.
+    let readCsv (settings: SqlSourceSettings) (command: DbCommand) = async {
+        let! ct = Async.CancellationToken
+
+        try
+            use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
+            let! bytes = Csv.ofReader reader
+            return Ok bytes
+        with ProviderException(ex: DbException) ->
+            return
+                Error(
+                    SchemaMismatch
+                        $"%s{kind} (%s{SqlDialect.backendName settings.Backend}) query failed: %s{ex.Message}"
+                )
+    }
+
+    /// Run a bound statement. The kinds the source's backend binds, the
+    /// markers and the one-statement rule are checked before any connection
+    /// opens; the values are bound through the provider's own parameters.
+    let queryBound (ctx: DataSourceCallContext) (statement: BoundStatement) = async {
+        match readSettings ctx.Config.ConnectionScope with
+        | Error err -> return Error(BoundStatementError.Failed err)
+        | Ok settings ->
+            let translated =
+                BoundStatement.check (SqlBinding.bindableKinds settings.Backend) statement
+                |> Result.mapError BoundStatementError.Refused
+                |> Result.bind (fun () -> SqlBinding.translate settings.Backend statement)
+
+            match translated with
+            | Error refusal -> return Error refusal
+            | Ok backendStatement ->
+                let! result =
+                    Errors.guard $"%s{kind} QueryBound" (fun () -> async {
+                        match! prepare ctx with
+                        | Error err -> return Error err
+                        | Ok(settings, connection) ->
+                            use connection = connection
+                            use command = newBoundCommand settings connection statement.Timeout backendStatement
+                            return! readCsv settings command
+                    })
+
+                return result |> Result.mapError BoundStatementError.Failed
+    }
+
+    /// Every kind a bound value can carry: which of them a source binds is
+    /// its backend's (`SqlBinding.bindableKinds`), read per call, and the
+    /// rest are refused by name.
+    let binds =
+        { new IBindsStatements with
+            member _.BindableKinds = Set.ofList BoundValue.kinds
+            member _.QueryBound(ctx, statement) = queryBound ctx statement
+        }
+
+    // `Query` emits RFC 4180 CSV; declared, not implied.
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
 
-    // Phase 1017 — OPTIONAL: `ConnectionScope` may carry the whole
-    // connection string (integrated security or an inline password), and
-    // then there is no secret to resolve.
+    // OPTIONAL: `ConnectionScope` may carry the whole connection string
+    // (integrated security or an inline password), and then there is no
+    // secret to resolve.
     interface IDeclaresCredentialNeed with
         member _.CredentialNeed = CredentialNeed.Optional
 
     interface IDataSource with
         member _.Kind = kind
 
-        // Phase 1095 — a query against a SQL database has no location a delivery can
-        // watch, and it emits only the CSV it declares: nothing beyond the five
-        // members (what the capability probes answered before the record).
-        member _.Capabilities = ConnectorCapabilities.none
+        // A query against a SQL database has no location a delivery can watch,
+        // and it emits only the CSV it declares; it binds a statement's values.
+        member _.Capabilities = {
+            ConnectorCapabilities.none with
+                Binds = Some binds
+        }
 
         member _.Connect(ctx) =
             Errors.guard $"%s{kind} Connect" (fun () -> async {
@@ -322,7 +598,7 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
                 (fun settings -> SqlDialect.listTablesSql settings.Backend settings.Schema)
                 (fun reader -> reader.GetValue 0 |> Csv.renderValue)
 
-        // Phase 1041 — a statement-shaped "table" (what `Query` passes
+        // A statement-shaped "table" (what `Query` passes
         // through verbatim) is described by its result set, read with
         // `CommandBehavior.SchemaOnly`, so a statement ingested under a
         // caller label keeps its schema record and drift detection. A bare
@@ -343,23 +619,8 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
                     match resolveStatement settings sql with
                     | Error err -> return Error err
                     | Ok statement ->
-                        let! ct = Async.CancellationToken
                         use command = newCommand settings connection statement
-
-                        try
-                            use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
-                            let! bytes = Csv.ofReader reader
-                            return Ok bytes
-                        with ProviderException(ex: DbException) ->
-                            // The connection opened, so the source
-                            // is reachable — a failure HERE is the
-                            // statement or the schema, which is
-                            // the operator's to fix.
-                            return
-                                Error(
-                                    SchemaMismatch
-                                        $"%s{kind} (%s{SqlDialect.backendName settings.Backend}) query failed: %s{ex.Message}"
-                                )
+                        return! readCsv settings command
             })
 
 /// Build the connector with an `ISecretStore` for the credential

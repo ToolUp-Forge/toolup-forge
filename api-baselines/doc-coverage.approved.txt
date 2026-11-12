@@ -79,7 +79,7 @@ ToolUp.DataSources.GoogleAnalytics.Client 6/11
 ToolUp.DataSources.Parquet 21/25
 ToolUp.DataSources.Redshift 17/19
 ToolUp.DataSources.Snowflake 28/36
-ToolUp.DataSources.Sql 25/48
+ToolUp.DataSources.Sql 31/71
 ToolUp.DataSources.Synapse 27/37
 ToolUp.EmbeddingCaches.Redis 33/63
 ToolUp.EmbeddingProviders.Local 19/23

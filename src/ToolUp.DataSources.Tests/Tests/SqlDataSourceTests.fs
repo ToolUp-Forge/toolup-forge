@@ -132,52 +132,64 @@ let private connectionStringTests =
         }
     ]
 
+let private allBackends = [ PostgreSql; MySql; SqlServer; Sqlite; Oracle; ClickHouse ]
+
+/// The command a catalogue statement emits on `backend`: the text the
+/// provider runs and the values it binds.
+let private emitted (backend: SqlBackend) (statement: Result<BoundStatement, IngestionError>) =
+    match statement with
+    | Error err -> failtestf "%A: expected a statement; got %A" backend err
+    | Ok statement ->
+        match SqlBinding.translate backend statement with
+        | Ok command -> command
+        | Error refusal -> failtestf "%A: the catalogue statement did not translate: %A" backend refusal
+
+let private boundTexts (command: BackendStatement) =
+    command.Bindings
+    |> List.choose (fun binding ->
+        match binding.Value with
+        | BoundValue.Text text -> Some text
+        | _ -> None)
+
 let private catalogueTests =
     testList "catalogue SQL" [
-        test "the four ANSI backends scope by table_schema" {
+        test "the four ANSI backends scope by table_schema, bound and never rendered" {
             for backend in [ PostgreSql; MySql; SqlServer; ClickHouse ] do
-                match SqlDialect.listTablesSql backend (Some "analytics") with
-                | Ok sql ->
-                    Expect.stringContains sql "information_schema.tables" $"{backend} uses information_schema"
-                    Expect.stringContains sql "'analytics'" $"{backend} scopes to the schema"
-                    Expect.stringContains sql "ORDER BY" $"{backend} orders deterministically"
-                | Error err -> failtestf "%A: expected Ok; got %A" backend err
+                let command = emitted backend (SqlDialect.listTablesSql backend (Some "analytics"))
+                Expect.stringContains command.Text "information_schema.tables" $"{backend} uses information_schema"
+                Expect.stringContains command.Text "ORDER BY" $"{backend} orders deterministically"
+                Expect.isFalse (command.Text.Contains "analytics") $"{backend}: the schema is not in the text"
+                Expect.equal (boundTexts command) [ "analytics" ] $"{backend} binds the schema"
         }
 
         test "an unscoped ANSI listing excludes the system catalogues" {
             let exclusions = [ PostgreSql, "pg_catalog"; SqlServer, "sys"; ClickHouse, "system" ]
 
             for backend, excluded in exclusions do
-                match SqlDialect.listTablesSql backend None with
-                | Ok sql -> Expect.stringContains sql excluded $"{backend} excludes {excluded}"
-                | Error err -> failtestf "%A: expected Ok; got %A" backend err
+                let command = emitted backend (SqlDialect.listTablesSql backend None)
+                Expect.stringContains command.Text excluded $"{backend} excludes {excluded}"
+                Expect.isEmpty command.Bindings $"{backend} binds nothing"
 
-            match SqlDialect.listTablesSql MySql None with
-            | Ok sql -> Expect.stringContains sql "DATABASE()" "mysql self-scopes to the connected database"
-            | Error err -> failtestf "expected Ok; got %A" err
+            let mysql = emitted MySql (SqlDialect.listTablesSql MySql None)
+            Expect.stringContains mysql.Text "DATABASE()" "mysql self-scopes to the connected database"
         }
 
         test "Oracle uses ALL_TABLES with an upper-cased owner" {
-            match SqlDialect.listTablesSql Oracle (Some "hr") with
-            | Ok sql ->
-                Expect.stringContains sql "ALL_TABLES" "Oracle catalogue view"
-                // Oracle folds unquoted identifiers to upper case and
-                // STORES them that way, so comparing against 'hr'
-                // would match nothing.
-                Expect.stringContains sql "'HR'" "owner is upper-cased for the comparison"
-            | Error err -> failtestf "expected Ok; got %A" err
+            let command = emitted Oracle (SqlDialect.listTablesSql Oracle (Some "hr"))
+            Expect.stringContains command.Text "ALL_TABLES" "Oracle catalogue view"
+            Expect.stringContains command.Text "OWNER = :b1" "the owner is a bind variable"
+            // Oracle folds unquoted identifiers to upper case and STORES them
+            // that way, so comparing against 'hr' would match nothing.
+            Expect.equal (boundTexts command) [ "HR" ] "the owner is bound upper-cased"
 
-            match SqlDialect.listTablesSql Oracle None with
-            | Ok sql -> Expect.stringContains sql "OWNER = USER" "unscoped Oracle listing is the connected user's"
-            | Error err -> failtestf "expected Ok; got %A" err
+            let unscoped = emitted Oracle (SqlDialect.listTablesSql Oracle None)
+            Expect.stringContains unscoped.Text "OWNER = USER" "unscoped Oracle listing is the connected user's"
         }
 
         test "SQLite uses sqlite_master and refuses a declared schema" {
-            match SqlDialect.listTablesSql Sqlite None with
-            | Ok sql ->
-                Expect.stringContains sql "sqlite_master" "SQLite catalogue"
-                Expect.stringContains sql "sqlite_%" "internal tables excluded"
-            | Error err -> failtestf "expected Ok; got %A" err
+            let command = emitted Sqlite (SqlDialect.listTablesSql Sqlite None)
+            Expect.stringContains command.Text "sqlite_master" "SQLite catalogue"
+            Expect.stringContains command.Text "sqlite_%" "internal tables excluded"
 
             // Silently ignoring a declared schema would leave an
             // operator believing a scope was applied.
@@ -197,19 +209,41 @@ let private catalogueTests =
             ]
 
             for backend, schema, needles in expectations do
-                match SqlDialect.columnsSql backend schema "orders" with
-                | Ok sql ->
-                    for needle in needles do
-                        Expect.stringContains sql needle $"{backend} projects {needle}"
-                | Error err -> failtestf "%A: expected Ok; got %A" backend err
+                let command = emitted backend (SqlDialect.columnsSql backend schema "orders")
+
+                for needle in needles do
+                    Expect.stringContains command.Text needle $"{backend} projects {needle}"
         }
 
-        test "an unsafe table or schema name is REFUSED, never escaped into the query" {
-            // The connectors interpolate identifiers because the six
-            // backends share no parameter marker; validation is what
-            // makes that safe, so it is asserted per backend rather
-            // than sampled.
-            for backend in [ PostgreSql; MySql; SqlServer; Sqlite; Oracle; ClickHouse ] do
+        test "no catalogue query renders a schema or table value into its text" {
+            for backend in allBackends do
+                let schema =
+                    match backend with
+                    | Sqlite -> None
+                    | _ -> Some "analytics"
+
+                let columns = emitted backend (SqlDialect.columnsSql backend schema "orders")
+                let listed = emitted backend (SqlDialect.listTablesSql backend schema)
+
+                for command in [ columns; listed ] do
+                    let text = command.Text.ToLowerInvariant()
+                    Expect.isFalse (text.Contains "orders") $"{backend}: the table is not in the text"
+                    Expect.isFalse (text.Contains "analytics") $"{backend}: the schema is not in the text"
+
+                let expected =
+                    match backend with
+                    | Oracle -> [ "ANALYTICS"; "ORDERS" ]
+                    | Sqlite -> [ "orders" ]
+                    | _ -> [ "analytics"; "orders" ]
+
+                Expect.equal (boundTexts columns) expected $"{backend} binds the schema and the table"
+        }
+
+        test "an unsafe table or schema name is REFUSED before any statement is built" {
+            // The values are bound, so the identifier check is no longer
+            // what keeps them out of the text; it stays as the refusal of a
+            // name no catalogue could hold, asserted per backend.
+            for backend in allBackends do
                 match SqlDialect.columnsSql backend None "orders; DROP TABLE users" with
                 | Error(SchemaMismatch _) -> ()
                 | other -> failtestf "%A: expected the injection-shaped table name to be refused; got %A" backend other
@@ -221,6 +255,8 @@ let private catalogueTests =
         }
 
         test "selectAllSql quotes with each backend's own delimiter" {
+            // An IDENTIFIER, which no backend binds: rendered, behind the
+            // identifier check.
             let expectations = [
                 PostgreSql, "\"public\".\"orders\""
                 Oracle, "\"public\".\"orders\""
@@ -344,7 +380,7 @@ let private kindTests =
             Expect.equal
                 (TestFakes.declaredFormat (SqlDataSource.createWithoutSecrets ()))
                 PayloadFormat.Csv
-                "declares Csv explicitly (Phase 834)"
+                "declares Csv explicitly"
         }
 
         test "createWithKind lets a deployment route by backend name instead" {

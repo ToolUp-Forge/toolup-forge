@@ -23,9 +23,9 @@ open ToolUp.DataSources.Tests.Support
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Testing
 
-// ─── Phase 834 / 1017 — every shipped connector declares what it is ───
+// ─── Every shipped connector declares what it is ───
 //
-// Binds the `IDeclaresPayloadFormat` pack and the Phase 1017
+// Binds the `IDeclaresPayloadFormat` pack and the
 // `IDeclaresCredentialNeed` pack to each connector this project ships,
 // and pins what `DataIngestor` does with each credential need.
 // Both declarations are constants of the connector, so the factories
@@ -144,7 +144,7 @@ let private seededInMemory () =
     source :> IDataSource, config
 
 let private ingestorTests =
-    testList "DataIngestor honours the declared credential need (Phase 1017)" [
+    testList "DataIngestor honours the declared credential need" [
 
         test "a NONE connector (CSV) ingests while the secret store throws on every read" {
             let storage = FakeBlobStorage.InMemoryBlobStorage()
@@ -248,7 +248,7 @@ let private resolveDeclaredTests =
     let declaring need =
         probing (Some need) (ref false) (ref []) (InMemoryDataSource.create ())
 
-    testList "Credentials.resolveDeclared follows the declaration (Phase 1017)" [
+    testList "Credentials.resolveDeclared follows the declaration" [
         testCaseAsync "NONE resolves to None without reading the store"
         <| async {
             let! resolved =
@@ -338,8 +338,7 @@ let tests =
             IDeclaresCredentialNeedContract.tests "ParquetDataSource" CredentialNeed.NoCredential (fun () ->
                 ParquetDataSource.create (blobs ()))
         ]
-        // Phase 1095 — each record is exactly what the capability probes
-        // answered before the record existed.
+        // Each record is exactly what the connector implements.
         testList "ConnectorCapabilities bindings" [
             IDataSourceContract.capabilities "AthenaDataSource" [] (fun () ->
                 AthenaDataSource.createWithDefaultCredentials ())
@@ -349,7 +348,8 @@ let tests =
                 RedshiftDataSource.createWithDefaultCredentials ())
             IDataSourceContract.capabilities "SnowflakeDataSource" [] (fun () ->
                 SnowflakeDataSource.createWithKeyFile ())
-            IDataSourceContract.capabilities "SqlDataSource" [] (fun () -> SqlDataSource.createWithoutSecrets ())
+            IDataSourceContract.capabilities "SqlDataSource" [ ConnectorCapability.Binds ] (fun () ->
+                SqlDataSource.createWithoutSecrets ())
             IDataSourceContract.capabilities "SynapseDataSource" [] (fun () ->
                 SynapseDataSource.createWithDefaultCredentials ())
             IDataSourceContract.capabilities "GoogleAnalyticsDataSource" [] googleAnalytics

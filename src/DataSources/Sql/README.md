@@ -49,7 +49,8 @@ key configured.
 ## What each backend's introspection actually runs
 
 Six backends collapse to **three** catalogue shapes. All of it is a pure function of strings
-(`SqlDialect`), so every query in this table is unit-tested without a database.
+(`SqlDialect`, and `SqlBinding` for the markers), so every query in this table is unit-tested without
+a database.
 
 | Backend | `ListTables` | `GetSchema` | Unscoped behaviour |
 |---|---|---|---|
@@ -58,20 +59,68 @@ Six backends collapse to **three** catalogue shapes. All of it is a pure functio
 | SQLite | `sqlite_master` (excluding `sqlite_%`) | `pragma_table_info(...)` | the attached file |
 
 Oracle folds unquoted identifiers to **upper case** and stores them that way, so the connector
-upper-cases the owner and table literals it compares against. Getting this wrong is the classic
+upper-cases the owner and table values it compares against. Getting this wrong is the classic
 "the table exists but `GetSchema` returns nothing" symptom.
 
-### Identifier safety
+### What is bound, and what is rendered
 
-Catalogue queries **interpolate** the schema and table names rather than binding them, because the six
-backends do not share one parameter marker (`@p` / `:p` / `{p:String}` / `?`) and a connector whose
-safety depended on getting four markers right in eighteen places is a connector waiting to be wrong.
+A catalogue query compares the schema and the table name against the catalogue as **values**, so
+`ListTables` and `GetSchema` bind them (`@schema`, `@table`, rewritten to each backend's marker form
+below) and render no value into the statement text. Oracle's values are bound upper-cased, as
+above.
 
-Every interpolated identifier is instead validated against a deliberately narrow pattern first —
-`^[A-Za-z_][A-Za-z0-9_$]{0,127}$` — and **refused** as `SchemaMismatch` if it does not match, so
-nothing that could terminate a literal ever reaches the string builder. Quoted identifiers containing
-spaces, dots or Unicode are refused rather than escaped. Literal quoting is applied on top as a
-second, independent line of defence. Both halves are enumerated in the test pack, per backend.
+`selectAllSql` (the bare-identifier expansion `Query` applies) names a table as an **identifier**,
+and no backend binds an identifier: it is still rendered, with the backend's own quoting. What keeps
+it safe is the identifier check in front of it: every name is validated against a deliberately
+narrow pattern — `^[A-Za-z_][A-Za-z0-9_$]{0,127}$` — and **refused** as `SchemaMismatch` if it does
+not match, so nothing that could end a quoted identifier reaches the string builder. The catalogue
+queries keep the same check in front of their bound values, so a name no catalogue could hold is
+refused before a connection opens. Both are enumerated in the test pack, per backend.
+
+## Bound statements
+
+The connector declares `Binds` (`ConnectorCapabilities`): `BoundQuery.run source ctx statement` runs a
+statement whose values travel beside its text and are bound by the provider, never rendered into it.
+The statement names each parameter `@name`; the connector rewrites the markers to the backend's form
+and sets each provider parameter's type from the value's kind, never letting the provider infer it
+from a boxed object. The result is the same CSV `Query` returns.
+
+| Backend | Marker form | Kinds bound (provider type) | Kinds refused |
+|---|---|---|---|
+| PostgreSQL | positional `$n` (Npgsql sends the text unparsed) | Float (`double precision`), Int (`bigint`), Bool (`boolean`), Text and Categorical (`text`), Timestamp (`timestamptz`, as UTC), Decimal (its text, `CAST($n AS numeric)`) | none |
+| MySQL / MariaDB | named `@name` | Float (`DOUBLE`), Int (`BIGINT`), Bool (`BOOL`), Text and Categorical (`VARCHAR`), Timestamp (`DATETIME`, as UTC) | **Decimal**: `DECIMAL` holds at most 30 fractional digits, so some canonical decimals have no exact MySQL value, and a decimal bound as text is compared through a double |
+| SQL Server | named `@name` | Float (`float`), Int (`bigint`), Bool (`bit`), Text and Categorical (`nvarchar`), Timestamp (`datetimeoffset`), Decimal (`SqlDecimal`, up to 38 digits) | none |
+| SQLite | named `@name` | Float (`REAL`), Int and Bool (`INTEGER`, 1 / 0), Text and Categorical (`TEXT`), Timestamp (`TEXT`, ISO 8601), Decimal (`TEXT`, the digits) | none |
+| Oracle | prefixed `:bN`, bound by name | Float (`BINARY_DOUBLE`), Int (`NUMBER`, Int64), Text and Categorical (`NVARCHAR2`), Timestamp (`TIMESTAMP WITH TIME ZONE`, as UTC), Decimal (`OracleDecimal`, up to 38 significant digits) | **Bool**: before 23ai Oracle has no SQL boolean; bind an Int |
+| ClickHouse | typed `{name:Type}` | Float (`Float64`), Int (`Int64`), Bool (`Bool`), Text and Categorical (`String`), Timestamp (`DateTime64(7, 'UTC')`), Decimal (`Decimal(P, S)`, up to 76 digits); a typed null is `Nullable(Type)` | none |
+
+A refused kind is `BindingRefusal.UnbindableKind`, naming the parameter and the kind, before any
+connection opens. The connector serves all six backends, so its declared `BindableKinds` is every
+kind and the backend's set above is applied per call, from the source's `backend` key. A decimal
+wider than the backend's exact type (the limits in the table) is refused before the provider, naming
+the parameter, rather than rounded. SQLite has no exact numeric: the digits arrive exactly as given,
+as text, which is how the provider stores a `System.Decimal` itself, and SQLite's own arithmetic on
+them is by its affinity rules.
+
+**The marker scanner reads the text as the backend does.** A marker-shaped sequence inside a string
+literal, a quoted identifier (`"…"`, `` `…` ``, `[…]` where the backend has them), a comment (`--`,
+`/* */`, and `#` on MySQL and ClickHouse; nested where PostgreSQL and SQL Server nest them) or a
+PostgreSQL dollar-quoted string is left alone, and so is a separator. MySQL's `--` is a comment only
+before whitespace, and the body of its `/*! … */` runs, so it is scanned as code. The statement is
+refused, before it reaches the provider, when:
+
+- it holds a second statement after a `;`: **one statement per call**. A trailing `;` is admitted.
+  SQL Server runs a batch of statements with no separator between them, which a lexical check cannot
+  see; on that backend the rule covers the separated form, and the bound values themselves can never
+  add a statement;
+- a quoted run holds a backslash whose meaning a session setting decides (MySQL's `sql_mode`;
+  PostgreSQL's `standard_conforming_strings` outside an `E'…'` string), because the scanner cannot
+  know which reading the server will apply;
+- it uses the backend's own marker syntax (`$1`, `:name`, `?`), which would bind outside the
+  statement's parameter list;
+- a marker has no parameter (`MissingParameter`), or a parameter has no marker (`UnusedParameter`).
+
+A statement's `Timeout` is the command's, overriding `command_timeout_seconds`.
 
 ## Queries and output
 
@@ -162,9 +211,23 @@ reason 2 stops being the whole story.
 
 ## Testing
 
-The pure surface — backend parsing, catalogue SQL for all three dialect shapes, connection-string
-composition, statement resolution, identifier refusal and type classification — is covered by the
-always-on arm of `src/ToolUp.DataSources.Tests`, which needs no database.
+The pure surface — backend parsing, catalogue statements for all three dialect shapes, the marker
+scanner and its translation per backend, connection-string composition, statement resolution,
+identifier refusal and type classification — is covered by the always-on arm of
+`src/ToolUp.DataSources.Tests`, which needs no database. The binding laws of the data source contract
+pack (`IDataSourceContract.bindingLaws`) run there too, against an in-memory SQLite database, always.
+
+The five server backends run the same laws as armed legs, one variable each, holding the connection
+string of a **scratch** database: the laws seed one table (`kept`) and drop it again. With the
+variable unset the leg reports `Pending`, naming it.
+
+| Variable | Backend |
+|---|---|
+| `TOOLUP_SQL_BIND_POSTGRES` | PostgreSQL |
+| `TOOLUP_SQL_BIND_MYSQL` | MySQL / MariaDB |
+| `TOOLUP_SQL_BIND_SQLSERVER` | SQL Server |
+| `TOOLUP_SQL_BIND_ORACLE` | Oracle |
+| `TOOLUP_SQL_BIND_CLICKHOUSE` | ClickHouse |
 
 The remote arm binds `RemoteDataSourceContract` against a real server when these are set. It is
 **read-only** — it creates nothing, writes nothing and drops nothing:
