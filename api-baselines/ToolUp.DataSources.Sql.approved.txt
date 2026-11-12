@@ -3,6 +3,14 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.DataSources.Sql.BackendStatement (class)
+ToolUp.DataSources.Sql.BackendStatement..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Sql.ProviderBinding])
+ToolUp.DataSources.Sql.BackendStatement.Bindings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Sql.ProviderBinding] { get }
+ToolUp.DataSources.Sql.BackendStatement.Text : System.String { get }
+ToolUp.DataSources.Sql.ProviderBinding (class)
+ToolUp.DataSources.Sql.ProviderBinding..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.BoundValue)
+ToolUp.DataSources.Sql.ProviderBinding.Name : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.DataSources.Sql.ProviderBinding.Value : ToolUp.Platform.BoundValue { get }
 ToolUp.DataSources.Sql.SqlBackend (class)
 ToolUp.DataSources.Sql.SqlBackend.ClickHouse : ToolUp.DataSources.Sql.SqlBackend { get }
 ToolUp.DataSources.Sql.SqlBackend.IsClickHouse : System.Boolean { get }
@@ -24,6 +32,11 @@ ToolUp.DataSources.Sql.SqlBackend+Tags.Oracle : System.Int32 (literal)
 ToolUp.DataSources.Sql.SqlBackend+Tags.PostgreSql : System.Int32 (literal)
 ToolUp.DataSources.Sql.SqlBackend+Tags.SqlServer : System.Int32 (literal)
 ToolUp.DataSources.Sql.SqlBackend+Tags.Sqlite : System.Int32 (literal)
+ToolUp.DataSources.Sql.SqlBinding (class)
+ToolUp.DataSources.Sql.SqlBinding.bindableKinds(ToolUp.DataSources.Sql.SqlBackend) : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DatasetDType]
+ToolUp.DataSources.Sql.SqlBinding.clickHouseType(ToolUp.Platform.BoundValue) : System.String
+ToolUp.DataSources.Sql.SqlBinding.scan(ToolUp.DataSources.Sql.SqlBackend, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Sql.StatementPiece], System.String]
+ToolUp.DataSources.Sql.SqlBinding.translate(ToolUp.DataSources.Sql.SqlBackend, ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Sql.BackendStatement, ToolUp.Platform.Infra.BoundStatementError]
 ToolUp.DataSources.Sql.SqlDataSource (class)
 ToolUp.DataSources.Sql.SqlDataSource.Kind : System.String (literal)
 ToolUp.DataSources.Sql.SqlDataSource.composeConnectionString(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String
@@ -41,13 +54,23 @@ ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings.Schema : Microsoft.FSharp
 ToolUp.DataSources.Sql.SqlDialect (class)
 ToolUp.DataSources.Sql.SqlDialect.acceptedBackends : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.DataSources.Sql.SqlDialect.backendName(ToolUp.DataSources.Sql.SqlBackend) : System.String
-ToolUp.DataSources.Sql.SqlDialect.columnsSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Sql.SqlDialect.columnsSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BoundStatement, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDialect.defaultSchema(ToolUp.DataSources.Sql.SqlBackend) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.DataSources.Sql.SqlDialect.isSafeIdentifier(System.String) : System.Boolean
-ToolUp.DataSources.Sql.SqlDialect.listTablesSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Sql.SqlDialect.listTablesSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BoundStatement, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDialect.nullableFromToken(ToolUp.DataSources.Sql.SqlBackend, System.String) : System.Boolean
 ToolUp.DataSources.Sql.SqlDialect.parseBackend(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Sql.SqlBackend, ToolUp.Platform.IngestionError]
-ToolUp.DataSources.Sql.SqlDialect.quoteLiteral(System.String) : System.String
 ToolUp.DataSources.Sql.SqlDialect.requireIdentifier(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDialect.selectAllSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDialect.toColumnType(ToolUp.DataSources.Sql.SqlBackend, System.String) : DataManagementTypes+ColumnType
+ToolUp.DataSources.Sql.StatementPiece (class)
+ToolUp.DataSources.Sql.StatementPiece.IsMarker : System.Boolean { get }
+ToolUp.DataSources.Sql.StatementPiece.IsVerbatim : System.Boolean { get }
+ToolUp.DataSources.Sql.StatementPiece.Tag : System.Int32 { get }
+ToolUp.DataSources.Sql.StatementPiece+Marker (class)
+ToolUp.DataSources.Sql.StatementPiece+Marker.name : System.String { get }
+ToolUp.DataSources.Sql.StatementPiece+Tags (class)
+ToolUp.DataSources.Sql.StatementPiece+Tags.Marker : System.Int32 (literal)
+ToolUp.DataSources.Sql.StatementPiece+Tags.Verbatim : System.Int32 (literal)
+ToolUp.DataSources.Sql.StatementPiece+Verbatim (class)
+ToolUp.DataSources.Sql.StatementPiece+Verbatim.text : System.String { get }

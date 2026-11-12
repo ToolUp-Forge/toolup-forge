@@ -12,6 +12,7 @@ let private registeredTests =
     testList "ToolUp.DataSources.Tests" [
         ConnectorSupportTests.tests
         SqlDataSourceTests.tests
+        SqlBindingTests.tests
         BigQueryDataSourceTests.tests
         AthenaDataSourceTests.tests
         RedshiftDataSourceTests.tests
