@@ -172,6 +172,7 @@ let private series (metric: string) (points: FactSeriesPoint list) : FactSeries 
                         Count = withheld
                     }
                 ]
+        View = None
     }
 
 let private id (subject: string) (d: int) = sprintf "fact-%s-%d" subject d
