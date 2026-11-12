@@ -2,7 +2,7 @@
 // Copyright (c) Eugene Tolmachev and Fable.Elmish contributors
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Elmish
+namespace ToolUp.Elmish.Kernel
 
 [<Struct>]
 type internal RingState<'item> =
@@ -10,18 +10,16 @@ type internal RingState<'item> =
     | ReadWritable of rw: 'item array * wix: int * rix: int
 
 /// Bounded ring buffer used by the dispatch loop to defer reentrant
-/// `dispatch` calls. Capacity defaults to 10 (matches upstream) and
-/// auto-grows on overflow. Capacity is configurable per-program via
-/// `Program.withRingBufferCapacity` — apps that synchronously dispatch >10
-/// follow-up messages from a single `update` no longer need to fork the
-/// runtime.
+/// `dispatch` calls. Auto-grows on overflow; the host chooses the initial
+/// capacity (ToolUp.Elmish defaults it to 10, matching upstream, and lets a
+/// program set it with `Program.withRingBufferCapacity`).
 ///
-/// Phase 788 — proved a FIFO queue through every grow
-/// (`proofs/ElmishRing.fst`, `ring_is_queue`): every pushed item is popped
-/// exactly once, in push order, and never as one of the placeholder slots
-/// below. The differential host runs the extracted model beside this
-/// class on both runtimes.
-type internal RingBuffer<'item>(size) =
+/// Proved a FIFO queue through every grow (`proofs/ElmishRing.fst`,
+/// `ring_is_queue`): every pushed item is popped exactly once, in push
+/// order, and never as one of the placeholder slots below. The
+/// differential host runs the extracted model beside this class on both
+/// runtimes.
+type RingBuffer<'item>(size) =
     let doubleSize ix (items: 'item array) =
         seq {
             yield! items |> Seq.skip ix
@@ -44,16 +42,15 @@ type internal RingBuffer<'item>(size) =
         Writable(Array.zeroCreate (max size RingBuffer<'item>.MinimumCapacity), 0)
 
     /// The capacity floor — the ONE number, read by this constructor and by
-    /// `Program.withRingBufferCapacity`, and the precondition every ring
-    /// theorem carries (`ElmishRing.minimum_capacity`). Two slots, not one:
-    /// at one slot the `ReadWritable` state cannot tell one unread slot
-    /// from none (`wix = rix` in both) and the second push overwrites the
-    /// first item before the grow step runs — `capacity_one_loses_an_item`
-    /// in the model is that execution, computed. Before Phase 788 this
-    /// constructor floored at 10 while `withRingBufferCapacity` floored at
-    /// 1 and documented per-program configurability; both now read this.
+    /// the host's capacity setter, and the precondition every ring theorem
+    /// carries (`ElmishRing.minimum_capacity`). Two slots, not one: at one
+    /// slot the `ReadWritable` state cannot tell one unread slot from none
+    /// (`wix = rix` in both) and the second push overwrites the first item
+    /// before the grow step runs — `capacity_one_loses_an_item` in the model
+    /// is that execution, computed.
     static member MinimumCapacity: int = 2
 
+    /// Take the oldest unread item, or `None` when the ring is empty.
     member __.Pop() =
         match state with
         | ReadWritable(items, wix, rix) ->
@@ -66,6 +63,8 @@ type internal RingBuffer<'item>(size) =
             Some items.[rix]
         | _ -> None
 
+    /// Append an item, growing the backing array when the write head would
+    /// reach the read head.
     member __.Push(item: 'item) =
         match state with
         | Writable(items, ix) ->

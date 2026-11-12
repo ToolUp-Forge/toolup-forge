@@ -31,6 +31,7 @@ toolup-forge/
 │   ├── ToolUp.Platform.{Core,Server,Client,Build}/   # core SDK; Server is the umbrella over the six parts below
 │   ├── ToolUp.Platform.Server.{Remoting,Infra,Config,Scope,Jobs,Audit}/ # the server tier's part assemblies (sources stay under ToolUp.Platform.Server/)
 │   ├── ToolUp.Platform.UI/                           # the standalone UI toolkit (Feliz component library)
+│   ├── ToolUp.Elmish.Kernel/                         # the proved core of the ToolUp.Elmish runtime: ring, subscription diff, loop step machine (FSharp.Core only)
 │   ├── ToolUp.AI.{Core,Server,Client}/               # AI agent loop + SSE + tools
 │   ├── ToolUp.Platform.Transport/                    # lowest tier: HTTP seam, RetryPolicy, retry loop (FSharp.Core only)
 │   ├── ToolUp.AI.Wire{,.Conformance}/                # AI wire format + conformance fixtures

@@ -111,6 +111,7 @@
 module ToolUp.Platform.Tests.Client.ElmishLoopDifferential
 
 open ToolUp.Elmish
+open ToolUp.Elmish.Kernel
 open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 
 // ─── The script ──────────────────────────────────────────────────────

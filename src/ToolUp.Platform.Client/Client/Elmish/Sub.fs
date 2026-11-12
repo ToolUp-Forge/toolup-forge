@@ -5,6 +5,7 @@
 namespace ToolUp.Elmish
 
 open System
+open ToolUp.Elmish.Kernel
 
 /// SubId — Subscription ID, alias for `string list`.
 type SubId = string list
@@ -36,86 +37,43 @@ module Sub =
         sub
         |> List.map (fun (subId, subscribe) -> idPrefix :: subId, (fun dispatch -> subscribe (f >> dispatch)))
 
+    /// The subscription diff and the step that applies it, as the runtime
+    /// runs them: each name here is the kernel's
+    /// (`ToolUp.Elmish.Kernel.Subscriptions`, proved against
+    /// `proofs/ElmishSub.fst`), kept under its upstream path.
     module Internal =
 
         module SubId =
-            let toString (subId: SubId) = String.Join("/", subId)
+            let toString (subId: SubId) = Subscriptions.SubId.toString subId
 
         module Fx =
 
-            let warnDupe onError subId =
-                let ex = exn "Duplicate SubId"
-                onError ("Duplicate SubId: " + SubId.toString subId, ex)
+            let warnDupe onError subId = Subscriptions.Fx.warnDupe onError subId
 
             let tryStop onError (subId, sub: IDisposable) =
-                try
-                    sub.Dispose()
-                with ex ->
-                    onError ("Error stopping subscription: " + SubId.toString subId, ex)
+                Subscriptions.Fx.tryStop onError (subId, sub)
 
             let tryStart onError dispatch (subId, start) : (SubId * IDisposable) option =
-                try
-                    Some(subId, start dispatch)
-                with ex ->
-                    onError ("Error starting subscription: " + SubId.toString subId, ex)
-                    None
+                Subscriptions.Fx.tryStart onError dispatch (subId, start)
 
-            let stop onError subs = subs |> List.iter (tryStop onError)
+            let stop onError subs = Subscriptions.Fx.stop onError subs
 
             /// Apply a diff: warn the duplicates, stop what is no longer
             /// asked for, start what is new, and return the next active
-            /// list. `terminated` is the loop's flag, read before EACH
-            /// start (Phase 900): a start function may call
-            /// `IDispatcher.Terminate`, and the teardown that runs then
-            /// stops the active list as it stood BEFORE this diff and never
-            /// runs again — so a start made after it would be held by
-            /// nobody. Once the flag is set, nothing further is started,
-            /// what this call had already started is stopped, and the next
-            /// active list is empty: a terminated program holds nothing.
-            /// Until 900 every entry of `toStart` was started whatever the
-            /// flag said, and the loop assigned the lot to the stopped set.
+            /// list, reading `terminated` before each start; once it is set
+            /// nothing further starts and the next active list is empty.
             let change onError dispatch (terminated: unit -> bool) (dupes, toStop, toKeep, toStart) =
-                dupes |> List.iter (warnDupe onError)
-                toStop |> List.iter (tryStop onError)
-
-                let started =
-                    toStart
-                    |> List.choose (fun sub ->
-                        if terminated () then
-                            None
-                        else
-                            tryStart onError dispatch sub)
-
-                if terminated () then
-                    stop onError started
-                    []
-                else
-                    List.append toKeep started
+                Subscriptions.Fx.change onError dispatch terminated (dupes, toStop, toKeep, toStart)
 
         module NewSubs =
 
-            let (_dupes, _newKeys, _newSubs) as init = List.empty, Set.empty, List.empty
+            let (_dupes, _newKeys, _newSubs) as init = Subscriptions.NewSubs.init
 
             let update (subId, start) (dupes, newKeys, newSubs) =
-                if Set.contains subId newKeys then
-                    subId :: dupes, newKeys, newSubs
-                else
-                    dupes, Set.add subId newKeys, (subId, start) :: newSubs
+                Subscriptions.NewSubs.update (subId, start) (dupes, newKeys, newSubs)
 
-            let calculate subs = List.foldBack update subs init
+            let calculate subs = Subscriptions.NewSubs.calculate subs
 
-        let empty = List.empty<SubId * IDisposable>
+        let empty = Subscriptions.empty
 
-        let diff (activeSubs: (SubId * IDisposable) list) (sub: Sub<'msg>) =
-            let keys = activeSubs |> List.map fst |> Set.ofList
-            let dupes, newKeys, newSubs = NewSubs.calculate sub
-
-            if keys = newKeys then
-                dupes, [], activeSubs, []
-            else
-                let toKeep, toStop =
-                    activeSubs |> List.partition (fun (k, _) -> Set.contains k newKeys)
-
-                let toStart = newSubs |> List.filter (fun (k, _) -> not (Set.contains k keys))
-
-                dupes, toStop, toKeep, toStart
+        let diff (activeSubs: (SubId * IDisposable) list) (sub: Sub<'msg>) = Subscriptions.diff activeSubs sub

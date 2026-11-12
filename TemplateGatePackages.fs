@@ -39,6 +39,9 @@ let templates = [
     // ToolUp.Platform.UI the scratch feed cannot serve, and the NU1603
     // escalation would fail the gate by name.
     TemplateGate.package "ToolUp.Platform.UI" "src/ToolUp.Platform.UI/ToolUp.Platform.UI.fsproj"
+    // Also declared by Platform.Client: the proved runtime kernel the
+    // ToolUp.Elmish runtime wraps.
+    TemplateGate.package "ToolUp.Elmish.Kernel" "src/ToolUp.Elmish.Kernel/ToolUp.Elmish.Kernel.fsproj"
     // Also declared by Platform.Client, since Phase 344 promoted the
     // AG Grid / AG Charts bindings out of the client tier. They were
     // not added here at the time, and the consequence is not benign:
