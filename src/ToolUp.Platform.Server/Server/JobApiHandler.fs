@@ -67,12 +67,6 @@ type WireSchedulableJobHandler = {
 let declareWireSchedulable (handler: string) (services: IServiceCollection) : IServiceCollection =
     services.AddSingleton<WireSchedulableJobHandler>({ Handler = handler })
 
-/// The handlers `services` declares wire-schedulable.
-let wireSchedulable (services: IServiceProvider) : Set<string> =
-    match services.GetService(typeof<seq<WireSchedulableJobHandler>>) with
-    | :? seq<WireSchedulableJobHandler> as declared -> declared |> Seq.map _.Handler |> Set.ofSeq
-    | _ -> Set.empty
-
 /// The `HttpContext.Items` key the scope-resolution middleware records the
 /// request's `ResolvedScope` under (`ScopeResolution.ItemsKey`, which
 /// compiles after this file). Only a `ResolvedScope` value is honoured there.
@@ -96,7 +90,11 @@ let jobApi (ctx: HttpContext) : JobApi =
         AccessContext.configScope accessContext
         |> Option.filter (fun scope -> scope.ScopeId <> ScopeKey.PlatformContainer)
 
-    let declared = wireSchedulable ctx.RequestServices
+    // The handlers the deployment declared wire-schedulable.
+    let declared =
+        match ctx.RequestServices.GetService(typeof<seq<WireSchedulableJobHandler>>) with
+        | :? seq<WireSchedulableJobHandler> as handlers -> handlers |> Seq.map _.Handler |> Set.ofSeq
+        | _ -> Set.empty
 
     // Phase 930 — the scope the middleware resolved and recorded for this
     // request. `ScopeResolution.forRequest` compiles after this file, so the

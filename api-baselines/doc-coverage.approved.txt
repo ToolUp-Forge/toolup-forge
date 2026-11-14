@@ -145,7 +145,7 @@ ToolUp.Platform.Server 3113/5586
 ToolUp.Platform.Server.Audit 376/696
 ToolUp.Platform.Server.Config 396/662
 ToolUp.Platform.Server.Infra 2271/3878
-ToolUp.Platform.Server.Jobs 930/1740
+ToolUp.Platform.Server.Jobs 929/1739
 ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 457/827
 ToolUp.Platform.Testing 166/339
