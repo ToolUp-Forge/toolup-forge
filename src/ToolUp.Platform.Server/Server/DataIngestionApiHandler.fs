@@ -53,7 +53,15 @@ let private decodeOAuthRefreshPayload<'T> (json: string) : 'T option =
 // mode (via `TeamRoles.canWriteTeamConfig`). Read paths
 // (`ListDataSources`, `GetDataSource`, `ListRecentRuns`) are
 // ungated within the caller's scope — any team member can inspect
-// the team's data sources.
+// the team's data sources — but a reader who fails the write gate
+// reads each secret-bearing `ConnectionScope` key redacted
+// (`DataSourceConfigWire.forReader`).
+//
+// **The container is the platform's.** `SaveDataSource` refuses a
+// config that sets `ConnectionScope["container"]` and records the
+// caller's own scope container in its place; reads never return it. The
+// file connectors read only a container their call's scope owns, so a
+// config at rest that names another one is refused when it runs.
 
 let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
 
@@ -124,7 +132,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
         | _ -> return Ok()
     }
 
-    let withWriteScope (f: IDataSourceConfigStore -> string -> Async<Result<'T, string>>) = async {
+    let withWriteScope (f: IDataSourceConfigStore -> StorageScope -> Async<Result<'T, string>>) = async {
         match configStore, scopeOpt with
         | None, _ -> return Error "Data ingestion is not enabled in this deployment."
         | _, None -> return Error "Data ingestion requires a persistent scope (sign in or join a team)."
@@ -133,38 +141,53 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
 
             match rbac with
             | Error msg -> return Error msg
-            | Ok() -> return! f s scope.ScopeId
+            | Ok() -> return! f s scope
+    }
+
+    /// The configs as this caller reads them: redacted unless it passes
+    /// the write gate.
+    let forReader (configs: DataSourceConfig list) : Async<DataSourceConfig list> = async {
+        match configs with
+        | [] -> return []
+        | _ ->
+            let! gate = ensureWriteAllowed ()
+            return configs |> List.map (DataSourceConfigWire.forReader (Result.isOk gate))
     }
 
     {
         ListDataSources =
             fun () -> async {
                 match configStore, scopeOpt with
-                | Some s, Some scope -> return! s.List scope.ScopeId
+                | Some s, Some scope ->
+                    let! configs = s.List scope.ScopeId
+                    return! forReader configs
                 | _ -> return []
             }
 
         GetDataSource =
             fun sourceId -> async {
                 match configStore, scopeOpt with
-                | Some s, Some scope -> return! s.Get(scope.ScopeId, sourceId)
+                | Some s, Some scope ->
+                    let! config = s.Get(scope.ScopeId, sourceId)
+                    let! read = forReader (Option.toList config)
+                    return List.tryHead read
                 | _ -> return None
             }
 
         SaveDataSource =
             fun config ->
-                withWriteScope (fun s scopeId -> async {
-                    // Reject mismatched ids — admin UI sends the
-                    // source's intended id; the handler enforces
-                    // it matches what the scope sees.
-                    do! s.Save(scopeId, config)
-                    return Ok()
+                withWriteScope (fun s scope -> async {
+                    match DataSourceConfigWire.forSave scope.Container config with
+                    | Error refusal -> return Error refusal
+                    | Ok stored ->
+                        do! s.Save(scope.ScopeId, stored)
+                        return Ok()
                 })
 
         DeleteDataSource =
             fun sourceId ->
-                withWriteScope (fun s scopeId -> async {
-                    do! s.Delete(scopeId, sourceId)
+                withWriteScope (fun s scope -> async {
+                    do! s.Delete(scope.ScopeId, sourceId)
                     return Ok()
                 })
 
@@ -225,7 +248,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
 
         BeginOAuth =
             fun (sourceId, flowName) ->
-                withWriteScope (fun s scopeId -> async {
+                withWriteScope (fun s { StorageScope.ScopeId = scopeId } -> async {
                     // Look-before-you-leap validation. /authorize
                     // re-checks RBAC + flow + config, but doing it
                     // here lets the admin UI surface a synchronous
@@ -284,7 +307,9 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
 
         Disconnect =
             fun sourceId ->
-                withWriteScope (fun _ scopeId -> async {
+                withWriteScope (fun _ scope -> async {
+                    let scopeId = scope.ScopeId
+
                     let blob =
                         match ctx.RequestServices.GetService(typeof<IBlobStorage>) with
                         | :? IBlobStorage as b -> Some b
@@ -299,12 +324,10 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                     | None, _ -> return Error "Blob storage is not registered."
                     | _, None -> return Error "Secret store is not registered."
                     | Some storage, Some secrets ->
-                        // Resolve the data source's scope container
-                        // for the secret-store key. We need it for
-                        // both the secret read (revocation) and
-                        // delete (cleanup).
-                        let containerForScope =
-                            scopeOpt |> Option.map _.Container |> Option.defaultValue scopeId
+                        // The data source's scope container keys the
+                        // secret store, for both the secret read
+                        // (revocation) and the delete (cleanup).
+                        let containerForScope = scope.Container
 
                         let! metaOpt = OAuthFlowHandler.loadCredentialMetadata storage scopeId sourceId
 

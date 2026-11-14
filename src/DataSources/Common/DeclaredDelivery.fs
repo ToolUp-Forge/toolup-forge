@@ -75,8 +75,9 @@ type DeclaredDeliveryRefusal =
     /// A watched source's connector does not declare a watch
     /// (`ConnectorCapabilities.Watchable`).
     | NotWatchable of sourceId: DataSourceId * kind: string
-    /// A watched source's config sets the container or prefix itself; a
-    /// watch reads its principal's scope container at its declared location.
+    /// A watched source's config sets the container or prefix itself, or a
+    /// pulled file source's config sets the container: a file source reads
+    /// its principal's scope container (a watch at its declared location).
     | LocationInConfig of sourceId: DataSourceId * key: string
     /// The watched location is not a prefix within the scope container.
     | InvalidLocation of sourceId: DataSourceId * location: string * reason: string
@@ -127,7 +128,7 @@ module DeclaredDeliveryRefusal =
         | NotWatchable(sourceId, kind) ->
             $"declared data source '{sourceId}' is watched, but its connector '{kind}' is not a file connector a location can be watched through"
         | LocationInConfig(sourceId, key) ->
-            $"declared data source '{sourceId}' is watched, and its config sets '{key}' itself — a watch reads its principal's scope container at its declared location"
+            $"declared data source '{sourceId}' sets '{key}' in its config itself — a file source reads its principal's scope container, and a watch reads it at its declared location"
         | InvalidLocation(sourceId, location, reason) ->
             $"declared data source '{sourceId}': watched location '{location}' {reason}"
         | PrincipalUnresolved(sourceId, principal, missing) ->
@@ -410,6 +411,13 @@ module DeclaredDelivery =
         | Ok _ -> None
         | Error reason -> Some(InvalidCadence(sourceId, cadence, reason))
 
+    /// A file connector is one a location can be watched through: it
+    /// reads files from a storage container, which is always its
+    /// principal's own.
+    let private isFileConnector (connectors: Map<string, ConnectorCapabilities>) (kind: string) =
+        connectors.TryFind kind
+        |> Option.exists (ConnectorCapabilities.declares ConnectorCapability.Watchable)
+
     /// The refusals a declaration set earns before anything is resolved.
     let private shapeRefusals
         (connectors: Map<string, ConnectorCapabilities>)
@@ -439,6 +447,12 @@ module DeclaredDelivery =
                     if not (connectors.ContainsKey d.Source.Kind) then
                         UnknownConnector(sourceId, d.Source.Kind)
 
+                    if
+                        isFileConnector connectors d.Source.Kind
+                        && d.Source.ConnectionScope.ContainsKey DataSourceConfigWire.ContainerKey
+                    then
+                        LocationInConfig(sourceId, DataSourceConfigWire.ContainerKey)
+
                     yield! cadenceRefusal sourceId cadence |> Option.toList
 
                     match d.Source.Tables with
@@ -455,7 +469,7 @@ module DeclaredDelivery =
                         ()
                     | Some _ -> NotWatchable(sourceId, d.Source.Kind)
 
-                    for key in [ "container"; "prefix" ] do
+                    for key in [ DataSourceConfigWire.ContainerKey; "prefix" ] do
                         if d.Source.ConnectionScope.ContainsKey key then
                             LocationInConfig(sourceId, key)
 
@@ -474,21 +488,31 @@ module DeclaredDelivery =
 
     // ── Check ────────────────────────────────────────────────────────
 
-    /// The config a source is seeded with under `storage`: a watch's
-    /// container is the principal's scope container and its prefix the
-    /// declared location, so it reads only what lands in that scope.
-    let private seededConfig (d: DeclaredDataSource) (storage: StorageScope) : DataSourceConfig =
+    /// The config a source is seeded with under `storage`: a file
+    /// source's container is the principal's scope container, and a
+    /// watch's prefix is its declared location, so it reads only what
+    /// lands in that scope.
+    let private seededConfig
+        (connectors: Map<string, ConnectorCapabilities>)
+        (d: DeclaredDataSource)
+        (storage: StorageScope)
+        : DataSourceConfig =
+        let located =
+            d.Source.ConnectionScope
+            |> Map.add DataSourceConfigWire.ContainerKey storage.Container
+
         match d.Delivery with
         | DataSourceDelivery.Watched(location, _) ->
             let prefix = watchedPrefix location |> Result.defaultValue ""
 
             {
                 d.Source with
-                    ConnectionScope =
-                        d.Source.ConnectionScope
-                        |> Map.add "container" storage.Container
-                        |> Map.add "prefix" prefix
+                    ConnectionScope = located |> Map.add "prefix" prefix
             }
+        | DataSourceDelivery.ScheduledPull _ when isFileConnector connectors d.Source.Kind -> {
+            d.Source with
+                ConnectionScope = located
+          }
         | DataSourceDelivery.Upload
         | DataSourceDelivery.ScheduledPull _ -> d.Source
 
@@ -511,7 +535,7 @@ module DeclaredDelivery =
                         Declared = d
                         Principal = principal
                         Scope = scope
-                        Config = seededConfig d storage
+                        Config = seededConfig observed.Connectors d storage
                     }
 
                 match d.Delivery with
@@ -873,7 +897,7 @@ module DeclaredDelivery =
                                     async {
                                         let ctx: DataSourceCallContext = {
                                             ScopeId = scope.ScopeId
-                                            Config = seededConfig d storage
+                                            Config = seededConfig connectors d storage
                                             Credential = None
                                         }
 

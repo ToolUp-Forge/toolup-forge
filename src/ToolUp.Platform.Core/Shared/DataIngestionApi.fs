@@ -20,21 +20,109 @@ namespace ToolUp.Platform
 // (`SaveDataSource`, `DeleteDataSource`, `TriggerRefresh`) require
 // Owner / Admin in `Team` / `MultiTeam` mode (via
 // `TeamRoles.canWriteTeamConfig`); other modes are ungated.
+//
+// **What a config carries on the wire (`DataSourceConfigWire`).** A
+// caller who fails the write gate reads every secret-bearing
+// `ConnectionScope` key with its value replaced by
+// `DataSourceConfigWire.RedactedValue`; the key itself stays, so a reader
+// can see the source has that setting. The `container` key is the
+// platform's: `SaveDataSource` refuses a config that carries one and
+// records the saving scope's own container, and no read returns it.
+
+/// How a data source's config crosses the wire: what a reader who
+/// cannot edit the source sees, and the one key the platform owns.
+[<RequireQualifiedAccess>]
+module DataSourceConfigWire =
+
+    /// The value a redacted key carries on the wire, in place of its own.
+    [<Literal>]
+    let RedactedValue = "<redacted>"
+
+    /// The `ConnectionScope` key that names a file connector's storage
+    /// container. The platform owns it: a saved config never sets it.
+    [<Literal>]
+    let ContainerKey = "container"
+
+    /// The secret-bearing `ConnectionScope` keys of the shipped
+    /// connectors: connector, key, and what the value can disclose.
+    /// Credentials proper never live in `ConnectionScope` (they are read
+    /// from the secret store by `CredentialKey`); these are the keys
+    /// through which secret material, or its location, can still arrive.
+    let secretKeys: (string * string * string) list = [
+        "Sql", "connection_string", "the database password, when it is written inline (Password= / Pwd=)"
+        "Snowflake", "private_key_file", "where the key-pair private key is stored"
+        "Redshift", "secret_arn", "which Secrets Manager secret holds the database credential"
+    ]
+
+    /// Name fragments that mark a key secret-bearing whatever connector
+    /// reads it, so a connector this table does not name (a consumer's,
+    /// or a shipped one registered under another `Kind`) is covered too.
+    let private secretMarkers = [
+        "password"
+        "pwd"
+        "secret"
+        "token"
+        "private_key"
+        "connection_string"
+        "api_key"
+        "apikey"
+    ]
+
+    /// Is `key` secret-bearing? A key named in `secretKeys`, or any key
+    /// whose name holds a marker, case-insensitively.
+    let isSecretKey (key: string) : bool =
+        let name = (if isNull key then "" else key).ToLowerInvariant()
+
+        secretKeys |> List.exists (fun (_, secret, _) -> secret = name)
+        || secretMarkers |> List.exists (fun marker -> name.Contains marker)
+
+    /// The config as a reader sees it. The platform-owned container never
+    /// leaves the server; a reader who fails the write gate
+    /// (`canWrite = false`) reads each secret-bearing key as
+    /// `RedactedValue`.
+    let forReader (canWrite: bool) (config: DataSourceConfig) : DataSourceConfig = {
+        config with
+            ConnectionScope =
+                config.ConnectionScope
+                |> Map.remove ContainerKey
+                |> Map.map (fun key value ->
+                    if canWrite || not (isSecretKey key) then
+                        value
+                    else
+                        RedactedValue)
+    }
+
+    /// The config as `SaveDataSource` stores it under the saving scope's
+    /// `container`, or the refusal naming the key when the caller set it.
+    let forSave (container: string) (config: DataSourceConfig) : Result<DataSourceConfig, string> =
+        if config.ConnectionScope.ContainsKey ContainerKey then
+            Error
+                $"ConnectionScope key '%s{ContainerKey}' is set by the platform: a data source reads only its own scope's container. Remove the key and save again."
+        else
+            Ok {
+                config with
+                    ConnectionScope = config.ConnectionScope |> Map.add ContainerKey container
+            }
 
 type IDataIngestionApi = {
-    /// List every data-source config in the caller's resolved scope.
+    /// List every data-source config in the caller's resolved scope, as
+    /// `DataSourceConfigWire.forReader` shapes it for the caller.
     /// Empty when `DataIngestion` is disabled for the deployment, or
     /// when no sources have been configured.
     [<AllowAnonymous>]
     ListDataSources: unit -> Async<DataSourceConfig list>
 
-    /// Read one data-source config by id. `None` for unknown ids —
-    /// does not throw.
+    /// Read one data-source config by id, as
+    /// `DataSourceConfigWire.forReader` shapes it for the caller. `None`
+    /// for unknown ids — does not throw.
     [<AllowAnonymous>]
     GetDataSource: DataSourceId -> Async<DataSourceConfig option>
 
     /// Persist a data-source config. Idempotent — re-saving the same
-    /// `Id` overwrites. Owner / Admin only in Team mode.
+    /// `Id` overwrites. Owner / Admin only in Team mode. A config that
+    /// sets `ConnectionScope["container"]` is refused; the platform
+    /// records the caller's own scope container instead
+    /// (`DataSourceConfigWire.forSave`).
     [<RequiresClaim "scope">]
     [<Audit "PolicyChanged">]
     SaveDataSource: DataSourceConfig -> Async<Result<unit, string>>

@@ -30,7 +30,7 @@ let private Prefix = "extracts/"
 
 let private context (sourceId: string) : DataSourceCallContext =
     TestFakes.config sourceId ParquetDataSource.Kind [ "container", container sourceId; "prefix", Prefix ]
-    |> TestFakes.context "test-scope" None
+    |> TestFakes.context sourceId None
 
 // ─── Fixture files ────────────────────────────────────────────────
 
@@ -129,7 +129,7 @@ let private typedFixture () =
         nullableStrings "label" [ "alpha"; null; "" ]
     ]
 
-let private ingestScope = "scope-837"
+let private ingestScope = "src"
 
 type private IngestRig = {
     Ingestor: IDataIngestor
@@ -479,13 +479,13 @@ let tests =
 
         testList "readSettings" [
             test "container is required" {
-                match ParquetDataSource.readSettings Map.empty with
+                match ParquetDataSource.readSettings "x" Map.empty with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "container" "names the missing key"
                 | other -> failtestf "Expected SchemaMismatch naming 'container'; got %A" other
             }
 
             test "the default extension is .parquet" {
-                match ParquetDataSource.readSettings (Map.ofList [ "container", "c" ]) with
+                match ParquetDataSource.readSettings "c" (Map.ofList [ "container", "team-c" ]) with
                 | Ok settings -> Expect.equal settings.File.Extension ".parquet" "default"
                 | Error err -> failtestf "readSettings failed: %A" err
             }

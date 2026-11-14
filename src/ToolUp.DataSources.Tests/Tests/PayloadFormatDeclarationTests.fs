@@ -148,10 +148,10 @@ let private ingestorTests =
 
         test "a NONE connector (CSV) ingests while the secret store throws on every read" {
             let storage = FakeBlobStorage.InMemoryBlobStorage()
-            storage.Put($"team-{sourceId}", $"exports/{table}.csv", Encoding.UTF8.GetBytes "id,total\r\n1,10\r\n")
+            storage.Put($"team-{scopeId}", $"exports/{table}.csv", Encoding.UTF8.GetBytes "id,total\r\n1,10\r\n")
 
             let config =
-                TestFakes.config sourceId CsvDataSource.Kind [ "container", $"team-{sourceId}"; "prefix", "exports/" ]
+                TestFakes.config sourceId CsvDataSource.Kind [ "container", $"team-{scopeId}"; "prefix", "exports/" ]
 
             let connector = CsvDataSource.create storage
 

@@ -27,8 +27,8 @@ backend.
 
 | Key | Required | Meaning |
 |---|---|---|
-| `container` | yes | Scope-derived container the workbooks live in. |
-| `prefix` | no | Blob-name prefix within the container. Omitted reads the container root. |
+| `container` | set by the platform | The scope container the workbooks live in. Never set by a caller: `SaveDataSource` refuses a config carrying it and records the saving scope's own container, and a declared delivery seeds its principal's. The connector reads it only when it is the container of the scope the call runs under (`team-{id}` / `user-{id}`), so `_platform`, any `_`-prefixed container and another scope's are refused. |
+| `prefix` | no | Blob-name prefix within the container. Omitted reads the container root. Refused when it holds `..` or starts with a separator. |
 | `extension` | no | Defaults to `.xlsx`. Set `xlsm` for macro-enabled workbooks. |
 | `sheet` | no | Default sheet name, applied when a table name carries no selector. |
 | `sheet_index` | no | Default sheet by 0-based position. Mutually exclusive with `sheet` — setting both is refused, because a disagreement between them has no correct reading. |
@@ -145,7 +145,8 @@ let ordersSource = {
     Id = "orders-xlsx"
     Name = "Weekly orders workbook"
     Kind = ExcelDataSource.Kind // "Excel"
-    ConnectionScope = Map.ofList [ "container", "team-acme"; "prefix", "inbox" ]
+    // No `container`: the platform records the saving scope's own.
+    ConnectionScope = Map.ofList [ "prefix", "inbox" ]
     CredentialKey = ""
     Tables = None
     Tags = Map.empty

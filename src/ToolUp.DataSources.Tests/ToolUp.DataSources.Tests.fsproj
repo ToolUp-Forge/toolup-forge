@@ -70,6 +70,7 @@
         <!-- Phase 1015 - a declared source's scheduled pull or watched location,
              run under its declared principal, end to end in process. -->
         <Compile Include="Tests\DeclaredDeliveryTests.fs" />
+        <Compile Include="FileSourceScopeTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

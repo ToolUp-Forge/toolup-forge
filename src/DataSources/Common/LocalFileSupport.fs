@@ -28,9 +28,22 @@ open ToolUp.Platform.Infra
 // **A source is a CONTAINER + PREFIX, and a table is a FILE in it.**
 // `ListTables` lists the container under the prefix and strips the
 // extension; `GetSchema` and `Query` map a table name back to its blob
-// name. That is what makes `ListTables` scope-isolated for free: the
-// container is scope-derived, so a source can never enumerate another
-// tenant's files.
+// name.
+//
+// **The container is the job scope's own, and the connector checks it.**
+// A config names its container in `ConnectionScope["container"]`, but
+// that key is not trusted: `readSettings` admits it only when it is the
+// container of the scope the call runs under (`team-{scopeId}` or
+// `user-{scopeId}`, as `ScopeKey` renders them), and refuses every other
+// value, `_platform` and any `_`-prefixed container among them. The key
+// is written by the platform, never by a caller: the declared-delivery
+// route seeds it from the principal's scope, and `SaveDataSource`
+// refuses a config that carries one and records the saving scope's
+// container itself. A config already at rest that names another scope
+// is refused when it runs. `prefix` and `extension` may not climb out
+// of the container (no `..`, no leading separator), and a table name
+// may not leave the prefix (`requireTableName`). So a source can never
+// enumerate or read another tenant's files, or the platform's.
 
 /// File acquisition and table↔blob naming for the file-shaped
 /// connectors.
@@ -40,8 +53,9 @@ module Files =
     /// file connector shares. Format-specific keys (`delimiter`,
     /// `sheet`, …) are read by the connector that owns them.
     type FileSourceSettings = {
-        /// Scope-derived container the files live in. Required — a
-        /// connector never invents one (GP 4).
+        /// The container the files live in: always the call's own scope
+        /// container, which `readSettings` has checked against the
+        /// scope id the call runs under (GP 4).
         Container: string
         /// Blob-name prefix within the container. `""` means the
         /// container root. A non-empty prefix is normalised to end
@@ -77,33 +91,81 @@ module Files =
         let trimmed = (if isNull raw then "" else raw).Replace('\\', '/').Trim().Trim('/')
         if trimmed = "" then "" else trimmed + "/"
 
-    /// Read the shared file-source keys. `defaultExtension` is the
-    /// connector's own (`.csv`, `.xlsx`, `.parquet`); an operator may
-    /// override it for a deployment whose exports carry a different
-    /// suffix.
+    let private refused (message: string) : Result<'T, IngestionError> = Error(SchemaMismatch message)
+
+    /// The container a call under `scopeId` may read: the configured one,
+    /// admitted only when it is that scope's own container — the team or
+    /// user scope of `scopeId`, read through `ScopeKey`. The platform's
+    /// reserved containers (`_platform`, and any `_`-prefixed name) and
+    /// every other scope's container are refused, so a saved config cannot
+    /// point a file connector anywhere its own scope does not own.
+    let scopeContainer (scopeId: string) (configured: string option) : Result<string, IngestionError> =
+        match configured with
+        | None ->
+            refused
+                "ConnectionScope has no 'container'. It is set by the platform, never by the caller: save the source through the data-ingestion API, or declare its delivery"
+        | Some container when container.StartsWith '_' ->
+            refused $"container '%s{container}' is reserved for the platform and is never readable by a data source"
+        | Some container ->
+            match ScopeKey.tryParseContainer container with
+            | Some(ScopeKey.Team teamId) when teamId.Value = scopeId -> Ok container
+            | Some(ScopeKey.User userId) when userId.Value = scopeId -> Ok container
+            | _ ->
+                refused
+                    $"container '%s{container}' is not the container of the scope this source runs under; a data source reads only its own scope's files"
+
+    /// A `prefix` or `extension` value, refused when it could leave the
+    /// container: it holds `..`, or it starts at a separator. `extension`
+    /// is held to the table-name rule as well, since it is concatenated onto
+    /// the table: no separator anywhere.
+    let private requireRelative (key: string) (anySeparator: bool) (raw: string) : Result<string, IngestionError> =
+        let value = if isNull raw then "" else raw.Trim()
+        let separator (c: char) = c = '/' || c = '\\'
+
+        if value.Contains ".." then
+            refused
+                $"ConnectionScope key '%s{key}' must stay within the container — '..' is not permitted; got '%s{value}'"
+        elif value.Length > 0 && separator value[0] then
+            refused $"ConnectionScope key '%s{key}' must not start with a separator; got '%s{value}'"
+        elif anySeparator && Seq.exists separator value then
+            refused $"ConnectionScope key '%s{key}' must not contain a separator; got '%s{value}'"
+        else
+            Ok value
+
+    /// Read the shared file-source keys for a call under `scopeId`.
+    /// `defaultExtension` is the connector's own (`.csv`, `.xlsx`,
+    /// `.parquet`); an operator may override it for a deployment whose
+    /// exports carry a different suffix. The container is admitted by
+    /// `scopeContainer`, so the settings this returns never name a
+    /// container outside the call's scope.
     let readSettings
         (defaultExtension: string)
+        (scopeId: string)
         (scope: Map<string, string>)
         : Result<FileSourceSettings, IngestionError> =
-        ConnectionScope.require scope "container"
+        scopeContainer scopeId (ConnectionScope.optional scope "container")
         |> Result.bind (fun container ->
-            ConnectionScope.optionalInt scope "sample_rows"
-            |> Result.bind (fun sample ->
-                let sampleRows = defaultArg sample DefaultSampleRows
+            requireRelative "prefix" false (ConnectionScope.optionalOr scope "prefix" "")
+            |> Result.bind (fun prefix ->
+                requireRelative "extension" true (ConnectionScope.optionalOr scope "extension" defaultExtension)
+                |> Result.bind (fun extension ->
+                    ConnectionScope.optionalInt scope "sample_rows"
+                    |> Result.bind (fun sample ->
+                        let sampleRows = defaultArg sample DefaultSampleRows
 
-                if sampleRows <= 0 then
-                    Error(SchemaMismatch $"ConnectionScope key 'sample_rows' must be positive; got %d{sampleRows}")
-                else
-                    Ok {
-                        Container = container
-                        Prefix = normalisePrefix (ConnectionScope.optionalOr scope "prefix" "")
-                        Extension = normaliseExtension (ConnectionScope.optionalOr scope "extension" defaultExtension)
-                        SampleRows = sampleRows
-                    }))
+                        if sampleRows <= 0 then
+                            refused $"ConnectionScope key 'sample_rows' must be positive; got %d{sampleRows}"
+                        else
+                            Ok {
+                                Container = container
+                                Prefix = normalisePrefix prefix
+                                Extension = normaliseExtension extension
+                                SampleRows = sampleRows
+                            }))))
 
     /// Reject a table name that could escape the configured prefix.
     ///
-    /// The container is scope-derived and therefore safe, but the
+    /// The container is the call's own (`scopeContainer`), but the
     /// TABLE name arrives from a persisted config or a `Query`
     /// statement, and it is concatenated onto the prefix. A name
     /// carrying `..` or a separator would address a blob outside the

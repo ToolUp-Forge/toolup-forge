@@ -322,14 +322,14 @@ let tests =
             let world = World()
             let analyst = world.TeamPrincipal "analyst"
             let scope = world.ScopeOf analyst
-            world.Store.Put("exports", "sales.csv", csvBytes [ "1,10"; "2,20" ])
+            world.Store.Put(scope.Storage.Value.Container, "sales.csv", csvBytes [ "1,10"; "2,20" ])
 
             let report =
                 seeded world {
                     Principals = [ analyst ]
                     Sources = [
                         {
-                            Source = csvSource "sales" [ "container", "exports" ] (Some [ "sales" ])
+                            Source = csvSource "sales" [] (Some [ "sales" ])
                             Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "analyst")
                         }
                     ]
@@ -450,7 +450,7 @@ let tests =
                 Principals = [ stranger ]
                 Sources = [
                     {
-                        Source = csvSource "sales" [ "container", "exports" ] (Some [ "sales" ])
+                        Source = csvSource "sales" [] (Some [ "sales" ])
                         Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "stranger")
                     }
                 ]
@@ -596,6 +596,12 @@ let tests =
                                 (DataSourceDelivery.ScheduledPull("0 6 * * *", "p"))
                             source "warehouse" "Sql" [] None (DataSourceDelivery.Watched("in", "p"))
                             source "located" "Csv" [ "container", "mine" ] None (DataSourceDelivery.Watched("in", "p"))
+                            source
+                                "pulled-located"
+                                "Csv"
+                                [ "container", "mine" ]
+                                (Some [ "t" ])
+                                (DataSourceDelivery.ScheduledPull("0 6 * * *", "p"))
                             source "climbing" "Csv" [] None (DataSourceDelivery.Watched("in/../../x", "p"))
                             source "twice" "Csv" [] None DataSourceDelivery.Upload
                             source "twice" "Csv" [] None DataSourceDelivery.Upload
@@ -629,6 +635,10 @@ let tests =
             has ((=) (LocationInConfig("located", "container"))) "a watch whose config locates itself"
 
             has
+                ((=) (LocationInConfig("pulled-located", "container")))
+                "a pulled file source whose config names its container"
+
+            has
                 (function
                 | InvalidLocation("climbing", _, _) -> true
                 | _ -> false)
@@ -648,7 +658,7 @@ let tests =
                 Principals = [ p ]
                 Sources = [
                     {
-                        Source = csvSource "sales" [ "container", "exports" ] (Some [ "sales" ])
+                        Source = csvSource "sales" [] (Some [ "sales" ])
                         Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
                     }
                 ]
@@ -674,7 +684,7 @@ let tests =
                 Principals = [ p ]
                 Sources = [
                     {
-                        Source = csvSource "sales" [ "container", "exports" ] (Some tables)
+                        Source = csvSource "sales" [] (Some tables)
                         Delivery = DataSourceDelivery.ScheduledPull(cadence, "p")
                     }
                 ]
@@ -712,7 +722,7 @@ let tests =
             let world = World()
             let p = world.TeamPrincipal "p"
             let scope = world.ScopeOf p
-            let source = csvSource "sales" [ "container", "exports" ] (Some [ "sales" ])
+            let source = csvSource "sales" [] (Some [ "sales" ])
 
             seeded world {
                 Principals = [ p ]
@@ -784,7 +794,7 @@ let tests =
                 }
 
                 let pull id = {
-                    Source = csvSource id [ "container", "exports" ] (Some [ "t" ])
+                    Source = csvSource id [] (Some [ "t" ])
                     Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
                 }
 
@@ -854,11 +864,11 @@ let tests =
                     Principals = [ p ]
                     Sources = [
                         {
-                            Source = csvSource "good" [ "container", "exports" ] (Some [ "t" ])
+                            Source = csvSource "good" [] (Some [ "t" ])
                             Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
                         }
                         {
-                            Source = csvSource "bad" [ "container", "exports" ] (Some [ "t" ])
+                            Source = csvSource "bad" [] (Some [ "t" ])
                             Delivery = DataSourceDelivery.ScheduledPull("whenever", "p")
                         }
                     ]
@@ -902,7 +912,7 @@ let tests =
                     Principals = [ p; loader ]
                     Sources = [
                         {
-                            Source = csvSource "sales" [ "container", "exports" ] (Some [ "sales"; "returns" ])
+                            Source = csvSource "sales" [] (Some [ "sales"; "returns" ])
                             Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
                         }
                         {

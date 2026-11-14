@@ -81,9 +81,11 @@ let private DefaultExtension = ".xlsx"
 [<Literal>]
 let SelectorSeparator = '#'
 
-/// Read and validate one call's `ConnectionScope`. Pure.
-let readSettings (scope: Map<string, string>) : Result<ExcelSourceSettings, IngestionError> =
-    Files.readSettings DefaultExtension scope
+/// Read and validate the `ConnectionScope` of one call running under
+/// `scopeId`. Pure. The container must be that scope's own
+/// (`Files.scopeContainer`).
+let readSettings (scopeId: string) (scope: Map<string, string>) : Result<ExcelSourceSettings, IngestionError> =
+    Files.readSettings DefaultExtension scopeId scope
     |> Result.bind (fun file ->
         ConnectionScope.optionalBool scope "has_header"
         |> Result.bind (fun hasHeader ->
@@ -503,7 +505,7 @@ type private ExcelDataSourceImpl(storage: IBlobStorage) =
         (body: ExcelSourceSettings -> Async<Result<'T, IngestionError>>)
         : Async<Result<'T, IngestionError>> =
         Errors.guard context (fun () -> async {
-            match readSettings ctx.Config.ConnectionScope with
+            match readSettings ctx.ScopeId ctx.Config.ConnectionScope with
             | Error err -> return Error err
             | Ok settings -> return! body settings
         })

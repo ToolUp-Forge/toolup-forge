@@ -90,8 +90,8 @@ backend.
 
 | Key | Required | Meaning |
 |---|---|---|
-| `container` | yes | Scope-derived container the extracts live in. |
-| `prefix` | no | Blob-name prefix within the container. Omitted reads the container root. |
+| `container` | set by the platform | The scope container the extracts live in. Never set by a caller: `SaveDataSource` refuses a config carrying it and records the saving scope's own container, and a declared delivery seeds its principal's. The connector reads it only when it is the container of the scope the call runs under (`team-{id}` / `user-{id}`), so `_platform`, any `_`-prefixed container and another scope's are refused. |
+| `prefix` | no | Blob-name prefix within the container. Omitted reads the container root. Refused when it holds `..` or starts with a separator. |
 | `extension` | no | Defaults to `.parquet`. |
 | `sample_rows` | no | Accepted for uniformity with the other file connectors and **inert here** — Parquet declares its own schema, so nothing is sampled. |
 
@@ -179,7 +179,8 @@ let ordersSource = {
     Id = "orders-parquet"
     Name = "Nightly warehouse extract"
     Kind = ParquetDataSource.Kind // "Parquet"
-    ConnectionScope = Map.ofList [ "container", "team-acme"; "prefix", "extracts" ]
+    // No `container`: the platform records the saving scope's own.
+    ConnectionScope = Map.ofList [ "prefix", "extracts" ]
     CredentialKey = ""
     Tables = None
     Tags = Map.empty

@@ -4466,6 +4466,13 @@ ToolUp.Platform.DataSourceConfig.Kind : System.String { get }
 ToolUp.Platform.DataSourceConfig.Name : System.String { get }
 ToolUp.Platform.DataSourceConfig.Tables : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.DataSourceConfig.Tags : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.DataSourceConfigWire (class)
+ToolUp.Platform.DataSourceConfigWire.ContainerKey : System.String (literal)
+ToolUp.Platform.DataSourceConfigWire.RedactedValue : System.String (literal)
+ToolUp.Platform.DataSourceConfigWire.forReader(System.Boolean, ToolUp.Platform.DataSourceConfig) : ToolUp.Platform.DataSourceConfig
+ToolUp.Platform.DataSourceConfigWire.forSave(System.String, ToolUp.Platform.DataSourceConfig) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSourceConfig, System.String]
+ToolUp.Platform.DataSourceConfigWire.isSecretKey(System.String) : System.Boolean
+ToolUp.Platform.DataSourceConfigWire.secretKeys : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]] { get }
 ToolUp.Platform.DataStoreResetPayload (class)
 ToolUp.Platform.DataStoreResetPayload..ctor(ToolUp.Platform.UserId, System.Int32)
 ToolUp.Platform.DataStoreResetPayload.FileCount : System.Int32 { get }

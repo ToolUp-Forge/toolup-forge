@@ -30,9 +30,9 @@ from object storage composes the matching companion. The connector cannot tell t
 
 | Key | Required | Meaning |
 |---|---|---|
-| `container` | yes | Scope-derived container the files live in. |
-| `prefix` | no | Blob-name prefix within the container. Omitted reads the container root. Normalised to one trailing `/`; backslashes are folded to `/`, because blob names are `/`-delimited on every backend whatever the host OS is. |
-| `extension` | no | Defaults to `.csv`. A bare suffix (`tsv`) is dot-prefixed for you. |
+| `container` | set by the platform | The scope container the files live in. Never set by a caller: `SaveDataSource` refuses a config carrying it and records the saving scope's own container, and a declared delivery seeds its principal's. The connector reads it only when it is the container of the scope the call runs under (`team-{id}` / `user-{id}`), so `_platform`, any `_`-prefixed container and another scope's are refused. |
+| `prefix` | no | Blob-name prefix within the container. Omitted reads the container root. Refused when it holds `..` or starts with a separator. Normalised to one trailing `/`; backslashes are folded to `/`, because blob names are `/`-delimited on every backend whatever the host OS is. |
+| `extension` | no | Defaults to `.csv`. A bare suffix (`tsv`) is dot-prefixed for you. Refused when it holds `..` or a separator. |
 | `delimiter` | no | Field separator in the **source** file. One character, or one of `tab` / `pipe` / `semicolon` / `comma` / `space` — a literal tab has no representation in most admin UIs. Defaults to `,`. |
 | `quote` | no | Quote character in the **source** file. Defaults to `"`. Must differ from `delimiter`. |
 | `has_header` | no | Defaults to `true`. When `false`, columns are named `column_1` … `column_n` and the first record is data. |
@@ -53,8 +53,8 @@ Two things it deliberately does **not** report: a blob in a nested folder (its r
 collide with a sibling's and address the wrong file), and a blob with a different extension (the
 `manifest.json` sitting beside the exports is not a table).
 
-A table name carrying `/`, `\` or `..` is **refused**, not sanitised. The container is scope-derived
-and safe, but the table name is concatenated onto the prefix, so a name with `..` would address a
+A table name carrying `/`, `\` or `..` is **refused**, not sanitised. The container is the call's own scope
+container (the connector checks it), but the table name is concatenated onto the prefix, so a name with `..` would address a
 file the source was never pointed at. Refusing is louder than rewriting: a silently-corrected name
 fails later, as a missing file, somewhere less informative.
 
@@ -167,7 +167,8 @@ let salesSource = {
     Id = "sales-csv"
     Name = "Daily sales export"
     Kind = CsvDataSource.Kind // "Csv"
-    ConnectionScope = Map.ofList [ "container", "team-acme"; "prefix", "exports" ]
+    // No `container`: the platform records the saving scope's own.
+    ConnectionScope = Map.ofList [ "prefix", "exports" ]
     CredentialKey = "" // unused — the credential belongs to IBlobStorage
     Tables = None
     Tags = Map.empty

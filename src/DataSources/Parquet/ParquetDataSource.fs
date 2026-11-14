@@ -59,9 +59,11 @@ let Kind = "Parquet"
 [<Literal>]
 let private DefaultExtension = ".parquet"
 
-/// Read and validate one call's `ConnectionScope`. Pure.
-let readSettings (scope: Map<string, string>) : Result<ParquetSourceSettings, IngestionError> =
-    Files.readSettings DefaultExtension scope
+/// Read and validate the `ConnectionScope` of one call running under
+/// `scopeId`. Pure. The container must be that scope's own
+/// (`Files.scopeContainer`).
+let readSettings (scopeId: string) (scope: Map<string, string>) : Result<ParquetSourceSettings, IngestionError> =
+    Files.readSettings DefaultExtension scopeId scope
     |> Result.map (fun file -> { File = file })
 
 /// Dotted path of a field, which is how a nested Parquet schema
@@ -548,7 +550,7 @@ type private ParquetDataSourceImpl(storage: IBlobStorage) =
         (body: ParquetSourceSettings -> Async<Result<'T, IngestionError>>)
         : Async<Result<'T, IngestionError>> =
         Errors.guard context (fun () -> async {
-            match readSettings ctx.Config.ConnectionScope with
+            match readSettings ctx.ScopeId ctx.Config.ConnectionScope with
             | Error err -> return Error err
             | Ok settings -> return! body settings
         })

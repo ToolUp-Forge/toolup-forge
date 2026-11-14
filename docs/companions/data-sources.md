@@ -111,8 +111,9 @@ platform's scope carrier seals the resolution onto it. No scope is built from a 
 refusal fails the host's start (`DeclaredDataSourcesRefused`) naming each source and what it lacks: an undeclared
 principal or one that does not resolve (naming the grant it lacks), a scope that does not persist, a `Kind` no
 connector answers, a cadence that is not cron, a pull with no tables, a watch over a connector that is not a file
-connector, a watched config that sets its own `container` or `prefix`, a location that climbs out of the scope
-container, and a watched location that cannot be read.
+connector, a watched config that sets its own `container` or `prefix`, a pulled file source whose config sets its
+own `container` (a file source's container is its principal's, which the seeding writes), a location that climbs
+out of the scope container, and a watched location that cannot be read.
 
 **Idempotent, and retired by declaration.** A re-deploy updates what it seeded; a new cadence replaces the job on
 the old one. A ledger (`DataSourceConfigStore.declaredDeliveryLedger`) records where each source was seeded, so a
@@ -121,6 +122,40 @@ config deleted there. A watched object is recorded once ingested, by its identit
 instant and size — so polling never ingests it twice, and an object rewritten in place is ingested again. An
 object refused for its own content (`SchemaMismatch`) is recorded too, and is not retried until it is rewritten;
 any other failure is retried at the next poll.
+
+## What a saved source reads, and what a reader sees
+
+**A file source reads only its own scope's container.** `Csv`, `Excel` and `Parquet` read the container named by
+`ConnectionScope["container"]` only when it is the container of the scope the call runs under (`team-{id}` or
+`user-{id}` for the call's scope id, as `ScopeKey` renders them). The platform's `_platform` container, any
+`_`-prefixed container and another scope's container are refused with `SchemaMismatch` before a byte is listed or
+read, so a config already at rest that names one fails its next run. `prefix` and `extension` are refused when they
+hold `..` or start with a separator (`extension` may hold no separator at all), as a table name already was.
+
+**The container key belongs to the platform.** `IDataIngestionApi.SaveDataSource` refuses a config whose
+`ConnectionScope` carries `container` and records the saving scope's own container in its place; `ListDataSources`
+and `GetDataSource` never return the key, so a config read back saves again unchanged. A declared delivery seeds
+the principal's container for a watch and for a pulled file source alike.
+
+**A reader who cannot edit a source reads its secret-bearing keys redacted.** `ListDataSources` and
+`GetDataSource` stay open to every member of the scope, but a caller who fails the write gate (in `Team` /
+`MultiTeam` mode, a member who is neither Owner nor Admin) reads each secret-bearing `ConnectionScope` key with its
+value replaced by `DataSourceConfigWire.RedactedValue`, the literal string `<redacted>`. The key stays on the wire,
+so the reader can see that the source has the setting; every other key, the `Kind`, `CredentialKey` (a key name,
+never a credential) and the tags are unchanged. A writer reads the config as saved, less `container`.
+
+The keys, by connector (`DataSourceConfigWire.secretKeys`):
+
+| Connector | Key | What its value can disclose |
+|---|---|---|
+| `Sql` | `connection_string` | the database password, when it is written inline (`Password=` / `Pwd=`) |
+| `Snowflake` | `private_key_file` | where the key-pair private key is stored |
+| `Redshift` | `secret_arn` | which Secrets Manager secret holds the database credential |
+
+A key is also redacted when its name holds `password`, `pwd`, `secret`, `token`, `private_key`, `connection_string`,
+`api_key` or `apikey` (case-insensitively), so a connector the table does not name, a consumer's own or a shipped
+one registered under another `Kind`, is covered by the same rule. Credentials proper never travel in
+`ConnectionScope`: a connector reads them from `ISecretStore` by `CredentialKey`, which is why the table is short.
 
 ## Authoring a connector
 

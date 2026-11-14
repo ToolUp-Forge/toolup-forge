@@ -30,7 +30,7 @@ let private Prefix = "inbox/"
 
 let private context (scope: (string * string) list) (sourceId: string) : DataSourceCallContext =
     TestFakes.config sourceId ExcelDataSource.Kind ([ "container", container sourceId; "prefix", Prefix ] @ scope)
-    |> TestFakes.context "test-scope" None
+    |> TestFakes.context sourceId None
 
 // ─── Fixture workbooks ────────────────────────────────────────────
 
@@ -190,31 +190,33 @@ let tests =
 
         testList "readSettings" [
             test "container is required" {
-                match ExcelDataSource.readSettings Map.empty with
+                match ExcelDataSource.readSettings "x" Map.empty with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "container" "names the missing key"
                 | other -> failtestf "Expected SchemaMismatch naming 'container'; got %A" other
             }
 
             test "sheet and sheet_index together are refused" {
                 match
-                    ExcelDataSource.readSettings (Map.ofList [ "container", "c"; "sheet", "Sales"; "sheet_index", "1" ])
+                    ExcelDataSource.readSettings
+                        "c"
+                        (Map.ofList [ "container", "team-c"; "sheet", "Sales"; "sheet_index", "1" ])
                 with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "sheet_index" "names both keys"
                 | other -> failtestf "Expected SchemaMismatch; got %A" other
             }
 
             test "a negative sheet_index is refused" {
-                match ExcelDataSource.readSettings (Map.ofList [ "container", "c"; "sheet_index", "-1" ]) with
+                match ExcelDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "sheet_index", "-1" ]) with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "sheet_index" "names the key"
                 | other -> failtestf "Expected SchemaMismatch; got %A" other
             }
 
             test "the default extension is .xlsx and is overridable" {
-                match ExcelDataSource.readSettings (Map.ofList [ "container", "c" ]) with
+                match ExcelDataSource.readSettings "c" (Map.ofList [ "container", "team-c" ]) with
                 | Ok settings -> Expect.equal settings.File.Extension ".xlsx" "default"
                 | Error err -> failtestf "readSettings failed: %A" err
 
-                match ExcelDataSource.readSettings (Map.ofList [ "container", "c"; "extension", "xlsm" ]) with
+                match ExcelDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "extension", "xlsm" ]) with
                 | Ok settings -> Expect.equal settings.File.Extension ".xlsm" "a bare suffix is dot-prefixed"
                 | Error err -> failtestf "readSettings failed: %A" err
             }

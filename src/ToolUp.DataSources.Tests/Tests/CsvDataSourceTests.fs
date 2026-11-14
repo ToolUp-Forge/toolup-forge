@@ -27,7 +27,7 @@ let private Prefix = "exports/"
 
 let private context (scope: (string * string) list) (sourceId: string) : DataSourceCallContext =
     TestFakes.config sourceId CsvDataSource.Kind ([ "container", container sourceId; "prefix", Prefix ] @ scope)
-    |> TestFakes.context "test-scope" None
+    |> TestFakes.context sourceId None
 
 /// Render a header and rows as a delimited file.
 let private render (delimiter: string) (header: string list) (rows: string list list) : byte[] =
@@ -72,13 +72,13 @@ let tests =
 
         testList "readSettings" [
             test "container is required" {
-                match CsvDataSource.readSettings Map.empty with
+                match CsvDataSource.readSettings "x" Map.empty with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "container" "names the missing key"
                 | other -> failtestf "Expected SchemaMismatch naming 'container'; got %A" other
             }
 
             test "defaults are comma / double-quote / header / utf-8 / 1000 rows" {
-                match CsvDataSource.readSettings (Map.ofList [ "container", "team-x" ]) with
+                match CsvDataSource.readSettings "x" (Map.ofList [ "container", "team-x" ]) with
                 | Ok settings ->
                     Expect.equal settings.Delimiter ',' "delimiter"
                     Expect.equal settings.Quote '"' "quote"
@@ -90,14 +90,18 @@ let tests =
                 | Error err -> failtestf "readSettings failed: %A" err
             }
 
-            test "a prefix is normalised to one trailing slash, separators folded" {
+            test "a prefix is normalised to one trailing slash, separators folded; a leading one is refused" {
                 let read (raw: string) =
-                    match CsvDataSource.readSettings (Map.ofList [ "container", "c"; "prefix", raw ]) with
+                    match CsvDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "prefix", raw ]) with
                     | Ok settings -> settings.File.Prefix
                     | Error err -> failtestf "readSettings failed: %A" err
 
                 Expect.equal (read "exports") "exports/" "bare name"
-                Expect.equal (read "/exports/") "exports/" "leading and trailing slashes"
+                Expect.equal (read "exports/") "exports/" "a trailing slash"
+
+                match CsvDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "prefix", "/exports/" ]) with
+                | Error(SchemaMismatch message) -> Expect.stringContains message "prefix" "names the key"
+                | other -> failtestf "a prefix starting at a separator is refused; got %A" other
                 // Blob names are `/`-delimited on IBlobStorage whatever
                 // the host OS is, so a Windows operator's backslash must
                 // not silently produce a prefix matching nothing.
@@ -106,7 +110,7 @@ let tests =
 
             test "named delimiters are accepted where a literal cannot be typed" {
                 let read (raw: string) =
-                    match CsvDataSource.readSettings (Map.ofList [ "container", "c"; "delimiter", raw ]) with
+                    match CsvDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "delimiter", raw ]) with
                     | Ok settings -> settings.Delimiter
                     | Error err -> failtestf "readSettings failed: %A" err
 
@@ -116,27 +120,31 @@ let tests =
             }
 
             test "a multi-character delimiter is refused, naming the accepted spellings" {
-                match CsvDataSource.readSettings (Map.ofList [ "container", "c"; "delimiter", "::" ]) with
+                match CsvDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "delimiter", "::" ]) with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "semicolon" "names the accepted set"
                 | other -> failtestf "Expected SchemaMismatch; got %A" other
             }
 
             test "an unknown encoding is refused rather than silently defaulted" {
-                match CsvDataSource.readSettings (Map.ofList [ "container", "c"; "encoding", "windows-1252" ]) with
+                match
+                    CsvDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "encoding", "windows-1252" ])
+                with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "utf-8" "names the accepted set"
                 | other -> failtestf "Expected SchemaMismatch; got %A" other
             }
 
             test "delimiter and quote must differ" {
                 match
-                    CsvDataSource.readSettings (Map.ofList [ "container", "c"; "delimiter", "\""; "quote", "\"" ])
+                    CsvDataSource.readSettings
+                        "c"
+                        (Map.ofList [ "container", "team-c"; "delimiter", "\""; "quote", "\"" ])
                 with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "differ" "says why"
                 | other -> failtestf "Expected SchemaMismatch; got %A" other
             }
 
             test "a non-positive sample_rows is refused" {
-                match CsvDataSource.readSettings (Map.ofList [ "container", "c"; "sample_rows", "0" ]) with
+                match CsvDataSource.readSettings "c" (Map.ofList [ "container", "team-c"; "sample_rows", "0" ]) with
                 | Error(SchemaMismatch message) -> Expect.stringContains message "sample_rows" "names the key"
                 | other -> failtestf "Expected SchemaMismatch; got %A" other
             }

@@ -37,7 +37,7 @@ open ToolUp.Platform.Compose
 // connector's `create` over a blob store and its file extension.
 
 [<Literal>]
-let private Container = "watched"
+let private Container = "team-watch-scope"
 
 let private config (scope: (string * string) list) : DataSourceConfig = {
     Id = "watched-source"

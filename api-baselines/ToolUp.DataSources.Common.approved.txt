@@ -273,8 +273,9 @@ ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobSto
 ToolUp.DataSources.Common.Files.listTables(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.IngestionError]]
 ToolUp.DataSources.Common.Files.normaliseExtension(System.String) : System.String
 ToolUp.DataSources.Common.Files.normalisePrefix(System.String) : System.String
-ToolUp.DataSources.Common.Files.readSettings(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.Files+FileSourceSettings, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Common.Files.readSettings(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.Files+FileSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Common.Files.requireTableName(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Common.Files.scopeContainer(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Common.Files.tableOf(ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.DataSources.Common.Files+FileSourceSettings (class)
 ToolUp.DataSources.Common.Files+FileSourceSettings..ctor(System.String, System.String, System.String, System.Int32)

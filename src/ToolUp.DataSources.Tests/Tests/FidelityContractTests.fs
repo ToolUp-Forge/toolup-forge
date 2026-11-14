@@ -143,7 +143,7 @@ let private sqliteTarget () : FidelityTarget =
 
 let private fileContext (kind: string) (prefix: string) (scope: (string * string) list) =
     TestFakes.config "fidelity" kind ([ "container", "team-fidelity"; "prefix", prefix ] @ scope)
-    |> TestFakes.context "test-scope" None
+    |> TestFakes.context "fidelity" None
 
 /// Why a delimited file or a workbook binds with `CannotState`.
 let private blankIsAllAFileSays =
