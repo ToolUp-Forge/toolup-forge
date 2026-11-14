@@ -146,10 +146,13 @@ module ModelFitJobHandler =
 
     /// The fit-run job.
     let job (registry: ModelFitProviderRegistry) (audit: IAuditLog) : RunJob<FitRequest> =
-        RunJob.ofPayload HandlerName (fun _ request -> async {
-            match! ModelFitEnvelope.runFit registry audit request with
-            | Ok _ -> return Ok()
-            | Error e -> return Error(failureOf e)
+        RunJob.ofPayload HandlerName (fun ctx request -> async {
+            match JobPayloadScope.requireOwn ctx request.ScopeId with
+            | Error reason -> return Error(RunFailure.Terminal reason)
+            | Ok() ->
+                match! ModelFitEnvelope.runFit registry audit request with
+                | Ok _ -> return Ok()
+                | Error e -> return Error(failureOf e)
         })
 
     /// Construct the fit-run job handler.

@@ -41,6 +41,9 @@ type JobApi = {
     /// Submit a new job. Returns `Ok JobId` on success, `Error
     /// ScheduleError` on validation failure (cron parse, handler
     /// not registered, precision unsupported, storage failure).
+    /// The wire names only a handler the deployment declared
+    /// wire-schedulable; any other answers `HandlerNotRegistered`,
+    /// exactly as an unknown name does.
     /// The handler stamps `CreatedBy` from the caller's
     /// `AccessContext.UserId` regardless of the value supplied on
     /// the wire (informational only). `ScopeId` is overwritten by
@@ -65,7 +68,10 @@ type JobApi = {
     Enable: System.Guid -> Async<Result<unit, string>>
 
     /// Fire a job immediately, regardless of its `Trigger`.
-    /// `Error` when the job is unknown or `Status = Cancelled`.
+    /// `Error` when the job is unknown or `Status = Cancelled`. Not
+    /// gated by the wire-schedulable declaration: it fires a job the
+    /// caller's scope already holds, and a handler refuses a payload
+    /// naming a scope other than its job's when it runs.
     [<AllowAnonymous>]
     TriggerOnce: System.Guid -> Async<Result<unit, string>>
 }

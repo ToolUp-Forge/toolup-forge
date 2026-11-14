@@ -119,12 +119,21 @@ type ProviderStatusProbeJobHandler(providerProfile: IProviderProfile, probe: IPr
 
     interface IJobHandler with
         member _.Execute(ctx) = async {
-            match ProviderStatusProbePayload.tryDeserialize ctx.Payload with
+            let parsed =
+                ProviderStatusProbePayload.tryDeserialize ctx.Payload
+                |> Option.map (fun payload ->
+                    payload, JobPayloadScope.requireOwnStorage ctx (ProviderStatusProbePayload.scope payload))
+
+            match parsed with
             | None ->
                 let msg = $"[ProviderStatusProbe] malformed payload for job %A{ctx.JobId}"
                 logger.Warn msg
                 return PermanentFailure msg
-            | Some payload ->
+            | Some(_, Error reason) ->
+                let msg = $"[ProviderStatusProbe] refused: {reason}"
+                logger.Warn msg
+                return PermanentFailure msg
+            | Some(payload, Ok()) ->
                 let scope = ProviderStatusProbePayload.scope payload
                 let! profile = providerProfile.Get scope
 

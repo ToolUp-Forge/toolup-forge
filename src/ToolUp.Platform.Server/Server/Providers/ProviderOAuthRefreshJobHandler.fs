@@ -157,12 +157,21 @@ type ProviderOAuthRefreshJobHandler
 
     interface IJobHandler with
         member _.Execute(ctx) = async {
-            match ProviderOAuthRefreshPayload.tryDeserialize ctx.Payload with
+            let parsed =
+                ProviderOAuthRefreshPayload.tryDeserialize ctx.Payload
+                |> Option.map (fun payload ->
+                    payload, JobPayloadScope.requireOwnStorage ctx (ProviderOAuthRefreshPayload.scope payload))
+
+            match parsed with
             | None ->
                 let msg = $"[ProviderOAuthRefresh] malformed payload for job %A{ctx.JobId}"
                 logger.Warn msg
                 return PermanentFailure msg
-            | Some payload ->
+            | Some(_, Error reason) ->
+                let msg = $"[ProviderOAuthRefresh] refused: {reason}"
+                logger.Warn msg
+                return PermanentFailure msg
+            | Some(payload, Ok()) ->
                 match flows |> List.tryFind (fun f -> f.Name = payload.FlowName) with
                 | None ->
                     // The flow was unregistered (a companion package
