@@ -474,7 +474,8 @@ let private productionSequence (swapLastTwo: bool) (row: SequenceRow) : ToolGate
     | Ok _ -> None
     | Error refusal -> Some(slotOf refusal)
 
-/// The extraction's answer for the same row: `ToolGate.admit_reach`.
+/// The extraction's answer for the same row: `admit_reach` of the committed
+/// `proofs/oracle/ToolGate.fs`.
 let private modelSequence (row: SequenceRow) : ToolGate.slot option =
     let effects = toModelDeclaration (AIToolEffects.declaredOf row.Tool.Definition)
     let host pick (c: ToolGate.reach) = pick (hostOf row c.reach_module)
