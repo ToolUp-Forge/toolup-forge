@@ -1168,10 +1168,10 @@ let private platformLibraryPage: PageConfig = {
 }
 
 /// Build the Knowledge Base `ErasedModule`, optionally re-branded.
-/// Phase 1e — the parameterised form behind `KnowledgeBaseMode`'s
+/// The parameterised form behind `KnowledgeBaseMode`'s
 /// `DefaultKnowledgeBase` (`None`) and `ConfiguredKnowledgeBase`
-/// (`Some cfg`) cases, mirroring `FileManagerUI.create`'s
-/// `DataManagerConfig option` shape.
+/// (`Some cfg`) cases. The file manager's counterpart is the
+/// `DataManagerConfig` that `FileManagerUI.builtIn` takes.
 ///
 /// `create None` is byte-for-byte the historical `register ()` module —
 /// same name, icon, group, and therefore the same derived
