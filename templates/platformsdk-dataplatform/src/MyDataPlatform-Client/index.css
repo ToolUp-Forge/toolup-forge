@@ -1,3 +1,10 @@
 /* MyDataPlatform — base styles. Replace with your own design system. */
+/* The Fuaran-UI renderer's reference stylesheet, read from the restored
+   Fuaran.UI.Renderer package's content/ (vite-fuaran-content.mjs resolves the
+   @nuget/ prefix), then the bridge that answers its --fuaran-* tokens with the
+   shell's. Layered, so every rule below still wins over both. */
+@import "@nuget/fuaran.ui.renderer/content/fuaran-reference.css" layer(base);
+@import "./fuaran-bridge.css" layer(base);
+
 html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; }
 #app { height: 100%; }

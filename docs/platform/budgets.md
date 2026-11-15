@@ -255,6 +255,29 @@ vocabulary statically, and its closure holds `Fuaran.Compute.DataFrame` and `Fua
 ceiling, so a tree surface does not return to a view the shell imports at boot until that closure is cut on the
 Fuaran-UI side or the surface builds its tree behind the same import.
 
+### The Fuaran-UI stylesheet
+
+A tree is styled by the renderer's `fuaran-reference.css` and the shell's `fuaran-bridge.css`, which the client CSS
+entry imports ([theming](theming.md)). CSS is not in `shellFirstLoadKiB`, which sums JavaScript, so its cost is
+recorded here. Measured 2026-11-15 with `Fuaran.UI.Renderer` 0.104.0, a production `vite build` of
+`samples/MinimalClient` with and without the two imports:
+
+| CSS asset | Bytes | Gzipped |
+|---|---:|---:|
+| the sample's own rules | 91 | 118 |
+| with the reference stylesheet and the bridge | 68,802 | 10,163 |
+| added to every first load | 68,711 | 10,045 |
+
+The source file is 152,796 bytes; minifying takes it to under half. The 68,711 minified bytes are 4.5 % of the
+shell's JavaScript first load above (1,511,762 bytes, also minified).
+
+**It stays on the entry rather than riding the renderer's chunk.** Vite would split a stylesheet imported from
+`TreeLoweringRuntime` into that chunk and fetch it with the renderer, saving those bytes on a page with no tree. But
+the import would then sit in the SDK's packaged Fable source, so every consumer's bundler would have to resolve the
+`@nuget/` alias, and a consumer with its own stylesheet pipeline could no longer choose where the rules go; the
+Node test harness that loads the shell's modules would need a CSS stub. At 10 KiB the saving does not pay for that.
+Revisit it if a first-load ceiling comes to count CSS, or the stylesheet grows several-fold.
+
 The split points came from the bundle, by package (rendered bytes, before minifying):
 
 | Candidate | KiB | Decision |

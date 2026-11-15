@@ -55,7 +55,7 @@ ToolUp.AuthProviders.Oidc.Shared 33/52
 ToolUp.AuthProviders.Passkey 85/171
 ToolUp.AuthProviders.Passkey.Client 6/30
 ToolUp.AuthProviders.Scim 58/258
-ToolUp.BrandKit 65/210
+ToolUp.BrandKit 66/211
 ToolUp.Calendar.CalDAV 22/25
 ToolUp.Calendar.Google 88/102
 ToolUp.Calendar.Microsoft 71/76

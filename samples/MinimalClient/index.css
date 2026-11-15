@@ -1,3 +1,10 @@
+/* The Fuaran-UI renderer's reference stylesheet, read from the restored
+   Fuaran.UI.Renderer package's content/ (client-styling/vite-fuaran-content.mjs
+   resolves the @nuget/ prefix), then the shell's bridge that answers its
+   --fuaran-* tokens. Layered, so every rule below still wins over both. */
+@import "@nuget/fuaran.ui.renderer/content/fuaran-reference.css" layer(base);
+@import "../../client-styling/fuaran-bridge.css" layer(base);
+
 body {
     font-family: system-ui, -apple-system, sans-serif;
     margin: 2rem;

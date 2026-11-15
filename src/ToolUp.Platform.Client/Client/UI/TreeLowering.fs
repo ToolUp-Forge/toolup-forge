@@ -54,20 +54,6 @@ let island (id: string) (render: unit -> ReactElement) : Node<'Msg> =
     islands[id] <- render
     Fuaran.custom id IslandModule id Map.empty None []
 
-/// The renderer's tokens read from the shell's. The shell's own tokens are what
-/// `HostThemeTokens` and a tenant palette drive, so a tree takes the deployment's
-/// brand without a second theme. `fuaran-reference.css` states the structure and
-/// is a host stylesheet; these lines only answer the colours and radii it asks for.
-[<Literal>]
-let internal themeBridge =
-    ":root{"
-    + "--fuaran-tone-default-fg:var(--text);--fuaran-tone-default-bg:var(--surface);"
-    + "--fuaran-tone-default-border:var(--color-border);--fuaran-tone-subdued-fg:var(--muted);"
-    + "--fuaran-tone-subdued-bg:var(--color-bg-light);--fuaran-tone-brand-fg:var(--color-brand);"
-    + "--fuaran-tone-success-fg:var(--pos);--fuaran-tone-critical-fg:var(--neg);"
-    + "--fuaran-radius-sm:var(--radius);--fuaran-radius-md:var(--radius);--fuaran-radius-lg:var(--radius);"
-    + "--fuaran-focus-ring-color:var(--color-brand)}"
-
 let private reactLazy: (unit -> JS.Promise<obj>) -> obj = import "lazy" "react"
 
 [<Emit("$0.then(c => ({ default: c }), e => { $1(); throw e; })")>]
@@ -111,7 +97,10 @@ let private placeholder =
         prop.style [ style.minHeight 160 ]
     ]
 
-/// Lower `node` to the `ReactElement` the module contract asks for.
+/// Lower `node` to the `ReactElement` the module contract asks for. The tree's
+/// structure and theme come from the host's stylesheet (`fuaran-reference.css`
+/// and the shell's `fuaran-bridge.css`, imported once by the CSS entry), so a
+/// lowered tree emits no style element of its own.
 let lower (host: HostBindingSources) (dispatch: 'Msg -> unit) (node: Node<'Msg>) : ReactElement =
     let props: TreeLoweringRuntime.TreeProps = {|
         Host = host
@@ -121,10 +110,7 @@ let lower (host: HostBindingSources) (dispatch: 'Msg -> unit) (node: Node<'Msg>)
         RenderIsland = renderIsland
     |}
 
-    React.Fragment [
-        Html.style [ prop.text themeBridge ]
-        React.Suspense([ ReactLegacy.createElement (unbox<ReactElement> (lazyTree ()), props) ], placeholder)
-    ]
+    React.Suspense([ ReactLegacy.createElement (unbox<ReactElement> (lazyTree ()), props) ], placeholder)
 
 /// Lower through the module's capability bag, so a tree dispatches exactly
 /// where the rest of the hosted seam does.

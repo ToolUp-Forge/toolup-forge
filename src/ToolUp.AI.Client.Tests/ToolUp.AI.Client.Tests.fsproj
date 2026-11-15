@@ -281,6 +281,9 @@
              AG Grid props compare, pinned on the transpiled code. -->
         <Compile Include="RenderScope.fs" />
         <Compile Include="SlicedStoreTests.fs" />
+        <!-- Every fuaran-* class a tree surface emits has a rule in the
+             restored renderer's reference stylesheet. -->
+        <Compile Include="TreeStylesheetTests.fs" />
         <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
         <!-- Phase 910 - the composition routes' render scope (the AI composer

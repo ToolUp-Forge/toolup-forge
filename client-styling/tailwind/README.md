@@ -21,7 +21,9 @@ publish path. The contract is **embedded by copy** and enforced by
 |---|---|
 | `index.css` | The canonical block: `@import "tailwindcss"` + `@source "./output"` (Fable output; see below) + `@theme` token contract + the official v3→v4 compatibility base layer. Delimited by `>>> @toolup/tailwind canonical <<<` markers. |
 | `deps.json` | Exact toolchain pin (`tailwindcss` + `@tailwindcss/vite` = `4.3.0`, no `^`) and the v3/PostCSS deps + config files v4 makes obsolete. |
-| `../check-drift.ps1` | Fails if any consumer's marked region or pinned deps differ. Wire into precommit/CI. |
+| `../fuaran-bridge.css` | The `--fuaran-*` tokens of the Fuaran-UI reference stylesheet, answered with the shell's tokens. Copied beside the entry. |
+| `../vite-fuaran-content.mjs` | The Vite plugin that resolves `@nuget/<package-id>/…` to the restored package folder. Copied beside `vite.config.mts`. |
+| `../check-drift.ps1` | Fails if any consumer's marked region or pinned deps differ, or a copied file differs from its canonical source. Wire into precommit/CI. |
 
 ## How a consumer adopts it
 
@@ -44,7 +46,16 @@ publish path. The contract is **embedded by copy** and enforced by
    Vite plugin](#fable-output-needs-source--the-canonical-vite-plugin)
    below; this is the single most important difference from v3 for ToolUp
    Fable apps, and the canonical `index.css` carries the `@source` line.
-4. Run `npm install` (commit the regenerated lockfile) and
+4. Copy `../fuaran-bridge.css` next to the app's `index.css` and
+   `../vite-fuaran-content.mjs` next to `vite.config.mts`, and add
+   `import nugetContent from "./vite-fuaran-content.mjs"` →
+   `plugins: [nugetContent(), …]`. The canonical region imports the
+   Fuaran-UI renderer's `fuaran-reference.css` from the restored
+   `Fuaran.UI.Renderer` package's `content/` (the plugin resolves the
+   `@nuget/` prefix from `obj/project.assets.json`) and then the bridge, so a
+   surface authored as a Fuaran-UI tree is styled and themed by the shell's
+   tokens. See [`docs/platform/theming.md`](../../docs/platform/theming.md).
+5. Run `npm install` (commit the regenerated lockfile) and
    `check-drift.ps1` (must pass).
 
 Per-app branding is then a ~6-line `:root` block; the toolchain version
