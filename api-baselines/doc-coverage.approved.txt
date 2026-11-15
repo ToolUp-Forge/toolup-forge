@@ -52,7 +52,7 @@ ToolUp.AuthProviders.LdapActiveDirectory 73/127
 ToolUp.AuthProviders.Oidc 79/102
 ToolUp.AuthProviders.Oidc.Client 128/331
 ToolUp.AuthProviders.Oidc.Shared 33/52
-ToolUp.AuthProviders.Passkey 85/171
+ToolUp.AuthProviders.Passkey 111/194
 ToolUp.AuthProviders.Passkey.Client 6/30
 ToolUp.AuthProviders.Scim 58/258
 ToolUp.BrandKit 65/210
@@ -147,7 +147,7 @@ ToolUp.Platform.Server.Config 396/662
 ToolUp.Platform.Server.Infra 2271/3878
 ToolUp.Platform.Server.Jobs 929/1739
 ToolUp.Platform.Server.Remoting 360/1027
-ToolUp.Platform.Server.Scope 457/827
+ToolUp.Platform.Server.Scope 459/829
 ToolUp.Platform.Testing 166/339
 ToolUp.Platform.Transport 48/96
 ToolUp.Platform.UI 115/284

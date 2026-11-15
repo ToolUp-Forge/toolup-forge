@@ -43,8 +43,11 @@ type PendingChallenge = {
     Username: string option
     /// The registration grant ground (`ExistingSession` / `Bootstrap`
     /// / `PendingInvite` / `OpenRegistration`) carried to the complete
-    /// leg for the audit trail. `None` for assertion challenges.
+    /// leg, which admits the enrolment on it. `None` for assertion challenges.
     Grant: string option
+    /// The invitation link token a `PendingInvite` registration redeems at
+    /// the complete leg. Held server-side only; `None` on every other grant.
+    InviteToken: string option
     ExpiresAt: DateTime
 }
 
@@ -173,6 +176,60 @@ type PasskeyCredentialStore(blobs: IBlobStorage) =
     /// Delete a credential (idempotent).
     member _.Remove(credentialIdB64Url: string) : Async<Result<unit, string>> =
         blobs.Delete(container, blobName credentialIdB64Url)
+
+    /// Write `blobName` only if it does not exist yet. Exactly one of any
+    /// number of racing writers, on one replica or many, gets `Ok true`; the
+    /// rest get `Ok false`. A store without conditional writes cannot make
+    /// that promise, so it refuses rather than guessing.
+    member private _.CreateOnly(blobName: string, userId: UserId) : Async<Result<bool, string>> = async {
+        match box blobs with
+        | :? IConditionalBlobStorage as cas ->
+            let marker =
+                JsonSerializer.Serialize(
+                    {|
+                        UserId = userId.Value
+                        At = DateTime.UtcNow
+                    |}
+                )
+
+            match! cas.UploadWithETag(container, blobName, System.Text.Encoding.UTF8.GetBytes marker, IfAbsent) with
+            | Ok _ -> return Ok true
+            | Error(ETagMismatch _) -> return Ok false
+            | Error(ConditionalWriteFailure message) -> return Error message
+        | _ ->
+            return
+                Error
+                    "passkey enrolment needs a blob store with conditional writes (IConditionalBlobStorage), so that a one-time grant is spent exactly once across replicas"
+    }
+
+    /// Whether the bootstrap token has been spent: its marker blob exists
+    /// in the store every replica's credentials live in.
+    member _.IsBootstrapConsumed() : Async<bool> =
+        blobs.Exists(container, PasskeyConfig.BootstrapMarkerBlob)
+
+    /// Spend the bootstrap token for `userId`, create-only: of two
+    /// ceremonies racing it, exactly one wins and the other is refused.
+    member this.ConsumeBootstrap(userId: UserId) : Async<Result<unit, string>> = async {
+        match! this.CreateOnly(PasskeyConfig.BootstrapMarkerBlob, userId) with
+        | Ok true -> return Ok()
+        | Ok false -> return Error "The bootstrap token has already been used."
+        | Error e -> return Error $"The bootstrap token could not be consumed: {e}"
+    }
+
+    /// Claim a new user id for one enrolment, create-only, so two ceremonies
+    /// racing to enrol the same new id cannot both succeed.
+    member this.ClaimIdentity(userId: UserId) : Async<Result<unit, string>> = async {
+        match! this.CreateOnly(PasskeyConfig.IdentityClaimPrefix + userHandleFor userId.Value + ".json", userId) with
+        | Ok true -> return Ok()
+        | Ok false -> return Error "That username has just been taken; choose another."
+        | Error e -> return Error $"The username could not be claimed: {e}"
+    }
+
+    /// Release a claim whose enrolment was refused after it was taken.
+    member _.ReleaseIdentity(userId: UserId) : Async<unit> = async {
+        let! _ = blobs.Delete(container, PasskeyConfig.IdentityClaimPrefix + userHandleFor userId.Value + ".json")
+        return ()
+    }
 
 // ─── Session signing secret ──────────────────────────────────────────
 

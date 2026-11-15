@@ -49,6 +49,14 @@ let buildFido2 (config: PasskeyConfig) : IFido2 =
 /// many platform passkeys), so no regression can be asserted.
 let isCounterRegression (stored: uint32) (incoming: uint32) : bool = stored <> 0u && incoming <= stored
 
+/// The user-verification requirement both ceremonies demand: `Required`
+/// unless the deployment names a reason to waive it, which lowers it to
+/// `Preferred`. A blank reason waives nothing.
+let userVerificationOf (config: PasskeyConfig) : UserVerificationRequirement =
+    match config.UserVerificationWaiver with
+    | Some reason when not (String.IsNullOrWhiteSpace reason) -> UserVerificationRequirement.Preferred
+    | _ -> UserVerificationRequirement.Required
+
 let private descriptorFor (record: PasskeyCredentialRecord) : PublicKeyCredentialDescriptor =
     PublicKeyCredentialDescriptor(Base64Url.decode record.CredentialId)
 
@@ -56,14 +64,16 @@ let private descriptorFor (record: PasskeyCredentialRecord) : PublicKeyCredentia
 
 /// Begin registration — build attestation `CredentialCreateOptions` for
 /// `identity`, excluding any credentials the user already enrolled, and
-/// stash the pending challenge. Returns the options JSON for the browser
-/// plus the correlating challenge id.
+/// stash the pending challenge (with the invitation token a
+/// `PendingInvite` grant redeems at completion). Returns the options JSON
+/// for the browser plus the correlating challenge id.
 let beginRegistration
     (fido: IFido2)
     (creds: PasskeyCredentialStore)
     (challenges: IPasskeyChallengeStore)
     (config: PasskeyConfig)
     (grant: RegistrationGrant)
+    (inviteToken: string option)
     (identity: RegistrationIdentity)
     : Async<Result<CeremonyOptionsResponse, string>> =
     async {
@@ -83,7 +93,7 @@ let beginRegistration
             let selection =
                 AuthenticatorSelection(
                     ResidentKey = ResidentKeyRequirement.Preferred,
-                    UserVerification = UserVerificationRequirement.Preferred
+                    UserVerification = userVerificationOf config
                 )
 
             let requestParams =
@@ -106,6 +116,10 @@ let beginRegistration
                 Email = identity.Email
                 Username = Some identity.UserId.Value
                 Grant = Some(string grant)
+                InviteToken =
+                    match grant with
+                    | PendingInvite -> inviteToken
+                    | _ -> Option<string>.None
                 ExpiresAt = DateTime.UtcNow.AddSeconds(float config.ChallengeTtlSeconds)
             }
 
@@ -121,13 +135,14 @@ let beginRegistration
     }
 
 /// Complete registration — verify the attestation against the stashed
-/// options and persist the new credential. Rejects a duplicate
-/// credential id (`IsCredentialIdUniqueToUser`). Returns the persisted
-/// record.
+/// options, run `admit` (the grant's admission, which may refuse), and
+/// only then persist the new credential. Rejects a duplicate credential
+/// id (`IsCredentialIdUniqueToUser`). Returns the persisted record.
 let completeRegistration
     (fido: IFido2)
     (creds: PasskeyCredentialStore)
     (pending: PendingChallenge)
+    (admit: PasskeyCredentialRecord -> Async<Result<unit, string>>)
     (rawResponseJson: string)
     : Async<Result<PasskeyCredentialRecord, string>> =
     async {
@@ -173,9 +188,12 @@ let completeRegistration
                     CreatedAt = DateTime.UtcNow
                 }
 
-                match! creds.Save record with
-                | Ok() -> return Ok record
-                | Error e -> return Error $"Passkey registered but failed to persist: {e}"
+                match! admit record with
+                | Error e -> return Error e
+                | Ok() ->
+                    match! creds.Save record with
+                    | Ok() -> return Ok record
+                    | Error e -> return Error $"Passkey registered but failed to persist: {e}"
             with ex ->
                 return Error $"Passkey attestation verification failed: {ex.Message}"
         | _ -> return Error "Challenge is not a pending registration."
@@ -210,7 +228,7 @@ let beginAssertion
             let assertionParams =
                 GetAssertionOptionsParams(
                     AllowedCredentials = ResizeArray(allowed),
-                    UserVerification = System.Nullable(UserVerificationRequirement.Preferred)
+                    UserVerification = System.Nullable(userVerificationOf config)
                 )
 
             let options = fido.GetAssertionOptions assertionParams
@@ -225,6 +243,7 @@ let beginAssertion
                 Email = Option<string>.None
                 Username = username
                 Grant = Option<string>.None
+                InviteToken = Option<string>.None
                 ExpiresAt = DateTime.UtcNow.AddSeconds(float config.ChallengeTtlSeconds)
             }
 

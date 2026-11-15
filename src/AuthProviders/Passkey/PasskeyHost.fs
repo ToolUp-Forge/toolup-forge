@@ -19,6 +19,9 @@ open ToolUp.AuthProviders.Passkey.PasskeySessionToken
 open ToolUp.Remoting.Server.Http
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Infra
+open ToolUp.Platform.Config.TeamManagement
+open ToolUp.Platform.Scope.Teams
 
 // ─── Ceremony endpoints ──────────────────────────────────────────────
 //
@@ -132,6 +135,68 @@ let private mintSession
         }
     }
 
+/// The registration gate's lookups over the request's composed stores:
+/// the credential store, `IPlatformAdminStore` and `ITeamStore` for
+/// "does the deployment already know this id", and `IShareTokenStore` for
+/// invitation links. A store the deployment did not compose contributes
+/// nothing to the known-principal check; with no share-token store an
+/// invitation cannot be redeemed, so it is refused.
+let private lookupsOf (runtime: PasskeyRuntime) (ctx: HttpContext) : RegistrationLookups =
+    let admins = tryGetService<IPlatformAdminStore> ctx
+    let teams = tryGetService<ITeamStore> ctx
+    let shareTokens = tryGetService<IShareTokenStore> ctx
+    let noInvitations = "Invitations are not available on this deployment."
+
+    {
+        HasCredential =
+            fun userId -> async {
+                let! existing = runtime.Credentials.ListByUserId userId.Value
+                return not existing.IsEmpty
+            }
+        IsKnownPrincipal =
+            fun userId -> async {
+                let! isAdmin = async {
+                    match admins with
+                    | Some store -> return! store.IsPlatformAdmin userId
+                    | None -> return false
+                }
+
+                if isAdmin then
+                    return true
+                else
+                    match teams with
+                    | Some store ->
+                        let! memberships = store.GetTeamsForUser userId
+                        return not memberships.IsEmpty
+                    | None -> return false
+            }
+        ClaimIdentity = runtime.Credentials.ClaimIdentity
+        ReleaseIdentity = runtime.Credentials.ReleaseIdentity
+        ValidateInvite =
+            fun token -> async {
+                match shareTokens with
+                | Some store ->
+                    let! validated = TeamInvitationHandler.validateInviteToken store token
+                    return validated |> Result.map ignore
+                | None -> return Error noInvitations
+            }
+        RedeemInvite =
+            fun token userId -> async {
+                match shareTokens, teams with
+                | Some store, Some teamStore ->
+                    return!
+                        TeamInvitationHandler.redeemInviteForNewPrincipal
+                            store
+                            teamStore
+                            (ToolUp.Platform.Config.Background.auditLogOf ctx)
+                            token
+                            userId
+                | _ -> return Error noInvitations
+            }
+        BootstrapConsumed = runtime.Credentials.IsBootstrapConsumed
+        ConsumeBootstrap = runtime.Credentials.ConsumeBootstrap
+    }
+
 // ─── Handlers ────────────────────────────────────────────────────────
 
 let private registerBeginHandler: HttpHandler =
@@ -153,19 +218,28 @@ let private registerBeginHandler: HttpHandler =
             | Error _ -> {
                 Username = None
                 DisplayName = None
-                Email = None
+                InviteToken = None
                 BootstrapToken = None
               }
 
         let! user = currentUser ctx |> Async.StartAsTask
-        let pendingStore = tryGetService<IPendingInviteStore> ctx
-        let! resolved = resolveIdentity runtime.Config user pendingStore request |> Async.StartAsTask
+
+        let! resolved =
+            resolveIdentity runtime.Config user (lookupsOf runtime ctx) request
+            |> Async.StartAsTask
 
         match resolved with
         | Error e -> return! writeError 403 e next ctx
         | Ok(grant, identity) ->
             let! begun =
-                beginRegistration runtime.Fido2 runtime.Credentials runtime.Challenges runtime.Config grant identity
+                beginRegistration
+                    runtime.Fido2
+                    runtime.Credentials
+                    runtime.Challenges
+                    runtime.Config
+                    grant
+                    request.InviteToken
+                    identity
                 |> Async.StartAsTask
 
             match begun with
@@ -186,8 +260,18 @@ let private registerCompleteHandler: HttpHandler =
             | Some pending ->
                 let! body = ctx.ReadBodyFromRequestAsync()
 
+                // The grant decided at begin is admitted again here, after
+                // the attestation verifies and before anything persists: a
+                // new id is re-checked and claimed, and the bootstrap token
+                // or one use of the invitation is spent. A challenge whose
+                // grant cannot be read back admits nothing.
+                let admit (record: PasskeyCredentialRecord) =
+                    match pending.Grant |> Option.bind RegistrationGrant.tryParse with
+                    | Some grant -> admitEnrolment (lookupsOf runtime ctx) grant pending.InviteToken record.UserId
+                    | None -> async.Return(Error "This registration carries no grant; start registration again.")
+
                 let! completed =
-                    completeRegistration runtime.Fido2 runtime.Credentials pending body
+                    completeRegistration runtime.Fido2 runtime.Credentials pending admit body
                     |> Async.StartAsTask
 
                 match completed with

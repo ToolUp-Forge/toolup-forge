@@ -432,6 +432,7 @@
         <Compile Include="InProcess\TeamAdminLifecycleTests.fs" />
         <Compile Include="InProcess\UserMembershipTeardownTests.fs" />
         <Compile Include="InProcess\HttpBodyBindingTests.fs" />
+        <Compile Include="InProcess\PasskeyRegistrationGateTests.fs" />
         <Compile Include="InProcess\ModuleIdentityTests.fs" />
         <Compile Include="InProcess\AnonymousModeContractTests.fs" />
         <Compile Include="InProcess\ModuleSurfaceRequirementTests.fs" />

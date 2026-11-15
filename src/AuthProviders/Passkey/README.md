@@ -10,7 +10,7 @@ Every other shipped auth companion (OIDC, Clerk, Entra) delegates identity to a 
 - **`IConfigValidator`** (security-class) — `PasskeyConfigValidator` runs a startup preflight that fails loudly on a relying-party-id / origin mismatch or a cleartext origin, rather than letting the first sign-up silently fail at the browser. Being security-class, it runs even under `ServerConfig.SkipPreflight`.
 - **Four ceremony routes** mounted onto the SDK route chain (see [Routes](#routes)).
 
-Substrate dependencies arrive through composition, never read directly (companion rule): credential records persist through the resolved `IBlobStorage` (container `_platform`, blob prefix `auth/passkeys/`); the HS256 session signing secret is resolved per use from `ISecretStore` (key `passkey_session_signing_key`, auto-generated on first use, mirroring `ShareTokenStore`); ceremony outcomes emit through `IAuditLog` when one is composed; pending team invites are honoured through `IPendingInviteStore` when present.
+Substrate dependencies arrive through composition, never read directly (companion rule): credential records persist through the resolved `IBlobStorage` (container `_platform`, blob prefix `auth/passkeys/`); the HS256 session signing secret is resolved per use from `ISecretStore` (key `passkey_session_signing_key`, auto-generated on first use, mirroring `ShareTokenStore`); ceremony outcomes emit through `IAuditLog` when one is composed; invitation links are redeemed through `IShareTokenStore` and `ITeamStore`, and `IPlatformAdminStore` and `ITeamStore` answer whether a proposed user id is already known, when they are composed.
 
 ## How a consumer composes it
 
@@ -51,11 +51,19 @@ Core takes no `Fido2` dependency and a deployment that never composes the passke
 | `ChallengeTtlSeconds` | Begin-ceremony challenge lifetime; single-use + expiring (replay defence). | `120` |
 | `SessionTokenTtlSeconds` | Lifetime of the minted platform session JWT. | `900` |
 | `Issuer` / `Audience` | Optional `iss` / `aud` bound onto the session JWT and required by the paired validator. `None` skips the binding (matches `StaticJwtConfig`). | `None` |
-| `AllowOpenRegistration` | `false` = invite-gated (an existing session, a pending invite, or the bootstrap token is required to enrol). `true` = anyone may enrol — an explicit opt-in the preflight surfaces as a warning. | `false` |
-| `BootstrapToken` | One-time token (typically from an env var) that lets a fresh deployment enrol its **first** credential before any session or invite exists. Compared in constant time; `None` disables the path. | `None` |
+| `AllowOpenRegistration` | `false` = invite-gated (an existing session, an invitation link, or the bootstrap token is required to enrol). `true` = anyone may enrol a passkey for a **new** user id — an explicit opt-in the preflight surfaces as a warning. | `false` |
+| `BootstrapToken` | One-time token (typically from an env var) that lets a fresh deployment enrol its **first** credential before any session or invite exists. Compared in constant time and spent on its first successful use; `None` disables the path. | `None` |
+| `UserVerificationWaiver` | Why the deployment accepts an authenticator that does not verify the user (PIN or biometric). `None` = both ceremonies require user verification; `Some reason` lowers it to preferred; a blank reason waives nothing. | `None` |
 | `EnforceHttps` | Require every origin to be `https://` (loopback exempt for local dev). Relax only behind a terminating TLS proxy. | `true` |
 
-**Registration is secure by default.** With `AllowOpenRegistration = false`, `register/begin` admits a caller only when an authenticated session already drives the identity, a pending invite matches the supplied email, or the one-time `BootstrapToken` is presented — closing the "anyone can enrol" hole a naïve passkey flow leaves open. The bootstrap token is the intended way to enrol the first administrator on a brand-new deployment; source it from an environment variable your host reads at startup and pass it into `BootstrapToken`.
+**Registration proves who is enrolling.** `register/complete` signs in the identity it enrols, so the server decides that identity and the request never chooses an existing one. `register/begin` admits a caller on the first of these that holds:
+
+1. **A signed-in session** — the passkey is added to the session's own user, with the session's email; the body's `username` and any email are not read.
+2. **The bootstrap token**, unspent — for a fresh deployment's first credential. It is spent on the first successful enrolment: the marker is the blob `auth/passkey-bootstrap/consumed.json` in the `_platform` container of the credential store, written create-only (`IConditionalBlobStorage`), so every replica sharing that store sees it and exactly one of two racing ceremonies wins. A store without conditional writes refuses the path.
+3. **An invitation link's token** (`inviteToken`, the token of the `/invite/<token>` link `IssueInvite` returns) — validated for signature, expiry, revocation and use limit. The server mints the identity (`pk-` and 32 hex digits); at completion one use of the link is consumed atomically and the member joins the team with the invited role. A pending-by-email invitation does not admit a registration: knowing an address proves nothing.
+4. **Open registration**, when `AllowOpenRegistration = true`.
+
+On the bootstrap and open paths the `username` must be **new**: an id that holds a passkey, is a platform admin or is a member of any team is refused at begin, then checked again and claimed create-only (`auth/passkey-identities/`) at completion, before the credential persists. Adding a passkey to an existing user is done from that user's session. To enrol the first administrator, present the bootstrap token with a new username, then name that id in `TOOLUP_INITIAL_PLATFORM_ADMIN` and restart; an id already seeded as an admin is a known principal and is refused.
 
 ## Session signing key
 

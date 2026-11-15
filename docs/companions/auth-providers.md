@@ -14,6 +14,7 @@ This page is a cross-cutting overview of the shipped provider companions. For fu
 | `ToolUp.AuthProviders.Oidc.Client` | Client | OIDC sign-in UI: Authorization Code + PKCE flow. |
 | `ToolUp.AuthProviders.GoogleIdentity.Client` | Client | Google Identity Services: the branded sign-in button and opt-in One Tap. A UX layer over the Google OIDC preset, not a second way to sign in. |
 | `ToolUp.AuthProviders.ClerkUI` | Client | Clerk sign-in UI; commercial product integration. |
+| `ToolUp.AuthProviders.Passkey` | Server | WebAuthn passkeys for a deployment with no external IdP; sessions are the HS256 JWT `StaticJwtAuthProvider` validates. |
 
 Client- vs server-side: the OIDC stack ships as **two packages** because authentication has both ends. The server validates tokens; the client renders the sign-in UX. They share no code but share the OIDC protocol.
 
@@ -736,6 +737,30 @@ Configuration via environment / Vite env:
 - Server-side signing key — see Clerk's docs.
 
 `#if DEBUG` in the consuming app typically controls Clerk activation — debug skips sign-in, release enables it.
+
+### `ToolUp.AuthProviders.Passkey` (passkeys, no external IdP)
+
+The passkey companion runs the WebAuthn ceremonies itself, and a completed registration signs the enrolled
+identity in. That makes registration an authentication step, so the server decides who is enrolling and the
+request never chooses an existing user id. `register/begin` admits the first of these that holds:
+
+- **A signed-in session.** The passkey is added to the session's user, with the session's email. This is the
+  only way to add a passkey to a user who already exists.
+- **The bootstrap token**, unspent. It enrols a fresh deployment's first credential and is spent on that
+  enrolment. The consumed marker is a create-only blob in the `_platform` container of the credential store
+  (`auth/passkey-bootstrap/consumed.json`), so every replica sharing the store sees it.
+- **An invitation link's token** (`inviteToken`, the `/invite/<token>` secret). The server mints the identity,
+  and completion consumes one use of the link and adds the member with the invited role. Knowing an invited
+  email address admits nothing.
+- **Open registration** (`AllowOpenRegistration = true`), for a new user id only.
+
+On the bootstrap and open paths a username that already holds a passkey, is a platform admin or is a member
+of any team is refused, at begin and again at completion. User verification is required on both ceremonies
+unless `PasskeyConfig.UserVerificationWaiver` names a reason to lower it. To make the bootstrap user the first
+platform admin, enrol a new username with the token, then set `TOOLUP_INITIAL_PLATFORM_ADMIN` to it and
+restart. The companion's [README](https://github.com/ToolUp-Forge/toolup-forge/blob/main/src/AuthProviders/Passkey/README.md)
+has the configuration table; [`docs/migrations/1285-passkey-registration-proves-who-is-enrolling.md`](../migrations/1285-passkey-registration-proves-who-is-enrolling.md)
+has the adoption steps.
 
 ## Directory companions
 

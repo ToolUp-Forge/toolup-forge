@@ -619,6 +619,39 @@ carelessly.
 > `docs/migrations/135-anonymous-session-binding.md` (Phase 135) ·
 > `docs/migrations/337-signed-anonymous-session-binding.md` (Phase 337)
 
+> **AN-14 — A passkey registration enrols a credential only for an identity the
+> server has proved, and the request never chooses an existing one.**
+> *Enablement:* Always on (when the passkey provider is composed). User
+> verification is default on and lowered only with a named reason.
+> Enrolling a passkey mints a session for the identity it enrols, so the
+> identity is decided server-side. A signed-in session enrols for itself, with
+> the session's email and never the body's. Without a session, an invitation
+> is redeemed by the secret its link carries: the token is validated
+> (signature, expiry, revocation, use limit), one use is consumed atomically at
+> completion before the member is added with the invited role, and the
+> identity is minted by the server. A bootstrap or open-registration request
+> may propose a new user id only: an id that already holds a passkey, is a
+> platform admin or is a member of any team is refused at `register/begin` and
+> checked again before the credential is persisted. The bootstrap token is
+> spent on its first successful use; the consumed marker is a create-only blob
+> in the `_platform` container of the deployment's blob store, so every replica
+> sharing that store sees it and exactly one of two racing ceremonies wins, and
+> a store without conditional writes refuses the bootstrap path. Registration
+> and sign-in demand user verification unless the deployment configures a
+> lower requirement with a reason (`UserVerificationWaiver`); a blank reason
+> waives nothing.
+> **Evidence:**
+> `src/AuthProviders/Passkey/PasskeyRegistrationPolicy.fs` (`resolveIdentity`,
+> `admitEnrolment`) ·
+> `src/AuthProviders/Passkey/PasskeyHost.fs` (`lookupsOf`) ·
+> `src/AuthProviders/Passkey/PasskeyStores.fs` (`ConsumeBootstrap`) ·
+> `src/AuthProviders/Passkey/PasskeyCeremony.fs` (`userVerificationOf`) ·
+> `src/ToolUp.Platform.Server/Server/Teams/TeamInvitationHandler.fs`
+> (`validateInviteToken`, `redeemInviteForNewPrincipal`) ·
+> `src/ToolUp.Platform.Tests/InProcess/PasskeyRegistrationGateTests.fs` ·
+> `docs/migrations/1285-passkey-registration-proves-who-is-enrolling.md`
+> (Phase 1285)
+
 ---
 
 ## 3. Authorisation

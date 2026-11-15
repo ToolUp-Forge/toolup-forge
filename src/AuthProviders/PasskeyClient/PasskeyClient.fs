@@ -74,8 +74,13 @@ let private serializeAssertion (credential: obj) : string = jsNative
 // Build the begin-ceremony request body, including only the fields the
 // caller supplied (empty / null values omitted so the server's option
 // fields resolve to `None`). Keys are case-insensitive server-side.
-[<Emit("""JSON.stringify(Object.fromEntries(Object.entries({username:$0,displayName:$1,email:$2,bootstrapToken:$3}).filter(function(e){return e[1]!=null&&e[1]!==''})))""")>]
-let private registerBody (username: string) (displayName: string) (email: string) (bootstrapToken: string) : string =
+[<Emit("""JSON.stringify(Object.fromEntries(Object.entries({username:$0,displayName:$1,inviteToken:$2,bootstrapToken:$3}).filter(function(e){return e[1]!=null&&e[1]!==''})))""")>]
+let private registerBody
+    (username: string)
+    (displayName: string)
+    (inviteToken: string)
+    (bootstrapToken: string)
+    : string =
     jsNative
 
 [<Emit("""JSON.stringify(Object.fromEntries(Object.entries({username:$0}).filter(function(e){return e[1]!=null&&e[1]!==''})))""")>]
@@ -159,22 +164,24 @@ let private runCeremony
                 )
     }
 
-/// Enrol a new passkey for `username` (server-gated: invite / session /
-/// bootstrap). On success the browser is signed in (session token
-/// stored). `bootstrapToken` is empty unless bootstrapping a fresh
-/// deployment's first credential.
+/// Enrol a new passkey (server-gated: session / bootstrap / invitation /
+/// open registration). On success the browser is signed in (session token
+/// stored). `inviteToken` is the token of the invitation link being
+/// redeemed, empty otherwise; the server then mints the identity and
+/// `username` is not read. `bootstrapToken` is empty unless bootstrapping
+/// a fresh deployment's first credential.
 let register
     (cfg: PasskeyUIConfig)
     (username: string)
     (displayName: string)
-    (email: string)
+    (inviteToken: string)
     (bootstrapToken: string)
     : Async<Result<unit, string>> =
     runCeremony
         cfg.ApiBase
         "/register/begin"
         "/register/complete"
-        (registerBody username displayName email bootstrapToken)
+        (registerBody username displayName inviteToken bootstrapToken)
         true
 
 /// Sign in with an existing passkey. `username` may be empty for a

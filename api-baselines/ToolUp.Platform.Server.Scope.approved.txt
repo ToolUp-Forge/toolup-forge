@@ -816,8 +816,10 @@ ToolUp.Platform.Scope.Teams.PendingInviteStoreInstanceValidator+PendingInviteSto
 ToolUp.Platform.Scope.Teams.PendingInviteStoreInstanceValidator+PendingInviteStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Scope.Teams.PendingInviteStoreInstanceValidator+PendingInviteStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Scope.Teams.TeamInvitationHandler (class)
+ToolUp.Platform.Scope.Teams.TeamInvitationHandler.redeemInviteForNewPrincipal(ToolUp.Platform.Scope.IShareTokenStore, ToolUp.Platform.Config.TeamManagement+ITeamStore, ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.Scope.Teams.TeamInvitationHandler.teamInvitationApi(ToolUp.Platform.Scope.IShareTokenStore, ToolUp.Platform.Config.TeamManagement+ITeamStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.ServerConfig, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ITeamInviteApi
 ToolUp.Platform.Scope.Teams.TeamInvitationHandler.tryConsumePendingForUser(ToolUp.Platform.IPendingInviteStore, ToolUp.Platform.Config.TeamManagement+ITeamStore, ToolUp.Platform.IAuditLog, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PendingInviteByEmail]]
+ToolUp.Platform.Scope.Teams.TeamInvitationHandler.validateInviteToken(ToolUp.Platform.Scope.IShareTokenStore, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.ShareTokenClaim, ToolUp.Platform.TeamRole], System.String]]
 ToolUp.Platform.Scope.TokenAttemptThrottle (class)
 ToolUp.Platform.Scope.TokenAttemptThrottle..ctor(System.Int32, System.TimeSpan)
 ToolUp.Platform.Scope.TokenAttemptThrottle.FailureCount(System.String, System.DateTime) : System.Int32

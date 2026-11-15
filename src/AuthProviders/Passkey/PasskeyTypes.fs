@@ -51,15 +51,25 @@ type PasskeyConfig = {
     Audience: string option
     /// Registration policy (secure by default). `false` (default) —
     /// invite-gated: registration requires an existing authenticated
-    /// session, a pending-invite for the email, or the one-time bootstrap
-    /// token. `true` — open registration: anyone may enrol a passkey.
-    /// An explicit opt-in, surfaced by preflight.
+    /// session, an invitation link's token, or the one-time bootstrap
+    /// token. `true` — open registration: anyone may enrol a passkey for a
+    /// NEW user id (an id the deployment already knows is refused). An
+    /// explicit opt-in, surfaced by preflight.
     AllowOpenRegistration: bool
     /// One-time bootstrap token (typically sourced from an env var) that
     /// lets a fresh deployment enrol its FIRST credential before any
     /// session or invite exists. `None` disables the bootstrap path.
-    /// Compared in constant time.
+    /// Compared in constant time, and spent on its first successful use:
+    /// the consumed marker is `BootstrapMarkerBlob` in the credential
+    /// store's `_platform` container, so every replica sharing that store
+    /// sees it.
     BootstrapToken: string option
+    /// Why the deployment accepts an authenticator that does not verify
+    /// the user (a PIN or a biometric), only that someone touched it.
+    /// `None` (default) — both ceremonies REQUIRE user verification: the
+    /// passkey is the only factor. `Some reason` lowers the requirement to
+    /// preferred; a blank reason is read as `None`.
+    UserVerificationWaiver: string option
     /// Whether `PasskeyConfigValidator` enforces that every origin is
     /// `https://` (loopback hosts exempt for local dev). Default `true`
     /// — WebAuthn requires a secure context in the browser anyway, so a
@@ -84,8 +94,19 @@ module PasskeyConfig =
     [<Literal>]
     let SigningKeySecretName = "passkey_session_signing_key"
 
+    /// Blob (under `PlatformContainer`) marking the bootstrap token spent.
+    /// Outside `CredentialBlobPrefix`, so a credential listing never reads it.
+    [<Literal>]
+    let BootstrapMarkerBlob = "auth/passkey-bootstrap/consumed.json"
+
+    /// Blob prefix (under `PlatformContainer`) of the create-only claims a
+    /// registration takes on a NEW user id, keyed by its user handle.
+    [<Literal>]
+    let IdentityClaimPrefix = "auth/passkey-identities/"
+
     /// Minimal, secure defaults — invite-gated, https-enforced, no
-    /// bootstrap token, 120s challenge / 15-min session. A consumer sets
+    /// bootstrap token, user verification required, 120s challenge /
+    /// 15-min session. A consumer sets
     /// `RelyingPartyId` / `RelyingPartyName` / `Origins`.
     let create (rpId: string) (rpName: string) (origins: string list) : PasskeyConfig = {
         RelyingPartyId = rpId
@@ -97,6 +118,7 @@ module PasskeyConfig =
         Audience = None
         AllowOpenRegistration = false
         BootstrapToken = None
+        UserVerificationWaiver = None
         EnforceHttps = true
     }
 
@@ -141,15 +163,17 @@ type PasskeyCredentialRecord = {
 
 /// `POST /api/passkey/register/begin` request.
 type RegisterBeginRequest = {
-    /// Username / handle to enrol under. Required on the open-registration
-    /// and bootstrap paths; ignored when an authenticated session drives
-    /// the identity.
+    /// A NEW username / handle to enrol under. Required on the
+    /// open-registration and bootstrap paths, where an id the deployment
+    /// already knows is refused; ignored when an authenticated session or
+    /// an invitation drives the identity.
     Username: string option
     /// Display name for the authenticator UI. Defaults to the username.
     DisplayName: string option
-    /// Email — used to match a pending invite and, post-login, to join
-    /// the invited team via the existing pending-invite consume path.
-    Email: string option
+    /// The token an invitation link carries (`/invite/<token>`). Redeemed
+    /// once on a successful enrolment, which joins the invited team with
+    /// the invited role under an identity the server mints.
+    InviteToken: string option
     /// One-time bootstrap token for a fresh deployment's first credential.
     BootstrapToken: string option
 }

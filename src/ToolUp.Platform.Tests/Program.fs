@@ -435,6 +435,7 @@ let private registeredTests =
         TeamInvitationTests.activeTeamPolicyTests
         TeamInvitationTests.checkMyInvitesTests
         HttpBodyBindingTests.tests
+        PasskeyRegistrationGateTests.tests
         ModuleIdentityTests.tests
         AnonymousModeContractTests.tests
         AnonymousModeContractTests.exposureTests

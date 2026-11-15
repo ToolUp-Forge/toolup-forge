@@ -99,6 +99,7 @@ let private regPending (userId: string) : PendingChallenge = {
     Email = Some "alice@example.com"
     Username = Some userId
     Grant = Some "Bootstrap"
+    InviteToken = Option<string>.None
     ExpiresAt = DateTime.UtcNow.AddMinutes 5.0
 }
 
@@ -111,6 +112,7 @@ let private assertPending: PendingChallenge = {
     Email = Option<string>.None
     Username = Some "alice"
     Grant = Option<string>.None
+    InviteToken = Option<string>.None
     ExpiresAt = DateTime.UtcNow.AddMinutes 5.0
 }
 
@@ -132,7 +134,7 @@ let tests =
                     (registeredCredential credBytes 0u (Base64Url.decode (userHandleFor userId)))
                     (assertionResult credBytes 1u)
 
-            let! reg = completeRegistration regFido creds (regPending userId) "{}"
+            let! reg = completeRegistration regFido creds (regPending userId) (fun _ -> async.Return(Ok())) "{}"
 
             let record =
                 match reg with
@@ -223,6 +225,12 @@ let tests =
             | Ok OpenRegistration -> ()
             | other -> failtestf "AllowOpenRegistration should grant OpenRegistration, got %A" other
 
+            // A signed-in caller enrols for itself even under open
+            // registration: the session, not the body, names the identity.
+            match decide cfg true false false with
+            | Ok ExistingSession -> ()
+            | other -> failtestf "a session should outrank open registration, got %A" other
+
         testCase "bootstrap token compares in constant time and rejects a mismatch"
         <| fun _ ->
             let cfg = {
@@ -234,6 +242,91 @@ let tests =
             Expect.isFalse (bootstrapMatches cfg (Some "wrong")) "mismatched token rejected"
             Expect.isFalse (bootstrapMatches cfg (Option<string>.None)) "absent token rejected"
             Expect.isFalse (bootstrapMatches baseConfig (Some "anything")) "no configured token ⇒ rejected"
+
+        testCase "user verification is required unless waived with a named reason"
+        <| fun _ ->
+            let uv waiver =
+                userVerificationOf {
+                    baseConfig with
+                        UserVerificationWaiver = waiver
+                }
+
+            Expect.equal
+                (userVerificationOf baseConfig)
+                Fido2NetLib.Objects.UserVerificationRequirement.Required
+                "the default demands user verification"
+
+            Expect.equal
+                (uv (Some "kiosk security keys have no PIN"))
+                Fido2NetLib.Objects.UserVerificationRequirement.Preferred
+                "a named reason lowers it to Preferred"
+
+            Expect.equal
+                (uv (Some "  "))
+                Fido2NetLib.Objects.UserVerificationRequirement.Required
+                "a blank reason waives nothing"
+
+        testCase "a pending challenge's grant reads back as the grant it was written from"
+        <| fun _ ->
+            for grant in [ ExistingSession; Bootstrap; PendingInvite; OpenRegistration ] do
+                Expect.equal (RegistrationGrant.tryParse (string grant)) (Some grant) $"{grant} round-trips"
+
+            Expect.isNone (RegistrationGrant.tryParse "Unknown") "an unreadable grant admits nothing"
+
+        testCaseAsync "the complete leg re-checks a new id, claims it, and releases the claim when the grant is spent"
+        <| async {
+            let calls = System.Collections.Generic.List<string>()
+
+            let lookups (known: bool) (spend: Result<unit, string>) : RegistrationLookups = {
+                HasCredential = fun _ -> async { return false }
+                IsKnownPrincipal = fun _ -> async { return known }
+                ClaimIdentity =
+                    fun (UserId u) -> async {
+                        calls.Add $"claim {u}"
+                        return Ok()
+                    }
+                ReleaseIdentity = fun (UserId u) -> async { calls.Add $"release {u}" }
+                ValidateInvite = fun _ -> async { return Ok() }
+                RedeemInvite =
+                    fun _ (UserId u) -> async {
+                        calls.Add $"redeem {u}"
+                        return spend
+                    }
+                BootstrapConsumed = fun () -> async { return false }
+                ConsumeBootstrap =
+                    fun (UserId u) -> async {
+                        calls.Add $"bootstrap {u}"
+                        return spend
+                    }
+            }
+
+            let! knownId = admitEnrolment (lookups true (Ok())) OpenRegistration None (UserId "victim")
+            Expect.isError knownId "an id that became known since begin is refused at complete"
+            Expect.isEmpty calls "and nothing is claimed for it"
+
+            let! spentBootstrap = admitEnrolment (lookups false (Error "already used")) Bootstrap None (UserId "admin")
+
+            Expect.equal spentBootstrap (Error "already used") "a lost bootstrap race refuses"
+
+            Expect.equal
+                (List.ofSeq calls)
+                [ "claim admin"; "bootstrap admin"; "release admin" ]
+                "the claim is released"
+
+            calls.Clear()
+            let! noToken = admitEnrolment (lookups false (Ok())) PendingInvite None (UserId "pk-1")
+            Expect.isError noToken "an invitation grant without its token admits nothing"
+
+            calls.Clear()
+            let! invited = admitEnrolment (lookups false (Ok())) PendingInvite (Some "tok") (UserId "pk-2")
+            Expect.isOk invited "a valid invitation admits the minted id"
+            Expect.equal (List.ofSeq calls) [ "claim pk-2"; "redeem pk-2" ] "one use of the link is redeemed"
+
+            calls.Clear()
+            let! session = admitEnrolment (lookups true (Ok())) ExistingSession None (UserId "carol")
+            Expect.isOk session "a session adds a passkey to an existing user"
+            Expect.isEmpty calls "without claiming or spending anything"
+        }
 
         // ── 443.A / 443.D — challenge store expiry + single-use ──
         testCase "challenge store rejects an expired challenge and consumes on first take"

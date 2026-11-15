@@ -248,6 +248,123 @@ let tryConsumePendingForUser
                         return Some entry
     }
 
+// ─── Invitation-link redemption core ────────────────────────────────
+
+/// The invitee-facing sentence for a share-token refusal on an invitation.
+let private describeInviteRefusal (err: ShareTokenError) : string =
+    match err with
+    | ShareTokenError.Malformed
+    | ShareTokenError.InvalidSignature
+    | ShareTokenError.NotFound -> "This invitation link is invalid."
+    | ShareTokenError.Expired -> "This invitation has expired."
+    | ShareTokenError.RevokedToken -> "This invitation has been revoked."
+    | ShareTokenError.UseLimitExceeded -> "This invitation has been used."
+    // Never raised by Validate or MarkUsed (the limiter gate is applied at
+    // submit-time on the publishable-forms path); kept so the match stays
+    // exhaustive.
+    | ShareTokenError.RateLimited -> "This invitation link is invalid."
+    | ShareTokenError.StorageFailed s -> sprintf "Invitation lookup failed: %s" s
+
+/// Validate an invitation link token without redeeming it: the signature,
+/// existence, expiry, revocation and use-limit gates of the share-token
+/// store, then the team-invitation kind and its role attribution. Returns
+/// the claim and the role it grants.
+let validateInviteToken
+    (shareTokenStore: IShareTokenStore)
+    (token: string)
+    : Async<Result<ShareTokenClaim * TeamRole, string>> =
+    async {
+        match! shareTokenStore.Validate token with
+        | Error err -> return Error(describeInviteRefusal err)
+        | Ok claim when claim.ResourceKind <> TeamInviteTypes.ResourceKind ->
+            return Error "This link is not a team invitation."
+        | Ok claim -> return parseAttribution claim |> Result.map (fun (role, _emailHint) -> claim, role)
+    }
+
+/// The two audit rows of a redeemed invitation.
+let private recordRedemption
+    (auditLog: IAuditLog)
+    (subject: AuditSubject)
+    (claim: ShareTokenClaim)
+    (role: TeamRole)
+    (invitee: UserId)
+    (remainingUses: int)
+    : Async<unit> =
+    async {
+        let teamId = TeamId claim.ResourceId
+
+        do!
+            auditLog.Record(
+                AuditScope.team teamId,
+                subject,
+                TeamInviteAccepted {
+                    TeamId = teamId
+                    TokenId = claim.TokenId
+                    InviteeUserId = invitee
+                    InviterUserId = UserId claim.IssuedBy
+                    Role = role
+                }
+            )
+            |> AuditRow.orRefuse
+
+        do!
+            auditLog.Record(
+                AuditScope.team teamId,
+                subject,
+                TeamInviteRedeemed {
+                    TeamId = teamId
+                    TokenId = claim.TokenId
+                    RemainingUses = remainingUses
+                }
+            )
+            |> AuditRow.orRefuse
+    }
+
+/// Redeem an invitation link for a principal it admits for the first time
+/// (a passkey enrolment, where possession of the link is the only proof
+/// the enrollee has). The token is re-validated, ONE use is consumed
+/// before anything else — the store's increment is atomic, so of two
+/// redemptions racing the last use exactly one proceeds — and only then
+/// is `invitee` added to the team with the invited role, its first team
+/// made active, and the redemption audited.
+let redeemInviteForNewPrincipal
+    (shareTokenStore: IShareTokenStore)
+    (teamStore: ITeamStore)
+    (auditLog: IAuditLog)
+    (token: string)
+    (invitee: UserId)
+    : Async<Result<unit, string>> =
+    async {
+        match! validateInviteToken shareTokenStore token with
+        | Error e -> return Error e
+        | Ok(claim, role) ->
+            let teamId = TeamId claim.ResourceId
+
+            match! shareTokenStore.MarkUsed(teamScopeId claim.ResourceId, claim.TokenId) with
+            | Error err -> return Error(describeInviteRefusal err)
+            | Ok() ->
+                match! teamStore.AddMember(teamId, invitee, role) with
+                | Error msg -> return Error(sprintf "Could not add you to the team: %s" msg)
+                | Ok() ->
+                    do! ActiveTeamPolicy.ensureActiveTeam teamStore invitee teamId
+
+                    let remaining =
+                        match claim.UseLimit with
+                        | Some limit -> max 0 (limit - claim.UsedCount - 1)
+                        | None -> 0
+
+                    do!
+                        recordRedemption
+                            auditLog
+                            (AuditSubject.fromSubject (Subject.AuthenticatedUser invitee.Value))
+                            claim
+                            role
+                            invitee
+                            remaining
+
+                    return Ok()
+    }
+
 // ─── Per-request API construction ───────────────────────────────────
 
 let teamInvitationApi
@@ -334,117 +451,77 @@ let teamInvitationApi
                 if AccessContext.isAnonymous access then
                     return Error "You must sign in before accepting an invitation."
                 else
-                    match! shareTokenStore.Validate token with
-                    | Error err ->
-                        let message =
-                            match err with
-                            | ShareTokenError.Malformed
-                            | ShareTokenError.InvalidSignature
-                            | ShareTokenError.NotFound -> "This invitation link is invalid."
-                            | ShareTokenError.Expired -> "This invitation has expired."
-                            | ShareTokenError.RevokedToken -> "This invitation has been revoked."
-                            | ShareTokenError.UseLimitExceeded -> "This invitation has been used."
-                            // Phase 21e — RateLimited is never raised by
-                            // Validate (the limiter gate is applied at
-                            // submit-time on the publishable-forms path,
-                            // not by the share-token store). Surface a
-                            // generic invalid-link message if it ever
-                            // reaches here so the match stays exhaustive.
-                            | ShareTokenError.RateLimited -> "This invitation link is invalid."
-                            | ShareTokenError.StorageFailed s -> sprintf "Invitation lookup failed: %s" s
+                    match! validateInviteToken shareTokenStore token with
+                    | Error message -> return Error message
+                    | Ok(claim, role) ->
+                        let teamId = claim.ResourceId
+                        let scope = teamScopeId teamId
 
-                        return Error message
-                    | Ok claim when claim.ResourceKind <> TeamInviteTypes.ResourceKind ->
-                        return Error "This link is not a team invitation."
-                    | Ok claim ->
-                        match parseAttribution claim with
-                        | Error msg -> return Error msg
-                        | Ok(role, _emailHint) ->
-                            let teamId = claim.ResourceId
-                            let scope = teamScopeId teamId
+                        // Already-member is a benign success — the
+                        // recipient may have followed the link a
+                        // second time. Bump the use count to keep
+                        // accounting honest.
+                        let! existingRole = teamStore.GetMemberRole(TeamId teamId, UserId access.UserId)
 
-                            // Already-member is a benign success — the
-                            // recipient may have followed the link a
-                            // second time. Bump the use count to keep
-                            // accounting honest.
-                            let! existingRole = teamStore.GetMemberRole(TeamId teamId, UserId access.UserId)
+                        let addResult = async {
+                            match existingRole with
+                            | Some _ -> return Ok()
+                            | None ->
+                                match! teamStore.AddMember(TeamId teamId, UserId access.UserId, role) with
+                                | Ok() -> return Ok()
+                                | Error e -> return Error e
+                        }
 
-                            let addResult = async {
-                                match existingRole with
-                                | Some _ -> return Ok()
-                                | None ->
-                                    match! teamStore.AddMember(TeamId teamId, UserId access.UserId, role) with
-                                    | Ok() -> return Ok()
-                                    | Error e -> return Error e
+                        match! addResult with
+                        | Error msg -> return Error(sprintf "Could not add you to the team: %s" msg)
+                        | Ok() ->
+                            // First-team-becomes-active: without
+                            // this the invitee resolves as
+                            // `AuthenticatedUser` (personal scope)
+                            // on every request after accepting —
+                            // empty data, empty module list. Only
+                            // writes when their pointer is unset;
+                            // also heals already-member re-redeems
+                            // left stranded by pre-fix adds.
+                            do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId access.UserId) (TeamId teamId)
+
+                            // Best-effort use-count bump. A failure
+                            // here does not roll back the add —
+                            // the membership is durable and the
+                            // substrate's `UseLimitExceeded` gate
+                            // catches double-redemption on the
+                            // next call.
+                            let! markResult = shareTokenStore.MarkUsed(scope, claim.TokenId)
+
+                            let remaining =
+                                match markResult, claim.UseLimit with
+                                | Ok(), Some limit -> max 0 (limit - claim.UsedCount - 1)
+                                | _, Some limit -> max 0 (limit - claim.UsedCount)
+                                | _ -> 0
+
+                            let teamName = async {
+                                match! teamStore.GetTeam(TeamId teamId) with
+                                | Some info -> return info.Name
+                                | None -> return teamId
                             }
 
-                            match! addResult with
-                            | Error msg -> return Error(sprintf "Could not add you to the team: %s" msg)
-                            | Ok() ->
-                                // First-team-becomes-active: without
-                                // this the invitee resolves as
-                                // `AuthenticatedUser` (personal scope)
-                                // on every request after accepting —
-                                // empty data, empty module list. Only
-                                // writes when their pointer is unset;
-                                // also heals already-member re-redeems
-                                // left stranded by pre-fix adds.
-                                do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId access.UserId) (TeamId teamId)
+                            let! resolvedTeamName = teamName
 
-                                // Best-effort use-count bump. A failure
-                                // here does not roll back the add —
-                                // the membership is durable and the
-                                // substrate's `UseLimitExceeded` gate
-                                // catches double-redemption on the
-                                // next call.
-                                let! markResult = shareTokenStore.MarkUsed(scope, claim.TokenId)
+                            do!
+                                recordRedemption
+                                    auditLog
+                                    (AuditSubject.fromSubject access.Subject)
+                                    claim
+                                    role
+                                    (UserId access.UserId)
+                                    remaining
 
-                                let remaining =
-                                    match markResult, claim.UseLimit with
-                                    | Ok(), Some limit -> max 0 (limit - claim.UsedCount - 1)
-                                    | _, Some limit -> max 0 (limit - claim.UsedCount)
-                                    | _ -> 0
-
-                                let teamName = async {
-                                    match! teamStore.GetTeam(TeamId teamId) with
-                                    | Some info -> return info.Name
-                                    | None -> return teamId
+                            return
+                                Ok {
+                                    TeamId = teamId
+                                    TeamName = resolvedTeamName
+                                    Role = role
                                 }
-
-                                let! resolvedTeamName = teamName
-
-                                do!
-                                    auditLog.Record(
-                                        AuditScope.team (TeamId teamId),
-                                        AuditSubject.fromSubject access.Subject,
-                                        TeamInviteAccepted {
-                                            TeamId = TeamId teamId
-                                            TokenId = claim.TokenId
-                                            InviteeUserId = UserId access.UserId
-                                            InviterUserId = UserId claim.IssuedBy
-                                            Role = role
-                                        }
-                                    )
-                                    |> AuditRow.orRefuse
-
-                                do!
-                                    auditLog.Record(
-                                        AuditScope.team (TeamId teamId),
-                                        AuditSubject.fromSubject access.Subject,
-                                        TeamInviteRedeemed {
-                                            TeamId = TeamId teamId
-                                            TokenId = claim.TokenId
-                                            RemainingUses = remaining
-                                        }
-                                    )
-                                    |> AuditRow.orRefuse
-
-                                return
-                                    Ok {
-                                        TeamId = teamId
-                                        TeamName = resolvedTeamName
-                                        Role = role
-                                    }
             }
 
         RevokeInvite =
