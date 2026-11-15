@@ -1,6 +1,6 @@
 # 1081 — `BudgetPosture`, the task registry as a DI singleton, and the compute-budget twins retired
 
-**Class:** breaking (the twins); additive (the posture and the registry). Rides 0.42.0. The codemod rewrites the
+**Class:** breaking (the twins); additive (the posture and the registry). Rides 0.42.1. The codemod rewrites the
 mechanical renames and lists every other site: `dotnet run --project Build.fsproj -- Codemod <dir> --phase 1081`.
 
 ## A budget that cannot read decides by its declared posture

@@ -1,6 +1,6 @@
 # A provider call is one function, and a connector is data
 
-**Ships in:** the 0.42.0 minor (the core group and the ai-providers group). The change is breaking-class: the five
+**Ships in:** the 0.42.1 minor (the core group and the ai-providers group). The change is breaking-class: the five
 AI connector packages lose their provider classes, and `AIProviderResponse.StopReason` changes type.
 `RetryPolicy.RateLimitFloor` is additive in meaning but is a new record field.
 
