@@ -14,9 +14,9 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Compose
 
-// ─── The narrative grounding gate (Phase 985) ────────────────────────
+// ─── The narrative grounding gate ────────────────────────
 //
-// Phase 521 made a fact reference OPTIONAL on a `Metric` span. That is
+// A fact reference is OPTIONAL on a `Metric` span. That is
 // right for an authored narrative and wrong for a model-written one: a
 // model can state a figure that is plausible, well formatted and wrong.
 // The gate below is what a model-written narrative passes before it is
@@ -26,7 +26,7 @@ open ToolUp.Platform.Compose
 //   1. resolves — a Fact id the scope holds, or `<kind>:<id>` for a kind a
 //      deployment registered (`ICitableReferenceKind`); an unregistered
 //      kind is refused by name;
-//   2. may be disclosed at the publishing surface (the one Phase 525
+//   2. may be disclosed at the publishing surface (the one disclosure
 //      predicate, through `IFactDisclosureGate`, so the deny is audited
 //      like every other door's);
 //   3. is current — the head of its lineage, not a superseded Fact;
@@ -53,6 +53,18 @@ open ToolUp.Platform.Compose
 // comma-separated list of references a chart component draws its values
 // from, which are checked as citations (resolve, disclosable, current) with
 // no stated value to compare.
+//
+// **Keys are not figures.** A label in a KEY POSITION — a table's column
+// header, the first cell of a table row, a key/value grid's key, a tick of a
+// chart component's `axis` prop — names what the figures beside it are
+// about. It is a key, and passes without a reference, when it is a period in
+// the deployment's grammar (`isPeriodLabel`: a calendar day, an ISO week, a
+// month, a quarter, a year, or a period the policy declares), or when it
+// names the subject of every Fact its row, column or entry cites. Anything
+// else in a key position — a free number, a currency figure, a label naming
+// a subject the cited Facts are not about — is read as prose, as everywhere
+// else. A key is not an admission: it is recorded nowhere and the
+// certificate seals nothing for it.
 //
 // **Derived figures.** A figure computed from two Facts — "margin was
 // 12.5%" from revenue and cost — is refused when the model writes it: it is
@@ -84,6 +96,12 @@ type GroundingPolicy = {
     /// Lower-case words that state a quantity. A word in prose matching one
     /// is an unreferenced number.
     NumberWords: Set<string>
+    /// The deployment's own period labels (a fiscal period, `FY26 P05`), each
+    /// a pattern that must match the whole of a label in a key position. The
+    /// calendar forms are periods whatever this holds
+    /// (`NarrativeGrounding.isPeriodLabel`); `NarrativeGrounding.withPeriodPatterns`
+    /// declares more, ignoring case. Empty by default.
+    PeriodPatterns: Regex list
 }
 
 module NarrativeGrounding =
@@ -151,7 +169,83 @@ module NarrativeGrounding =
             "halved"
         ]
 
-    let defaultPolicy: GroundingPolicy = { NumberWords = englishNumberWords }
+    let defaultPolicy: GroundingPolicy = {
+        NumberWords = englishNumberWords
+        PeriodPatterns = []
+    }
+
+    /// The `Component` prop carrying a chart's axis: a comma-separated list
+    /// of tick labels, each a key position.
+    [<Literal>]
+    let AxisProp = "axis"
+
+    let private normalise (s: string) : string =
+        String.Join(" ", s.Split([| ' '; '\t'; ' ' |], StringSplitOptions.RemoveEmptyEntries))
+
+    let private wholeLabel (pattern: string) =
+        Regex(sprintf "^(?:%s)$" pattern, RegexOptions.CultureInvariant ||| RegexOptions.IgnoreCase)
+
+    // ── Periods ─────────────────────────────────────────────────────
+
+    let private year = @"(?:19|20|21)\d{2}"
+    let private isoWeek = @"(?:0?[1-9]|[1-4]\d|5[0-3])"
+
+    /// The calendar periods written with a number the day forms below do not
+    /// read: weeks, a numbered month, quarters and a year.
+    let private calendarPatterns: Regex list =
+        [
+            sprintf @"%s-?W%s" year isoWeek // 2026-W32, 2026W32
+            sprintf @"(?:W|Wk|Week) ?%s(?: %s)?" isoWeek year // W32, Week 32, Week 32 2026
+            sprintf @"%s-(?:0[1-9]|1[0-2])" year // 2026-08
+            sprintf @"%s[- ]?Q[1-4]" year // 2026-Q3, 2026 Q3
+            sprintf @"Q[1-4](?:[- ]%s)?" year // Q3, Q3 2026, Q3-2026
+            year // 2026
+        ]
+        |> List.map wholeLabel
+
+    let private dayForms = [| "yyyy-MM-dd"; "d MMM yyyy"; "d MMMM yyyy"; "MMM yyyy"; "MMMM yyyy" |]
+
+    /// Is `label`, the whole of it, a period: a calendar day (`2026-08-03`,
+    /// `3 Aug 2026`), an ISO week (`2026-W32`, `Week 32`), a month (`2026-08`,
+    /// `August 2026`), a quarter (`2026-Q3`, `Q3 2026`), a year from 1900 to
+    /// 2199, or a period `policy` declares (`PeriodPatterns`, each matching the
+    /// whole label)? Surrounding and repeated spaces are ignored. A free number
+    /// (`1250`), a currency figure or a percentage is not a period.
+    let isPeriodLabel (policy: GroundingPolicy) (label: string) : bool =
+        let l = if isNull label then "" else normalise label
+
+        let whole (r: Regex) =
+            let m = r.Match l
+            m.Success && m.Index = 0 && m.Length = l.Length
+
+        let calendarDay () =
+            match DateTime.TryParseExact(l, dayForms, CultureInfo.InvariantCulture, DateTimeStyles.None) with
+            | true, d -> d.Year >= 1900 && d.Year <= 2199
+            | _ -> false
+
+        l <> ""
+        && (calendarDay ()
+            || List.exists whole calendarPatterns
+            || List.exists whole policy.PeriodPatterns)
+
+    /// `policy` with `patterns` declared as periods beside the calendar forms:
+    /// regular expressions, each matched against the whole label, ignoring
+    /// case (`@"FY\d{2} P(0[1-9]|1[0-3])"` for a thirteen-period year).
+    let withPeriodPatterns (patterns: string list) (policy: GroundingPolicy) : GroundingPolicy = {
+        policy with
+            PeriodPatterns = policy.PeriodPatterns @ List.map wholeLabel patterns
+    }
+
+    /// Does `label` name `subject` (a readable subject, `hierarchy/member>member`):
+    /// the whole subject, or a trailing run of its members? A label carrying
+    /// no letter names no subject.
+    let private namesSubject (label: string) (subject: string) : bool =
+        let l = normalise label
+
+        l |> Seq.exists Char.IsLetter
+        && (subject = l
+            || subject.EndsWith(">" + l, StringComparison.Ordinal)
+            || subject.EndsWith("/" + l, StringComparison.Ordinal))
 
     let private wordPattern = Regex(@"\p{L}+", RegexOptions.CultureInvariant)
 
@@ -465,6 +559,10 @@ module NarrativeGrounding =
         | MetricClaim of location: string * label: string * value: string * reference: string option
         /// A reference with no stated value (a chart component's `factRefs`).
         | CitationClaim of location: string * reference: string
+        /// A label in a key position — a table's column header, a table row's
+        /// first cell, a key/value grid's key, a chart's axis tick — and the
+        /// references its column, row or entry cites (none for an axis tick).
+        | KeyClaim of location: string * label: string * cited: string list
 
     let private spanClaims (at: string) (spans: InlineSpan list) : Claim list =
         let rec go (prefix: string) (spans: InlineSpan list) =
@@ -486,6 +584,30 @@ module NarrativeGrounding =
             |> List.concat
 
         go at spans
+
+    /// The references the `Metric` spans of `spans` cite.
+    let private citedIn (spans: InlineSpan list) : string list =
+        spanClaims "" spans
+        |> List.choose (function
+            | MetricClaim(_, _, _, Some reference) -> Some reference
+            | _ -> None)
+
+    /// The text of a cell that holds text alone (plain, emphasised or
+    /// strong), or `None` when it holds anything else: a metric, a link, an
+    /// image, code, or nothing.
+    let private labelOf (cell: InlineSpan list) : string option =
+        let parts =
+            cell
+            |> List.map (function
+                | Text s
+                | Emphasis s
+                | Strong s -> Some s
+                | _ -> None)
+
+        if not (List.isEmpty parts) && List.forall Option.isSome parts then
+            Some(parts |> List.choose id |> String.concat "")
+        else
+            None
 
     let private optProse (loc: string) (text: string option) : Claim list =
         text |> Option.map (fun t -> ProseClaim(loc, t)) |> Option.toList
@@ -530,19 +652,32 @@ module NarrativeGrounding =
             pairs
             |> List.mapi (fun k (key, spans) ->
                 let loc = sprintf "%s › entry %d" at (k + 1)
-                ProseClaim(loc, key) :: spanClaims loc spans)
+                KeyClaim(loc, key, citedIn spans) :: spanClaims loc spans)
             |> List.concat
             |> own
         | Table(columns, rows) ->
             let headers =
                 columns
-                |> List.mapi (fun c (h, _) -> ProseClaim(sprintf "%s › header %d" at (c + 1), h))
+                |> List.mapi (fun c (h, _) ->
+                    let column =
+                        rows
+                        |> List.collect (fun row -> List.tryItem c row |> Option.map citedIn |> Option.defaultValue [])
+
+                    KeyClaim(sprintf "%s › header %d" at (c + 1), h, List.distinct column))
 
             let cells =
                 rows
                 |> List.mapi (fun r row ->
+                    let loc c =
+                        sprintf "%s › row %d › column %d" at (r + 1) (c + 1)
+
                     row
-                    |> List.mapi (fun c cell -> spanClaims (sprintf "%s › row %d › column %d" at (r + 1) (c + 1)) cell)
+                    |> List.mapi (fun c cell ->
+                        match c, labelOf cell with
+                        | 0, Some label -> [
+                            KeyClaim(loc c, label, row |> List.tail |> List.collect citedIn |> List.distinct)
+                          ]
+                        | _ -> spanClaims (loc c) cell)
                     |> List.concat)
                 |> List.concat
 
@@ -592,6 +727,10 @@ module NarrativeGrounding =
             |> List.collect (fun (key, value) ->
                 if key = FactRefsProp then
                     splitRefs value |> List.map (fun r -> CitationClaim(loc, r))
+                elif key = AxisProp then
+                    value.Split([| ','; '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)
+                    |> List.ofArray
+                    |> List.mapi (fun k tick -> KeyClaim(sprintf "%s › prop '%s' › tick %d" loc key (k + 1), tick, []))
                 else
                     [ ProseClaim(sprintf "%s › prop '%s'" loc key, value) ])
             |> own
@@ -691,9 +830,6 @@ module NarrativeGrounding =
                 Some(value, halfUnit, percent)
             | _ -> None
 
-    let private normalise (s: string) : string =
-        String.Join(" ", s.Split([| ' '; '\t'; ' ' |], StringSplitOptions.RemoveEmptyEntries))
-
     /// Does `stated` state the resolved value? A verbatim rendering always
     /// does; otherwise the stated figure, rounded at the precision it is
     /// stated to, must equal the value.
@@ -736,6 +872,11 @@ module NarrativeGrounding =
     ///
     /// No other number becomes admissible: a percentage, a currency amount,
     /// a fraction or a decimal is never a whole number (`mentions`).
+    ///
+    /// A label in a key position (`KeyClaim`) is not a claim at all when it
+    /// is a period (`isPeriodLabel`) or names the subject of every Fact its
+    /// row, column or entry cites; it is then neither refused nor admitted.
+    /// Otherwise it is prose, judged as above.
     ///
     /// A figure in prose is never admitted by a calculation: a derived
     /// figure is stated as a `Metric` span citing a `calc:` reference, and
@@ -875,7 +1016,20 @@ module NarrativeGrounding =
                 | CitationClaim(loc, reference) ->
                     match judgeReference loc reference reference None with
                     | [] -> [], calculation loc reference
-                    | offences -> offences, [])
+                    | offences -> offences, []
+                | KeyClaim(loc, label, cited) ->
+                    // A key passes unrecorded: a period, or the subject of
+                    // every Fact its row, column or entry cites. Anything
+                    // else is prose.
+                    let namesCited =
+                        not (List.isEmpty cited)
+                        && cited
+                           |> List.forall (fun reference -> subjectOf reference |> Option.exists (namesSubject label))
+
+                    if isPeriodLabel policy label || namesCited then
+                        [], []
+                    else
+                        prose context loc label)
 
         match judged |> List.collect fst with
         | [] ->

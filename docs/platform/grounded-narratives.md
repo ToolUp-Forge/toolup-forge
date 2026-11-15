@@ -43,6 +43,33 @@ by cell, lists, captions, alt text, code. A `Component` block's props are prose,
 title, subtitle and section headings are structure the deployment authors, and are not inspected;
 the grounded run never lets the model write them.
 
+### Keys: a period or a subject in a key position is not a figure
+
+A label in a **key position** names what the figures beside it are about. There are four key
+positions: a table's column header, the first cell of a table row (when it holds text alone), a
+key/value grid's key, and each tick of a chart component's `axis` prop (a comma-separated list,
+`NarrativeGrounding.AxisProp`). A label there is a **key**, and passes without a reference, in two
+cases:
+
+- **It is a period** in the deployment's period grammar (`NarrativeGrounding.isPeriodLabel`). The
+  whole label must be the period. The calendar forms are always periods: a day (`2026-08-03`,
+  `3 Aug 2026`), an ISO week (`2026-W32`, `Week 32`), a month (`2026-08`, `August 2026`), a quarter
+  (`2026-Q3`, `Q3 2026`) and a year from 1900 to 2199. A deployment declares its own periods, such
+  as a fiscal period, as patterns on the policy, each matched against the whole label ignoring
+  case: `NarrativeGrounding.defaultPolicy |> NarrativeGrounding.withPeriodPatterns
+  [ @"FY\d{2} P(0[1-9]|1[0-3])" ]`, passed to `FactNarrativeGroundingGate.createWithPolicy`.
+- **It names the subject** of every Fact its row, column or entry cites: the whole readable subject
+  (`hierarchy/member>member`) or a trailing run of its members. So a product row labelled
+  `House Blend 500g Tin` keeps its row when the row's cells cite that product's Facts. A label
+  carrying no letter never names a subject.
+
+Anything else in a key position is prose and is judged as prose. That covers a free number
+(`1250`), a currency figure (`£40`), a percentage, a month that does not exist (`2026-13`), and a
+product label over another product's Fact. A period stated in prose ("in week 32 we sold…") is
+judged exactly as before, and so is a metric's label. A key is **not an admission**: the verdict
+records nothing for it and [the certificate](#the-grounding-certificate) seals nothing for it,
+because the figures beside it still each need their reference.
+
 ### What counts as a number, and the two that pass without a Fact
 
 Two kinds of number are grounded without a Fact, because a reader never mistakes them for a
@@ -424,7 +451,7 @@ is appended, after the deterministic projections. A request is refused by name o
 row (`ProjectionRefusals`), and the rest of the run still publishes, when:
 
 - its kind has no registered builder (the refusal names the registered kinds);
-- the builder could not draw it (malformed, a refused read, a trend, annotations, nothing on the day);
+- the builder could not draw it (malformed, a refused read, annotations, nothing in the period);
 - the gate refuses what was drawn. This includes a table whose facts the narrative's disclosure
   policy does not permit at `FactNarrativePublication`, which is refused like an ungrounded figure.
   The refusal names each offence by location and reason, never by the value drawn;
@@ -436,11 +463,15 @@ The row also counts what was drawn (`Projections`).
 `PresentationNarrative` draws a request as a heading, a `Table` and a note per point it leaves
 out. Each cell is a `Metric` span that cites the Fact it states, so the gate checks each one as it
 checks the model's citations. A withheld point leaves its cell empty, and the note names the subject
-and metric with the reason, never a count or a value. A chart is **not** projected into a narrative.
-The gate reads a chart component's props as prose, so a chart's points would be refused. A trend's
-rows are days, and the gate reads a date as a figure. Narratives therefore project tables, breakdowns
-and comparisons until a chart-shaped narrative element exists. For the same reason, a subject or
-metric whose name contains a digit draws a table that the gate refuses.
+and metric with the reason, never a day, a count or a value. A row's first cell and each column
+header are [key positions](#keys-a-period-or-a-subject-in-a-key-position-is-not-a-figure), so a
+day there is a key, and so is a subject's label, which the gate checks against the subject of the
+Facts its row or column cites. A **trend** is drawn as a table with a row per day the period holds a
+fact for and a column per subject; a gap is named by subject and reason, never by day, because a
+date in a note is prose. A chart is **not** projected into a narrative: the gate checks a chart
+component's `factRefs` as citations with no stated value, so a drawn figure goes in a table cell,
+where its value is checked. A metric whose name contains a digit draws a table that the gate
+refuses, and annotations are refused before any read, because they would be drawn as notes.
 
 **Why one context, and why it carries a request rather than a typed reader.** The deterministic
 hook and the request builders take the same context. Two mechanisms would diverge in what a read
