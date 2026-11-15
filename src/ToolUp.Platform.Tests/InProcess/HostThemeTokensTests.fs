@@ -196,12 +196,20 @@ let tests =
 
         testCase "client-styling/fuaran-bridge.css declares exactly the table's shell rows"
         <| fun _ ->
-            let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
-
-            let bridgeFile =
+            // bin/<Config>/net10.0/<pack>.dll -> up five is the repository root.
+            let repoRoot =
                 Path.GetFullPath(
-                    Path.Combine(assemblyDir, "..", "..", "..", "..", "..", "client-styling/fuaran-bridge.css")
+                    Path.Combine(
+                        Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+                        "..",
+                        "..",
+                        "..",
+                        "..",
+                        ".."
+                    )
                 )
+
+            let bridgeFile = Path.Combine(repoRoot, "client-styling/fuaran-bridge.css")
 
             let css = File.ReadAllText bridgeFile
 
