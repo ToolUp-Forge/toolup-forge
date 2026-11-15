@@ -132,45 +132,45 @@
        family's property in Directory.Packages.props moves that family alone.
   -->
   <PropertyGroup>
-    <ToolUpAIProvidersVersion Condition="'$(ToolUpAIProvidersVersion)' == ''">0.39.3</ToolUpAIProvidersVersion>
-    <ToolUpAlgorithmProvidersVersion Condition="'$(ToolUpAlgorithmProvidersVersion)' == ''">0.39.2</ToolUpAlgorithmProvidersVersion>
-    <ToolUpArtefactSigningVersion Condition="'$(ToolUpArtefactSigningVersion)' == ''">0.39.2</ToolUpArtefactSigningVersion>
-    <ToolUpAuditSinksVersion Condition="'$(ToolUpAuditSinksVersion)' == ''">0.39.2</ToolUpAuditSinksVersion>
-    <ToolUpAuthProvidersVersion Condition="'$(ToolUpAuthProvidersVersion)' == ''">0.39.2</ToolUpAuthProvidersVersion>
-    <ToolUpCalendarVersion Condition="'$(ToolUpCalendarVersion)' == ''">0.39.2</ToolUpCalendarVersion>
-    <ToolUpCloudVersion Condition="'$(ToolUpCloudVersion)' == ''">0.39.0</ToolUpCloudVersion>
-    <ToolUpContainerSchedulersVersion Condition="'$(ToolUpContainerSchedulersVersion)' == ''">0.39.2</ToolUpContainerSchedulersVersion>
-    <ToolUpContentScannersVersion Condition="'$(ToolUpContentScannersVersion)' == ''">0.39.2</ToolUpContentScannersVersion>
+    <ToolUpAIProvidersVersion Condition="'$(ToolUpAIProvidersVersion)' == ''">0.40.0</ToolUpAIProvidersVersion>
+    <ToolUpAlgorithmProvidersVersion Condition="'$(ToolUpAlgorithmProvidersVersion)' == ''">0.39.3</ToolUpAlgorithmProvidersVersion>
+    <ToolUpArtefactSigningVersion Condition="'$(ToolUpArtefactSigningVersion)' == ''">0.39.3</ToolUpArtefactSigningVersion>
+    <ToolUpAuditSinksVersion Condition="'$(ToolUpAuditSinksVersion)' == ''">0.39.3</ToolUpAuditSinksVersion>
+    <ToolUpAuthProvidersVersion Condition="'$(ToolUpAuthProvidersVersion)' == ''">0.40.0</ToolUpAuthProvidersVersion>
+    <ToolUpCalendarVersion Condition="'$(ToolUpCalendarVersion)' == ''">0.39.3</ToolUpCalendarVersion>
+    <ToolUpCloudVersion Condition="'$(ToolUpCloudVersion)' == ''">0.39.1</ToolUpCloudVersion>
+    <ToolUpContainerSchedulersVersion Condition="'$(ToolUpContainerSchedulersVersion)' == ''">0.39.3</ToolUpContainerSchedulersVersion>
+    <ToolUpContentScannersVersion Condition="'$(ToolUpContentScannersVersion)' == ''">0.39.3</ToolUpContentScannersVersion>
     <ToolUpDataSourcesVersion Condition="'$(ToolUpDataSourcesVersion)' == ''">0.40.0</ToolUpDataSourcesVersion>
-    <ToolUpEmbeddingCachesVersion Condition="'$(ToolUpEmbeddingCachesVersion)' == ''">0.39.2</ToolUpEmbeddingCachesVersion>
-    <ToolUpEmbeddingProvidersVersion Condition="'$(ToolUpEmbeddingProvidersVersion)' == ''">0.39.2</ToolUpEmbeddingProvidersVersion>
-    <ToolUpEncryptionVersion Condition="'$(ToolUpEncryptionVersion)' == ''">0.39.2</ToolUpEncryptionVersion>
-    <ToolUpEntityStoresVersion Condition="'$(ToolUpEntityStoresVersion)' == ''">0.39.2</ToolUpEntityStoresVersion>
+    <ToolUpEmbeddingCachesVersion Condition="'$(ToolUpEmbeddingCachesVersion)' == ''">0.39.3</ToolUpEmbeddingCachesVersion>
+    <ToolUpEmbeddingProvidersVersion Condition="'$(ToolUpEmbeddingProvidersVersion)' == ''">0.39.3</ToolUpEmbeddingProvidersVersion>
+    <ToolUpEncryptionVersion Condition="'$(ToolUpEncryptionVersion)' == ''">0.39.3</ToolUpEncryptionVersion>
+    <ToolUpEntityStoresVersion Condition="'$(ToolUpEntityStoresVersion)' == ''">0.39.3</ToolUpEntityStoresVersion>
     <ToolUpExperimentsVersion Condition="'$(ToolUpExperimentsVersion)' == ''">0.1.0-alpha</ToolUpExperimentsVersion>
-    <ToolUpFactStoresVersion Condition="'$(ToolUpFactStoresVersion)' == ''">0.39.2</ToolUpFactStoresVersion>
-    <ToolUpFeatureFlagProvidersVersion Condition="'$(ToolUpFeatureFlagProvidersVersion)' == ''">0.1.3-alpha</ToolUpFeatureFlagProvidersVersion>
-    <ToolUpHostsVersion Condition="'$(ToolUpHostsVersion)' == ''">0.39.2</ToolUpHostsVersion>
-    <ToolUpIngestionQueuesVersion Condition="'$(ToolUpIngestionQueuesVersion)' == ''">0.39.2</ToolUpIngestionQueuesVersion>
-    <ToolUpJobSchedulersVersion Condition="'$(ToolUpJobSchedulersVersion)' == ''">0.39.2</ToolUpJobSchedulersVersion>
-    <ToolUpMediaVersion Condition="'$(ToolUpMediaVersion)' == ''">0.39.2</ToolUpMediaVersion>
-    <ToolUpMetricsVersion Condition="'$(ToolUpMetricsVersion)' == ''">0.39.2</ToolUpMetricsVersion>
-    <ToolUpModelProvidersVersion Condition="'$(ToolUpModelProvidersVersion)' == ''">0.39.2</ToolUpModelProvidersVersion>
-    <ToolUpNotificationChannelsVersion Condition="'$(ToolUpNotificationChannelsVersion)' == ''">0.39.2</ToolUpNotificationChannelsVersion>
-    <ToolUpObservabilityVersion Condition="'$(ToolUpObservabilityVersion)' == ''">0.39.2</ToolUpObservabilityVersion>
-    <ToolUpOcrProvidersVersion Condition="'$(ToolUpOcrProvidersVersion)' == ''">0.39.2</ToolUpOcrProvidersVersion>
-    <ToolUpRateLimitVersion Condition="'$(ToolUpRateLimitVersion)' == ''">0.39.2</ToolUpRateLimitVersion>
-    <ToolUpReportRenderersVersion Condition="'$(ToolUpReportRenderersVersion)' == ''">0.39.2</ToolUpReportRenderersVersion>
-    <ToolUpRerankersVersion Condition="'$(ToolUpRerankersVersion)' == ''">0.39.2</ToolUpRerankersVersion>
-    <ToolUpSecretsVersion Condition="'$(ToolUpSecretsVersion)' == ''">0.39.2</ToolUpSecretsVersion>
-    <ToolUpShareTokenStoreDecoratorsVersion Condition="'$(ToolUpShareTokenStoreDecoratorsVersion)' == ''">0.39.2</ToolUpShareTokenStoreDecoratorsVersion>
-    <ToolUpSparseIndicesVersion Condition="'$(ToolUpSparseIndicesVersion)' == ''">0.39.2</ToolUpSparseIndicesVersion>
-    <ToolUpStorageVersion Condition="'$(ToolUpStorageVersion)' == ''">0.39.2</ToolUpStorageVersion>
-    <ToolUpStripeVersion Condition="'$(ToolUpStripeVersion)' == ''">0.2.3</ToolUpStripeVersion>
-    <ToolUpSvgRasterizersVersion Condition="'$(ToolUpSvgRasterizersVersion)' == ''">0.39.2</ToolUpSvgRasterizersVersion>
-    <ToolUpTelemetrySinksVersion Condition="'$(ToolUpTelemetrySinksVersion)' == ''">0.39.2</ToolUpTelemetrySinksVersion>
-    <ToolUpTimeSeriesStoresVersion Condition="'$(ToolUpTimeSeriesStoresVersion)' == ''">0.39.2</ToolUpTimeSeriesStoresVersion>
-    <ToolUpVectorStoresVersion Condition="'$(ToolUpVectorStoresVersion)' == ''">0.39.2</ToolUpVectorStoresVersion>
-    <ToolUpVoiceProvidersVersion Condition="'$(ToolUpVoiceProvidersVersion)' == ''">0.39.2</ToolUpVoiceProvidersVersion>
+    <ToolUpFactStoresVersion Condition="'$(ToolUpFactStoresVersion)' == ''">0.39.3</ToolUpFactStoresVersion>
+    <ToolUpFeatureFlagProvidersVersion Condition="'$(ToolUpFeatureFlagProvidersVersion)' == ''">0.1.4-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpHostsVersion Condition="'$(ToolUpHostsVersion)' == ''">0.39.3</ToolUpHostsVersion>
+    <ToolUpIngestionQueuesVersion Condition="'$(ToolUpIngestionQueuesVersion)' == ''">0.39.3</ToolUpIngestionQueuesVersion>
+    <ToolUpJobSchedulersVersion Condition="'$(ToolUpJobSchedulersVersion)' == ''">0.39.3</ToolUpJobSchedulersVersion>
+    <ToolUpMediaVersion Condition="'$(ToolUpMediaVersion)' == ''">0.39.3</ToolUpMediaVersion>
+    <ToolUpMetricsVersion Condition="'$(ToolUpMetricsVersion)' == ''">0.39.3</ToolUpMetricsVersion>
+    <ToolUpModelProvidersVersion Condition="'$(ToolUpModelProvidersVersion)' == ''">0.39.3</ToolUpModelProvidersVersion>
+    <ToolUpNotificationChannelsVersion Condition="'$(ToolUpNotificationChannelsVersion)' == ''">0.39.3</ToolUpNotificationChannelsVersion>
+    <ToolUpObservabilityVersion Condition="'$(ToolUpObservabilityVersion)' == ''">0.39.3</ToolUpObservabilityVersion>
+    <ToolUpOcrProvidersVersion Condition="'$(ToolUpOcrProvidersVersion)' == ''">0.39.3</ToolUpOcrProvidersVersion>
+    <ToolUpRateLimitVersion Condition="'$(ToolUpRateLimitVersion)' == ''">0.39.3</ToolUpRateLimitVersion>
+    <ToolUpReportRenderersVersion Condition="'$(ToolUpReportRenderersVersion)' == ''">0.39.3</ToolUpReportRenderersVersion>
+    <ToolUpRerankersVersion Condition="'$(ToolUpRerankersVersion)' == ''">0.39.3</ToolUpRerankersVersion>
+    <ToolUpSecretsVersion Condition="'$(ToolUpSecretsVersion)' == ''">0.39.3</ToolUpSecretsVersion>
+    <ToolUpShareTokenStoreDecoratorsVersion Condition="'$(ToolUpShareTokenStoreDecoratorsVersion)' == ''">0.39.3</ToolUpShareTokenStoreDecoratorsVersion>
+    <ToolUpSparseIndicesVersion Condition="'$(ToolUpSparseIndicesVersion)' == ''">0.39.3</ToolUpSparseIndicesVersion>
+    <ToolUpStorageVersion Condition="'$(ToolUpStorageVersion)' == ''">0.40.0</ToolUpStorageVersion>
+    <ToolUpStripeVersion Condition="'$(ToolUpStripeVersion)' == ''">0.2.4</ToolUpStripeVersion>
+    <ToolUpSvgRasterizersVersion Condition="'$(ToolUpSvgRasterizersVersion)' == ''">0.39.3</ToolUpSvgRasterizersVersion>
+    <ToolUpTelemetrySinksVersion Condition="'$(ToolUpTelemetrySinksVersion)' == ''">0.39.3</ToolUpTelemetrySinksVersion>
+    <ToolUpTimeSeriesStoresVersion Condition="'$(ToolUpTimeSeriesStoresVersion)' == ''">0.39.3</ToolUpTimeSeriesStoresVersion>
+    <ToolUpVectorStoresVersion Condition="'$(ToolUpVectorStoresVersion)' == ''">0.40.0</ToolUpVectorStoresVersion>
+    <ToolUpVoiceProvidersVersion Condition="'$(ToolUpVoiceProvidersVersion)' == ''">0.39.3</ToolUpVoiceProvidersVersion>
     <ToolUpWebhooksVersion Condition="'$(ToolUpWebhooksVersion)' == ''">0.1.0-alpha</ToolUpWebhooksVersion>
     <ToolUpWorkflowVersion Condition="'$(ToolUpWorkflowVersion)' == ''">0.1.0-alpha</ToolUpWorkflowVersion>
   </PropertyGroup>
