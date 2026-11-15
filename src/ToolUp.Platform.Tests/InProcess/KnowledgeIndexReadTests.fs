@@ -1,6 +1,8 @@
 module ToolUp.Platform.Tests.InProcess.KnowledgeIndexReadTests
 
+open System
 open System.Text
+open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -74,6 +76,46 @@ let private corrupt (storage: IBlobStorage) = async {
     Expect.isOk written "the corrupt index is seeded"
 }
 
+/// Wait until the background extraction an admitted upload started has written
+/// the document's index entry past `Queued`. The upload returns before that
+/// extraction runs, and its index write is a read-modify-write: on this
+/// in-memory storage, which has no conditional writes, a test that overwrites
+/// the index while the write is in flight has its bytes replaced by the
+/// extraction's. `mkDeps` composes a queue nothing drains, so the attempt's
+/// `Embedding` seed is the extraction's last index write (a terminal status
+/// is, on a path that enqueues nothing).
+///
+/// The status feed is subscribed before the index is read, and the feed
+/// publishes after the index write, so a transition landing between the two
+/// is seen by one or the other. `ExtractingText` is announced without an
+/// index write, so it does not count.
+let private awaitExtractionIndexWrite (storage: IBlobStorage) (docId: string) = async {
+    let written =
+        TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+    use _ =
+        IngestionStatusFeed.subscribe docId (fun status ->
+            match status with
+            | ExtractingText -> ()
+            | _ -> written.TrySetResult() |> ignore)
+
+    let! index = loadIndex storage container
+
+    let settled =
+        match index with
+        | Ok docs ->
+            docs
+            |> List.exists (fun d ->
+                d.Id = docId
+                && (match d.Status with
+                    | Queued -> false
+                    | _ -> true))
+        | Error _ -> false
+
+    if not settled then
+        do! written.Task.WaitAsync(TimeSpan.FromMinutes 2.0) |> Async.AwaitTask
+}
+
 let private isRejected (status: IngestionStatus) =
     match status with
     | UploadRejected _ -> true
@@ -110,6 +152,7 @@ let tests =
             let deps = mkDeps storage Logger.silent KnowledgePolicies.defaults
             let! first = uploadDocument deps csvBytes "scores.csv"
             Expect.isFalse (isRejected first.Status) "the first upload is admitted"
+            do! awaitExtractionIndexWrite storage first.Id
             do! corrupt storage
             let! second = uploadDocument deps csvBytes "scores-copy.csv"
             expectIndexRefusal second
@@ -162,5 +205,83 @@ let tests =
             Expect.equal read (Ok []) "absence reads as an empty index"
             let! doc = uploadDocument (mkDeps storage Logger.silent KnowledgePolicies.defaults) csvBytes "scores.csv"
             Expect.isFalse (isRejected doc.Status) "an upload into an empty scope is admitted"
+        }
+
+        // The background extraction's index write is a decider too: one that
+        // read the index before it was corrupted refuses rather than replacing
+        // the corrupt bytes. The write is held between its read and its write,
+        // the index corrupted under it, and then let go. On a conditional
+        // backend it loses its precondition, re-reads the corrupt index and
+        // refuses. (A backend without conditional writes cannot detect a
+        // writer outside the process lock, which is why the dedup case above
+        // waits for this write before corrupting.)
+        testCaseAsync "an extraction write that read the index before it was corrupted refuses"
+        <| async {
+            let innerStore =
+                ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
+
+            let inner = innerStore :> IBlobStorage
+            let conditional = innerStore :> IConditionalBlobStorage
+            let held = TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+
+            let release =
+                TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+
+            let heldResult =
+                TaskCompletionSource<Result<string, ConditionalWriteError>>(
+                    TaskCreationOptions.RunContinuationsAsynchronously
+                )
+
+            let mutable indexWrites = 0
+
+            // The request path's entry is the first index write; the
+            // extraction's attempt seed is the second.
+            let storage =
+                { new IBlobStorage with
+                    member _.CanComposeFrom = inner.CanComposeFrom
+                    member _.ComposeFrom(c, t, s) = inner.ComposeFrom(c, t, s)
+                    member _.Download(c, b) = inner.Download(c, b)
+                    member _.Upload(c, b, content) = inner.Upload(c, b, content)
+                    member _.Delete(c, b) = inner.Delete(c, b)
+                    member _.List(c, p) = inner.List(c, p)
+                    member _.Exists(c, b) = inner.Exists(c, b)
+                    member _.GetMetadata(c, b) = inner.GetMetadata(c, b)
+                    member _.DownloadRange(c, b, o, l) = inner.DownloadRange(c, b, o, l)
+                    member _.Erase(c, p, policy, dryRun) = inner.Erase(c, p, policy, dryRun)
+                  interface IConditionalBlobStorage with
+                      member _.DownloadWithETag(c, b) = conditional.DownloadWithETag(c, b)
+
+                      member _.UploadWithETag(c, b, content, condition) = async {
+                          let isHeld =
+                              b = indexBlobName && System.Threading.Interlocked.Increment &indexWrites = 2
+
+                          if isHeld then
+                              held.TrySetResult() |> ignore
+                              do! release.Task |> Async.AwaitTask
+
+                          let! result = conditional.UploadWithETag(c, b, content, condition)
+
+                          if isHeld then
+                              heldResult.TrySetResult result |> ignore
+
+                          return result
+                      }
+                }
+
+            let within (task: Task) =
+                task.WaitAsync(TimeSpan.FromMinutes 2.0) |> Async.AwaitTask
+
+            let deps = mkDeps storage Logger.silent KnowledgePolicies.defaults
+            let! first = uploadDocument deps csvBytes "scores.csv"
+            Expect.isFalse (isRejected first.Status) "the first upload is admitted"
+            do! within held.Task
+            do! corrupt inner
+            release.TrySetResult() |> ignore
+            do! within heldResult.Task
+            Expect.isError heldResult.Task.Result "the held write loses its precondition"
+            let! second = uploadDocument deps csvBytes "scores-copy.csv"
+            expectIndexRefusal second
+            let! index = loadIndex inner container
+            Expect.isError index "the corrupt index was not replaced"
         }
     ]
