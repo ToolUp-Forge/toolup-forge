@@ -35,26 +35,29 @@ module ModelFitBatchItemJobHandler =
         (modelRegistry: IModelRegistry)
         (audit: IAuditLog)
         : RunJob<FitBatchItemPayload> =
-        RunJob.ofPayload ModelFitBatch.ItemHandlerName (fun _ item -> async {
-            match! ModelFitEnvelope.runFit providers audit item.Request with
-            | Error e -> return Error(ModelFitJobHandler.failureOf e)
-            | Ok outcome ->
-                let annotations =
-                    Map [
-                        FitRequestBatch.BatchIdAnnotationKey, item.BatchId
-                        FitRequestBatch.BatchIndexAnnotationKey, string item.Index
-                    ]
+        RunJob.ofPayload ModelFitBatch.ItemHandlerName (fun ctx item -> async {
+            match JobPayloadScope.requireOwn ctx item.Request.ScopeId with
+            | Error reason -> return Error(RunFailure.Terminal reason)
+            | Ok() ->
+                match! ModelFitEnvelope.runFit providers audit item.Request with
+                | Error e -> return Error(ModelFitJobHandler.failureOf e)
+                | Ok outcome ->
+                    let annotations =
+                        Map [
+                            FitRequestBatch.BatchIdAnnotationKey, item.BatchId
+                            FitRequestBatch.BatchIndexAnnotationKey, string item.Index
+                        ]
 
-                let registeredBy = $"_platform.modelfit.batch/{item.BatchId}"
+                    let registeredBy = $"_platform.modelfit.batch/{item.BatchId}"
 
-                match! modelRegistry.Register(item.Request.ScopeId, outcome, registeredBy, annotations, "") with
-                | Ok _ -> return Ok()
-                | Error e ->
-                    return
-                        Error(
-                            RunFailure.Retryable
-                                $"registration failed (batch {item.BatchId}): {ModelRegistryError.describe e}"
-                        )
+                    match! modelRegistry.Register(item.Request.ScopeId, outcome, registeredBy, annotations, "") with
+                    | Ok _ -> return Ok()
+                    | Error e ->
+                        return
+                            Error(
+                                RunFailure.Retryable
+                                    $"registration failed (batch {item.BatchId}): {ModelRegistryError.describe e}"
+                            )
         })
 
     /// Construct the batch-item job handler.

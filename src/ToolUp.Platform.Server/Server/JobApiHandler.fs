@@ -2,6 +2,7 @@ module ToolUp.Platform.Jobs.JobApiHandler
 
 open System
 open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Config
@@ -33,7 +34,38 @@ open ToolUp.Platform.Config
 // one); it is used only when it names the same shard the registration is
 // written under. A request the middleware resolved no scope for (a caller
 // bypassing it) keeps the string overload, whose job runs anonymous on
-// `JobContext.Scope` with the carried `ScopeId`, as before this phase.
+// `JobContext.Scope` with the carried `ScopeId`.
+//
+// **The wire names only a declared handler.** Every handler the platform
+// and its companions register is reachable by name on the scheduler, and
+// several act on a scope, user or container their payload names. So the
+// wire may name a handler only when the deployment declared it
+// wire-schedulable (`declareWireSchedulable`); nothing is declared by
+// default. `Schedule` refuses an undeclared handler with
+// `ScheduleError.HandlerNotRegistered`, the answer an unknown name gets, so
+// the wire cannot tell a platform handler from a name nobody registered.
+// `TriggerOnce` is not gated by the declaration: it fires an existing job in
+// the caller's own scope, choosing neither its handler nor its payload, and a
+// handler whose payload names a scope refuses one that is not its job's own
+// when it runs (`JobPayloadScope`). And no method acts under the platform
+// container (`_platform`): a job registered there may act on any tenant (the
+// OAuth token refresh), so that scope is one only the platform's own paths
+// can register under.
+
+/// A handler a deployment lets a caller name over the job API, so that
+/// `Schedule` registers a job for it. Declare it with
+/// `declareWireSchedulable`. Declare only a handler whose payload can name
+/// nothing outside the job's own scope, because the caller writes the
+/// payload.
+type WireSchedulableJobHandler = {
+    /// The handler name, exactly as it is registered with the scheduler.
+    Handler: string
+}
+
+/// Adds `handler` to the handlers a caller may name over the job API. A
+/// handler nobody declares is not wire-schedulable.
+let declareWireSchedulable (handler: string) (services: IServiceCollection) : IServiceCollection =
+    services.AddSingleton<WireSchedulableJobHandler>({ Handler = handler })
 
 /// The `HttpContext.Items` key the scope-resolution middleware records the
 /// request's `ResolvedScope` under (`ScopeResolution.ItemsKey`, which
@@ -52,7 +84,17 @@ let jobApi (ctx: HttpContext) : JobApi =
         AccessContext.tryResolve ctx.RequestServices
         |> Option.defaultWith (fun () -> AccessContext.unresolved "JobApiHandler")
 
-    let scopeOpt = AccessContext.configScope accessContext
+    // A caller whose scope is the platform container is served as one with
+    // no scope: a job there may act on any tenant.
+    let scopeOpt =
+        AccessContext.configScope accessContext
+        |> Option.filter (fun scope -> scope.ScopeId <> ScopeKey.PlatformContainer)
+
+    // The handlers the deployment declared wire-schedulable.
+    let declared =
+        match ctx.RequestServices.GetService(typeof<seq<WireSchedulableJobHandler>>) with
+        | :? seq<WireSchedulableJobHandler> as handlers -> handlers |> Seq.map _.Handler |> Set.ofSeq
+        | _ -> Set.empty
 
     // Phase 930 — the scope the middleware resolved and recorded for this
     // request. `ScopeResolution.forRequest` compiles after this file, so the
@@ -144,6 +186,8 @@ let jobApi (ctx: HttpContext) : JobApi =
 
                     match rbac with
                     | Error msg -> return Error(ScheduleError.StorageFailure msg)
+                    | Ok() when not (declared.Contains registration.Handler) ->
+                        return Error(ScheduleError.HandlerNotRegistered registration.Handler)
                     | Ok() ->
                         // Overwrite caller-supplied scope and creator
                         // with the resolved values from AccessContext.

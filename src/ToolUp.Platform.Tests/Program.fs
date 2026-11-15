@@ -705,6 +705,7 @@ let private registeredTests =
         NarrativeCalculationTests.tests
         LanguageProfileTests.tests
         IdentitySeamCensusTests.tests
+        JobApiHandlerNamespaceTests.tests
     ]
 
 let private deliberatelyUnregistered: TestRegistrationGuard.Exemption list = []

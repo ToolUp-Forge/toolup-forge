@@ -45,10 +45,20 @@ open ToolUp.Platform.Jobs
 type LifecycleJobHandler(services: IServiceProvider) =
     interface IJobHandler with
         member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match TenantLifecycleAggregator.LifecycleJobPayload.parse ctx.Payload with
-            | Error e ->
-                // A malformed payload will not recover on retry.
-                return PermanentFailure(sprintf "malformed tenant-lifecycle payload: %s" e)
+            // The platform enqueues a lifecycle job under the scope its payload
+            // names, so a payload naming any other scope was not the
+            // platform's and is refused before any hook runs.
+            let admitted =
+                TenantLifecycleAggregator.LifecycleJobPayload.parse ctx.Payload
+                |> Result.mapError (sprintf "malformed tenant-lifecycle payload: %s")
+                |> Result.bind (fun (phase, scopeId, actorUserId) ->
+                    JobPayloadScope.requireOwn ctx scopeId
+                    |> Result.map (fun () -> phase, scopeId, actorUserId))
+
+            match admitted with
+            | Error reason ->
+                // Neither a malformed payload nor a foreign scope recovers on retry.
+                return PermanentFailure reason
             | Ok(phase, scopeId, actorUserId) ->
                 let hooks =
                     match services.GetService(typeof<seq<ITenantLifecycle>>) with

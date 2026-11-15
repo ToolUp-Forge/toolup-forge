@@ -216,6 +216,31 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 > `src/ToolUp.Platform.Server/Server/Middleware.fs` (`Middleware.fromSubject`) ·
 > `src/ToolUp.Platform.Tests/Contracts/ISubjectResolverContract.fs` ·
 > `docs/platform/surfaces.md`
+>
+> **The rule extends to background jobs.** A job runs under the scope the
+> platform resolved when it was scheduled, and two controls stop a scheduling
+> caller from pointing it at another scope:
+>
+> - The job API schedules (`Schedule`) only a handler the deployment declared
+>   wire-schedulable, and none is declared by default. An undeclared handler
+>   gets the answer an unknown name gets, so the wire cannot schedule or
+>   discover a platform handler. `TriggerOnce` fires an existing job in the
+>   caller's own scope and cannot choose its handler or payload.
+> - The job API serves no caller whose scope is the platform container, and a
+>   handler whose payload names a target scope, container or descriptor refuses
+>   one that is not its job's own before it acts. A registration forged in the
+>   job store is therefore refused at execution as well as at scheduling. The
+>   one exception is a job registered under the platform container, which may
+>   name a tenant (the OAuth token refresh).
+>
+> **Evidence (jobs):**
+> `src/ToolUp.Platform.Server/Server/JobApiHandler.fs`
+> (`declareWireSchedulable`) ·
+> `src/ToolUp.Platform.Server/Server/IJobHandler.fs` (`JobPayloadScope`) ·
+> `src/ToolUp.Platform.Server/Server/LifecycleJobHandler.fs` ·
+> `src/ToolUp.Platform.Server/Server/ScheduledDeprovisionJobHandler.fs` ·
+> `src/ToolUp.Platform.Tests/JobApiHandlerNamespaceTests.fs` ·
+> `docs/migrations/1283-wire-schedulable-job-handlers.md` (Phase 1283)
 
 > **TI-1b — Membership caches are invalidated by event, and a deprovisioned
 > tenant's cache entries are evicted, so a warm cache cannot resolve a revoked

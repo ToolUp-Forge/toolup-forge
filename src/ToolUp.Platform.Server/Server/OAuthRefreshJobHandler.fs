@@ -162,12 +162,23 @@ type OAuthRefreshJobHandler
     (refresher: InProcessOAuthTokenRefresher.Impl, secretStore: ISecretStore, auditLog: IAuditLog, logger: ILogger) =
     interface IJobHandler with
         member _.Execute(ctx) = async {
-            match InProcessOAuthTokenRefresher.tryDeserializeDescriptor ctx.Payload with
+            // The refresher registers this job under the platform container and
+            // names the tenant in the descriptor; any other job must name its own.
+            let parsed =
+                InProcessOAuthTokenRefresher.tryDeserializeDescriptor ctx.Payload
+                |> Option.map (fun descriptor ->
+                    descriptor, JobPayloadScope.requireOwnOrPlatform ctx descriptor.ScopeId)
+
+            match parsed with
             | None ->
                 let msg = sprintf "[OAuthRefreshJobHandler] malformed payload for job %A" ctx.JobId
                 logger.Warn msg
                 return JobResult.PermanentFailure msg
-            | Some descriptor ->
+            | Some(_, Error reason) ->
+                let msg = sprintf "[OAuthRefreshJobHandler] refused: %s" reason
+                logger.Warn msg
+                return JobResult.PermanentFailure msg
+            | Some(descriptor, Ok()) ->
                 let! windowOpen = isRefreshWindowOpen secretStore descriptor
 
                 if not windowOpen then

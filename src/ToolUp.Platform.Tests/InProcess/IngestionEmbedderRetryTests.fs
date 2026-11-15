@@ -233,7 +233,9 @@ let private credentialRejection =
                 ChunkId = "doc-867:chunk:0"
                 ChunkIndex = 0
                 Chunk = { Content = "x"; Metadata = Map.empty }
-                Scope = Deployment
+                // The vector scope this container projects to (`VectorScope.ofContainer`):
+                // a retry naming any other is refused before it reaches the pipeline.
+                Scope = VectorScope.User "team-867"
                 ScopeId = "team-867"
                 Container = "team-867"
                 OriginatingUserId = None

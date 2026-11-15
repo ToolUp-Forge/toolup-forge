@@ -1482,6 +1482,7 @@ type ToolUp.Platform JobContextProgressExtensions ToolUp.Platform.Jobs
 type ToolUp.Platform JobLifecycle ToolUp.Platform.Jobs
 type ToolUp.Platform JobNotifyEventStore ToolUp.Platform.Jobs
 type ToolUp.Platform JobPayload ToolUp.Platform.Jobs
+type ToolUp.Platform JobPayloadScope ToolUp.Platform.Jobs
 type ToolUp.Platform JobProgressScope ToolUp.Platform.Jobs
 type ToolUp.Platform JobProgressSink ToolUp.Platform.Jobs
 type ToolUp.Platform JobScheduler ToolUp.Platform.Jobs

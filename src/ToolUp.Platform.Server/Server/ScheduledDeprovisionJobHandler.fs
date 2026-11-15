@@ -41,12 +41,22 @@ open ToolUp.Platform.Jobs
 type ScheduledDeprovisionJobHandler(services: IServiceProvider) =
     interface IJobHandler with
         member _.Execute(ctx: JobContext) : Async<JobResult> = async {
-            match TenantLifecycleAggregator.ScheduledDeprovisionPayload.parse ctx.Payload with
-            | Error e ->
-                // A malformed payload cannot recover on retry — retiring
-                // the poll job here would need a scheduler we may not have,
-                // so dead-letter it; an admin re-schedules if needed.
-                return PermanentFailure(sprintf "malformed scheduled-deprovision payload: %s" e)
+            // `scheduleDeprovision` registers the poll under the scope its
+            // payload names, so a payload naming any other scope is refused
+            // before anything is enqueued.
+            let admitted =
+                TenantLifecycleAggregator.ScheduledDeprovisionPayload.parse ctx.Payload
+                |> Result.mapError (sprintf "malformed scheduled-deprovision payload: %s")
+                |> Result.bind (fun (scopeId, actorUserId, reason, dueAt) ->
+                    JobPayloadScope.requireOwn ctx scopeId
+                    |> Result.map (fun () -> scopeId, actorUserId, reason, dueAt))
+
+            match admitted with
+            | Error reason ->
+                // Neither a malformed payload nor a foreign scope recovers on
+                // retry — retiring the poll job here would need a scheduler we
+                // may not have, so dead-letter it; an admin re-schedules if needed.
+                return PermanentFailure reason
             | Ok(scopeId, actorUserId, _reason, dueAt) ->
                 if ctx.RunningAt < dueAt.UtcDateTime then
                     // Grace window has not elapsed — wait for the next tick.

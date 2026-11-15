@@ -64,6 +64,32 @@ let private jobToIngestionJob (p: IngestionRetryPayload) : IngestionJob = {
     Attempt = p.Attempt
 }
 
+/// Whether a retry payload names only the job's own scope. An ingestion
+/// schedules its retry under the document's scope, and the vector scope it
+/// indexes into is the one that scope projects to: the platform knowledge base
+/// for the platform container, otherwise `VectorScope.ofContainer`.
+let private admit (ctx: JobContext) (p: IngestionRetryPayload) : Result<unit, string> =
+    let storage: StorageScope = {
+        ScopeId = p.ScopeId
+        Container = p.Container
+        Persist = true
+    }
+
+    match JobPayloadScope.requireOwnStorage ctx storage with
+    | Error reason -> Error reason
+    | Ok() ->
+        let expected =
+            if p.Container = ScopeKey.PlatformContainer then
+                VectorScope.Platform
+            else
+                VectorScope.ofContainer storage
+
+        if p.Scope = expected then
+            Ok()
+        else
+            Error
+                $"the job's payload names vector scope '{VectorScope.key p.Scope}', which is not the vector scope of container '{p.Container}'"
+
 /// `IJobHandler` for `_platform.rag.ingestion-retry`. `deps` is the same
 /// `IngestionRetryDeps` bundle the background service uses (crucially the
 /// SAME `AlertState`, so provider-unavailable dedup + the dead-letter-rate
@@ -76,11 +102,17 @@ type IngestionRetryJobHandler(deps: IngestionRetryDeps) =
 
     interface IJobHandler with
         member _.Execute(ctx) = async {
-            match tryDeserialize ctx.Payload with
+            match
+                tryDeserialize ctx.Payload
+                |> Option.map (fun payload -> payload, admit ctx payload)
+            with
             | None ->
                 deps.Logger.Warn(sprintf "[IngestionRetryJobHandler] malformed payload for job %A" ctx.JobId)
                 return JobResult.PermanentFailure "malformed ingestion-retry payload"
-            | Some payload ->
+            | Some(_, Error reason) ->
+                deps.Logger.Warn(sprintf "[IngestionRetryJobHandler] refused job %A: %s" ctx.JobId reason)
+                return JobResult.PermanentFailure reason
+            | Some(payload, Ok()) ->
                 let job = jobToIngestionJob payload
 
                 // True ingestion attempt: scheduler attempt 1 == ingestion

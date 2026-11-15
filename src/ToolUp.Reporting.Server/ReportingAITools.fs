@@ -1121,9 +1121,16 @@ let private executeRenderReport (deps: ReportingAIToolDeps) (ctx: HttpContext) (
 let renderJobHandler (deps: ReportingAIToolDeps) (services: IServiceProvider) : IJobHandler =
     { new IJobHandler with
         member _.Execute(jobCtx: JobContext) = async {
-            match RenderJobPayload.decode jobCtx.Payload with
+            // `enqueue` registers the render under the requester's scope, the
+            // one its payload names; a payload naming any other is refused.
+            let parsed =
+                RenderJobPayload.decode jobCtx.Payload
+                |> Option.map (fun payload -> payload, JobPayloadScope.requireOwn jobCtx payload.ScopeId)
+
+            match parsed with
             | None -> return PermanentFailure "unreadable report render payload"
-            | Some payload ->
+            | Some(_, Error reason) -> return PermanentFailure reason
+            | Some(payload, Ok()) ->
                 let channel = serviceOf<INotificationChannel> services
                 let events = serviceOf<IEventStore> services
 

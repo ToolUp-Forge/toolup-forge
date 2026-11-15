@@ -533,7 +533,11 @@ ToolUp.Platform.Jobs.InProcessOAuthTokenRefresher+Impl.AttemptRefresh(ToolUp.Pla
 ToolUp.Platform.Jobs.InProcessOAuthTokenRefresher+Impl.Recover() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.InProcessOAuthTokenRefresher+Impl.TryGetDescriptor(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthRefreshDescriptor]
 ToolUp.Platform.Jobs.JobApiHandler (class)
+ToolUp.Platform.Jobs.JobApiHandler.declareWireSchedulable(System.String, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Platform.Jobs.JobApiHandler.jobApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.JobApi
+ToolUp.Platform.Jobs.JobApiHandler+WireSchedulableJobHandler (class)
+ToolUp.Platform.Jobs.JobApiHandler+WireSchedulableJobHandler..ctor(System.String)
+ToolUp.Platform.Jobs.JobApiHandler+WireSchedulableJobHandler.Handler : System.String { get }
 ToolUp.Platform.Jobs.JobContextProgressExtensions (class)
 ToolUp.Platform.Jobs.JobContextProgressExtensions.JobContext.get_Progress(ToolUp.Platform.JobContext) : ToolUp.Platform.IJobProgressReporter
 ToolUp.Platform.Jobs.JobLifecycle (class)
@@ -736,6 +740,10 @@ ToolUp.Platform.Jobs.JobNotifyEventStore+JobNotifyEventStore..ctor(ToolUp.Platfo
 ToolUp.Platform.Jobs.JobPayload (class)
 ToolUp.Platform.Jobs.JobPayload.parse`1(System.String) : Microsoft.FSharp.Core.FSharpResult`2[T, System.String]
 ToolUp.Platform.Jobs.JobPayload.serialise`1(T) : System.String
+ToolUp.Platform.Jobs.JobPayloadScope (class)
+ToolUp.Platform.Jobs.JobPayloadScope.requireOwn(ToolUp.Platform.JobContext, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.Jobs.JobPayloadScope.requireOwnOrPlatform(ToolUp.Platform.JobContext, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.Jobs.JobPayloadScope.requireOwnStorage(ToolUp.Platform.JobContext, ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.Jobs.JobProgressScope (class)
 ToolUp.Platform.Jobs.JobProgressScope.current() : ToolUp.Platform.IJobProgressReporter
 ToolUp.Platform.Jobs.JobProgressScope.push(ToolUp.Platform.IJobProgressReporter) : System.IDisposable

@@ -1,5 +1,6 @@
 namespace ToolUp.Platform.Jobs
 
+open System
 open ToolUp.Platform
 
 // ─── IJobHandler ─────────────────────────────────────────────────
@@ -46,3 +47,62 @@ type IJobHandler =
     /// `TransientFailure` — handlers that want explicit terminal
     /// failure must return `PermanentFailure` rather than throwing.
     abstract Execute: ctx: JobContext -> Async<JobResult>
+
+// ─── A payload never names another job's scope ───────────────────
+//
+// A job runs under the scope it was registered under (`ctx.ScopeId`). A
+// handler whose payload ALSO names a scope (a target, a container, a
+// descriptor) acts on the payload's scope, so a payload that names a scope
+// other than the job's own reaches a tenant nobody scheduled it for. Every
+// platform path that schedules such a handler registers the job under the
+// very scope its payload names, so the comparison costs a legitimate job
+// nothing. The one exception is a job registered under the platform
+// container (`_platform`), which acts on a tenant by design (the OAuth token
+// refresh): the job API refuses a caller whose resolved scope is the
+// platform container, so that scope is a registration field the wire
+// cannot set.
+
+/// The comparison a handler makes before it acts on a scope its
+/// payload names. Each check answers `Error` with an operator-readable
+/// reason; the handler returns it as `PermanentFailure`, since no retry
+/// makes a payload name a different scope.
+[<RequireQualifiedAccess>]
+module JobPayloadScope =
+
+    let private sameScope (left: string) (right: string) =
+        String.Equals(left, right, StringComparison.Ordinal)
+
+    let private refusal (ctx: JobContext) (named: string) =
+        $"the job's payload names scope '{named}', but job {ctx.JobId} runs under scope '{ctx.ScopeId}'"
+
+    /// `Ok` when `payloadScopeId` is the scope the job runs under.
+    let requireOwn (ctx: JobContext) (payloadScopeId: string) : Result<unit, string> =
+        if sameScope payloadScopeId ctx.ScopeId then
+            Ok()
+        else
+            Error(refusal ctx payloadScopeId)
+
+    /// `Ok` when `payloadScopeId` is the job's own scope, or when the job runs
+    /// under the platform container, which only the platform's own paths can
+    /// register.
+    let requireOwnOrPlatform (ctx: JobContext) (payloadScopeId: string) : Result<unit, string> =
+        if sameScope ctx.ScopeId ScopeKey.PlatformContainer then
+            Ok()
+        else
+            requireOwn ctx payloadScopeId
+
+    /// `Ok` when the storage scope a payload carries field by field is the
+    /// job's own: its id is the job's scope, and its container is the one
+    /// that id renders to (`StorageScope.tryKey`), or the id itself for a
+    /// claim scope. A container naming a different principal from its id is
+    /// refused even when the id matches.
+    let requireOwnStorage (ctx: JobContext) (scope: StorageScope) : Result<unit, string> =
+        match requireOwn ctx scope.ScopeId with
+        | Error reason -> Error reason
+        | Ok() ->
+            match StorageScope.tryKey scope with
+            | Some _ -> Ok()
+            | None when sameScope scope.Container scope.ScopeId -> Ok()
+            | None ->
+                Error
+                    $"the job's payload names container '{scope.Container}', which is not the container of scope '{scope.ScopeId}'"

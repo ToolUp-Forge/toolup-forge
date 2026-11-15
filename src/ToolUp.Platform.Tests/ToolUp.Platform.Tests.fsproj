@@ -571,6 +571,7 @@
         <Compile Include="InProcess\NarrativeCalculationTests.fs" />
         <Compile Include="InProcess\LanguageProfileTests.fs" />
         <Compile Include="InProcess\IdentitySeamCensusTests.fs" />
+        <Compile Include="JobApiHandlerNamespaceTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

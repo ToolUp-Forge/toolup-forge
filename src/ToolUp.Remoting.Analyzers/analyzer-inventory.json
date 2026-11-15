@@ -83,7 +83,7 @@
         "src/ToolUp.Platform.Server/Server/HostingBaseline.fs": 2,
         "src/ToolUp.Platform.Server/Server/IEdgeCache.fs": 1,
         "src/ToolUp.Platform.Server/Server/INarrativeStore.fs": 2,
-        "src/ToolUp.Platform.Server/Server/JobApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/JobApiHandler.fs": 4,
         "src/ToolUp.Platform.Server/Server/Lifecycle/ConfigSeedLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Lifecycle/ConversationStoreLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Lifecycle/DataSubjectRequestLifecycle.fs": 4,

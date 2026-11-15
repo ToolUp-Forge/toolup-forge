@@ -917,6 +917,8 @@ let private reactivePathTests =
                 let scheduler = CarryingScheduler((fun () -> failwith "not run"), true)
                 let services = ServiceCollection()
                 services.AddSingleton<IJobScheduler>(scheduler) |> ignore
+                // The wire schedules only a declared handler.
+                JobApiHandler.declareWireSchedulable "h" services |> ignore
 
                 services.AddSingleton<AccessContext>(AccessContexts.forSubject (AuthenticatedUser "user-930"))
                 |> ignore

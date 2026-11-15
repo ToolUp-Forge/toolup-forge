@@ -468,9 +468,16 @@ type DerivativeJobHandler
 
     interface IJobHandler with
         member _.Execute(ctx: JobContext) = async {
-            match DerivativeJobsJson.tryFromJson<DerivativeJobPayload> ctx.Payload with
+            // `EnsureQueued` registers the job under the container its payload
+            // names, so a payload naming any other container is refused.
+            let parsed =
+                DerivativeJobsJson.tryFromJson<DerivativeJobPayload> ctx.Payload
+                |> Option.map (fun payload -> payload, JobPayloadScope.requireOwn ctx payload.ScopeContainer)
+
+            match parsed with
             | None -> return PermanentFailure "malformed derivative-job payload"
-            | Some payload ->
+            | Some(_, Error reason) -> return PermanentFailure reason
+            | Some(payload, Ok()) ->
                 let container = payload.ScopeContainer
                 let hash = payload.ContentHash
                 let name = payload.DerivativeName
