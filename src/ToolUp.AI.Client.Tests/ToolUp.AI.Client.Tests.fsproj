@@ -342,5 +342,6 @@
         <ProjectReference Include="..\..\proofs\oracle\fable\ToolUp.Remoting.Proofs.Oracle.Fable.fsproj" />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Fable.Core" />
+        <PackageReference Include="Fuaran.UI.Operability" />
     </ItemGroup>
 </Project>

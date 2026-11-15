@@ -2,13 +2,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <Description>ToolUp.Facts Client — the fact browse companion: a multi-page Feliz module over IFactBrowseApi showing declared fact tables, their run history and change summaries, and server-paged drill-down rows with one fact's provenance. Separate from the knowledge base client; depends on ToolUp.Platform.Client + ToolUp.Facts.Shared. Phase 895.</Description>
+        <Description>ToolUp.Facts Client — the fact browse companion: a multi-page module over IFactBrowseApi showing declared fact tables (the listing and the table detail as Fuaran-UI trees), their run history and change summaries, and server-paged drill-down rows with one fact's provenance. Separate from the knowledge base client; depends on ToolUp.Platform.Client + ToolUp.Facts.Shared.</Description>
         <PackageTags>fsharp;fable;feliz;elmish;sdk;client;facts;grounding</PackageTags>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
         <ProjectReference Include="..\ToolUp.Facts.Shared\ToolUp.Facts.Shared.fsproj" />
+        <!-- The listing and the table detail are authored as Fuaran-UI trees
+             and lowered through Platform.Client's internal tree seam. -->
+        <PackageReference Include="Fuaran.UI" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="ToolUp.AI.Client.Tests" />
     </ItemGroup>
     <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
     <ItemGroup>
@@ -20,7 +26,7 @@
     <ItemGroup>
         <Compile Include="Client\FactBrowseModel.fs" />
         <Compile Include="Client\FactBrowseView.fs" />
-        <!-- Phase 1130 — the series read a conversation block part is re-read
+        <!-- The series read a conversation block part is re-read
              through, for a client boot to register with the AI client. -->
         <Compile Include="Client\BlockSeriesResolver.fs" />
     </ItemGroup>
