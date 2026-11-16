@@ -546,6 +546,25 @@ jobs:
           path: .model-execution-corpus
           persist-credentials: false
 
+      # ─── The Fact wire specification corpus ─────────────────────────
+      #
+      # The Platform pack's `Fact wire specification` list certifies forge's
+      # fact store and identity against the specification's corpus. The
+      # specification is public
+      # (https://github.com/Fuaran-Data/fuaran-fact-specification,
+      # Apache-2.0), so the checkout needs no token and fork PRs run it. It
+      # lands at `fuaran-fact-specification/` in the checkout (gitignored),
+      # the first place the list looks. The revision is the one `Pin.commit`
+      # names in src/ToolUp.Platform.Tests/Conformance/FactSpecConformance.fs;
+      # bump the two together. Without the corpus the list fails, never skips.
+      - name: Check out the Fact wire specification corpus
+        uses: actions/checkout@v6
+        with:
+          repository: Fuaran-Data/fuaran-fact-specification
+          ref: 9d2347f4c2dbab831781f8c0f47fb9cd1a9fc75e
+          path: fuaran-fact-specification
+          persist-credentials: false
+
       # ─── The App-composition wire specification, at forge's pin ─────
       #
       # `spec/fixtures/core/` carries copies of the specification's vectors
