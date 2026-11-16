@@ -1,6 +1,6 @@
 # Phase 1217 — a period or a subject label in a key position is a key, not a figure
 
-**Class:** breaking on the 0.42.0 draft (already breaking) for code that builds a `GroundingPolicy` as a full
+**Class:** breaking on the 0.43.0 draft for code that builds a `GroundingPolicy` as a full
 record or matches `NarrativeGrounding.Claim` exhaustively; additive for everyone else. A narrative that
 passed the grounding gate before still passes, and nothing it refused in prose is admitted now.
 
