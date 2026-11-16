@@ -23,7 +23,7 @@ publish path. The contract is **embedded by copy** and enforced by
 | `deps.json` | Exact toolchain pin (`tailwindcss` + `@tailwindcss/vite` = `4.3.0`, no `^`) and the v3/PostCSS deps + config files v4 makes obsolete. |
 | `../fuaran-bridge.css` | The `--fuaran-*` tokens of the Fuaran-UI reference stylesheet, answered with the shell's tokens. Copied beside the entry. |
 | `../vite-fuaran-content.mjs` | The Vite plugin that resolves `@nuget/<package-id>/…` to the restored package folder. Copied beside `vite.config.mts`. |
-| `../check-drift.ps1` | Fails if any consumer's marked region or pinned deps differ, or a copied file differs from its canonical source. Wire into precommit/CI. |
+| `../check-drift.ps1` | Fails if any consumer's marked region or pinned deps differ, or a copied file differs from its canonical source, or a `dotnet new` template client does not carry the block. Wire into precommit/CI; `-Root <dir>` scopes the search to one tree. |
 
 ## How a consumer adopts it
 
@@ -56,10 +56,36 @@ publish path. The contract is **embedded by copy** and enforced by
    surface authored as a Fuaran-UI tree is styled and themed by the shell's
    tokens. See [`docs/platform/theming.md`](../../docs/platform/theming.md).
 5. Run `npm install` (commit the regenerated lockfile) and
-   `check-drift.ps1` (must pass).
+   `check-drift.ps1` (must pass). A client whose lockfile is committed
+   but whose `node_modules` you do not want to install (a template, for
+   instance) regenerates it with
+   `npm install --package-lock-only --no-fund --no-audit`.
 
 Per-app branding is then a ~6-line `:root` block; the toolchain version
 lives in exactly one place.
+
+### The `dotnet new` templates are consumers
+
+Every template with a client (`platformsdk-application`,
+`platformsdk-dataplatform`, `platformsdk-solution`, `safer`) carries the
+block, the pins and the plugins exactly as the steps above describe, so
+an app made from a template starts styled. The templates differ from
+other consumers in two ways:
+
+- `check-drift.ps1` **requires** them. Any
+  `templates/<template>/src/<App>-Client/` holding a `vite.config.mts` must
+  carry the start marker in its `index.css`; one without it is drift, not
+  "not a consumer", so a template cannot drop the block unnoticed.
+- The template gate runs the check. `dotnet run --project Build.fsproj --
+  VerifyTemplates` (the `templates` CI job) calls
+  `check-drift.ps1 -Root .` before it compiles a template, which holds the
+  repository's own consumers and nothing beside the clone.
+
+When the canonical block or `deps.json` changes, re-stamp the four
+template clients in the same change (the region verbatim, the pins, the
+copied `vite-fable-tailwind.mjs`) and regenerate their lockfiles; the
+template gate is red until you do. The template's own rules and any
+brand `:root` override go after the end marker.
 
 ## Fable `output/` needs `@source` + the canonical Vite plugin
 
