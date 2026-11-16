@@ -1,6 +1,6 @@
 # 1087 — `KnowledgePolicies`, the hook over `VectorisationDeps`, and the deletions
 
-**Class:** breaking. Rides 0.42.0. The codemod covers the mechanical renames and lists every other site:
+**Class:** breaking. Rides 0.42.1. The codemod covers the mechanical renames and lists every other site:
 `dotnet run --project Build.fsproj -- Codemod <dir> --phase 1087`.
 
 ## The knowledge base's policies are one record

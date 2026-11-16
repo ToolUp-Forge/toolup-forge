@@ -2044,7 +2044,7 @@ module Codemod =
             CodemodFileClass.Source
             @"\bDeserialize<[^>]*(?:AuditEvent|AuditEnvelope|Archive\w*|Ledger\w*)>\s*\(.*\bPlatformJson\.options\b"
             "if this reads an audit archive, a ledger or a sink payload, read it with `AuditLog.AuditEventJson.options`: a companion's event is archived under its kind, which `PlatformJson.options` cannot decode"
-        // Since 0.42.0 the toolkit's table is typed over its rows.
+        // Since 0.42.1 the toolkit's table is typed over its rows.
         review
             "1073-data-table-columns"
             CodemodMigration.AdminPageKit

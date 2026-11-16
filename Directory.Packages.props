@@ -12,9 +12,9 @@
     <!-- Phase 1348 — the Fuaran-DB repository's pin, for Fuaran.DB (the
          dataset model and its pipeline check; ToolUp.Facts.Server only).
          Public: a release on nuget.org, built on the Core and Compute pins
-         above (0.1.0 is built on Fuaran.Core 0.42.0 and Fuaran.Compute
+         above (0.2.0 is built on Fuaran.Core 0.42.0 and Fuaran.Compute
          0.44.0). The core package only: no provider, session or dialect. -->
-    <FuaranDbVersion>0.1.0</FuaranDbVersion>
+    <FuaranDbVersion>0.2.0</FuaranDbVersion>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Phase 1129 — the Fuaran-UI repository's pin, for Fuaran.UI and

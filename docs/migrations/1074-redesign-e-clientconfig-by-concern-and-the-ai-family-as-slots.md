@@ -128,4 +128,4 @@ else.
 read the review findings. The shell's composition is unchanged for every configuration (the 32
 shell-slot snapshot baselines are byte-identical).
 
-**Rollback.** Pin the SDK below 0.42.0.
+**Rollback.** Pin the SDK below 0.42.1.
