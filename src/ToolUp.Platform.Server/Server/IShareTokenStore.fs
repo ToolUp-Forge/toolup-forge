@@ -32,16 +32,31 @@ type IShareTokenStore =
 
     /// Validate a token string. Re-reads the persisted claim and
     /// applies every gate: signature, existence, expiry, revocation.
-    /// Does NOT increment `UsedCount` — call `MarkUsed` separately
-    /// after the consuming operation succeeds. This split lets the
-    /// caller validate-then-act-then-bump without burning a use-slot
-    /// on a request that fails downstream.
+    /// Does NOT increment `UsedCount` — call `MarkUsed` separately. A
+    /// passed `Validate` is no bound on how many concurrent callers pass
+    /// it: a caller for whom the use limit is a bound marks FIRST and acts
+    /// only on `Ok` (a team invite link admits that way). Acting before
+    /// marking spends no use on a request that fails downstream, at the
+    /// cost of letting concurrent callers exceed the limit.
     abstract Validate: token: string -> Async<Result<ShareTokenClaim, ShareTokenError>>
 
     /// Atomically increment `UsedCount`. Returns `Error UseLimitExceeded`
     /// when the increment would push `UsedCount` past `UseLimit`.
     /// Callers must call exactly once per consumed use — there is no
     /// rollback.
+    ///
+    /// Atomic is the contract, not a best effort: of N concurrent calls on
+    /// a token with `UseLimit = K`, exactly K return `Ok ()`. An
+    /// implementation that cannot make the increment atomic returns an
+    /// `Error` rather than a check-then-write, and a caller that admits
+    /// something on a use (a team invite link) consumes BEFORE it admits
+    /// and admits nothing on an `Error`. `BlobShareTokenStore` serialises
+    /// the increment in-process and makes it conditional on the claim's
+    /// ETag across replicas on a blob backend implementing
+    /// `IConditionalBlobStorage` (every shipped backend does). Over a
+    /// third-party backend without conditional writes it is atomic within
+    /// one process only and logs that it fell back, so such a backend is
+    /// single-replica. The shipped decorators forward `MarkUsed` unchanged.
     abstract MarkUsed: scopeId: string * tokenId: string -> Async<Result<unit, ShareTokenError>>
 
     /// Permanently revoke a token. Subsequent `Validate` returns

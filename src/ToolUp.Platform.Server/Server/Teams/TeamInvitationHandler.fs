@@ -320,6 +320,44 @@ let private recordRedemption
             |> AuditRow.orRefuse
     }
 
+/// Admit `invitee` to the link's team: consume ONE use of the link first,
+/// and add the member only when the consume succeeded. The store's
+/// `MarkUsed` is an atomic increment, so of N redemptions racing the last
+/// use exactly one proceeds, and a store that cannot consume (a refusal or
+/// a storage fault) admits nobody: there is no check-then-mark fallback.
+/// When the add fails after a successful consume, the use stays spent —
+/// `IShareTokenStore` has no rollback, and returning a use would be a
+/// second write that can itself race; a link spent without a member
+/// fails closed, and the issuer re-issues.
+let private admitThroughLink
+    (shareTokenStore: IShareTokenStore)
+    (teamStore: ITeamStore)
+    (auditLog: IAuditLog)
+    (subject: AuditSubject)
+    (claim: ShareTokenClaim)
+    (role: TeamRole)
+    (invitee: UserId)
+    : Async<Result<unit, string>> =
+    async {
+        let teamId = TeamId claim.ResourceId
+
+        match! shareTokenStore.MarkUsed(teamScopeId claim.ResourceId, claim.TokenId) with
+        | Error err -> return Error(describeInviteRefusal err)
+        | Ok() ->
+            match! teamStore.AddMember(teamId, invitee, role) with
+            | Error msg -> return Error(sprintf "Could not add you to the team: %s" msg)
+            | Ok() ->
+                do! ActiveTeamPolicy.ensureActiveTeam teamStore invitee teamId
+
+                let remaining =
+                    match claim.UseLimit with
+                    | Some limit -> max 0 (limit - claim.UsedCount - 1)
+                    | None -> 0
+
+                do! recordRedemption auditLog subject claim role invitee remaining
+                return Ok()
+    }
+
 /// Redeem an invitation link for a principal it admits for the first time
 /// (a passkey enrolment, where possession of the link is the only proof
 /// the enrollee has). The token is re-validated, ONE use is consumed
@@ -338,31 +376,15 @@ let redeemInviteForNewPrincipal
         match! validateInviteToken shareTokenStore token with
         | Error e -> return Error e
         | Ok(claim, role) ->
-            let teamId = TeamId claim.ResourceId
-
-            match! shareTokenStore.MarkUsed(teamScopeId claim.ResourceId, claim.TokenId) with
-            | Error err -> return Error(describeInviteRefusal err)
-            | Ok() ->
-                match! teamStore.AddMember(teamId, invitee, role) with
-                | Error msg -> return Error(sprintf "Could not add you to the team: %s" msg)
-                | Ok() ->
-                    do! ActiveTeamPolicy.ensureActiveTeam teamStore invitee teamId
-
-                    let remaining =
-                        match claim.UseLimit with
-                        | Some limit -> max 0 (limit - claim.UsedCount - 1)
-                        | None -> 0
-
-                    do!
-                        recordRedemption
-                            auditLog
-                            (AuditSubject.fromSubject (Subject.AuthenticatedUser invitee.Value))
-                            claim
-                            role
-                            invitee
-                            remaining
-
-                    return Ok()
+            return!
+                admitThroughLink
+                    shareTokenStore
+                    teamStore
+                    auditLog
+                    (AuditSubject.fromSubject (Subject.AuthenticatedUser invitee.Value))
+                    claim
+                    role
+                    invitee
     }
 
 // ─── Per-request API construction ───────────────────────────────────
@@ -455,66 +477,40 @@ let teamInvitationApi
                     | Error message -> return Error message
                     | Ok(claim, role) ->
                         let teamId = claim.ResourceId
-                        let scope = teamScopeId teamId
+                        let invitee = UserId access.UserId
 
                         // Already-member is a benign success — the
                         // recipient may have followed the link a
-                        // second time. Bump the use count to keep
-                        // accounting honest.
-                        let! existingRole = teamStore.GetMemberRole(TeamId teamId, UserId access.UserId)
-
-                        let addResult = async {
-                            match existingRole with
-                            | Some _ -> return Ok()
+                        // second time. Nothing is admitted, so no
+                        // use is consumed and no redemption audited.
+                        // Everyone else consumes a use BEFORE the add.
+                        let! admitted = async {
+                            match! teamStore.GetMemberRole(TeamId teamId, invitee) with
+                            | Some _ ->
+                                // First-team-becomes-active: heals an
+                                // already-member whose pointer is unset.
+                                do! ActiveTeamPolicy.ensureActiveTeam teamStore invitee (TeamId teamId)
+                                return Ok()
                             | None ->
-                                match! teamStore.AddMember(TeamId teamId, UserId access.UserId, role) with
-                                | Ok() -> return Ok()
-                                | Error e -> return Error e
+                                return!
+                                    admitThroughLink
+                                        shareTokenStore
+                                        teamStore
+                                        auditLog
+                                        (AuditSubject.fromSubject access.Subject)
+                                        claim
+                                        role
+                                        invitee
                         }
 
-                        match! addResult with
-                        | Error msg -> return Error(sprintf "Could not add you to the team: %s" msg)
+                        match admitted with
+                        | Error msg -> return Error msg
                         | Ok() ->
-                            // First-team-becomes-active: without
-                            // this the invitee resolves as
-                            // `AuthenticatedUser` (personal scope)
-                            // on every request after accepting —
-                            // empty data, empty module list. Only
-                            // writes when their pointer is unset;
-                            // also heals already-member re-redeems
-                            // left stranded by pre-fix adds.
-                            do! ActiveTeamPolicy.ensureActiveTeam teamStore (UserId access.UserId) (TeamId teamId)
-
-                            // Best-effort use-count bump. A failure
-                            // here does not roll back the add —
-                            // the membership is durable and the
-                            // substrate's `UseLimitExceeded` gate
-                            // catches double-redemption on the
-                            // next call.
-                            let! markResult = shareTokenStore.MarkUsed(scope, claim.TokenId)
-
-                            let remaining =
-                                match markResult, claim.UseLimit with
-                                | Ok(), Some limit -> max 0 (limit - claim.UsedCount - 1)
-                                | _, Some limit -> max 0 (limit - claim.UsedCount)
-                                | _ -> 0
-
-                            let teamName = async {
+                            let! resolvedTeamName = async {
                                 match! teamStore.GetTeam(TeamId teamId) with
                                 | Some info -> return info.Name
                                 | None -> return teamId
                             }
-
-                            let! resolvedTeamName = teamName
-
-                            do!
-                                recordRedemption
-                                    auditLog
-                                    (AuditSubject.fromSubject access.Subject)
-                                    claim
-                                    role
-                                    (UserId access.UserId)
-                                    remaining
 
                             return
                                 Ok {

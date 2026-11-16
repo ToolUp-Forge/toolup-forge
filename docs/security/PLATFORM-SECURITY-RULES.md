@@ -652,6 +652,32 @@ carelessly.
 > `docs/migrations/1285-passkey-registration-proves-who-is-enrolling.md`
 > (Phase 1285)
 
+> **AN-15 — A team invite link admits no more members than its use limit.**
+> *Enablement:* Always on (wherever the team invitation surface is composed).
+> Every path that adds a team member from an invite link — a signed-in caller
+> accepting it, and a passkey enrolment redeeming it — consumes one use of the
+> link first and adds the member only when the consume succeeded. The consume
+> is the share-token store's atomic increment, so of any number of concurrent
+> redemptions exactly the use limit succeed, whatever the timing. A consume
+> that fails, whether the link is spent or the store cannot write, adds nobody;
+> there is no check-then-mark fallback. A caller who is already a member is
+> answered as before and consumes no use. If the add fails after a successful
+> consume, the use stays spent: the store has no rollback, and a link spent
+> without a member fails closed. The shipped store, `BlobShareTokenStore`,
+> makes the increment conditional on the claim's ETag across replicas on every
+> shipped blob backend (local, Azure, S3, GCS); over a third-party backend
+> without conditional writes it is atomic within one process only.
+> **Evidence:**
+> `src/ToolUp.Platform.Server/Server/Teams/TeamInvitationHandler.fs`
+> (`admitThroughLink`, `AcceptInvite`) ·
+> `src/ToolUp.Platform.Server/Server/IShareTokenStore.fs` (`MarkUsed`) ·
+> `src/ToolUp.Platform.Server/Server/ShareTokenStore.fs` (`MarkUsed`) ·
+> `src/ToolUp.Platform.Tests/Contracts/IShareTokenStoreContract.fs`
+> (`MarkUsed is atomic`) ·
+> `src/ToolUp.Platform.Tests/InProcess/TeamInvitationTests.fs`
+> (concurrent redemptions, already-member, failed consume, failed add)
+> (Phase 1362)
+
 ---
 
 ## 3. Authorisation
