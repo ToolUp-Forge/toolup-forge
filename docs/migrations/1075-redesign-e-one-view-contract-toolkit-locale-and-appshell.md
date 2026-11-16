@@ -1,4 +1,4 @@
-# 0.42.0 — one view contract, a toolkit that takes the locale, and one `AppShell`
+# 0.42.1 — one view contract, a toolkit that takes the locale, and one `AppShell`
 
 A module's view is `'Model -> RenderContext<'Msg> -> PageContent`; the SDK's built-ins are `BuiltIn` values; the
 toolkit's number formatters take the caller's locale; `Layout.AppShell` is the one shell entry. Breaking, in one
