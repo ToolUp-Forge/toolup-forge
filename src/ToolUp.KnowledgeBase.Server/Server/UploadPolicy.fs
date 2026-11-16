@@ -339,9 +339,11 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
             s
         else
             // Once at start: the sweep runs as a scheduler job, placed by
-            // the scheduler's own unit.
+            // the scheduler's own unit. It runs under each listed tenant
+            // scope, so it is declared protected: the job API stops it for a
+            // platform administrator only.
             Hosting.register
-                s
+                (JobApiHandler.declareProtected KnowledgeBase.ServerRetentionSweep.SweepHandlerName s)
                 (Hosting.deferredJobs "knowledge-base-retention-sweep" [
                     DeferredScheduledJobDeclaration.create (fun provider ->
                         ScheduledJobDeclaration.create

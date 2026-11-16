@@ -138,6 +138,15 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         // returns its clear "requires an IJobScheduler" error and the inline
         // paths are unaffected (GP 13). Once at start: a handler
         // registration, placed by the scheduler's own unit.
+        //
+        // Both handlers run platform work under the tenant's own scope, so
+        // they are declared protected: the job API stops their jobs for a
+        // platform administrator only.
+        services
+        |> JobApiHandler.declareProtected TenantLifecycleAggregator.LifecycleJobHandlerName
+        |> JobApiHandler.declareProtected TenantLifecycleAggregator.ScheduledDeprovisionHandlerName
+        |> ignore
+
         Hosting.register
             services
             (BackgroundUnit.create "tenant-lifecycle-handler-registration" OnceAtStart (fun sp ->

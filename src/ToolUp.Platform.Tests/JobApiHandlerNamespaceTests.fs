@@ -27,11 +27,14 @@ open ToolUp.Platform.Testing
 //
 //   * the wire schedules only a handler the deployment declared
 //     wire-schedulable, and never acts under the platform container
-//     (`TriggerOnce` fires an existing job in the caller's scope, by
-//     operator ruling 2026-11-14);
+//     (`TriggerOnce` fires an existing job in the caller's scope);
 //   * a handler whose payload names a scope refuses one that is not the
 //     job's own, so a registration forged in the store is refused at
 //     `Execute` too.
+//
+// A third rule keeps a tenant from stopping platform work in its own scope:
+// a handler declared protected has `Cancel`, `Disable` and `Enable` refused
+// for every caller but a platform administrator.
 
 // ─── A scheduler that records what reaches it ────────────────────────
 
@@ -39,9 +42,13 @@ type private RecordingScheduler() =
     let jobs = ConcurrentDictionary<JobId, JobDefinition>()
     let triggered = ConcurrentQueue<string * JobId>()
     let scheduled = ConcurrentQueue<JobRegistration>()
+    let transitions = ConcurrentQueue<string * string * JobId>()
 
     member _.Scheduled = List.ofSeq scheduled
     member _.Triggered = List.ofSeq triggered
+
+    /// Every status transition that reached the scheduler: verb, scope, job.
+    member _.Transitions = List.ofSeq transitions
 
     /// Seed a job as if a registration had already been stored.
     member _.Seed(scopeId: string, handler: string, payload: string) : JobId =
@@ -87,9 +94,20 @@ type private RecordingScheduler() =
             return Ok(Scheduled id)
         }
 
-        member _.Cancel(_, _) = async { return Ok() }
-        member _.Disable(_, _) = async { return Ok() }
-        member _.Enable(_, _) = async { return Ok() }
+        member _.Cancel(scopeId, jobId) = async {
+            transitions.Enqueue("cancel", scopeId, jobId)
+            return Ok()
+        }
+
+        member _.Disable(scopeId, jobId) = async {
+            transitions.Enqueue("disable", scopeId, jobId)
+            return Ok()
+        }
+
+        member _.Enable(scopeId, jobId) = async {
+            transitions.Enqueue("enable", scopeId, jobId)
+            return Ok()
+        }
 
         member _.Get(scopeId, jobId) = async {
             match jobs.TryGetValue jobId with
@@ -247,9 +265,8 @@ let private wireRefusals =
             Expect.isEmpty scheduler.Scheduled "nothing reached the scheduler"
         }
 
-        // `TriggerOnce` is not gated by the declaration (operator ruling
-        // 2026-11-14): a forged job already in the store fires, and the
-        // handler refuses it when it runs.
+        // `TriggerOnce` is not gated by the declaration: a forged job already
+        // in the store fires, and the handler refuses it when it runs.
         testCaseAsync "a stored job naming another tenant fires, and is refused when it runs"
         <| async {
             let scheduler = RecordingScheduler()
@@ -728,6 +745,122 @@ let private stillRuns =
         }
     ]
 
+// ─── A protected handler's job is the platform's to stop ─────────────
+
+let private protectedHandler =
+    TenantLifecycleAggregator.ScheduledDeprovisionHandlerName
+
+let private declareProtected (services: IServiceCollection) =
+    JobApiHandler.declareProtected protectedHandler services |> ignore
+
+let private platformAdmin = {
+    teamAdmin with
+        PlatformRole = Some PlatformRole.PlatformAdmin
+}
+
+/// Each of the three stop-and-start verbs, by the name the scheduler records.
+let private verbs: (string * (JobApi -> Guid -> Async<Result<unit, string>>)) list = [
+    "cancel", (fun api jobId -> api.Cancel jobId)
+    "disable", (fun api jobId -> api.Disable jobId)
+    "enable", (fun api jobId -> api.Enable jobId)
+]
+
+let private protectedHandlers =
+    testList "a protected handler's job is stopped by a platform administrator only" [
+
+        for verb, call in verbs do
+            testCaseAsync $"a team admin cannot {verb} a protected handler's job in their own scope"
+            <| async {
+                let scheduler = RecordingScheduler()
+                let jobId = scheduler.Seed(attackerTeam, protectedHandler, victimGraceOffboard)
+                let api = jobApiFor teamAdmin scheduler declareProtected
+                let! answered = call api jobId
+
+                Expect.equal
+                    answered
+                    (Error JobApiHandler.ProtectedHandlerRefusal)
+                    "the refusal is the published answer, not an exception"
+
+                Expect.isEmpty scheduler.Transitions "nothing reached the scheduler"
+            }
+
+            testCaseAsync $"a platform administrator can {verb} a protected handler's job"
+            <| async {
+                let scheduler = RecordingScheduler()
+                let jobId = scheduler.Seed(attackerTeam, protectedHandler, victimGraceOffboard)
+                let api = jobApiFor platformAdmin scheduler declareProtected
+                let! answered = call api jobId
+                Expect.isOk answered "a platform administrator manages the job"
+                Expect.equal scheduler.Transitions [ verb, attackerTeam, jobId ] "the transition ran once, in scope"
+            }
+
+            testCaseAsync $"a team admin can still {verb} an unprotected job, exactly as before"
+            <| async {
+                let scheduler = RecordingScheduler()
+                let jobId = scheduler.Seed(attackerTeam, declaredHandler, "")
+                let api = jobApiFor teamAdmin scheduler declareProtected
+                let! answered = call api jobId
+                Expect.isOk answered "an unprotected job is managed as before"
+                Expect.equal scheduler.Transitions [ verb, attackerTeam, jobId ] "the transition ran once, in scope"
+            }
+
+            testCaseAsync $"a protected job id from another scope answers a {verb} as it does today"
+            <| async {
+                let scheduler = RecordingScheduler()
+                let jobId = scheduler.Seed(victimTeam, protectedHandler, victimGraceOffboard)
+                let api = jobApiFor teamAdmin scheduler declareProtected
+                let! answered = call api jobId
+
+                // Today the job id reaches the scheduler under the caller's own
+                // scope, which answers it as it answers any id it does not hold
+                // there; the protected rule must neither refuse it (which would
+                // reveal that the id exists elsewhere) nor reach another scope.
+                Expect.isOk answered "the answer is the scheduler's, as for any id"
+                Expect.equal scheduler.Transitions [ verb, attackerTeam, jobId ] "under the caller's own scope only"
+            }
+
+        testCase "a handler cannot be both wire-schedulable and protected"
+        <| fun () ->
+            let protectedFirst = ServiceCollection()
+            declareProtected protectedFirst
+
+            Expect.throws
+                (fun () -> JobApiHandler.declareWireSchedulable protectedHandler protectedFirst |> ignore)
+                "declaring a protected handler wire-schedulable is refused at composition"
+
+            let wireFirst = ServiceCollection()
+            JobApiHandler.declareWireSchedulable protectedHandler wireFirst |> ignore
+
+            Expect.throws
+                (fun () -> declareProtected wireFirst)
+                "declaring a wire-schedulable handler protected is refused at composition"
+
+        testCase "the platform's tenant offboard handlers are declared protected where they are registered"
+        <| fun () ->
+            let services = ServiceCollection()
+
+            ComposeTenantLifecycle.registerTenantLifecycle services {
+                ServerConfig.defaults with
+                    TenantLifecycle = FeatureMode.Enabled
+            }
+
+            let declared =
+                services
+                |> Seq.choose (fun d ->
+                    match d.ImplementationInstance with
+                    | :? JobApiHandler.ProtectedJobHandler as h -> Some h.Handler
+                    | _ -> None)
+                |> Set.ofSeq
+
+            Expect.equal
+                declared
+                (set [
+                    TenantLifecycleAggregator.LifecycleJobHandlerName
+                    TenantLifecycleAggregator.ScheduledDeprovisionHandlerName
+                ])
+                "the lifecycle and grace-period poll handlers are protected"
+    ]
+
 let tests =
     testList "The job API schedules only handlers a caller may name" [
         wireRefusals
@@ -736,4 +869,5 @@ let tests =
         moreStoragePayloadRefusals
         helperTests
         stillRuns
+        protectedHandlers
     ]

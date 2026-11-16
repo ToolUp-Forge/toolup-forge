@@ -25,9 +25,9 @@ open ToolUp.Platform.Config
 // `GetJob`, `GetRecentRuns`) are ungated within the caller's scope
 // — any team member can inspect the team's jobs.
 //
-// **Typed scheduling (Phase 930).** `Schedule` hands the scheduler the
+// **Typed scheduling.** `Schedule` hands the scheduler the
 // scope the platform RESOLVED for this request, through the typed
-// `IJobScheduler.Schedule(ResolvedScope, …)` overload (Phase 818), so the
+// `IJobScheduler.Schedule(ResolvedScope, …)` overload, so the
 // job runs under that scope rather than the anonymous one. The scope is the
 // value the scope-resolution middleware recorded on the request (only a
 // `ResolvedScope` is honoured at that key, and only the platform can mint
@@ -51,6 +51,25 @@ open ToolUp.Platform.Config
 // container (`_platform`): a job registered there may act on any tenant (the
 // OAuth token refresh), so that scope is one only the platform's own paths
 // can register under.
+//
+// **A protected handler's job is the platform's to stop.** The platform
+// registers some of its own jobs under a tenant's scope (the offboarding
+// grace-period poll is one), and the write gate alone would let a team
+// Owner or Admin cancel or disable them. A handler declared protected
+// (`declareProtected`, where it is registered) has `Cancel`, `Disable` and
+// `Enable` refused with `ProtectedHandlerRefusal` for every caller but a
+// platform administrator; every other job is managed as before. A handler
+// cannot be both wire-schedulable and protected: the composition refuses it.
+
+/// A handler whose jobs run platform work under a tenant's scope. The job
+/// API refuses `Cancel`, `Disable` and `Enable` on such a job for every
+/// caller except a platform administrator, so a team Owner or Admin cannot
+/// switch off work the platform relies on in their scope. Declare it with
+/// `declareProtected` where the handler is registered.
+type ProtectedJobHandler = {
+    /// The handler name, exactly as it is registered with the scheduler.
+    Handler: string
+}
 
 /// A handler a deployment lets a caller name over the job API, so that
 /// `Schedule` registers a job for it. Declare it with
@@ -62,10 +81,51 @@ type WireSchedulableJobHandler = {
     Handler: string
 }
 
+let private declaredIn<'T> (services: IServiceCollection) (handlerOf: 'T -> string) (handler: string) =
+    services
+    |> Seq.exists (fun descriptor ->
+        descriptor.ServiceType = typeof<'T>
+        && (match descriptor.ImplementationInstance with
+            | :? 'T as declared -> handlerOf declared = handler
+            | _ -> false))
+
+let private refuseBoth (handler: string) =
+    invalidOp
+        $"Job handler '{handler}' is declared both wire-schedulable and protected. A wire caller could then register a job it may not stop, so the two declarations are refused together; declare the handler one way only."
+
 /// Adds `handler` to the handlers a caller may name over the job API. A
-/// handler nobody declares is not wire-schedulable.
+/// handler nobody declares is not wire-schedulable. A handler declared
+/// protected (`declareProtected`) cannot also be declared wire-schedulable:
+/// the composition is refused.
 let declareWireSchedulable (handler: string) (services: IServiceCollection) : IServiceCollection =
+    if declaredIn<ProtectedJobHandler> services _.Handler handler then
+        refuseBoth handler
+
     services.AddSingleton<WireSchedulableJobHandler>({ Handler = handler })
+
+/// Adds `handler` to the protected handlers: the job API answers `Cancel`,
+/// `Disable` and `Enable` on its jobs with `ProtectedHandlerRefusal` unless
+/// the caller is a platform administrator. Declare every handler whose jobs
+/// the platform (or a consumer's own platform code) registers under a team
+/// or user scope. A handler declared wire-schedulable cannot also be
+/// declared protected: the composition is refused.
+let declareProtected (handler: string) (services: IServiceCollection) : IServiceCollection =
+    if declaredIn<WireSchedulableJobHandler> services _.Handler handler then
+        refuseBoth handler
+
+    services.AddSingleton<ProtectedJobHandler>(
+        {
+            ProtectedJobHandler.Handler = handler
+        }
+    )
+
+/// The answer `Cancel`, `Disable` and `Enable` give a caller who is not a
+/// platform administrator when the job's handler is protected. It is an
+/// `Error`, never an exception, and it is given only for a job in the
+/// caller's own scope: a job id from another scope answers as an unknown id.
+[<Literal>]
+let ProtectedHandlerRefusal =
+    "This job runs platform work for your scope; only a platform administrator can cancel, disable or enable it."
 
 /// The `HttpContext.Items` key the scope-resolution middleware records the
 /// request's `ResolvedScope` under (`ScopeResolution.ItemsKey`, which
@@ -96,7 +156,13 @@ let jobApi (ctx: HttpContext) : JobApi =
         | :? seq<WireSchedulableJobHandler> as handlers -> handlers |> Seq.map _.Handler |> Set.ofSeq
         | _ -> Set.empty
 
-    // Phase 930 — the scope the middleware resolved and recorded for this
+    // The handlers the deployment declared protected.
+    let protectedHandlers =
+        match ctx.RequestServices.GetService(typeof<seq<ProtectedJobHandler>>) with
+        | :? seq<ProtectedJobHandler> as handlers -> handlers |> Seq.map _.Handler |> Set.ofSeq
+        | _ -> Set.empty
+
+    // The scope the middleware resolved and recorded for this
     // request. `ScopeResolution.forRequest` compiles after this file, so the
     // record is read here by its key; `ScopeChokePointTests` pins that the
     // two agree. A type test, never a construction: a value that is not a
@@ -128,7 +194,7 @@ let jobApi (ctx: HttpContext) : JobApi =
         | _ -> return Ok()
     }
 
-    /// Phase 1064 — run a status transition, rendering the scheduler's typed
+    /// Run a status transition, rendering the scheduler's typed
     /// refusal (an in-flight dispatch holds the job's lease, typically asleep
     /// in its retry backoff, or the store did not persist it) as
     /// a retryable `Error` rather than letting the request wait the backoff
@@ -144,6 +210,28 @@ let jobApi (ctx: HttpContext) : JobApi =
         | _, None -> return Error "Background jobs require a persistent scope (sign in or join a team)."
         | Some s, Some scope -> return! f s scope.ScopeId
     }
+
+    // Cancel, Disable and Enable: the write gate, then the protected-handler
+    // rule, then the transition. The job is read in the caller's own scope,
+    // so a job id from another scope is not found here and reaches the
+    // transition, which answers it exactly as it answers an unknown id.
+    let manage (act: IJobScheduler -> string -> Guid -> Async<Result<unit, JobTransitionError>>) (jobId: Guid) =
+        withSchedulerResult (fun s scopeId -> async {
+            let! rbac = ensureWriteAllowed ()
+
+            match rbac with
+            | Error msg -> return Error msg
+            | Ok() ->
+                let! job =
+                    if protectedHandlers.IsEmpty || AccessContext.canModifyPlatformConfig accessContext then
+                        async.Return None
+                    else
+                        s.Get(scopeId, jobId)
+
+                match job with
+                | Some job when protectedHandlers.Contains job.Handler -> return Error ProtectedHandlerRefusal
+                | _ -> return! transition (act s scopeId jobId)
+        })
 
     {
         ListJobs =
@@ -210,35 +298,11 @@ let jobApi (ctx: HttpContext) : JobApi =
                         return scheduled |> Result.map ScheduleOutcome.jobId
             }
 
-        Cancel =
-            fun jobId ->
-                withSchedulerResult (fun s scopeId -> async {
-                    let! rbac = ensureWriteAllowed ()
+        Cancel = manage (fun s scopeId jobId -> s.Cancel(scopeId, jobId))
 
-                    match rbac with
-                    | Error msg -> return Error msg
-                    | Ok() -> return! transition (s.Cancel(scopeId, jobId))
-                })
+        Disable = manage (fun s scopeId jobId -> s.Disable(scopeId, jobId))
 
-        Disable =
-            fun jobId ->
-                withSchedulerResult (fun s scopeId -> async {
-                    let! rbac = ensureWriteAllowed ()
-
-                    match rbac with
-                    | Error msg -> return Error msg
-                    | Ok() -> return! transition (s.Disable(scopeId, jobId))
-                })
-
-        Enable =
-            fun jobId ->
-                withSchedulerResult (fun s scopeId -> async {
-                    let! rbac = ensureWriteAllowed ()
-
-                    match rbac with
-                    | Error msg -> return Error msg
-                    | Ok() -> return! transition (s.Enable(scopeId, jobId))
-                })
+        Enable = manage (fun s scopeId jobId -> s.Enable(scopeId, jobId))
 
         TriggerOnce =
             fun jobId ->

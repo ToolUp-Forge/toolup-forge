@@ -533,8 +533,13 @@ ToolUp.Platform.Jobs.InProcessOAuthTokenRefresher+Impl.AttemptRefresh(ToolUp.Pla
 ToolUp.Platform.Jobs.InProcessOAuthTokenRefresher+Impl.Recover() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Jobs.InProcessOAuthTokenRefresher+Impl.TryGetDescriptor(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.OAuthRefreshDescriptor]
 ToolUp.Platform.Jobs.JobApiHandler (class)
+ToolUp.Platform.Jobs.JobApiHandler.ProtectedHandlerRefusal : System.String (literal)
+ToolUp.Platform.Jobs.JobApiHandler.declareProtected(System.String, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Platform.Jobs.JobApiHandler.declareWireSchedulable(System.String, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Platform.Jobs.JobApiHandler.jobApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.JobApi
+ToolUp.Platform.Jobs.JobApiHandler+ProtectedJobHandler (class)
+ToolUp.Platform.Jobs.JobApiHandler+ProtectedJobHandler..ctor(System.String)
+ToolUp.Platform.Jobs.JobApiHandler+ProtectedJobHandler.Handler : System.String { get }
 ToolUp.Platform.Jobs.JobApiHandler+WireSchedulableJobHandler (class)
 ToolUp.Platform.Jobs.JobApiHandler+WireSchedulableJobHandler..ctor(System.String)
 ToolUp.Platform.Jobs.JobApiHandler+WireSchedulableJobHandler.Handler : System.String { get }

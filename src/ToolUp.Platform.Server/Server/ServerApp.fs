@@ -3171,8 +3171,11 @@ module ServerApp =
             withPolicy
         else
             // A hosted contribution, once at start: the sweep runs as a
-            // scheduler job, placed by the scheduler's own unit.
+            // scheduler job, placed by the scheduler's own unit. It runs
+            // under each listed tenant scope, so it is declared protected:
+            // the job API stops it for a platform administrator only.
             withPolicy
+            |> addPlatformServices (JobApiHandler.declareProtected DataObjectOrphanSweep.SweepHandlerName)
             |> addContribution (
                 Contribution.hosted
                     EgressPolicy.platformComponent

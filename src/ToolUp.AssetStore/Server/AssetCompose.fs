@@ -297,6 +297,12 @@ let private composeAssetStore (companion: AssetStoreCompanionOptions) (app: Serv
 
         // ─── DI registrations ────────────────────────────────
         let assetStoreServiceConfig (services: IServiceCollection) =
+            // An async derivation runs under the uploader's own scope, so its
+            // handler is declared protected: the job API stops it for a
+            // platform administrator only.
+            if asyncDerivation.IsSome then
+                JobApiHandler.declareProtected DerivativeJobs.HandlerName services |> ignore
+
             services
                 .AddSingleton<IDerivativeRenderer>(
                     System.Func<System.IServiceProvider, IDerivativeRenderer>(fun _sp ->
