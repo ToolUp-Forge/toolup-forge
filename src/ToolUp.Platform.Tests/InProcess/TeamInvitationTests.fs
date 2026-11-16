@@ -102,6 +102,124 @@ let private provisionTeam (ts: ITeamStore) (owner: string) (memberUserId: string
     return teamId
 }
 
+// ─── An invite link admits no more members than its use limit ──────────
+//
+// Fakes that force the interleavings a race would need, rather than
+// relying on timing.
+
+/// Holds the FIRST `MarkUsed` until `expected` redemptions have passed
+/// `Validate` (or a bounded wait lapses), so every redeemer has seen the
+/// link unspent before any use is recorded. A handler that adds before it
+/// consumes admits all of them; one that consumes first admits the limit.
+type private HoldFirstConsume(inner: IShareTokenStore, expected: int) =
+    let mutable validated = 0
+    let mutable marks = 0
+    let allValidated = Threading.Tasks.TaskCompletionSource<unit>()
+
+    interface IShareTokenStore with
+        member _.Issue req = inner.Issue req
+
+        member _.Validate token = async {
+            let! result = inner.Validate token
+
+            if Threading.Interlocked.Increment(&validated) >= expected then
+                allValidated.TrySetResult() |> ignore
+
+            return result
+        }
+
+        member _.MarkUsed(scopeId, tokenId) = async {
+            if Threading.Interlocked.Increment(&marks) = 1 then
+                let! _ =
+                    Threading.Tasks.Task.WhenAny(
+                        allValidated.Task,
+                        Threading.Tasks.Task.Delay(TimeSpan.FromSeconds 10.0)
+                    )
+                    |> Async.AwaitTask
+
+                ()
+
+            return! inner.MarkUsed(scopeId, tokenId)
+        }
+
+        member _.Revoke(scopeId, tokenId, actor) = inner.Revoke(scopeId, tokenId, actor)
+        member _.ListByResource(scopeId, kind, id) = inner.ListByResource(scopeId, kind, id)
+        member _.ListByIssuer(scopeId, issuer) = inner.ListByIssuer(scopeId, issuer)
+
+/// A store whose consume always fails (a storage fault).
+type private FailingConsume(inner: IShareTokenStore) =
+    interface IShareTokenStore with
+        member _.Issue req = inner.Issue req
+        member _.Validate token = inner.Validate token
+
+        member _.MarkUsed(_, _) = async { return Error(ShareTokenError.StorageFailed "the claim could not be written") }
+
+        member _.Revoke(scopeId, tokenId, actor) = inner.Revoke(scopeId, tokenId, actor)
+        member _.ListByResource(scopeId, kind, id) = inner.ListByResource(scopeId, kind, id)
+        member _.ListByIssuer(scopeId, issuer) = inner.ListByIssuer(scopeId, issuer)
+
+/// A team store whose `AddMember` fails for `refused` and delegates otherwise.
+let private refusingAdd (inner: ITeamStore) (refused: string) =
+    { new ITeamStore with
+        member _.CreateTeam(t, n) = inner.CreateTeam(t, n)
+        member _.DeleteTeam t = inner.DeleteTeam t
+        member _.GetTeam t = inner.GetTeam t
+        member _.ListTeams() = inner.ListTeams()
+
+        member _.AddMember(t, u, r) =
+            if u = UserId refused then
+                async { return Error "the membership could not be written" }
+            else
+                inner.AddMember(t, u, r)
+
+        member _.RemoveMember(t, u) = inner.RemoveMember(t, u)
+        member _.ChangeMemberRole(t, u, r) = inner.ChangeMemberRole(t, u, r)
+        member _.GetTeamsForUser u = inner.GetTeamsForUser u
+        member _.GetTeamMembers t = inner.GetTeamMembers t
+        member _.GetMemberRole(t, u) = inner.GetMemberRole(t, u)
+        member _.GetActiveTeam u = inner.GetActiveTeam u
+        member _.SetActiveTeam(u, t) = inner.SetActiveTeam(u, t)
+        member _.SetArchived(t, a) = inner.SetArchived(t, a)
+        member _.PurgeTeam t = inner.PurgeTeam t
+        member _.PurgeUser u = inner.PurgeUser u
+    }
+
+/// Issue a Member invite link with `maxUses` as alice (an Owner) and return its token.
+let private issueLink (ts: ITeamStore) (sts: IShareTokenStore) (teamId: string) (maxUses: int) = async {
+    let owner = mkApi ts sts (NoOpAuditLog()) "alice@example.com"
+
+    let! issued =
+        owner.IssueInvite {
+            TeamId = teamId
+            Role = Member
+            ExpiresIn = None
+            EmailHint = None
+            MaxUses = Some maxUses
+        }
+
+    match issued with
+    | Ok r -> return r.InviteUrl.Substring(r.InviteUrl.LastIndexOf('/') + 1)
+    | Error msg -> return failwithf "issue failed: %s" msg
+}
+
+/// N distinct callers redeem `token` at once through `sts`; returns how
+/// many of them are members of the team afterwards.
+let private redeemConcurrently (ts: ITeamStore) (sts: IShareTokenStore) (teamId: string) (token: string) (n: int) = async {
+    let redeemers = List.init n (fun i -> sprintf "redeemer-%d@example.com" i)
+
+    let! _ =
+        redeemers
+        |> List.map (fun user -> (mkApi ts sts (NoOpAuditLog()) user).AcceptInvite token)
+        |> Async.Parallel
+
+    let! roles =
+        redeemers
+        |> List.map (fun user -> ts.GetMemberRole(TeamId teamId, UserId user))
+        |> Async.Parallel
+
+    return roles |> Array.filter Option.isSome |> Array.length
+}
+
 [<Tests>]
 let tests =
     testList "TeamInvitation" [
@@ -357,6 +475,95 @@ let tests =
                     // bob's role should remain Member (his prior role), not bumped
                     Expect.equal role (Some Member) "existing role preserved"
                 | Error msg -> failtestf "expected Ok for already-member, got %s" msg
+        }
+
+        testCaseAsync "8 concurrent redemptions of a use-limit-1 link admit exactly one member"
+        <| async {
+            let ts = freshTeamStore ()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let inner = freshShareTokenStore ()
+            let! token = issueLink ts inner teamId 1
+            let held = HoldFirstConsume(inner, 8) :> IShareTokenStore
+
+            let! admitted = redeemConcurrently ts held teamId token 8
+            Expect.equal admitted 1 "a single-use link admits one member, whatever the timing"
+        }
+
+        testCaseAsync "8 concurrent redemptions of a use-limit-3 link admit exactly three members"
+        <| async {
+            let ts = freshTeamStore ()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let inner = freshShareTokenStore ()
+            let! token = issueLink ts inner teamId 3
+            let held = HoldFirstConsume(inner, 8) :> IShareTokenStore
+
+            let! admitted = redeemConcurrently ts held teamId token 8
+            Expect.equal admitted 3 "a link admits exactly its use limit"
+        }
+
+        testCaseAsync "an already-member re-redeem consumes no use of the link"
+        <| async {
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let! token = issueLink ts sts teamId 1
+
+            // bob is already a Member: answered Ok, nothing consumed.
+            let! bobs = (mkApi ts sts (NoOpAuditLog()) "bob@example.com").AcceptInvite token
+            Expect.isOk bobs "the already-member is answered as before"
+
+            match! sts.Validate token with
+            | Ok claim -> Expect.equal claim.UsedCount 0 "no use consumed by the already-member"
+            | Error e -> failtestf "the link must still be unspent, got %A" e
+
+            // so the one use is still there for the person it was meant for.
+            let! carols = (mkApi ts sts (NoOpAuditLog()) "carol@example.com").AcceptInvite token
+            Expect.isOk carols "the single use still admits a new member"
+            let! role = ts.GetMemberRole(TeamId teamId, UserId "carol@example.com")
+            Expect.equal role (Some Member) "carol joined"
+        }
+
+        testCaseAsync "a redemption whose consume fails adds nobody"
+        <| async {
+            let ts = freshTeamStore ()
+            let inner = freshShareTokenStore ()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let! token = issueLink ts inner teamId 5
+            let failing = FailingConsume inner :> IShareTokenStore
+            let audit = CapturingAuditLog()
+
+            let! accepted = (mkApi ts failing (audit :> IAuditLog) "carol@example.com").AcceptInvite token
+            Expect.isError accepted "a redemption that consumed no use is refused"
+
+            let! role = ts.GetMemberRole(TeamId teamId, UserId "carol@example.com")
+            Expect.isNone role "nobody is added without a consumed use"
+
+            let names = audit.Recorded |> List.map (fun (_, e) -> AuditEvent.eventTypeName e)
+            Expect.isFalse (List.contains "TeamInviteAccepted" names) "no acceptance audited"
+        }
+
+        testCaseAsync "an add that fails after a successful consume leaves the use spent"
+        <| async {
+            let inner = freshTeamStore ()
+            let! teamId = provisionTeam inner "alice@example.com" "bob@example.com"
+            let sts = freshShareTokenStore ()
+            let! token = issueLink inner sts teamId 1
+            let ts = refusingAdd inner "carol@example.com"
+
+            let! accepted = (mkApi ts sts (NoOpAuditLog()) "carol@example.com").AcceptInvite token
+
+            match accepted with
+            | Error msg -> Expect.stringContains msg "Could not add you to the team" "the add failure is surfaced"
+            | Ok _ -> failtest "a failed add must not answer Ok"
+
+            let! role = inner.GetMemberRole(TeamId teamId, UserId "carol@example.com")
+            Expect.isNone role "carol was not added"
+
+            // The use is spent, not returned: there is no rollback, and a
+            // returned use would be a second write that can itself race.
+            match! sts.Validate token with
+            | Error ShareTokenError.UseLimitExceeded -> ()
+            | other -> failtestf "the consumed use stays spent, got %A" other
         }
 
         // ─── Pending-invite-by-email (Phase 3d / Cluster A1) ──────────
