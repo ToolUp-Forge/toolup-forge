@@ -46,6 +46,9 @@
     { "path": "templates/*/compose.yml", "reason": "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs" },
     { "path": "templates/**/vite.config.mts", "reason": "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs" },
     { "path": "templates/**/launchSettings.json", "reason": "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs" },
+    { "path": "templates/**/package.json", "reason": "a template client's npm manifest, held to the SDK client contract and installed by the Templates row (VerifyTemplates), which the templates CI job runs and VerifyAll does not" },
+    { "path": "templates/**/package-lock.json", "reason": "a template client's lock file, installed by the Templates row (CI-only) when it bundles the client" },
+    { "path": "templates/**/index.html", "reason": "a template client's page, held to the shell's mount id by the Templates row (CI-only)" },
     { "path": "client-styling/check-drift.ps1", "reason": "run by the Templates row (VerifyTemplates), which the templates CI job runs and VerifyAll does not" },
     { "path": "client-styling/tailwind/**", "reason": "the styling drift check's canonical sources, read by the Templates row (CI-only) through client-styling/check-drift.ps1" }
   ]
