@@ -155,4 +155,7 @@ let register () : ErasedModule =
         Icon = Html.span [ prop.text "💬" ]
     }
     |> ClientModule.withView view
+    // The shell refuses to boot when every module is ungrouped (its sidebar
+    // would render empty), so the one module names its group.
+    |> ClientModule.withGroup "Chat"
     |> ClientModule.register
