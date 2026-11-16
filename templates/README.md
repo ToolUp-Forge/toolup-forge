@@ -118,6 +118,17 @@ The acceptance bar requires byte-identical output from `dotnet new` and direct p
   root-inheriting templates get the rule from the root. An architecture-fitness test discovers every
   walk-stopping `Directory.Build.props` and fails on one that is neither the root, a named exemption,
   nor a restatement of the rule.
+- **Every template with a client starts styled.** The client of `platformsdk-application`,
+  `platformsdk-dataplatform`, `platformsdk-solution` and `safer` embeds the canonical Tailwind block
+  at the top of its `index.css` (the app's own rules follow the end marker), pins `tailwindcss` and
+  `@tailwindcss/vite` exactly, and runs the canonical Vite plugins (`nugetContent()`,
+  `fableTailwindGitignore()`, `tailwindcss()`). So a new app renders the SDK shell with its utility
+  classes and shell tokens, and a Fuaran-UI tree in it takes the app's brand through
+  `fuaran-bridge.css`. Brand the app by overriding `--color-brand` and the other `--color-*` values
+  in a `:root` after the end marker. `client-styling/check-drift.ps1` holds each template client to
+  the block, the pins and the copied files, and `VerifyTemplates` runs it, so a template cannot fall
+  behind the canonical block without a red gate. The contract and how to re-stamp:
+  [`client-styling/tailwind/README.md`](../client-styling/tailwind/README.md).
 - ToolUp.* packages are consumed via the `ToolUpSdkVersion` property in `Directory.Packages.props`; bump the property to bump every transitive ToolUp package.
 - The `platformsdk-solution` template includes a `Directory.Build.props`, `Directory.Packages.props`, `nuget.config`, `global.json`, and `.gitignore` so the scaffold is a complete buildable repo root.
 - Modules ship the same 4-file convention demonstrated by `samples/HelloWorld/HelloWorld.Module/`.

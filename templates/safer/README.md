@@ -139,9 +139,18 @@ If any of these grow beyond "a small addition to SAFER", that's the signal to gr
         ├── MyApp-Client.fsproj
         ├── package.json
         ├── vite.config.mts
+        ├── vite-fable-tailwind.mjs  — canonical Vite plugin: Tailwind scans Fable's output/
+        ├── vite-fuaran-content.mjs  — canonical Vite plugin: resolves @nuget/ stylesheet imports
         ├── index.html
-        └── index.css
+        ├── index.css               — the canonical styling block, then your own rules
+        └── fuaran-bridge.css       — Fuaran-UI tokens answered with the shell's
 ```
+
+SAFER is minimal in features, not in styling: it renders the same SDK shell as every other
+template, so its client carries the same canonical Tailwind block, pins and Vite plugins
+(`client-styling/tailwind/` in the forge repository). The shell draws with its utility classes and
+tokens, and a Fuaran-UI tree takes the app's brand colour. Re-brand by overriding `--color-brand`
+(and the other `--color-*` values) in a `:root` after the block's end marker in `index.css`.
 
 ## Versioning + compatibility
 
