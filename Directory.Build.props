@@ -1012,7 +1012,7 @@
       `ServerModule.describeSubjects`, `ServerApp.metricRegistry`, `MetricRegistry.buildDescribed`,
       `MetricRegistry.trySubjectDescription`. Recipe: `docs/migrations/1150-fact-table-descriptions.md`.
     -->
-    <Version>0.42.0</Version>
+    <Version>0.43.0</Version>
     <!-- Draft notes for this <Version> are appended to DRAFT-NOTES.md, one line per change. Never here: every project imports this file, so any edit to it runs the full test lane. -->
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
@@ -1050,45 +1050,45 @@
   -->
   <PropertyGroup>
     <ToolUpProjectRelativePath>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectFullPath)').Replace('\', '/'))</ToolUpProjectRelativePath>
-    <ToolUpAIProvidersVersion>0.39.3</ToolUpAIProvidersVersion>
-    <ToolUpAlgorithmProvidersVersion>0.39.2</ToolUpAlgorithmProvidersVersion>
-    <ToolUpArtefactSigningVersion>0.39.2</ToolUpArtefactSigningVersion>
-    <ToolUpAuditSinksVersion>0.39.2</ToolUpAuditSinksVersion>
-    <ToolUpAuthProvidersVersion>0.40.0</ToolUpAuthProvidersVersion>
-    <ToolUpCalendarVersion>0.39.2</ToolUpCalendarVersion>
-    <ToolUpCloudVersion>0.39.0</ToolUpCloudVersion>
-    <ToolUpContainerSchedulersVersion>0.39.2</ToolUpContainerSchedulersVersion>
-    <ToolUpContentScannersVersion>0.39.2</ToolUpContentScannersVersion>
+    <ToolUpAIProvidersVersion>0.40.0</ToolUpAIProvidersVersion>
+    <ToolUpAlgorithmProvidersVersion>0.39.3</ToolUpAlgorithmProvidersVersion>
+    <ToolUpArtefactSigningVersion>0.39.3</ToolUpArtefactSigningVersion>
+    <ToolUpAuditSinksVersion>0.39.3</ToolUpAuditSinksVersion>
+    <ToolUpAuthProvidersVersion>0.41.0</ToolUpAuthProvidersVersion>
+    <ToolUpCalendarVersion>0.39.3</ToolUpCalendarVersion>
+    <ToolUpCloudVersion>0.39.1</ToolUpCloudVersion>
+    <ToolUpContainerSchedulersVersion>0.39.3</ToolUpContainerSchedulersVersion>
+    <ToolUpContentScannersVersion>0.39.3</ToolUpContentScannersVersion>
     <ToolUpDataSourcesVersion>0.40.0</ToolUpDataSourcesVersion>
-    <ToolUpEmbeddingCachesVersion>0.39.2</ToolUpEmbeddingCachesVersion>
-    <ToolUpEmbeddingProvidersVersion>0.39.2</ToolUpEmbeddingProvidersVersion>
-    <ToolUpEncryptionVersion>0.39.2</ToolUpEncryptionVersion>
-    <ToolUpEntityStoresVersion>0.39.2</ToolUpEntityStoresVersion>
-    <ToolUpFactStoresVersion>0.39.2</ToolUpFactStoresVersion>
-    <ToolUpFeatureFlagProvidersVersion>0.1.3-alpha</ToolUpFeatureFlagProvidersVersion>
-    <ToolUpHostsVersion>0.39.2</ToolUpHostsVersion>
-    <ToolUpIngestionQueuesVersion>0.39.2</ToolUpIngestionQueuesVersion>
-    <ToolUpJobSchedulersVersion>0.39.2</ToolUpJobSchedulersVersion>
-    <ToolUpMediaVersion>0.39.2</ToolUpMediaVersion>
-    <ToolUpMetricsVersion>0.39.2</ToolUpMetricsVersion>
-    <ToolUpModelProvidersVersion>0.39.2</ToolUpModelProvidersVersion>
-    <ToolUpNotificationChannelsVersion>0.39.2</ToolUpNotificationChannelsVersion>
-    <ToolUpObservabilityVersion>0.39.2</ToolUpObservabilityVersion>
-    <ToolUpOcrProvidersVersion>0.39.2</ToolUpOcrProvidersVersion>
-    <ToolUpRateLimitVersion>0.39.2</ToolUpRateLimitVersion>
-    <ToolUpReportRenderersVersion>0.39.2</ToolUpReportRenderersVersion>
-    <ToolUpRerankersVersion>0.39.2</ToolUpRerankersVersion>
-    <ToolUpSecretsVersion>0.39.2</ToolUpSecretsVersion>
-    <ToolUpShareTokenStoreDecoratorsVersion>0.39.2</ToolUpShareTokenStoreDecoratorsVersion>
-    <ToolUpSparseIndicesVersion>0.39.2</ToolUpSparseIndicesVersion>
-    <ToolUpStorageVersion>0.39.2</ToolUpStorageVersion>
-    <ToolUpSvgRasterizersVersion>0.39.2</ToolUpSvgRasterizersVersion>
-    <ToolUpTelemetrySinksVersion>0.39.2</ToolUpTelemetrySinksVersion>
-    <ToolUpTimeSeriesStoresVersion>0.39.2</ToolUpTimeSeriesStoresVersion>
-    <ToolUpVectorStoresVersion>0.39.2</ToolUpVectorStoresVersion>
-    <ToolUpVoiceProvidersVersion>0.39.2</ToolUpVoiceProvidersVersion>
+    <ToolUpEmbeddingCachesVersion>0.39.3</ToolUpEmbeddingCachesVersion>
+    <ToolUpEmbeddingProvidersVersion>0.39.3</ToolUpEmbeddingProvidersVersion>
+    <ToolUpEncryptionVersion>0.39.3</ToolUpEncryptionVersion>
+    <ToolUpEntityStoresVersion>0.39.3</ToolUpEntityStoresVersion>
+    <ToolUpFactStoresVersion>0.39.3</ToolUpFactStoresVersion>
+    <ToolUpFeatureFlagProvidersVersion>0.1.4-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpHostsVersion>0.39.3</ToolUpHostsVersion>
+    <ToolUpIngestionQueuesVersion>0.39.3</ToolUpIngestionQueuesVersion>
+    <ToolUpJobSchedulersVersion>0.39.3</ToolUpJobSchedulersVersion>
+    <ToolUpMediaVersion>0.39.3</ToolUpMediaVersion>
+    <ToolUpMetricsVersion>0.39.3</ToolUpMetricsVersion>
+    <ToolUpModelProvidersVersion>0.39.3</ToolUpModelProvidersVersion>
+    <ToolUpNotificationChannelsVersion>0.39.3</ToolUpNotificationChannelsVersion>
+    <ToolUpObservabilityVersion>0.39.3</ToolUpObservabilityVersion>
+    <ToolUpOcrProvidersVersion>0.39.3</ToolUpOcrProvidersVersion>
+    <ToolUpRateLimitVersion>0.39.3</ToolUpRateLimitVersion>
+    <ToolUpReportRenderersVersion>0.39.3</ToolUpReportRenderersVersion>
+    <ToolUpRerankersVersion>0.39.3</ToolUpRerankersVersion>
+    <ToolUpSecretsVersion>0.39.3</ToolUpSecretsVersion>
+    <ToolUpShareTokenStoreDecoratorsVersion>0.39.3</ToolUpShareTokenStoreDecoratorsVersion>
+    <ToolUpSparseIndicesVersion>0.39.3</ToolUpSparseIndicesVersion>
+    <ToolUpStorageVersion>0.40.0</ToolUpStorageVersion>
+    <ToolUpSvgRasterizersVersion>0.39.3</ToolUpSvgRasterizersVersion>
+    <ToolUpTelemetrySinksVersion>0.39.3</ToolUpTelemetrySinksVersion>
+    <ToolUpTimeSeriesStoresVersion>0.39.3</ToolUpTimeSeriesStoresVersion>
+    <ToolUpVectorStoresVersion>0.40.0</ToolUpVectorStoresVersion>
+    <ToolUpVoiceProvidersVersion>0.39.3</ToolUpVoiceProvidersVersion>
     <ToolUpExperimentsVersion>0.1.0-alpha</ToolUpExperimentsVersion>
-    <ToolUpStripeVersion>0.2.3</ToolUpStripeVersion>
+    <ToolUpStripeVersion>0.2.4</ToolUpStripeVersion>
     <ToolUpWorkflowVersion>0.1.0-alpha</ToolUpWorkflowVersion>
     <ToolUpWebhooksVersion>0.1.0-alpha</ToolUpWebhooksVersion>
   </PropertyGroup>

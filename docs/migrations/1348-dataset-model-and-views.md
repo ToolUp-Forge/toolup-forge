@@ -1,6 +1,6 @@
 # A dataset model over a module's fact tables, and views checked against it
 
-**Ships in:** ToolUp.Platform.Core, ToolUp.Platform.Server and ToolUp.Facts.Server 0.42.0, and the composition profile
+**Ships in:** ToolUp.Platform.Core, ToolUp.Platform.Server and ToolUp.Facts.Server 0.42.1, and the composition profile
 `server-app-host` 7.5. Breaking only for a full-literal construction of `ServerModule`, `ServerApp` or
 `FactTableComposition`, each of which gains fields; everything else is additive, and a module that declares no model
 composes byte for byte as before.

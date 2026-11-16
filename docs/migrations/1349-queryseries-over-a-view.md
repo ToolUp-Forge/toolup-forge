@@ -1,6 +1,6 @@
 # `QuerySeries` reads a registered view
 
-**Ships in:** ToolUp.Facts.Shared, ToolUp.Facts.Server, ToolUp.Facts.Presentation.Server 0.42.0. Breaking only for a
+**Ships in:** ToolUp.Facts.Shared, ToolUp.Facts.Server, ToolUp.Facts.Presentation.Server 0.42.1. Breaking only for a
 full-literal construction of `FactSeriesQuery`, `FactSeries` or `FactBrowseDeps`, each of which gains one field, and for
 a caller of `PageRequestResolvers.create`, which gains a parameter. The wire is additive: a series request with no
 `View` member reads its table as before.

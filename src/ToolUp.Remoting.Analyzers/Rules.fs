@@ -58,7 +58,7 @@ module Rules =
             Sanctioned =
                 "Use the SDK's attribute — `ToolUp.Platform.*` (or `ToolUp.Remoting.Server.*` in a server-only record) — qualified where a local type of the same name would shadow it, and remove or rename the foreign one. No codefix is offered: the foreign marker has to go."
             RuntimeHalf = "The dispatcher's startup marker-collision refusal."
-            Since = "0.42.0"
+            Since = "0.42.1"
         }
         {
             Id = "TUR0002"

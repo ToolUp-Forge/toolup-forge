@@ -32,7 +32,7 @@ module Data =
         | Center -> "text-center"
 
     /// The typed table: one header row from the columns, one body row per
-    /// value. Since 0.42.0 (Phase 1073) it takes `Column<'row>` values in
+    /// value. Since 0.42.1 (Phase 1073) it takes `Column<'row>` values in
     /// place of header strings and pre-rendered element rows.
     let table (columns: Column<'row> list) (rows: 'row list) =
         Html.div [

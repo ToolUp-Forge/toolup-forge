@@ -1,6 +1,6 @@
 # A data source binds what it is given: bound statements
 
-**Ships in:** ToolUp.Platform.Core and ToolUp.Platform.Server 0.42.0. The change is breaking-class for one narrow
+**Ships in:** ToolUp.Platform.Core and ToolUp.Platform.Server 0.42.1. The change is breaking-class for one narrow
 reason: `ConnectorCapabilities` gains two fields and `ConnectorCapability` two cases. Everything else is new surface.
 
 **Affected:** a consumer that renders a value into a statement's text before calling `IDataSource.Query`; a full

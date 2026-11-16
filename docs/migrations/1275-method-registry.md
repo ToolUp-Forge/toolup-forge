@@ -1,6 +1,6 @@
 # A method tool registry and the method profile
 
-**Ships in:** ToolUp.Facts.Core, ToolUp.Facts.Server and ToolUp.AI.Server 0.42.0. Additive: no existing call
+**Ships in:** ToolUp.Facts.Core, ToolUp.Facts.Server and ToolUp.AI.Server 0.42.1. Additive: no existing call
 changes, `evaluate_pipeline` answers exactly as before, and a deployment that registers no method sends the prompt
 it sent before.
 

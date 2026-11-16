@@ -3,7 +3,7 @@
 **Who this is for:** deployments composing `ToolUp.AuthProviders.Passkey`, and clients that call
 `POST /api/passkey/register/begin` (including `ToolUp.AuthProviders.Passkey.Client`). **Breaking:** the
 request body no longer carries `email`, an invitation is redeemed by its link token, the bootstrap token is
-spent on first use, and user verification is required. The auth-providers group advances to 0.40.0.
+spent on first use, and user verification is required. The auth-providers group advances to 0.41.0.
 
 ## What changes
 
@@ -72,7 +72,7 @@ already seeded as an admin is a platform principal and is refused.
 
 ## Rollback
 
-Pin the previous auth-providers version (0.39.2). A consumed bootstrap marker is ignored by it. Credentials
+Pin the previous auth-providers version (0.40.0). A consumed bootstrap marker is ignored by it. Credentials
 enrolled under this version are ordinary records and keep working. To re-arm the bootstrap token deliberately,
 delete the marker blob; that is a deliberate act and should be audited.
 

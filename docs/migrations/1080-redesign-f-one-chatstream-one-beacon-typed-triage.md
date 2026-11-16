@@ -1,6 +1,6 @@
 # One chat stream per tab, one telemetry beacon, the triage vocabularies as unions
 
-**Ships in:** the 0.42.0 draft slot (ToolUp.AI.Core, ToolUp.AI.Client, ToolUp.AI.Server). Breaking-class: public
+**Ships in:** the 0.42.1 draft slot (ToolUp.AI.Core, ToolUp.AI.Client, ToolUp.AI.Server). Breaking-class: public
 members are removed or retyped in all three.
 
 **Affected:** code that subscribes to the AI stream itself (`SSEClient.subscribe`), that installs or calls the
