@@ -14,6 +14,7 @@ ToolUp.BrandKit.HostThemeTokens.Variables : Microsoft.FSharp.Collections.FSharpM
 ToolUp.BrandKit.HostThemeTokensModule (class)
 ToolUp.BrandKit.HostThemeTokensModule.brandKitVars : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.BrandKit.HostThemeTokensModule.empty : ToolUp.BrandKit.HostThemeTokens { get }
+ToolUp.BrandKit.HostThemeTokensModule.fuaranBridge : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.BrandKit.HostThemeTokensModule.ofBrandKitValues(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : ToolUp.BrandKit.HostThemeTokens
 ToolUp.BrandKit.HostThemeTokensModule.toDeclarations(ToolUp.BrandKit.HostThemeTokens) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.BrandKit.HostThemeTokensModule.toRootCss(ToolUp.BrandKit.HostThemeTokens) : System.String

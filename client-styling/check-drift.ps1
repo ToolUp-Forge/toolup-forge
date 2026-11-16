@@ -16,6 +16,9 @@
       3. Checks the sibling client package.json carries exactly the
          canonical devDependency pins and none of the v3/PostCSS deps or
          config files that v4 + @tailwindcss/vite makes obsolete.
+      4. Checks each consumer carries the canonical fuaran-bridge.css and
+         vite-fuaran-content.mjs beside its entry, and that every copy of
+         either file under the workspace equals its canonical source.
 
     Exit 0 = in sync. Exit 1 = drift (details printed). Read-only.
 .EXAMPLE
@@ -55,11 +58,13 @@ $pinVit = $deps.devDependencies.'@tailwindcss/vite'
 $banned = @($deps.remove.devDependencies) + @($deps.remove.files)
 
 $noise = '[\\/](node_modules|bin|obj|output|\.vite|\.git)[\\/]'
+# Another clone's canonical sources are a copy of this package, not a consumer.
+$canonCopy = '[\\/]client-styling[\\/]'
 $drift = @()
 
 $cssFiles =
     Get-ChildItem -Path $wsRoot -Recurse -Filter 'index.css' -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch $noise -and $_.FullName -ne $canonCss }
+    Where-Object { $_.FullName -notmatch $noise -and $_.FullName -notmatch $canonCopy }
 
 foreach ($f in $cssFiles) {
     $raw = Get-Content -Raw -LiteralPath $f.FullName
@@ -95,6 +100,36 @@ foreach ($f in $cssFiles) {
         $drift += "MJS  $rel : canonical vite-fable-tailwind.mjs missing (copy it next to vite.config.mts + add fableTailwindGitignore())"
     } elseif (-not [string]::Equals(((Get-Content -Raw -LiteralPath $mjs) -replace "`r`n", "`n").TrimEnd(), $canonMjsText, [System.StringComparison]::Ordinal)) {
         $drift += "MJS  $rel : vite-fable-tailwind.mjs differs from canonical"
+    }
+}
+
+# The Fuaran-UI files the canonical region imports: the bridge beside the
+# entry and the Vite plugin that resolves the renderer package's content/.
+# Every canonical consumer carries both, and every copy anywhere (the
+# templates carry them without the Tailwind region) is byte-equal to its
+# canonical source.
+$copied = @(
+    @{ Name = 'fuaran-bridge.css'; Canon = (Join-Path $PSScriptRoot 'fuaran-bridge.css') }
+    @{ Name = 'vite-fuaran-content.mjs'; Canon = (Join-Path $PSScriptRoot 'vite-fuaran-content.mjs') }
+)
+foreach ($c in $copied) {
+    $canonText = ((Get-Content -Raw -LiteralPath $c.Canon) -replace "`r`n", "`n").TrimEnd()
+    foreach ($f in $cssFiles) {
+        if ((Get-Content -Raw -LiteralPath $f.FullName) -notlike "*$START*") { continue }
+        if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $f.FullName) $c.Name))) {
+            $rel = $f.FullName.Substring($wsRoot.Length).TrimStart('\', '/')
+            $drift += "COPY $rel : canonical $($c.Name) missing beside the entry (copy it from client-styling/)"
+        }
+    }
+    $copies =
+        Get-ChildItem -Path $wsRoot -Recurse -Filter $c.Name -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch $noise -and $_.FullName -notmatch $canonCopy }
+    foreach ($copy in $copies) {
+        $text = ((Get-Content -Raw -LiteralPath $copy.FullName) -replace "`r`n", "`n").TrimEnd()
+        if (-not [string]::Equals($text, $canonText, [System.StringComparison]::Ordinal)) {
+            $rel = $copy.FullName.Substring($wsRoot.Length).TrimStart('\', '/')
+            $drift += "COPY $rel : differs from canonical client-styling/$($c.Name)"
+        }
     }
 }
 

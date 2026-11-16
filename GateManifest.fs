@@ -829,6 +829,7 @@ let rowReads: (string * string list) list = [
         "CONTRIBUTING.md"
         "README.md"
         "SECURITY.md"
+        "client-styling/fuaran-bridge.css"
         "docs/**"
         "samples/**"
         "spec/**"

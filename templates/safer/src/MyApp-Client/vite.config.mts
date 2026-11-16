@@ -1,4 +1,8 @@
 import { defineConfig } from "vite";
+// Resolves `@nuget/<package-id>/...` in index.css to the restored package, so
+// the Fuaran-UI reference stylesheet is read from the renderer this client
+// compiled against.
+import nugetContent from "./vite-fuaran-content.mjs";
 
 // SAFER vite config — matches platformsdk-solution's shape so consumers
 // can adopt the production posture without re-learning bundle-constant
@@ -10,6 +14,7 @@ import { defineConfig } from "vite";
 // boot. Default unset → "anonymous" — single-shape, no auth screens.
 
 export default defineConfig({
+  plugins: [nugetContent()],
   server: {
     port: 8080,
     proxy: {

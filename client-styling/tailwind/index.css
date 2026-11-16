@@ -9,6 +9,17 @@
    a blanket `ncu -u` (update-all.ps1 rejects them by default). */
 @import "tailwindcss";
 
+/* The Fuaran-UI renderer's reference stylesheet, read from the restored
+   Fuaran.UI.Renderer package's `content/` through the canonical
+   `vite-fuaran-content.mjs` plugin (copy it beside vite.config.mts and add
+   `nugetContent()`), so it is always the stylesheet of the renderer the
+   client compiled against. Then the bridge that answers its `--fuaran-*`
+   tokens with the shell's (copy `client-styling/fuaran-bridge.css` beside
+   this file). Both sit in Tailwind's `base` layer: every utility, and every
+   rule an app writes after the end marker, still wins over them. */
+@import "@nuget/fuaran.ui.renderer/content/fuaran-reference.css" layer(base);
+@import "./fuaran-bridge.css" layer(base);
+
 /* The SDK shell's classes (bg-sidebar, bg-brand, text-brand-dark, …) exist
    ONLY in Fable's compiled output/ (the shell ships in the
    ToolUp.Platform.Client NuGet pkg, not the app source). v4's oxide scan

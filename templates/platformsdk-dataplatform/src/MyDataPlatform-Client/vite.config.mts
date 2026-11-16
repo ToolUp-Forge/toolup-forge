@@ -1,4 +1,8 @@
 import { defineConfig } from "vite";
+// Resolves `@nuget/<package-id>/...` in index.css to the restored package, so
+// the Fuaran-UI reference stylesheet is read from the renderer this client
+// compiled against.
+import nugetContent from "./vite-fuaran-content.mjs";
 
 // Phase 11.G + Phase 16e — build-time defines consumed by the SDK's
 // `ToolUp.Platform.BundleConstants` typed accessors. Each value is
@@ -21,6 +25,7 @@ import { defineConfig } from "vite";
 //   __OIDC_ISSUER_OVERRIDE__       → BundleConstants.oidcIssuerOverride
 //   __OIDC_AUDIENCE_OVERRIDE__     → BundleConstants.oidcAudienceOverride
 export default defineConfig({
+  plugins: [nugetContent()],
   server: {
     port: 8080,
     proxy: {
