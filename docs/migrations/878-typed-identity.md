@@ -1,6 +1,6 @@
 # 878 — Typed identity: a team id cannot be passed where a user id is expected
 
-**Breaking, 0.42.0.** `UserId` and `TeamId` are single-case types in `ToolUp.Platform.Core`
+**Breaking, 0.42.1.** `UserId` and `TeamId` are single-case types in `ToolUp.Platform.Core`
 (`Shared/Types/Identity.fs`). Every platform store and service seam that takes a user or a team id takes it
 typed, `ScopeKey.Team` / `ScopeKey.User` carry the typed id, and the Core records that hold one outside the
 remoting wire hold it typed. Passing a `TeamId` where a `UserId` is expected is a compile error at every one of

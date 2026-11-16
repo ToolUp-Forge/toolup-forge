@@ -1,7 +1,7 @@
 # 1086 — typed retrieval stages, and one extractor model
 
 **Class:** breaking, in one place: `ScoredPool` gains a field, so a full `ScoredPool` record literal outside the
-SDK adds it. Everything else is additive or internal. Rides 0.42.0.
+SDK adds it. Everything else is additive or internal. Rides 0.42.1.
 
 ## What changes
 

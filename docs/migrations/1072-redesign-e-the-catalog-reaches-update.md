@@ -1,6 +1,6 @@
 # Phase 1072 — the catalog reaches `update`
 
-**Class:** breaking (rides the 0.42.0 draft slot). Additive for a consumer that builds `ClientModuleContext`
+**Class:** breaking (rides the 0.42.1 draft slot). Additive for a consumer that builds `ClientModuleContext`
 through `ClientModuleContext.empty` and only renders the SDK's modules; the breaks are named below, each with
 its replacement.
 
