@@ -519,11 +519,17 @@ ToolUp.Facts.FactSupersededEvent.Subject : System.String { get }
 ToolUp.Facts.FactSupersededEvent.SupersededFactId : System.String { get }
 ToolUp.Facts.FactWrite (class)
 ToolUp.Facts.FactWrite.address(ToolUp.Facts.FactDraft) : ToolUp.Facts.AddressedDraft
+ToolUp.Facts.FactWrite.collisions(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact], ToolUp.Facts.WriteRequest) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
+ToolUp.Facts.FactWrite.describeCollisions(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : System.String
 ToolUp.Facts.FactWrite.factOf(ToolUp.Facts.AddressedDraft, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Fuaran.Facts.Fact
 ToolUp.Facts.FactWrite.headOf(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.Fact]
 ToolUp.Facts.FactWrite.plan(System.DateTime, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact], ToolUp.Facts.WriteRequest) : ToolUp.Facts.WritePlan
 ToolUp.Facts.FactWrite.prepare(ToolUp.Facts.WriteShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.WriteRequest, ToolUp.Facts.FactStoreError]
 ToolUp.Facts.FactWrite.recordedAt(ToolUp.Facts.FactDraft, System.DateTime) : Fuaran.Facts.Fact
+ToolUp.Facts.FactWriteCollision (class)
+ToolUp.Facts.FactWriteCollision..ctor()
+ToolUp.Facts.FactWriteCollision..ctor(System.String)
+ToolUp.Facts.FactWriteCollision.Data0 : System.String { get }
 ToolUp.Facts.FreshnessHistogram (class)
 ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
 ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
