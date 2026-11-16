@@ -45,6 +45,8 @@
     { "path": "templates/*/.config/dotnet-tools.json", "reason": "named by the template gates (CI-only rows); the gate restores the root tool manifest only" },
     { "path": "templates/*/compose.yml", "reason": "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs" },
     { "path": "templates/**/vite.config.mts", "reason": "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs" },
-    { "path": "templates/**/launchSettings.json", "reason": "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs" }
+    { "path": "templates/**/launchSettings.json", "reason": "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs" },
+    { "path": "client-styling/check-drift.ps1", "reason": "run by the Templates row (VerifyTemplates), which the templates CI job runs and VerifyAll does not" },
+    { "path": "client-styling/tailwind/**", "reason": "the styling drift check's canonical sources, read by the Templates row (CI-only) through client-styling/check-drift.ps1" }
   ]
 }

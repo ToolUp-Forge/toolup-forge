@@ -19,20 +19,36 @@
       4. Checks each consumer carries the canonical fuaran-bridge.css and
          vite-fuaran-content.mjs beside its entry, and that every copy of
          either file under the workspace equals its canonical source.
+      5. Requires every `dotnet new` template client in this repository
+         (templates/<template>/src/<App>-Client/ with a vite.config.mts) to
+         be a canonical consumer. Discovery by marker alone would let a
+         template that drops the block escape the check; a template is held
+         whether or not its marker is still there.
 
     Exit 0 = in sync. Exit 1 = drift (details printed). Read-only.
+.PARAMETER Root
+    The tree to search for consumers. Defaults to the workspace root three
+    levels up. The template gate passes the repository root, so it holds
+    the repository's own consumers (the templates) and nothing beside it.
 .EXAMPLE
     pwsh -File toolup-forge/client-styling/check-drift.ps1
+.EXAMPLE
+    pwsh -File client-styling/check-drift.ps1 -Root .
 #>
 [CmdletBinding()]
-param()
+param(
+    [string] $Root
+)
 
 $ErrorActionPreference = 'Stop'
 $styleDir = Join-Path $PSScriptRoot 'tailwind'
 $canonCss = Join-Path $styleDir 'index.css'
 $depsFile = Join-Path $styleDir 'deps.json'
 $canonMjs = Join-Path $styleDir 'vite-fable-tailwind.mjs'
-$wsRoot   = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$wsRoot   =
+    if ($Root) { (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\', '/') }
+    else { (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path }
 
 $START = '>>> @toolup/tailwind canonical'
 $END   = '>>> end @toolup/tailwind canonical <<<'
@@ -130,6 +146,20 @@ foreach ($c in $copied) {
             $rel = $copy.FullName.Substring($wsRoot.Length).TrimStart('\', '/')
             $drift += "COPY $rel : differs from canonical client-styling/$($c.Name)"
         }
+    }
+}
+
+# Every template client is a required consumer: one whose entry lacks the
+# start marker is drift, not "not a consumer".
+$templateClients =
+    Get-ChildItem -Path (Join-Path $repoRoot 'templates') -Directory -ErrorAction SilentlyContinue |
+    ForEach-Object { Get-ChildItem -Path (Join-Path $_.FullName 'src') -Directory -Filter '*-Client' -ErrorAction SilentlyContinue } |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'vite.config.mts') }
+foreach ($t in $templateClients) {
+    $rel = $t.FullName.Substring($repoRoot.Length).TrimStart('\', '/')
+    $entry = Join-Path $t.FullName 'index.css'
+    if (-not (Test-Path -LiteralPath $entry) -or (Get-Content -Raw -LiteralPath $entry) -notlike "*$START*") {
+        $drift += "TMPL $rel : template client's index.css does not carry the canonical block (embed client-styling/tailwind/index.css's marked region at its top)"
     }
 }
 

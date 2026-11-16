@@ -987,7 +987,24 @@ let main args =
 
     // The template-content compile gate. Its rationale and its spec are
     // `TemplateGatePackages.verifyTemplates`; the mechanism is `TemplateGate.run`.
-    Target.create "VerifyTemplates" (fun _ -> TemplateGate.run TemplateGatePackages.verifyTemplates)
+    // It first holds every template client to the canonical styling block and
+    // pins (`client-styling/check-drift.ps1`), scoped to this repository so the
+    // check reads the templates and nothing beside the clone.
+    let runVerifyTemplates () =
+        let drift =
+            Proc.exec
+                "pwsh"
+                [ "-NoProfile"; "-File"; "client-styling/check-drift.ps1"; "-Root"; "." ]
+                __SOURCE_DIRECTORY__
+
+        if drift.ExitCode <> 0 then
+            failwithf
+                "VerifyTemplates: client-styling/check-drift.ps1 exited %d; a template client has drifted from the canonical styling block or its pins (the lines above name which)."
+                drift.ExitCode
+
+        TemplateGate.run TemplateGatePackages.verifyTemplates
+
+    Target.create "VerifyTemplates" (fun _ -> runVerifyTemplates ())
 
     // The three documentation gates live in `DocGates.fs`, which holds what
     // each checks and why. Each target here is its gate's verdict: the gate
@@ -4075,7 +4092,7 @@ let main args =
         DocSnippets = runVerifyDocSnippets
         SourceCitations = runVerifySourceCitations
         UploadResults = runVerifyUploadResults
-        Templates = fun () -> Gate.verdictOf (fun () -> TemplateGate.run TemplateGatePackages.verifyTemplates)
+        Templates = fun () -> Gate.verdictOf runVerifyTemplates
         PackagedModuleTemplate =
             fun () -> Gate.verdictOf (fun () -> TemplateGate.run TemplateGatePackages.verifyPackagedModuleTemplate)
         DataPlatformTemplate =

@@ -3,6 +3,11 @@ import { defineConfig } from "vite";
 // the Fuaran-UI reference stylesheet is read from the renderer this client
 // compiled against.
 import nugetContent from "./vite-fuaran-content.mjs";
+// The canonical styling block's two Vite plugins (client-styling/tailwind/):
+// `fableTailwindGitignore()` lets Tailwind scan Fable's output/, where the
+// SDK shell's classes live, and MUST precede `tailwindcss()`.
+import tailwindcss from "@tailwindcss/vite";
+import fableTailwindGitignore from "./vite-fable-tailwind.mjs";
 
 // Phase 11.G + Phase 16e — build-time defines consumed by the SDK's
 // `ToolUp.Platform.BundleConstants` typed accessors. Each value is
@@ -25,7 +30,7 @@ import nugetContent from "./vite-fuaran-content.mjs";
 //   __OIDC_ISSUER_OVERRIDE__       → BundleConstants.oidcIssuerOverride
 //   __OIDC_AUDIENCE_OVERRIDE__     → BundleConstants.oidcAudienceOverride
 export default defineConfig({
-  plugins: [nugetContent()],
+  plugins: [nugetContent(), fableTailwindGitignore(), tailwindcss()],
   server: {
     port: 8080,
     proxy: {
