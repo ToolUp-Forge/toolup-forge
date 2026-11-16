@@ -44,6 +44,7 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI.AnswerVerifier
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -51,6 +52,7 @@ open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 
@@ -59,18 +61,9 @@ let private t0 = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 let private metric (id: string) (rollUp: RollUp option) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = rollUp
-    Context = None
+    ToolUp.Platform.Tests.KernelFixtures.metric id id "count" "count" "" with
+        Direction = HigherIsBetter
+        RollUp = rollUp
 }
 
 let private products: SubjectDefinition = {
@@ -84,7 +77,7 @@ let private registry: IMetricRegistry =
     MetricRegistry.build [
         {
             MetricRegistration.Module = "sales"
-            Definition = metric "revenue" (Some(Additive 0.01m))
+            Definition = metric "revenue" (Some(Additive(DecimalText.ofDecimal 0.01m)))
         }
         {
             MetricRegistration.Module = "sales"
@@ -125,16 +118,16 @@ let private tablesFor (history: FactTableHistoryMode) (destination: string) : IF
         }
     ] [ BindFactTable("sku-sales", destination) ]
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+let private september: TemporalExtent =
+    period
+        (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "2026-09")
 
 let private row (brand: string) (sku: string) (revenue: decimal) : FactTableRow = {
     Subject = [ brand; sku ]
     Period = september
-    Values = Map.ofList [ "revenue", Scalar revenue; "segment", Categorical "core" ]
+    Values = Map.ofList [ "revenue", scalar revenue; "segment", Categorical "core" ]
 }
 
 /// A population with ties (the ranking's tiebreak is load-bearing) across
@@ -284,7 +277,7 @@ let private held (w: World) (metricId: string) : Fact list =
 
 let private valueOf (f: Fact) =
     match f.Value with
-    | Scalar d -> d
+    | Scalar d -> DecimalText.toDecimal d
     | other -> failtestf "expected a scalar, got %A" other
 
 // ─── 1. Equivalence ──────────────────────────────────────────────────
@@ -439,7 +432,7 @@ let private equivalenceTests =
                     Path = [ "brand-01" ]
                 }
                 Metric = MetricRef "revenue"
-                Value = Scalar 5m
+                Value = scalar 5m
                 Period = september
                 Method = HumanAsserted "analyst"
                 Evidence = {
@@ -541,7 +534,7 @@ let private quotedOnlyTests =
 
             Expect.equal
                 (records |> List.map _.Value)
-                [ Series(DelegateFact.token c.Watermark) ]
+                [ Series(HostKey(DelegateFact.token c.Watermark), None) ]
                 "one record, naming the run"
 
             let current =
@@ -571,7 +564,7 @@ let private quotingTests =
                     [
                         {
                             FactId = best.FactId
-                            Rendering = FactRendering.render "" best.Value
+                            Rendering = FactRendering.renderFor None best.Value
                             Metric = "revenue"
                             Inputs = []
                         }
@@ -811,7 +804,7 @@ let private brandFact (w: World) (brand: string) (value: decimal) =
             Path = [ brand ]
         }
         Metric = MetricRef "revenue"
-        Value = Scalar value
+        Value = scalar value
         Period = september
         Method = Computed("brand-rollup", "v1", "")
         Evidence = {
@@ -879,8 +872,8 @@ let private walkTests =
                 Expect.equal stats.FactCount c.RowCount "the run's row count"
                 Expect.equal stats.SubjectCount 1_000 "its subjects"
                 Expect.equal stats.ComparableCount 1_000 "its comparable cells"
-                Expect.equal stats.PeriodFrom (Some september.From) "its period reach"
-                Expect.equal stats.PeriodTo (Some september.To) "to the end"
+                Expect.equal stats.PeriodFrom (Some(Instant.toDateTime september.From)) "its period reach"
+                Expect.equal stats.PeriodTo (Some(Instant.toDateTime september.To)) "to the end"
                 Expect.isEmpty p.Cited "and cites nothing it would have to mint"
             | other -> failtestf "expected one population, got %d" other.Length
 
@@ -1623,11 +1616,11 @@ let private runOptionsTests =
         test "a slice carries every row outside it under the run that wrote it, and withdraws only the rows inside it" {
             let w = delegatedWorld FactTableHistoryMode.Replace
 
-            let october: TemporalExtent = {
-                From = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-                To = DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)
-                Label = Some "2026-10"
-            }
+            let october: TemporalExtent =
+                period
+                    (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (Some "2026-10")
 
             let first =
                 match
@@ -1707,15 +1700,15 @@ let private runOptionsTests =
 
             // A slice from August to mid-September: it holds August whole and
             // splits the committed September row.
-            let august: TemporalExtent = {
-                From = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
-                To = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-                Label = Some "2026-08"
-            }
+            let august: TemporalExtent =
+                period
+                    (DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (Some "2026-08")
 
             let slice = {
                 august with
-                    To = DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc)
+                    To = instant (DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc))
             }
 
             match
@@ -1761,11 +1754,11 @@ let private runOptionsTests =
             |> Async.RunSynchronously
             |> ignore
 
-            let october: TemporalExtent = {
-                From = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-                To = DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)
-                Label = Some "2026-10"
-            }
+            let october: TemporalExtent =
+                period
+                    (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (Some "2026-10")
 
             match
                 w.Writer.OpenRun(

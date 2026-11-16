@@ -16,11 +16,13 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Scope.TeamPolicyStore
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.AI
 open ToolUp.AI.TeamConversationPolicyStore
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
@@ -80,11 +82,11 @@ let private salesPolicy: DisclosurePolicy = {
     ContributorScope = None
 }
 
-let private q3: TemporalExtent = {
-    From = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q3-2026"
-}
+let private q3: TemporalExtent =
+    period
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q3-2026")
 
 let private draftWith (metric: string) (disclosure: Disclosure) (value: decimal) : FactDraft = {
     Subject = {
@@ -92,7 +94,7 @@ let private draftWith (metric: string) (disclosure: Disclosure) (value: decimal)
         Path = [ "uk" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = scalar value
     Period = q3
     Method = Computed("rollup", "1", "p0")
     Evidence = {

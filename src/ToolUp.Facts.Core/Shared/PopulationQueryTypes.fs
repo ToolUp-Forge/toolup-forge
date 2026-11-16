@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 open System
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -306,7 +308,7 @@ module PopulationValue =
     /// not placed in a ranking that would silently invent its position.
     let comparable (value: FactValue) : decimal option =
         match value with
-        | Scalar d -> Some d
+        | Scalar d -> Some(DecimalText.toDecimal d)
         | Interval _
         | Series _
         | Distribution _
@@ -323,9 +325,9 @@ module PopulationMember =
         FactId = f.FactId
         Subject = f.Subject
         Magnitude = PopulationValue.comparable f.Value
-        PeriodFrom = f.Period.From
-        PeriodTo = f.Period.To
-        AsOf = f.AsOf
+        PeriodFrom = Instant.toDateTime f.Period.From
+        PeriodTo = Instant.toDateTime f.Period.To
+        AsOf = Instant.toDateTime f.AsOf
         MethodIdentity = Fact.methodIdentity f.Method
     }
 

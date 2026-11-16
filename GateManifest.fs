@@ -160,6 +160,7 @@ let private apiKeys =
 let private platformEnv =
     env [
         "TOOLUP_FEDERATION_SPEC_DIR"
+        "TOOLUP_FACT_SPEC_DIR"
         "TOOLUP_APPROVE"
         "TOOLUP_APPROVE_API"
         "TOOLUP_APPROVE_COMPOSITION"

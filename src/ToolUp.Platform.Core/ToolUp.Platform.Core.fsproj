@@ -825,5 +825,11 @@
              than only through ToolUp.AI.Wire. -->
         <ProjectReference Include="..\ToolUp.Platform.Transport\ToolUp.Platform.Transport.fsproj" />
     </ItemGroup>
+    <!-- The metric and subject definitions the registry holds are the
+         published Fact kernel's (Fuaran.Facts): FSharp.Core and Fuaran.Core
+         only, Fable-clean, its source shipped for Fable consumers. -->
+    <ItemGroup>
+        <PackageReference Include="Fuaran.Facts" />
+    </ItemGroup>
   <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

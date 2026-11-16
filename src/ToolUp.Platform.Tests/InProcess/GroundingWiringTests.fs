@@ -6,8 +6,10 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
@@ -22,11 +24,11 @@ open ToolUp.Platform.Compose
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draftWith resultRef inputHashes value : FactDraft = {
     Subject = {
@@ -34,7 +36,7 @@ let private draftWith resultRef inputHashes value : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar value
+    Value = scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

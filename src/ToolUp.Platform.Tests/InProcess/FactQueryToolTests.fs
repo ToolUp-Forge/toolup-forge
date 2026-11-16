@@ -14,9 +14,11 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI.AIToolRegistry
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
@@ -39,11 +41,11 @@ open ToolUp.Platform.Compose
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft (metric: string) (period: TemporalExtent) (inputHashes: string list) (value: decimal) : FactDraft = {
     Subject = {
@@ -51,7 +53,7 @@ let private draft (metric: string) (period: TemporalExtent) (inputHashes: string
         Path = [ "acme" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = scalar value
     Period = period
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -74,18 +76,9 @@ let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : 
         {
             Module = "TestModule"
             Definition = {
-                Id = "revenue"
-                Name = "Revenue"
-                Unit = "GBP"
-                Dimensionality = "currency"
-                Direction = HigherIsBetter
-                DisplayFormat = displayFormat
-                Staleness = staleness
-                ProducingOperation = None
-                CanonicalMethod = None
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
+                metric "revenue" "Revenue" "GBP" "currency" displayFormat with
+                    Direction = HigherIsBetter
+                    Staleness = staleness
             }
         }
     ] []
@@ -564,7 +557,7 @@ let temporalTests =
                 run (
                     sprintf
                         """{"subject_hierarchy":"brand","subject_path":"acme","metric":"revenue","as_of":"%s"}"""
-                        (original.AsOf.ToUniversalTime().ToString "o")
+                        ((Instant.toDateTime original.AsOf).ToString "o")
                 )
 
             let asOfEl = (JsonDocument.Parse asOfView).RootElement
@@ -582,11 +575,11 @@ let temporalTests =
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
-            let q1: TemporalExtent = {
-                From = DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                To = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-                Label = Some "Q1-2026"
-            }
+            let q1: TemporalExtent =
+                period
+                    (DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+                    (Some "Q1-2026")
 
             let q1Fact = assertFact store scope (draft "revenue" q1 [ "h1" ] 100m)
             assertFact store scope (draft "revenue" q2 [ "h2" ] 200m) |> ignore

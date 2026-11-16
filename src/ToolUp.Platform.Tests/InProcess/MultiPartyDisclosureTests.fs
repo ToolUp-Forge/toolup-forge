@@ -7,11 +7,13 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── Phase 674 — multi-party conjunction + contributor scope ─────────
 //
@@ -78,11 +80,14 @@ let private unscopedCfg =
 
 // ── Fact builders (pure walk) ─────────────────────────────────────
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
+
+/// A series value referencing a data-object version by its host key.
+let private series (version: string) : FactValue = Series(HostKey version, None)
 
 let private mkFact
     (id: string)
@@ -101,7 +106,7 @@ let private mkFact
         Metric = MetricRef metric
         Value = value
         Period = q2
-        AsOf = DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Utc)
+        AsOf = instant (DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Utc))
         Method = method
         Evidence = {
             ResultRef = None
@@ -115,15 +120,15 @@ let private mkFact
 
 /// Party A's raw contribution, published as the series `dov-a`.
 let private rawA =
-    mkFact "RA" "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted policyA) []
+    mkFact "RA" "raw-a" (Computed("load", "1", "p")) (series "dov-a") (Restricted policyA) []
 
 /// Party B's raw contribution, published as the series `dov-b`.
 let private rawB =
-    mkFact "RB" "raw-b" (Computed("load", "1", "p")) (Series "dov-b") (Restricted policyB) []
+    mkFact "RB" "raw-b" (Computed("load", "1", "p")) (series "dov-b") (Restricted policyB) []
 
 /// The joint output — a declassifier-shaped operation over BOTH parties.
 let private joint =
-    mkFact "J" "joint" (Computed(jointOp, "1", "p")) (Scalar 42m) Surfaceable [ "dov-a"; "dov-b" ]
+    mkFact "J" "joint" (Computed(jointOp, "1", "p")) (scalar 42m) Surfaceable [ "dov-a"; "dov-b" ]
 
 let private jointGraph = DisclosureTaint.buildGraph [ rawA; rawB; joint ]
 
@@ -193,13 +198,13 @@ let conjunctionTests =
             // PB carries party B's data through a plain passthrough — not a
             // declassifier — so B's restriction reaches the combiner intact.
             let passthroughB =
-                mkFact "PB" "pass-b" (Computed("passthrough", "1", "p")) (Series "dov-pass-b") Surfaceable [ "dov-b" ]
+                mkFact "PB" "pass-b" (Computed("passthrough", "1", "p")) (series "dov-pass-b") Surfaceable [ "dov-b" ]
 
             let acceptedJoint =
-                mkFact "AJ" "agg" (Computed(jointOp, "1", "p")) (Series "dov-agg") Surfaceable [ "dov-a"; "dov-b" ]
+                mkFact "AJ" "agg" (Computed(jointOp, "1", "p")) (series "dov-agg") Surfaceable [ "dov-a"; "dov-b" ]
 
             let combined =
-                mkFact "C" "report" (Computed("combine", "1", "p")) (Scalar 1m) Surfaceable [ "dov-agg"; "dov-pass-b" ]
+                mkFact "C" "report" (Computed("combine", "1", "p")) (scalar 1m) Surfaceable [ "dov-agg"; "dov-pass-b" ]
 
             let graph =
                 DisclosureTaint.buildGraph [ rawA; rawB; passthroughB; acceptedJoint; combined ]
@@ -226,7 +231,7 @@ let conjunctionTests =
             let unscopedJointGraph =
                 DisclosureTaint.buildGraph [
                     rawA
-                    mkFact "J1" "joint" (Computed(jointOp, "1", "p")) (Scalar 42m) Surfaceable [ "dov-a" ]
+                    mkFact "J1" "joint" (Computed(jointOp, "1", "p")) (scalar 42m) Surfaceable [ "dov-a" ]
                 ]
 
             let outcome = DisclosureTaint.analyze unscopedCfg unscopedJointGraph "J1"
@@ -300,13 +305,13 @@ let private draftOf
 /// Seed both parties' contributions plus the joint output derived from
 /// both, and return the joint fact.
 let private seedJoint (store: IFactStore) (scope: string) : Fact =
-    assertFact store scope (draftOf "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted policyA) [])
+    assertFact store scope (draftOf "raw-a" (Computed("load", "1", "p")) (series "dov-a") (Restricted policyA) [])
     |> ignore
 
-    assertFact store scope (draftOf "raw-b" (Computed("load", "1", "p")) (Series "dov-b") (Restricted policyB) [])
+    assertFact store scope (draftOf "raw-b" (Computed("load", "1", "p")) (series "dov-b") (Restricted policyB) [])
     |> ignore
 
-    assertFact store scope (draftOf "joint" (Computed(jointOp, "1", "p")) (Scalar 42m) Surfaceable [ "dov-a"; "dov-b" ])
+    assertFact store scope (draftOf "joint" (Computed(jointOp, "1", "p")) (scalar 42m) Surfaceable [ "dov-a"; "dov-b" ])
 
 let private rowsOf (events: IEventStore) (scope: string) (eventType: string) = async {
     let! rows = events.ReadBySource(scope, FactEvents.SourceModule)
@@ -400,7 +405,7 @@ let gateTests =
                 assertFact
                     store
                     scope
-                    (draftOf "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted policyA) [])
+                    (draftOf "raw-a" (Computed("load", "1", "p")) (series "dov-a") (Restricted policyA) [])
 
             // policyA permits FactRetrieval and nothing else.
             let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ ra.FactId ])
@@ -423,14 +428,14 @@ let gateTests =
             assertFact
                 store
                 scope
-                (draftOf "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted policyA) [])
+                (draftOf "raw-a" (Computed("load", "1", "p")) (series "dov-a") (Restricted policyA) [])
             |> ignore
 
             let derived =
                 assertFact
                     store
                     scope
-                    (draftOf "joint" (Computed(jointOp, "1", "p")) (Scalar 42m) Surfaceable [ "dov-a" ])
+                    (draftOf "joint" (Computed(jointOp, "1", "p")) (scalar 42m) Surfaceable [ "dov-a" ])
 
             let unscopedGate = FactDisclosureGate.createWithTaint unscopedCfg store events
 
@@ -543,7 +548,7 @@ let private labelling = AssemblyTaint.labelling declaredLabels
 /// no upstream for it at all — this is the derivation the file header calls
 /// invisible, made concrete.
 let private orphan =
-    mkFact "O" "orphan" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-a"; "dov-b" ]
+    mkFact "O" "orphan" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-a"; "dov-b" ]
 
 let private orphanGraph = DisclosureTaint.buildGraph [ orphan ]
 

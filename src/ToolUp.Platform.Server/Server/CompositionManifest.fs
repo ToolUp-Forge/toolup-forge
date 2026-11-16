@@ -91,7 +91,7 @@ type MetricCanonicalMethod = {
     /// same string `metricEntry` carries as its `Label`.
     MetricId: string
     /// The declared selector, matched against method-identity strings per
-    /// `Grounding.CanonicalMethod.matches`.
+    /// `Fuaran.Facts.CanonicalMethod.matches`.
     Selector: string
 }
 

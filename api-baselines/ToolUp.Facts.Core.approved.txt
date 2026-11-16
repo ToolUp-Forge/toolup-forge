@@ -43,10 +43,10 @@ ToolUp.Facts.AggregateGroupRefusal+Tags (class)
 ToolUp.Facts.AggregateGroupRefusal+Tags.CompetingMethods : System.Int32 (literal)
 ToolUp.Facts.AggregateGroupRefusal+Tags.PeriodsDisagree : System.Int32 (literal)
 ToolUp.Facts.AggregateInput (class)
-ToolUp.Facts.AggregateInput..ctor(System.String, ToolUp.Facts.SubjectRef, System.String)
+ToolUp.Facts.AggregateInput..ctor(System.String, Fuaran.Facts.SubjectRef, System.String)
 ToolUp.Facts.AggregateInput.FactId : System.String { get }
 ToolUp.Facts.AggregateInput.Rendering : System.String { get }
-ToolUp.Facts.AggregateInput.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.AggregateInput.Subject : Fuaran.Facts.SubjectRef { get }
 ToolUp.Facts.AggregatePlan (class)
 ToolUp.Facts.AggregatePlan..ctor(ToolUp.Facts.PopulationTriple, ToolUp.Facts.RankDirection, System.Int32, System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.RankedFactRef], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]], ToolUp.Facts.PopulationStats, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.AggregateRefresh], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.AggregatePlan.Direction : ToolUp.Facts.RankDirection { get }
@@ -62,13 +62,13 @@ ToolUp.Facts.AggregatePlan.ValueStatisticsWithheld : System.Boolean { get }
 ToolUp.Facts.AggregatePlan.WithheldByPolicy : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
 ToolUp.Facts.AggregatePlan.WithheldCount : System.Int32 { get }
 ToolUp.Facts.AggregateQuery (class)
-ToolUp.Facts.AggregateQuery..ctor(ToolUp.Facts.MetricRef, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
+ToolUp.Facts.AggregateQuery..ctor(Fuaran.Facts.MetricRef, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime])
 ToolUp.Facts.AggregateQuery.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Facts.AggregateQuery.GroupByLevel : System.String { get }
 ToolUp.Facts.AggregateQuery.Hierarchy : System.String { get }
-ToolUp.Facts.AggregateQuery.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.AggregateQuery.Metric : Fuaran.Facts.MetricRef { get }
 ToolUp.Facts.AggregateQuery.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
-ToolUp.Facts.AggregateQuery.PeriodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
+ToolUp.Facts.AggregateQuery.PeriodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.TemporalExtent] { get }
 ToolUp.Facts.AggregateRefresh (class)
 ToolUp.Facts.AggregateRefresh..ctor(System.String, System.DateTime)
 ToolUp.Facts.AggregateRefresh.FactId : System.String { get }
@@ -123,11 +123,11 @@ ToolUp.Facts.AggregateResult.Hierarchy : System.String { get }
 ToolUp.Facts.AggregateResult.Metric : System.String { get }
 ToolUp.Facts.AggregateResult.WithheldByPolicy : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
 ToolUp.Facts.AggregateTotal (class)
-ToolUp.Facts.AggregateTotal..ctor(System.String, System.String, System.Decimal, ToolUp.Facts.TemporalExtent, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AggregateInput])
+ToolUp.Facts.AggregateTotal..ctor(System.String, System.String, System.Decimal, Fuaran.Facts.TemporalExtent, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AggregateInput])
 ToolUp.Facts.AggregateTotal.Group : System.String { get }
 ToolUp.Facts.AggregateTotal.Inputs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.AggregateInput] { get }
 ToolUp.Facts.AggregateTotal.MemberCount : System.Int32 { get }
-ToolUp.Facts.AggregateTotal.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.AggregateTotal.Period : Fuaran.Facts.TemporalExtent { get }
 ToolUp.Facts.AggregateTotal.Rendering : System.String { get }
 ToolUp.Facts.AggregateTotal.Value : System.Decimal { get }
 ToolUp.Facts.AnswerPlan (class)
@@ -178,14 +178,6 @@ ToolUp.Facts.CompiledQuestionModule (class)
 ToolUp.Facts.CompiledQuestionModule.empty : ToolUp.Facts.CompiledQuestion { get }
 ToolUp.Facts.CompiledQuestionModule.isEmpty(ToolUp.Facts.CompiledQuestion) : System.Boolean
 ToolUp.Facts.CompiledQuestionModule.ofTriples(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TripleCandidate]) : ToolUp.Facts.CompiledQuestion
-ToolUp.Facts.Confidence (class)
-ToolUp.Facts.Confidence..ctor(System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Facts.Confidence.Basis : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Facts.Confidence.Value : System.Decimal { get }
-ToolUp.Facts.CurrencySymbols (class)
-ToolUp.Facts.CurrencySymbols.prefix(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
-ToolUp.Facts.CurrencySymbols.table : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
-ToolUp.Facts.CurrencySymbols.tryFind(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DeclaredMethod (class)
 ToolUp.Facts.DeclaredMethod..ctor(System.String, System.String)
 ToolUp.Facts.DeclaredMethod.MethodId : System.String { get }
@@ -194,7 +186,7 @@ ToolUp.Facts.DeclaredMethodModule (class)
 ToolUp.Facts.DeclaredMethodModule.TokenPrefix : System.String (literal)
 ToolUp.Facts.DeclaredMethodModule.create(System.String, System.String) : ToolUp.Facts.DeclaredMethod
 ToolUp.Facts.DeclaredMethodModule.describe(ToolUp.Facts.DeclaredMethod) : System.String
-ToolUp.Facts.DeclaredMethodModule.ofEvidence(ToolUp.Facts.Evidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]
+ToolUp.Facts.DeclaredMethodModule.ofEvidence(Fuaran.Facts.Evidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]
 ToolUp.Facts.DeclaredMethodModule.problem(ToolUp.Facts.DeclaredMethod) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DeclaredMethodModule.token(ToolUp.Facts.DeclaredMethod) : System.String
 ToolUp.Facts.DeclaredMethodModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]
@@ -204,18 +196,18 @@ ToolUp.Facts.DeclassificationRoutine.AcceptingScopes : Microsoft.FSharp.Collecti
 ToolUp.Facts.DeclassificationRoutine.OperationId : System.String { get }
 ToolUp.Facts.DeclassificationRoutine.Rationale : System.String { get }
 ToolUp.Facts.DelegateChildTotal (class)
-ToolUp.Facts.DelegateChildTotal..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.TemporalExtent, System.Decimal, System.Int32, System.Int32)
+ToolUp.Facts.DelegateChildTotal..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Fuaran.Facts.TemporalExtent, System.Decimal, System.Int32, System.Int32)
 ToolUp.Facts.DelegateChildTotal.AbsentCount : System.Int32 { get }
 ToolUp.Facts.DelegateChildTotal.ChildCount : System.Int32 { get }
 ToolUp.Facts.DelegateChildTotal.Parent : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.DelegateChildTotal.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.DelegateChildTotal.Period : Fuaran.Facts.TemporalExtent { get }
 ToolUp.Facts.DelegateChildTotal.Total : System.Decimal { get }
 ToolUp.Facts.DelegateFact (class)
-ToolUp.Facts.DelegateFact..ctor(ToolUp.Facts.MetricRef, System.String, System.String, ToolUp.Facts.DelegateQuerySpec, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableWatermark], ToolUp.Facts.MethodRef, ToolUp.Facts.Disclosure, ToolUp.Platform.SnapshotFidelity)
-ToolUp.Facts.DelegateFact.Disclosure : ToolUp.Facts.Disclosure { get }
+ToolUp.Facts.DelegateFact..ctor(Fuaran.Facts.MetricRef, System.String, System.String, ToolUp.Facts.DelegateQuerySpec, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableWatermark], Fuaran.Facts.MethodRef, Fuaran.Facts.Disclosure, ToolUp.Platform.SnapshotFidelity)
+ToolUp.Facts.DelegateFact.Disclosure : Fuaran.Facts.Disclosure { get }
 ToolUp.Facts.DelegateFact.History : ToolUp.Platform.SnapshotFidelity { get }
-ToolUp.Facts.DelegateFact.Method : ToolUp.Facts.MethodRef { get }
-ToolUp.Facts.DelegateFact.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.DelegateFact.Method : Fuaran.Facts.MethodRef { get }
+ToolUp.Facts.DelegateFact.Metric : Fuaran.Facts.MetricRef { get }
 ToolUp.Facts.DelegateFact.Query : ToolUp.Facts.DelegateQuerySpec { get }
 ToolUp.Facts.DelegateFact.SourceRef : System.String { get }
 ToolUp.Facts.DelegateFact.TableId : System.String { get }
@@ -223,12 +215,12 @@ ToolUp.Facts.DelegateFact.Watermark : Microsoft.FSharp.Core.FSharpOption`1[ToolU
 ToolUp.Facts.DelegateFactModule (class)
 ToolUp.Facts.DelegateFactModule.Destination : System.String (literal)
 ToolUp.Facts.DelegateFactModule.advance(ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateFact) : ToolUp.Facts.DelegateFact
-ToolUp.Facts.DelegateFactModule.covers(ToolUp.Facts.DelegateFact, ToolUp.Facts.SubjectRef) : System.Boolean
-ToolUp.Facts.DelegateFactModule.disclosureOf(ToolUp.Platform.Grounding.FactTableDisclosure) : ToolUp.Facts.Disclosure
+ToolUp.Facts.DelegateFactModule.covers(ToolUp.Facts.DelegateFact, Fuaran.Facts.SubjectRef) : System.Boolean
+ToolUp.Facts.DelegateFactModule.disclosureOf(ToolUp.Platform.Grounding.FactTableDisclosure) : Fuaran.Facts.Disclosure
 ToolUp.Facts.DelegateFactModule.historyOf(ToolUp.Platform.Grounding.FactTableHistoryMode) : ToolUp.Platform.SnapshotFidelity
 ToolUp.Facts.DelegateFactModule.isRunToken(System.String, System.String) : System.Boolean
-ToolUp.Facts.DelegateFactModule.methodOf(ToolUp.Platform.Grounding.FactTableDefinition) : ToolUp.Facts.MethodRef
-ToolUp.Facts.DelegateFactModule.ofTable(ToolUp.Platform.Grounding.SubjectDefinition, ToolUp.Platform.Grounding.FactTableDefinition) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateFact], System.String]
+ToolUp.Facts.DelegateFactModule.methodOf(ToolUp.Platform.Grounding.FactTableDefinition) : Fuaran.Facts.MethodRef
+ToolUp.Facts.DelegateFactModule.ofTable(Fuaran.Facts.SubjectDefinition, ToolUp.Platform.Grounding.FactTableDefinition) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateFact], System.String]
 ToolUp.Facts.DelegateFactModule.token(ToolUp.Platform.Grounding.FactTableWatermark) : System.String
 ToolUp.Facts.DelegateQuerySpec (class)
 ToolUp.Facts.DelegateQuerySpec..ctor(System.String, System.Int32, System.String)
@@ -267,14 +259,14 @@ ToolUp.Facts.DelegateTableRead.IsPoint : System.Boolean { get }
 ToolUp.Facts.DelegateTableRead.IsRanked : System.Boolean { get }
 ToolUp.Facts.DelegateTableRead.Tag : System.Int32 { get }
 ToolUp.Facts.DelegateTableRead+ChildTotals (class)
-ToolUp.Facts.DelegateTableRead+ChildTotals.periodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
+ToolUp.Facts.DelegateTableRead+ChildTotals.periodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.TemporalExtent] { get }
 ToolUp.Facts.DelegateTableRead+Point (class)
-ToolUp.Facts.DelegateTableRead+Point.periodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
+ToolUp.Facts.DelegateTableRead+Point.periodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.TemporalExtent] { get }
 ToolUp.Facts.DelegateTableRead+Point.subject : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.DelegateTableRead+Ranked (class)
 ToolUp.Facts.DelegateTableRead+Ranked.direction : ToolUp.Facts.RankDirection { get }
 ToolUp.Facts.DelegateTableRead+Ranked.pathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
-ToolUp.Facts.DelegateTableRead+Ranked.periodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
+ToolUp.Facts.DelegateTableRead+Ranked.periodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.TemporalExtent] { get }
 ToolUp.Facts.DelegateTableRead+Ranked.threshold : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.ValueThreshold] { get }
 ToolUp.Facts.DelegateTableRead+Ranked.topK : System.Int32 { get }
 ToolUp.Facts.DelegateTableRead+Tags (class)
@@ -282,30 +274,21 @@ ToolUp.Facts.DelegateTableRead+Tags.ChildTotals : System.Int32 (literal)
 ToolUp.Facts.DelegateTableRead+Tags.Point : System.Int32 (literal)
 ToolUp.Facts.DelegateTableRead+Tags.Ranked : System.Int32 (literal)
 ToolUp.Facts.DelegateTableRow (class)
-ToolUp.Facts.DelegateTableRow..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.TemporalExtent, ToolUp.Facts.FactValue)
-ToolUp.Facts.DelegateTableRow.Period : ToolUp.Facts.TemporalExtent { get }
+ToolUp.Facts.DelegateTableRow..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Fuaran.Facts.TemporalExtent, Fuaran.Facts.FactValue)
+ToolUp.Facts.DelegateTableRow.Period : Fuaran.Facts.TemporalExtent { get }
 ToolUp.Facts.DelegateTableRow.Subject : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.DelegateTableRow.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.DelegateTableRow.Value : Fuaran.Facts.FactValue { get }
 ToolUp.Facts.Disclosure (class)
-ToolUp.Facts.Disclosure.Internal : ToolUp.Facts.Disclosure { get }
-ToolUp.Facts.Disclosure.IsInternal : System.Boolean { get }
-ToolUp.Facts.Disclosure.IsRestricted : System.Boolean { get }
-ToolUp.Facts.Disclosure.IsSurfaceable : System.Boolean { get }
-ToolUp.Facts.Disclosure.Surfaceable : ToolUp.Facts.Disclosure { get }
-ToolUp.Facts.Disclosure.Tag : System.Int32 { get }
-ToolUp.Facts.Disclosure+Restricted (class)
-ToolUp.Facts.Disclosure+Restricted.policyRef : System.String { get }
-ToolUp.Facts.Disclosure+Tags (class)
-ToolUp.Facts.Disclosure+Tags.Internal : System.Int32 (literal)
-ToolUp.Facts.Disclosure+Tags.Restricted : System.Int32 (literal)
-ToolUp.Facts.Disclosure+Tags.Surfaceable : System.Int32 (literal)
+ToolUp.Facts.Disclosure.floor(Fuaran.Facts.Disclosure, Fuaran.Facts.Disclosure) : Fuaran.Facts.Disclosure
+ToolUp.Facts.Disclosure.toString(Fuaran.Facts.Disclosure) : System.String
+ToolUp.Facts.Disclosure.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.Disclosure]
 ToolUp.Facts.DisclosureContributorScope (class)
 ToolUp.Facts.DisclosureContributorScope.UnsatisfiedPrefix : System.String (literal)
 ToolUp.Facts.DisclosureContributorScope.unsatisfiedRef(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.Facts.DisclosureEgress (class)
-ToolUp.Facts.DisclosureEgress.evaluate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
-ToolUp.Facts.DisclosureEgress.evaluateFact(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Fact) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
-ToolUp.Facts.DisclosureEgress.evaluateForViewer(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.DisclosureViewer, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer, ToolUp.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
+ToolUp.Facts.DisclosureEgress.evaluate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Fuaran.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
+ToolUp.Facts.DisclosureEgress.evaluateFact(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Fuaran.Facts.Fact) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
+ToolUp.Facts.DisclosureEgress.evaluateForViewer(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.DisclosureViewer, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer, Fuaran.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
 ToolUp.Facts.DisclosureEvents (class)
 ToolUp.Facts.DisclosureEvents.AccessedType : System.String (literal)
 ToolUp.Facts.DisclosureEvents.DeclassifiedType : System.String (literal)
@@ -325,10 +308,6 @@ ToolUp.Facts.DisclosureMode.TaintPropagating : ToolUp.Facts.DisclosureMode { get
 ToolUp.Facts.DisclosureMode+Tags (class)
 ToolUp.Facts.DisclosureMode+Tags.Plain : System.Int32 (literal)
 ToolUp.Facts.DisclosureMode+Tags.TaintPropagating : System.Int32 (literal)
-ToolUp.Facts.DisclosureModule (class)
-ToolUp.Facts.DisclosureModule.floor(ToolUp.Facts.Disclosure, ToolUp.Facts.Disclosure) : ToolUp.Facts.Disclosure
-ToolUp.Facts.DisclosureModule.toString(ToolUp.Facts.Disclosure) : System.String
-ToolUp.Facts.DisclosureModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Disclosure]
 ToolUp.Facts.DisclosurePolicy (class)
 ToolUp.Facts.DisclosurePolicy..ctor(System.String, ToolUp.Facts.DisclosureMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.DisclosurePolicy.ContributorScope : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -377,11 +356,11 @@ ToolUp.Facts.DisclosureTaintIndex.Nodes : Microsoft.FSharp.Collections.FSharpMap
 ToolUp.Facts.DisclosureTaintIndexModule (class)
 ToolUp.Facts.DisclosureTaintIndexModule.apply(ToolUp.Facts.DisclosureTaintDelta, ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
 ToolUp.Facts.DisclosureTaintIndexModule.deltaOf(ToolUp.Facts.WritePlan) : ToolUp.Facts.DisclosureTaintDelta
-ToolUp.Facts.DisclosureTaintIndexModule.deltaOfFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.DisclosureTaintDelta
+ToolUp.Facts.DisclosureTaintIndexModule.deltaOfFacts(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : ToolUp.Facts.DisclosureTaintDelta
 ToolUp.Facts.DisclosureTaintIndexModule.empty : ToolUp.Facts.DisclosureTaintIndex { get }
 ToolUp.Facts.DisclosureTaintIndexModule.factIds(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Collections.FSharpSet`1[System.String]
 ToolUp.Facts.DisclosureTaintIndexModule.ofEntries(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]]) : ToolUp.Facts.DisclosureTaintIndex
-ToolUp.Facts.DisclosureTaintIndexModule.ofFacts(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.DisclosureTaintIndex
+ToolUp.Facts.DisclosureTaintIndexModule.ofFacts(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : ToolUp.Facts.DisclosureTaintIndex
 ToolUp.Facts.DisclosureTaintIndexModule.restrictTo(Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Facts.DisclosureTaintIndex) : ToolUp.Facts.DisclosureTaintIndex
 ToolUp.Facts.DisclosureTaintIndexModule.toEntries(ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Facts.DisclosureTaintNode]]
 ToolUp.Facts.DisclosureTaintIndexModule.tryNode(System.String, ToolUp.Facts.DisclosureTaintIndex) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DisclosureTaintNode]
@@ -397,7 +376,7 @@ ToolUp.Facts.DisclosureTaintNodeModule (class)
 ToolUp.Facts.DisclosureTaintNodeModule.inferredInputs(ToolUp.Facts.DisclosureTaintNode) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.DisclosureTaintNodeModule.join(ToolUp.Facts.DisclosureTaintNode, ToolUp.Facts.DisclosureTaintNode) : ToolUp.Facts.DisclosureTaintNode
 ToolUp.Facts.DisclosureTaintNodeModule.namedInputs(ToolUp.Facts.DisclosureTaintNode) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Facts.DisclosureTaintNodeModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.DisclosureTaintNode
+ToolUp.Facts.DisclosureTaintNodeModule.ofFact(Fuaran.Facts.Fact) : ToolUp.Facts.DisclosureTaintNode
 ToolUp.Facts.DisclosureViewer (class)
 ToolUp.Facts.DisclosureViewer..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.TeamVisibilityLevel)
 ToolUp.Facts.DisclosureViewer.IsPlatformAdmin : System.Boolean { get }
@@ -410,24 +389,6 @@ ToolUp.Facts.DraftDefect..ctor(System.Int32, ToolUp.Facts.FactDraft, Microsoft.F
 ToolUp.Facts.DraftDefect.Defects : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.DraftDefect.Draft : ToolUp.Facts.FactDraft { get }
 ToolUp.Facts.DraftDefect.Position : System.Int32 { get }
-ToolUp.Facts.Evidence (class)
-ToolUp.Facts.Evidence..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Facts.Evidence.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.Evidence.ResultRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Facts.Evidence.TriggerRef : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Facts.Fact (class)
-ToolUp.Facts.Fact..ctor(System.String, ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.FactValue, ToolUp.Facts.TemporalExtent, System.DateTime, ToolUp.Facts.MethodRef, ToolUp.Facts.Evidence, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Facts.Disclosure)
-ToolUp.Facts.Fact.AsOf : System.DateTime { get }
-ToolUp.Facts.Fact.Confidence : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence] { get }
-ToolUp.Facts.Fact.Disclosure : ToolUp.Facts.Disclosure { get }
-ToolUp.Facts.Fact.Evidence : ToolUp.Facts.Evidence { get }
-ToolUp.Facts.Fact.FactId : System.String { get }
-ToolUp.Facts.Fact.Method : ToolUp.Facts.MethodRef { get }
-ToolUp.Facts.Fact.Metric : ToolUp.Facts.MetricRef { get }
-ToolUp.Facts.Fact.Period : ToolUp.Facts.TemporalExtent { get }
-ToolUp.Facts.Fact.Subject : ToolUp.Facts.SubjectRef { get }
-ToolUp.Facts.Fact.Supersedes : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Facts.Fact.Value : ToolUp.Facts.FactValue { get }
 ToolUp.Facts.FactAssertedEvent (class)
 ToolUp.Facts.FactAssertedEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.DateTime)
 ToolUp.Facts.FactAssertedEvent.AsOf : System.DateTime { get }
@@ -459,9 +420,9 @@ ToolUp.Facts.FactBatchAssertedEvent..ctor(ToolUp.Facts.BatchAssertReceipt, Syste
 ToolUp.Facts.FactBatchAssertedEvent.AsOf : System.DateTime { get }
 ToolUp.Facts.FactBatchAssertedEvent.Receipt : ToolUp.Facts.BatchAssertReceipt { get }
 ToolUp.Facts.FactCompetition (class)
-ToolUp.Facts.FactCompetition.competingMethods(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.Fact) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Facts.FactCompetition.key(ToolUp.Facts.Fact) : System.Tuple`4[ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, System.DateTime, System.DateTime]
-ToolUp.Facts.FactCompetition.selectCanonical(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]
+ToolUp.Facts.FactCompetition.competingMethods(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact], Fuaran.Facts.Fact) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.FactCompetition.key(Fuaran.Facts.Fact) : System.Tuple`4[Fuaran.Facts.SubjectRef, Fuaran.Facts.MetricRef, Fuaran.Facts.Instant, Fuaran.Facts.Instant]
+ToolUp.Facts.FactCompetition.selectCanonical(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]
 ToolUp.Facts.FactDisclosureAccessedEvent (class)
 ToolUp.Facts.FactDisclosureAccessedEvent..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.String)
 ToolUp.Facts.FactDisclosureAccessedEvent.ContributorScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -495,15 +456,15 @@ ToolUp.Facts.FactDisclosureDeniedEvent.Surface : System.String { get }
 ToolUp.Facts.FactDisclosureDeniedEvent.TaxonomyVersion : System.String { get }
 ToolUp.Facts.FactDisclosureDeniedEvent.UnsatisfiedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactDraft (class)
-ToolUp.Facts.FactDraft..ctor(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.FactValue, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, ToolUp.Facts.Evidence, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence], ToolUp.Facts.Disclosure)
-ToolUp.Facts.FactDraft.Confidence : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Confidence] { get }
-ToolUp.Facts.FactDraft.Disclosure : ToolUp.Facts.Disclosure { get }
-ToolUp.Facts.FactDraft.Evidence : ToolUp.Facts.Evidence { get }
-ToolUp.Facts.FactDraft.Method : ToolUp.Facts.MethodRef { get }
-ToolUp.Facts.FactDraft.Metric : ToolUp.Facts.MetricRef { get }
-ToolUp.Facts.FactDraft.Period : ToolUp.Facts.TemporalExtent { get }
-ToolUp.Facts.FactDraft.Subject : ToolUp.Facts.SubjectRef { get }
-ToolUp.Facts.FactDraft.Value : ToolUp.Facts.FactValue { get }
+ToolUp.Facts.FactDraft..ctor(Fuaran.Facts.SubjectRef, Fuaran.Facts.MetricRef, Fuaran.Facts.FactValue, Fuaran.Facts.TemporalExtent, Fuaran.Facts.MethodRef, Fuaran.Facts.Evidence, Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.Confidence], Fuaran.Facts.Disclosure)
+ToolUp.Facts.FactDraft.Confidence : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.Confidence] { get }
+ToolUp.Facts.FactDraft.Disclosure : Fuaran.Facts.Disclosure { get }
+ToolUp.Facts.FactDraft.Evidence : Fuaran.Facts.Evidence { get }
+ToolUp.Facts.FactDraft.Method : Fuaran.Facts.MethodRef { get }
+ToolUp.Facts.FactDraft.Metric : Fuaran.Facts.MetricRef { get }
+ToolUp.Facts.FactDraft.Period : Fuaran.Facts.TemporalExtent { get }
+ToolUp.Facts.FactDraft.Subject : Fuaran.Facts.SubjectRef { get }
+ToolUp.Facts.FactDraft.Value : Fuaran.Facts.FactValue { get }
 ToolUp.Facts.FactDraftModule (class)
 ToolUp.Facts.FactDraftModule.defects(ToolUp.Facts.FactDraft) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.FactEvents (class)
@@ -511,31 +472,14 @@ ToolUp.Facts.FactEvents.AssertedType : System.String (literal)
 ToolUp.Facts.FactEvents.BatchAssertedType : System.String (literal)
 ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
 ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
-ToolUp.Facts.FactFreshness (class)
-ToolUp.Facts.FactFreshness.Fresh : ToolUp.Facts.FactFreshness { get }
-ToolUp.Facts.FactFreshness.IsFresh : System.Boolean { get }
-ToolUp.Facts.FactFreshness.IsStale : System.Boolean { get }
-ToolUp.Facts.FactFreshness.Tag : System.Int32 { get }
-ToolUp.Facts.FactFreshness+Stale (class)
-ToolUp.Facts.FactFreshness+Stale.since : System.DateTime { get }
-ToolUp.Facts.FactFreshness+Tags (class)
-ToolUp.Facts.FactFreshness+Tags.Fresh : System.Int32 (literal)
-ToolUp.Facts.FactFreshness+Tags.Stale : System.Int32 (literal)
 ToolUp.Facts.FactInput (class)
 ToolUp.Facts.FactInput.Prefix : System.String (literal)
 ToolUp.Facts.FactInput.factIdsOf(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.FactInput.ofFactId(System.String) : System.String
 ToolUp.Facts.FactInput.tryFactId(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
-ToolUp.Facts.FactModule (class)
-ToolUp.Facts.FactModule.IdLabel : System.String (literal)
-ToolUp.Facts.FactModule.compute(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
-ToolUp.Facts.FactModule.computeFor(ToolUp.Facts.Fact) : System.String
-ToolUp.Facts.FactModule.effectiveInputHashes(ToolUp.Facts.MethodRef, ToolUp.Facts.Evidence, ToolUp.Facts.FactValue) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Facts.FactModule.instant(System.DateTime) : System.DateTime
-ToolUp.Facts.FactModule.isForecast(ToolUp.Facts.Fact) : System.Boolean
-ToolUp.Facts.FactModule.lineageKey(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef) : System.String
-ToolUp.Facts.FactModule.methodIdentity(ToolUp.Facts.MethodRef) : System.String
-ToolUp.Facts.FactModule.valueHash(ToolUp.Facts.FactValue) : System.String
+ToolUp.Facts.FactLineage (class)
+ToolUp.Facts.FactLineage.digestOf(Fuaran.Facts.SubjectRef, Fuaran.Facts.MetricRef, Fuaran.Facts.TemporalExtent, Fuaran.Facts.MethodRef) : System.String
+ToolUp.Facts.FactLineage.keyOf(Fuaran.Facts.SubjectRef, Fuaran.Facts.MetricRef, Fuaran.Facts.TemporalExtent, Fuaran.Facts.MethodRef) : System.String
 ToolUp.Facts.FactPublicationTarget (class)
 ToolUp.Facts.FactPublicationTarget..ctor(System.String, System.String, ToolUp.Facts.PublicationVisibility)
 ToolUp.Facts.FactPublicationTarget.OriginLevel : System.String { get }
@@ -543,10 +487,9 @@ ToolUp.Facts.FactPublicationTarget.Requires : ToolUp.Facts.PublicationVisibility
 ToolUp.Facts.FactPublicationTarget.Table : System.String { get }
 ToolUp.Facts.FactPublicationTargetModule (class)
 ToolUp.Facts.FactPublicationTargetModule.create(System.String, System.String) : ToolUp.Facts.FactPublicationTarget
-ToolUp.Facts.FactPublicationTargetModule.defects(ToolUp.Facts.FactPublicationTarget, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDefinition], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Facts.FactRendering (class)
-ToolUp.Facts.FactRendering.render(System.String, ToolUp.Facts.FactValue) : System.String
-ToolUp.Facts.FactRendering.renderFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.MetricDefinition], ToolUp.Facts.FactValue) : System.String
+ToolUp.Facts.FactPublicationTargetModule.defects(ToolUp.Facts.FactPublicationTarget, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDefinition], Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.SubjectDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.FactStoreCodec (class)
+ToolUp.Facts.FactStoreCodec.read(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Facts.Fact, Fuaran.Facts.Refusal]
 ToolUp.Facts.FactStoreError (class)
 ToolUp.Facts.FactStoreError.IsMalformedDrafts : System.Boolean { get }
 ToolUp.Facts.FactStoreError.IsRefused : System.Boolean { get }
@@ -574,44 +517,13 @@ ToolUp.Facts.FactSupersededEvent.Metric : System.String { get }
 ToolUp.Facts.FactSupersededEvent.NewFactId : System.String { get }
 ToolUp.Facts.FactSupersededEvent.Subject : System.String { get }
 ToolUp.Facts.FactSupersededEvent.SupersededFactId : System.String { get }
-ToolUp.Facts.FactValue (class)
-ToolUp.Facts.FactValue.IsAbsent : System.Boolean { get }
-ToolUp.Facts.FactValue.IsCategorical : System.Boolean { get }
-ToolUp.Facts.FactValue.IsDistribution : System.Boolean { get }
-ToolUp.Facts.FactValue.IsInterval : System.Boolean { get }
-ToolUp.Facts.FactValue.IsScalar : System.Boolean { get }
-ToolUp.Facts.FactValue.IsSeries : System.Boolean { get }
-ToolUp.Facts.FactValue.Tag : System.Int32 { get }
-ToolUp.Facts.FactValue+Absent (class)
-ToolUp.Facts.FactValue+Absent.reason : System.String { get }
-ToolUp.Facts.FactValue+Categorical (class)
-ToolUp.Facts.FactValue+Categorical.Item : System.String { get }
-ToolUp.Facts.FactValue+Distribution (class)
-ToolUp.Facts.FactValue+Distribution.buckets : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Decimal] { get }
-ToolUp.Facts.FactValue+Interval (class)
-ToolUp.Facts.FactValue+Interval.high : System.Decimal { get }
-ToolUp.Facts.FactValue+Interval.low : System.Decimal { get }
-ToolUp.Facts.FactValue+Scalar (class)
-ToolUp.Facts.FactValue+Scalar.Item : System.Decimal { get }
-ToolUp.Facts.FactValue+Series (class)
-ToolUp.Facts.FactValue+Series.dataObjectVersion : System.String { get }
-ToolUp.Facts.FactValue+Tags (class)
-ToolUp.Facts.FactValue+Tags.Absent : System.Int32 (literal)
-ToolUp.Facts.FactValue+Tags.Categorical : System.Int32 (literal)
-ToolUp.Facts.FactValue+Tags.Distribution : System.Int32 (literal)
-ToolUp.Facts.FactValue+Tags.Interval : System.Int32 (literal)
-ToolUp.Facts.FactValue+Tags.Scalar : System.Int32 (literal)
-ToolUp.Facts.FactValue+Tags.Series : System.Int32 (literal)
 ToolUp.Facts.FactWrite (class)
 ToolUp.Facts.FactWrite.address(ToolUp.Facts.FactDraft) : ToolUp.Facts.AddressedDraft
-ToolUp.Facts.FactWrite.factOf(ToolUp.Facts.AddressedDraft, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.Facts.Fact
-ToolUp.Facts.FactWrite.headOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact]
-ToolUp.Facts.FactWrite.plan(System.DateTime, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.WriteRequest) : ToolUp.Facts.WritePlan
+ToolUp.Facts.FactWrite.factOf(ToolUp.Facts.AddressedDraft, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Fuaran.Facts.Fact
+ToolUp.Facts.FactWrite.headOf(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.Fact]
+ToolUp.Facts.FactWrite.plan(System.DateTime, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact], ToolUp.Facts.WriteRequest) : ToolUp.Facts.WritePlan
 ToolUp.Facts.FactWrite.prepare(ToolUp.Facts.WriteShape, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactDraft]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.WriteRequest, ToolUp.Facts.FactStoreError]
-ToolUp.Facts.FactWrite.recordedAt(ToolUp.Facts.FactDraft, System.DateTime) : ToolUp.Facts.Fact
-ToolUp.Facts.Freshness (class)
-ToolUp.Facts.Freshness.derive(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
-ToolUp.Facts.Freshness.deriveAt(ToolUp.Platform.Grounding.StalenessPolicy, System.DateTime, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
+ToolUp.Facts.FactWrite.recordedAt(ToolUp.Facts.FactDraft, System.DateTime) : Fuaran.Facts.Fact
 ToolUp.Facts.FreshnessHistogram (class)
 ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
 ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
@@ -627,10 +539,6 @@ ToolUp.Facts.IndexDelta..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`
 ToolUp.Facts.IndexDelta.Head : System.String { get }
 ToolUp.Facts.IndexDelta.Lineage : System.String { get }
 ToolUp.Facts.IndexDelta.Retires : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Facts.InputHash (class)
-ToolUp.Facts.InputHash.MinimumDigits : System.Int32 (literal)
-ToolUp.Facts.InputHash.isContentHash(System.String) : System.Boolean
-ToolUp.Facts.InputHash.named(ToolUp.Facts.Evidence) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.MethodAlternative (class)
 ToolUp.Facts.MethodAlternative..ctor(System.String, System.String)
 ToolUp.Facts.MethodAlternative.Method : System.String { get }
@@ -728,23 +636,6 @@ ToolUp.Facts.MethodPresentation (class)
 ToolUp.Facts.MethodPresentation..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.MethodPresentation.BaseCard : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.MethodPresentation.Blocks : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.MethodRef (class)
-ToolUp.Facts.MethodRef.IsComputed : System.Boolean { get }
-ToolUp.Facts.MethodRef.IsHumanAsserted : System.Boolean { get }
-ToolUp.Facts.MethodRef.IsImported : System.Boolean { get }
-ToolUp.Facts.MethodRef.Tag : System.Int32 { get }
-ToolUp.Facts.MethodRef+Computed (class)
-ToolUp.Facts.MethodRef+Computed.operationId : System.String { get }
-ToolUp.Facts.MethodRef+Computed.paramHash : System.String { get }
-ToolUp.Facts.MethodRef+Computed.version : System.String { get }
-ToolUp.Facts.MethodRef+HumanAsserted (class)
-ToolUp.Facts.MethodRef+HumanAsserted.principal : System.String { get }
-ToolUp.Facts.MethodRef+Imported (class)
-ToolUp.Facts.MethodRef+Imported.certificateRef : System.String { get }
-ToolUp.Facts.MethodRef+Tags (class)
-ToolUp.Facts.MethodRef+Tags.Computed : System.Int32 (literal)
-ToolUp.Facts.MethodRef+Tags.HumanAsserted : System.Int32 (literal)
-ToolUp.Facts.MethodRef+Tags.Imported : System.Int32 (literal)
 ToolUp.Facts.MethodRefusal (class)
 ToolUp.Facts.MethodRefusal.IsArgumentMistyped : System.Boolean { get }
 ToolUp.Facts.MethodRefusal.IsArgumentNotAdmitted : System.Boolean { get }
@@ -789,10 +680,6 @@ ToolUp.Facts.MethodTable..ctor(System.String, System.String, Microsoft.FSharp.Co
 ToolUp.Facts.MethodTable.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.MethodColumn] { get }
 ToolUp.Facts.MethodTable.Meaning : System.String { get }
 ToolUp.Facts.MethodTable.Name : System.String { get }
-ToolUp.Facts.MetricRef (class)
-ToolUp.Facts.MetricRef.Item : System.String { get }
-ToolUp.Facts.MetricRef.Tag : System.Int32 { get }
-ToolUp.Facts.MetricRef.Value : System.String { get }
 ToolUp.Facts.OnePrefixPath (class)
 ToolUp.Facts.OnePrefixPath.IsNoSubject : System.Boolean { get }
 ToolUp.Facts.OnePrefixPath.IsNotOnePrefix : System.Boolean { get }
@@ -1069,27 +956,27 @@ ToolUp.Facts.PlannedTriple..ctor(ToolUp.Facts.TripleCandidate, ToolUp.Facts.Plan
 ToolUp.Facts.PlannedTriple.Candidate : ToolUp.Facts.TripleCandidate { get }
 ToolUp.Facts.PlannedTriple.Step : ToolUp.Facts.PlanStep { get }
 ToolUp.Facts.PopulationDisclosure (class)
-ToolUp.Facts.PopulationDisclosure..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.Fact]], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]])
-ToolUp.Facts.PopulationDisclosure.Disclosable : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.Fact]] { get }
+ToolUp.Facts.PopulationDisclosure..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, Fuaran.Facts.Fact]], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]])
+ToolUp.Facts.PopulationDisclosure.Disclosable : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, Fuaran.Facts.Fact]] { get }
 ToolUp.Facts.PopulationDisclosure.WithheldByPolicy : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.Int32]] { get }
 ToolUp.Facts.PopulationDisclosure.WithheldCount : System.Int32 { get }
 ToolUp.Facts.PopulationDisclosureModule (class)
 ToolUp.Facts.PopulationDisclosureModule.MagnitudesWithheldReason : System.String (literal)
 ToolUp.Facts.PopulationDisclosureModule.disclosedStats(ToolUp.Facts.PopulationDisclosure, ToolUp.Facts.PopulationStats) : ToolUp.Facts.PopulationStats
-ToolUp.Facts.PopulationDisclosureModule.fold(Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.PopulationDisclosure
+ToolUp.Facts.PopulationDisclosureModule.fold(Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : ToolUp.Facts.PopulationDisclosure
 ToolUp.Facts.PopulationDisclosureModule.valuesWithheld(ToolUp.Facts.PopulationDisclosure) : System.Boolean
 ToolUp.Facts.PopulationMember (class)
-ToolUp.Facts.PopulationMember..ctor(System.String, ToolUp.Facts.SubjectRef, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], System.DateTime, System.DateTime, System.DateTime, System.String)
+ToolUp.Facts.PopulationMember..ctor(System.String, Fuaran.Facts.SubjectRef, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], System.DateTime, System.DateTime, System.DateTime, System.String)
 ToolUp.Facts.PopulationMember.AsOf : System.DateTime { get }
 ToolUp.Facts.PopulationMember.FactId : System.String { get }
 ToolUp.Facts.PopulationMember.Magnitude : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
 ToolUp.Facts.PopulationMember.MethodIdentity : System.String { get }
 ToolUp.Facts.PopulationMember.PeriodFrom : System.DateTime { get }
 ToolUp.Facts.PopulationMember.PeriodTo : System.DateTime { get }
-ToolUp.Facts.PopulationMember.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.PopulationMember.Subject : Fuaran.Facts.SubjectRef { get }
 ToolUp.Facts.PopulationMemberModule (class)
-ToolUp.Facts.PopulationMemberModule.competitionKey(ToolUp.Facts.PopulationMember) : System.Tuple`3[ToolUp.Facts.SubjectRef, System.DateTime, System.DateTime]
-ToolUp.Facts.PopulationMemberModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.PopulationMember
+ToolUp.Facts.PopulationMemberModule.competitionKey(ToolUp.Facts.PopulationMember) : System.Tuple`3[Fuaran.Facts.SubjectRef, System.DateTime, System.DateTime]
+ToolUp.Facts.PopulationMemberModule.ofFact(Fuaran.Facts.Fact) : ToolUp.Facts.PopulationMember
 ToolUp.Facts.PopulationMethodSelection (class)
 ToolUp.Facts.PopulationMethodSelection.AllCompetingMethods : ToolUp.Facts.PopulationMethodSelection { get }
 ToolUp.Facts.PopulationMethodSelection.CanonicalMethodOnly : ToolUp.Facts.PopulationMethodSelection { get }
@@ -1098,7 +985,7 @@ ToolUp.Facts.PopulationMethodSelection.IsCanonicalMethodOnly : System.Boolean { 
 ToolUp.Facts.PopulationMethodSelection.IsOneMethod : System.Boolean { get }
 ToolUp.Facts.PopulationMethodSelection.Tag : System.Int32 { get }
 ToolUp.Facts.PopulationMethodSelection+OneMethod (class)
-ToolUp.Facts.PopulationMethodSelection+OneMethod.Item : ToolUp.Facts.MethodRef { get }
+ToolUp.Facts.PopulationMethodSelection+OneMethod.Item : Fuaran.Facts.MethodRef { get }
 ToolUp.Facts.PopulationMethodSelection+Tags (class)
 ToolUp.Facts.PopulationMethodSelection+Tags.AllCompetingMethods : System.Int32 (literal)
 ToolUp.Facts.PopulationMethodSelection+Tags.CanonicalMethodOnly : System.Int32 (literal)
@@ -1116,38 +1003,38 @@ ToolUp.Facts.PopulationOrdering+Tags.Ascending : System.Int32 (literal)
 ToolUp.Facts.PopulationOrdering+Tags.Descending : System.Int32 (literal)
 ToolUp.Facts.PopulationOrdering+Tags.RegistryDirection : System.Int32 (literal)
 ToolUp.Facts.PopulationOrderingModule (class)
-ToolUp.Facts.PopulationOrderingModule.resolve(System.String, ToolUp.Facts.PopulationOrdering, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.DirectionOfBetter]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.RankDirection, System.String]
+ToolUp.Facts.PopulationOrderingModule.resolve(System.String, ToolUp.Facts.PopulationOrdering, Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.DirectionOfBetter]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.RankDirection, System.String]
 ToolUp.Facts.PopulationQuery (class)
-ToolUp.Facts.PopulationQuery..ctor(ToolUp.Facts.MetricRef, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.ValueThreshold], ToolUp.Facts.PopulationOrdering, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Facts.PopulationMethodSelection)
+ToolUp.Facts.PopulationQuery..ctor(Fuaran.Facts.MetricRef, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.ValueThreshold], ToolUp.Facts.PopulationOrdering, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Facts.PopulationMethodSelection)
 ToolUp.Facts.PopulationQuery.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Facts.PopulationQuery.Hierarchy : System.String { get }
 ToolUp.Facts.PopulationQuery.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Facts.PopulationQuery.Methods : ToolUp.Facts.PopulationMethodSelection { get }
-ToolUp.Facts.PopulationQuery.Metric : ToolUp.Facts.MetricRef { get }
+ToolUp.Facts.PopulationQuery.Metric : Fuaran.Facts.MetricRef { get }
 ToolUp.Facts.PopulationQuery.Ordering : ToolUp.Facts.PopulationOrdering { get }
 ToolUp.Facts.PopulationQuery.PathAnyOf : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.Facts.PopulationQuery.PathExclude : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]] { get }
 ToolUp.Facts.PopulationQuery.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
-ToolUp.Facts.PopulationQuery.PeriodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
+ToolUp.Facts.PopulationQuery.PeriodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.TemporalExtent] { get }
 ToolUp.Facts.PopulationQuery.Threshold : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.ValueThreshold] { get }
 ToolUp.Facts.PopulationQuery.TopK : System.Int32 { get }
 ToolUp.Facts.PopulationQueryModule (class)
 ToolUp.Facts.PopulationQueryModule.MaxTopK : System.Int32 (literal)
 ToolUp.Facts.PopulationQueryModule.asOf(System.DateTime, ToolUp.Facts.PopulationQuery) : ToolUp.Facts.PopulationQuery
 ToolUp.Facts.PopulationQueryModule.asOnePrefix(ToolUp.Facts.PopulationQuery) : ToolUp.Facts.OnePrefixPath
-ToolUp.Facts.PopulationQueryModule.create(ToolUp.Facts.MetricRef, System.String) : ToolUp.Facts.PopulationQuery
+ToolUp.Facts.PopulationQueryModule.create(Fuaran.Facts.MetricRef, System.String) : ToolUp.Facts.PopulationQuery
 ToolUp.Facts.PopulationQueryModule.effectiveTopK(ToolUp.Facts.PopulationQuery) : System.Int32
-ToolUp.Facts.PopulationQueryModule.matchesSubject(ToolUp.Facts.PopulationQuery, ToolUp.Facts.SubjectRef) : System.Boolean
+ToolUp.Facts.PopulationQueryModule.matchesSubject(ToolUp.Facts.PopulationQuery, Fuaran.Facts.SubjectRef) : System.Boolean
 ToolUp.Facts.PopulationQueryModule.pathStartsWith(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Boolean
 ToolUp.Facts.PopulationRanking (class)
-ToolUp.Facts.PopulationRanking.rank(ToolUp.Facts.RankDirection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]
+ToolUp.Facts.PopulationRanking.rank(ToolUp.Facts.RankDirection, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]
 ToolUp.Facts.PopulationRanking.rankBy`1(ToolUp.Facts.RankDirection, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]], Microsoft.FSharp.Core.FSharpFunc`2[a, System.String], Microsoft.FSharp.Collections.FSharpList`1[a]) : Microsoft.FSharp.Collections.FSharpList`1[a]
 ToolUp.Facts.PopulationRanking.rankMembers(ToolUp.Facts.RankDirection, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]
 ToolUp.Facts.PopulationResult (class)
-ToolUp.Facts.PopulationResult..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], ToolUp.Facts.RankDirection, System.Int32, System.Boolean, ToolUp.Facts.PopulationStats)
+ToolUp.Facts.PopulationResult..ctor(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact], ToolUp.Facts.RankDirection, System.Int32, System.Boolean, ToolUp.Facts.PopulationStats)
 ToolUp.Facts.PopulationResult.Direction : ToolUp.Facts.RankDirection { get }
 ToolUp.Facts.PopulationResult.EffectiveTopK : System.Int32 { get }
-ToolUp.Facts.PopulationResult.Ranked : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact] { get }
+ToolUp.Facts.PopulationResult.Ranked : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact] { get }
 ToolUp.Facts.PopulationResult.Stats : ToolUp.Facts.PopulationStats { get }
 ToolUp.Facts.PopulationResult.Truncated : System.Boolean { get }
 ToolUp.Facts.PopulationSelection (class)
@@ -1167,9 +1054,9 @@ ToolUp.Facts.PopulationStats.PeriodTo : Microsoft.FSharp.Core.FSharpOption`1[Sys
 ToolUp.Facts.PopulationStats.SubjectCount : System.Int32 { get }
 ToolUp.Facts.PopulationStatsModule (class)
 ToolUp.Facts.PopulationStatsModule.empty : ToolUp.Facts.PopulationStats { get }
-ToolUp.Facts.PopulationStatsModule.ofMembers(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PopulationMember, ToolUp.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]) : ToolUp.Facts.PopulationStats
-ToolUp.Facts.PopulationStatsModule.ofMembersWithFreshness(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.PopulationMember, ToolUp.Facts.FactFreshness]]) : ToolUp.Facts.PopulationStats
-ToolUp.Facts.PopulationStatsModule.ofPopulation(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.Fact, ToolUp.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : ToolUp.Facts.PopulationStats
+ToolUp.Facts.PopulationStatsModule.ofMembers(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.PopulationMember, Fuaran.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PopulationMember]) : ToolUp.Facts.PopulationStats
+ToolUp.Facts.PopulationStatsModule.ofMembersWithFreshness(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.PopulationMember, Fuaran.Facts.FactFreshness]]) : ToolUp.Facts.PopulationStats
+ToolUp.Facts.PopulationStatsModule.ofPopulation(Microsoft.FSharp.Core.FSharpFunc`2[Fuaran.Facts.Fact, Fuaran.Facts.FactFreshness], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : ToolUp.Facts.PopulationStats
 ToolUp.Facts.PopulationTriple (class)
 ToolUp.Facts.PopulationTriple..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal])
 ToolUp.Facts.PopulationTriple.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
@@ -1190,7 +1077,7 @@ ToolUp.Facts.PopulationTripleModule.threshold(ToolUp.Facts.PopulationTriple) : M
 ToolUp.Facts.PopulationTripleModule.toCandidate(ToolUp.Facts.PopulationTriple) : ToolUp.Facts.TripleCandidate
 ToolUp.Facts.PopulationTripleModule.tryOrdering(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PopulationOrdering]
 ToolUp.Facts.PopulationValue (class)
-ToolUp.Facts.PopulationValue.comparable(ToolUp.Facts.FactValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
+ToolUp.Facts.PopulationValue.comparable(Fuaran.Facts.FactValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
 ToolUp.Facts.PublicationConsent (class)
 ToolUp.Facts.PublicationConsent..ctor(ToolUp.Platform.TeamId, ToolUp.Platform.UserId, System.DateTime)
 ToolUp.Facts.PublicationConsent.At : System.DateTime { get }
@@ -1411,11 +1298,11 @@ ToolUp.Facts.SpecDoorRefusalModule (class)
 ToolUp.Facts.SpecDoorRefusalModule.describe(ToolUp.Facts.SpecDoorRefusal) : System.String
 ToolUp.Facts.SpecDoorRefusalModule.name(ToolUp.Facts.SpecDoorRefusal) : System.String
 ToolUp.Facts.SpecFactRow (class)
-ToolUp.Facts.SpecFactRow..ctor(ToolUp.Facts.SubjectRef, System.String, ToolUp.Facts.TemporalExtent, System.Decimal, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.SpecFactRow..ctor(Fuaran.Facts.SubjectRef, System.String, Fuaran.Facts.TemporalExtent, System.Decimal, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.SpecFactRow.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.SpecFactRow.Metric : System.String { get }
-ToolUp.Facts.SpecFactRow.Period : ToolUp.Facts.TemporalExtent { get }
-ToolUp.Facts.SpecFactRow.Subject : ToolUp.Facts.SubjectRef { get }
+ToolUp.Facts.SpecFactRow.Period : Fuaran.Facts.TemporalExtent { get }
+ToolUp.Facts.SpecFactRow.Subject : Fuaran.Facts.SubjectRef { get }
 ToolUp.Facts.SpecFactRow.Value : System.Decimal { get }
 ToolUp.Facts.SpecResult (class)
 ToolUp.Facts.SpecResult..ctor(System.String, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldColumn], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.SpecFactRow])
@@ -1424,12 +1311,6 @@ ToolUp.Facts.SpecResult.Facts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp
 ToolUp.Facts.SpecResult.Rows : System.Int32 { get }
 ToolUp.Facts.SpecResult.Table : System.String { get }
 ToolUp.Facts.SpecResult.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldColumn] { get }
-ToolUp.Facts.SubjectRef (class)
-ToolUp.Facts.SubjectRef..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
-ToolUp.Facts.SubjectRef.Hierarchy : System.String { get }
-ToolUp.Facts.SubjectRef.Path : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Facts.SubjectRefModule (class)
-ToolUp.Facts.SubjectRefModule.toString(ToolUp.Facts.SubjectRef) : System.String
 ToolUp.Facts.TaintLabel (class)
 ToolUp.Facts.TaintLabelModule (class)
 ToolUp.Facts.TaintLabelModule.below(ToolUp.Facts.TaintLabel, ToolUp.Facts.TaintLabel) : System.Boolean
@@ -1450,11 +1331,6 @@ ToolUp.Facts.TaintLabelModule.policyRefs(ToolUp.Facts.TaintLabel) : Microsoft.FS
 ToolUp.Facts.TaintLabelModule.render(ToolUp.Facts.TaintLabel) : System.String
 ToolUp.Facts.TaintLabelModule.toEgressLabel(ToolUp.Facts.TaintLabel) : ToolUp.Platform.EgressLabel
 ToolUp.Facts.TaintLabelModule.vocabulary(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.TaintLabel]
-ToolUp.Facts.TemporalExtent (class)
-ToolUp.Facts.TemporalExtent..ctor(System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Facts.TemporalExtent.From : System.DateTime { get }
-ToolUp.Facts.TemporalExtent.Label : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Facts.TemporalExtent.To : System.DateTime { get }
 ToolUp.Facts.TripleCandidate (class)
 ToolUp.Facts.TripleCandidate..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.TripleCandidate.Metric : System.String { get }
@@ -1480,7 +1356,7 @@ ToolUp.Facts.ValueThreshold+Tags.AtLeast : System.Int32 (literal)
 ToolUp.Facts.ValueThreshold+Tags.AtMost : System.Int32 (literal)
 ToolUp.Facts.ValueThreshold+Tags.Between : System.Int32 (literal)
 ToolUp.Facts.ValueThresholdModule (class)
-ToolUp.Facts.ValueThresholdModule.satisfies(ToolUp.Facts.ValueThreshold, ToolUp.Facts.FactValue) : System.Boolean
+ToolUp.Facts.ValueThresholdModule.satisfies(ToolUp.Facts.ValueThreshold, Fuaran.Facts.FactValue) : System.Boolean
 ToolUp.Facts.ValueThresholdModule.satisfiesMagnitude(ToolUp.Facts.ValueThreshold, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]) : System.Boolean
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule (class)
 ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule.ofResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
@@ -1500,9 +1376,9 @@ ToolUp.Facts.WithholdingReach+Tags.CanWithhold : System.Int32 (literal)
 ToolUp.Facts.WithholdingReach+Tags.CannotWithhold : System.Int32 (literal)
 ToolUp.Facts.WithholdingReach+Tags.Unregistered : System.Int32 (literal)
 ToolUp.Facts.WritePlan (class)
-ToolUp.Facts.WritePlan..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.IndexDelta], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.BatchAssertReceipt)
+ToolUp.Facts.WritePlan..ctor(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.IndexDelta], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.BatchAssertReceipt)
 ToolUp.Facts.WritePlan.Audit : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactAuditEvent] { get }
-ToolUp.Facts.WritePlan.Facts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact] { get }
+ToolUp.Facts.WritePlan.Facts : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact] { get }
 ToolUp.Facts.WritePlan.IndexDeltas : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.IndexDelta] { get }
 ToolUp.Facts.WritePlan.Receipt : ToolUp.Facts.BatchAssertReceipt { get }
 ToolUp.Facts.WritePlan.Supersessions : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }

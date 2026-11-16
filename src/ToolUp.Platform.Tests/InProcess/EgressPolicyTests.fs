@@ -975,7 +975,7 @@ let private snapshotTests =
                 ToolUp.Facts.DisclosureEgress.evaluate
                     ToolUp.Facts.DisclosurePolicyResolver.denyUnknown
                     FactRetrieval
-                    ToolUp.Facts.Internal
+                    Fuaran.Facts.Internal
             with
             | FactNotDisclosable policyRef ->
                 Expect.contains DisclosurePolicyRefSnapshot.reservedPolicyRefs policyRef "the snapshot names it"

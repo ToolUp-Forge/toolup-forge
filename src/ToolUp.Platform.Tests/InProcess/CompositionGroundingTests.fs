@@ -7,6 +7,8 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open Fuaran.Facts
+open ToolUp.Platform.Tests
 
 // ─── Phase 526 — composition introspection covers grounding ──────────
 //
@@ -18,18 +20,8 @@ open ToolUp.Platform.Compose
 // and absent (manifest), and is otherwise byte-identical.
 
 let private metric id : MetricDefinition = {
-    Id = id
-    Name = id.ToUpperInvariant()
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = "N0"
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id (id.ToUpperInvariant()) "count" "count" "N0" with
+        Direction = HigherIsBetter
 }
 
 let private subject id : SubjectDefinition = {

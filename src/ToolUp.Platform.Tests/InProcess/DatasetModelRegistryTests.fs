@@ -34,6 +34,7 @@ open ToolUp.Platform.Compose
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Scope.StorageScopeResolver
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
 
@@ -46,18 +47,8 @@ let openMargins: FactTableDefinition = {
 }
 
 let private metric (id: string) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    ToolUp.Platform.Tests.KernelFixtures.metric id id "GBP" "currency" "" with
+        Direction = HigherIsBetter
 }
 
 let private describe (table: FactTableDefinition) (column: string) : FactTableDescriptionRegistration = {

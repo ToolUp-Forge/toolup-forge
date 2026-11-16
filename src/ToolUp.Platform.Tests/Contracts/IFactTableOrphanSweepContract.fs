@@ -5,7 +5,9 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Compose
@@ -94,18 +96,8 @@ type FactTableOrphanSweepFactory = unit -> FactTableOrphanSweepFixture
 let private t0 = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
 
 let private revenue: MetricDefinition = {
-    Id = "revenue"
-    Name = "revenue"
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric "revenue" "revenue" "count" "count" "" with
+        Direction = HigherIsBetter
 }
 
 let private products: SubjectDefinition = {
@@ -146,18 +138,18 @@ let private skuSales: FactTableDefinition = {
 /// takes one open run per scope, Phase 994).
 let private skuStock: FactTableDefinition = { skuSales with Id = "sku-stock" }
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+let private september: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "2026-09")
 
 let private rows (n: int) : FactTableRow list = [
     for i in 1..n ->
         {
             Subject = [ "brand-01"; sprintf "sku-%04d" i ]
             Period = september
-            Values = Map.ofList [ "revenue", Scalar(decimal i) ]
+            Values = Map.ofList [ "revenue", KernelFixtures.scalar (decimal i) ]
         }
 ]
 

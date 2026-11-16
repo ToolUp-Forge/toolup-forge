@@ -6,8 +6,10 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.HealthChecks
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Jobs
@@ -34,28 +36,20 @@ let private noopLogger =
         member _.Error(_, _) = ()
     }
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private t0 = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
 
 /// A metric definition carrying a roll-up declaration.
 let private metricDef (id: string) (rollup: RollUp option) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = "C0"
-    Staleness = UntilSuperseded
-    ProducingOperation = Some "rollup"
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = rollup
-    Context = None
+    metric id id "GBP" "currency" "C0" with
+        Direction = HigherIsBetter
+        ProducingOperation = Some "rollup"
+        RollUp = rollup
 }
 
 let private subjectDef (id: string) (levels: string list) : SubjectDefinition = {
@@ -71,7 +65,7 @@ let private registry: IMetricRegistry =
     MetricRegistry.build [
         {
             Module = "sales"
-            Definition = metricDef "revenue" (Some(Additive 1m))
+            Definition = metricDef "revenue" (Some(Additive(DecimalText.ofDecimal 1m)))
         }
         {
             Module = "sales"
@@ -91,7 +85,7 @@ let private registryWithStaleness (staleness: StalenessPolicy) : IMetricRegistry
         {
             Module = "sales"
             Definition = {
-                metricDef "revenue" (Some(Additive 1m)) with
+                metricDef "revenue" (Some(Additive(DecimalText.ofDecimal 1m))) with
                     Staleness = staleness
             }
         }
@@ -111,7 +105,7 @@ let private factAt (metric: string) (hierarchy: string) (path: string list) (val
     Metric = MetricRef metric
     Value = value
     Period = q2
-    AsOf = asOf
+    AsOf = instant asOf
     Method = Computed("rollup", "1", "p0")
     Evidence = {
         ResultRef = None
@@ -202,9 +196,9 @@ let tests =
 
         test "coherent base ⇒ no findings" {
             let facts = [
-                revenue [ "acme" ] (Scalar 100m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 100m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             Expect.isEmpty (CoherenceCheck.check (Some registry) cfg facts) "parent equals the sum of its children"
@@ -212,9 +206,9 @@ let tests =
 
         test "a discrepancy within the declared tolerance is not flagged" {
             let facts = [
-                revenue [ "acme" ] (Scalar 100.5m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 100.5m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             Expect.isEmpty (CoherenceCheck.check (Some registry) cfg facts) "0.5 is within the tolerance of 1"
@@ -222,8 +216,8 @@ let tests =
 
         test "no registry ⇒ no findings (GP 13 zero-weight)" {
             let facts = [
-                revenue [ "acme" ] (Scalar 999m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 1m) t0
+                revenue [ "acme" ] (scalar 999m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 1m) t0
             ]
 
             Expect.isEmpty (CoherenceCheck.check None cfg facts) "a registry-less deployment never checks coherence"
@@ -231,9 +225,9 @@ let tests =
 
         test "a non-additive metric is excluded from checking" {
             let facts = [
-                factAt "margin" "product" [ "acme" ] (Scalar 0.9m) t0
-                factAt "margin" "product" [ "acme"; "widget-x" ] (Scalar 0.4m) t0
-                factAt "margin" "product" [ "acme"; "widget-y" ] (Scalar 0.4m) t0
+                factAt "margin" "product" [ "acme" ] (scalar 0.9m) t0
+                factAt "margin" "product" [ "acme"; "widget-x" ] (scalar 0.4m) t0
+                factAt "margin" "product" [ "acme"; "widget-y" ] (scalar 0.4m) t0
             ]
 
             Expect.isEmpty
@@ -243,8 +237,8 @@ let tests =
 
         test "an unregistered subject hierarchy is excluded" {
             let facts = [
-                factAt "revenue" "unregistered" [ "acme" ] (Scalar 999m) t0
-                factAt "revenue" "unregistered" [ "acme"; "widget-x" ] (Scalar 1m) t0
+                factAt "revenue" "unregistered" [ "acme" ] (scalar 999m) t0
+                factAt "revenue" "unregistered" [ "acme"; "widget-x" ] (scalar 1m) t0
             ]
 
             Expect.isEmpty
@@ -253,7 +247,7 @@ let tests =
         }
 
         test "a leaf with no children generates no finding" {
-            let facts = [ revenue [ "acme"; "widget-x" ] (Scalar 60m) t0 ]
+            let facts = [ revenue [ "acme"; "widget-x" ] (scalar 60m) t0 ]
 
             Expect.isEmpty
                 (CoherenceCheck.check (Some registry) cfg facts)
@@ -264,8 +258,8 @@ let tests =
 
         test "cause: PartialLoad — an explicitly Absent child" {
             let facts = [
-                revenue [ "acme" ] (Scalar 100m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
+                revenue [ "acme" ] (scalar 100m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
                 revenue [ "acme"; "widget-y" ] (Absent "no data loaded") t0
             ]
 
@@ -279,9 +273,9 @@ let tests =
 
         test "cause: PartialLoad — parent exceeds the children sum (no explicit Absent)" {
             let facts = [
-                revenue [ "acme" ] (Scalar 130m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 130m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             let findings = CoherenceCheck.check (Some registry) cfg facts
@@ -292,9 +286,9 @@ let tests =
 
         test "cause: UnitSlip — a power-of-ten ratio" {
             let facts = [
-                revenue [ "acme" ] (Scalar 100000m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 100000m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             let findings = CoherenceCheck.check (Some registry) cfg facts
@@ -304,9 +298,9 @@ let tests =
 
         test "cause: MixedVintage — a wide AsOf spread" {
             let facts = [
-                revenue [ "acme" ] (Scalar 130m) (t0.AddDays 10.0)
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 130m) (t0.AddDays 10.0)
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             let findings = CoherenceCheck.check (Some registry) cfg facts
@@ -331,12 +325,12 @@ let tests =
             // spread as the case below — and with the default config the
             // classification must be what it always was. If this ever
             // reads MixedVintage, the feature stopped being opt-in.
-            let reg = registryWithStaleness (Grounding.FreshFor(TimeSpan.FromHours 1.0))
+            let reg = registryWithStaleness (FreshFor 3600)
 
             let facts = [
-                revenue [ "acme" ] (Scalar 130m) (t0.AddHours 6.0)
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 130m) (t0.AddHours 6.0)
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             let findings = CoherenceCheck.check (Some reg) cfg facts
@@ -349,13 +343,13 @@ let tests =
         }
 
         test "derived vintage ON: a six-hour spread on a FreshFor-1h metric is MixedVintage" {
-            let reg = registryWithStaleness (Grounding.FreshFor(TimeSpan.FromHours 1.0))
+            let reg = registryWithStaleness (FreshFor 3600)
             let derived = CoherenceConfig.withDerivedVintage cfg
 
             let facts = [
-                revenue [ "acme" ] (Scalar 130m) (t0.AddHours 6.0)
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 130m) (t0.AddHours 6.0)
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             let findings = CoherenceCheck.check (Some reg) derived facts
@@ -372,13 +366,13 @@ let tests =
             // really being read per-metric rather than merely tightened:
             // a 10-day spread — which the GLOBAL one-day window calls
             // mixed — is coherent for a metric declared fresh for 30 days.
-            let reg = registryWithStaleness (Grounding.FreshFor(TimeSpan.FromDays 30.0))
+            let reg = registryWithStaleness (FreshFor 2592000)
             let derived = CoherenceConfig.withDerivedVintage cfg
 
             let facts = [
-                revenue [ "acme" ] (Scalar 130m) (t0.AddDays 10.0)
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 130m) (t0.AddDays 10.0)
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             Expect.equal
@@ -400,9 +394,9 @@ let tests =
             let derived = CoherenceConfig.withDerivedVintage cfg
 
             let facts = [
-                revenue [ "acme" ] (Scalar 130m) (t0.AddDays 10.0)
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 130m) (t0.AddDays 10.0)
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             // `registry`'s metricDef declares Staleness = UntilSuperseded.
@@ -413,9 +407,9 @@ let tests =
 
         test "cause: Unclassified — parent below the sum, same vintage, no scale signal" {
             let facts = [
-                revenue [ "acme" ] (Scalar 70m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
+                revenue [ "acme" ] (scalar 70m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
             ]
 
             let findings = CoherenceCheck.check (Some registry) cfg facts
@@ -428,11 +422,11 @@ let tests =
             // brand acme = 100 (correct); sku widget-x = 60 but its own
             // children (variants) sum to 50 → one finding at widget-x only.
             let facts = [
-                revenue [ "acme" ] (Scalar 100m) t0
-                revenue [ "acme"; "widget-x" ] (Scalar 60m) t0
-                revenue [ "acme"; "widget-y" ] (Scalar 40m) t0
-                revenue [ "acme"; "widget-x"; "red" ] (Scalar 30m) t0
-                revenue [ "acme"; "widget-x"; "blue" ] (Scalar 20m) t0
+                revenue [ "acme" ] (scalar 100m) t0
+                revenue [ "acme"; "widget-x" ] (scalar 60m) t0
+                revenue [ "acme"; "widget-y" ] (scalar 40m) t0
+                revenue [ "acme"; "widget-x"; "red" ] (scalar 30m) t0
+                revenue [ "acme"; "widget-x"; "blue" ] (scalar 20m) t0
             ]
 
             let findings = CoherenceCheck.check (Some registry) cfg facts
@@ -453,15 +447,15 @@ let tests =
             let scope = newScope ()
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (scalar 130m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (scalar 60m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (scalar 40m))
                 |> assertOk
 
             let! findings =
@@ -500,15 +494,15 @@ let tests =
             let scope = newScope ()
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 100m))
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (scalar 100m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (scalar 60m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (scalar 40m))
                 |> assertOk
 
             let! findings =
@@ -543,15 +537,15 @@ let tests =
             let scope = newScope ()
 
             let! parent =
-                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (scalar 130m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (scalar 60m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (scalar 40m))
                 |> assertOk
 
             let! before = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
@@ -585,15 +579,15 @@ let tests =
             let scope = newScope ()
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (scalar 130m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (scalar 60m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (scalar 40m))
                 |> assertOk
 
             let handler =
@@ -620,11 +614,11 @@ let tests =
             let scope = newScope ()
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 130m))
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (scalar 130m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (scalar 60m))
                 |> assertOk
 
             let handler =
@@ -660,15 +654,15 @@ let tests =
                     async.Return(Ok(TestScope.resolved scope)))
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme" ] (Scalar 100m))
+                store.Assert(TestScope.resolved scope, draft [ "acme" ] (scalar 100m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (Scalar 60m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-x" ] (scalar 60m))
                 |> assertOk
 
             let! _ =
-                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (Scalar 40m))
+                store.Assert(TestScope.resolved scope, draft [ "acme"; "widget-y" ] (scalar 40m))
                 |> assertOk
 
             let! healthy = probe.Check()
@@ -679,7 +673,7 @@ let tests =
             // is what supersedes — re-asserting the same content address is
             // an idempotent no-op).
             let! _ =
-                store.Assert(TestScope.resolved scope, draftWith "h2" [ "acme" ] (Scalar 130m))
+                store.Assert(TestScope.resolved scope, draftWith "h2" [ "acme" ] (scalar 130m))
                 |> assertOk
 
             let! degraded = probe.Check()

@@ -12,8 +12,10 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.RAG.IngestionTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -107,18 +109,9 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
 // ── Registry + coverage fixtures ──────────────────────────────────
 
 let private metricDef (id: string) (context: string option) : MetricDefinition = {
-    Id = id
-    Name = id.ToUpperInvariant()
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = "N0"
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = context
+    metric id (id.ToUpperInvariant()) "GBP" "currency" "N0" with
+        Direction = HigherIsBetter
+        Context = context
 }
 
 let private subjectDef (id: string) (levels: string list) : SubjectDefinition = {
@@ -141,17 +134,17 @@ let private registryOf (metrics: MetricDefinition list) (subjects: SubjectDefini
              Definition = d
          }))
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
-let private q3: TemporalExtent = {
-    From = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q3-2026"
-}
+let private q3: TemporalExtent =
+    period
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q3-2026")
 
 let private rollup = Computed("rollup", "1", "p0")
 
@@ -161,8 +154,8 @@ let private statsOf (subjects: int) (facts: int) : PopulationStats = {
         FactCount = facts
         ComparableCount = facts
         NonComparableCount = 0
-        PeriodFrom = Some q2.From
-        PeriodTo = Some q2.To
+        PeriodFrom = Some(Instant.toDateTime q2.From)
+        PeriodTo = Some(Instant.toDateTime q2.To)
         Freshness = { FreshCount = facts; StaleCount = 0 }
         MethodMix = [ "computed:rollup:1:p0", facts ]
 }
@@ -458,7 +451,7 @@ let bandTests =
 
             let extended = {
                 statsOf 12 40 with
-                    PeriodTo = Some q3.To
+                    PeriodTo = Some(Instant.toDateTime q3.To)
             }
 
             Expect.isTrue
@@ -652,7 +645,7 @@ let disclosureTests =
             let draft (sku: string) (value: decimal) : FactDraft = {
                 Subject = { Hierarchy = "brand"; Path = [ sku ] }
                 Metric = MetricRef "revenue"
-                Value = Scalar value
+                Value = scalar value
                 Period = q2
                 Method = rollup
                 Evidence = {
@@ -808,7 +801,7 @@ let private options =
 let private skuDraft (sku: string) : FactDraft = {
     Subject = { Hierarchy = "brand"; Path = [ sku ] }
     Metric = MetricRef "revenue"
-    Value = Scalar 10m
+    Value = scalar 10m
     Period = q2
     Method = rollup
     Evidence = {

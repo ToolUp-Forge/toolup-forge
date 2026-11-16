@@ -12,8 +12,10 @@ open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.FactStores.Postgres
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -43,11 +45,11 @@ open ToolUp.Platform.Compose
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draftFor (member': string) (metric: string) (inputHash: string) (value: decimal) : FactDraft = {
     Subject = {
@@ -55,7 +57,7 @@ let private draftFor (member': string) (metric: string) (inputHash: string) (val
         Path = [ member' ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -220,9 +222,15 @@ let private byTransactionTime (facts: Fact list) =
         | 0 -> String.CompareOrdinal(a.FactId, b.FactId)
         | c -> c)
 
-let private visibleIds (store: IFactStore) (scope: string) (t: DateTime) = async {
+let private visibleIds (store: IFactStore) (scope: string) (t: Instant) = async {
     let! facts =
-        store.Query(TestScope.resolved scope, { FactQuery.all with AsOf = Some t })
+        store.Query(
+            TestScope.resolved scope,
+            {
+                FactQuery.all with
+                    AsOf = Some(Instant.toDateTime t)
+            }
+        )
         |> TestScope.ok
 
     return facts |> List.map _.FactId |> List.sort
@@ -368,7 +376,7 @@ let private migrationOfflineTests =
             let fork = {
                 successor with
                     FactId = "fork"
-                    AsOf = successor.AsOf.AddTicks 1L
+                    AsOf = Instant.ofTicks (successor.AsOf.Ticks + 1L)
             }
 
             let forked = FactStoreMigration.validateSource (fork :: facts)
@@ -744,11 +752,11 @@ let private HistorySubjects = 400
 [<Literal>]
 let private HistoryWeeks = 52
 
-let private historyWeek (w: int) : TemporalExtent = {
-    From = DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc).AddDays(7.0 * float w)
-    To = DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc).AddDays(7.0 * float (w + 1))
-    Label = Some(sprintf "W%02d" (w + 1))
-}
+let private historyWeek (w: int) : TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc).AddDays(7.0 * float w))
+        (DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc).AddDays(7.0 * float (w + 1)))
+        (Some(sprintf "W%02d" (w + 1)))
 
 let private historyDraft (subject: int) (w: int) (tag: string) : FactDraft = {
     (draftFor (sprintf "h%04d" subject) "history" tag (decimal ((subject * 7 + w) % 1000))) with
@@ -780,27 +788,19 @@ let private steppedClock () : unit -> DateTime =
         value
 
 let private aggregateMetric (id: string) (staleness: StalenessPolicy) (canonical: string option) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = "N2"
-    Staleness = staleness
-    ProducingOperation = None
-    CanonicalMethod = canonical
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id id "count" "count" "N2" with
+        Direction = HigherIsBetter
+        Staleness = staleness
+        CanonicalMethod = canonical
 }
 
 let private aggregateRegistry: IMetricRegistry =
     MetricRegistry.build [
         for definition in
             [
-                aggregateMetric "footfall" (FreshFor(TimeSpan.FromMinutes 30.0)) None
+                aggregateMetric "footfall" (FreshFor 1800) None
                 aggregateMetric "yield" UntilSuperseded (Some "computed:rollup")
-                aggregateMetric "share" (FreshFor(TimeSpan.FromMinutes 45.0)) (Some "computed:rollup")
+                aggregateMetric "share" (FreshFor 2700) (Some "computed:rollup")
                 aggregateMetric "precise" UntilSuperseded None
             ] do
             ({
@@ -810,11 +810,11 @@ let private aggregateRegistry: IMetricRegistry =
             : MetricRegistration)
     ] []
 
-let private q3: TemporalExtent = {
-    From = q2.To
-    To = q2.To.AddMonths 3
-    Label = Some "Q3-2026"
-}
+let private q3: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q3-2026")
 
 let private aggregateDraft
     (path: string list)
@@ -840,25 +840,25 @@ let private aggregateSeed: FactDraft list = [
     for i in 0..23 do
         let path = [ "north"; sprintf "s%02d" i ]
         let value = decimal i * 1.5m
-        aggregateDraft path "footfall" q2 rollup (Scalar value) (sprintf "f%d" i)
+        aggregateDraft path "footfall" q2 rollup (KernelFixtures.scalar value) (sprintf "f%d" i)
 
         if i % 3 = 0 then
-            aggregateDraft path "footfall" q3 rollup (Scalar(value + 0.25m)) (sprintf "f%d-q3" i)
+            aggregateDraft path "footfall" q3 rollup (KernelFixtures.scalar (value + 0.25m)) (sprintf "f%d-q3" i)
 
         if i % 5 = 0 then
-            aggregateDraft path "footfall" q2 estimator (Scalar(value * 2m)) (sprintf "f%d-est" i)
+            aggregateDraft path "footfall" q2 estimator (KernelFixtures.scalar (value * 2m)) (sprintf "f%d-est" i)
 
-        aggregateDraft path "yield" q2 rollup (Scalar(decimal (i % 7))) (sprintf "y%d" i)
-        aggregateDraft path "share" q2 rollup (Scalar(decimal i / 4m)) (sprintf "s%d" i)
+        aggregateDraft path "yield" q2 rollup (KernelFixtures.scalar (decimal (i % 7))) (sprintf "y%d" i)
+        aggregateDraft path "share" q2 rollup (KernelFixtures.scalar (decimal i / 4m)) (sprintf "s%d" i)
 
     // Equal values at two scales, a non-comparable member, supersessions.
-    aggregateDraft [ "north"; "tie-a" ] "footfall" q2 rollup (Scalar 12.0m) "tie-a"
-    aggregateDraft [ "north"; "tie-b" ] "footfall" q2 rollup (Scalar 12.00m) "tie-b"
+    aggregateDraft [ "north"; "tie-a" ] "footfall" q2 rollup (KernelFixtures.scalar 12.0m) "tie-a"
+    aggregateDraft [ "north"; "tie-b" ] "footfall" q2 rollup (KernelFixtures.scalar 12.00m) "tie-b"
     aggregateDraft [ "north"; "gap" ] "footfall" q2 rollup (Absent "not measured") "gap"
-    aggregateDraft [ "north"; "s04" ] "footfall" q2 rollup (Scalar 40m) "f4-v2"
-    aggregateDraft [ "north"; "s07" ] "yield" q2 rollup (Scalar 9m) "y7-v2"
+    aggregateDraft [ "north"; "s04" ] "footfall" q2 rollup (KernelFixtures.scalar 40m) "f4-v2"
+    aggregateDraft [ "north"; "s07" ] "yield" q2 rollup (KernelFixtures.scalar 9m) "y7-v2"
     // The one competitor that makes `share` a contested population.
-    aggregateDraft [ "north"; "s02" ] "share" q2 estimator (Scalar 99m) "s2-est"
+    aggregateDraft [ "north"; "s02" ] "share" q2 estimator (KernelFixtures.scalar 99m) "s2-est"
     // Twenty copies of a value whose left-to-right decimal sum rounds
     // differently from the exact sum (20.000...001 against 20.000...002),
     // far enough that the two means differ too (1 against 1.000...001).
@@ -868,9 +868,9 @@ let private aggregateSeed: FactDraft list = [
             "precise"
             q2
             rollup
-            (Scalar 1.0000000000000000000000000001m)
+            (KernelFixtures.scalar 1.0000000000000000000000000001m)
             (sprintf "p%d" i)
-    aggregateDraft [ "north"; "s09" ] "footfall" q2 rollup (Scalar 3m) "f9-v2"
+    aggregateDraft [ "north"; "s09" ] "footfall" q2 rollup (KernelFixtures.scalar 3m) "f9-v2"
 ]
 
 let private aggregateQueries (instants: DateTime list) : (string * PopulationQuery) list = [
@@ -927,7 +927,7 @@ let private aggregateTests
 
         // Instants inside the seed, so a replay sees earlier heads, a
         // superseded predecessor and a freshness window part-elapsed.
-        let instants = [ written[20].AsOf; written[70].AsOf ]
+        let instants = [ written[20].AsOf; written[70].AsOf ] |> List.map Instant.toDateTime
         let mutable freshAndStale = false
 
         for label, query in aggregateQueries instants do
@@ -958,6 +958,14 @@ let private aggregateTests
                 "the mean is the left-to-right decimal fold's"
         | Error e -> failtestf "precise refused: %s" (FactStoreError.describe e)
     }
+
+/// `period` an hour earlier at both ends: the period a machine an hour ahead
+/// of UTC read for the same instants.
+let private hourEarlier (period: TemporalExtent) : TemporalExtent = {
+    period with
+        From = KernelFixtures.instant ((Instant.toDateTime period.From).AddHours -1.0)
+        To = KernelFixtures.instant ((Instant.toDateTime period.To).AddHours -1.0)
+}
 
 let private migrationLiveTests (dataSource: NpgsqlDataSource) =
     let targetOn (table: string) (events: IEventStore) =
@@ -1102,7 +1110,7 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
             for t in export.Facts |> List.map _.AsOf |> List.distinct do
                 let! onSource = visibleIds (source :> IFactStore) scope t
                 let! onTarget = visibleIds (target :> IFactStore) scope t
-                Expect.equal onTarget onSource (sprintf "the AsOf read at %O matches" t)
+                Expect.equal onTarget onSource (sprintf "the AsOf read at %s matches" (Instant.toWire t))
 
             let! doubled =
                 scalar
@@ -1363,18 +1371,16 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
             // as Utc: its kind changes on the round trip. An Unspecified
             // period is read as UTC on every machine.
             let utc = q2
+            let from, until = Instant.toDateTime q2.From, Instant.toDateTime q2.To
 
-            let local = {
-                q2 with
-                    From = q2.From.ToLocalTime()
-                    To = q2.To.ToLocalTime()
-            }
+            let local =
+                KernelFixtures.period (from.ToLocalTime()) (until.ToLocalTime()) q2.Label
 
-            let unspecified = {
-                q2 with
-                    From = DateTime.SpecifyKind(q2.From, DateTimeKind.Unspecified)
-                    To = DateTime.SpecifyKind(q2.To, DateTimeKind.Unspecified)
-            }
+            let unspecified =
+                KernelFixtures.period
+                    (DateTime.SpecifyKind(from, DateTimeKind.Unspecified))
+                    (DateTime.SpecifyKind(until, DateTimeKind.Unspecified))
+                    q2.Label
 
             for member', period in [ "local", local; "unspecified", unspecified ] do
                 let draft = {
@@ -1392,8 +1398,7 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
                                 bindScope scope cmd
                                 cmd.Parameters.AddWithValue("id", f.FactId) |> ignore)
 
-                    let expected =
-                        Sha256.hexOfUtf8 (Fact.lineageKey draft.Subject draft.Metric utc draft.Method)
+                    let expected = FactLineage.digestOf draft.Subject draft.Metric utc draft.Method
 
                     Expect.equal
                         (string stored)
@@ -1415,22 +1420,10 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
             let! export = source.ExportScope scope
             let f = export.Facts |> List.find (fun f -> f.Metric = MetricRef "visits")
 
-            let correct =
-                Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+            let correct = Fact.lineageDigest f
 
             // The key a machine an hour ahead of UTC computed for the same fact.
-            let shifted =
-                Sha256.hexOfUtf8 (
-                    Fact.lineageKey
-                        f.Subject
-                        f.Metric
-                        {
-                            f.Period with
-                                From = f.Period.From.AddHours -1.0
-                                To = f.Period.To.AddHours -1.0
-                        }
-                        f.Method
-                )
+            let shifted = Fact.lineageDigest { f with Period = hourEarlier f.Period }
 
             let! _ =
                 execute
@@ -1467,15 +1460,7 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
 
             let lineages =
                 export.Facts
-                |> List.map (fun f ->
-                    let shiftedPeriod = {
-                        f.Period with
-                            From = f.Period.From.AddHours -1.0
-                            To = f.Period.To.AddHours -1.0
-                    }
-
-                    Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method),
-                    Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric shiftedPeriod f.Method))
+                |> List.map (fun f -> Fact.lineageDigest f, Fact.lineageDigest { f with Period = hourEarlier f.Period })
                 |> List.distinct
 
             for correct, shifted in lineages do
@@ -1660,7 +1645,9 @@ let private liveTests (conn: string) =
                 SeedRaw =
                     fun facts -> async {
                         let source, storage = blobSource ()
-                        let json = ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options
+                        // The shape a blob store held its facts in before it wrote the
+                        // specification's encoding, keyed by their old ids.
+                        let json = FactStorageJson.options
 
                         for f in facts do
                             let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(f, json))
@@ -1824,7 +1811,8 @@ let private liveTests (conn: string) =
                     let! atSecond =
                         s.Query(
                             TestScope.resolved scope,
-                            FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f2.AsOf
+                            FactQuery.forSubjectMetric f1.Subject f1.Metric
+                            |> FactQuery.asOf (Instant.toDateTime f2.AsOf)
                         )
                         |> TestScope.ok
 
@@ -1925,7 +1913,11 @@ let private liveTests (conn: string) =
                      else
                          "index scans only")
 
-                Expect.equal (answer |> List.map _.Value) [ Scalar 7m ] "the point read answers the current head"
+                Expect.equal
+                    (answer |> List.map _.Value)
+                    [ KernelFixtures.scalar 7m ]
+                    "the point read answers the current head"
+
                 Expect.isFalse sequential "no sequential scan over the scope"
                 // The lineage's two facts, visited by the heads branch and the
                 // successor probe — a handful, whatever the scope's size.

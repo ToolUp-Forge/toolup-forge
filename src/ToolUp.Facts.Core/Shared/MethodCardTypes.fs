@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 // ─── Method cards ────────────────────────────────────────────────────
 //
 // A method card is a versioned, hashed description of one analytical method:

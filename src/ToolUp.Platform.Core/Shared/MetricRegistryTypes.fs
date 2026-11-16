@@ -4,126 +4,42 @@
 namespace ToolUp.Platform.Grounding
 
 open System
+open Fuaran.Facts
 
-// ─── Metric & subject registry (Phase 519) ───────────────────────────
+// ─── Metric & subject registry ───────────────────────────────────────
 //
-// **Namespace `ToolUp.Platform.Grounding`** — deliberately *not* the
-// root `ToolUp.Platform` namespace, so the grounding `MetricDefinition`
-// does not collide with the observability `ToolUp.Platform.Metrics
-// .MetricDefinition` (a Prometheus signal). Consumers reference these as
-// `Grounding.MetricDefinition` / `Grounding.IMetricRegistry`, keeping the
-// two "metric" vocabularies unambiguous by construction.
+// **The definitions are the published Fact kernel's.** A metric is a
+// `Fuaran.Facts.MetricDefinition` and a subject hierarchy a
+// `Fuaran.Facts.SubjectDefinition` — the package's types, checked by its
+// `Definition.checkMetric` / `checkSubject`, digested and written by its
+// codec, rendered by its standard. This namespace keeps what is forge's:
+// the compose-time registry, its provenance and its duplicate rejection.
+//
+// **Namespace `ToolUp.Platform.Grounding`** — deliberately *not* the root
+// `ToolUp.Platform` namespace, so nothing here collides with the
+// observability `ToolUp.Platform.Metrics.MetricDefinition` (a Prometheus
+// signal). That type describes a *telemetry* signal; a grounding metric is
+// a *business quantity* (a KPI: elasticity, share-of-voice, MRR). The two
+// never interact; a module may declare both, neither, or either.
 //
 // Modules declare the *quantities they compute* (metrics) and the
 // *entity hierarchies they compute them over* (subjects) exactly the way
 // they declare `DataType`s — a compose-time fan-in with duplicate-id
-// rejection. Without a registry, module outputs are stringly-typed and
-// incomparable across modules; with it, the platform gains an
-// ontology-lite that fact storage, retrieval planning, and capability
-// discovery all stand on.
-//
-// **Distinct from the observability `Metrics.MetricDefinition`.** That
-// type (namespace `ToolUp.Platform.Metrics`) describes a Prometheus
-// counter/gauge/histogram — a *telemetry* signal. A `MetricDefinition`
-// here is a *business quantity* (a KPI: elasticity, share-of-voice, MRR)
-// with a unit, a direction-of-better, a staleness policy, and an optional
-// producing-operation link. The two never interact; a module may declare
-// both, neither, or either.
+// rejection.
 //
 // **Optional; zero-weight when unused (GP 13).** A module that declares
-// no metrics or subjects composes and runs byte-for-byte identically to
-// today; the registry is empty and every read surface returns nothing.
-// Registration is a gift a module gives to planners and discovery tools,
-// never an obligation.
-//
-// **Generic substrate (GP 1).** The types carry no domain or vendor
-// vocabulary — a metric's `Name` / `Unit` / `Dimensionality` are opaque
-// strings the declaring module supplies. Domain metric packs (media,
-// retail, finance vocabularies) live in consumer packages, never here.
-
-/// Which direction of movement in a metric's value is "better" — the
-/// polarity a planner or dashboard uses to colour a change green or red.
-/// A metric with no natural polarity declares `Neutral`.
-type DirectionOfBetter =
-    /// A larger value is preferable (revenue, retention, throughput).
-    | HigherIsBetter
-    /// A smaller value is preferable (churn, latency, cost).
-    | LowerIsBetter
-    /// No natural polarity (a count, a category share, a raw reading).
-    | Neutral
-
-/// How long a fact carrying this metric stays "fresh" before retrieval
-/// flags it stale. Freshness is a *derived* status per this policy — no
-/// mutable flag is stored on any fact (see Phase 520).
-type StalenessPolicy =
-    /// Fresh for a fixed wall-clock window after the fact's transaction
-    /// time; stale thereafter. The window is the `TimeSpan`.
-    | FreshFor of TimeSpan
-    /// Never stale on age alone — a fact stays current until a newer
-    /// fact in its lineage supersedes it (the default for slow-moving
-    /// or asserted quantities).
-    | UntilSuperseded
-    /// Stale as soon as any upstream input the fact was computed from
-    /// changes (lineage-driven; the reactive-recomputation policy).
-    | UntilUpstreamChange
-
-/// What a fact carrying this metric does when the lineage walk (Phase 8a)
-/// marks it `InputsChanged` — an upstream data-object version it was
-/// computed from has been superseded (Phase 561, continuous-intelligence
-/// ladder rung 2). The invalidation state is *derived* (never a stored
-/// mutable flag — law L1); this policy only governs what *executes* in
-/// response. An **undeclared** metric (`MetricDefinition.RecomputePolicy =
-/// None`) behaves as `Manual`: nothing recomputes unbidden on upgrade
-/// (GP 11), so a deployment that declares no policy is byte-for-byte
-/// unchanged (GP 13).
-type RecomputePolicy =
-    /// On invalidation, enqueue a recompute job through `IJobScheduler`
-    /// (GP 12 job-scheduler rules). The job re-asserts through the ordinary
-    /// `IFactStore.Assert` path, so supersession edges stay derived and the
-    /// audit trail is the same one assert always writes. The eager posture
-    /// — the fact base chases its inputs the moment they move.
-    | Eager
-    /// On invalidation, do nothing until the next store read of the
-    /// affected lineage drives the recompute inline. Amortises cost against
-    /// demand — a fact nobody reads never recomputes.
-    | OnQuery
-    /// On invalidation, surface the changed state only — freshness derives
-    /// stale under `UntilUpstreamChange`, and a human or an explicit
-    /// trigger drives any recompute. The default (an undeclared metric).
-    | Manual
+// no metrics or subjects composes and runs byte-for-byte identically; the
+// registry is empty and every read surface returns nothing.
 
 /// Resolution for an optional `MetricDefinition.RecomputePolicy`
-/// declaration — the undeclared metric (`None`) is `Manual` (GP 11:
-/// nothing recomputes unbidden).
+/// declaration — the undeclared metric (`None`) is `Manual`: nothing
+/// recomputes unbidden (GP 11).
 [<RequireQualifiedAccess>]
 module RecomputePolicy =
 
     /// The effective policy for an optional declaration — `None` ⇒
     /// `Manual`.
     let resolve (declared: RecomputePolicy option) : RecomputePolicy = declared |> Option.defaultValue Manual
-
-/// How a metric's value at a parent subject relates to its values at the
-/// child subjects one level down — the declared **roll-up semantics** the
-/// fact-base coherence check (Phase 563) reads to decide whether a parent
-/// fact and its direct children are mechanically comparable. Roll-up
-/// semantics are declared once, on the metric, and applied over every
-/// registered subject hierarchy — comparability is *derived* from this
-/// declaration, never configured per fact.
-type RollUp =
-    /// The value aggregates by **summation** across the hierarchy: a
-    /// parent's value equals the sum of its direct children's values for
-    /// the same metric and period, within `tolerance` (absolute, in the
-    /// metric's unit). Currency and count metrics are the canonical
-    /// additive case. `tolerance` absorbs rounding / display-format drift
-    /// without flagging a real inconsistency — it is registry data, carried
-    /// here, never attached to an individual fact.
-    | Additive of tolerance: decimal
-    /// The value does **not** aggregate by summation (a ratio, an average,
-    /// a share, an index): a parent is not the sum of its children, so
-    /// there is no decidable cross-level relationship to test. The coherence
-    /// check excludes the metric (GP 9 — it never guesses a relationship the
-    /// declaration does not assert).
-    | NonAdditive
 
 /// Resolution for an optional `MetricDefinition.RollUp` declaration.
 [<RequireQualifiedAccess>]
@@ -133,148 +49,12 @@ module RollUp =
     /// carries, or `None` when the metric is `NonAdditive` or undeclared —
     /// the single signal the coherence check gates comparability on. An
     /// undeclared metric (`None`) is treated as non-additive: it is excluded
-    /// from coherence checking, so a deployment that declares nothing is
-    /// byte-for-byte unchanged (GP 11 / GP 13).
-    let additiveTolerance (declared: RollUp option) : decimal option =
+    /// from coherence checking (GP 11 / GP 13).
+    let additiveTolerance (declared: RollUp option) : DecimalText option =
         match declared with
         | Some(Additive tolerance) -> Some tolerance
         | Some NonAdditive
         | None -> None
-
-/// A registered business quantity a module computes. Identity is the
-/// stable `Id` string (a `ComponentId`-class token, never the display
-/// `Name`) — two modules declaring the same `Id` is a compose-time
-/// duplicate-registration error.
-type MetricDefinition = {
-    /// Stable identity token (e.g. `"elasticity"`, `"share_of_voice"`).
-    /// `ComponentId`-class: lowercase, rename-stable, never a display
-    /// name. The key every fact, plan, and discovery tool references.
-    Id: string
-    /// Human-readable display name (`"Price Elasticity"`). Cosmetic —
-    /// may be renamed without breaking any reference.
-    Name: string
-    /// Unit symbol the value is measured in (`"GBP"`, `"%"`, `"count"`,
-    /// `"ratio"`). Opaque here; a later dimensional-analysis check
-    /// (plan law L6) reads `Dimensionality`.
-    Unit: string
-    /// Coarse dimension label for comparability (`"currency"`,
-    /// `"count"`, `"ratio"`, `"duration"`, `"dimensionless"`). Two
-    /// metrics are only combinable when their dimensionalities agree;
-    /// the check itself is a later phase, the declaration lands now.
-    Dimensionality: string
-    /// Which direction of movement is "better".
-    Direction: DirectionOfBetter
-    /// Canonical rendering format for the value — a .NET numeric format
-    /// string (`"N2"`, `"P1"`, `"C0"`) or an empty string for "render
-    /// verbatim". The numeric-fidelity gate (Phase 523) canonicalises a
-    /// quoted number through this format before comparing it to a fact.
-    DisplayFormat: string
-    /// How freshness of a fact carrying this metric is derived.
-    Staleness: StalenessPolicy
-    /// Optional link to the catalog operation that *produces* this
-    /// metric (an operation id). `None` for a metric a module declares
-    /// but computes off-catalog, or asserts by hand. When present, the
-    /// gap planner can map a missing fact → this operation → its input
-    /// schema → the data catalog (the closed loop's "computable" branch).
-    ProducingOperation: string option
-    /// Optional **canonical-method** declaration (Phase 566 — D19
-    /// closure). Several methods computing one metric is normal and the
-    /// fact store never merges the competitors; this selector names which
-    /// method's lineage a *method-less* query resolves to by default, so
-    /// retrieval and planning pick deterministically instead of returning
-    /// whichever competing head enumerates first. The selector is matched
-    /// against method-identity strings (`computed:op:ver:hash` /
-    /// `asserted:principal` / `imported:cert`) per `CanonicalMethod.matches`
-    /// — a full identity matches exactly; a shorter selector matches any
-    /// identity it prefixes at a `:` boundary (`"computed:rollup"` matches
-    /// every version/parameterisation of the `rollup` operation). `None`
-    /// (the default) preserves the undeclared behaviour exactly (GP 11):
-    /// a method-less query surfaces every competing head. Selection is
-    /// never silent — competitors stay fully queryable, and the query
-    /// surface carries a derived competing-methods indicator (GP 9).
-    CanonicalMethod: string option
-    /// Optional **recompute policy** (Phase 561 — reactive fact
-    /// recomputation). Governs what executes when the lineage walk marks a
-    /// fact carrying this metric `InputsChanged`: `Eager` enqueues a
-    /// recompute job, `OnQuery` recomputes lazily at the next read, `Manual`
-    /// surfaces the changed state only. `None` (the default) resolves to
-    /// `Manual` via `RecomputePolicy.resolve` — an undeclared metric
-    /// recomputes nothing unbidden, so the composition is byte-for-byte
-    /// unchanged (GP 11 / GP 13).
-    RecomputePolicy: RecomputePolicy option
-    /// Optional **roll-up semantics** (Phase 563 — fact-base coherence
-    /// checking). Declares how the metric aggregates across a subject
-    /// hierarchy: `Additive tolerance` makes a parent's value comparable to
-    /// the sum of its direct children's (within `tolerance`), so the standing
-    /// coherence check can flag a cross-level inconsistency (mixed-vintage
-    /// aggregate, partial load, unit slip); `NonAdditive` excludes it. `None`
-    /// (the default) is treated as non-additive — a metric with no
-    /// declaration is never coherence-checked, so the composition is
-    /// byte-for-byte unchanged (GP 11 / GP 13). Comparability is derived
-    /// wholly from this registry declaration, never configured per fact.
-    RollUp: RollUp option
-    /// Optional **interpretive context** for the metric family (Phase 705)
-    /// — the analyst's narrative for what this quantity means, how it is
-    /// computed, and how to read its sign and magnitude. Declared once
-    /// *with the metric*, so a discovery surface can say what `elasticity`
-    /// IS without a hand-authored knowledge chunk per subject repeating
-    /// the same sentence.
-    ///
-    /// **Prose about the FAMILY, never a value.** This field is
-    /// interpretation, not data. A number — a level, a ranking, a
-    /// "currently around X" — belongs in a fact, where it is bitemporal,
-    /// superseded when it changes, disclosure-classified, and carries its
-    /// provenance. A value copied here is none of those things: it is a
-    /// claim nothing can supersede, on a compose-time declaration readable
-    /// by anything that resolves `IMetricRegistry`, and it egresses
-    /// through surfaces the disclosure gate does not guard.
-    ///
-    /// Generic substrate (GP 1): opaque text the declaring module
-    /// supplies; nothing here parses or interprets it. `None` (the
-    /// default) leaves every existing surface byte-for-byte unchanged
-    /// (GP 11 / GP 13).
-    Context: string option
-}
-
-/// Matching semantics for a `MetricDefinition.CanonicalMethod` selector
-/// (Phase 566). Pure string logic over method-identity strings, shared by
-/// the fact store's query default and any surface that needs to explain
-/// which competitor a canonical declaration picks.
-[<RequireQualifiedAccess>]
-module CanonicalMethod =
-
-    /// Whether a method identity (`computed:op:ver:hash` /
-    /// `asserted:principal` / `imported:cert`) matches a canonical-method
-    /// selector: an exact match, or a segment-prefix match at a `:`
-    /// boundary (`"computed:rollup"` matches `"computed:rollup:2:p7"` but
-    /// never `"computed:rollup-alt:1:p0"`). Ordinal throughout — identity
-    /// strings are wire tokens, never localised text.
-    let matches (selector: string) (methodIdentity: string) : bool =
-        methodIdentity = selector
-        || methodIdentity.StartsWith(selector + ":", StringComparison.Ordinal)
-
-/// A registered subject hierarchy a module computes metrics over — a
-/// *dimension* of the entity space (a product hierarchy, a geography, an
-/// org chart). Identity is the stable `Id`; the ordered `Levels` name the
-/// kind of entity at each depth from root to leaf.
-type SubjectDefinition = {
-    /// Stable identity token for this hierarchy (e.g.
-    /// `"product_hierarchy"`, `"geography"`). `ComponentId`-class.
-    Id: string
-    /// Human-readable display name (`"Product Hierarchy"`). Cosmetic.
-    Name: string
-    /// Ordered level labels from root to leaf — each names the *kind* of
-    /// entity at that depth (`[ "market"; "brand"; "sku" ]`). A subject
-    /// *instance* (a concrete SKU) is an ordered path through these
-    /// levels; the definition declares the shape, not the members.
-    Levels: string list
-    /// Optional calendar tag scoping period comparability within this
-    /// hierarchy (plan law L5 — fiscal calendars are registry-scoped per
-    /// subject hierarchy, so "Q2" is unambiguous *within* a subject and
-    /// never silently compared across calendars). Opaque here; `None`
-    /// means the deployment's default (calendar) periods apply.
-    Calendar: string option
-}
 
 /// One registered metric paired with the module that declared it — the
 /// provenance the registry keeps so `MetricsByModule` and the
@@ -500,6 +280,34 @@ module MetricRegistry =
 
         twice @ perDescription
 
+    /// Every declared definition the kernel's own checks refuse
+    /// (`Definition.checkMetric` / `checkSubject`: a malformed id, an empty
+    /// name, a currency format over a unit that is not one currency, a
+    /// negative roll-up tolerance), each naming the declaring module, the
+    /// definition and the refusal.
+    let private definitionProblems
+        (metrics: MetricRegistration list)
+        (subjects: SubjectRegistration list)
+        : string list =
+        let describe kind (r: string) id (refusal: Refusal) =
+            sprintf
+                "Module '%s' declares %s '%s', which the Fact kernel refuses: %s"
+                r
+                kind
+                id
+                (Refusal.describe refusal)
+
+        [
+            for r in metrics do
+                match Definition.checkMetric r.Definition with
+                | Error refusal -> describe "metric" r.Module r.Definition.Id refusal
+                | Ok() -> ()
+            for r in subjects do
+                match Definition.checkSubject r.Definition with
+                | Error refusal -> describe "subject" r.Module r.Definition.Id refusal
+                | Ok() -> ()
+        ]
+
     /// Fold accumulated registrations and subject descriptions into an
     /// `IMetricRegistry` that also carries `IDescribesSubjects`, or a
     /// diagnostic naming both modules when a metric or subject id is
@@ -546,7 +354,7 @@ module MetricRegistry =
                     (String.concat ", " mods)
             )
         | None, None ->
-            match descriptionProblems subjects descriptions with
+            match definitionProblems metrics subjects @ descriptionProblems subjects descriptions with
             | [] -> Ok(Registry(metrics, subjects, descriptions |> List.map _.Description) :> IMetricRegistry)
             | problems ->
                 Error(

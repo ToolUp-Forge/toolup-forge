@@ -12,29 +12,32 @@ that fact storage, retrieval planning, and capability discovery stand on.
 > counter/gauge/histogram signals wired through `ServerModule.withMetrics`
 > and the `/metrics` endpoint). To keep the two vocabularies unambiguous,
 > the grounding types live in the **`ToolUp.Platform.Grounding`**
-> namespace — you reference them as `Grounding.MetricDefinition`,
-> `Grounding.IMetricRegistry`, etc.
+> namespace — you reference them as `Grounding.IMetricRegistry`, etc.
+> The definitions themselves are the published Fact kernel's:
+> `Fuaran.Facts.MetricDefinition` and `Fuaran.Facts.SubjectDefinition`
+> (the [`Fuaran.Facts`](https://www.nuget.org/packages/Fuaran.Facts)
+> package; see [the fact store](facts.md#which-half-lives-where)).
 
 ## What a metric declaration is
 
-A `Grounding.MetricDefinition` describes one quantity:
+A `MetricDefinition` (`Fuaran.Facts`) describes one quantity. The registry refuses at compose a definition the kernel's `Definition.checkMetric` refuses (an id outside `[a-z0-9][a-z0-9._-]*`, an empty name, a currency format over a unit that is not one currency, a negative tolerance), naming the module:
 
 | Field | Meaning |
 |---|---|
 | `Id` | Stable identity token (`"elasticity"`, `"share_of_voice"`). Lowercase, rename-stable, `ComponentId`-class — **the** key every fact, plan, and discovery tool references. Never the display name. |
 | `Name` | Human-readable display name (`"Price Elasticity"`). Cosmetic. |
-| `Unit` | Unit symbol (`"GBP"`, `"%"`, `"count"`, `"ratio"`). |
+| `Unit` | A `Fuaran.Core` unit of measure: a currency (`[GBP]`), `%`, `1` for a count or ratio. `Legacy.unitOf "GBP"` converts a free-text unit. |
 | `Dimensionality` | Coarse dimension label (`"currency"`, `"count"`, `"ratio"`, `"duration"`, `"dimensionless"`) — the axis a later comparability check reads. |
 | `Direction` | `HigherIsBetter` / `LowerIsBetter` / `Neutral` — the polarity a dashboard colours a change by. |
-| `DisplayFormat` | Canonical rendering format — a .NET numeric format string (`"N2"`, `"P1"`, `"C0"`) or `""` for verbatim. The numeric-fidelity gate canonicalises a quoted number through this before comparing it to a fact. |
-| `Staleness` | `FreshFor of TimeSpan` / `UntilSuperseded` / `UntilUpstreamChange` — how a fact's freshness is *derived* (no mutable flag is ever stored). |
+| `DisplayFormat` | `{ Style; FractionDigits; Grouping }`: `Verbatim`, `Number`, `Percent` or `Currency` (only over a currency unit). `Legacy.displayFormatOf "C0"` converts a .NET format string. A value is shown by the kernel's rendering standard (`FactRendering.renderFor`). |
+| `Staleness` | `FreshFor of windowSeconds` / `UntilSuperseded` / `UntilUpstreamChange` — how a fact's freshness is *derived* (no mutable flag is ever stored). |
 | `ProducingOperation` | Optional catalog-operation id that produces this metric. When present, a planner can map a missing fact → this operation → its input schema → the data catalog. |
 | `CanonicalMethod` | Optional canonical-method selector (Phase 566). When several methods compute this metric over one (subject, period), a *method-less* fact query resolves to this method's lineage by default — matched against method-identity strings (`computed:op:ver:hash` / `asserted:principal` / `imported:cert`), exactly or as a `:`-boundary prefix (`"computed:rollup"` matches every version of `rollup`). `None` = no default; every competing head surfaces. Competitors stay queryable either way, and the query surface discloses them (GP 9). |
 | `RecomputePolicy` | Optional reactive-recomputation policy (Phase 561). When an upstream data-object version a fact was computed from is superseded, the lineage walk marks the fact `InputsChanged` (derived, never a stored flag); this policy governs what executes — `Eager` enqueues a recompute job (through `IJobScheduler`) that re-asserts on the ordinary `Assert` path, `OnQuery` recomputes lazily at the next read, `Manual` surfaces the changed state only. `None` = `Manual` (nothing recomputes unbidden; the composition is byte-for-byte unchanged). |
 | `Context` | Optional interpretive prose for the metric **family** (Phase 705) — what the quantity means, how it is computed, how to read its sign and magnitude. Declared once with the metric rather than repeated per subject. Read by the `list_metric_coverage` discovery tool and carried on a population answer, so an assistant can explain a metric without a hand-authored knowledge chunk. `None` = the default; no surface changes. **Never a place to copy values** — see [Context is prose, never data](#context-is-prose-never-data). |
 | `RollUp` | Optional roll-up semantics (Phase 563). Declares how the metric aggregates across a subject hierarchy: `Additive tolerance` makes a parent's value comparable to the sum of its direct children's for the same metric and period, within `tolerance` (absolute, in the metric's unit), so the standing coherence check can flag a cross-level inconsistency — a mixed-vintage aggregate, a partial load, a unit slip. `NonAdditive` (a ratio, an average, a share, an index) excludes it: a parent is not the sum of its children, so there is no decidable relationship to test. `None` = the default, treated as non-additive, so a metric that declares nothing is never coherence-checked and the composition is byte-for-byte unchanged. Comparability is derived wholly from this declaration, never configured per fact. |
 
-A `Grounding.SubjectDefinition` declares a hierarchy — a *dimension* of
+A `SubjectDefinition` (`Fuaran.Facts`) declares a hierarchy — a *dimension* of
 the entity space:
 
 | Field | Meaning |
@@ -50,23 +53,23 @@ Declare on a `ServerModule` the same way you attach data types or query
 handlers — both declarations are optional and compose left-to-right:
 
 ```fsharp
+open Fuaran.Facts
 open ToolUp.Platform
-open ToolUp.Platform.Grounding
 
 let serverModule =
     ServerModule.create "sales"
     |> ServerModule.declareMetrics [
         { Id = "revenue"
           Name = "Revenue"
-          Unit = "GBP"
+          Unit = Legacy.unitOf "GBP" |> Result.defaultWith (fun r -> failwith (Refusal.describe r))
           Dimensionality = "currency"
           Direction = HigherIsBetter
-          DisplayFormat = "C0"
-          Staleness = FreshFor (System.TimeSpan.FromDays 1.0)
+          DisplayFormat = { Style = Currency; FractionDigits = Some 0; Grouping = true }
+          Staleness = FreshFor 86400
           ProducingOperation = Some "sales.rollup"
           CanonicalMethod = None
           RecomputePolicy = None
-          RollUp = Some(Additive 0.01M)
+          RollUp = Some(Additive(DecimalText.ofDecimal 0.01M))
           Context = Some "Net invoiced sales, excluding VAT and intra-group transfers, rolled up nightly from the ledger. A month-on-month move under 2% is inside normal seasonal noise." }
       ]
     |> ServerModule.declareSubjects [

@@ -22,6 +22,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.Infra.Tracing
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -29,6 +30,7 @@ open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── 1. Row attribution ──────────────────────────────────────────────
 
@@ -44,18 +46,8 @@ let private registry: IMetricRegistry =
         {
             MetricRegistration.Module = "sales"
             Definition = {
-                Id = "revenue"
-                Name = "revenue"
-                Unit = "count"
-                Dimensionality = "count"
-                Direction = HigherIsBetter
-                DisplayFormat = ""
-                Staleness = UntilSuperseded
-                ProducingOperation = None
-                CanonicalMethod = None
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
+                metric "revenue" "revenue" "count" "count" "" with
+                    Direction = HigherIsBetter
             }
         }
     ] [
@@ -79,16 +71,16 @@ let private table: FactTableDefinition = {
     Requirement = FactTableRequirement.Optional
 }
 
-let private month (m: int) : TemporalExtent = {
-    From = DateTime(2026, m, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, m + 1, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some(sprintf "2026-%02d" m)
-}
+let private month (m: int) : TemporalExtent =
+    period
+        (DateTime(2026, m, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, m + 1, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some(sprintf "2026-%02d" m))
 
 let private row (sku: string) (m: int) (revenue: decimal) : FactTableRow = {
     Subject = [ "acme"; sku ]
     Period = month m
-    Values = Map.ofList [ "revenue", Scalar revenue ]
+    Values = Map.ofList [ "revenue", scalar revenue ]
 }
 
 type private DelegatedWorld = {
@@ -185,7 +177,7 @@ let private attribute (w: DelegatedWorld) (dryRun: bool) =
 
 let private valueOf' (f: Fact) =
     match f.Value with
-    | Scalar d -> d
+    | Scalar d -> DecimalText.toDecimal d
     | other -> failtestf "expected a scalar, got %A" other
 
 let private sliced (m: int) =

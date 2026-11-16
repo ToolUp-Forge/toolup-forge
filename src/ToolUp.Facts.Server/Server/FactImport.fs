@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open ToolUp.Platform
 open ToolUp.Facts.FactsAuditEvents
@@ -410,7 +412,7 @@ module FactImport =
         CertificateRef = ""
         DerivedFactId = derived
         ImportedFactId = ""
-        Subject = SubjectRef.toString offer.Subject
+        Subject = Fact.subjectRendering offer.Subject
         Metric = offer.Metric.Value
         DeclaredDisclosure = ""
         EffectiveDisclosure = ""

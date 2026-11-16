@@ -13,6 +13,7 @@ open Npgsql
 open NpgsqlTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.ProviderExceptions
 open ToolUp.Platform.Infra
@@ -526,21 +527,25 @@ LIMIT @k"""
 /// and an asserted row are the same bytes for the same fact.
 module internal FactRow =
 
-    let private jsonOptions = PlatformJson.options
-
-    /// The fact exactly as `BlobFactStore` serialises it (the `payload`
-    /// column).
+    /// The fact in the specification's encoding (`FactWire`), as
+    /// `BlobFactStore` writes it (the `payload` column).
     let serialise (f: Fact) : string =
-        JsonSerializer.Serialize(f, jsonOptions)
+        match FactWire.writeFact f with
+        | Ok text -> text
+        | Error refusal -> invalidOp (sprintf "fact %s cannot be written: %s" f.FactId (Refusal.describe refusal))
 
+    /// The fact a `payload` holds: the specification's encoding, or the
+    /// legacy saved shape a row written before the store adopted it carries
+    /// (`FactStoreCodec.read`). Rows are never rewritten to convert them.
     let deserialise (payload: string) : Fact =
-        JsonSerializer.Deserialize<Fact>(payload, jsonOptions)
+        match FactStoreCodec.read payload with
+        | Ok f -> f
+        | Error refusal -> invalidOp (Refusal.describe refusal)
 
-    /// The `lineage_hash` column: the SHA-256 of the fact's lineage key,
-    /// built through `Fact.instant`, so the same fact hashes the same on
-    /// every machine.
-    let lineageHash (f: Fact) =
-        Sha256.hexOfUtf8 (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+    /// The `lineage_hash` column: the fact's lineage digest
+    /// (`Fact.lineageDigest`), so the same fact hashes the same on every
+    /// machine.
+    let lineageHash (f: Fact) = Fact.lineageDigest f
 
     /// The `lineage_hash` a stored row's payload says it should carry: the
     /// hash of the fact the store reads back, which is what every lineage
@@ -608,10 +613,7 @@ type PostgresFactStore
     let deserialise (payload: string) : Fact = FactRow.deserialise payload
 
     let lineageHashOf (subject: SubjectRef) (metric: MetricRef) (period: TemporalExtent) (method: MethodRef) =
-        Sha256.hexOfUtf8 (Fact.lineageKey subject metric period method)
-
-    let lineageKeyOf (f: Fact) =
-        Fact.lineageKey f.Subject f.Metric f.Period f.Method
+        FactLineage.digestOf subject metric period method
 
     let command (sql: string) (conn: NpgsqlConnection) (tx: NpgsqlTransaction) : NpgsqlCommand =
         let cmd = new NpgsqlCommand(sql, conn, tx)
@@ -846,10 +848,8 @@ type PostgresFactStore
 
     // ─── Population read ──────────────────────────────────────────────
 
-    let stalenessOf (metricDef: Grounding.MetricDefinition option) =
-        metricDef
-        |> Option.map _.Staleness
-        |> Option.defaultValue Grounding.UntilSuperseded
+    let stalenessOf (metricDef: MetricDefinition option) =
+        metricDef |> Option.map _.Staleness |> Option.defaultValue UntilSuperseded
 
     // The population's row filter; the threshold only when the caller
     // has shown no canonical selection can run before it.
@@ -871,22 +871,24 @@ type PostgresFactStore
 
     // The transaction-time floor a fact must reach to be FRESH at `t` —
     // `Freshness.deriveAt` over a current head, restated as a comparison
-    // the database can count. Under `FreshFor window` a head is fresh while
-    // `t <= asOf + window`, i.e. `asOf.Ticks >= t.Ticks - window.Ticks`;
+    // the database can count. Under `FreshFor windowSeconds` a head is fresh
+    // while `t <= asOf + window`, i.e. `asOf.Ticks >= t.Ticks - window.Ticks`;
     // under the other two policies every current head is fresh. `None`
     // when `asOf + window` could leave `DateTime`'s range (a negative
     // window, or one reaching past `DateTime.MaxValue` from `t`): the
-    // shared derivation throws there, so the member read runs it rather
-    // than the database quietly answering.
-    let freshFloor (policy: Grounding.StalenessPolicy) (t: DateTime) : int64 option =
+    // member read runs the shared derivation there rather than the
+    // database quietly answering.
+    let freshFloor (policy: StalenessPolicy) (t: DateTime) : int64 option =
         match policy with
-        | Grounding.UntilSuperseded
-        | Grounding.UntilUpstreamChange -> Some Int64.MinValue
-        | Grounding.FreshFor window ->
-            if window < TimeSpan.Zero || window.Ticks > DateTime.MaxValue.Ticks - t.Ticks then
+        | UntilSuperseded
+        | UntilUpstreamChange -> Some Int64.MinValue
+        | FreshFor windowSeconds ->
+            let windowTicks = int64 windowSeconds * TimeSpan.TicksPerSecond
+
+            if windowTicks < 0L || windowTicks > DateTime.MaxValue.Ticks - t.Ticks then
                 None
             else
-                Some(t.Ticks - window.Ticks)
+                Some(t.Ticks - windowTicks)
 
     // The full facts of the ranked members, in the members' order.
     let factsInOrder (members: PopulationMember list) (facts: Fact list) : Fact list =
@@ -908,7 +910,7 @@ type PostgresFactStore
         (scopeId: string)
         (query: PopulationQuery)
         (direction: RankDirection)
-        (policy: Grounding.StalenessPolicy)
+        (policy: StalenessPolicy)
         (selector: string option)
         (t: DateTime)
         : Async<PopulationResult> =
@@ -945,7 +947,9 @@ type PostgresFactStore
                 | _ -> selected
 
             let stats =
-                PopulationStats.ofMembers (fun m -> Freshness.deriveAt policy m.AsOf true t) population
+                PopulationStats.ofMembers
+                    (fun m -> Freshness.deriveAt policy (Instant.ofDateTime m.AsOf) true (Instant.ofDateTime t))
+                    population
 
             let k = PopulationQuery.effectiveTopK query
             let ranked = PopulationRanking.rankMembers direction population
@@ -1663,7 +1667,7 @@ type PostgresFactStore
                     match target with
                     | None -> return []
                     | Some f ->
-                        let key = lineageKeyOf f
+                        let key = Fact.lineageKey f
 
                         let! lineage =
                             queryPayloads (Sql.lineage table) (fun cmd ->
@@ -1673,7 +1677,7 @@ type PostgresFactStore
                         return
                             lineage
                             |> byContentAddress
-                            |> List.filter (fun g -> lineageKeyOf g = key)
+                            |> List.filter (fun g -> Fact.lineageKey g = key)
                             |> List.sortBy _.AsOf
                 })
 

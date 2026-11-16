@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Collections.Generic
 open System.Text.Json
@@ -309,7 +311,10 @@ module ToleranceTrigger =
     /// never a zero.
     let read (trigger: ToleranceTrigger) (heads: Fact list) : ToleranceReading =
         let periods =
-            heads |> List.map _.Period.From |> List.distinct |> List.sortDescending
+            heads
+            |> List.map (fun fact -> Instant.toDateTime fact.Period.From)
+            |> List.distinct
+            |> List.sortDescending
 
         let comparedWith (newest: DateTime) =
             match trigger.Comparison with
@@ -329,7 +334,7 @@ module ToleranceTrigger =
             | Some earlier ->
                 let at (period: DateTime) =
                     heads
-                    |> List.filter (fun fact -> fact.Period.From = period)
+                    |> List.filter (fun fact -> Instant.toDateTime fact.Period.From = period)
                     |> List.groupBy subjectOf
                     |> List.map (fun (subject, facts) -> subject, facts |> List.maxBy _.AsOf)
                     |> Map.ofList
@@ -347,14 +352,16 @@ module ToleranceTrigger =
                     |> Map.tryFind subject
                     |> Option.bind (fun from ->
                         match from.Value, current.Value with
-                        | Scalar before, Scalar now when beyond trigger.Tolerance before now ->
+                        | Scalar before, Scalar now when
+                            beyond trigger.Tolerance (DecimalText.toDecimal before) (DecimalText.toDecimal now)
+                            ->
                             Some {
                                 Trigger = trigger
                                 Subject = subject
                                 From = from
                                 To = current
-                                FromValue = before
-                                ToValue = now
+                                FromValue = DecimalText.toDecimal before
+                                ToValue = DecimalText.toDecimal now
                             }
                         | _ -> None))
                 |> ToleranceReading.Compared
@@ -384,8 +391,8 @@ module ToleranceTrigger =
                 move.Trigger.Table
                 move.Trigger.Metric
                 move.Subject
-                (move.From.Period.From.ToString "o")
-                (move.To.Period.From.ToString "o")
+                ((Instant.toDateTime move.From.Period.From).ToString "o")
+                ((Instant.toDateTime move.To.Period.From).ToString "o")
                 move.FromValue
                 move.ToValue)
         |> List.sort
@@ -396,7 +403,10 @@ module ToleranceTrigger =
     let change (moves: ToleranceMove list) : Set<string> =
         Set.unionMany [
             Set.ofList (moves |> List.map moveEntry)
-            Set.ofList (moves |> List.map (fun move -> "period:" + move.To.Period.From.ToString "o"))
+            Set.ofList (
+                moves
+                |> List.map (fun move -> "period:" + (Instant.toDateTime move.To.Period.From).ToString "o")
+            )
             Set.singleton (figures moves)
         ]
 

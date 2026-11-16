@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -256,7 +258,7 @@ module FactQueryTool =
                     let policy =
                         metricDef
                         |> Option.map _.Staleness
-                        |> Option.defaultValue Grounding.UntilSuperseded
+                        |> Option.defaultValue StalenessPolicy.UntilSuperseded
 
                     let now = clock().ToUniversalTime()
 
@@ -272,19 +274,19 @@ module FactQueryTool =
                             let successor = chain |> List.tryFind (fun g -> g.Supersedes = Some fact.FactId)
 
                             let freshness, staleSince =
-                                match Freshness.derive policy fact successor.IsNone now with
+                                match Freshness.derive policy fact successor.IsNone (Instant.ofDateTime now) with
                                 | Fresh -> "Fresh", None
-                                | Stale since -> "Stale", Some(since.ToUniversalTime().ToString "o")
+                                | Stale since -> "Stale", Some((Instant.toDateTime since).ToString "o")
 
                             return {|
                                 factId = fact.FactId
-                                subject = SubjectRef.toString fact.Subject
+                                subject = Fact.subjectRendering fact.Subject
                                 metric = fact.Metric.Value
                                 rendering = FactRendering.renderFor metricDef fact.Value
-                                periodFrom = fact.Period.From.ToUniversalTime().ToString "o"
-                                periodTo = fact.Period.To.ToUniversalTime().ToString "o"
+                                periodFrom = (Instant.toDateTime fact.Period.From).ToString "o"
+                                periodTo = (Instant.toDateTime fact.Period.To).ToString "o"
                                 periodLabel = fact.Period.Label
-                                asOf = fact.AsOf.ToUniversalTime().ToString "o"
+                                asOf = (Instant.toDateTime fact.AsOf).ToString "o"
                                 freshness = freshness
                                 staleSince = staleSince
                                 supersededBy = successor |> Option.map _.FactId

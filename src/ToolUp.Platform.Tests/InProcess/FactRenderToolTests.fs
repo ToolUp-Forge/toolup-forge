@@ -47,7 +47,9 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AICompose
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -61,18 +63,8 @@ open ToolUp.Platform.Compose
 module RenderFixtures =
 
     let private metric (id: string) : MetricDefinition = {
-        Id = id
-        Name = id
-        Unit = "GBP"
-        Dimensionality = "currency"
-        Direction = HigherIsBetter
-        DisplayFormat = ""
-        Staleness = UntilSuperseded
-        ProducingOperation = None
-        CanonicalMethod = None
-        RecomputePolicy = None
-        RollUp = None
-        Context = None
+        KernelFixtures.metric id id "GBP" "currency" "" with
+            Direction = HigherIsBetter
     }
 
     let private sites: SubjectDefinition = {
@@ -156,11 +148,8 @@ module RenderFixtures =
     [<Literal>]
     let DistinctiveDigits = "987654"
 
-    let private dayExtent (d: DateTime) : TemporalExtent = {
-        From = d
-        To = d.AddDays 1.0
-        Label = None
-    }
+    let private dayExtent (d: DateTime) : TemporalExtent =
+        KernelFixtures.period d (d.AddDays 1.0) None
 
     /// The revenue on `day` (0-based) at `site`: day 2 at s2 is the
     /// distinctive value.
@@ -230,7 +219,7 @@ module RenderFixtures =
                     {
                         Subject = [ "north"; site ]
                         Period = dayExtent (day1.AddDays(float day))
-                        Values = Map.ofList [ column, Scalar(revenueOn day site) ]
+                        Values = Map.ofList [ column, KernelFixtures.scalar (revenueOn day site) ]
                     }
         ]
 

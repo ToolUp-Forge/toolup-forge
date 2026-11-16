@@ -169,31 +169,18 @@ module Canonical =
     let private normaliseSign (s: string) =
         s.Replace('−', '-').Replace('–', '-').Replace('—', '-').Replace('‒', '-')
 
-    /// Decimal-place precision implied by a .NET numeric format string, in
-    /// *fraction* space — so a percent format `"P1"` (one decimal on the
-    /// ×100 value) is three fraction decimals. `None` for an empty / verbatim
-    /// format (`""`) and for a custom format (`"£#,##0"`), which names no
-    /// precision. The verifier itself reads a fact's precision off its
-    /// rendering, so this is the declared precision a caller can read
-    /// without rendering.
-    let formatPrecision (fmt: string) : int option =
-        if String.IsNullOrWhiteSpace fmt then
-            None
-        else
-            let f = fmt.Trim()
-            let letter = Char.ToUpperInvariant f.[0]
-
-            let digits =
-                match Int32.TryParse(f.Substring 1) with
-                | true, n -> n
-                | _ -> 2 // .NET default for N/C/F/P when no digit is given
-
-            match letter with
-            | 'P' -> Some(digits + 2) // percent renders the ×100 value
-            | 'C'
-            | 'N'
-            | 'F' -> Some digits
-            | _ -> None
+    /// Decimal-place precision a metric's display format declares, in
+    /// *fraction* space — so a percent format with one fraction digit (one
+    /// decimal on the ×100 value) is three fraction decimals. `None` for the
+    /// verbatim format, which names no precision. The verifier itself reads a
+    /// fact's precision off its rendering, so this is the declared precision
+    /// a caller can read without rendering.
+    let formatPrecision (fmt: Fuaran.Facts.DisplayFormat) : int option =
+        match fmt.Style with
+        | Fuaran.Facts.DisplayStyle.Verbatim -> None
+        | Fuaran.Facts.DisplayStyle.Percent -> fmt.FractionDigits |> Option.map ((+) 2) // percent renders the ×100 value
+        | Fuaran.Facts.DisplayStyle.Number
+        | Fuaran.Facts.DisplayStyle.Currency -> fmt.FractionDigits
 
     /// Parse a raw numeric token to `(fractionValue, apparentPrecision)`.
     /// `apparentPrecision` is the decimal places in *fraction* space
@@ -467,7 +454,7 @@ module NumericFidelity =
 
                 match tolerance, Canonical.parse d.Rendering with
                 | Some tolerance, Some(value, _) when d.Inputs |> List.forall inScope.Contains ->
-                    Some(d, value, tolerance)
+                    Some(d, value, Fuaran.Facts.DecimalText.toDecimal tolerance)
                 | _ -> None)
 
         let derivedMatch (tokenPrecision: int) (tokenValue: decimal) =

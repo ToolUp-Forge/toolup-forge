@@ -12,7 +12,9 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Reporting.RendererRegistry
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -264,12 +266,12 @@ let exportDoorTests =
                     Path = [ "uk" ]
                 }
                 Metric = MetricRef "margin"
-                Value = Scalar 100m
-                Period = {
-                    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-                    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-                    Label = Some "Q2-2026"
-                }
+                Value = scalar 100m
+                Period =
+                    period
+                        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+                        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+                        (Some "Q2-2026")
                 Method = Computed("rollup", "1", "p0")
                 Evidence = {
                     ResultRef = None

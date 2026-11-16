@@ -940,21 +940,21 @@ let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
                     Hierarchy = "brand"
                     Path = [ "acme" ]
                 }
-                Metric = ToolUp.Facts.MetricRef "revenue"
-                Value = ToolUp.Facts.Scalar 10m
+                Metric = Fuaran.Facts.MetricRef "revenue"
+                Value = Fuaran.Facts.Scalar(Fuaran.Facts.DecimalText.ofDecimal 10m)
                 Period = {
-                    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-                    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+                    From = Fuaran.Facts.Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+                    To = Fuaran.Facts.Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
                     Label = Some "Q2-2026"
                 }
-                Method = ToolUp.Facts.Computed("rollup", "1", "p0")
+                Method = Fuaran.Facts.Computed("rollup", "1", "p0")
                 Evidence = {
                     ResultRef = None
                     InputHashes = [ inputHash ]
                     TriggerRef = None
                 }
                 Confidence = None
-                Disclosure = ToolUp.Facts.Surfaceable
+                Disclosure = Fuaran.Facts.Surfaceable
             }
 
             let original =

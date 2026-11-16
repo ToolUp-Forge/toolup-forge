@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Globalization
 open ToolUp.Platform
@@ -343,7 +345,7 @@ module PipelineAssertion =
                     Path = path.Split('>') |> List.ofArray
                 }
 
-                let named = SubjectRef.toString subject
+                let named = Fact.subjectRendering subject
                 let! value = numberOf valueCell |> orRefuse (PipelineRefusal.ValueMissing named)
 
                 let inputs =
@@ -356,8 +358,8 @@ module PipelineAssertion =
                     Subject = subject
                     Metric = request.AsMetric
                     Period = {
-                        From = evaluation.Request.PeriodFrom
-                        To = evaluation.Request.PeriodTo
+                        From = Instant.ofDateTime evaluation.Request.PeriodFrom
+                        To = Instant.ofDateTime evaluation.Request.PeriodTo
                         Label = None
                     }
                     Value = value
@@ -375,7 +377,7 @@ module PipelineAssertion =
                     match rowOf keyCell valueCell with
                     | Error e -> Error e
                     | Ok d when seen.Contains d.Subject ->
-                        Error(PipelineRefusal.SubjectRepeated(SubjectRef.toString d.Subject))
+                        Error(PipelineRefusal.SubjectRepeated(Fact.subjectRendering d.Subject))
                     | Ok d -> collect (seen.Add d.Subject) (d :: acc) rest
 
             return! collect Set.empty [] (List.zip (PipelineTool.cellsOf key table) (PipelineTool.cellsOf column table))

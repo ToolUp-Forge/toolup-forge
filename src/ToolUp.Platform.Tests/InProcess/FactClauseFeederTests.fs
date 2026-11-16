@@ -15,9 +15,11 @@ open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.Infra.IRagTelemetry
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI.SystemPromptBuilder
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.RAG
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
@@ -45,11 +47,11 @@ let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 /// Phase 821 — a `ResolvedScope` for a test scope id, through the same
 /// internal mint the scope-resolution middleware uses.
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draftFor (brand: string) (metric: string) (value: FactValue) : FactDraft = {
     Subject = {
@@ -74,18 +76,8 @@ let private registry: IMetricRegistry =
         {
             Module = "TestModule"
             Definition = {
-                Id = "revenue"
-                Name = "Revenue"
-                Unit = "GBP"
-                Dimensionality = "currency"
-                Direction = HigherIsBetter
-                DisplayFormat = "N0"
-                Staleness = UntilSuperseded
-                ProducingOperation = None
-                CanonicalMethod = None
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
+                metric "revenue" "Revenue" "GBP" "currency" "N0" with
+                    Direction = HigherIsBetter
             }
         }
     ] [
@@ -234,7 +226,7 @@ let projectionTests =
             let compiler = CountingCompiler [ candidate [ "acme" ] "revenue" ]
             let planner, store, _ = plannerOver compiler.Compiler
             let scope = newScope ()
-            assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+            assertFact store scope (draftFor "acme" "revenue" (scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
             let! planned = feeder.PlanClauses(TestScope.resolved scope, "user-1", "what was acme revenue?")
@@ -289,7 +281,7 @@ let projectionTests =
 
             let planner, store, _ = plannerOver compiler.Compiler
             let scope = newScope ()
-            assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+            assertFact store scope (draftFor "acme" "revenue" (scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
             let! planned = feeder.PlanClauses(TestScope.resolved scope, "user-1", "acme revenue and acme revenue?")
@@ -308,7 +300,7 @@ let promptPathTests =
             let compiler = CountingCompiler [ candidate [ "acme" ] "revenue" ]
             let planner, store, _ = plannerOver compiler.Compiler
             let scope = newScope ()
-            assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+            assertFact store scope (draftFor "acme" "revenue" (scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
             let pipeline = RecordingPipeline [ factMatch "fact-1" "£21,800"; chunkMatch ]
@@ -358,7 +350,7 @@ let promptPathTests =
             let compiler = CountingCompiler [ candidate [ "acme" ] "revenue" ]
             let planner, store, _ = plannerOver compiler.Compiler
             let seeded = newScope ()
-            assertFact store seeded (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+            assertFact store seeded (draftFor "acme" "revenue" (scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
 
@@ -448,7 +440,7 @@ let promptPathTests =
             let compiler = CountingCompiler [ candidate [ "acme" ] "revenue" ]
             let planner, store, _ = plannerOver compiler.Compiler
             let scope = newScope ()
-            assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+            assertFact store scope (draftFor "acme" "revenue" (scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
             let pipeline = RecordingPipeline [ chunkMatch ]
@@ -607,7 +599,7 @@ let reuseTests =
             let compiler = CountingCompiler [ candidate [ "acme" ] "revenue" ]
             let planner, store, events = plannerOver compiler.Compiler
             let scope = newScope ()
-            assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+            assertFact store scope (draftFor "acme" "revenue" (scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner
 
@@ -649,7 +641,7 @@ let reuseTests =
             let compiler = CountingCompiler [ candidate [ "acme" ] "revenue" ]
             let planner, store, _ = plannerOver compiler.Compiler
             let scope = newScope ()
-            assertFact store scope (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+            assertFact store scope (draftFor "acme" "revenue" (scalar 21800m)) |> ignore
 
             let feeder = AnswerPlanClausePlanner.createWithRetention planner 1
             let clausePlanner = feeder :> IFactClausePlanner

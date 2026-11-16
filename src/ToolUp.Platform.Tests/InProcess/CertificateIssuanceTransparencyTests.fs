@@ -14,8 +14,10 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.Platform.AuditSinks.LedgerChain
 open ToolUp.ArtefactSigning
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
@@ -50,11 +52,11 @@ let private scopeB = "team-other"
 
 let private jsonOptions = ToolUp.Platform.Audit.AuditLog.AuditEventJson.options
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft metric inputHash value : FactDraft = {
     Subject = {
@@ -62,7 +64,7 @@ let private draft metric inputHash value : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

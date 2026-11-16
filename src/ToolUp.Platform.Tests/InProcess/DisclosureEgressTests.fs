@@ -15,12 +15,14 @@ open ToolUp.Platform.Infra.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.RAG.IngestionTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open SharedTypes
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiNarrative
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -135,11 +137,11 @@ let predicateTests =
 
 // ── Gate over the real fact store (525.A/E + scope interplay) ─────
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draftWith (metric: string) (disclosure: Disclosure) : FactDraft = {
     Subject = {
@@ -147,7 +149,7 @@ let private draftWith (metric: string) (disclosure: Disclosure) : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef metric
-    Value = Scalar 100m
+    Value = scalar 100m
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -1362,14 +1364,14 @@ let heldFormTests =
             let scopeId = "team-" + Guid.NewGuid().ToString("N")
             let scope = resolvedAt scopeId ("container-" + scopeId)
 
-            assertFact store scopeId (derivedDraft "raw" (Series "dov-raw") (Restricted "licensed") [])
+            assertFact store scopeId (derivedDraft "raw" (Series(HostKey "dov-raw", None)) (Restricted "licensed") [])
             |> ignore
 
             let derived =
-                assertFact store scopeId (derivedDraft "derived" (Scalar 42m) Surfaceable [ "dov-raw" ])
+                assertFact store scopeId (derivedDraft "derived" (scalar 42m) Surfaceable [ "dov-raw" ])
 
             let clean =
-                assertFact store scopeId (derivedDraft "clean" (Scalar 7m) Surfaceable [ "hashZ" ])
+                assertFact store scopeId (derivedDraft "clean" (scalar 7m) Surfaceable [ "hashZ" ])
 
             let ids = [ derived.FactId; clean.FactId ]
 
@@ -1851,38 +1853,22 @@ type private PrincipalGate(inner: IFactDisclosureGate, outsider: string) =
 
 module private CompanionWorld =
 
-    let metric (id: string) : Grounding.MetricDefinition = {
-        Id = id
-        Name = id
-        Unit = "units"
-        Dimensionality = "count"
-        Direction = Grounding.HigherIsBetter
-        DisplayFormat = ""
-        Staleness = Grounding.UntilSuperseded
-        ProducingOperation = None
-        CanonicalMethod = None
-        RecomputePolicy = None
-        RollUp = None
-        Context = None
+    let countMetric (id: string) : MetricDefinition = {
+        metric id id "units" "count" "" with
+            Direction = HigherIsBetter
     }
 
     let registry: Grounding.IMetricRegistry =
         Grounding.MetricRegistry.build [
             {
                 Grounding.MetricRegistration.Module = "trade"
-                Definition = metric "revenue"
+                Definition = countMetric "revenue"
             }
             {
                 Grounding.MetricRegistration.Module = "trade"
-                Definition = metric "shoppers"
+                Definition = countMetric "shoppers"
             }
         ] []
-
-    let period: TemporalExtent = {
-        From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-        To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-        Label = Some "Q2-2026"
-    }
 
     type World = {
         Store: RecordingFactStore
@@ -1911,8 +1897,8 @@ module private CompanionWorld =
         let draft: FactDraft = {
             Subject = { Hierarchy = "brand"; Path = [ sku ] }
             Metric = MetricRef metric
-            Value = Scalar value
-            Period = period
+            Value = scalar value
+            Period = q2
             Method = Computed("rollup", "1", "p0")
             Evidence = {
                 ResultRef = None
@@ -2002,7 +1988,7 @@ let companionTests =
             Expect.equal (answer.GetProperty("withheldCount").GetInt32()) 1 "the hidden member is a count"
 
             Expect.equal
-                (w.Store.Queries |> List.choose _.Subject |> List.map SubjectRef.toString)
+                (w.Store.Queries |> List.choose _.Subject |> List.map Fact.subjectRendering)
                 [ "brand/sku-b" ]
                 "the only companion read is the visible member's"
 

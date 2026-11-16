@@ -11,6 +11,7 @@ open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -36,8 +37,8 @@ open ToolUp.Platform.Compose
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -77,18 +78,10 @@ let private registryDirected
         {
             Module = "TestModule"
             Definition = {
-                Id = "revenue"
-                Name = "Revenue"
-                Unit = "GBP"
-                Dimensionality = "currency"
-                Direction = direction
-                DisplayFormat = "N0"
-                Staleness = staleness
-                ProducingOperation = producingOp
-                CanonicalMethod = None
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
+                ToolUp.Platform.Tests.KernelFixtures.metric "revenue" "Revenue" "GBP" "currency" "N0" with
+                    Direction = direction
+                    Staleness = staleness
+                    ProducingOperation = producingOp
             }
         }
     ] [
@@ -202,7 +195,9 @@ let compilerTests =
                 plannerWith registry (compilerOf [ candidate "brand" [ "acme" ] "revenue" ]) utcNow
 
             let scope = newScope ()
-            let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let fact =
+                assertFact store scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
 
             let result = plan planner scope "what was acme revenue in Q2?"
 
@@ -225,7 +220,9 @@ let compilerTests =
                     utcNow
 
             let scope = newScope ()
-            let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let fact =
+                assertFact store scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
 
             let result = plan planner scope "revenue and share of voice for acme?"
 
@@ -264,7 +261,8 @@ let compilerTests =
 
             let scope = newScope ()
             // A real revenue fact exists — the typo must still refuse.
-            assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m)) |> ignore
+            assertFact store scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
+            |> ignore
 
             let result = plan planner scope "acme revenu?"
 
@@ -347,13 +345,15 @@ let resolutionTests =
         test "a stale head plans RefreshFact with the derived stale-since instant — typed, deferred" {
             let mutable nowRef = DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc)
             let window = TimeSpan.FromHours 1.0
-            let registry = Some(registryWith (FreshFor window) None)
+            let registry = Some(registryWith (FreshFor(int window.TotalSeconds)) None)
 
             let planner, store, _ =
                 plannerWith registry (compilerOf [ candidate "brand" [ "acme" ] "revenue" ]) (fun () -> nowRef)
 
             let scope = newScope ()
-            let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let fact =
+                assertFact store scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
 
             // Two hours later the one-hour window has elapsed.
             nowRef <- nowRef.AddHours 2.0
@@ -362,7 +362,7 @@ let resolutionTests =
 
             Expect.equal
                 (stepsOf result)
-                [ RefreshFact(fact.FactId, fact.AsOf + window) ]
+                [ RefreshFact(fact.FactId, Instant.toDateTime fact.AsOf + window) ]
                 "stale ⇒ RefreshFact carrying the fact id + the derived stale-since"
         }
 
@@ -428,7 +428,7 @@ let disclosureTests =
 
             let internalFact =
                 assertFact store scope {
-                    draft "revenue" [ "h1" ] (Scalar 19999m) with
+                    draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 19999m)) with
                         Disclosure = Internal
                 }
 
@@ -463,7 +463,7 @@ let disclosureTests =
 
             let restricted =
                 assertFact store scope {
-                    draft "revenue" [ "h1" ] (Scalar 555m) with
+                    draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 555m)) with
                         Disclosure = Restricted "licence-x"
                 }
 
@@ -482,11 +482,13 @@ let disclosureTests =
                 plannerWith registry (compilerOf [ candidate "brand" [ "acme" ] "revenue" ]) utcNow
 
             let scope = newScope ()
-            let surfaceable = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let surfaceable =
+                assertFact store scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
 
             // A competing Internal fact (different method ⇒ both current).
             assertFact store scope {
-                draft "revenue" [ "h2" ] (Scalar 19999m) with
+                draft "revenue" [ "h2" ] (Scalar(DecimalText.ofDecimal 19999m)) with
                     Method = Computed("intermediate", "1", "p1")
                     Disclosure = Internal
             }
@@ -513,9 +515,15 @@ let populationCompilerTests =
                 plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
 
             let scope = newScope ()
-            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
-            let beta = assertFact store scope (brandDraft "beta" (Scalar 200m))
-            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            let acme =
+                assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+
+            let beta =
+                assertFact store scope (brandDraft "beta" (Scalar(DecimalText.ofDecimal 200m)))
+
+            let gamma =
+                assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
 
             let result = plan planner scope "which brand has the highest revenue?"
             let aggregate = aggregateOf result
@@ -549,8 +557,12 @@ let populationCompilerTests =
                 plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
 
             let scope = newScope ()
-            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
-            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
+
+            let gamma =
+                assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
 
             let aggregate = aggregateOf (plan planner scope "which brand is best on revenue?")
 
@@ -574,9 +586,15 @@ let populationCompilerTests =
                 plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
 
             let scope = newScope ()
-            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
-            assertFact store scope (brandDraft "beta" (Scalar 200m)) |> ignore
-            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
+
+            assertFact store scope (brandDraft "beta" (Scalar(DecimalText.ofDecimal 200m)))
+            |> ignore
+
+            assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
+            |> ignore
 
             let aggregate = aggregateOf (plan planner scope "top 2 brands by revenue?")
 
@@ -599,9 +617,15 @@ let populationCompilerTests =
                 plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
 
             let scope = newScope ()
-            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
-            assertFact store scope (brandDraft "beta" (Scalar 200m)) |> ignore
-            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
+
+            assertFact store scope (brandDraft "beta" (Scalar(DecimalText.ofDecimal 200m)))
+            |> ignore
+
+            assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
+            |> ignore
 
             let aggregate =
                 aggregateOf (plan planner scope "how many brands reach at least 150?")
@@ -623,7 +647,9 @@ let populationCompilerTests =
                 plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
 
             let scope = newScope ()
-            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
 
             let result = plan planner scope "rank the brands sideways?"
 
@@ -641,7 +667,9 @@ let populationCompilerTests =
                 plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
 
             let scope = newScope ()
-            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
 
             match stepsOf (plan planner scope "which brand is best on revenue?") with
             | [ Refuse(PopulationNotOrderable(metricId, detail)) ] ->
@@ -668,8 +696,12 @@ let populationCompilerTests =
                 plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
 
             let scope = newScope ()
-            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
-            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            let acme =
+                assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+
+            assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
+            |> ignore
 
             let aggregate = aggregateOf (plan planner scope "brands by revenue, largest first")
 
@@ -729,7 +761,9 @@ let populationCompilerTests =
 
             let planner, store, _ = plannerCompiling registry compiler utcNow
             let scope = newScope ()
-            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+
+            let acme =
+                assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
 
             match stepsOf (plan planner scope "acme's revenue, and who is highest?") with
             | [ UseFact factId; UseAggregate aggregate ] ->
@@ -748,8 +782,13 @@ let populationCompilerTests =
                 plannerCompiling registry (QuestionCompiler.ofTriples (compilerOf candidates)) utcNow
 
             let scope = newScope ()
-            let a = assertFact storeA scope (draft "revenue" [ "h1" ] (Scalar 21800m))
-            let b = assertFact storeB scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let a =
+                assertFact storeA scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
+
+            let b =
+                assertFact storeB scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
+
             Expect.equal a.FactId b.FactId "harness sanity: content-addressed, so the same fact id both sides"
 
             Expect.equal
@@ -767,7 +806,9 @@ let populationResolutionTests =
         test "a wholly stale population keeps its ranking and carries the refresh in the RefreshFact shape" {
             let mutable nowRef = DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc)
             let window = TimeSpan.FromHours 1.0
-            let registry = Some(registryDirected HigherIsBetter (FreshFor window) None)
+
+            let registry =
+                Some(registryDirected HigherIsBetter (FreshFor(int window.TotalSeconds)) None)
 
             let planner, store, _ =
                 plannerCompiling
@@ -776,8 +817,12 @@ let populationResolutionTests =
                     (fun () -> nowRef)
 
             let scope = newScope ()
-            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
-            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            let acme =
+                assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+
+            let gamma =
+                assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
 
             nowRef <- nowRef.AddHours 2.0
 
@@ -793,7 +838,7 @@ let populationResolutionTests =
                 aggregate.Refresh
                 (Some {
                     FactId = acme.FactId
-                    StaleSince = min (acme.AsOf + window) (gamma.AsOf + window)
+                    StaleSince = min (Instant.toDateTime acme.AsOf + window) (Instant.toDateTime gamma.AsOf + window)
                 })
                 "the deferred refresh names the top-ranked member and the earliest derived stale-since"
 
@@ -805,7 +850,9 @@ let populationResolutionTests =
         test "a partially stale population resolves with a freshness caveat and no refresh" {
             let mutable nowRef = DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc)
             let window = TimeSpan.FromHours 3.0
-            let registry = Some(registryDirected HigherIsBetter (FreshFor window) None)
+
+            let registry =
+                Some(registryDirected HigherIsBetter (FreshFor(int window.TotalSeconds)) None)
 
             let planner, store, _ =
                 plannerCompiling
@@ -814,12 +861,16 @@ let populationResolutionTests =
                     (fun () -> nowRef)
 
             let scope = newScope ()
-            assertFact store scope (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
 
             // Four hours on, the first fact is past its window; assert the
             // second here so it is still inside its own.
             nowRef <- nowRef.AddHours 4.0
-            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
+            |> ignore
 
             let aggregate =
                 aggregateOf (plan planner scope "which brand has the highest revenue?")
@@ -895,15 +946,18 @@ let populationDisclosureTests =
                 plannerCompiling registry (populationCompilerOf [ PopulationTriple.create "brand" "revenue" ]) utcNow
 
             let scope = newScope ()
-            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
+
+            let acme =
+                assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
 
             assertFact store scope {
-                brandDraft "beta" (Scalar 200m) with
+                brandDraft "beta" (Scalar(DecimalText.ofDecimal 200m)) with
                     Disclosure = Internal
             }
             |> ignore
 
-            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+            let gamma =
+                assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
 
             let! result = planner.Plan(TestScope.resolved scope, "user-1", "which brand has the highest revenue?")
             let aggregate = aggregateOf result
@@ -947,7 +1001,7 @@ let populationDisclosureTests =
 
             for brand, value in [ "acme", 300m; "gamma", 100m ] do
                 assertFact store scope {
-                    brandDraft brand (Scalar value) with
+                    brandDraft brand (Scalar(DecimalText.ofDecimal value)) with
                         Disclosure = Restricted "licence-x"
                 }
                 |> ignore
@@ -972,7 +1026,8 @@ let populationDisclosureTests =
 
             let ranked =
                 [ "acme", 300m; "beta", 200m; "gamma", 100m ]
-                |> List.map (fun (brand, value) -> assertFact store scope (brandDraft brand (Scalar value)))
+                |> List.map (fun (brand, value) ->
+                    assertFact store scope (brandDraft brand (Scalar(DecimalText.ofDecimal value))))
 
             let restricted = ranked[1].FactId
 
@@ -1096,7 +1151,7 @@ let chainTests =
             // with the lineage link recorded — the full 524 island set.
             let fact =
                 assertFact store scope {
-                    draft "revenue" [ "obj-1" ] (Scalar 21800m) with
+                    draft "revenue" [ "obj-1" ] (Scalar(DecimalText.ofDecimal 21800m)) with
                         Evidence = {
                             ResultRef = Some "res-1"
                             InputHashes = [ "obj-1" ]
@@ -1199,8 +1254,12 @@ let chainTests =
                 plannerCompiling registry (populationCompilerOf [ triple ]) utcNow
 
             let scope = newScope ()
-            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
-            let gamma = assertFact store scope (brandDraft "gamma" (Scalar 100m))
+
+            let acme =
+                assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+
+            let gamma =
+                assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
 
             let! compiled = planner.Plan(TestScope.resolved scope, "user-1", "which brand has the highest revenue?")
             do! planner.Record(TestScope.resolved scope, "msg-agg", compiled)
@@ -1377,7 +1436,8 @@ let composeTests =
             let store = sp.GetRequiredService<IFactStore>()
             let graph = sp.GetRequiredService<IProvenanceGraph>()
 
-            let stored = assertFact store scope (draft "revenue" [ "hash-a" ] (Scalar 100m))
+            let stored =
+                assertFact store scope (draft "revenue" [ "hash-a" ] (Scalar(DecimalText.ofDecimal 100m)))
 
             let! chain = graph.GetChain(TestScope.resolved scope, FactRef stored.FactId, Upstream, 3)
 
@@ -1452,7 +1512,9 @@ let composeTests =
 
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
-            let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let fact =
+                assertFact store scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
             let! result = planner.Plan(TestScope.resolved scope, "user-1", "what was acme revenue in Q2?")
@@ -1505,8 +1567,12 @@ let populationComposeTests =
 
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
-            let acme = assertFact store scope (brandDraft "acme" (Scalar 300m))
-            assertFact store scope (brandDraft "gamma" (Scalar 100m)) |> ignore
+
+            let acme =
+                assertFact store scope (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+
+            assertFact store scope (brandDraft "gamma" (Scalar(DecimalText.ofDecimal 100m)))
+            |> ignore
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
             let! result = planner.Plan(TestScope.resolved scope, "user-1", "which brand has the highest revenue?")
@@ -1544,7 +1610,9 @@ let populationComposeTests =
 
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
-            let fact = assertFact store scope (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let fact =
+                assertFact store scope (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
 
             let planner = sp.GetRequiredService<IAnswerPlanner>()
             let! result = planner.Plan(TestScope.resolved scope, "user-1", "what was acme revenue?")
@@ -1740,7 +1808,9 @@ let typedScopeTests =
         <| async {
             let planner, inner, calls = recordedPlanner ()
             let scopeId = newScope ()
-            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            assertFact inner scopeId (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
 
             let! result = planner.Plan(TestScope.resolved scopeId, "user-1", "acme revenue, and who leads?")
 
@@ -1768,7 +1838,9 @@ let typedScopeTests =
                 plannerWith registry (compilerOf [ candidate "brand" [ "acme" ] "revenue" ]) utcNow
 
             let scopeId = newScope ()
-            let fact = assertFact store scopeId (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let fact =
+                assertFact store scopeId (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
 
             let! typed = planner.Plan(TestScope.resolved scopeId, "user-1", "acme revenue?")
 
@@ -1782,7 +1854,7 @@ let typedScopeTests =
             let planner, store, _ =
                 plannerWith registry (compilerOf [ candidate "brand" [ "acme" ] "revenue" ]) utcNow
 
-            assertFact store (newScope ()) (draft "revenue" [ "h1" ] (Scalar 21800m))
+            assertFact store (newScope ()) (draft "revenue" [ "h1" ] (Scalar(DecimalText.ofDecimal 21800m)))
             |> ignore
 
             let! result = planner.Plan(ResolvedScope.anonymous, "user-1", "acme revenue?")
@@ -1797,7 +1869,9 @@ let typedScopeTests =
         <| async {
             let planner, inner, calls = recordedPlanner ()
             let scopeId = newScope ()
-            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            assertFact inner scopeId (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
 
             let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
             let! planned = feeder.PlanClauses(TestScope.resolved scopeId, "user-1", "acme revenue?")
@@ -1929,7 +2003,10 @@ let retentionTests =
         <| async {
             let planner, inner, _ = recordedPlanner ()
             let scopeId = newScope ()
-            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            assertFact inner scopeId (brandDraft "acme" (Scalar(DecimalText.ofDecimal 300m)))
+            |> ignore
+
             let! template = planner.Plan(TestScope.resolved scopeId, "user-1", "acme revenue?")
             let recorded = System.Collections.Concurrent.ConcurrentBag<string>()
             let bound = 4

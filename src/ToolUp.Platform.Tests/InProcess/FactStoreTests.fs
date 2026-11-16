@@ -31,7 +31,9 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Remoting.Json.SystemTextJson
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -121,11 +123,11 @@ let private surfaceRegistryFactory (registry: IMetricRegistry) : IFactStore * st
 let surfacePopulationRegistryTests =
     IFactStoreContract.populationRegistryTests "BlobFactStore (metric surface)" surfaceRegistryFactory
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private scalarDraft inputHash value : FactDraft = {
     Subject = {
@@ -133,7 +135,7 @@ let private scalarDraft inputHash value : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -184,22 +186,37 @@ let private syntheticEvidence: Evidence = {
 
 let private syntheticMethod = Computed("rollup", "1", "p0")
 
-let private syntheticFact (index: int) (value: FactValue) : Fact = {
-    FactId = sprintf "f%08d" index
-    Subject = {
-        Hierarchy = "geography"
-        Path = [ "eu"; sprintf "sku-%06d" index ]
-    }
-    Metric = MetricRef "elasticity"
-    Value = value
-    Period = q2
-    AsOf = baseAsOf
-    Method = syntheticMethod
-    Evidence = syntheticEvidence
-    Confidence = None
-    Supersedes = None
-    Disclosure = Disclosure.Surfaceable
+/// `fact` under its own content address (`Fact.computeFor`). A store reads a
+/// fact only when its id is the digest of its members, so a fact built here
+/// and then given a different subject, metric, period, method or evidence is
+/// re-addressed before it is written or compared with one read back.
+let private identified (fact: Fact) : Fact = {
+    fact with
+        FactId = Fact.computeFor fact
 }
+
+/// A head per index. Its evidence names the index, so two synthetic facts in
+/// one lineage (a head and its successor) are two facts, not one.
+let private syntheticFact (index: int) (value: FactValue) : Fact =
+    identified {
+        FactId = ""
+        Subject = {
+            Hierarchy = "geography"
+            Path = [ "eu"; sprintf "sku-%06d" index ]
+        }
+        Metric = MetricRef "elasticity"
+        Value = value
+        Period = q2
+        AsOf = KernelFixtures.instant baseAsOf
+        Method = syntheticMethod
+        Evidence = {
+            syntheticEvidence with
+                InputHashes = [ sprintf "h%d" index ]
+        }
+        Confidence = None
+        Supersedes = None
+        Disclosure = Disclosure.Surfaceable
+    }
 
 /// The stated cardinality of the operator requirement this tier exists
 /// for. `(i * 7) % PopulationSize` is a bijection over `0 .. size - 1`
@@ -222,7 +239,7 @@ let populationScaleTests =
 
             let population = [
                 for i in 0 .. PopulationSize - 1 do
-                    syntheticFact i (Scalar(decimal ((i * 7) % PopulationSize)))
+                    syntheticFact i (KernelFixtures.scalar (decimal ((i * 7) % PopulationSize)))
 
                 for i in PopulationSize .. PopulationSize + AbsentMembers - 1 do
                     syntheticFact i (Absent "no data loaded for this period")
@@ -234,7 +251,9 @@ let populationScaleTests =
             let ranked = PopulationRanking.rank HighestFirst population
 
             let stats =
-                PopulationStats.ofPopulation (fun f -> Freshness.derive UntilSuperseded f true baseAsOf) population
+                PopulationStats.ofPopulation
+                    (fun f -> Freshness.derive UntilSuperseded f true (KernelFixtures.instant baseAsOf))
+                    population
 
             let top = ranked |> List.truncate PopulationQuery.MaxTopK
             stopwatch.Stop()
@@ -257,7 +276,11 @@ let populationScaleTests =
 
             Expect.equal
                 (top |> List.truncate 3 |> List.map _.Value)
-                [ Scalar 299999m; Scalar 299998m; Scalar 299997m ]
+                [
+                    KernelFixtures.scalar 299999m
+                    KernelFixtures.scalar 299998m
+                    KernelFixtures.scalar 299997m
+                ]
                 "the ceiling page is the true top of the population"
 
             Expect.equal (List.length top) PopulationQuery.MaxTopK "the ranking is bounded by the ceiling"
@@ -290,7 +313,7 @@ let populationScaleTests =
                                 Path = [ "eu"; sprintf "sku-%06d" i ]
                             }
                             Metric = MetricRef "elasticity"
-                            Value = Scalar(decimal ((i * 7) % seedSize))
+                            Value = KernelFixtures.scalar (decimal ((i * 7) % seedSize))
                             Period = q2
                             Method = syntheticMethod
                             Evidence = syntheticEvidence
@@ -336,11 +359,11 @@ let populationScaleTests =
                 Expect.equal
                     (population.Ranked |> List.map _.Value)
                     [
-                        Scalar(decimal (seedSize - 1))
-                        Scalar(decimal (seedSize - 2))
-                        Scalar(decimal (seedSize - 3))
-                        Scalar(decimal (seedSize - 4))
-                        Scalar(decimal (seedSize - 5))
+                        KernelFixtures.scalar (decimal (seedSize - 1))
+                        KernelFixtures.scalar (decimal (seedSize - 2))
+                        KernelFixtures.scalar (decimal (seedSize - 3))
+                        KernelFixtures.scalar (decimal (seedSize - 4))
+                        KernelFixtures.scalar (decimal (seedSize - 5))
                     ]
                     "the top of the population, ordered"
 
@@ -628,14 +651,15 @@ let auditAndFreshnessTests =
 
         test "Freshness.derive honours FreshFor / UntilSuperseded without storing a flag" {
             let asOf = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+            let at (d: DateTime) = KernelFixtures.instant d
 
             let fact: Fact = {
                 FactId = "x"
                 Subject = { Hierarchy = "h"; Path = [] }
                 Metric = MetricRef "m"
-                Value = Scalar 1m
+                Value = KernelFixtures.scalar 1m
                 Period = q2
-                AsOf = asOf
+                AsOf = at asOf
                 Method = Computed("o", "1", "p")
                 Evidence = {
                     ResultRef = None
@@ -647,22 +671,26 @@ let auditAndFreshnessTests =
                 Disclosure = Disclosure.Surfaceable
             }
 
-            let policy = FreshFor(TimeSpan.FromDays 1.0)
-            Expect.equal (Freshness.derive policy fact true (asOf.AddHours 12.0)) Fresh "within window → Fresh"
+            let policy = FreshFor 86_400 // one day
 
-            match Freshness.derive policy fact true (asOf.AddDays 2.0) with
-            | Stale _ -> ()
-            | Fresh -> failtest "past the window → Stale"
+            Expect.equal
+                (Freshness.derive policy fact true (at (asOf.AddHours 12.0)))
+                FactFreshness.Fresh
+                "within window → Fresh"
+
+            match Freshness.derive policy fact true (at (asOf.AddDays 2.0)) with
+            | FactFreshness.Stale _ -> ()
+            | FactFreshness.Fresh -> failtest "past the window → Stale"
 
             // UntilSuperseded: fresh exactly while current.
             Expect.equal
-                (Freshness.derive UntilSuperseded fact true (asOf.AddDays 999.0))
-                Fresh
+                (Freshness.derive UntilSuperseded fact true (at (asOf.AddDays 999.0)))
+                FactFreshness.Fresh
                 "current → Fresh regardless of age"
 
-            match Freshness.derive UntilSuperseded fact false (asOf.AddSeconds 1.0) with
-            | Stale _ -> ()
-            | Fresh -> failtest "superseded → Stale"
+            match Freshness.derive UntilSuperseded fact false (at (asOf.AddSeconds 1.0)) with
+            | FactFreshness.Stale _ -> ()
+            | FactFreshness.Fresh -> failtest "superseded → Stale"
         }
     ]
 
@@ -804,18 +832,9 @@ let private steppingClock (start: DateTime) : unit -> DateTime =
         value
 
 let private elasticityMetric (canonical: string option) : MetricDefinition = {
-    Id = "elasticity"
-    Name = "Elasticity"
-    Unit = "ratio"
-    Dimensionality = "ratio"
-    Direction = HigherIsBetter
-    DisplayFormat = "N2"
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = canonical
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric "elasticity" "Elasticity" "ratio" "ratio" "N2" with
+        Direction = HigherIsBetter
+        CanonicalMethod = canonical
 }
 
 let private surfaceRegistry: IMetricRegistry =
@@ -881,14 +900,23 @@ let private seed702 (store: IFactStore) (scope: string) = async {
             assertSeed
                 store
                 scope
-                (draftAt [ "eu"; sprintf "sku-%06d" i ] "elasticity" rollup (Scalar(decimal (10 * i))) (sprintf "h%d" i))
+                (draftAt
+                    [ "eu"; sprintf "sku-%06d" i ]
+                    "elasticity"
+                    rollup
+                    (KernelFixtures.scalar (decimal (10 * i)))
+                    (sprintf "h%d" i))
 
     // A supersession: sku-000000's head is replaced, and the replaced fact
     // must never rank from either path.
-    do! assertSeed store scope (draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (Scalar 95m) "h0-v2")
+    do! assertSeed store scope (draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (KernelFixtures.scalar 95m) "h0-v2")
 
     // A competing method on sku-000001 — never merged (D19).
-    do! assertSeed store scope (draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar 77m) "cfo-1")
+    do!
+        assertSeed
+            store
+            scope
+            (draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (KernelFixtures.scalar 77m) "cfo-1")
 
     // Non-comparable shapes: counted in the summary, never ranked.
     do! assertSeed store scope (draftAt [ "eu"; "sku-000006" ] "elasticity" rollup (Absent "no data loaded") "h6")
@@ -896,15 +924,20 @@ let private seed702 (store: IFactStore) (scope: string) = async {
 
     // A different depth — legal, rarely meaningful, and exactly what
     // `Level` exists to exclude.
-    do! assertSeed store scope (draftAt [ "eu" ] "elasticity" rollup (Scalar 500m) "hroot")
+    do! assertSeed store scope (draftAt [ "eu" ] "elasticity" rollup (KernelFixtures.scalar 500m) "hroot")
 
     // A neighbouring metric in the same scope.
-    do! assertSeed store scope (draftAt [ "eu"; "sku-000000" ] "revenue" rollup (Scalar 1234m) "rev0")
+    do! assertSeed store scope (draftAt [ "eu"; "sku-000000" ] "revenue" rollup (KernelFixtures.scalar 1234m) "rev0")
 
     // Every character the surface's wire format escapes, plus the empty
     // path segment.
-    do! assertSeed store scope (draftAt [ "eu"; "we>ird\tta\\b\nnl" ] "elasticity" rollup (Scalar 42m) "hodd")
-    do! assertSeed store scope (draftAt [ "eu"; "" ] "elasticity" rollup (Scalar 43m) "hempty")
+    do!
+        assertSeed
+            store
+            scope
+            (draftAt [ "eu"; "we>ird\tta\\b\nnl" ] "elasticity" rollup (KernelFixtures.scalar 42m) "hodd")
+
+    do! assertSeed store scope (draftAt [ "eu"; "" ] "elasticity" rollup (KernelFixtures.scalar 43m) "hempty")
 }
 
 /// The query matrix the two read models are compared over. Every clause
@@ -1003,11 +1036,12 @@ let private queryMatrix: (string * PopulationQuery) list =
                 Level = Some 2
                 Ordering = Descending
                 PeriodOverlaps =
-                    Some {
-                        From = DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                        To = DateTime(2020, 2, 1, 0, 0, 0, DateTimeKind.Utc)
-                        Label = None
-                    }
+                    Some(
+                        KernelFixtures.period
+                            (DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+                            (DateTime(2020, 2, 1, 0, 0, 0, DateTimeKind.Utc))
+                            None
+                    )
         }
     ]
 
@@ -1048,20 +1082,22 @@ let private emptySnapshot (width: int) : FactSurfaceSnapshot = {
 }
 
 /// A head per index, under `metric`, at a distinct transaction time.
-let private headAt (metric: string) (index: int) : Fact = {
-    syntheticFact index (Scalar(decimal index)) with
-        Metric = MetricRef metric
-        AsOf = baseAsOf.AddSeconds(float index)
-}
+let private headAt (metric: string) (index: int) : Fact =
+    identified {
+        syntheticFact index (KernelFixtures.scalar (decimal index)) with
+            Metric = MetricRef metric
+            AsOf = KernelFixtures.instant (baseAsOf.AddSeconds(float index))
+    }
 
 /// A fact superseding `prior`, later than it.
-let private successorOf (index: int) (prior: Fact) : Fact = {
-    syntheticFact index (Scalar(decimal index)) with
-        Subject = prior.Subject
-        Metric = prior.Metric
-        AsOf = prior.AsOf.AddDays 1.0
-        Supersedes = Some prior.FactId
-}
+let private successorOf (index: int) (prior: Fact) : Fact =
+    identified {
+        syntheticFact index (KernelFixtures.scalar (decimal index)) with
+            Subject = prior.Subject
+            Metric = prior.Metric
+            AsOf = KernelFixtures.instant ((Instant.toDateTime prior.AsOf).AddDays 1.0)
+            Supersedes = Some prior.FactId
+    }
 
 let private surfaceBlobSize (storage: IBlobStorage) (scope: string) = async {
     let! r = storage.Download(scope, FactSurface.blobName "elasticity")
@@ -1072,9 +1108,14 @@ let private surfaceBlobSize (storage: IBlobStorage) (scope: string) = async {
         | Error e -> failtestf "no surface blob: %s" e
 }
 
+/// A fact as the store writes it: the specification's encoding.
+let private factBytes (fact: Fact) : byte[] =
+    match FactWire.writeFact fact with
+    | Ok text -> Encoding.UTF8.GetBytes text
+    | Error refusal -> failtestf "fact %s cannot be written: %s" fact.FactId (Refusal.describe refusal)
+
 let private writeRaw (storage: IBlobStorage) (scope: string) (fact: Fact) = async {
-    let payload =
-        JsonSerializer.Serialize(fact, PlatformJson.options) |> Encoding.UTF8.GetBytes
+    let payload = factBytes fact
 
     let! written = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
 
@@ -1130,7 +1171,12 @@ let metricSurfaceTests =
             do! expectSameAnswers "after seeding through the surface" enumerating surfaced scope
 
             // A supersession: the replaced head must leave the projection.
-            do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000003" ] "elasticity" rollup (Scalar 999m) "h3-v2")
+            do!
+                assertSeed
+                    surfaced
+                    scope
+                    (draftAt [ "eu"; "sku-000003" ] "elasticity" rollup (KernelFixtures.scalar 999m) "h3-v2")
+
             do! expectSameAnswers "after supersession" enumerating surfaced scope
 
             // A competing method: a second row under one subject, never a
@@ -1139,17 +1185,32 @@ let metricSurfaceTests =
                 assertSeed
                     surfaced
                     scope
-                    (draftAt [ "eu"; "sku-000004" ] "elasticity" (HumanAsserted "cfo") (Scalar 61m) "cfo-4")
+                    (draftAt
+                        [ "eu"; "sku-000004" ]
+                        "elasticity"
+                        (HumanAsserted "cfo")
+                        (KernelFixtures.scalar 61m)
+                        "cfo-4")
 
             do! expectSameAnswers "after competition" enumerating surfaced scope
 
             // A neighbouring metric's fact: absorbed by the census, never a
             // row in this metric's population.
-            do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000005" ] "revenue" rollup (Scalar 7m) "rev5")
+            do!
+                assertSeed
+                    surfaced
+                    scope
+                    (draftAt [ "eu"; "sku-000005" ] "revenue" rollup (KernelFixtures.scalar 7m) "rev5")
+
             do! expectSameAnswers "after a neighbouring metric" enumerating surfaced scope
 
             // And a brand-new subject.
-            do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000009" ] "elasticity" rollup (Scalar 88m) "h9")
+            do!
+                assertSeed
+                    surfaced
+                    scope
+                    (draftAt [ "eu"; "sku-000009" ] "elasticity" rollup (KernelFixtures.scalar 88m) "h9")
+
             do! expectSameAnswers "after a new subject" enumerating surfaced scope
         }
 
@@ -1194,18 +1255,17 @@ let metricSurfaceTests =
             // transaction time is in the read's past, as a real assertion's
             // would be — the FUTURE-stamped case is its own test below,
             // because it exercises the opposite branch.
-            let smuggled = {
-                syntheticFact 424242 (Scalar 777m) with
-                    Subject = {
-                        Hierarchy = "geography"
-                        Path = [ "eu"; "sku-424242" ]
-                    }
-                    AsOf = baseAsOf
-            }
+            let smuggled =
+                identified {
+                    syntheticFact 424242 (KernelFixtures.scalar 777m) with
+                        Subject = {
+                            Hierarchy = "geography"
+                            Path = [ "eu"; "sku-424242" ]
+                        }
+                        AsOf = KernelFixtures.instant baseAsOf
+                }
 
-            let payload =
-                JsonSerializer.Serialize(smuggled, PlatformJson.options)
-                |> Encoding.UTF8.GetBytes
+            let payload = factBytes smuggled
 
             let! written = storage.Upload(scope, sprintf "_facts/%s.json" smuggled.FactId, payload)
 
@@ -1258,17 +1318,17 @@ let metricSurfaceTests =
             do! seed702 surfaced scope
             do! expectSameAnswers "converged" enumerating surfaced scope
 
-            let ahead = {
-                syntheticFact 999999 (Scalar 888m) with
-                    Subject = {
-                        Hierarchy = "geography"
-                        Path = [ "eu"; "sku-999999" ]
-                    }
-                    AsOf = baseAsOf.AddDays 3650.0
-            }
+            let ahead =
+                identified {
+                    syntheticFact 999999 (KernelFixtures.scalar 888m) with
+                        Subject = {
+                            Hierarchy = "geography"
+                            Path = [ "eu"; "sku-999999" ]
+                        }
+                        AsOf = KernelFixtures.instant (baseAsOf.AddDays 3650.0)
+                }
 
-            let payload =
-                JsonSerializer.Serialize(ahead, PlatformJson.options) |> Encoding.UTF8.GetBytes
+            let payload = factBytes ahead
 
             let! written = storage.Upload(scope, sprintf "_facts/%s.json" ahead.FactId, payload)
 
@@ -1331,7 +1391,7 @@ let metricSurfaceTests =
             let! first =
                 surfaced.Assert(
                     TestScope.resolved scope,
-                    draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (Scalar 5m) "v1"
+                    draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (KernelFixtures.scalar 5m) "v1"
                 )
 
             let firstFact =
@@ -1339,7 +1399,11 @@ let metricSurfaceTests =
                 | Ok f -> f
                 | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
 
-            do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (Scalar 6m) "v2")
+            do!
+                assertSeed
+                    surfaced
+                    scope
+                    (draftAt [ "eu"; "sku-000000" ] "elasticity" rollup (KernelFixtures.scalar 6m) "v2")
 
             // A replay instant between the two assertions: the head that
             // was current THEN is one the surface has already dropped, so
@@ -1348,7 +1412,7 @@ let metricSurfaceTests =
                 PopulationQuery.create elasticity "geography" with
                     Level = Some 2
                     Ordering = Descending
-                    AsOf = Some(firstFact.AsOf.AddMilliseconds 1.0)
+                    AsOf = Some((Instant.toDateTime firstFact.AsOf).AddMilliseconds 1.0)
             }
 
             let! viaLog = enumerating.QueryPopulation(TestScope.resolved scope, historical)
@@ -1360,7 +1424,7 @@ let metricSurfaceTests =
             | Ok population ->
                 Expect.equal
                     (population.Ranked |> List.map _.Value)
-                    [ Scalar 5m ]
+                    [ KernelFixtures.scalar 5m ]
                     "the replay ranks the head that was current then, which the surface no longer holds"
         }
 
@@ -1387,7 +1451,7 @@ let metricSurfaceTests =
                             [ "eu"; sprintf "sku-%06d" i ]
                             "elasticity"
                             rollup
-                            (Scalar(decimal ((i * 7) % seedSize)))
+                            (KernelFixtures.scalar (decimal ((i * 7) % seedSize)))
                             (sprintf "h%d" i))
 
             let query = {
@@ -1484,7 +1548,7 @@ let metricSurfaceTests =
                 added
                 successorOf 302 heads[7]
                 addedThenRetired
-                {
+                identified {
                     headAt "elasticity" 303 with
                         Subject = heads[9].Subject
                         Method = HumanAsserted "cfo"
@@ -1571,7 +1635,7 @@ let metricSurfaceTests =
                             [ "eu"; sprintf "sku-%06d" i ]
                             "elasticity"
                             rollup
-                            (Scalar(decimal i))
+                            (KernelFixtures.scalar (decimal i))
                             (sprintf "e%d" i))
 
             do! expectSameAnswers "seeded" enumerating surfaced scope
@@ -1589,7 +1653,7 @@ let metricSurfaceTests =
                                 [ "eu"; sprintf "sku-%06d" i ]
                                 "revenue"
                                 rollup
-                                (Scalar(decimal (i + round)))
+                                (KernelFixtures.scalar (decimal (i + round)))
                                 (sprintf "r%d-%d" round i))
 
             do! expectSameAnswers "after the neighbour's refresh" enumerating surfaced scope
@@ -1646,17 +1710,27 @@ let metricSurfaceTests =
             // Replica B writes through its OWN maintenance — a supersession
             // and a new subject — and then a fact reaches the log through
             // neither replica.
-            do! assertSeed replicaB scope (draftAt [ "eu"; "sku-000002" ] "elasticity" rollup (Scalar 612m) "b-v2")
-            do! assertSeed replicaB scope (draftAt [ "eu"; "sku-000077" ] "elasticity" rollup (Scalar 611m) "b-77")
+            do!
+                assertSeed
+                    replicaB
+                    scope
+                    (draftAt [ "eu"; "sku-000002" ] "elasticity" rollup (KernelFixtures.scalar 612m) "b-v2")
 
-            let smuggled = {
-                syntheticFact 777777 (Scalar 613m) with
-                    Subject = {
-                        Hierarchy = "geography"
-                        Path = [ "eu"; "sku-777777" ]
-                    }
-                    AsOf = baseAsOf
-            }
+            do!
+                assertSeed
+                    replicaB
+                    scope
+                    (draftAt [ "eu"; "sku-000077" ] "elasticity" rollup (KernelFixtures.scalar 611m) "b-77")
+
+            let smuggled =
+                identified {
+                    syntheticFact 777777 (KernelFixtures.scalar 613m) with
+                        Subject = {
+                            Hierarchy = "geography"
+                            Path = [ "eu"; "sku-777777" ]
+                        }
+                        AsOf = KernelFixtures.instant baseAsOf
+                }
 
             do! writeRaw storage scope smuggled
 
@@ -1674,7 +1748,11 @@ let metricSurfaceTests =
 
                 Expect.containsAll
                     values
-                    [ Scalar 613m; Scalar 612m; Scalar 611m ]
+                    [
+                        KernelFixtures.scalar 613m
+                        KernelFixtures.scalar 612m
+                        KernelFixtures.scalar 611m
+                    ]
                     "both replicas' writes and the out-of-band one rank"
 
             do! expectSameAnswers "replica A after replica B" enumerating replicaA scope
@@ -1689,12 +1767,17 @@ let metricSurfaceTests =
             let scope = newScope ()
 
             do! seed702 surfaced scope
-            do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (Scalar 401m) "e40-v1")
+
+            do!
+                assertSeed
+                    surfaced
+                    scope
+                    (draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (KernelFixtures.scalar 401m) "e40-v1")
 
             let! latest =
                 surfaced.Assert(
                     TestScope.resolved scope,
-                    draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (Scalar 402m) "e40-v2"
+                    draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (KernelFixtures.scalar 402m) "e40-v2"
                 )
 
             let erased =
@@ -1715,7 +1798,7 @@ let metricSurfaceTests =
             do!
                 writeRaw storage scope {
                     headAt "elasticity" 404040 with
-                        AsOf = baseAsOf
+                        AsOf = KernelFixtures.instant baseAsOf
                 }
 
             // Verify the probe: the erased head is gone from the log, so the
@@ -1851,10 +1934,11 @@ let metricSurfaceTests =
 [<Literal>]
 let private SurfaceScaleSize = 100_000
 
-let private scaleFact (index: int) : Fact = {
-    syntheticFact index (Scalar(decimal ((index * 7) % SurfaceScaleSize))) with
-        Metric = MetricRef "elasticity"
-}
+let private scaleFact (index: int) : Fact =
+    identified {
+        syntheticFact index (KernelFixtures.scalar (decimal ((index * 7) % SurfaceScaleSize))) with
+            Metric = MetricRef "elasticity"
+    }
 
 let metricSurfaceScaleTests =
     testList "Phase 702 metric surface at scale" [
@@ -1872,12 +1956,11 @@ let metricSurfaceScaleTests =
             let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
             let storage = counting :> IBlobStorage
             let scope = newScope ()
-            let json = PlatformJson.options
             let seeding = Diagnostics.Stopwatch.StartNew()
 
             for i in 0 .. SurfaceScaleSize - 1 do
                 let fact = scaleFact i
-                let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+                let payload = factBytes fact
                 let! _ = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
                 ()
 
@@ -1951,9 +2034,9 @@ let metricSurfaceScaleTests =
                 Expect.equal
                     (population.Ranked |> List.truncate 3 |> List.map _.Value)
                     [
-                        Scalar(decimal (SurfaceScaleSize - 1))
-                        Scalar(decimal (SurfaceScaleSize - 2))
-                        Scalar(decimal (SurfaceScaleSize - 3))
+                        KernelFixtures.scalar (decimal (SurfaceScaleSize - 1))
+                        KernelFixtures.scalar (decimal (SurfaceScaleSize - 2))
+                        KernelFixtures.scalar (decimal (SurfaceScaleSize - 3))
                     ]
                     "the page is the true top of the population"
 
@@ -2020,10 +2103,13 @@ let metricSurfaceScaleTests =
             // A neighbouring metric of the same size, written into the log.
             for i in 0 .. SurfaceScaleSize - 1 do
                 do!
-                    writeRaw storage scope {
-                        scaleFact (SurfaceScaleSize + i) with
-                            Metric = MetricRef "revenue"
-                    }
+                    writeRaw
+                        storage
+                        scope
+                        (identified {
+                            scaleFact (SurfaceScaleSize + i) with
+                                Metric = MetricRef "revenue"
+                        })
 
             let! viaLogAfter = enumerating.QueryPopulation(TestScope.resolved scope, query)
             let! afterNeighbour = surfaced.QueryPopulation(TestScope.resolved scope, query)
@@ -2040,12 +2126,13 @@ let metricSurfaceScaleTests =
 
             let successors =
                 snapshot.Rows
-                |> List.mapi (fun i row -> {
-                    scaleFact (2 * SurfaceScaleSize + i) with
-                        Subject = row.Member.Subject
-                        AsOf = row.Member.AsOf.AddDays 1.0
-                        Supersedes = Some row.Member.FactId
-                })
+                |> List.mapi (fun i row ->
+                    identified {
+                        scaleFact (2 * SurfaceScaleSize + i) with
+                            Subject = row.Member.Subject
+                            AsOf = KernelFixtures.instant (row.Member.AsOf.AddDays 1.0)
+                            Supersedes = Some row.Member.FactId
+                    })
 
             let foldClock = Diagnostics.Stopwatch.StartNew()
             let refreshed, visits = FactSurfaceFold.applyFacts "elasticity" successors snapshot
@@ -2133,29 +2220,27 @@ let indexPopulationRegistryTests =
 [<Literal>]
 let private PointScaleSize = 10_000
 
-let private pointPeriod (k: int) : TemporalExtent = {
-    From = DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k)
-    To = DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k + 3)
-    Label = None
-}
+let private pointPeriod (k: int) : TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k))
+        (DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k + 3))
+        None
 
-let private pointFact (index: int) : Fact = {
-    syntheticFact index (Scalar(decimal index)) with
-        FactId = sprintf "p%08d" index
-        Subject = {
-            Hierarchy = "geography"
-            Path = [ "eu"; sprintf "sku-%04d" (index / 10) ]
-        }
-        Metric = MetricRef "revenue"
-        Period = pointPeriod (index % 10)
-}
+let private pointFact (index: int) : Fact =
+    identified {
+        syntheticFact index (KernelFixtures.scalar (decimal index)) with
+            Subject = {
+                Hierarchy = "geography"
+                Path = [ "eu"; sprintf "sku-%04d" (index / 10) ]
+            }
+            Metric = MetricRef "revenue"
+            Period = pointPeriod (index % 10)
+    }
 
 let private seedPoints (storage: IBlobStorage) (scope: string) (count: int) = async {
-    let json = PlatformJson.options
-
     for i in 0 .. count - 1 do
         let fact = pointFact i
-        let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+        let payload = factBytes fact
         let! _ = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
         ()
 }
@@ -2236,7 +2321,7 @@ let private measurePointReads (size: int) = async {
         indexed.Assert(
             TestScope.resolved scope,
             {
-                draftAt target.Subject.Path "revenue" syntheticMethod (Scalar 1m) "new-input" with
+                draftAt target.Subject.Path "revenue" syntheticMethod (KernelFixtures.scalar 1m) "new-input" with
                     Period = target.Period
             }
         )
@@ -2249,7 +2334,7 @@ let private measurePointReads (size: int) = async {
         indexed.Assert(
             TestScope.resolved scope,
             {
-                draftAt [ "eu"; "sku-new" ] "revenue" syntheticMethod (Scalar 2m) "fresh" with
+                draftAt [ "eu"; "sku-new" ] "revenue" syntheticMethod (KernelFixtures.scalar 2m) "fresh" with
                     Period = target.Period
             }
         )
@@ -2335,23 +2420,20 @@ type private ProbeBlobStorage(inner: IBlobStorage) =
         member _.Erase(container, prefix, policy, dryRun) =
             inner.Erase(container, prefix, policy, dryRun)
 
-let private unmarkedPeriod: TemporalExtent = {
-    From = DateTime(2026, 1, 1)
-    To = DateTime(2026, 2, 1)
-    Label = None
-}
+let private unmarkedPeriod: TemporalExtent =
+    KernelFixtures.period (DateTime(2026, 1, 1)) (DateTime(2026, 2, 1)) None
 
-let private localPeriod: TemporalExtent = {
-    From = DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Local)
-    To = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Local)
-    Label = None
-}
+let private localPeriod: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Local))
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Local))
+        None
 
-let private q3: TemporalExtent = {
-    From = q2.To
-    To = q2.To.AddMonths 3
-    Label = Some "Q3-2026"
-}
+let private q3: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q3-2026")
 
 let private estimator = Computed("estimator", "1", "p0")
 
@@ -2363,31 +2445,31 @@ let private awkwardPath = [ "a/b"; ""; "c>d"; "x|y"; "100%"; "é" ]
 /// return what was written in order.
 let private seed890 (store: IFactStore) (scope: string) = async {
     let drafts = [
-        draftAt [ "uk" ] "revenue" rollup (Scalar 1m) "uk-q2-v1"
-        draftAt [ "uk" ] "revenue" rollup (Scalar 2m) "uk-q2-v2"
-        draftAt [ "uk" ] "revenue" estimator (Scalar 3m) "uk-q2-est"
+        draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 1m) "uk-q2-v1"
+        draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 2m) "uk-q2-v2"
+        draftAt [ "uk" ] "revenue" estimator (KernelFixtures.scalar 3m) "uk-q2-est"
         {
-            draftAt [ "uk" ] "revenue" rollup (Scalar 4m) "uk-q3" with
+            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 4m) "uk-q3" with
                 Period = q3
         }
         {
-            draftAt [ "uk" ] "revenue" rollup (Scalar 5m) "uk-un-v1" with
+            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 5m) "uk-un-v1" with
                 Period = unmarkedPeriod
         }
         {
-            draftAt [ "uk" ] "revenue" rollup (Scalar 6m) "uk-un-v2" with
+            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 6m) "uk-un-v2" with
                 Period = unmarkedPeriod
         }
         {
-            draftAt [ "uk" ] "revenue" rollup (Scalar 7m) "uk-loc" with
+            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 7m) "uk-loc" with
                 Period = localPeriod
         }
-        draftAt [ "uk" ] "cost" rollup (Scalar 8m) "uk-cost"
-        draftAt [ "fr" ] "revenue" rollup (Scalar 9m) "fr-q2"
-        draftAt awkwardPath "revenue" rollup (Scalar 10m) "awk-v1"
-        draftAt awkwardPath "revenue" rollup (Scalar 11m) "awk-v2"
-        draftAt [ "de" ] "elasticity" rollup (Scalar 12m) "de-rollup"
-        draftAt [ "de" ] "elasticity" estimator (Scalar 13m) "de-est"
+        draftAt [ "uk" ] "cost" rollup (KernelFixtures.scalar 8m) "uk-cost"
+        draftAt [ "fr" ] "revenue" rollup (KernelFixtures.scalar 9m) "fr-q2"
+        draftAt awkwardPath "revenue" rollup (KernelFixtures.scalar 10m) "awk-v1"
+        draftAt awkwardPath "revenue" rollup (KernelFixtures.scalar 11m) "awk-v2"
+        draftAt [ "de" ] "elasticity" rollup (KernelFixtures.scalar 12m) "de-rollup"
+        draftAt [ "de" ] "elasticity" estimator (KernelFixtures.scalar 13m) "de-est"
     ]
 
     let written = ResizeArray<Fact>()
@@ -2424,7 +2506,7 @@ let private queries890 (midway: DateTime) : FactQuery list = [
 
 /// Both read paths, every query in the matrix, every chain: equal.
 let private expectSameReads (enumerating: IFactStore) (indexed: IFactStore) (scope: string) (facts: Fact list) = async {
-    let midway = facts[0].AsOf
+    let midway = Instant.toDateTime facts[0].AsOf
 
     for query in queries890 midway do
         let! a = enumerating.Query(TestScope.resolved scope, query) |> TestScope.ok
@@ -2516,7 +2598,7 @@ let private seedThree (store: IFactStore) (scope: string) = async {
         match!
             store.Assert(
                 TestScope.resolved scope,
-                draftAt [ "eu"; name ] "elasticity" rollup (Scalar 10m) ("h-" + name)
+                draftAt [ "eu"; name ] "elasticity" rollup (KernelFixtures.scalar 10m) ("h-" + name)
             )
         with
         | Ok f -> facts.Add f
@@ -2561,9 +2643,23 @@ let private readFaultTests =
             let! seeded = seedThree store scope
 
             // A three-fact chain on one more subject.
-            let! d1 = store.Assert(TestScope.resolved scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 1m) "d1")
-            let! d2 = store.Assert(TestScope.resolved scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 2m) "d2")
-            let! d3 = store.Assert(TestScope.resolved scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 3m) "d3")
+            let! d1 =
+                store.Assert(
+                    TestScope.resolved scope,
+                    draftAt [ "eu"; "d" ] "elasticity" rollup (KernelFixtures.scalar 1m) "d1"
+                )
+
+            let! d2 =
+                store.Assert(
+                    TestScope.resolved scope,
+                    draftAt [ "eu"; "d" ] "elasticity" rollup (KernelFixtures.scalar 2m) "d2"
+                )
+
+            let! d3 =
+                store.Assert(
+                    TestScope.resolved scope,
+                    draftAt [ "eu"; "d" ] "elasticity" rollup (KernelFixtures.scalar 3m) "d3"
+                )
 
             let middle, head =
                 match d1, d2, d3 with
@@ -2613,7 +2709,7 @@ let private readFaultTests =
 
             // A fact reaches the log behind the surface, so the next read
             // must reconcile, and its one download fails.
-            let late = syntheticFact 424242 (Scalar 20m)
+            let late = syntheticFact 424242 (KernelFixtures.scalar 20m)
             do! writeRaw outage scope late
             outage.Failing <- Some(factBlob late.FactId)
 
@@ -2680,39 +2776,37 @@ let private SeriesMonths = 12
 
 let private seriesMethod = Computed("sales-rollup", "v1", "sku-sales")
 
-let private seriesMonth (k: int) : TemporalExtent = {
-    From = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths k
-    To = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(k + 1)
-    Label = Some(sprintf "m%02d" k)
-}
+let private seriesMonth (k: int) : TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths k)
+        (DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(k + 1))
+        (Some(sprintf "m%02d" k))
 
 /// Original fact `index` of a seeded series scope: one subject per twelve
 /// facts, one month each. Subjects alternate between two metrics, so the
 /// series metric shares its scope (and its surface's census) with a
 /// neighbour it must never read.
-let private seriesFact (index: int) : Fact = {
-    syntheticFact index (Scalar(decimal index)) with
-        FactId = sprintf "s%08d" index
-        Subject = {
-            Hierarchy = "products"
-            Path = [
-                sprintf "brand-%02d" (index / SeriesMonths % 10)
-                sprintf "sku-%05d" (index / SeriesMonths)
-            ]
-        }
-        Metric = MetricRef(if index / SeriesMonths % 2 = 0 then "revenue" else "units")
-        Method = seriesMethod
-        Period = seriesMonth (index % SeriesMonths)
-}
+let private seriesFact (index: int) : Fact =
+    identified {
+        syntheticFact index (KernelFixtures.scalar (decimal index)) with
+            Subject = {
+                Hierarchy = "products"
+                Path = [
+                    sprintf "brand-%02d" (index / SeriesMonths % 10)
+                    sprintf "sku-%05d" (index / SeriesMonths)
+                ]
+            }
+            Metric = MetricRef(if index / SeriesMonths % 2 = 0 then "revenue" else "units")
+            Method = seriesMethod
+            Period = seriesMonth (index % SeriesMonths)
+    }
 
 /// Seed `count` facts behind the store's back: nine in ten are originals,
 /// and every ninth original's lineage carries a revision that supersedes it
 /// — so the scope holds history the read must step over, not only heads.
 let private seedSeries (storage: IBlobStorage) (scope: string) (count: int) = async {
-    let json = PlatformJson.options
-
     let upload (fact: Fact) = async {
-        let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+        let payload = factBytes fact
         let! _ = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
         ()
     }
@@ -2725,13 +2819,18 @@ let private seedSeries (storage: IBlobStorage) (scope: string) (count: int) = as
 
         if i % 9 = 0 then
             do!
-                upload {
-                    original with
-                        FactId = sprintf "r%08d" i
-                        Value = Scalar(decimal (i + 1))
-                        AsOf = baseAsOf.AddDays 1.0
-                        Supersedes = Some original.FactId
-                }
+                upload (
+                    identified {
+                        original with
+                            Value = KernelFixtures.scalar (decimal (i + 1))
+                            Evidence = {
+                                original.Evidence with
+                                    InputHashes = [ sprintf "r%d" i ]
+                            }
+                            AsOf = KernelFixtures.instant (baseAsOf.AddDays 1.0)
+                            Supersedes = Some original.FactId
+                    }
+                )
 }
 
 /// The chart read: revenue under the table's method over three months.
@@ -2837,7 +2936,12 @@ let private measureSeriesRead (size: int) = async {
             [
                 for path in revisedSubjects ->
                     {
-                        draftAt path "revenue" seriesMethod (Scalar 1m) (sprintf "rerun-%s" (String.concat "/" path)) with
+                        draftAt
+                            path
+                            "revenue"
+                            seriesMethod
+                            (KernelFixtures.scalar 1m)
+                            (sprintf "rerun-%s" (String.concat "/" path)) with
                             Subject = { Hierarchy = "products"; Path = path }
                             Period = seriesMonth 1
                     }
@@ -2914,7 +3018,12 @@ let private seriesReadTests =
             // scope, well past the 512-fact threshold.
             let drafts = [
                 for i in 0..1_999 ->
-                    draftAt [ "eu"; sprintf "sku-%05d" i ] "revenue" rollup (Scalar(decimal i)) (sprintf "b%d" i)
+                    draftAt
+                        [ "eu"; sprintf "sku-%05d" i ]
+                        "revenue"
+                        rollup
+                        (KernelFixtures.scalar (decimal i))
+                        (sprintf "b%d" i)
             ]
 
             let! written = store.AssertBatch(TestScope.resolved scope, drafts)
@@ -2969,7 +3078,7 @@ let private firstUploadDraft (i: int) (value: decimal) (hash: string) : FactDraf
     let metric = if i / SeriesMonths % 2 = 0 then "revenue" else "units"
 
     {
-        draftAt path metric seriesMethod (Scalar value) hash with
+        draftAt path metric seriesMethod (KernelFixtures.scalar value) hash with
             Subject = { Hierarchy = "products"; Path = path }
             Period = seriesMonth (i % SeriesMonths)
     }
@@ -3206,9 +3315,9 @@ let private mixedDraft (i: int) (hash: string) : FactDraft =
     let value =
         match i % 5 with
         | 0 -> Absent "no data loaded for this period"
-        | 1 -> Interval(decimal i, decimal i + 0.50m)
+        | 1 -> Interval(DecimalText.ofDecimal (decimal i), DecimalText.ofDecimal (decimal i + 0.50m))
         | 2 -> Categorical(sprintf "tier\t%d>core" (i % 3))
-        | _ -> Scalar(decimal i + 0.10m)
+        | _ -> KernelFixtures.scalar (decimal i + 0.10m)
 
     {
         draftAt path "revenue" seriesMethod value hash with
@@ -3520,19 +3629,18 @@ let pointReadIndexTests =
             let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
             let! facts = seed890 writer scope
 
-            let outOfBand = {
-                pointFact 1 with
-                    Subject = {
-                        Hierarchy = "geography"
-                        Path = [ "uk" ]
-                    }
-                    Period = q2
-                    Method = Computed("manual", "1", "p0")
-            }
+            let outOfBand =
+                identified {
+                    pointFact 1 with
+                        Subject = {
+                            Hierarchy = "geography"
+                            Path = [ "uk" ]
+                        }
+                        Period = q2
+                        Method = Computed("manual", "1", "p0")
+                }
 
-            let payload =
-                JsonSerializer.Serialize(outOfBand, PlatformJson.options)
-                |> Encoding.UTF8.GetBytes
+            let payload = factBytes outOfBand
 
             let! _ = storage.Upload(scope, sprintf "_facts/%s.json" outOfBand.FactId, payload)
 
@@ -3688,7 +3796,7 @@ let private storedFor (d: FactDraft) : Fact = {
     Metric = d.Metric
     Value = d.Value
     Period = d.Period
-    AsOf = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+    AsOf = KernelFixtures.instant (DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc))
     Method = d.Method
     Evidence = d.Evidence
     Confidence = d.Confidence
@@ -3696,7 +3804,9 @@ let private storedFor (d: FactDraft) : Fact = {
     Disclosure = d.Disclosure
 }
 
-let private blobJson = PlatformJson.options
+/// The shape a store held its facts in before it wrote the specification's
+/// encoding: the saved shape a migration starts from, keyed by its old id.
+let private blobJson = FactStorageJson.options
 
 let private migrationHarness (surfaces: FactSurfaceOptions) () : IFactStoreContract.FactIdMigrationHarness =
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
@@ -3772,7 +3882,7 @@ let factIdTests =
 
             let v2 = {
                 storedFor (goldenDraft [ inputB ]) with
-                    AsOf = DateTime(2026, 8, 2, 0, 0, 0, DateTimeKind.Utc)
+                    AsOf = KernelFixtures.instant (DateTime(2026, 8, 2, 0, 0, 0, DateTimeKind.Utc))
                     Supersedes = Some v1.FactId
             }
 

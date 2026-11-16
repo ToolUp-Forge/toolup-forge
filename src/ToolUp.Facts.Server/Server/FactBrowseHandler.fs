@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Text.Json
 open Microsoft.AspNetCore.Http
@@ -86,11 +88,11 @@ module internal SeriesHead =
     let ofFact (f: Fact) : SeriesHead = {
         FactId = f.FactId
         Subject = f.Subject
-        PeriodFrom = f.Period.From
-        PeriodTo = f.Period.To
+        PeriodFrom = Instant.toDateTime f.Period.From
+        PeriodTo = Instant.toDateTime f.Period.To
         Label = f.Period.Label
         Value = f.Value
-        AsOf = f.AsOf
+        AsOf = Instant.toDateTime f.AsOf
         Fact = Some f
         Row = None
     }
@@ -323,7 +325,7 @@ module FactBrowseHandler =
     let private displayFormatOf (deps: FactBrowseDeps) (metric: string) : string =
         deps.Registry
         |> Option.bind (fun r -> r.TryGetMetric metric)
-        |> Option.map _.DisplayFormat
+        |> Option.map (fun d -> DisplayFormatText.ofFormat d.DisplayFormat)
         |> Option.defaultValue ""
 
     /// The rendering of a value of `metric`, as the registry declares it.
@@ -389,25 +391,26 @@ module FactBrowseHandler =
         |> List.map (fun (policyRef, count) -> { PolicyRef = policyRef; Count = count })
 
     let private freshnessOf (staleness: StalenessPolicy) (now: DateTime) (asOf: DateTime) : string =
-        match Freshness.deriveAt staleness asOf true now with
+        match Freshness.deriveAt staleness (Instant.ofDateTime asOf) true (Instant.ofDateTime now) with
         | FactFreshness.Fresh -> "fresh"
         | FactFreshness.Stale _ -> "stale"
 
     let private rowOf (deps: FactBrowseDeps) (now: DateTime) (rank: int) (fact: Fact) : FactRowView =
         let metric = fact.Metric |> fun (MetricRef m) -> m
 
-        let freshness = freshnessOf (stalenessOf deps metric) now fact.AsOf
+        let freshness =
+            freshnessOf (stalenessOf deps metric) now (Instant.toDateTime fact.AsOf)
 
         {
             Rank = rank
             FactId = fact.FactId
-            Subject = SubjectRef.toString fact.Subject
+            Subject = Fact.subjectRendering fact.Subject
             SubjectPath = fact.Subject.Path
             Rendering = renderOf deps metric fact.Value
-            PeriodFrom = fact.Period.From
-            PeriodTo = fact.Period.To
+            PeriodFrom = Instant.toDateTime fact.Period.From
+            PeriodTo = Instant.toDateTime fact.Period.To
             PeriodLabel = fact.Period.Label
-            AsOf = fact.AsOf
+            AsOf = Instant.toDateTime fact.AsOf
             Freshness = freshness
         }
 
@@ -524,7 +527,11 @@ module FactBrowseHandler =
     let private periodText (period: TemporalExtent) : string =
         match period.Label with
         | Some label -> label
-        | None -> sprintf "%s..%s" (period.From.ToString("o")) (period.To.ToString("o"))
+        | None ->
+            sprintf
+                "%s..%s"
+                ((Instant.toDateTime period.From).ToString("o"))
+                ((Instant.toDateTime period.To).ToString("o"))
 
     /// One committed run's largest movers. Each mover names a cell the run
     /// rewrote; it is served only when the gate admits BOTH the run's fact
@@ -621,7 +628,8 @@ module FactBrowseHandler =
                                         | FactNotDisclosable policy, _
                                         | _, FactNotDisclosable policy -> mover, Error policy)
 
-                            let render (metric: string) (value: decimal) = renderOf deps metric (Scalar value)
+                            let render (metric: string) (value: decimal) =
+                                renderOf deps metric (Scalar(DecimalText.ofDecimal value))
 
                             let shown =
                                 judged
@@ -731,7 +739,7 @@ module FactBrowseHandler =
 
                     let stats = PopulationDisclosure.disclosedStats disclosure result.Stats
                     let render = renderOf deps request.Metric
-                    let renderStat = Option.map (Scalar >> render)
+                    let renderStat = Option.map (DecimalText.ofDecimal >> Scalar >> render)
 
                     return
                         Ok {
@@ -827,7 +835,7 @@ module FactBrowseHandler =
                                     |> List.map (fun f -> {
                                         FactId = f.FactId
                                         Rendering = render f.Value
-                                        AsOf = f.AsOf
+                                        AsOf = Instant.toDateTime f.AsOf
                                         Method = Fact.methodIdentity f.Method
                                         Supersedes = f.Supersedes
                                     })
@@ -858,8 +866,8 @@ module FactBrowseHandler =
                 Method = Some(tableMethod table)
                 PeriodOverlaps =
                     Some {
-                        From = from
-                        To = until
+                        From = Instant.ofDateTime from
+                        To = Instant.ofDateTime until
                         Label = None
                     }
         }
@@ -1020,14 +1028,14 @@ module FactBrowseHandler =
                             let freshness = freshnessOf staleness now head.AsOf
 
                             {
-                                Subject = SubjectRef.toString head.Subject
+                                Subject = Fact.subjectRendering head.Subject
                                 SubjectPath = head.Subject.Path
                                 PeriodFrom = head.PeriodFrom
                                 PeriodTo = head.PeriodTo
                                 PeriodLabel = head.Label
                                 Value =
                                     match withheld, head.Value with
-                                    | false, Scalar d -> Some d
+                                    | false, Scalar d -> Some(DecimalText.toDecimal d)
                                     | _ -> None
                                 Rendering = if withheld then None else Some(render head.Value)
                                 FactId = head.FactId
@@ -1165,14 +1173,14 @@ module FactBrowseHandler =
                                 {
                                     Metric = metric
                                     FactId = h.FactId
-                                    Subject = SubjectRef.toString h.Subject
+                                    Subject = Fact.subjectRendering h.Subject
                                     SubjectPath = h.Subject.Path
                                     PeriodFrom = h.PeriodFrom
                                     PeriodTo = h.PeriodTo
                                     PeriodLabel = h.Label
                                     Value =
                                         match policy, h.Value with
-                                        | None, Scalar d -> Some d
+                                        | None, Scalar d -> Some(DecimalText.toDecimal d)
                                         | _ -> None
                                     Rendering =
                                         match policy with

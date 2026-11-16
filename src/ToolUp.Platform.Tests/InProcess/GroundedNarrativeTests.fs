@@ -62,11 +62,13 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
 open ToolUp.ArtefactSigning
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 open ToolUp.Reporting
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -334,11 +336,11 @@ let pureGateTests =
 
 // ── B. The fact-tier gate over a real store ───────────────────────
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+let private september: TemporalExtent =
+    period
+        (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "2026-09")
 
 let private assertedDraft (metricId: string) (value: decimal) (disclosure: Disclosure) : FactDraft = {
     Subject = {
@@ -346,7 +348,7 @@ let private assertedDraft (metricId: string) (value: decimal) (disclosure: Discl
         Path = [ "acme" ]
     }
     Metric = MetricRef metricId
-    Value = Scalar value
+    Value = scalar value
     Period = september
     Method = HumanAsserted "analyst"
     Evidence = {
@@ -524,18 +526,8 @@ let private brands: SubjectDefinition = {
 }
 
 let private revenueDefinition: MetricDefinition = {
-    Id = "revenue"
-    Name = "revenue"
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    ToolUp.Platform.Tests.KernelFixtures.metric "revenue" "revenue" "GBP" "currency" "" with
+        Direction = HigherIsBetter
 }
 
 let private metrics: IMetricRegistry =
@@ -2820,16 +2812,12 @@ let private withBrandSales (deployment: Deployment) : Deployment =
 
     let writer = deployment.Services.GetRequiredService<IFactTableWriter>()
 
-    let period: TemporalExtent = {
-        From = tradingDay
-        To = tradingDay.AddDays 1.0
-        Label = None
-    }
+    let day = period tradingDay (tradingDay.AddDays 1.0) None
 
     let row (brand: string) (revenue: decimal) (cost: decimal) : FactTableRow = {
         Subject = [ brand ]
-        Period = period
-        Values = Map.ofList [ "revenue", Scalar revenue; "cost", Scalar cost ]
+        Period = day
+        Values = Map.ofList [ "revenue", scalar revenue; "cost", scalar cost ]
     }
 
     let opened =
@@ -2916,7 +2904,7 @@ let private brandFacts (deployment: Deployment) (metric: string) : Map<string, F
     )
     |> TestScope.ok
     |> Async.RunSynchronously
-    |> List.filter (fun f -> f.Period.From = tradingDay)
+    |> List.filter (fun f -> f.Period.From = instant tradingDay)
     |> List.map (fun f -> List.last f.Subject.Path, f)
     |> Map.ofList
 

@@ -8,16 +8,38 @@ answer quotes facts verbatim; prose exists for comprehension, not recall.
 > (`ServerConfig.Stores.FactStore = FeatureMode.Disabled`, the default) is byte-for-byte
 > unchanged (GP 13).
 
+## Which half lives where
+
+The **kernel is the published [`Fuaran.Facts`](https://www.nuget.org/packages/Fuaran.Facts) package**, the .NET
+reference implementation of the [Fact wire specification](https://github.com/Fuaran-Data/fuaran-fact-specification),
+pinned once in `Directory.Packages.props` (`FuaranFactsVersion`). It owns the fact types (`Fact`, `FactValue`,
+`MethodRef`, `Disclosure`, `SubjectRef`, `MetricRef`, `TemporalExtent`, `Evidence`, `Confidence`, with quantities as
+`DecimalText` and times as `Instant`), the identity frame and lineage key (`Fact.compute`, `Fact.lineageKey`,
+`Fact.lineageDigest`), the laws (`History`, `Freshness`), the metric and subject definitions
+(`MetricDefinition`, `SubjectDefinition`, `Definition.checkMetric`), the codec (`FactWire`, and `LegacyFact` for the
+legacy saved shape) and the rendering standard (`FactRendering.renderFor`, rule `FactRendering.Rule`). Forge uses
+them directly. `ToolUp.Platform.Core` references the package for the metric registry's definitions.
+
+**Forge keeps the store and the gates**: the stores (`BlobFactStore`, the Postgres store), the write plan, the
+disclosure gate and its taint walk, the metric registry and its compose-time checks, the fact tools, the grounding
+certificate, and four small pieces of its own vocabulary in `ToolUp.Facts`: `Disclosure.toString` / `tryParse` /
+`floor`, `DeclaredMethod`, `FactLineage` (a lineage key or digest from its parts) and `FactStoreCodec.read`. A store
+writes the specification's encoding (`FactWire.writeFact`); `FactStoreCodec.read` reads that and the legacy saved
+shape, verifying every id, so a fact stored before forge adopted the package is read as it stands and never
+rewritten. Ids and lineage digests are byte for byte the ones forge minted: the `Fact kernel` list of the Platform
+pack holds facts as forge stored them, and the `Fact wire specification` list certifies the store and identity
+against the specification's corpus. The move: [`docs/migrations/1229-fact-kernel-rebase.md`](../migrations/1229-fact-kernel-rebase.md).
+
 ## What a fact is
 
 A **fact** is a verified assertion about a `(subject, metric, period)`:
 
 | Field | Meaning |
 |---|---|
-| `FactId` | Content-addressed identity — `CanonicalFrame.digest` of `(subject, metric, period, method, inputHashes)` ([Content ids](#content-ids-one-frame-phase-1089)). |
+| `FactId` | Content-addressed identity — the kernel's `Fact.compute`, the identity frame over `(subject, metric, period, method, inputHashes)`, byte for byte `CanonicalFrame.digest` of the same fields ([Content ids](#content-ids-one-frame-phase-1089)). |
 | `Subject` | A node in a registered subject hierarchy (`{ Hierarchy; Path }`). |
 | `Metric` | A registered metric id (`MetricRef`). |
-| `Value` | `Scalar` / `Interval` / `Series` (a data-object version ref) / `Distribution` / `Categorical` / `Absent`. |
+| `Value` | `Scalar` / `Interval` (decimal text) / `Series` (a content address or a host key such as a data-object version) / `Distribution` / `Categorical` / `Absent`. |
 | `Period` | **Valid time** — the extent the value describes. |
 | `AsOf` | **Transaction time** — when the assertion entered the store. |
 | `Method` | `Computed(op, ver, paramHash)` / `HumanAsserted(principal)` / `Imported(certRef)`. |

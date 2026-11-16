@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Collections.Concurrent
 open ToolUp.Platform
@@ -131,7 +133,7 @@ module CoverageNarrative =
 
     /// One populated (metric, hierarchy) pair's coverage.
     type HierarchyCoverage = {
-        Hierarchy: Grounding.SubjectDefinition
+        Hierarchy: SubjectDefinition
         Posture: CoveragePosture
         /// `None` whenever the posture withholds the detail — the same
         /// one-shape rule Phase 705's JSON row follows, so "withheld" and
@@ -146,7 +148,7 @@ module CoverageNarrative =
     /// A metric's coverage across every hierarchy that holds facts under
     /// it. A hierarchy holding none is absent, never a zero row.
     type MetricCoverage = {
-        Definition: Grounding.MetricDefinition
+        Definition: MetricDefinition
         Populations: HierarchyCoverage list
     }
 
@@ -241,28 +243,29 @@ module CoverageNarrative =
         | WhollyRestricted policies -> policies
         | Unprobed -> []
 
-    let private directionLabel (d: Grounding.DirectionOfBetter) =
+    let private directionLabel (d: DirectionOfBetter) =
         match d with
-        | Grounding.HigherIsBetter -> "higher is better"
-        | Grounding.LowerIsBetter -> "lower is better"
-        | Grounding.Neutral -> "neither direction is better"
+        | DirectionOfBetter.HigherIsBetter -> "higher is better"
+        | DirectionOfBetter.LowerIsBetter -> "lower is better"
+        | DirectionOfBetter.Neutral -> "neither direction is better"
 
-    let private stalenessLabel (s: Grounding.StalenessPolicy) =
+    let private stalenessLabel (s: StalenessPolicy) =
         match s with
-        | Grounding.FreshFor window -> sprintf "fresh for %s" (window.ToString())
-        | Grounding.UntilSuperseded -> "fresh until superseded"
-        | Grounding.UntilUpstreamChange -> "fresh until its inputs change"
+        | StalenessPolicy.FreshFor windowSeconds ->
+            sprintf "fresh for %s" (TimeSpan.FromSeconds(float windowSeconds).ToString())
+        | StalenessPolicy.UntilSuperseded -> "fresh until superseded"
+        | StalenessPolicy.UntilUpstreamChange -> "fresh until its inputs change"
 
-    let private declarationFingerprint (d: Grounding.MetricDefinition) : string =
+    let private declarationFingerprint (d: MetricDefinition) : string =
         String.Join(
             "",
             [
                 d.Id
                 d.Name
-                d.Unit
+                MetricUnit.text d.Unit
                 d.Dimensionality
                 directionLabel d.Direction
-                d.DisplayFormat
+                DisplayFormatText.ofFormat d.DisplayFormat
                 stalenessLabel d.Staleness
                 defaultArg d.ProducingOperation ""
                 defaultArg d.Context ""
@@ -330,16 +333,16 @@ module CoverageNarrative =
 
     let private metricSpan (label: string) (value: string) = Metric(label, value, None)
 
-    let private declarationGrid (d: Grounding.MetricDefinition) : NarrativeElement =
+    let private declarationGrid (d: MetricDefinition) : NarrativeElement =
         KeyValueGrid [
             "Metric id", [ Code d.Id ]
-            "Unit", [ Text d.Unit ]
+            "Unit", [ Text(MetricUnit.text d.Unit) ]
             "Dimension", [ Text d.Dimensionality ]
             "Direction of better", [ Text(directionLabel d.Direction) ]
             "Best-first ranking",
             [
                 Text(
-                    if d.Direction = Grounding.Neutral then
+                    if d.Direction = DirectionOfBetter.Neutral then
                         "not available — this metric declares no better direction, so a population read must name its own order"
                     else
                         "available"
@@ -351,7 +354,7 @@ module CoverageNarrative =
             | None -> ()
         ]
 
-    let private contextElements (d: Grounding.MetricDefinition) : NarrativeElement list =
+    let private contextElements (d: MetricDefinition) : NarrativeElement list =
         match d.Context with
         | Some context when not (String.IsNullOrWhiteSpace context) -> [
             // Verbatim, and quoted as the analyst's own words. The
@@ -394,10 +397,7 @@ module CoverageNarrative =
             )
           ]
 
-    let private coverageElements
-        (d: Grounding.MetricDefinition)
-        (population: HierarchyCoverage)
-        : NarrativeElement list =
+    let private coverageElements (d: MetricDefinition) (population: HierarchyCoverage) : NarrativeElement list =
         match population.Posture, population.Stats with
         | WhollyRestricted policies, _ -> [
             Paragraph [
@@ -441,8 +441,8 @@ module CoverageNarrative =
                 | Some from, Some until ->
                     sprintf
                         "%s to %s"
-                        ((Fact.instant from).ToString "yyyy-MM-dd")
-                        ((Fact.instant until).ToString "yyyy-MM-dd")
+                        ((Instant.toDateTime (Instant.ofDateTime from)).ToString "yyyy-MM-dd")
+                        ((Instant.toDateTime (Instant.ofDateTime until)).ToString "yyyy-MM-dd")
                 | _ -> "no period recorded"
 
             let methods =
@@ -491,7 +491,7 @@ module CoverageNarrative =
                     )
             ]
 
-    let private howToQuery (d: Grounding.MetricDefinition) (hierarchy: Grounding.SubjectDefinition) : NarrativeElement =
+    let private howToQuery (d: MetricDefinition) (hierarchy: SubjectDefinition) : NarrativeElement =
         Paragraph [
             Text "These are counts, not values. To read the values, call "
             Code "query_metric_population"
@@ -583,8 +583,8 @@ module CoverageNarrative =
         | _ ->
             sprintf
                 "%s to %s"
-                ((Fact.instant period.From).ToString "yyyy-MM-dd")
-                ((Fact.instant period.To).ToString "yyyy-MM-dd")
+                ((Instant.toDateTime period.From).ToString "yyyy-MM-dd")
+                ((Instant.toDateTime period.To).ToString "yyyy-MM-dd")
 
     /// Read one (metric, hierarchy) pair's coverage, folding the gate's
     /// verdicts through `PopulationDisclosure.fold` — Phase 706's shared
@@ -596,7 +596,7 @@ module CoverageNarrative =
         (scope: ResolvedScope)
         (principal: string)
         (metricId: string)
-        (hierarchy: Grounding.SubjectDefinition)
+        (hierarchy: SubjectDefinition)
         : Async<HierarchyCoverage option> =
         async {
             let! outcome = store.QueryPopulation(scope, CoverageTool.coverageQuery metricId hierarchy.Id)
@@ -664,7 +664,7 @@ module CoverageNarrative =
                             disclosable
                             |> List.map (fun (_, fact) -> {
                                 FactId = fact.FactId
-                                Subject = SubjectRef.toString fact.Subject
+                                Subject = Fact.subjectRendering fact.Subject
                                 Period = periodLabel fact.Period
                             })
                             |> List.sortWith (fun a b -> String.CompareOrdinal(a.FactId, b.FactId))
@@ -687,8 +687,8 @@ module CoverageNarrative =
         (gate: IFactDisclosureGate)
         (scope: ResolvedScope)
         (principal: string)
-        (definition: Grounding.MetricDefinition)
-        (hierarchies: Grounding.SubjectDefinition list)
+        (definition: MetricDefinition)
+        (hierarchies: SubjectDefinition list)
         : Async<MetricCoverage> =
         async {
             let! populations =
@@ -723,10 +723,10 @@ module CoverageNarrative =
     /// A delegated population's coverage — from its declaration and the
     /// last committed run, with no population read.
     let delegatedHierarchy
-        (definition: Grounding.MetricDefinition)
+        (definition: MetricDefinition)
         (delegateFact: DelegateFact)
         (run: DelegateRun)
-        (hierarchy: Grounding.SubjectDefinition)
+        (hierarchy: SubjectDefinition)
         (now: DateTime)
         : HierarchyCoverage =
         let comparable =
@@ -735,7 +735,13 @@ module CoverageNarrative =
             |> Option.defaultValue 0
 
         let fresh =
-            match Freshness.deriveAt definition.Staleness run.Watermark.CommittedAt true now with
+            match
+                Freshness.deriveAt
+                    definition.Staleness
+                    (Instant.ofDateTime run.Watermark.CommittedAt)
+                    true
+                    (Instant.ofDateTime now)
+            with
             | Fresh -> run.RowCount
             | Stale _ -> 0
 
@@ -785,11 +791,11 @@ module CoverageNarrative =
         (gate: IFactDisclosureGate)
         (scope: ResolvedScope)
         (principal: string)
-        (definition: Grounding.MetricDefinition)
-        (hierarchies: Grounding.SubjectDefinition list)
+        (definition: MetricDefinition)
+        (hierarchies: SubjectDefinition list)
         : Async<MetricCoverage> =
         async {
-            let delegateFor (hierarchy: Grounding.SubjectDefinition) =
+            let delegateFor (hierarchy: SubjectDefinition) =
                 walks
                 |> Option.bind (fun w ->
                     w.Delegates

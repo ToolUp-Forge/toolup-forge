@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Text
 open System.Text.Json
@@ -309,8 +311,8 @@ module FactTableRunOptions =
                 Error(
                     sprintf
                         "the slice %s..%s is not a half-open extent"
-                        (slice.From.ToString "o")
-                        (slice.To.ToString "o")
+                        ((Instant.toDateTime slice.From).ToString "o")
+                        ((Instant.toDateTime slice.To).ToString "o")
                 )
             | _, Some problem -> Error problem
             | slice, None ->
@@ -329,8 +331,8 @@ module FactTableRunOptions =
         RunOptions.Slice =
             options.Slice
             |> Option.map (fun slice -> {
-                RunSlice.From = slice.From
-                RunSlice.To = slice.To
+                RunSlice.From = Instant.toDateTime slice.From
+                RunSlice.To = Instant.toDateTime slice.To
                 RunSlice.Label = slice.Label
             })
         RunOptions.Method =
@@ -347,8 +349,8 @@ module FactTableRunOptions =
         Slice =
             options.Slice
             |> Option.map (fun slice -> {
-                From = slice.From
-                To = slice.To
+                From = Instant.ofDateTime slice.From
+                To = Instant.ofDateTime slice.To
                 Label = slice.Label
             })
         Method =
@@ -360,12 +362,12 @@ module FactTableRunOptions =
     }
 
     /// Whether a period lies inside a slice.
-    let contains (slice: TemporalExtent) (from: DateTime) (``to``: DateTime) : bool =
+    let contains (slice: TemporalExtent) (from: Instant) (``to``: Instant) : bool =
         from >= slice.From && ``to`` <= slice.To
 
     /// Whether a period overlaps a slice without lying inside it — a
     /// committed row such a slice would split.
-    let splits (slice: TemporalExtent) (from: DateTime) (``to``: DateTime) : bool =
+    let splits (slice: TemporalExtent) (from: Instant) (``to``: Instant) : bool =
         from < slice.To && ``to`` > slice.From && not (contains slice from ``to``)
 
     /// The draft rewrite the options imply: the inputs, then the declared
@@ -447,7 +449,7 @@ module FactTableValidation =
             Path = row.Subject
         }
 
-        SubjectRef.toString subject
+        Fact.subjectRendering subject
 
     let private shapeOf (value: FactValue) : FactTableValueShape option =
         match value with
@@ -560,10 +562,10 @@ module FactTableValidation =
                 Problem =
                     sprintf
                         "the period %s..%s lies outside the run's slice %s..%s"
-                        (row.Period.From.ToString "o")
-                        (row.Period.To.ToString "o")
-                        (slice.From.ToString "o")
-                        (slice.To.ToString "o")
+                        ((Instant.toDateTime row.Period.From).ToString "o")
+                        ((Instant.toDateTime row.Period.To).ToString "o")
+                        ((Instant.toDateTime slice.From).ToString "o")
+                        ((Instant.toDateTime slice.To).ToString "o")
             })
 
 // ─── Snapshots, digests and change summaries ─────────────────────────
@@ -608,7 +610,7 @@ module FactTableSnapshot =
 
     let private scalarOf (value: FactValue) : decimal option =
         match value with
-        | Scalar d -> Some d
+        | Scalar d -> Some(DecimalText.toDecimal d)
         | _ -> None
 
     /// The snapshot of a validated run's rows, in canonical order (subject,
@@ -620,8 +622,8 @@ module FactTableSnapshot =
             rows
             |> List.map (fun row -> {
                 FactTableSnapshotRow.Subject = row.Subject
-                From = row.Period.From
-                To = row.Period.To
+                From = Instant.toDateTime row.Period.From
+                To = Instant.toDateTime row.Period.To
                 Label = row.Period.Label
                 Cells =
                     table.Columns
@@ -715,7 +717,7 @@ module FactTableSnapshot =
 
                         let mover: FactTableMover = {
                             Metric = c.Metric
-                            Subject = SubjectRef.toString subject
+                            Subject = Fact.subjectRendering subject
                             Period = periodText row
                             Previous = previousValue
                             Current = currentValue
@@ -791,10 +793,11 @@ type FactTableRunEvent = {
 // ─── The default writer ──────────────────────────────────────────────
 
 /// Blob I/O shared by the default writer (JSON through the platform's F#
-/// converter set).
+/// converter set, with a fact's period and value in their stored shapes:
+/// `FactStorageJson`).
 module internal FactTableBlobIo =
 
-    let private jsonOptions = PlatformJson.options
+    let private jsonOptions = FactStorageJson.options
 
     let serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, jsonOptions)
@@ -1101,8 +1104,8 @@ module FactTableRunProvenance =
                                     cells.TryFind(
                                         draft.Subject.Path,
                                         draft.Metric.Value,
-                                        draft.Period.From,
-                                        draft.Period.To
+                                        Instant.toDateTime draft.Period.From,
+                                        Instant.toDateTime draft.Period.To
                                     )
                                 with
                                 | Some published -> Disclosure.floor published draft.Disclosure
@@ -1591,8 +1594,8 @@ type DefaultFactTableWriter
             removed
             |> List.collect (fun row ->
                 let period: TemporalExtent = {
-                    From = row.From
-                    To = row.To
+                    From = Instant.ofDateTime row.From
+                    To = Instant.ofDateTime row.To
                     Label = row.Label
                 }
 
@@ -1802,13 +1805,20 @@ type DefaultFactTableWriter
                                         let inSlice (row: FactTableSnapshotRow) =
                                             options.Slice
                                             |> Option.forall (fun slice ->
-                                                FactTableRunOptions.contains slice row.From row.To)
+                                                FactTableRunOptions.contains
+                                                    slice
+                                                    (Instant.ofDateTime row.From)
+                                                    (Instant.ofDateTime row.To))
 
                                         let split =
                                             match options.Slice, previous with
                                             | Some slice, Some p ->
                                                 p.Rows
-                                                |> List.filter (fun r -> FactTableRunOptions.splits slice r.From r.To)
+                                                |> List.filter (fun r ->
+                                                    FactTableRunOptions.splits
+                                                        slice
+                                                        (Instant.ofDateTime r.From)
+                                                        (Instant.ofDateTime r.To))
                                             | _ -> []
 
                                         match split with
@@ -1822,7 +1832,7 @@ type DefaultFactTableWriter
                                                 sprintf
                                                     "the slice splits %d committed row(s), the first %s at %s; a slice must contain each committed row it overlaps"
                                                     split.Length
-                                                    (SubjectRef.toString subject)
+                                                    (Fact.subjectRendering subject)
                                                     (FactTableSnapshot.periodText first)
 
                                             return!
@@ -2198,7 +2208,7 @@ module DeliveryTrigger =
     /// every period.
     let period (options: FactTableRunOptions) : DateTime * DateTime =
         match options.Slice with
-        | Some slice -> slice.To, slice.From
+        | Some slice -> Instant.toDateTime slice.To, Instant.toDateTime slice.From
         | None -> DateTime.MaxValue, DateTime.MinValue
 
     /// Whether a commit brought its period to the table or changed it.
@@ -2237,7 +2247,11 @@ module DeliveryTrigger =
 
         let stated =
             match (List.head options).Slice with
-            | Some slice -> sprintf "%s..%s" (slice.From.ToString "o") (slice.To.ToString "o")
+            | Some slice ->
+                sprintf
+                    "%s..%s"
+                    ((Instant.toDateTime slice.From).ToString "o")
+                    ((Instant.toDateTime slice.To).ToString "o")
             | None -> "whole-table"
 
         let methods =

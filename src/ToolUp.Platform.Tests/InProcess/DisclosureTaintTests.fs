@@ -7,7 +7,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -28,11 +30,11 @@ open ToolUp.Platform.Compose
 
 // ── Fact + config builders ────────────────────────────────────────
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 /// A minimal fact with the fields the taint walk reads. `id` is used
 /// verbatim (the pure walk keys on it, not the content address).
@@ -53,7 +55,7 @@ let private mkFact
         Metric = MetricRef metric
         Value = value
         Period = q2
-        AsOf = DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Utc)
+        AsOf = instant (DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Utc))
         Method = method
         Evidence = {
             ResultRef = None
@@ -97,10 +99,10 @@ let pureWalkTests =
         test "inherited deny: a fact derived from a TaintPropagating input inherits the restriction" {
             // R (Restricted licensed, produces dov-raw) → D (passthrough).
             let r =
-                mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+                mkFact "R" "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
 
             let d =
-                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
+                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ]
 
             let graph = DisclosureTaint.buildGraph [ r; d ]
             let outcome = DisclosureTaint.analyze taintCfg graph "D"
@@ -111,11 +113,11 @@ let pureWalkTests =
 
         test "declassified allow: a declassification routine on the path clears the taint and records a crossing" {
             let r =
-                mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+                mkFact "R" "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
 
             // A is the declassifier, derived directly from the tainted R.
             let a =
-                mkFact "A" "index" (Computed("aggregate-over-k", "1", "p")) (Scalar 7m) Surfaceable [ "dov-raw" ]
+                mkFact "A" "index" (Computed("aggregate-over-k", "1", "p")) (scalar 7m) Surfaceable [ "dov-raw" ]
 
             let graph = DisclosureTaint.buildGraph [ r; a ]
             let outcome = DisclosureTaint.analyze taintCfg graph "A"
@@ -133,14 +135,20 @@ let pureWalkTests =
 
         test "declassified-then-derived: taint cleared upstream stays cleared downstream" {
             let r =
-                mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+                mkFact "R" "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
 
             let a =
-                mkFact "A" "index" (Computed("aggregate-over-k", "1", "p")) (Series "dov-agg") Surfaceable [ "dov-raw" ]
+                mkFact
+                    "A"
+                    "index"
+                    (Computed("aggregate-over-k", "1", "p"))
+                    (Series(HostKey "dov-agg", None))
+                    Surfaceable
+                    [ "dov-raw" ]
 
             // F is derived from the *declassified* A — no residual taint.
             let f =
-                mkFact "F" "report" (Computed("format", "1", "p")) (Scalar 1m) Surfaceable [ "dov-agg" ]
+                mkFact "F" "report" (Computed("format", "1", "p")) (scalar 1m) Surfaceable [ "dov-agg" ]
 
             let graph = DisclosureTaint.buildGraph [ r; a; f ]
             let outcome = DisclosureTaint.analyze taintCfg graph "F"
@@ -150,21 +158,31 @@ let pureWalkTests =
 
         test "mixed paths: any tainted, undeclassified path ⇒ deny (even alongside a declassified one)" {
             let r =
-                mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+                mkFact "R" "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
 
             // P: a plain passthrough (NOT a declassifier) — carries taint.
             let p =
-                mkFact "P" "passthrough" (Computed("passthrough", "1", "p")) (Series "dov-pass") Surfaceable [
-                    "dov-raw"
-                ]
+                mkFact
+                    "P"
+                    "passthrough"
+                    (Computed("passthrough", "1", "p"))
+                    (Series(HostKey "dov-pass", None))
+                    Surfaceable
+                    [ "dov-raw" ]
 
             // A: a declassifier — clears taint on its own branch.
             let a =
-                mkFact "A" "index" (Computed("aggregate-over-k", "1", "p")) (Series "dov-agg") Surfaceable [ "dov-raw" ]
+                mkFact
+                    "A"
+                    "index"
+                    (Computed("aggregate-over-k", "1", "p"))
+                    (Series(HostKey "dov-agg", None))
+                    Surfaceable
+                    [ "dov-raw" ]
 
             // F combines both — the undeclassified P branch still taints it.
             let f =
-                mkFact "F" "report" (Computed("combine", "1", "p")) (Scalar 1m) Surfaceable [ "dov-pass"; "dov-agg" ]
+                mkFact "F" "report" (Computed("combine", "1", "p")) (scalar 1m) Surfaceable [ "dov-pass"; "dov-agg" ]
 
             let graph = DisclosureTaint.buildGraph [ r; p; a; f ]
             let outcome = DisclosureTaint.analyze taintCfg graph "F"
@@ -177,10 +195,16 @@ let pureWalkTests =
 
         test "Plain-mode restricted inputs do not propagate taint (562.A default stays permissive)" {
             let r =
-                mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "plain-hold") []
+                mkFact
+                    "R"
+                    "raw"
+                    (Computed("load", "1", "p"))
+                    (Series(HostKey "dov-raw", None))
+                    (Restricted "plain-hold")
+                    []
 
             let d =
-                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
+                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ]
 
             let graph = DisclosureTaint.buildGraph [ r; d ]
             let outcome = DisclosureTaint.analyze taintCfg graph "D"
@@ -190,10 +214,10 @@ let pureWalkTests =
 
         test "an unclassified derivation graph is never tainted (empty config short-circuits)" {
             let r =
-                mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+                mkFact "R" "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
 
             let d =
-                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
+                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ]
 
             let graph = DisclosureTaint.buildGraph [ r; d ]
             let outcome = DisclosureTaint.analyze DisclosureTaintConfig.empty graph "D"
@@ -205,10 +229,10 @@ let pureWalkTests =
             // D declares no series-linked input from R; the only relation is
             // a supersession, which the walk deliberately ignores.
             let r =
-                mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
+                mkFact "R" "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
 
             let d =
-                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable []
+                mkFact "D" "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable []
 
             let graph = DisclosureTaint.buildGraph [ r; d ]
             let outcome = DisclosureTaint.analyze taintCfg graph "D"
@@ -292,13 +316,18 @@ let gateTests =
                 assertFact
                     store
                     scope
-                    (draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") [])
+                    (draftOf
+                        "raw"
+                        (Computed("load", "1", "p"))
+                        (Series(HostKey "dov-raw", None))
+                        (Restricted "licensed")
+                        [])
 
             let d =
                 assertFact
                     store
                     scope
-                    (draftOf "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ])
+                    (draftOf "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ])
 
             ignore r
             let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ d.FactId ])
@@ -334,14 +363,19 @@ let gateTests =
                 assertFact
                     store
                     scope
-                    (draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") [])
+                    (draftOf
+                        "raw"
+                        (Computed("load", "1", "p"))
+                        (Series(HostKey "dov-raw", None))
+                        (Restricted "licensed")
+                        [])
 
             // A: the declassifier, derived from the tainted R.
             let a =
                 assertFact
                     store
                     scope
-                    (draftOf "index" (Computed("aggregate-over-k", "1", "p")) (Scalar 7m) Surfaceable [ "dov-raw" ])
+                    (draftOf "index" (Computed("aggregate-over-k", "1", "p")) (scalar 7m) Surfaceable [ "dov-raw" ])
 
             ignore r
             let! verdicts = gate.Check(TestScope.resolved scope, "user-1", FactExport, [ a.FactId ])
@@ -375,7 +409,12 @@ let gateTests =
                 assertFact
                     store
                     scope
-                    (draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") [])
+                    (draftOf
+                        "raw"
+                        (Computed("load", "1", "p"))
+                        (Series(HostKey "dov-raw", None))
+                        (Restricted "licensed")
+                        [])
 
             // licensed permits FactRetrieval, denies FactExport.
             let! atRetrieval = gate.Check(TestScope.resolved scope, "user-1", FactRetrieval, [ r.FactId ])
@@ -403,13 +442,18 @@ let gateTests =
                 assertFact
                     store
                     scope
-                    (draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") [])
+                    (draftOf
+                        "raw"
+                        (Computed("load", "1", "p"))
+                        (Series(HostKey "dov-raw", None))
+                        (Restricted "licensed")
+                        [])
 
             let d =
                 assertFact
                     store
                     scope
-                    (draftOf "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ])
+                    (draftOf "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ])
 
             ignore r
             let plainGate = FactDisclosureGate.create store events
@@ -718,7 +762,7 @@ type private InFlightProbe(inner: ToolUp.Platform.BlobStorage.IBlobStorage) =
 
 let private batchOf (store: IFactStore) (scope: string) (n: int) = [
     for i in 1..n ->
-        (assertFact store scope (draftOf (sprintf "m%03d" i) (Computed("load", "1", "p")) (Scalar 1m) Surfaceable []))
+        (assertFact store scope (draftOf (sprintf "m%03d" i) (Computed("load", "1", "p")) (scalar 1m) Surfaceable []))
             .FactId
 ]
 
@@ -823,20 +867,20 @@ let private equalityCorpus (store: IFactStore) (scope: string) : string list =
     [
         // 562 — a restricted source, a passthrough and a declassifier-shaped
         // aggregate over it, and a Plain-held source with a fact over both.
-        put "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
-        put "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
-        put "index" (Computed("aggregate-over-k", "1", "p")) (Scalar 7m) Surfaceable [ "dov-raw" ]
-        put "held" (Computed("load", "1", "p")) (Series "dov-held") (Restricted "plain-hold") []
-        put "mixed" (Computed("passthrough", "1", "p")) (Scalar 3m) Surfaceable [ "dov-raw"; "dov-held" ]
+        put "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
+        put "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ]
+        put "index" (Computed("aggregate-over-k", "1", "p")) (scalar 7m) Surfaceable [ "dov-raw" ]
+        put "held" (Computed("load", "1", "p")) (Series(HostKey "dov-held", None)) (Restricted "plain-hold") []
+        put "mixed" (Computed("passthrough", "1", "p")) (scalar 3m) Surfaceable [ "dov-raw"; "dov-held" ]
         // 674 / 675 — two parties' inputs and the joint aggregate over both.
-        put "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted "party-a-licensed") []
-        put "raw-b" (Computed("load", "1", "p")) (Series "dov-b") (Restricted "party-b-licensed") []
-        put "joint" (Computed("aggregate-over-k", "1", "p")) (Scalar 11m) Surfaceable [ "dov-a"; "dov-b" ]
+        put "raw-a" (Computed("load", "1", "p")) (Series(HostKey "dov-a", None)) (Restricted "party-a-licensed") []
+        put "raw-b" (Computed("load", "1", "p")) (Series(HostKey "dov-b", None)) (Restricted "party-b-licensed") []
+        put "joint" (Computed("aggregate-over-k", "1", "p")) (scalar 11m) Surfaceable [ "dov-a"; "dov-b" ]
         // 525 egress — the consumer's policy, Internal, an unregistered ref, a leaf.
-        put "trade" (HumanAsserted "analyst") (Scalar 5m) (Restricted "trade-figures") []
-        put "internal" (HumanAsserted "analyst") (Scalar 6m) Disclosure.Internal []
-        put "unknown" (HumanAsserted "analyst") (Scalar 8m) (Restricted "unregistered") []
-        put "leaf" (HumanAsserted "analyst") (Scalar 9m) Surfaceable []
+        put "trade" (HumanAsserted "analyst") (scalar 5m) (Restricted "trade-figures") []
+        put "internal" (HumanAsserted "analyst") (scalar 6m) Disclosure.Internal []
+        put "unknown" (HumanAsserted "analyst") (scalar 8m) (Restricted "unregistered") []
+        put "leaf" (HumanAsserted "analyst") (scalar 9m) Surfaceable []
         // An id the scope does not hold.
         "no-such-fact"
     ]
@@ -996,15 +1040,17 @@ let private inertEqualityTests =
 /// an Internal fact, a human assertion, and a producer superseded in its
 /// lineage (still a node).
 let private indexCorpus: Fact list = [
-    mkFact "R" "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
-    mkFact "D" "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
-    mkFact "A" "index" (Computed("aggregate-over-k", "1", "p")) (Series "dov-agg") Surfaceable [ "dov-raw" ]
-    mkFact "E" "export" (Computed("passthrough", "1", "p")) (Scalar 1m) Surfaceable [ "dov-agg" ]
-    mkFact "M" "mixed" (Computed("join", "1", "p")) (Scalar 2m) Surfaceable [ "dov-agg"; "dov-raw" ]
-    mkFact "P" "plain" (Computed("load", "1", "p")) (Series "dov-plain") (Restricted "plain-hold") []
-    mkFact "Q" "fromplain" (Computed("passthrough", "1", "p")) (Scalar 3m) Surfaceable [ "dov-plain" ]
-    mkFact "I" "internal" (HumanAsserted "cfo") (Scalar 4m) Disclosure.Internal []
-    mkFact "R2" "raw" (Computed("load", "2", "p")) (Series "dov-raw-2") (Restricted "licensed") []
+    mkFact "R" "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
+    mkFact "D" "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ]
+    mkFact "A" "index" (Computed("aggregate-over-k", "1", "p")) (Series(HostKey "dov-agg", None)) Surfaceable [
+        "dov-raw"
+    ]
+    mkFact "E" "export" (Computed("passthrough", "1", "p")) (scalar 1m) Surfaceable [ "dov-agg" ]
+    mkFact "M" "mixed" (Computed("join", "1", "p")) (scalar 2m) Surfaceable [ "dov-agg"; "dov-raw" ]
+    mkFact "P" "plain" (Computed("load", "1", "p")) (Series(HostKey "dov-plain", None)) (Restricted "plain-hold") []
+    mkFact "Q" "fromplain" (Computed("passthrough", "1", "p")) (scalar 3m) Surfaceable [ "dov-plain" ]
+    mkFact "I" "internal" (HumanAsserted "cfo") (scalar 4m) Disclosure.Internal []
+    mkFact "R2" "raw" (Computed("load", "2", "p")) (Series(HostKey "dov-raw-2", None)) (Restricted "licensed") []
 ]
 
 let private indexLawTests =
@@ -1058,7 +1104,9 @@ let private indexLawTests =
 
         test "two payloads of one address join fail-closed: both policies taint, and two operations declassify nothing" {
             let clean =
-                mkFact "X" "x" (Computed("aggregate-over-k", "1", "p")) (Series "dov-x") Surfaceable [ "dov-raw" ]
+                mkFact "X" "x" (Computed("aggregate-over-k", "1", "p")) (Series(HostKey "dov-x", None)) Surfaceable [
+                    "dov-raw"
+                ]
 
             let other = {
                 clean with
@@ -1071,7 +1119,7 @@ let private indexLawTests =
                     indexCorpus.Head // R, the tainted producer of dov-raw
                     clean
                     other
-                    mkFact "Y" "y" (Computed("passthrough", "1", "p")) (Scalar 1m) Surfaceable [ "dov-x" ]
+                    mkFact "Y" "y" (Computed("passthrough", "1", "p")) (scalar 1m) Surfaceable [ "dov-x" ]
                 ]
 
             let node = DisclosureTaintIndex.tryNode "X" joined |> Option.get
@@ -1087,8 +1135,8 @@ let private indexLawTests =
 
         test "a write plan's delta is a node for every fact it stores, asserted or superseding" {
             let drafts = [
-                draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") []
-                draftOf "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ]
+                draftOf "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") []
+                draftOf "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ]
             ]
 
             let request =
@@ -1397,17 +1445,20 @@ let private taintedScope () =
     let inner = BlobFactStore.create blobs events
     let scope = "team-" + Guid.NewGuid().ToString("N")
 
-    assertFact inner scope (draftOf "raw" (Computed("load", "1", "p")) (Series "dov-raw") (Restricted "licensed") [])
+    assertFact
+        inner
+        scope
+        (draftOf "raw" (Computed("load", "1", "p")) (Series(HostKey "dov-raw", None)) (Restricted "licensed") [])
     |> ignore
 
     let d =
         assertFact
             inner
             scope
-            (draftOf "derived" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-raw" ])
+            (draftOf "derived" (Computed("passthrough", "1", "p")) (scalar 42m) Surfaceable [ "dov-raw" ])
 
     for i in 1..5 do
-        assertFact inner scope (draftOf (sprintf "other-%d" i) (HumanAsserted "a") (Scalar(decimal i)) Surfaceable [])
+        assertFact inner scope (draftOf (sprintf "other-%d" i) (HumanAsserted "a") (scalar (decimal i)) Surfaceable [])
         |> ignore
 
     let counted = QueryCountingStore(inner)
@@ -1482,20 +1533,20 @@ let derivedFactTests =
 
         test "its label is the join of its inputs' labels, computed rather than inferred" {
             let a =
-                mkFact "a" "raw" (Computed("load", "1", "p")) (Scalar 5m) (Restricted "licensed") []
+                mkFact "a" "raw" (Computed("load", "1", "p")) (scalar 5m) (Restricted "licensed") []
 
             let b =
-                mkFact "b" "raw" (Computed("load", "1", "p")) (Scalar 6m) (Restricted "licensed-b") []
+                mkFact "b" "raw" (Computed("load", "1", "p")) (scalar 6m) (Restricted "licensed-b") []
 
             let c =
-                mkFact "c" "raw" (Computed("load", "1", "p")) (Scalar 7m) (Restricted "plain-hold") []
+                mkFact "c" "raw" (Computed("load", "1", "p")) (scalar 7m) (Restricted "plain-hold") []
 
             let d =
                 mkFact
                     "d"
                     "total"
                     derivedMethod
-                    (Scalar 18m)
+                    (scalar 18m)
                     Surfaceable
                     ([ "a"; "b"; "c" ] |> List.map FactInput.ofFactId)
 
@@ -1516,10 +1567,10 @@ let derivedFactTests =
         }
 
         test "over clean inputs it carries nothing" {
-            let a = mkFact "a" "raw" (Computed("load", "1", "p")) (Scalar 5m) Surfaceable []
+            let a = mkFact "a" "raw" (Computed("load", "1", "p")) (scalar 5m) Surfaceable []
 
             let d =
-                mkFact "d" "total" derivedMethod (Scalar 5m) Surfaceable [ FactInput.ofFactId "a" ]
+                mkFact "d" "total" derivedMethod (scalar 5m) Surfaceable [ FactInput.ofFactId "a" ]
 
             let outcome =
                 DisclosureTaint.analyze (derivedCfg []) (DisclosureTaint.buildGraph [ a; d ]) "d"
@@ -1537,13 +1588,13 @@ let derivedFactTests =
                 assertFact
                     store
                     scope
-                    (draftOf "raw" (Computed("load", "1", "p")) (Scalar 5m) (Restricted "licensed") [])
+                    (draftOf "raw" (Computed("load", "1", "p")) (scalar 5m) (Restricted "licensed") [])
 
             let derived =
                 assertFact
                     store
                     scope
-                    (draftOf "total" derivedMethod (Scalar 5m) Surfaceable [ FactInput.ofFactId input.FactId ])
+                    (draftOf "total" derivedMethod (scalar 5m) Surfaceable [ FactInput.ofFactId input.FactId ])
 
             let verdictsUnder (config: DisclosureTaintConfig) (factId: string) = async {
                 let gate = FactDisclosureGate.createWithTaint config store events

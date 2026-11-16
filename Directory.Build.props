@@ -1064,7 +1064,7 @@
     <ToolUpEmbeddingProvidersVersion>0.39.3</ToolUpEmbeddingProvidersVersion>
     <ToolUpEncryptionVersion>0.39.3</ToolUpEncryptionVersion>
     <ToolUpEntityStoresVersion>0.39.3</ToolUpEntityStoresVersion>
-    <ToolUpFactStoresVersion>0.39.3</ToolUpFactStoresVersion>
+    <ToolUpFactStoresVersion>0.40.0</ToolUpFactStoresVersion>
     <ToolUpFeatureFlagProvidersVersion>0.1.4-alpha</ToolUpFeatureFlagProvidersVersion>
     <ToolUpHostsVersion>0.39.3</ToolUpHostsVersion>
     <ToolUpIngestionQueuesVersion>0.39.3</ToolUpIngestionQueuesVersion>

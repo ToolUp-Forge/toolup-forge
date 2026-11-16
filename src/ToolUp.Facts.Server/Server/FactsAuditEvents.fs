@@ -6,6 +6,8 @@
 /// `FactsCompose.withFactStore`; Core never names them.
 module ToolUp.Facts.FactsAuditEvents
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Audit.AuditLog

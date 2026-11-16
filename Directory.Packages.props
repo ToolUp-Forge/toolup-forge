@@ -15,6 +15,12 @@
          above (0.2.0 is built on Fuaran.Core 0.42.0 and Fuaran.Compute
          0.44.0). The core package only: no provider, session or dialect. -->
     <FuaranDbVersion>0.2.0</FuaranDbVersion>
+    <!-- The fuaran-facts repository's pin, for Fuaran.Facts: the Fact kernel,
+         its identity rule, codec, laws, definitions and rendering standard,
+         which ToolUp.Platform.Core and ToolUp.Facts.Core build on. Public: a
+         release on nuget.org (0.2.0 depends on Fuaran.Core 0.40.3 or later,
+         which the Core pin above satisfies). -->
+    <FuaranFactsVersion>0.2.0</FuaranFactsVersion>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Phase 1129 — the Fuaran-UI repository's pin, for Fuaran.UI and
@@ -176,6 +182,12 @@
          cost, never disclosure: the fact gate stays the disclosure
          authority. See docs/platform/open-core-boundary.md. -->
     <PackageVersion Include="Fuaran.DB" Version="$(FuaranDbVersion)" />
+    <!-- The published Apache-2.0 Fact kernel (Fuaran.Facts): forge's fact
+         types, identity, supersession and freshness laws, metric and subject
+         definitions and the rendering standard are the package's, read from
+         nuget.org at the one fuaran-facts pin. FSharp.Core and Fuaran.Core
+         only, Fable-clean. See docs/platform/facts.md. -->
+    <PackageVersion Include="Fuaran.Facts" Version="$(FuaranFactsVersion)" />
     <!-- Phase 1129 — the published Apache-2.0 Fuaran-UI libraries the fact
          presentation builders draw with: `Fuaran.UI` (the node vocabulary
          and its pre-emit validator) and `Fuaran.UI.Charts` (the chart

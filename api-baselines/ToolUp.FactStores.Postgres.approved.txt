@@ -24,7 +24,7 @@ ToolUp.FactStores.Postgres.FactStoreMigration.migrateIds(ToolUp.FactStores.Postg
 ToolUp.FactStores.Postgres.FactStoreMigration.preview(ToolUp.Facts.BlobFactStore, ToolUp.FactStores.Postgres.PostgresFactStore, ToolUp.FactStores.Postgres.FactStoreMigrationOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.FactStores.Postgres.FactStoreMigrationReport]
 ToolUp.FactStores.Postgres.FactStoreMigration.render(ToolUp.FactStores.Postgres.FactStoreMigrationReport) : System.String
 ToolUp.FactStores.Postgres.FactStoreMigration.scopeBound(ToolUp.FactStores.Postgres.FactStoreMigrationOptions, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.FactStores.Postgres.MigrationDifference]
-ToolUp.FactStores.Postgres.FactStoreMigration.validateSource(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference]
+ToolUp.FactStores.Postgres.FactStoreMigration.validateSource(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference]
 ToolUp.FactStores.Postgres.FactStoreMigration.verify(ToolUp.Facts.BlobFactStore, ToolUp.FactStores.Postgres.PostgresFactStore, ToolUp.FactStores.Postgres.FactStoreMigrationOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.FactStores.Postgres.FactStoreMigrationReport]
 ToolUp.FactStores.Postgres.FactStoreMigrationCompose (class)
 ToolUp.FactStores.Postgres.FactStoreMigrationCompose.withFactsMigrateTask(ToolUp.Platform.Compose.ServerApp) : ToolUp.Platform.Compose.ServerApp

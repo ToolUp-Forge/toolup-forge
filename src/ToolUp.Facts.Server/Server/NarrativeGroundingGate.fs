@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Globalization
 open System.Text.RegularExpressions
@@ -1134,17 +1136,15 @@ type FactNarrativeGroundingGate
 
     let currentOf (fact: Fact) : GroundingResolution =
         let metric = registry |> Option.bind (fun r -> r.TryGetMetric fact.Metric.Value)
-        let format = metric |> Option.map _.DisplayFormat |> Option.defaultValue ""
         let rendering = FactRendering.renderFor metric fact.Value
 
         let value =
             match fact.Value with
-            | Scalar d -> Some d
+            | Scalar d -> Some(DecimalText.toDecimal d)
             | _ -> None
 
         let asFraction =
-            format.StartsWith("P", StringComparison.OrdinalIgnoreCase)
-            || format.Contains "%"
+            metric |> Option.exists (fun m -> m.DisplayFormat.Style = DisplayStyle.Percent)
 
         GroundingCurrent([ rendering ], value, asFraction)
 
@@ -1170,7 +1170,7 @@ type FactNarrativeGroundingGate
                             if head.FactId <> id then
                                 return id, GroundingSuperseded(Some head.FactId), None
                             else
-                                return id, currentOf fact, Some(SubjectRef.toString fact.Subject)
+                                return id, currentOf fact, Some(Fact.subjectRendering fact.Subject)
                         | Some(FactNotDisclosable policyRef) -> return id, GroundingWithheld policyRef, None
                         | None -> return id, GroundingWithheld "unknown-fact", None
                 })

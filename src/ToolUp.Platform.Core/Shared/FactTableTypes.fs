@@ -181,7 +181,7 @@ module FactTableDefinition =
     /// — `1` for the hierarchy's first (root-most) level — or `None` when
     /// the level is not one of the hierarchy's `Levels`. A row's subject
     /// path has exactly this many members.
-    let levelDepth (subject: SubjectDefinition) (level: string) : int option =
+    let levelDepth (subject: Fuaran.Facts.SubjectDefinition) (level: string) : int option =
         subject.Levels
         |> List.tryFindIndex (fun l -> l = level)
         |> Option.map (fun i -> i + 1)

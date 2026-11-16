@@ -14,11 +14,12 @@ open System
 open System.IO
 open System.Text.RegularExpressions
 open Expecto
+open Fuaran.Facts
 open ToolUp.Facts
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -41,7 +42,7 @@ let private draftAt (path: string list) (metric: string) (method: MethodRef) (va
 }
 
 let private draft path input value =
-    draftAt path "revenue" rollup (Scalar value) input
+    draftAt path "revenue" rollup (Scalar(DecimalText.ofDecimal value)) input
 
 let private t0 = DateTime(2026, 9, 1, 9, 0, 0, DateTimeKind.Utc)
 
@@ -69,13 +70,13 @@ let private sequential (stored: Fact list) (drafts: FactDraft list) : Fact list 
 let private differentialRows: FactDraft list = [
     draft [ "uk" ] "uk-q2-v1" 1m
     draft [ "uk" ] "uk-q2-v2" 2m
-    draftAt [ "uk" ] "revenue" estimator (Scalar 3m) "uk-q2-est"
+    draftAt [ "uk" ] "revenue" estimator (Scalar(DecimalText.ofDecimal 3m)) "uk-q2-est"
     {
         draft [ "uk" ] "uk-q2-relabelled" 4m with
             Period = { q2 with Label = None }
     }
-    draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar 77m) "cfo-1"
-    draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar 78m) "cfo-1"
+    draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar(DecimalText.ofDecimal 77m)) "cfo-1"
+    draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar(DecimalText.ofDecimal 78m)) "cfo-1"
     draftAt [ "eu"; "sku-000006" ] "elasticity" rollup (Absent "no data loaded") "h6"
     draft [ "eu"; "we>ird\tta\\b\nnl" ] "hodd" 42m
     draft [ "eu"; "100%" ] "hpct" 43.0m
@@ -86,15 +87,15 @@ let private differentialRows: FactDraft list = [
 
 // ── A fact's identity is a function of the fact, not of the machine ──
 //
-// `Fact.instant` reads an `Unspecified` endpoint as UTC. Midnight on
+// `Instant.ofDateTime` reads an `Unspecified` endpoint as UTC. Midnight on
 // 9 September 2024 is inside British Summer Time, so on a machine in
 // Europe/London `ToUniversalTime` would read it as 23:00 the day before:
 // these cases fail there under the old rule and pass on every machine
 // under this one.
 
 let private nineSeptember (kind: DateTimeKind) : TemporalExtent = {
-    From = DateTime(2024, 9, 9, 0, 0, 0, kind)
-    To = DateTime(2024, 9, 10, 0, 0, 0, kind)
+    From = Instant.ofDateTime (DateTime(2024, 9, 9, 0, 0, 0, kind))
+    To = Instant.ofDateTime (DateTime(2024, 9, 10, 0, 0, 0, kind))
     Label = None
 }
 
@@ -104,14 +105,14 @@ let private uk = {
 }
 
 let private keyOf (period: TemporalExtent) =
-    Fact.lineageKey uk (MetricRef "revenue") period rollup
+    FactLineage.keyOf uk (MetricRef "revenue") period rollup
 
 let private idOf (period: TemporalExtent) =
     Fact.compute uk (MetricRef "revenue") period rollup [ "v1" ]
 
 // The census: every `.ToUniversalTime()` in the fact tier's core and in the
 // fact stores is a clock read, the rule itself, or a named transaction-time
-// use — never a period's, which goes through `Fact.instant`.
+// use — never a period's, which goes through `Instant.ofDateTime`.
 let private censusRoots = [ "src/ToolUp.Facts.Core"; "src/FactStores" ]
 
 let private censusServerFile (name: string) =
@@ -122,7 +123,6 @@ let private clockRead = Regex(@"[cC]lock\(\)\.ToUniversalTime\(\)")
 
 // (file name, trimmed line, why it is not a period's).
 let private censusAllowed = [
-    "FactTypes.fs", "| _ -> d.ToUniversalTime()", "the rule itself: a Local value converted"
     "DelegateFactTypes.fs",
     "(asOf.ToUniversalTime().ToString \"o\")",
     "a query's transaction time, rendered into a refusal message"
@@ -185,16 +185,17 @@ let private identityTests =
         testCase "a Local endpoint is converted to the instant it names"
         <| fun () ->
             let utc = nineSeptember DateTimeKind.Utc
+            let localFrom = (Instant.toDateTime utc.From).ToLocalTime()
 
             let local = {
                 utc with
-                    From = utc.From.ToLocalTime()
-                    To = utc.To.ToLocalTime()
+                    From = Instant.ofDateTime localFrom
+                    To = Instant.ofDateTime ((Instant.toDateTime utc.To).ToLocalTime())
             }
 
             Expect.equal (keyOf local) (keyOf utc) "a Local value keys as its UTC instant"
-            Expect.equal (Fact.instant local.From) utc.From "the rule converts a Local value"
-            Expect.equal (Fact.instant utc.From).Kind DateTimeKind.Utc "the rule's value is UTC"
+            Expect.equal (Instant.ofDateTime localFrom) utc.From "the rule converts a Local value"
+            Expect.equal (Instant.toDateTime utc.From).Kind DateTimeKind.Utc "the rule's value is UTC"
 
         testCase "the census finds a planted period conversion"
         <| fun () ->
@@ -216,7 +217,7 @@ let private identityTests =
                 (files |> List.exists (fun (name, _) -> name = "PostgresFactStore.fs"))
                 "the census reads the Postgres store"
 
-            Expect.isEmpty (censusOffences files) "every instant of a period goes through Fact.instant"
+            Expect.isEmpty (censusOffences files) "every instant of a period goes through Instant.ofDateTime"
     ]
 
 let tests =
@@ -278,7 +279,7 @@ let tests =
                 plan.IndexDeltas
                 [
                     {
-                        Lineage = Fact.lineageKey v1.Subject v1.Metric v1.Period v1.Method
+                        Lineage = Fact.lineageKey v1
                         Retires = None
                         Head = v3.FactId
                     }
@@ -289,11 +290,16 @@ let tests =
         <| fun () ->
             let head = {
                 (planOver [] WriteShape.ScalarAssert [ draft [ "uk" ] "v1" 1m ]).Facts.Head with
-                    AsOf = t0.AddDays 1.0
+                    AsOf = Instant.ofDateTime (t0.AddDays 1.0)
             }
 
             let plan = planOver [ head ] WriteShape.ScalarAssert [ draft [ "uk" ] "v2" 2m ]
-            Expect.equal plan.Facts.Head.AsOf (head.AsOf.AddTicks 1L) "law L3 under a clock behind the head"
+
+            Expect.equal
+                plan.Facts.Head.AsOf
+                (Instant.ofTicks (head.AsOf.Ticks + 1L))
+                "law L3 under a clock behind the head"
+
             Expect.equal plan.Facts.Head.Supersedes (Some head.FactId) "it supersedes the stored head"
             Expect.equal plan.IndexDeltas.Head.Retires (Some head.FactId) "the delta retires the stored head"
 
@@ -301,12 +307,12 @@ let tests =
         <| fun () ->
             let a = {
                 (planOver [] WriteShape.ScalarAssert [ draft [ "uk" ] "a" 1m ]).Facts.Head with
-                    AsOf = t0
+                    AsOf = Instant.ofDateTime t0
             }
 
             let b = {
                 (planOver [] WriteShape.ScalarAssert [ draft [ "uk" ] "b" 2m ]).Facts.Head with
-                    AsOf = t0
+                    AsOf = Instant.ofDateTime t0
             }
 
             let plan = planOver [ a; b ] WriteShape.ScalarAssert [ draft [ "uk" ] "c" 3m ]
@@ -318,7 +324,9 @@ let tests =
             let stored = (planOver [] WriteShape.ScalarAssert [ draft [ "uk" ] "v1" 1m ]).Facts
 
             let plan =
-                planOver stored WriteShape.ScalarAssert [ draftAt [ "uk" ] "revenue" estimator (Scalar 3m) "est" ]
+                planOver stored WriteShape.ScalarAssert [
+                    draftAt [ "uk" ] "revenue" estimator (Scalar(DecimalText.ofDecimal 3m)) "est"
+                ]
 
             Expect.equal plan.Facts.Head.Supersedes None "competitors are never merged (D19)"
             Expect.equal plan.Receipt.AssertedCount 1 "asserted, not superseding"
@@ -326,7 +334,7 @@ let tests =
         testCase "a human-asserted value change is a new fact that supersedes (D18)"
         <| fun () ->
             let cfo v =
-                draftAt [ "eu" ] "elasticity" (HumanAsserted "cfo") (Scalar v) "cfo-1"
+                draftAt [ "eu" ] "elasticity" (HumanAsserted "cfo") (Scalar(DecimalText.ofDecimal v)) "cfo-1"
 
             let plan = planOver [] WriteShape.BatchAssert [ cfo 77m; cfo 78m ]
             let first, second = plan.Facts.Head, plan.Facts.Tail.Head
@@ -363,7 +371,11 @@ let tests =
                 Expect.equal asserted.Method "computed:rollup:1:p0" "the method identity"
                 Expect.equal asserted.Subject "geography/uk" "the readable subject"
                 Expect.equal superseded.SupersededFactId stored.Head.FactId "the edge"
-                Expect.equal (FactAuditEvent.occurredAt plan.Audit.Head) fact.AsOf "timed by the fact"
+
+                Expect.equal
+                    (FactAuditEvent.occurredAt plan.Audit.Head)
+                    (Instant.toDateTime fact.AsOf)
+                    "timed by the fact"
             | other -> failtestf "unexpected audit %A" other
 
         testCase "an idempotent scalar write is not audited"
@@ -381,7 +393,11 @@ let tests =
             match written.Audit with
             | [ FactAuditEvent.BatchAssertedRow row ] ->
                 Expect.equal row.Receipt written.Receipt "the receipt the caller is told"
-                Expect.equal row.AsOf (written.Facts |> List.map _.AsOf |> List.max) "timed by its latest fact"
+
+                Expect.equal
+                    row.AsOf
+                    (written.Facts |> List.map _.AsOf |> List.max |> Instant.toDateTime)
+                    "timed by its latest fact"
             | other -> failtestf "unexpected audit %A" other
 
             let again = planOver written.Facts WriteShape.BatchAssert differentialRows
@@ -455,7 +471,9 @@ let tests =
 
         testCase "a recorded draft is addressed exactly as a write of it"
         <| fun () ->
-            let d = draftAt [ "eu" ] "elasticity" (HumanAsserted "cfo") (Scalar 77m) "cfo-1"
+            let d =
+                draftAt [ "eu" ] "elasticity" (HumanAsserted "cfo") (Scalar(DecimalText.ofDecimal 77m)) "cfo-1"
+
             let written = (planOver [] WriteShape.ScalarAssert [ d ]).Facts.Head
             Expect.equal (FactWrite.recordedAt d t0) written "one draft-to-fact step"
 
@@ -464,7 +482,7 @@ let tests =
             let plan =
                 planOver [] WriteShape.BatchAssert [
                     draft [ "uk" ] "v1" 1m
-                    draftAt [ "uk" ] "revenue" estimator (Scalar 3m) "est"
+                    draftAt [ "uk" ] "revenue" estimator (Scalar(DecimalText.ofDecimal 3m)) "est"
                     draft [ "fr" ] "f1" 2m
                 ]
 

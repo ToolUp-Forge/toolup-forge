@@ -5,7 +5,9 @@ open System.Collections.Concurrent
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -51,11 +53,11 @@ let private newStore () : IFactStore =
 let private newLineage () : ILineageStore =
     LineageStore.EventStoreLineageStore(InMemoryEventStore.InMemoryEventStore() :> IEventStore) :> ILineageStore
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 /// A computed scalar draft over one input hash, at metric `metricId`.
 let private draftFor (metricId: string) (inputHash: string) (value: decimal) : FactDraft = {
@@ -64,7 +66,7 @@ let private draftFor (metricId: string) (inputHash: string) (value: decimal) : F
         Path = [ "uk" ]
     }
     Metric = MetricRef metricId
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -87,18 +89,11 @@ let private lineageLink (fromId: string) (toId: string) : LineageLink = {
 
 /// A metric definition carrying a recompute policy + staleness.
 let private metricDef (id: string) (staleness: StalenessPolicy) (policy: RecomputePolicy option) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = "C0"
-    Staleness = staleness
-    ProducingOperation = Some "rollup"
-    CanonicalMethod = None
-    RecomputePolicy = policy
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id id "GBP" "currency" "C0" with
+        Direction = HigherIsBetter
+        Staleness = staleness
+        ProducingOperation = Some "rollup"
+        RecomputePolicy = policy
 }
 
 let private registryWith (defs: MetricDefinition list) : IMetricRegistry =
@@ -282,9 +277,9 @@ let tests =
                         Path = [ "uk" ]
                     }
                     Metric = MetricRef "revenue"
-                    Value = Scalar 100m
+                    Value = KernelFixtures.scalar 100m
                     Period = q2
-                    AsOf = now.AddDays -1.0
+                    AsOf = KernelFixtures.instant (now.AddDays -1.0)
                     Method = Computed("rollup", "1", "p0")
                     Evidence = {
                         ResultRef = None
@@ -300,19 +295,19 @@ let tests =
             // Current + inputs changed ⇒ stale now (the real trigger).
             Expect.equal
                 (FactInvalidation.deriveFreshness UntilUpstreamChange fact true true now)
-                (Stale now)
+                (FactFreshness.Stale(KernelFixtures.instant now))
                 "current fact with changed inputs is stale from now"
 
             // Current + inputs unchanged ⇒ Stage-0 behaviour (fresh).
             Expect.equal
                 (FactInvalidation.deriveFreshness UntilUpstreamChange fact true false now)
-                Fresh
+                FactFreshness.Fresh
                 "unchanged inputs ⇒ byte-for-byte the Stage-0 UntilSuperseded behaviour"
 
             // A different policy ignores the invalidation signal entirely.
             Expect.equal
                 (FactInvalidation.deriveFreshness UntilSuperseded fact true true now)
-                Fresh
+                FactFreshness.Fresh
                 "UntilSuperseded is unaffected by the upstream-change signal"
         }
 
@@ -505,7 +500,7 @@ let tests =
 
             let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.hasLength heads 1 "one current head after recompute"
-            Expect.equal heads.[0].Value (Scalar 120m) "the head is the recomputed value"
+            Expect.equal heads.[0].Value (KernelFixtures.scalar 120m) "the head is the recomputed value"
             Expect.equal heads.[0].Supersedes (Some stale.FactId) "the new head supersedes the stale one (derived edge)"
         }
 

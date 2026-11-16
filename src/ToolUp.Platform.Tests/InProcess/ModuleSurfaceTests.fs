@@ -94,22 +94,12 @@ let private signal: Metrics.MetricDefinition = {
     Tags = []
 }
 
-let private groundingMetric: Grounding.MetricDefinition = {
-    Id = "revenue"
-    Name = "Revenue"
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = Grounding.HigherIsBetter
-    DisplayFormat = "N0"
-    Staleness = Grounding.UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+let private groundingMetric: Fuaran.Facts.MetricDefinition = {
+    ToolUp.Platform.Tests.KernelFixtures.metric "revenue" "Revenue" "GBP" "currency" "N0" with
+        Direction = Fuaran.Facts.HigherIsBetter
 }
 
-let private groundingSubject: Grounding.SubjectDefinition = {
+let private groundingSubject: Fuaran.Facts.SubjectDefinition = {
     Id = "product"
     Name = "Product"
     Levels = [ "root" ]

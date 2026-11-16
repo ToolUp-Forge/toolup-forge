@@ -17,9 +17,11 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
@@ -48,17 +50,17 @@ open ToolUp.Platform.Compose
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
-let private q3: TemporalExtent = {
-    From = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q3-2026"
-}
+let private q3: TemporalExtent =
+    period
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q3-2026")
 
 let private draft
     (hierarchy: string)
@@ -89,7 +91,7 @@ let private rollup = Computed("rollup", "1", "p0")
 /// The ordinary seeded fact: one hierarchy member, one scalar, Q2, the
 /// rollup method, surfaceable.
 let private scalarIn (hierarchy: string) (member': string) (metric: string) (value: decimal) : FactDraft =
-    draft hierarchy [ member' ] metric (Scalar value) q2 rollup Surfaceable
+    draft hierarchy [ member' ] metric (scalar value) q2 rollup Surfaceable
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
     match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
@@ -103,18 +105,10 @@ let private metricDef
     (context: string option)
     : MetricDefinition =
     {
-        Id = id
-        Name = id.ToUpperInvariant()
-        Unit = "GBP"
-        Dimensionality = "currency"
-        Direction = direction
-        DisplayFormat = "N0"
-        Staleness = staleness
-        ProducingOperation = None
-        CanonicalMethod = None
-        RecomputePolicy = None
-        RollUp = None
-        Context = context
+        metric id (id.ToUpperInvariant()) "GBP" "currency" "N0" with
+            Direction = direction
+            Staleness = staleness
+            Context = context
     }
 
 let private subjectDef (id: string) (levels: string list) : SubjectDefinition = {
@@ -146,7 +140,7 @@ let private twoMetricRegistry: IMetricRegistry =
         metricDef
             "revenue"
             HigherIsBetter
-            (FreshFor(TimeSpan.FromDays 1.0))
+            (FreshFor 86400)
             (Some "Net invoiced sales excluding VAT, rolled up nightly from the ledger.")
         metricDef "churn" Neutral UntilSuperseded None
     ] [ subjectDef "brand" [ "brand"; "sku" ]; subjectDef "region" [ "country" ] ]
@@ -350,7 +344,7 @@ let definitionTests =
 
             let revenue = metricRow el "revenue"
             Expect.equal (str revenue "name") "REVENUE" "the display name"
-            Expect.equal (str revenue "unit") "GBP" ""
+            Expect.equal (str revenue "unit") "[GBP]" "the unit in its canonical text"
             Expect.equal (str revenue "dimensionality") "currency" ""
             Expect.equal (str revenue "displayFormat") "N0" "the format a quoted number must be canonicalised through"
             Expect.equal (str revenue "direction") "HigherIsBetter" ""
@@ -463,7 +457,7 @@ let coverageTests =
             assertFact
                 store
                 scope
-                (draft "brand" [ "sku-0" ] "revenue" (Scalar 105m) q2 (Computed("mmm", "2", "p9")) Surfaceable)
+                (draft "brand" [ "sku-0" ] "revenue" (scalar 105m) q2 (Computed("mmm", "2", "p9")) Surfaceable)
             |> ignore
 
             let brand = populationRow (metricRow (executeVia sp scope noArgs) "revenue") "brand"
@@ -538,7 +532,7 @@ let disclosureTests =
                 assertFact
                     store
                     scope
-                    (draft "brand" [ sprintf "sku-%d" i ] "revenue" (Scalar(decimal (100 + i))) q2 rollup Internal)
+                    (draft "brand" [ sprintf "sku-%d" i ] "revenue" (scalar (decimal (100 + i))) q2 rollup Internal)
                 |> ignore
 
             let raw = executeRaw sp scope noArgs
@@ -574,7 +568,7 @@ let disclosureTests =
             assertFact
                 store
                 scope
-                (draft "brand" [ "sku-shut" ] "revenue" (Scalar 900m) q2 rollup (Restricted "licence-x"))
+                (draft "brand" [ "sku-shut" ] "revenue" (scalar 900m) q2 rollup (Restricted "licence-x"))
             |> ignore
 
             let brand = populationRow (metricRow (executeVia sp scope noArgs) "revenue") "brand"
@@ -595,7 +589,7 @@ let disclosureTests =
 
         testCase "a population with nothing rankable is WITHHELD and said to be unprobeable"
         <| fun () ->
-            // The probe reads the ranking, and only a Scalar ranks. A
+            // The probe reads the ranking, and only a scalar ranks. A
             // population of categoricals therefore offers no member to
             // check against the gate — which is neither "disclosable" nor
             // "restricted", and is reported as the third thing rather than
@@ -627,7 +621,7 @@ let disclosureTests =
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
-            assertFact store scope (draft "brand" [ "sku-x" ] "revenue" (Scalar 19999m) q2 rollup Internal)
+            assertFact store scope (draft "brand" [ "sku-x" ] "revenue" (scalar 19999m) q2 rollup Internal)
             |> ignore
 
             let! _ = CoverageTool.execute (contextFor sp scope) noArgs

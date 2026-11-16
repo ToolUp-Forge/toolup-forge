@@ -177,12 +177,12 @@ type ServerModule = {
     /// duplicate-id rejection (a metric id declared by two modules fails
     /// compose). Empty (the default) — a module that computes no
     /// registered quantities composes byte-for-byte as before (GP 13).
-    Metrics: Grounding.MetricDefinition list
+    Metrics: Fuaran.Facts.MetricDefinition list
     /// Grounding **subject** declarations: the entity
     /// hierarchies this module computes its metrics over (product
     /// hierarchy, geography, org chart). Same fan-in + duplicate-id
     /// rejection as `Metrics`. Empty by default (GP 13).
-    Subjects: Grounding.SubjectDefinition list
+    Subjects: Fuaran.Facts.SubjectDefinition list
     /// What this module's declared subjects MEAN: a description per
     /// subject and per level, keyed by subject id, beside the declarations
     /// they describe. `addModule` fans these into the app; the composed
@@ -590,7 +590,7 @@ module ServerModule =
     /// diagnostic. Distinct from `withMetrics` (observability / Prometheus
     /// signals). Optional — a module that declares none composes
     /// unchanged (GP 13). **Adds** to the module's metric declarations.
-    let declareMetrics (defs: Grounding.MetricDefinition list) (m: ServerModule) : ServerModule = {
+    let declareMetrics (defs: Fuaran.Facts.MetricDefinition list) (m: ServerModule) : ServerModule = {
         m with
             Metrics = m.Metrics @ defs
     }
@@ -598,7 +598,7 @@ module ServerModule =
     /// Declare one or more grounding **subject** hierarchies
     /// (the entity dimensions this module computes its metrics over).
     /// Same fan-in + duplicate-id rejection as `declareMetrics`; **adds**.
-    let declareSubjects (defs: Grounding.SubjectDefinition list) (m: ServerModule) : ServerModule = {
+    let declareSubjects (defs: Fuaran.Facts.SubjectDefinition list) (m: ServerModule) : ServerModule = {
         m with
             Subjects = m.Subjects @ defs
     }

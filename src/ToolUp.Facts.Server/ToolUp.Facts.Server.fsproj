@@ -37,6 +37,8 @@
     <ItemGroup>
         <Compile Include="Server\FactsAuditEvents.fs" />
         <Compile Include="Server\IFactStore.fs" />
+        <Compile Include="Server\FactStorageJson.fs" />
+        <Compile Include="Server\DisplayFormatText.fs" />
         <!-- Phase 702 — the metric surface: the derived, columnar
              current-heads read model the population query executes
              against above a size threshold. Compiled ahead of the store

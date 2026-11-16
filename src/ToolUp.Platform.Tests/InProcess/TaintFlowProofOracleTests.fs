@@ -7,6 +7,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -430,8 +431,8 @@ let private toRootDerivation (config: DisclosureTaintConfig) (graph: FactDerivat
 // ─── The fact fixtures ───────────────────────────────────────────────
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -452,7 +453,7 @@ let private mkFact
         Metric = MetricRef metric
         Value = value
         Period = q2
-        AsOf = DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Utc)
+        AsOf = Instant.ofDateTime (DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Utc))
         Method = method
         Evidence = {
             ResultRef = None
@@ -465,30 +466,37 @@ let private mkFact
     }
 
 let private rawA =
-    mkFact "RA" "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted policyA) []
+    mkFact "RA" "raw-a" (Computed("load", "1", "p")) (Series(HostKey "dov-a", None)) (Restricted policyA) []
 
 let private rawB =
-    mkFact "RB" "raw-b" (Computed("load", "1", "p")) (Series "dov-b") (Restricted policyB) []
+    mkFact "RB" "raw-b" (Computed("load", "1", "p")) (Series(HostKey "dov-b", None)) (Restricted policyB) []
 
 let private joint =
-    mkFact "J" "joint" (Computed(jointOp, "1", "p")) (Series "dov-j") Surfaceable [ "dov-a"; "dov-b" ]
+    mkFact "J" "joint" (Computed(jointOp, "1", "p")) (Series(HostKey "dov-j", None)) Surfaceable [ "dov-a"; "dov-b" ]
 
 /// A second hop past the declassifier, so the walk is more than one level
 /// deep and a cleared ref has somewhere to stay cleared.
 let private downstream =
-    mkFact "D" "downstream" (Computed("passthrough", "1", "p")) (Scalar 42m) Surfaceable [ "dov-j" ]
+    mkFact "D" "downstream" (Computed("passthrough", "1", "p")) (Scalar(DecimalText.ofDecimal 42m)) Surfaceable [
+        "dov-j"
+    ]
 
 /// A fact that is a taint source AND carries upstream taint — the shape
 /// the conjunction needs both halves of.
 let private mixed =
-    mkFact "M" "mixed" (Computed("passthrough", "1", "p")) (Series "dov-m") (Restricted policyB) [ "dov-a" ]
+    mkFact "M" "mixed" (Computed("passthrough", "1", "p")) (Series(HostKey "dov-m", None)) (Restricted policyB) [
+        "dov-a"
+    ]
 
 let private afterMixed =
-    mkFact "AM" "after-mixed" (Computed(jointOp, "1", "p")) (Scalar 7m) Surfaceable [ "dov-m" ]
+    mkFact "AM" "after-mixed" (Computed(jointOp, "1", "p")) (Scalar(DecimalText.ofDecimal 7m)) Surfaceable [ "dov-m" ]
 
 /// A derivation with no declassifier anywhere — nothing is ever cleared.
 let private undeclassified =
-    mkFact "U" "undeclassified" (Computed("passthrough", "1", "p")) (Scalar 1m) Surfaceable [ "dov-a"; "dov-b" ]
+    mkFact "U" "undeclassified" (Computed("passthrough", "1", "p")) (Scalar(DecimalText.ofDecimal 1m)) Surfaceable [
+        "dov-a"
+        "dov-b"
+    ]
 
 type private Walk = {
     Name: string

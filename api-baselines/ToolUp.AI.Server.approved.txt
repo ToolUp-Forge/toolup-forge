@@ -927,7 +927,7 @@ ToolUp.AI.AnswerVerifier+AnswerProvenanceAnchors.compositionSeal(Microsoft.FShar
 ToolUp.AI.AnswerVerifier+AnswerProvenanceAnchors.fromBootVerification(ToolUp.Platform.Compose.BootVerificationResult, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Compose.SealedCompositionBinding]) : ToolUp.Platform.IAnswerProvenanceAnchors
 ToolUp.AI.AnswerVerifier+AnswerProvenanceAnchors.none : ToolUp.Platform.IAnswerProvenanceAnchors { get }
 ToolUp.AI.AnswerVerifier+Canonical (class)
-ToolUp.AI.AnswerVerifier+Canonical.formatPrecision(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
+ToolUp.AI.AnswerVerifier+Canonical.formatPrecision(Fuaran.Facts.DisplayFormat) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
 ToolUp.AI.AnswerVerifier+Canonical.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[System.Decimal, System.Int32]]
 ToolUp.AI.AnswerVerifier+Canonical.round(System.Int32, System.Decimal) : System.Decimal
 ToolUp.AI.AnswerVerifier+Canonical.valuesMatch(System.Int32, System.Decimal, System.Decimal) : System.Boolean

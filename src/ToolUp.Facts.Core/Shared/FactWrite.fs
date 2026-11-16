@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 open System
 open System.Collections.Generic
 open ToolUp.Platform.Grounding
@@ -399,7 +401,7 @@ module FactStoreError =
                     sprintf
                         "#%d %s / %s: %s"
                         d.Position
-                        (SubjectRef.toString d.Draft.Subject)
+                        (Fact.subjectRendering d.Draft.Subject)
                         d.Draft.Metric.Value
                         (String.concat ", " d.Defects))
                 |> String.concat "; "
@@ -517,7 +519,7 @@ module FactWrite =
                 draft.Period
                 draft.Method
                 (Fact.effectiveInputHashes draft.Method draft.Evidence draft.Value)
-        Lineage = Fact.lineageKey draft.Subject draft.Metric draft.Period draft.Method
+        Lineage = FactLineage.keyOf draft.Subject draft.Metric draft.Period draft.Method
     }
 
     /// The fact a draft is, stored at `asOf` behind `supersedes`.
@@ -527,7 +529,7 @@ module FactWrite =
         Metric = draft.Draft.Metric
         Value = draft.Draft.Value
         Period = draft.Draft.Period
-        AsOf = asOf
+        AsOf = Instant.ofDateTime asOf
         Method = draft.Draft.Method
         Evidence = draft.Draft.Evidence
         Confidence = draft.Draft.Confidence
@@ -593,7 +595,7 @@ module FactWrite =
         let heads = Dictionary<string, Fact>(StringComparer.Ordinal)
 
         for f in stored do
-            let key = Fact.lineageKey f.Subject f.Metric f.Period f.Method
+            let key = Fact.lineageKey f
 
             match heads.TryGetValue key with
             | true, existing when existing.AsOf >= f.AsOf -> ()
@@ -617,8 +619,10 @@ module FactWrite =
                     | _ -> None
 
                 let asOf =
-                    match head with
-                    | Some head when head.AsOf >= now -> head.AsOf.AddTicks 1L
+                    let headAsOf = head |> Option.map (fun h -> Instant.toDateTime h.AsOf)
+
+                    match headAsOf with
+                    | Some headAsOf when headAsOf >= now -> headAsOf.AddTicks 1L
                     | _ -> now
 
                 let fact = factOf draft asOf (head |> Option.map _.FactId)
@@ -640,11 +644,11 @@ module FactWrite =
                 for f in facts do
                     FactAuditEvent.AssertedRow {
                         FactId = f.FactId
-                        Subject = SubjectRef.toString f.Subject
+                        Subject = Fact.subjectRendering f.Subject
                         Metric = f.Metric.Value
                         Method = Fact.methodIdentity f.Method
                         Disclosure = Disclosure.toString f.Disclosure
-                        AsOf = f.AsOf
+                        AsOf = Instant.toDateTime f.AsOf
                     }
 
                     match f.Supersedes with
@@ -652,9 +656,9 @@ module FactWrite =
                         FactAuditEvent.SupersededRow {
                             NewFactId = f.FactId
                             SupersededFactId = superseded
-                            Subject = SubjectRef.toString f.Subject
+                            Subject = Fact.subjectRendering f.Subject
                             Metric = f.Metric.Value
-                            AsOf = f.AsOf
+                            AsOf = Instant.toDateTime f.AsOf
                         }
                     | None -> ()
               ]
@@ -669,7 +673,7 @@ module FactWrite =
                     AsOf =
                         match facts with
                         | [] -> now
-                        | _ -> facts |> List.map _.AsOf |> List.max
+                        | _ -> facts |> List.map (fun f -> Instant.toDateTime f.AsOf) |> List.max
                 }
               ]
 

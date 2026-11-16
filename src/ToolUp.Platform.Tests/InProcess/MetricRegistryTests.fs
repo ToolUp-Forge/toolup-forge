@@ -4,6 +4,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
 
@@ -16,19 +17,10 @@ open ToolUp.Platform.Compose
 // lookups, and the `ServerModule` → `ServerApp` fan-in accumulation — the
 // last without starting a server.
 
-let private metric id (op: string option) : MetricDefinition = {
-    Id = id
-    Name = id.ToUpperInvariant()
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = "N0"
-    Staleness = UntilSuperseded
-    ProducingOperation = op
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+let private metric (id: string) (op: string option) : MetricDefinition = {
+    ToolUp.Platform.Tests.KernelFixtures.metric id (id.ToUpperInvariant()) "count" "count" "N0" with
+        Direction = HigherIsBetter
+        ProducingOperation = op
 }
 
 let private subject id (levels: string list) : SubjectDefinition = {

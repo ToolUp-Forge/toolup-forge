@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Globalization
 open System.Numerics
@@ -424,9 +426,9 @@ module CalculationDeclaration =
 
             number display + " " + word
         | CalculationFormat.Currency code ->
-            let symbol =
-                CurrencySymbols.prefix code
-                |> Option.defaultValue (code.ToUpperInvariant() + " ")
+            // The table's symbol for a code it holds; the code and a space
+            // for any other.
+            let symbol = CurrencySymbols.prefix (code.ToUpperInvariant())
 
             (if display < 0m then "-" else "") + symbol + number (abs display)
 
@@ -627,6 +629,13 @@ module NarrativeCalculations =
     let tryFind (name: string) (calculations: NarrativeCalculations) : CalculationDeclaration option =
         calculations.ByName.TryFind name
 
+    /// Whether `code` has the shape of an ISO 4217 code: exactly three ASCII
+    /// letters, either case.
+    let private isCurrencyCode (code: string) =
+        not (isNull code)
+        && code.Length = 3
+        && code |> Seq.forall (fun c -> (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
+
     let private validName (name: string) =
         name <> ""
         && name |> Seq.forall (fun c -> Char.IsAsciiLetterOrDigit c || c = '-' || c = '_')
@@ -650,7 +659,7 @@ module NarrativeCalculations =
             yield sprintf "calculation '%s' rounds to %d places; places are 0 to 10" name declaration.Rounding.Places
 
         match declaration.Format with
-        | CalculationFormat.Currency code when CurrencySymbols.prefix code |> Option.isNone ->
+        | CalculationFormat.Currency code when not (isCurrencyCode code) ->
             yield sprintf "calculation '%s' names currency '%s', which is not an ISO 4217 code" name code
         | _ -> ()
 
@@ -766,7 +775,7 @@ module NarrativeCalculations =
                 | Present fact ->
                     match fact.Value with
                     | Scalar value when List.contains fact.Metric.Value declaration.Metrics ->
-                        Ok(id, fact.Metric.Value, value)
+                        Ok(id, fact.Metric.Value, DecimalText.toDecimal value)
                     | Scalar _ -> Error(InputMetricUndeclared(id, fact.Metric.Value, declaration.Metrics))
                     | _ -> Error(InputNotScalar id))
 
@@ -788,7 +797,13 @@ module NarrativeCalculations =
                     inputs
                     |> List.map (fun (id, metric, _) ->
                         match registry.TryGetMetric metric with
-                        | Some definition -> Ok(id, definition.Unit)
+                        // A currency unit by its code, any other by its text.
+                        | Some definition ->
+                            Ok(
+                                id,
+                                MetricUnit.currency definition.Unit
+                                |> Option.defaultValue (MetricUnit.text definition.Unit)
+                            )
                         | None -> Error(InputMetricUnregistered(id, metric)))
 
                 match

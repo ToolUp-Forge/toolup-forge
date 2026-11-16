@@ -12,7 +12,9 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.AuditSinks
 open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.ArtefactSigning
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -43,11 +45,11 @@ let private scope = "team-convergence"
 
 let private utf8 (s: string) = Encoding.UTF8.GetBytes s
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft metric inputHash value : FactDraft = {
     Subject = {
@@ -55,7 +57,7 @@ let private draft metric inputHash value : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

@@ -7,7 +7,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Compose
@@ -39,11 +41,11 @@ type RowGateHarness = {
     Scope: ResolvedScope
 }
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draftWith (metric: string) (disclosure: Disclosure) : FactDraft = {
     Subject = {
@@ -51,7 +53,7 @@ let private draftWith (metric: string) (disclosure: Disclosure) : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef metric
-    Value = Scalar 100m
+    Value = KernelFixtures.scalar 100m
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

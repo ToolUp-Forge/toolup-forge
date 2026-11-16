@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Collections.Generic
 open System.Text
@@ -116,11 +118,11 @@ module internal BlobFanOut =
 // through the exact filters and the exact lineage key the enumeration
 // uses, in census order — so the two paths agree by construction, not by
 // a second reading of the rules. Where the leaf name can be exact it is:
-// a `Utc` or `Unspecified` period endpoint round-trips through the store's
-// serialiser with its ticks intact and is compared exactly. A `Local`
-// endpoint is stored as its UTC instant and compared within
-// `LocalTolerance`, which bounds every UTC offset there is — a `Local`
-// value's read-back ticks depend on the reading machine's zone.
+// a period endpoint is an instant, written as its UTC ticks (`U`) and
+// compared exactly. A leaf written while endpoints carried a `DateTime`
+// kind may instead be `N` (an `Unspecified` endpoint, compared exactly) or
+// `L` (a `Local` endpoint stored as its UTC instant and compared within
+// `LocalTolerance`, which bounds every UTC offset there is).
 //
 // The index is DERIVED (GP 5): the fact blobs are the truth, the leaves
 // hold no fact data, and deleting every leaf loses nothing.
@@ -201,24 +203,23 @@ module internal FactIndexLayout =
     // exactly as the lineage the enumeration compares does, which a
     // second rendering of the subject here could drift from.
     let private anyPeriod: TemporalExtent = {
-        From = DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-        To = DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        From = Instant.ofDateTime (DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+        To = Instant.ofDateTime (DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc))
         Label = None
     }
 
     /// The (subject, metric) key segment.
     let subjectMetricKey (subject: SubjectRef) (metric: MetricRef) : string =
-        hex (Fact.lineageKey subject metric anyPeriod (HumanAsserted ""))
+        FactLineage.digestOf subject metric anyPeriod (HumanAsserted "")
 
     /// The method-identity half of the lineage segment.
     let methodHash (m: MethodRef) : string =
         (hex (Fact.methodIdentity m)).Substring(0, 32)
 
-    let private endpoint (d: DateTime) : char * int64 =
-        match d.Kind with
-        | DateTimeKind.Utc -> 'U', d.Ticks
-        | DateTimeKind.Unspecified -> 'N', d.Ticks
-        | _ -> 'L', (Fact.instant d).Ticks
+    // A fact's endpoint is an instant (UTC ticks), so a new leaf is always
+    // written as `U`. Leaves written before the endpoints became instants
+    // may still carry `N` or `L`, and parse and compare as before.
+    let private endpoint (i: Instant) : char * int64 = 'U', i.Ticks
 
     /// The leaf blob name for one fact.
     let leafName (f: Fact) : string =
@@ -302,10 +303,10 @@ module internal FactIndexLayout =
         period.From.Ticks < toHi && fromLo < period.To.Ticks
 
     // Does one endpoint canonicalise — as the lineage key does, through
-    // `Fact.instant` (an `Unspecified` endpoint read as UTC on every
+    // the instant (an `Unspecified` endpoint read as UTC on every
     // machine) — to the target's instant?
-    let private sameInstant (kind: char) (ticks: int64) (target: DateTime) : bool =
-        let targetUtc = (Fact.instant target).Ticks
+    let private sameInstant (kind: char) (ticks: int64) (target: Instant) : bool =
+        let targetUtc = target.Ticks
 
         match kind with
         | 'U'
@@ -497,11 +498,25 @@ type BlobFactStore
 
         Async.AwaitTask entry.Value
 
+    // A fact blob is the specification's encoding (`FactWire`); a blob
+    // written before the store adopted it is the legacy saved shape, read
+    // as it stands and never rewritten (`FactStoreCodec.read`).
     let serialise (f: Fact) : byte[] =
-        JsonSerializer.Serialize(f, jsonOptions) |> Encoding.UTF8.GetBytes
+        match FactWire.writeFact f with
+        | Ok text -> Encoding.UTF8.GetBytes text
+        | Error refusal -> invalidOp (sprintf "fact %s cannot be written: %s" f.FactId (Refusal.describe refusal))
 
     let deserialise (bytes: byte[]) : Fact =
-        JsonSerializer.Deserialize<Fact>(Encoding.UTF8.GetString bytes, jsonOptions)
+        match FactStoreCodec.read (Encoding.UTF8.GetString bytes) with
+        | Ok f -> f
+        | Error refusal -> invalidOp (Refusal.describe refusal)
+
+    // The id migration's export reads a fact stored under a pre-canonical
+    // id, unverified (`FactIdMigrationRead`); every other read verifies.
+    let deserialiseForExport (bytes: byte[]) : Fact =
+        match FactIdMigrationRead.read (Encoding.UTF8.GetString bytes) with
+        | Ok f -> f
+        | Error refusal -> invalidOp (Refusal.describe refusal)
 
     // One fact blob, read. `Ok None` only when the blob does not exist —
     // a download that fails over a blob the store still holds, and a blob
@@ -706,9 +721,6 @@ type BlobFactStore
         | _ -> ()
     }
 
-    let lineageKeyOf (f: Fact) : string =
-        Fact.lineageKey f.Subject f.Metric f.Period f.Method
-
     let periodsOverlap (a: TemporalExtent) (b: TemporalExtent) : bool = a.From < b.To && b.From < a.To
 
     // ─── The point-read index (Phase 890) ─────────────────────────────
@@ -839,7 +851,8 @@ type BlobFactStore
     // "extrapolate the per-item cost" measurement: the per-item cost was
     // not constant.
     let visibleAt (t: DateTime) (all: Fact list) : Fact list =
-        let byT = all |> List.filter (fun f -> f.AsOf <= t)
+        let at = Instant.ofDateTime t
+        let byT = all |> List.filter (fun f -> f.AsOf <= at)
         let superseded = HashSet<string>(StringComparer.Ordinal)
 
         for f in byT do
@@ -902,7 +915,7 @@ type BlobFactStore
         // (an explicit Method clause is already the caller's selection).
         let listing =
             if query.IncludeSuperseded then
-                byMethod scoped |> List.filter (fun f -> f.AsOf <= t)
+                byMethod scoped |> List.filter (fun f -> f.AsOf <= Instant.ofDateTime t)
             elif query.Method.IsSome then
                 byMethod heads
             else
@@ -930,16 +943,14 @@ type BlobFactStore
     // spec.
     // The metric's declared staleness policy — an undeclared metric reads
     // as `UntilSuperseded`, the shared default across every fact surface.
-    let stalenessOf (metricDef: Grounding.MetricDefinition option) =
-        metricDef
-        |> Option.map _.Staleness
-        |> Option.defaultValue Grounding.UntilSuperseded
+    let stalenessOf (metricDef: MetricDefinition option) =
+        metricDef |> Option.map _.Staleness |> Option.defaultValue UntilSuperseded
 
     let enumeratePopulation
         (scopeId: string)
         (query: PopulationQuery)
         (direction: RankDirection)
-        (metricDef: Grounding.MetricDefinition option)
+        (metricDef: MetricDefinition option)
         : Async<PopulationResult> =
         async {
             let! all = loadAll scopeId
@@ -984,7 +995,7 @@ type BlobFactStore
             let policy = stalenessOf metricDef
 
             let stats =
-                PopulationStats.ofPopulation (fun f -> Freshness.derive policy f true t) population
+                PopulationStats.ofPopulation (fun f -> Freshness.derive policy f true (Instant.ofDateTime t)) population
 
             let k = PopulationQuery.effectiveTopK query
             let ranked = PopulationRanking.rank direction population
@@ -1123,7 +1134,7 @@ type BlobFactStore
         (scopeId: string)
         (query: PopulationQuery)
         (direction: RankDirection)
-        (metricDef: Grounding.MetricDefinition option)
+        (metricDef: MetricDefinition option)
         (snapshot: FactSurfaceSnapshot)
         : Async<PopulationResult option> =
         async {
@@ -1171,7 +1182,9 @@ type BlobFactStore
                 let policy = stalenessOf metricDef
 
                 let stats =
-                    PopulationStats.ofMembers (fun x -> Freshness.deriveAt policy x.AsOf true t) population
+                    PopulationStats.ofMembers
+                        (fun x -> Freshness.deriveAt policy (Instant.ofDateTime x.AsOf) true (Instant.ofDateTime t))
+                        population
 
                 let k = PopulationQuery.effectiveTopK query
                 let ranked = PopulationRanking.rankMembers direction population
@@ -1261,7 +1274,7 @@ type BlobFactStore
         (scopeId: string)
         (query: PopulationQuery)
         (direction: RankDirection)
-        (metricDef: Grounding.MetricDefinition option)
+        (metricDef: MetricDefinition option)
         : Async<PopulationResult option> =
         async {
             // The census. This is the same `List` call `loadAll` makes
@@ -1458,7 +1471,9 @@ type BlobFactStore
                 else
                     let overlaps (r: FactSurfaceRow) =
                         query.PeriodOverlaps
-                        |> Option.forall (fun p -> p.From < r.Member.PeriodTo && r.Member.PeriodFrom < p.To)
+                        |> Option.forall (fun p ->
+                            p.From < Instant.ofDateTime r.Member.PeriodTo
+                            && Instant.ofDateTime r.Member.PeriodFrom < p.To)
 
                     return
                         rows
@@ -1797,7 +1812,7 @@ type BlobFactStore
                                 let! read = loadNames scopeId [ name ]
 
                                 match read with
-                                | [ f ] when lineageKeyOf f = key && f.AsOf.Ticks = ticks -> return Some(Ok f)
+                                | [ f ] when Fact.lineageKey f = key && f.AsOf.Ticks = ticks -> return Some(Ok f)
                                 | _ -> return Some(Error())
                         })
                         |> BlobFanOut.run
@@ -1811,7 +1826,7 @@ type BlobFactStore
                         | Some(Error()) ->
                             let! lineage = loadNames scopeId names
 
-                            match lineage |> List.filter (fun f -> lineageKeyOf f = key) |> FactWrite.headOf with
+                            match lineage |> List.filter (fun f -> Fact.lineageKey f = key) |> FactWrite.headOf with
                             | Some head -> heads.Add head
                             | None -> ()
 
@@ -2010,7 +2025,7 @@ type BlobFactStore
                     | Error e -> Error(name, sprintf "download failed: %s" e)
                     | Ok bytes ->
                         try
-                            let f = deserialise bytes
+                            let f = deserialiseForExport bytes
 
                             if f.FactId = factIdOfBlob name then
                                 Ok f
@@ -2102,7 +2117,7 @@ type BlobFactStore
                             // An orphaned leaf is ignored by every read (reads
                             // consult census members only), so its delete is
                             // tidying; the fact blob's is the one that counts.
-                            let! _ = storage.Delete(scopeId, FactIndexLayout.leafName (deserialise (serialise before))) // best-effort-write: an orphaned leaf names an id the census no longer holds, so every read ignores it; a failed delete leaves an inert leaf, never a wrong read, and the migration's outcome is the fact-blob delete below
+                            let! _ = storage.Delete(scopeId, FactIndexLayout.leafName before) // best-effort-write: an orphaned leaf names an id the census no longer holds, so every read ignores it; a failed delete leaves an inert leaf, never a wrong read, and the migration's outcome is the fact-blob delete below
                             let! r = storage.Delete(scopeId, blobName before.FactId)
                             return r |> Result.mapError (sprintf "%s: %s" before.FactId)
                         })
@@ -2348,7 +2363,7 @@ type BlobFactStore
                     match target with
                     | None -> return []
                     | Some f ->
-                        let key = lineageKeyOf f
+                        let key = Fact.lineageKey f
 
                         // The lineage's own facts through the index when it
                         // is complete; the enumeration (repairing an
@@ -2376,7 +2391,7 @@ type BlobFactStore
                                     | NotConsulted -> return! loadNames scopeId names
                                 }
 
-                        return facts |> List.filter (fun g -> lineageKeyOf g = key) |> List.sortBy _.AsOf
+                        return facts |> List.filter (fun g -> Fact.lineageKey g = key) |> List.sortBy _.AsOf
                 })
 
 /// Construction for `BlobFactStore`.

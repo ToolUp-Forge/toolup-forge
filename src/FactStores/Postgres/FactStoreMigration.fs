@@ -13,6 +13,7 @@ open NpgsqlTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.ProviderExceptions
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
@@ -49,7 +50,9 @@ open ToolUp.Platform.Compose
 // (a digest of their content addresses) is skipped.
 //
 // **Verified.** After the copy, a differential check compares source and
-// target: every row's presence, payload, transaction time, supersession
+// target: every row's presence, payload (the fact it reads back as, so a
+// row in the legacy saved shape and one in the specification's encoding
+// agree when they hold the same fact), transaction time, supersession
 // column, lineage hash (recomputed from the stored payload, as the server
 // computes it) and head flag; every lineage's chain as the target's
 // columns walk it; and the AsOf reads of both stores at sampled
@@ -550,7 +553,12 @@ module FactStoreMigration =
     // source's own transaction times, evenly spread, each read at the
     // instant and one tick before it, plus the end of time.
     let private sampleInstants (facts: Fact list) (samples: int) : DateTime list =
-        let times = facts |> List.map _.AsOf |> List.distinct |> List.sort |> Array.ofList
+        let times =
+            facts
+            |> List.map (fun f -> Instant.toDateTime f.AsOf)
+            |> List.distinct
+            |> List.sort
+            |> Array.ofList
 
         let picked =
             if samples = 0 || times.Length = 0 then
@@ -614,7 +622,18 @@ module FactStoreMigration =
                         if expected <> actual then
                             differences.Add(ColumnDiffers(f.FactId, name, expected, actual))
 
-                    column "payload" (FactRow.serialise f) r.Payload
+                    // The fact the row's payload holds against the source fact,
+                    // both in the store's encoding: a payload in the legacy
+                    // saved shape is the same fact as its specification
+                    // rendering, so the comparison is of facts, not of text.
+                    // A payload that does not read back is shown as stored.
+                    let storedFact =
+                        try
+                            FactRow.serialise (FactRow.deserialise r.Payload)
+                        with _ ->
+                            r.Payload
+
+                    column "payload" (FactRow.serialise f) storedFact
                     column "as_of_ticks" (string f.AsOf.Ticks) (string r.AsOfTicks)
                     column "supersedes" (defaultArg f.Supersedes "NULL") (defaultArg r.Supersedes "NULL")
                     // The row's lineage hash against what the server computes
@@ -1198,7 +1217,8 @@ module FactStoreMigration =
     /// the same plan (`FactIdMigration.plan`). Each fact whose stored id is
     /// not `Fact.computeFor` of its own fields has its row re-keyed —
     /// `fact_id`, `supersedes` and the payload's own `FactId` /
-    /// `Supersedes` — and a fact whose id was current but whose
+    /// `Supersedes`, the payload rewritten in the specification's encoding
+    /// — and a fact whose id was current but whose
     /// predecessor moved has its link rewritten. Every other column is a
     /// projection of fields the migration does not change (the lineage
     /// hash, the head flag, the transaction time), so it stays as it is.
@@ -1216,7 +1236,14 @@ module FactStoreMigration =
         : Async<Result<FactIdMigrationReport, string>> =
         async {
             let! rows = readTargetRows target scope
-            let stored = rows |> List.map (fun r -> r, FactRow.deserialise r.Payload)
+            // A row under a pre-canonical id does not read through the
+            // verifying reader; this is the read that exists to re-key it.
+            let stored =
+                rows
+                |> List.map (fun r ->
+                    match FactIdMigrationRead.read r.Payload with
+                    | Ok f -> r, f
+                    | Error refusal -> invalidOp (sprintf "row %s: %s" r.FactId (Refusal.describe refusal)))
 
             match stored |> List.filter (fun (r, f) -> r.FactId <> f.FactId) with
             | _ :: _ as mismatched ->

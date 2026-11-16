@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Globalization
 open System.Text.Json
@@ -333,7 +335,7 @@ module SpecTool =
     /// A row refused when its inputs cannot be named or are too many for one
     /// fact.
     let checkRow (row: SpecFactRow) : Result<unit, SpecDoorRefusal> =
-        let named = SubjectRef.toString row.Subject
+        let named = Fact.subjectRendering row.Subject
 
         if List.isEmpty row.Inputs then
             Error(SpecDoorRefusal.InputsUnnamed named)
@@ -347,7 +349,7 @@ module SpecTool =
     let draftOf (method: MethodRef) (trigger: string option) (row: SpecFactRow) : FactDraft = {
         Subject = row.Subject
         Metric = MetricRef row.Metric
-        Value = Scalar row.Value
+        Value = Scalar(DecimalText.ofDecimal row.Value)
         Period = row.Period
         Method = method
         Evidence = {
@@ -395,11 +397,7 @@ module SpecTool =
             match firstError ((checkedMetrics |> List.map (Result.map ignore)) @ (rows |> List.map checkRow)) with
             | Error refusal -> return Error(tool.OfDoor refusal)
             | Ok() ->
-                let formats =
-                    checkedMetrics
-                    |> List.choose Result.toOption
-                    |> List.map (fun (m, d) -> m, d.DisplayFormat)
-                    |> Map.ofList
+                let definitions = checkedMetrics |> List.choose Result.toOption |> Map.ofList
 
                 let method = Computed(tool.OperationId, tool.Version, tool.Hash spec)
                 let trigger = Some(sprintf "%s:%s" tool.Definition.Name principal)
@@ -433,16 +431,11 @@ module SpecTool =
 
                             {
                                 FactId = factId
-                                Subject = SubjectRef.toString d.Subject
+                                Subject = Fact.subjectRendering d.Subject
                                 Metric = row.Metric
                                 Rendering =
                                     match withheld with
-                                    | None ->
-                                        Some(
-                                            FactRendering.render
-                                                (formats.TryFind row.Metric |> Option.defaultValue "")
-                                                d.Value
-                                        )
+                                    | None -> Some(FactRendering.renderFor (definitions.TryFind row.Metric) d.Value)
                                     | Some _ -> None
                                 WithheldPolicy = withheld
                                 InputCount = List.length d.Evidence.InputHashes

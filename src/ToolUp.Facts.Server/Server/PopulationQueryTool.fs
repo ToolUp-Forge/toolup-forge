@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Text.Json
 open Microsoft.AspNetCore.Http
@@ -608,7 +610,7 @@ module PopulationQueryTool =
                     let policy =
                         metricDef
                         |> Option.map _.Staleness
-                        |> Option.defaultValue Grounding.UntilSuperseded
+                        |> Option.defaultValue StalenessPolicy.UntilSuperseded
 
                     let now = clock().ToUniversalTime()
 
@@ -622,20 +624,20 @@ module PopulationQueryTool =
                         disclosable
                         |> List.map (fun (rank, fact) ->
                             let freshness, staleSince =
-                                match Freshness.deriveAt policy fact.AsOf true now with
+                                match Freshness.deriveAt policy fact.AsOf true (Instant.ofDateTime now) with
                                 | Fresh -> "Fresh", None
-                                | Stale since -> "Stale", Some(since.ToUniversalTime().ToString "o")
+                                | Stale since -> "Stale", Some((Instant.toDateTime since).ToString "o")
 
                             {|
                                 rank = rank
                                 factId = fact.FactId
-                                subject = SubjectRef.toString fact.Subject
+                                subject = Fact.subjectRendering fact.Subject
                                 metric = fact.Metric.Value
                                 rendering = FactRendering.renderFor metricDef fact.Value
-                                periodFrom = fact.Period.From.ToUniversalTime().ToString "o"
-                                periodTo = fact.Period.To.ToUniversalTime().ToString "o"
+                                periodFrom = (Instant.toDateTime fact.Period.From).ToString "o"
+                                periodTo = (Instant.toDateTime fact.Period.To).ToString "o"
                                 periodLabel = fact.Period.Label
-                                asOf = fact.AsOf.ToUniversalTime().ToString "o"
+                                asOf = (Instant.toDateTime fact.AsOf).ToString "o"
                                 freshness = freshness
                                 staleSince = staleSince
                                 method = Fact.methodIdentity fact.Method
@@ -716,7 +718,8 @@ module PopulationQueryTool =
                     let renderPath (path: string list) = String.concat ">" path
 
                     let renderStat (value: decimal option) =
-                        value |> Option.map (fun d -> FactRendering.renderFor metricDef (Scalar d))
+                        value
+                        |> Option.map (fun d -> FactRendering.renderFor metricDef (Scalar(DecimalText.ofDecimal d)))
 
                     let directionLabel =
                         match result.Direction with

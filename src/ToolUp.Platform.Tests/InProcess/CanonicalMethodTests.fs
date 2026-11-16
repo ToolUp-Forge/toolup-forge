@@ -4,7 +4,9 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -22,25 +24,16 @@ open ToolUp.Platform.Infra.Metrics
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private metricWithCanonical (id: string) (canonical: string option) : MetricDefinition = {
-    Id = id
-    Name = id.ToUpperInvariant()
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = "N0"
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = canonical
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id (id.ToUpperInvariant()) "GBP" "currency" "N0" with
+        Direction = HigherIsBetter
+        CanonicalMethod = canonical
 }
 
 /// A registry declaring `revenue` canonical to the `rollup` operation
@@ -63,7 +56,7 @@ let private draft metricId (method: MethodRef) inputHash value : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef metricId
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = q2
     Method = method
     Evidence = {

@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 open System
 open ToolUp.Platform
 open ToolUp.Platform.Grounding

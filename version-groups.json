@@ -158,7 +158,7 @@
     {
       "id": "fact-stores",
       "property": "ToolUpFactStoresVersion",
-      "version": "0.39.3",
+      "version": "0.40.0",
       "projects": [
         "src/FactStores/**"
       ]

@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open ToolUp.Platform.Transport
 open System
 open System.Globalization
@@ -207,8 +209,8 @@ type AnswerPlanner
                         | None, None -> None
                         | from, to' ->
                             Some {
-                                From = from |> Option.defaultValue DateTime.MinValue
-                                To = to' |> Option.defaultValue DateTime.MaxValue
+                                From = Instant.ofDateTime (from |> Option.defaultValue DateTime.MinValue)
+                                To = Instant.ofDateTime (to' |> Option.defaultValue DateTime.MaxValue)
                                 Label = None
                             }
                     // The canonical-method default (Phase 566) applies —
@@ -281,10 +283,14 @@ type AnswerPlanner
                             let successor = chain |> List.tryFind (fun g -> g.Supersedes = Some head.FactId)
 
                             match
-                                Freshness.derive metric.Staleness head successor.IsNone (clock().ToUniversalTime())
+                                Freshness.derive
+                                    metric.Staleness
+                                    head
+                                    successor.IsNone
+                                    (Instant.ofDateTime (clock().ToUniversalTime()))
                             with
                             | Fresh -> return UseFact head.FactId
-                            | Stale since -> return RefreshFact(head.FactId, since)
+                            | Stale since -> return RefreshFact(head.FactId, Instant.toDateTime since)
     }
 
     // ── Population resolution (706.C) ─────────────────────────────
@@ -334,8 +340,8 @@ type AnswerPlanner
                             | None, None -> None
                             | from, to' ->
                                 Some {
-                                    From = from |> Option.defaultValue DateTime.MinValue
-                                    To = to' |> Option.defaultValue DateTime.MaxValue
+                                    From = Instant.ofDateTime (from |> Option.defaultValue DateTime.MinValue)
+                                    To = Instant.ofDateTime (to' |> Option.defaultValue DateTime.MaxValue)
                                     Label = None
                                 }
                         Threshold = PopulationTriple.threshold triple
@@ -404,8 +410,8 @@ type AnswerPlanner
                         let staleSinces =
                             disclosure.Disclosable
                             |> List.choose (fun (_, fact) ->
-                                match Freshness.deriveAt metric.Staleness fact.AsOf true now with
-                                | Stale since -> Some since
+                                match Freshness.deriveAt metric.Staleness fact.AsOf true (Instant.ofDateTime now) with
+                                | Stale since -> Some(Instant.toDateTime since)
                                 | Fresh -> None)
 
                         let rankedCount = List.length disclosure.Disclosable
@@ -691,7 +697,8 @@ module AnswerPlanner =
             sb.AppendLine "Registered metrics (id — name, unit):" |> ignore
 
             for m in r.Metrics do
-                sb.AppendLine(sprintf "  %s — %s, %s" m.Id m.Name m.Unit) |> ignore
+                sb.AppendLine(sprintf "  %s — %s, %s" m.Id m.Name (MetricUnit.text m.Unit))
+                |> ignore
 
             sb.AppendLine "Registered subject hierarchies (id — levels root→leaf):"
             |> ignore
@@ -734,9 +741,10 @@ module AnswerPlanner =
             for m in r.Metrics do
                 let direction =
                     match m.Direction with
-                    | Grounding.HigherIsBetter -> "higher is better — best_first ranks descending"
-                    | Grounding.LowerIsBetter -> "lower is better — best_first ranks ascending"
-                    | Grounding.Neutral -> "no better direction — best_first REFUSES; pass ascending or descending"
+                    | DirectionOfBetter.HigherIsBetter -> "higher is better — best_first ranks descending"
+                    | DirectionOfBetter.LowerIsBetter -> "lower is better — best_first ranks ascending"
+                    | DirectionOfBetter.Neutral ->
+                        "no better direction — best_first REFUSES; pass ascending or descending"
 
                 sb.AppendLine(sprintf "  %s — %s" m.Id direction) |> ignore
 

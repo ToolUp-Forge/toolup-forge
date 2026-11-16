@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
@@ -18,7 +20,7 @@ open ToolUp.Platform.Compose
 // The self-auditing store. Facts at different aggregation levels of one
 // subject hierarchy (a SKU volume vs the brand roll-up) are mechanically
 // comparable when the metric declares **additive** roll-up semantics
-// (`Grounding.RollUp.Additive tolerance`, Phase 519 registry data). A
+// (`RollUp.Additive tolerance`, Phase 519 registry data). A
 // standing, decidable check compares each parent fact against the sum of
 // its direct children for the same metric and period, over the current
 // heads, and flags a cross-level inconsistency — a mixed-vintage
@@ -193,7 +195,7 @@ module CoherenceCheck =
 
     let private scalarOf (v: FactValue) : decimal option =
         match v with
-        | Scalar d -> Some d
+        | Scalar d -> Some(DecimalText.toDecimal d)
         | _ -> None
 
     let private isAbsent (v: FactValue) : bool =
@@ -222,7 +224,7 @@ module CoherenceCheck =
             |> List.exists (fun p -> abs (ratio - p) <= p * config.UnitSlipRelativeTolerance)
 
     let private vintageSpread (facts: Fact list) : TimeSpan =
-        match facts |> List.map _.AsOf with
+        match facts |> List.map (fun f -> Instant.toDateTime f.AsOf) with
         | [] -> TimeSpan.Zero
         | asOfs -> (List.max asOfs) - (List.min asOfs)
 
@@ -249,9 +251,9 @@ module CoherenceCheck =
             |> Option.bind (fun reg -> reg.TryGetMetric metric.Value)
             |> Option.bind (fun d ->
                 match d.Staleness with
-                | Grounding.FreshFor window -> Some window
-                | Grounding.UntilSuperseded
-                | Grounding.UntilUpstreamChange -> None)
+                | StalenessPolicy.FreshFor windowSeconds -> Some(TimeSpan.FromSeconds(float windowSeconds))
+                | StalenessPolicy.UntilSuperseded
+                | StalenessPolicy.UntilUpstreamChange -> None)
             |> Option.defaultValue config.VintageWindow
 
     // The classifier over the two signals it reads from a comparable set —
@@ -321,6 +323,7 @@ module CoherenceCheck =
                     reg.TryGetMetric f.Metric.Value
                     |> Option.bind _.RollUp
                     |> Grounding.RollUp.additiveTolerance
+                    |> Option.map DecimalText.toDecimal
 
                 match tolerance with
                 | Some tol when (reg.TryGetSubject f.Subject.Hierarchy |> Option.isSome) -> Some(f, tol)
@@ -397,7 +400,7 @@ module CoherenceCheck =
 
     let private samePeriod (a: TemporalExtent) (b: TemporalExtent) = a.From = b.From && a.To = b.To
 
-    let private absoluteSpread (a: DateTime) (b: DateTime) : TimeSpan = (a - b).Duration()
+    let private absoluteSpread (a: Instant) (b: DateTime) : TimeSpan = (Instant.toDateTime a - b).Duration()
 
     /// One delegated comparison: a parent value against its children's total.
     [<RequireQualifiedAccess>]
@@ -488,7 +491,7 @@ module CoherenceCheck =
         (tolerance: decimal)
         (d: DelegateFact)
         (committedAt: DateTime)
-        (groups: ((string list * DateTime * DateTime) * Fact list) list)
+        (groups: ((string list * Instant * Instant) * Fact list) list)
         (rows: DelegateTableRow list)
         : CoherenceFinding list =
         groups
@@ -548,6 +551,7 @@ module CoherenceCheck =
                         reg.TryGetMetric d.Metric.Value
                         |> Option.bind _.RollUp
                         |> Grounding.RollUp.additiveTolerance
+                        |> Option.map DecimalText.toDecimal
 
                     match tolerance with
                     | Some tol when (reg.TryGetSubject d.Query.Hierarchy |> Option.isSome) -> Some(d, tol)
@@ -636,10 +640,10 @@ module CoherenceCheck =
         (finding: CoherenceFinding)
         : Async<unit> =
         let payload: CoherenceFindingEvent = {
-            Subject = SubjectRef.toString finding.Subject
+            Subject = Fact.subjectRendering finding.Subject
             Metric = finding.Metric.Value
-            PeriodFrom = finding.Period.From
-            PeriodTo = finding.Period.To
+            PeriodFrom = Instant.toDateTime finding.Period.From
+            PeriodTo = Instant.toDateTime finding.Period.To
             Expected = finding.Expected
             Found = finding.Found
             Discrepancy = finding.Discrepancy
