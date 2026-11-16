@@ -1,6 +1,6 @@
 # A Compute grammar profile for the assistant
 
-**Ships in:** ToolUp.Facts.Core, ToolUp.Facts.Server, ToolUp.Facts.Presentation.Server and ToolUp.AI.Server 0.42.0.
+**Ships in:** ToolUp.Facts.Core, ToolUp.Facts.Server, ToolUp.Facts.Presentation.Server and ToolUp.AI.Server 0.42.1.
 Opt-in: a deployment that registers no pipeline profile evaluates pipelines exactly as before. Two changes are
 breaking for a consumer that reached them:
 

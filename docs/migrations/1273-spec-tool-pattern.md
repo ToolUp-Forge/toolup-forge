@@ -1,6 +1,6 @@
 # A tool-result pattern for "spec in, Facts out"
 
-**Ships in:** ToolUp.Facts.Core and ToolUp.Facts.Server 0.42.0. Additive: no existing call changes, and
+**Ships in:** ToolUp.Facts.Core and ToolUp.Facts.Server 0.42.1. Additive: no existing call changes, and
 `evaluate_pipeline` answers exactly as before (its refusal text, summary, block part and asserted facts).
 
 **Affected:** a deployment that wants its own AI tool over the deployment's facts in the shape `evaluate_pipeline`
