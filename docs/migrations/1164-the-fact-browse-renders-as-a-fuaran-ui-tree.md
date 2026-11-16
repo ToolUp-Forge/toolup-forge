@@ -1,6 +1,6 @@
 # The fact browse renders as a Fuaran-UI tree
 
-**Ships in:** the 0.42.0 draft. `ToolUp.Facts.Client` only; no public signature changes.
+**Ships in:** the 0.43.0 draft. `ToolUp.Facts.Client` only; no public signature changes.
 
 **Affected:** a deployment that composes the fact browse (`FactBrowseView.create` or `appendFactBrowseModule`). The
 module id, its pages and routes, its `FactBrowseLinks` topic subscriptions and every link into it are unchanged, so
