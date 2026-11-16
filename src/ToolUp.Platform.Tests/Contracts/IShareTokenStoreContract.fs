@@ -174,6 +174,45 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             | other -> failtestf "Expected UseLimitExceeded on second MarkUsed, got %A" other
         }
 
+        // ─── MarkUsed is atomic: N concurrent uses of a limit-K token ──
+        //
+        // A caller that admits on a use (a team invite link) consumes first
+        // and admits only on `Ok`, so the limit holds only if exactly K of
+        // N concurrent increments succeed. A store that cannot increment
+        // atomically must answer `Error`, never a second `Ok`.
+
+        for limit in [ 1; 3 ] do
+            testCaseAsync
+                $"MarkUsed is atomic — 12 concurrent uses of a UseLimit={limit} token succeed exactly {limit} times"
+            <| async {
+                let store, scopeA, _ = factory ()
+
+                let req = {
+                    mkRequest scopeA "team.invite" $"concurrent-{limit}" None with
+                        UseLimit = Some(Some limit)
+                }
+
+                let! issued = store.Issue req
+                let token = okOrFail "Issue" issued
+
+                let! outcomes =
+                    List.init 12 (fun _ -> store.MarkUsed(scopeA, token.Claim.TokenId))
+                    |> Async.Parallel
+
+                let succeeded = outcomes |> Array.filter Result.isOk |> Array.length
+                Expect.equal succeeded limit "exactly UseLimit increments succeed"
+
+                for outcome in outcomes do
+                    match outcome with
+                    | Ok()
+                    | Error ShareTokenError.UseLimitExceeded -> ()
+                    | Error other -> failtestf "a losing increment answers UseLimitExceeded, got %A" other
+
+                match! store.Validate token.Token with
+                | Error ShareTokenError.UseLimitExceeded -> ()
+                | other -> failtestf "the token is spent after its limit, got %A" other
+            }
+
         // ─── Revocation ───────────────────────────────────────────
 
         testCaseAsync "Revoke marks token RevokedToken on subsequent Validate"
