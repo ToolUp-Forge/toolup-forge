@@ -278,6 +278,22 @@ the import would then sit in the SDK's packaged Fable source, so every consumer'
 Node test harness that loads the shell's modules would need a CSS stub. At 10 KiB the saving does not pay for that.
 Revisit it if a first-load ceiling comes to count CSS, or the stylesheet grows several-fold.
 
+**A template app also carries the canonical Tailwind block.** The template clients embed it above the two imports
+(Phase 1363), so an app made from a template pays for the shell's utilities and tokens as well. Measured 2026-11-16
+with `Fuaran.UI.Renderer` 0.104.0 and the pinned `tailwindcss` 4.3.0: a production `vite build` of the
+`platformsdk-application` client's CSS entry, after a Fable compile of the client so Tailwind scans the shell's
+classes, without and with the block (gzip as Vite reports it):
+
+| CSS asset | Bytes | Gzipped |
+|---|---:|---:|
+| the reference stylesheet, the bridge and the template's own rules | 68,817 | 10.18 kB |
+| with the canonical block | 118,807 | 19.50 kB |
+| added to every first load by the block | 49,990 | 9.32 kB |
+
+The 49,990 bytes are 3.3 % of the shell's JavaScript first load above. They are the price of the shell drawing at
+all: without the block none of the shell's utility classes (`bg-sidebar`, `bg-brand`, `border-border`, …) is
+generated, and the shell renders unstyled.
+
 The split points came from the bundle, by package (rendered bytes, before minifying):
 
 | Candidate | KiB | Decision |

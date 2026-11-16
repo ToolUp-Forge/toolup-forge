@@ -882,6 +882,10 @@ let notRead: (string * string) list = [
     "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
     "templates/**/launchSettings.json",
     "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
+    "client-styling/check-drift.ps1",
+    "run by the Templates row (VerifyTemplates), which the templates CI job runs and VerifyAll does not"
+    "client-styling/tailwind/**",
+    "the styling drift check's canonical sources, read by the Templates row (CI-only) through client-styling/check-drift.ps1"
 ]
 
 /// The record's `reads`: the union of the step and row declarations, each
