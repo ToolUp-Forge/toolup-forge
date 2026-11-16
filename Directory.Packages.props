@@ -18,9 +18,9 @@
     <!-- The fuaran-facts repository's pin, for Fuaran.Facts: the Fact kernel,
          its identity rule, codec, laws, definitions and rendering standard,
          which ToolUp.Platform.Core and ToolUp.Facts.Core build on. Public: a
-         release on nuget.org (0.2.0 depends on Fuaran.Core 0.40.3 or later,
+         release on nuget.org (0.2.1 depends on Fuaran.Core 0.40.3 or later,
          which the Core pin above satisfies). -->
-    <FuaranFactsVersion>0.2.0</FuaranFactsVersion>
+    <FuaranFactsVersion>0.2.1</FuaranFactsVersion>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Phase 1129 — the Fuaran-UI repository's pin, for Fuaran.UI and

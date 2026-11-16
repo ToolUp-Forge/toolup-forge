@@ -1398,6 +1398,10 @@ type PostgresFactStore
                 return! readPayloads cmd
             }
 
+            match FactWrite.collisions headFacts request with
+            | [] -> ()
+            | pairs -> raise (FactWriteCollision(FactWrite.describeCollisions pairs))
+
             let plan =
                 FactWrite.plan (clock().ToUniversalTime()) stored.Contains headFacts request
 
@@ -1449,20 +1453,25 @@ type PostgresFactStore
     // The write core: one transaction, re-attempted when it loses a race
     // to a concurrent writer. A lost race rolls back whole — the batch is
     // all-or-nothing — and the next attempt re-plans against the winner.
-    let writeDrafts (scopeId: string) (request: WriteRequest) : Async<Result<WritePlan, string>> =
+    let writeDrafts
+        (operation: string)
+        (scopeId: string)
+        (request: WriteRequest)
+        : Async<Result<WritePlan, FactStoreError>> =
         let rec attempt (n: int) = async {
             let! outcome = attemptWrite scopeId request |> Async.Catch
 
             match outcome with
             | Choice1Of2 plan -> return Ok plan
             | Choice2Of2 ex when isRaceLost ex && n < options.MaxWriteAttempts -> return! attempt (n + 1)
+            | Choice2Of2(FactWriteCollision reason) -> return Error(FactStoreError.Refused reason)
             | Choice2Of2 ex ->
                 let message =
                     match ex with
                     | :? AggregateException as a when a.InnerExceptions.Count = 1 -> a.InnerExceptions[0].Message
                     | _ -> ex.Message
 
-                return Error(sprintf "fact store write failed: %s" message)
+                return Error(FactStoreError.StorageFault(operation, sprintf "fact store write failed: %s" message))
         }
 
         attempt 1
@@ -1562,8 +1571,8 @@ type PostgresFactStore
                 match FactWrite.prepare WriteShape.ScalarAssert [ draft ] with
                 | Error refused -> return Error refused
                 | Ok request ->
-                    match! writeDrafts scopeId request with
-                    | Error e -> return Error(FactStoreError.StorageFault("assert", e))
+                    match! writeDrafts "assert" scopeId request with
+                    | Error e -> return Error e
                     | Ok plan ->
                         do! FactAudit.write events scopeId plan.Audit
 
@@ -1574,7 +1583,13 @@ type PostgresFactStore
                             // stored — return it unchanged, with no write and
                             // no audit.
                             match! load scopeId factId with
-                            | Some fact -> return Ok fact
+                            | Some fact ->
+                                // A stored fact under the draft's id that
+                                // matches it only by rendering is another
+                                // fact, never this one replayed.
+                                match FactWrite.collisions [ fact ] request with
+                                | [] -> return Ok fact
+                                | pairs -> return Error(FactStoreError.Refused(FactWrite.describeCollisions pairs))
                             | None ->
                                 return
                                     Error(
@@ -1608,8 +1623,8 @@ type PostgresFactStore
                     | Error refused -> return Error refused
                     | Ok request when List.isEmpty request.Drafts -> return Ok BatchAssertReceipt.empty
                     | Ok request ->
-                        match! writeDrafts scopeId request with
-                        | Error e -> return Error(FactStoreError.StorageFault("batch assert", e))
+                        match! writeDrafts "batch assert" scopeId request with
+                        | Error e -> return Error e
                         | Ok plan ->
                             do! FactAudit.write events scopeId plan.Audit
                             return Ok plan.Receipt

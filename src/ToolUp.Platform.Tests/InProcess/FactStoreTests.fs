@@ -894,7 +894,7 @@ let private storeOver (storage: IBlobStorage) (clock: unit -> DateTime) (options
 /// neighbours), and subject paths containing each character the wire
 /// format escapes — including the empty segment, which is the one shape a
 /// naive join-and-split round-trips wrongly.
-let private seed702 (store: IFactStore) (scope: string) = async {
+let private seed702 (storage: IBlobStorage) (clock: unit -> DateTime) (store: IFactStore) (scope: string) = async {
     for i in 0..5 do
         do!
             assertSeed
@@ -930,14 +930,18 @@ let private seed702 (store: IFactStore) (scope: string) = async {
     do! assertSeed store scope (draftAt [ "eu"; "sku-000000" ] "revenue" rollup (KernelFixtures.scalar 1234m) "rev0")
 
     // Every character the surface's wire format escapes, plus the empty
-    // path segment.
+    // path segment. The kernel refuses both on write (`>` and the empty
+    // member), so they are at rest, as an earlier store left them, each at
+    // the next reading of the store's clock as an assert would have stamped.
     do!
-        assertSeed
-            store
+        IFactStoreContract.AtRest.toBlob
+            storage
             scope
-            (draftAt [ "eu"; "we>ird\tta\\b\nnl" ] "elasticity" rollup (KernelFixtures.scalar 42m) "hodd")
-
-    do! assertSeed store scope (draftAt [ "eu"; "" ] "elasticity" rollup (KernelFixtures.scalar 43m) "hempty")
+            false
+            (IFactStoreContract.AtRest.facts clock [
+                draftAt [ "eu"; "we>ird\tta\\b\nnl" ] "elasticity" rollup (KernelFixtures.scalar 42m) "hodd"
+                draftAt [ "eu"; "" ] "elasticity" rollup (KernelFixtures.scalar 43m) "hempty"
+            ])
 }
 
 /// The query matrix the two read models are compared over. Every clause
@@ -1146,7 +1150,7 @@ let metricSurfaceTests =
             // Seeded through the DISABLED store, so no surface exists when
             // the surfaced store is first asked: the first comparison
             // therefore also exercises the cold build from the log.
-            do! seed702 enumerating scope
+            do! seed702 storage clock enumerating scope
             do! expectSameAnswers "cold build" enumerating surfaced scope
 
             let! surfaceBlobs = storage.List(scope, FactSurface.Prefix)
@@ -1163,7 +1167,7 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 surfaced scope
+            do! seed702 storage clock surfaced scope
 
             // Build the surface, then keep asserting THROUGH the surfaced
             // store so every subsequent write takes the incremental
@@ -1222,7 +1226,7 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 surfaced scope
+            do! seed702 storage clock surfaced scope
             do! expectSameAnswers "before the flush" enumerating surfaced scope
 
             do! FactSurface.drop storage scope
@@ -1247,7 +1251,7 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 surfaced scope
+            do! seed702 storage clock surfaced scope
             do! expectSameAnswers "converged" enumerating surfaced scope
 
             // A second replica's write, or a restore: the fact reaches the
@@ -1315,7 +1319,7 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 surfaced scope
+            do! seed702 storage clock surfaced scope
             do! expectSameAnswers "converged" enumerating surfaced scope
 
             let ahead =
@@ -1373,7 +1377,7 @@ let metricSurfaceTests =
                 }
 
             let scope = newScope ()
-            do! seed702 gated scope
+            do! seed702 storage clock gated scope
             do! expectSameAnswers "below the threshold" enumerating gated scope
 
             let! surfaceBlobs = storage.List(scope, FactSurface.Prefix)
@@ -1672,7 +1676,7 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 enumerating scope
+            do! seed702 storage clock enumerating scope
 
             // Built cold (a rebuild), then asked again.
             let! first = surfaced.QueryPopulation(TestScope.resolved scope, levelTwo)
@@ -1704,7 +1708,7 @@ let metricSurfaceTests =
             let replicaB = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 replicaA scope
+            do! seed702 storage clock replicaA scope
             do! expectSameAnswers "replica A warm" enumerating replicaA scope
 
             // Replica B writes through its OWN maintenance — a supersession
@@ -1766,7 +1770,7 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 surfaced scope
+            do! seed702 storage clock surfaced scope
 
             do!
                 assertSeed
@@ -1832,7 +1836,7 @@ let metricSurfaceTests =
             let surfaced = storeOver storage clock FactSurfaceOptions.always
             let scope = newScope ()
 
-            do! seed702 enumerating scope
+            do! seed702 storage clock enumerating scope
 
             // A pre-891 snapshot: its header and one absorbed id, and no rows.
             let legacy =
@@ -2442,47 +2446,71 @@ let private estimator = Computed("estimator", "1", "p0")
 let private awkwardPath = [ "a/b"; ""; "c>d"; "x|y"; "100%"; "é" ]
 
 /// Seed every shape a narrowed read could get wrong, through `store`, and
-/// return what was written in order.
-let private seed890 (store: IFactStore) (scope: string) = async {
-    let drafts = [
-        draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 1m) "uk-q2-v1"
-        draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 2m) "uk-q2-v2"
-        draftAt [ "uk" ] "revenue" estimator (KernelFixtures.scalar 3m) "uk-q2-est"
-        {
-            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 4m) "uk-q3" with
-                Period = q3
-        }
-        {
-            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 5m) "uk-un-v1" with
-                Period = unmarkedPeriod
-        }
-        {
-            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 6m) "uk-un-v2" with
-                Period = unmarkedPeriod
-        }
-        {
-            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 7m) "uk-loc" with
-                Period = localPeriod
-        }
-        draftAt [ "uk" ] "cost" rollup (KernelFixtures.scalar 8m) "uk-cost"
-        draftAt [ "fr" ] "revenue" rollup (KernelFixtures.scalar 9m) "fr-q2"
-        draftAt awkwardPath "revenue" rollup (KernelFixtures.scalar 10m) "awk-v1"
-        draftAt awkwardPath "revenue" rollup (KernelFixtures.scalar 11m) "awk-v2"
-        draftAt [ "de" ] "elasticity" rollup (KernelFixtures.scalar 12m) "de-rollup"
-        draftAt [ "de" ] "elasticity" estimator (KernelFixtures.scalar 13m) "de-est"
-    ]
+/// return what was written in order. The awkward path's lineage carries
+/// segments the kernel refuses on write (`>`, `|`, the empty member), so it
+/// is put at rest as an earlier store left it: each version at the next
+/// reading of the store's `clock`, the second superseding the first, with
+/// the index leaves that store wrote when `withLeaves`.
+let private seed890
+    (storage: IBlobStorage)
+    (clock: unit -> DateTime)
+    (withLeaves: bool)
+    (store: IFactStore)
+    (scope: string)
+    =
+    async {
+        let drafts = [
+            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 1m) "uk-q2-v1"
+            draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 2m) "uk-q2-v2"
+            draftAt [ "uk" ] "revenue" estimator (KernelFixtures.scalar 3m) "uk-q2-est"
+            {
+                draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 4m) "uk-q3" with
+                    Period = q3
+            }
+            {
+                draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 5m) "uk-un-v1" with
+                    Period = unmarkedPeriod
+            }
+            {
+                draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 6m) "uk-un-v2" with
+                    Period = unmarkedPeriod
+            }
+            {
+                draftAt [ "uk" ] "revenue" rollup (KernelFixtures.scalar 7m) "uk-loc" with
+                    Period = localPeriod
+            }
+            draftAt [ "uk" ] "cost" rollup (KernelFixtures.scalar 8m) "uk-cost"
+            draftAt [ "fr" ] "revenue" rollup (KernelFixtures.scalar 9m) "fr-q2"
+        ]
 
-    let written = ResizeArray<Fact>()
+        let awkward = [
+            draftAt awkwardPath "revenue" rollup (KernelFixtures.scalar 10m) "awk-v1"
+            draftAt awkwardPath "revenue" rollup (KernelFixtures.scalar 11m) "awk-v2"
+        ]
 
-    for d in drafts do
-        let! r = store.Assert(TestScope.resolved scope, d)
+        let after = [
+            draftAt [ "de" ] "elasticity" rollup (KernelFixtures.scalar 12m) "de-rollup"
+            draftAt [ "de" ] "elasticity" estimator (KernelFixtures.scalar 13m) "de-est"
+        ]
 
-        match r with
-        | Ok f -> written.Add f
-        | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
+        let written = ResizeArray<Fact>()
 
-    return List.ofSeq written
-}
+        let assertAll (ds: FactDraft list) = async {
+            for d in ds do
+                let! r = store.Assert(TestScope.resolved scope, d)
+
+                match r with
+                | Ok f -> written.Add f
+                | Error e -> failtestf "seed failed: %s" (FactStoreError.describe e)
+        }
+
+        do! assertAll drafts
+        let atRest = IFactStoreContract.AtRest.facts clock awkward
+        do! IFactStoreContract.AtRest.toBlob storage scope withLeaves atRest
+        written.AddRange atRest
+        do! assertAll after
+        return List.ofSeq written
+    }
 
 /// The query matrix: every subject × metric × period clause × method clause
 /// × history flag × visibility instant the seed can distinguish.
@@ -3303,7 +3331,9 @@ let private firstUploadSurfaceTests =
 // never read.
 
 /// Draft `i` of a mixed upload: one metric, twelve months per subject, with
-/// every shape the row has to carry, and labels absent, empty and present.
+/// every shape the row has to carry, and labels absent and present. (An
+/// empty label is no longer a fact any store holds: the kernel refuses it
+/// on write and on read.)
 let private mixedDraft (i: int) (hash: string) : FactDraft =
     let path = [
         sprintf "brand-%02d" (i / SeriesMonths % 4)
@@ -3327,7 +3357,6 @@ let private mixedDraft (i: int) (hash: string) : FactDraft =
                     Label =
                         match i % 7 with
                         | 0 -> None
-                        | 1 -> Some ""
                         | _ -> month.Label
             }
     }
@@ -3429,8 +3458,10 @@ let private seriesRowTests =
                  |> List.filter (fun l -> l.IsNone || l = Some "")
                  |> List.distinct
                  |> List.sort)
-                [ None; Some "" ]
-                "an absent label and an empty one are both carried, and stay distinct"
+                [ None ]
+                "an absent label is carried as absent, never as an empty one"
+
+            Expect.isTrue (rowsAtAssert |> List.exists (fun r -> r.Label.IsSome)) "and a present label as itself"
         }
 
         testCaseAsync "a version-2 snapshot is rebuilt in the current shape, never read without labels"
@@ -3523,8 +3554,9 @@ let pointReadIndexTests =
         <| async {
             let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
             let scope = newScope ()
-            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
-            let! facts = seed890 writer scope
+            let clock = steppingClock baseAsOf
+            let writer = storeWithIndex storage clock FactIndexOptions.always
+            let! facts = seed890 storage clock true writer scope
             let enumerating = storeWithIndex storage fixedClock FactIndexOptions.disabled
             let indexed = storeWithIndex storage fixedClock FactIndexOptions.always
 
@@ -3538,8 +3570,9 @@ let pointReadIndexTests =
         <| async {
             let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
             let scope = newScope ()
-            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
-            let! facts = seed890 writer scope
+            let clock = steppingClock baseAsOf
+            let writer = storeWithIndex storage clock FactIndexOptions.always
+            let! facts = seed890 storage clock true writer scope
             let enumerating = storeWithIndex storage fixedClock FactIndexOptions.disabled
             let indexed = storeWithIndex storage fixedClock FactIndexOptions.always
 
@@ -3575,10 +3608,11 @@ let pointReadIndexTests =
             let probe = ProbeBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
             let storage = probe :> IBlobStorage
             let scope = newScope ()
-            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
+            let clock = steppingClock baseAsOf
+            let writer = storeWithIndex storage clock FactIndexOptions.always
 
             probe.RefuseIndexWrites <- true
-            let! facts = seed890 writer scope
+            let! facts = seed890 storage clock true writer scope
             let! refused = leavesIn storage scope
             Expect.isEmpty refused "every leaf write failed, and no assert did"
 
@@ -3626,8 +3660,9 @@ let pointReadIndexTests =
         <| async {
             let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
             let scope = newScope ()
-            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
-            let! facts = seed890 writer scope
+            let clock = steppingClock baseAsOf
+            let writer = storeWithIndex storage clock FactIndexOptions.always
+            let! facts = seed890 storage clock true writer scope
 
             let outOfBand =
                 identified {
@@ -3665,11 +3700,11 @@ let pointReadIndexTests =
         <| async {
             let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
             let scope = newScope ()
+            let clock = steppingClock baseAsOf
 
-            let writer =
-                storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.disabled
+            let writer = storeWithIndex storage clock FactIndexOptions.disabled
 
-            let! facts = seed890 writer scope
+            let! facts = seed890 storage clock false writer scope
             let! none = leavesIn storage scope
             Expect.isEmpty none "a disabled store writes no index"
 
@@ -3706,15 +3741,15 @@ let pointReadIndexTests =
             let plain = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
             let defaulted = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
             let scope = newScope ()
+            let clockA = steppingClock baseAsOf
+            let clockB = steppingClock baseAsOf
 
-            let enumerating =
-                storeWithIndex plain (steppingClock baseAsOf) FactIndexOptions.disabled
+            let enumerating = storeWithIndex plain clockA FactIndexOptions.disabled
 
-            let belowThreshold =
-                storeWithIndex defaulted (steppingClock baseAsOf) FactIndexOptions.defaults
+            let belowThreshold = storeWithIndex defaulted clockB FactIndexOptions.defaults
 
-            let! factsA = seed890 enumerating scope
-            let! factsB = seed890 belowThreshold scope
+            let! factsA = seed890 plain clockA false enumerating scope
+            let! factsB = seed890 defaulted clockB false belowThreshold scope
             Expect.equal factsB factsA "the same facts, the same transaction times"
 
             let query =
@@ -3804,10 +3839,6 @@ let private storedFor (d: FactDraft) : Fact = {
     Disclosure = d.Disclosure
 }
 
-/// The shape a store held its facts in before it wrote the specification's
-/// encoding: the saved shape a migration starts from, keyed by its old id.
-let private blobJson = FactStorageJson.options
-
 let private migrationHarness (surfaces: FactSurfaceOptions) () : IFactStoreContract.FactIdMigrationHarness =
     let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
@@ -3826,15 +3857,14 @@ let private migrationHarness (surfaces: FactSurfaceOptions) () : IFactStoreContr
     {
         IFactStoreContract.Store = store
         Scope = scope
-        SeedRaw =
-            fun facts -> async {
-                for f in facts do
-                    let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(f, blobJson))
-                    let! r = storage.Upload(scope, sprintf "_facts/%s.json" f.FactId, bytes)
-                    Expect.isOk r "seeded"
-
-                let! _ = store.RebuildIndex scope
-                ()
+        // The saved shape a migration starts from, keyed by the old ids, with
+        // the index leaves the store that saved them wrote.
+        SeedRaw = IFactStoreContract.AtRest.toBlob storage scope true
+        Stored =
+            fun () -> async {
+                let! export = store.ExportScope scope
+                Expect.isEmpty export.Unreadable "every blob reads as its own fact"
+                return export.Facts
             }
         Migrate = fun dryRun -> store.MigrateIds(scope, dryRun)
     }
@@ -3930,4 +3960,39 @@ let factIdTests =
             Expect.isEmpty export.Unreadable "every blob reads as its own fact"
             Expect.equal (export.Facts |> List.map _.FactId) [ Fact.computeFor v1 ] "one blob, under the new id"
         }
+    ]
+
+// ─── Facts at rest that the kernel now refuses on write ──────────────
+
+let private atRestHarness
+    (surfaces: FactSurfaceOptions)
+    (index: FactIndexOptions)
+    ()
+    : IFactStoreContract.FactStoreAtRest =
+    let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+    let scope = newScope ()
+
+    {
+        Target =
+            BlobFactStore(
+                storage,
+                InMemoryEventStore.InMemoryEventStore(),
+                None,
+                (fun () -> DateTime.UtcNow),
+                surfaces,
+                index
+            )
+        TargetScope = scope
+        SeedAtRest = IFactStoreContract.AtRest.toBlob storage scope (index.Enabled && index.MinimumFacts = 0)
+    }
+
+/// The collision law bound to both blob read paths.
+let atRestTests =
+    testList "Facts at rest — BlobFactStore" [
+        IFactStoreContract.atRestTests
+            "BlobFactStore"
+            (atRestHarness FactSurfaceOptions.disabled FactIndexOptions.disabled)
+        IFactStoreContract.atRestTests
+            "BlobFactStore (index + surface)"
+            (atRestHarness FactSurfaceOptions.always FactIndexOptions.always)
     ]

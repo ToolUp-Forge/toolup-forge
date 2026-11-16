@@ -96,6 +96,7 @@ let private registeredTests =
         FactSpecConformance.tests
         FactWriteTests.tests
         FactStoreTests.factIdTests
+        FactStoreTests.atRestTests
         FactStoreTests.auditAndFreshnessTests
         FactStoreTests.batchAssertTests
         FactStoreTests.populationRegistryTests

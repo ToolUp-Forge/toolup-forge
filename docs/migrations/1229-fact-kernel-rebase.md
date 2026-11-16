@@ -1,7 +1,7 @@
 # Phase 1229 — the Fact kernel is the published `Fuaran.Facts` package
 
 **Class: breaking.** Forge's own Fact kernel types are removed. Forge now uses the published, Apache-2.0
-[`Fuaran.Facts`](https://www.nuget.org/packages/Fuaran.Facts) package (0.2.0, the .NET reference implementation of
+[`Fuaran.Facts`](https://www.nuget.org/packages/Fuaran.Facts) package (0.2.1, the .NET reference implementation of
 the [Fact wire specification](https://github.com/Fuaran-Data/fuaran-fact-specification)) directly: no aliases, no
 forwarders. **Stored data does not change**: every fact id, lineage key and lineage digest is byte for byte what
 forge minted, and stored facts are read as they stand.
@@ -46,13 +46,33 @@ descriptions), `RecomputePolicy.resolve` and `RollUp.additiveTolerance` (now `De
 A store writes the specification's encoding (`FactWire.writeFact`) and reads with `FactStoreCodec.read`, which
 also reads the legacy saved shape, verifying every id. Existing blobs and `payload` rows are never rewritten; a fact
 is converted when the store next writes it. Fact-table documents that embed a period or value keep their stored
-shape. The id migration reads a fact stored under a pre-canonical id unverified, to re-key it.
+shape.
+
+**Tokens the specification refuses (its §3.5).** A new fact may not carry `>` or `|` in a path member, an empty path
+member, `/` or `|` in a hierarchy, `|` in a metric id, `:` in a computed method's operation or version, or `=` or `;`
+in a distribution key: an assert or batch carrying one is refused as a malformed draft. A fact stored before these
+rules reads as stored, with its stored id and lineage key. Such a fact can share an id or a lineage key with a clean
+fact (`["a>b"]` and `["a";"b"]` render alike), so before the store treats a stored fact as the one a write names (a
+replay, a supersession, the head of a lineage) it compares them: a write that a stored fact matches only by
+rendering is refused, naming the stored fact, and nothing is merged, skipped or superseded. A batch whose every
+draft is already stored is answered from the store's census without reading a fact, so a batch replay of such a
+draft is taken as already stored. To clear an ambiguity, assert the stored facts again under admitted tokens: those
+are new facts in new lineages. Moving a blob store that holds such a fact into the Postgres store
+(`FactStoreMigration.migrate`) writes each fact, and so refuses that one: re-assert it first.
+
+**Ids written before 0.38.0.** A fact stored under an id minted before the canonical frame faults on every ordinary
+read: those ids are migrated, not dual-read, and the only read that does not verify an id is the id migration's own
+export. **Before upgrading**, a deployment that has not yet run the id migration runs it on the release it is on
+(`BlobFactStore.MigrateIds` / `FactStoreMigration.migrateIds`, [`1089`](1089-redesign-h-sha256-hex-and-canonicalframe.md)),
+or runs it first thing after upgrading, before any other read. A fact under such an id that also carries a refused
+token cannot be re-keyed (the re-keyed fact would have to be written, and is refused); re-assert it under admitted
+tokens.
 
 ## The package reference
 
 ```xml
 <!-- Directory.Packages.props -->
-<FuaranFactsVersion>0.2.0</FuaranFactsVersion>
+<FuaranFactsVersion>0.2.1</FuaranFactsVersion>
 <PackageVersion Include="Fuaran.Facts" Version="$(FuaranFactsVersion)" />
 <!-- a project that names the kernel types directly -->
 <PackageReference Include="Fuaran.Facts" />
@@ -63,7 +83,8 @@ It arrives transitively through `ToolUp.Platform.Core` and `ToolUp.Facts.Core`.
 ## Verify
 
 1. `dotnet build` the consumer; add `open Fuaran.Facts` (before `open ToolUp.Facts`) where it names kernel types.
-2. Read a scope through the store and compare the fact ids before and after: they are equal.
+2. Run the id migration if the deployment has not (above), then read a scope through the store and compare the
+   fact ids before and after: they are equal.
 3. The forge suite's `Fact kernel — a fact forge stored keeps its id and its lineage` and
    `Fact wire specification — forge's fact store and identity` lists pass.
 

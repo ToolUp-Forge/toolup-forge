@@ -174,6 +174,188 @@ let private scalars (facts: Fact list) =
         | Scalar d -> DecimalText.toDecimal d
         | other -> failtestf "expected a Scalar in the ranking, got %A" other)
 
+// ─── Facts at rest ───────────────────────────────────────────────────
+//
+// The Fact kernel refuses some tokens on write that a stored fact may still
+// carry (a path member holding `>` or `|`, an empty one, an empty period
+// label), and every read admits such a fact as it was stored. A test that
+// needs one puts it in place as an earlier store left it, rather than
+// through `Assert`, which refuses it.
+
+/// A store with a way to put facts into it exactly as given — id,
+/// transaction time and supersession link as stated, in the saved shape an
+/// earlier store wrote — bypassing `Assert`.
+type FactStoreAtRest = {
+    Target: IFactStore
+    TargetScope: string
+    SeedAtRest: Fact list -> Async<unit>
+}
+
+[<RequireQualifiedAccess>]
+module AtRest =
+
+    /// The fact a store holds for `d` written at `asOf` behind
+    /// `supersedes`: the id the write path addresses it by, and the time
+    /// and link a store's plan would have stamped.
+    let fact (d: FactDraft) (asOf: DateTime) (supersedes: Fact option) : Fact = {
+        FactWrite.recordedAt d asOf with
+            Supersedes = supersedes |> Option.map _.FactId
+    }
+
+    /// The same drafts as one store would have written them one at a time,
+    /// in order: each at the next reading of `clock`, superseding the
+    /// latest earlier fact of its lineage.
+    let facts (clock: unit -> DateTime) (drafts: FactDraft list) : Fact list =
+        drafts
+        |> List.fold
+            (fun (written: Fact list) d ->
+                let lineage = FactLineage.keyOf d.Subject d.Metric d.Period d.Method
+
+                let head =
+                    written
+                    |> List.filter (fun f -> Fact.lineageKey f = lineage)
+                    |> FactWrite.headOf
+
+                written @ [ fact d (clock().ToUniversalTime()) head ])
+            []
+
+    /// The blob store's saved layout: each fact as the platform JSON of the
+    /// record under `_facts/<id>.json`, and, with `withLeaves`, the
+    /// point-read index leaf the store that saved it wrote beside it. A
+    /// refused leaf upload is ignored, as the store ignores it.
+    let toBlob (storage: BlobStorage.IBlobStorage) (scope: string) (withLeaves: bool) (facts: Fact list) = async {
+        for f in facts do
+            let bytes =
+                Text.Encoding.UTF8.GetBytes(Text.Json.JsonSerializer.Serialize(f, FactStorageJson.options))
+
+            let! written = storage.Upload(scope, sprintf "_facts/%s.json" f.FactId, bytes)
+
+            match written with
+            | Ok _ -> ()
+            | Error e -> failtestf "could not put %s at rest: %s" f.FactId e
+
+            if withLeaves then
+                let! _ = storage.Upload(scope, FactIndexLayout.leafName f, Array.empty)
+                ()
+    }
+
+/// One draft per token the Fact kernel refuses on write and the draft's own
+/// shape does not, each otherwise well formed.
+let private kernelRefusedDrafts: (string * FactDraft) list =
+    let d = popDraft [ "eu"; "de" ] "h-refused" (scalar 1m)
+
+    let distribution key =
+        Distribution(Map.ofList [ key, DecimalText.ofDecimal 1m ])
+
+    [
+        "a path member holding '>'",
+        {
+            d with
+                Subject.Path = [ "eu"; "a>b" ]
+        }
+        "a path member holding '|'",
+        {
+            d with
+                Subject.Path = [ "eu"; "a|b" ]
+        }
+        "a hierarchy holding '/'",
+        {
+            d with
+                Subject.Hierarchy = "geo/graphy"
+        }
+        "a hierarchy holding '|'",
+        {
+            d with
+                Subject.Hierarchy = "geo|graphy"
+        }
+        "a metric id holding '|'",
+        {
+            d with
+                Metric = MetricRef "elas|ticity"
+        }
+        "a computed operation holding ':'",
+        {
+            d with
+                Method = Computed("roll:up", "1", "p0")
+        }
+        "a computed version holding ':'",
+        {
+            d with
+                Method = Computed("rollup", "1:0", "p0")
+        }
+        "a distribution key holding '='", { d with Value = distribution "a=b" }
+        "a distribution key holding ';'", { d with Value = distribution "a;b" }
+        "an empty period label", { d with Period.Label = Some "" }
+    ]
+
+/// The collision law over facts at rest: a stored fact whose lineage
+/// members carry a token the kernel refuses on write renders like a clean
+/// fact a writer may submit today (`["a>b"]` and `["a"; "b"]` are one
+/// subject rendering). A write that meets one is refused — never merged
+/// into it, skipped as idempotent, or allowed to supersede it — and the
+/// stored fact reads as it was.
+let atRestTests (name: string) (harness: unit -> FactStoreAtRest) =
+    let stored = popDraft [ "a>b" ] "h-ab" (scalar 10m)
+    let clean = popDraft [ "a"; "b" ] "h-ab" (scalar 10m)
+    let asOf = DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc)
+
+    let expectRefusedAndUnchanged (label: string) (batchToo: bool) (draft: FactDraft) = async {
+        let h = harness ()
+        let atRest = AtRest.fact stored asOf None
+        do! h.SeedAtRest [ atRest ]
+
+        let refused (what: string) (r: Result<'T, FactStoreError>) =
+            match r with
+            | Error(FactStoreError.Refused reason) ->
+                Expect.stringContains
+                    reason
+                    atRest.FactId
+                    (sprintf "%s, %s: the refusal names the stored fact" label what)
+            | Error other -> failtestf "%s, %s: expected a refusal, got %s" label what (FactStoreError.describe other)
+            | Ok answer -> failtestf "%s, %s: expected a refusal, got %A" label what answer
+
+        let! scalarWrite = h.Target.Assert(TestScope.resolved h.TargetScope, draft)
+        refused "scalar" scalarWrite
+
+        if batchToo then
+            let! batchWrite = h.Target.AssertBatch(TestScope.resolved h.TargetScope, [ draft ])
+            refused "batch" batchWrite
+
+        let! after = wholeStore h.Target h.TargetScope
+        Expect.equal after [ atRest ] (sprintf "%s: nothing was stored, and the stored fact is unchanged" label)
+
+        let! got = h.Target.Get(TestScope.resolved h.TargetScope, atRest.FactId) |> TestScope.ok
+        Expect.equal got (Some atRest) (sprintf "%s: and reads as it was stored" label)
+    }
+
+    testList $"{name} — a write meeting a fact at rest that it matches only by rendering" [
+
+        testCase "the two drafts share an id and a lineage"
+        <| fun () ->
+            let a = FactWrite.recordedAt stored asOf
+            let b = FactWrite.recordedAt clean asOf
+            Expect.notEqual a.Subject.Path b.Subject.Path "two subjects"
+            Expect.equal b.FactId a.FactId "one id"
+            Expect.equal (Fact.lineageKey b) (Fact.lineageKey a) "one lineage key"
+
+        // A scalar assert reads the fact it would return as already stored,
+        // and so meets the collision. A batch whose every address is already
+        // stored is answered from the census alone, without reading a fact,
+        // which is what keeps re-running an unchanged population to one round
+        // trip; it is not asserted here.
+        testCaseAsync "a scalar draft under the same id is refused, never taken as already stored"
+        <| expectRefusedAndUnchanged "same id" false clean
+
+        testCaseAsync "a draft that would supersede it is refused"
+        <| expectRefusedAndUnchanged "supersession" true {
+            clean with
+                Evidence = {
+                    clean.Evidence with
+                        InputHashes = [ "h-ab-2" ]
+                }
+        }
+    ]
+
 // ─── Phase 1089 — the id law and the id migration law ────────────────
 
 /// The pre-1089 fact id recipe: SHA-256 over the five fields joined by
@@ -204,12 +386,15 @@ let legacyFactId (f: Fact) : string =
 
 /// What the id migration law needs from a store: the store, a scope, a way
 /// to write facts exactly as given (ids, transaction times, supersession
-/// links — bypassing `Assert`, which would re-address them), and the
+/// links — bypassing `Assert`, which would re-address them), the facts as
+/// stored, read without verifying their ids (the migration's own export:
+/// every ordinary read of a fact under a legacy id faults), and the
 /// store's migration.
 type FactIdMigrationHarness = {
     Store: IFactStore
     Scope: string
     SeedRaw: Fact list -> Async<unit>
+    Stored: unit -> Async<Fact list>
     Migrate: bool -> Async<Result<FactIdMigrationReport, string>>
 }
 
@@ -248,9 +433,29 @@ let private migrated (report: Result<FactIdMigrationReport, string>) =
     | Ok r -> r
     | Error e -> failtestf "expected the migration to run, got %s" e
 
+/// The legacy scope's facts as the migration must leave them: the same
+/// fields under the recomputed ids, the supersession link following its
+/// predecessor's move.
+let private canonicalScope () =
+    let v1, v2, fr = legacyScope ()
+    let c1 = { v1 with FactId = Fact.computeFor v1 }
+
+    let c2 = {
+        v2 with
+            FactId = Fact.computeFor v2
+            Supersedes = Some c1.FactId
+    }
+
+    let cfr = { fr with FactId = Fact.computeFor fr }
+    c1, c2, cfr
+
+let private byId (facts: Fact list) = facts |> List.sortBy _.FactId
+
 /// Phase 1089 — the migration law: a store migrated by its tool answers
-/// every pre-migration query by content, under the recomputed ids, and a
-/// second run changes nothing.
+/// every query by content, under the recomputed ids, and a second run
+/// changes nothing. A fact under a legacy id faults on every ordinary
+/// read, so nothing is asked of the store before it is migrated except
+/// through the migration's own export.
 let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
     testList $"{name} — fact id migration (Phase 1089)" [
 
@@ -259,6 +464,9 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             let h = harness ()
             let v1, v2, fr = legacyScope ()
             do! h.SeedRaw [ v1; v2; fr ]
+            let! before = h.Stored()
+            Expect.equal (byId before) (byId [ v1; v2; fr ]) "the scope holds the legacy facts as seeded"
+
             let! report = h.Migrate true
             let r = migrated report
 
@@ -267,83 +475,104 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             Expect.equal r.Rekeyed 3 "every legacy id would move"
             Expect.isSome r.FirstDivergent "the first divergent id is named"
 
-            let! stillLegacy = h.Store.Get(TestScope.resolved h.Scope, v2.FactId) |> TestScope.ok
-            Expect.isSome stillLegacy "nothing was written: the legacy id still resolves"
-            let! notYet = h.Store.Get(TestScope.resolved h.Scope, Fact.computeFor v2) |> TestScope.ok
-            Expect.isNone notYet "and the new id does not yet"
+            let! after = h.Stored()
+            Expect.equal (byId after) (byId before) "nothing was written: every fact still under its legacy id"
+
+            Expect.isFalse
+                (after |> List.exists (fun f -> f.FactId = Fact.computeFor v2))
+                "and no fact is under a new id yet"
         }
 
-        testCaseAsync "a migrated store answers every pre-migration query by content"
+        testCaseAsync "an ordinary read of an unmigrated scope faults rather than answer"
         <| async {
             let h = harness ()
             let v1, v2, fr = legacyScope ()
             do! h.SeedRaw [ v1; v2; fr ]
 
-            let byContent (f: Fact) = f.Subject, f.Metric, f.Value, f.AsOf
+            let faults label (read: Async<Result<'T, FactStoreError>>) = async {
+                match! read with
+                | Error(FactStoreError.StorageFault _) -> ()
+                | Error other -> failtestf "%s: expected a storage fault, got %s" label (FactStoreError.describe other)
+                | Ok answer -> failtestf "%s: expected a storage fault, got an answer: %A" label answer
+            }
 
-            let! headBefore =
-                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
-                |> TestScope.ok
+            do!
+                faults
+                    "the current head"
+                    (h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric))
 
-            let! asOfBefore =
-                h.Store.Query(
-                    TestScope.resolved h.Scope,
-                    FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1
-                )
-                |> TestScope.ok
+            do! faults "the legacy id" (h.Store.Get(TestScope.resolved h.Scope, v2.FactId))
+        }
 
-            let! frBefore =
-                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
-                |> TestScope.ok
+        testCaseAsync "a migrated store answers every query by content, under the recomputed ids"
+        <| async {
+            let h = harness ()
+            let v1, v2, fr = legacyScope ()
+            let c1, c2, cfr = canonicalScope ()
+            do! h.SeedRaw [ v1; v2; fr ]
 
             let! report = h.Migrate false
             let r = migrated report
             Expect.equal r.Rekeyed 3 "every legacy id moved"
 
-            let! headAfter =
+            let! head =
                 h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
                 |> TestScope.ok
 
-            let! asOfAfter =
+            let! asOf =
                 h.Store.Query(
                     TestScope.resolved h.Scope,
                     FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1
                 )
                 |> TestScope.ok
 
-            let! frAfter =
+            let! history =
+                h.Store.Query(
+                    TestScope.resolved h.Scope,
+                    {
+                        FactQuery.forSubjectMetric v1.Subject v1.Metric with
+                            IncludeSuperseded = true
+                    }
+                )
+                |> TestScope.ok
+
+            let! other =
                 h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
                 |> TestScope.ok
 
-            Expect.equal (headAfter |> List.map byContent) (headBefore |> List.map byContent) "the current head"
-            Expect.equal (asOfAfter |> List.map byContent) (asOfBefore |> List.map byContent) "the AsOf read"
-            Expect.equal (frAfter |> List.map byContent) (frBefore |> List.map byContent) "the other lineage"
-
-            for f in headAfter @ asOfAfter @ frAfter do
-                Expect.equal f.FactId (Fact.computeFor f) "every fact is under its recomputed id"
-
-            let newV1 = Fact.computeFor v1
-            let newV2 = Fact.computeFor v2
+            Expect.equal head [ c2 ] "the current head is the second version, re-keyed"
+            Expect.equal asOf [ c1 ] "the AsOf read before the second version sees the first, re-keyed"
+            Expect.equal (byId history) (byId [ c1; c2 ]) "the lineage's history, re-keyed"
+            Expect.equal other [ cfr ] "the other lineage, re-keyed"
 
             let! chain =
-                h.Store.QuerySupersessionChain(TestScope.resolved h.Scope, newV2)
+                h.Store.QuerySupersessionChain(TestScope.resolved h.Scope, c2.FactId)
                 |> TestScope.ok
 
-            Expect.equal (chain |> List.map _.FactId |> Set.ofList) (Set.ofList [ newV1; newV2 ]) "the chain, re-keyed"
+            Expect.equal (byId chain) (byId [ c1; c2 ]) "the chain, re-keyed"
 
             Expect.equal
-                (chain |> List.tryFind (fun f -> f.FactId = newV2) |> Option.bind _.Supersedes)
-                (Some newV1)
+                (chain
+                 |> List.tryFind (fun f -> f.FactId = c2.FactId)
+                 |> Option.bind _.Supersedes)
+                (Some c1.FactId)
                 "the supersession link names the predecessor's new id"
+
+            let! got = h.Store.Get(TestScope.resolved h.Scope, c2.FactId) |> TestScope.ok
+            Expect.equal got (Some c2) "the new id resolves to the fact"
 
             let! legacy = h.Store.Get(TestScope.resolved h.Scope, v2.FactId) |> TestScope.ok
             Expect.isNone legacy "the legacy id is gone — moved, not dual-read"
+
+            let! stored = h.Stored()
+            Expect.equal (byId stored) (byId [ c1; c2; cfr ]) "the scope holds exactly the re-keyed facts"
         }
 
         testCaseAsync "a second run changes nothing"
         <| async {
             let h = harness ()
             let v1, v2, fr = legacyScope ()
+            let c1, c2, cfr = canonicalScope ()
             do! h.SeedRaw [ v1; v2; fr ]
             let! _ = h.Migrate false
             let! again = h.Migrate false
@@ -352,6 +581,9 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             Expect.equal (r.Rekeyed, r.Relinked) (0, 0) "idempotent"
             Expect.isNone r.FirstDivergent "nothing diverges"
             Expect.equal r.FactsRead 3 "and nothing was lost or duplicated"
+
+            let! stored = h.Stored()
+            Expect.equal (byId stored) (byId [ c1; c2; cfr ]) "the scope still holds exactly the re-keyed facts"
         }
     ]
 
@@ -908,6 +1140,53 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! stored = wholeStore store scopeA
             Expect.isEmpty stored "a rejected batch writes nothing at all — not even its well-formed drafts"
+        }
+
+        testCaseAsync "a draft carrying a token the Fact kernel refuses is never written"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let good = popDraft [ "eu"; "fr" ] "h-fr" (scalar 20m)
+
+            for label, refused in kernelRefusedDrafts do
+                let! batch = store.AssertBatch(TestScope.resolved scopeA, [ good; refused ])
+
+                match batch with
+                | Error(FactStoreError.MalformedDrafts(count, [ offender ]) as error) ->
+                    Expect.equal count 2 (sprintf "%s: the refusal counts the batch" label)
+                    Expect.equal offender.Position 1 (sprintf "%s: and names the offender" label)
+
+                    Expect.stringContains
+                        (FactStoreError.describe error)
+                        "the Fact kernel refuses it"
+                        (sprintf "%s: as the kernel's refusal" label)
+                | Error other ->
+                    failtestf "%s: expected a malformed-batch refusal, got %s" label (FactStoreError.describe other)
+                | Ok receipt ->
+                    failtestf "%s: expected a refusal, got a receipt over %d drafts" label receipt.DraftCount
+
+                // The scalar path has no pre-flight; the store still writes
+                // nothing it cannot write.
+                let! scalarWrite = store.Assert(TestScope.resolved scopeA, refused)
+                Expect.isError scalarWrite (sprintf "%s: a scalar assert of it fails" label)
+
+                let! stored = wholeStore store scopeA
+                Expect.isEmpty stored (sprintf "%s: and nothing was written" label)
+        }
+
+        testCaseAsync "an empty path member is refused by the draft's shape, before the kernel is asked"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let empty = popDraft [ "eu"; "" ] "h-empty" (scalar 20m)
+            let! batch = store.AssertBatch(TestScope.resolved scopeA, [ empty ])
+
+            match batch with
+            | Error(FactStoreError.MalformedDrafts(1, [ offender ])) ->
+                Expect.equal offender.Defects [ "subject path has an empty member id" ] "the shape defect, alone"
+            | Error other -> failtestf "expected a malformed-batch refusal, got %s" (FactStoreError.describe other)
+            | Ok receipt -> failtestf "expected a refusal, got a receipt over %d drafts" receipt.DraftCount
+
+            let! stored = wholeStore store scopeA
+            Expect.isEmpty stored "nothing was written"
         }
 
         testCaseAsync "a batch keeps the population read model current"
@@ -2004,8 +2283,10 @@ let private differentialDraft
 /// non-comparable shapes, a second depth, a neighbouring metric, awkward
 /// and empty path segments, equal magnitudes at different scales) plus the
 /// Phase 890 point-read shapes (several periods, unmarked and local-kind
-/// periods, supersession within each), asserted one draft at a time — then
-/// a batch carrying one lineage twice.
+/// periods, supersession within each), one draft at a time — then a batch
+/// carrying one lineage twice. A draft the write path refuses (a path
+/// segment holding `>` or `|`, an empty one) is put at rest instead, as an
+/// earlier store left it (`seedDifferential`).
 let private differentialDrafts: FactDraft list = [
     for i in 0..5 do
         differentialDraft
@@ -2066,14 +2347,33 @@ let private differentialBatch: FactDraft list = [
     differentialDraft [ "eu"; "sku-000002" ] "elasticity" rollupMethod (scalar 20m) "h2"
 ]
 
-let private seedDifferential (store: IFactStore) (scope: string) : Async<Fact list * BatchAssertReceipt> = async {
+/// Assert the seed's drafts in order, putting each run of consecutive
+/// drafts the write path refuses at rest in one step, each at the next
+/// reading of the store's own `clock` — what an assert would have stamped —
+/// so every fact, and every transaction time after it, is what the store
+/// held before the kernel refused those tokens.
+let private seedDifferential (h: FactStoreAtRest) (clock: unit -> DateTime) : Async<Fact list * BatchAssertReceipt> = async {
     let written = ResizeArray<Fact>()
+    let pending = ResizeArray<FactDraft>()
+
+    let flush () = async {
+        if pending.Count > 0 then
+            let facts = AtRest.facts clock (List.ofSeq pending)
+            pending.Clear()
+            do! h.SeedAtRest facts
+            written.AddRange facts
+    }
 
     for d in differentialDrafts do
-        let! f = assertOk "differential seed" store scope d
-        written.Add f
+        if List.isEmpty (FactDraft.defects d) then
+            do! flush ()
+            let! f = assertOk "differential seed" h.Target h.TargetScope d
+            written.Add f
+        else
+            pending.Add d
 
-    let! receipt = assertBatchOk "differential batch" store scope differentialBatch
+    do! flush ()
+    let! receipt = assertBatchOk "differential batch" h.Target h.TargetScope differentialBatch
     return List.ofSeq written, receipt
 }
 
@@ -2357,18 +2657,28 @@ let private expectContractOrder (label: string) (facts: Fact list) =
 
 /// Hold `candidate` to `reference` over one seeded fact base and every
 /// query shape (Phase 888). Each factory builds a FRESH store over the
-/// supplied registry and clock, and returns it with a scope to seed.
+/// supplied registry and clock, and returns it with a scope to seed and a
+/// way to put facts in that scope at rest.
 let differentialTests
     (name: string)
-    (referenceFactory: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
-    (candidateFactory: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
+    (referenceFactory: IMetricRegistry option -> (unit -> DateTime) -> FactStoreAtRest)
+    (candidateFactory: IMetricRegistry option -> (unit -> DateTime) -> FactStoreAtRest)
     =
 
     let bothOver (registry: IMetricRegistry option) = async {
-        let reference, referenceScope = referenceFactory registry (differentialClock ())
-        let candidate, candidateScope = candidateFactory registry (differentialClock ())
-        let! referenceFacts, referenceReceipt = seedDifferential reference referenceScope
-        let! candidateFacts, candidateReceipt = seedDifferential candidate candidateScope
+        let referenceClock = differentialClock ()
+        let candidateClock = differentialClock ()
+        let referenceHarness = referenceFactory registry referenceClock
+        let candidateHarness = candidateFactory registry candidateClock
+
+        let reference, referenceScope =
+            referenceHarness.Target, referenceHarness.TargetScope
+
+        let candidate, candidateScope =
+            candidateHarness.Target, candidateHarness.TargetScope
+
+        let! referenceFacts, referenceReceipt = seedDifferential referenceHarness referenceClock
+        let! candidateFacts, candidateReceipt = seedDifferential candidateHarness candidateClock
 
         Expect.equal candidateFacts referenceFacts "the seed wrote the same facts, with the same transaction times"
         Expect.equal candidateReceipt referenceReceipt "the batch settled identically, digest included"

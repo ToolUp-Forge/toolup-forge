@@ -66,7 +66,10 @@ let private sequential (stored: Fact list) (drafts: FactDraft list) : Fact list 
         (stored, [])
     |> snd
 
-/// The Phase 888 differential seed's rows, as drafts.
+/// The Phase 888 differential seed's rows, as drafts. The awkward subject
+/// path keeps the characters a writer may still submit (`/` inside a member,
+/// a tab, a backslash, a newline): the seed's `>` and empty members are now
+/// refused on write and live at rest there, outside any plan.
 let private differentialRows: FactDraft list = [
     draft [ "uk" ] "uk-q2-v1" 1m
     draft [ "uk" ] "uk-q2-v2" 2m
@@ -78,7 +81,7 @@ let private differentialRows: FactDraft list = [
     draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar(DecimalText.ofDecimal 77m)) "cfo-1"
     draftAt [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar(DecimalText.ofDecimal 78m)) "cfo-1"
     draftAt [ "eu"; "sku-000006" ] "elasticity" rollup (Absent "no data loaded") "h6"
-    draft [ "eu"; "we>ird\tta\\b\nnl" ] "hodd" 42m
+    draft [ "eu"; "we/ird\tta\\b\nnl" ] "hodd" 42m
     draft [ "eu"; "100%" ] "hpct" 43.0m
     draft [ "eu"; "100%" ] "hpct-scale" 43.00m
     draft [ "fr" ] "fr-q2" 9m

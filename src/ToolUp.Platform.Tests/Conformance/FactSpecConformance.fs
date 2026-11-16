@@ -13,17 +13,12 @@
 /// reader (`FactStoreCodec.read`, which also admits the legacy saved shape)
 /// refuses every document the specification refuses, for the same class.
 ///
-/// **The corpus is a build input.** `TOOLUP_FACT_SPEC_DIR` names a checkout
-/// (the repository, or its `wire-fixtures/`). With it unset, the corpus is
-/// searched for within three directory levels of this checkout and of the
-/// directories enclosing its main working tree, identified by its manifest
-/// declaring specification `fact-wire`. An absent corpus is one loud
-/// failure, never a skip: a conformance run without its corpus certifies
-/// nothing.
+/// **The corpus is a build input**, found as `Corpus` says. An absent
+/// corpus is one loud failure, never a skip: a conformance run without its
+/// corpus certifies nothing.
 module ToolUp.Platform.Tests.FactSpecConformance
 
 open System
-open System.Collections.Generic
 open System.IO
 open System.Reflection
 open System.Security.Cryptography
@@ -43,43 +38,40 @@ open ToolUp.Platform.Tests.Support
 /// moving the pin is a deliberate re-certification.
 [<RequireQualifiedAccess>]
 module Pin =
-    let commit = "1b8ca93b291c6d01a23125391f5ac8d6d2f1e8d1"
+    let commit = "9d2347f4c2dbab831781f8c0f47fb9cd1a9fc75e"
 
     let manifestDigest =
-        "c2e5cf6105e7a2ceddaf1d6caaf494f539e7264d2e2b7aa578caff51da4932e9"
+        "928abaf19a32ae2d1f0987fc8af4137c3dabbaaa0cf9e3ccfc35236d99569616"
 
     let specification = "fact-wire"
     let wireVersion = 1
 
+/// Where the corpus is, resolved in the order the federation-seam
+/// specification home is (`FederationWireCorpus`): the directory
+/// `TOOLUP_FACT_SPEC_DIR` names, checked, and no fallback when it is set but
+/// wrong; else a clone named `fuaran-fact-specification` in this repository
+/// (what CI checks out; the path is gitignored), here or in the main working
+/// tree; else a bounded search from the main working tree's ancestors for a
+/// directory of that name. The directory name is the interface.
 [<RequireQualifiedAccess>]
 module private Corpus =
 
-    let private envVar = "TOOLUP_FACT_SPEC_DIR"
+    [<Literal>]
+    let SpecDirName = "fuaran-fact-specification"
 
-    let private pruned =
-        HashSet<string>(
-            [
-                ".git"
-                ".vs"
-                ".idea"
-                "bin"
-                "obj"
-                "node_modules"
-                "artifacts"
-                "output"
-                "dist"
-                "packages"
-            ],
-            StringComparer.OrdinalIgnoreCase
-        )
+    [<Literal>]
+    let SpecDirVariable = "TOOLUP_FACT_SPEC_DIR"
 
     /// bin/<Config>/net10.0/ToolUp.Platform.Tests.dll -> up 5.
     let private repoRoot () =
         let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
         Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
 
-    let private isCorpusDir (dir: string) =
-        let manifest = Path.Combine(dir, "manifest.json")
+    /// A specification home: its `wire-fixtures/manifest.json` declares the
+    /// Fact wire specification. Keyed on the content, so a directory of the
+    /// right name and the wrong contents is not taken for it.
+    let private isSpecHome (dir: string) =
+        let manifest = Path.Combine(dir, "wire-fixtures", "manifest.json")
 
         File.Exists manifest
         && (try
@@ -91,70 +83,96 @@ module private Corpus =
             with _ ->
                 false)
 
-    let private asFixtureDir (dir: string) =
-        if isCorpusDir dir then
-            Some dir
-        else
-            let nested = Path.Combine(dir, "wire-fixtures")
-            if isCorpusDir nested then Some nested else None
-
     let private anchoring = lazy (CorpusAnchor.resolve (repoRoot ()))
 
-    let private searchRoots () =
-        let anchor = anchoring.Value.Anchor
+    /// Each ancestor of the anchor, then up to three levels beneath each,
+    /// never entering another working tree of this repository.
+    let private search (anchoring: CorpusAnchor.Anchoring) =
+        let skip (name: string) =
+            name.StartsWith '.'
+            || name = "node_modules"
+            || name = "bin"
+            || name = "obj"
+            || name = "packages"
 
-        [
-            repoRoot ()
-            anchor
-            Path.GetFullPath(Path.Combine(anchor, ".."))
-            Path.GetFullPath(Path.Combine(anchor, "..", ".."))
-            Path.GetFullPath(Path.Combine(anchor, "..", "..", ".."))
-        ]
-        |> List.distinct
-
-    let private search (root: string) (maxDepth: int) =
-        let rec go (dir: string) (depth: int) =
-            if CorpusAnchor.excluded anchoring.Value dir then
+        let rec descend (dir: string) (depth: int) =
+            if depth > 3 || CorpusAnchor.excluded anchoring dir then
                 None
             else
-                match asFixtureDir dir with
+                let candidate = Path.Combine(dir, SpecDirName)
+
+                if
+                    Directory.Exists candidate
+                    && isSpecHome candidate
+                    && not (CorpusAnchor.excluded anchoring candidate)
+                then
+                    Some candidate
+                else
+                    try
+                        Directory.EnumerateDirectories dir
+                        |> Seq.filter (fun d -> not (skip (Path.GetFileName d)))
+                        |> Seq.tryPick (fun d -> descend d (depth + 1))
+                    with _ ->
+                        None
+
+        let rec ascend (dir: string) (levels: int) =
+            if levels > 4 || String.IsNullOrEmpty dir then
+                None
+            else
+                match descend dir 1 with
                 | Some found -> Some found
-                | None when depth >= maxDepth -> None
                 | None ->
-                    let children =
-                        try
-                            Directory.EnumerateDirectories dir
-                            |> Seq.filter (fun d -> not (pruned.Contains(Path.GetFileName d)))
-                            |> Seq.toList
-                        with _ -> []
+                    match Path.GetDirectoryName dir with
+                    | null -> None
+                    | parent -> ascend parent (levels + 1)
 
-                    children |> List.tryPick (fun child -> go child (depth + 1))
+        ascend anchoring.Anchor 0
 
-        if Directory.Exists root then go root 0 else None
+    let private resolved =
+        lazy
+            (match Environment.GetEnvironmentVariable SpecDirVariable with
+             | null
+             | "" ->
+                 [ repoRoot (); anchoring.Value.Anchor ]
+                 |> List.distinct
+                 |> List.tryPick (fun root ->
+                     let inRepo = Path.Combine(root, SpecDirName)
 
-    let private locate () : string =
-        match Environment.GetEnvironmentVariable envVar with
-        | null
-        | "" ->
-            match searchRoots () |> List.tryPick (fun root -> search root 3) with
-            | Some found -> found
-            | None ->
-                failwithf
-                    "ENVIRONMENTAL FAILURE — the Fact wire specification corpus is absent; this is not a defect in the code under test. Clone https://github.com/Fuaran-Data/fuaran-fact-specification (revision %s) within three directory levels of this checkout, or set %s to the clone (or its wire-fixtures/). Searched: %s. A corpus under a different git worktree of this repository is never accepted. The failure is by design: a conformance run without its corpus certifies nothing."
-                    Pin.commit
-                    envVar
-                    (searchRoots () |> String.concat "; ")
-        | raw ->
-            match asFixtureDir (raw.Trim()) with
-            | Some found -> found
-            | None ->
-                failwithf
-                    "%s is set to '%s', which is not the Fact wire specification corpus (no manifest.json declaring specification '%s' there or under wire-fixtures/)."
-                    envVar
-                    raw
-                    Pin.specification
+                     if Directory.Exists inRepo && isSpecHome inRepo then
+                         Some inRepo
+                     else
+                         None)
+                 |> Option.orElseWith (fun () -> search anchoring.Value)
+             // Set and right, or set and wrong: a wrong pointer is the answer,
+             // never a reason to certify against some other corpus.
+             | explicitDir -> if isSpecHome explicitDir then Some explicitDir else None)
 
-    let dir = lazy (locate ())
+    let private missing =
+        $"ENVIRONMENTAL FAILURE — the Fact wire specification home was not found, so there is no
+       corpus to certify against; this is the checkout's arrangement, not a defect in the code under test.
+       This repository certifies against that specification; it does not own it: the normative text and
+       the conformance corpus live in their own public repository (revision {Pin.commit} is the one pinned).
+       Fix it in one of three ways:
+         1. clone it into this repository (what CI does; the path is gitignored):
+              git clone https://github.com/Fuaran-Data/{SpecDirName}.git {SpecDirName}
+         2. set {SpecDirVariable} to an existing checkout of it — if it is already set, it does
+            not point at one (a spec home contains wire-fixtures/manifest.json declaring '{Pin.specification}'), or
+         3. place a checkout named '{SpecDirName}' at or near this repository's parent — for a
+            linked git worktree that means near the MAIN working tree, which is where the search
+            runs from; a checkout under a different worktree of this repository is never accepted.
+       A conformance run without its corpus certifies nothing, so the leg fails rather than skips."
+
+    let dir =
+        lazy
+            (match resolved.Value with
+             | Some home -> Path.Combine(home, "wire-fixtures")
+             | None ->
+                 let worktreeNote =
+                     match CorpusAnchor.mainWorkingTree (repoRoot ()) with
+                     | Some main -> $" (This checkout is a linked git worktree; its main working tree is '{main}'.)"
+                     | None -> ""
+
+                 failwith (missing + worktreeNote))
 
     let bytes (relative: string) =
         File.ReadAllBytes(Path.Combine(dir.Value, relative.Replace('/', Path.DirectorySeparatorChar)))

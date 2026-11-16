@@ -69,25 +69,35 @@ let private draftFor (member': string) (metric: string) (inputHash: string) (val
     Disclosure = Disclosure.Surfaceable
 }
 
-let private blobReference (registry: IMetricRegistry option) (clock: unit -> DateTime) : IFactStore * string =
-    BlobFactStore.createWithIndex
-        (InMemoryBlobStorage.InMemoryBlobStorage())
-        (InMemoryEventStore.InMemoryEventStore())
-        registry
-        clock
-        FactSurfaceOptions.disabled
-        FactIndexOptions.disabled,
-    newScope ()
+/// A fresh blob store over `registry` and `clock`, a scope, and the blob
+/// layout an earlier store left its facts in (with the index leaves an
+/// indexing store wrote beside them).
+let private blobOver
+    (surfaces: FactSurfaceOptions)
+    (index: FactIndexOptions)
+    (registry: IMetricRegistry option)
+    (clock: unit -> DateTime)
+    : IFactStoreContract.FactStoreAtRest =
+    let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+    let scope = newScope ()
 
-let private blobIndexed (registry: IMetricRegistry option) (clock: unit -> DateTime) : IFactStore * string =
-    BlobFactStore.createWithIndex
-        (InMemoryBlobStorage.InMemoryBlobStorage())
-        (InMemoryEventStore.InMemoryEventStore())
-        registry
-        clock
-        FactSurfaceOptions.always
-        FactIndexOptions.always,
-    newScope ()
+    {
+        Target =
+            BlobFactStore.createWithIndex
+                storage
+                (InMemoryEventStore.InMemoryEventStore())
+                registry
+                clock
+                surfaces
+                index
+        TargetScope = scope
+        SeedAtRest = IFactStoreContract.AtRest.toBlob storage scope (index.Enabled && index.MinimumFacts = 0)
+    }
+
+let private blobReference =
+    blobOver FactSurfaceOptions.disabled FactIndexOptions.disabled
+
+let private blobIndexed = blobOver FactSurfaceOptions.always FactIndexOptions.always
 
 // ─── Always run ──────────────────────────────────────────────────────
 
@@ -545,7 +555,7 @@ let offlineTests =
                 "it samples the fact store's index"
 
             // A replaced store is not the blob store: nothing to sample.
-            let replacement, _ = blobIndexed None (fun () -> DateTime.UtcNow)
+            let replacement = (blobIndexed None (fun () -> DateTime.UtcNow)).Target
 
             let _, replaced =
                 composed
@@ -595,7 +605,7 @@ let offlineTests =
 
         testCaseAsync "withFactStoreImplementation replaces the store every fact registration resolves"
         <| async {
-            let replacement, _ = blobIndexed None (fun () -> DateTime.UtcNow)
+            let replacement = (blobIndexed None (fun () -> DateTime.UtcNow)).Target
 
             let services, sp =
                 composed
@@ -905,15 +915,15 @@ let private aggregateQueries (instants: DateTime list) : (string * PopulationQue
 ]
 
 let private aggregateTests
-    (reference: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
-    (candidate: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
+    (reference: IMetricRegistry option -> (unit -> DateTime) -> IFactStoreContract.FactStoreAtRest)
+    (candidate: IMetricRegistry option -> (unit -> DateTime) -> IFactStoreContract.FactStoreAtRest)
     =
     testCaseAsync "Phase 940 — every aggregated population shape answers as the blob store does"
     <| async {
-        let expectedStore, expectedScope =
-            reference (Some aggregateRegistry) (steppedClock ())
-
-        let actualStore, actualScope = candidate (Some aggregateRegistry) (steppedClock ())
+        let expected = reference (Some aggregateRegistry) (steppedClock ())
+        let expectedStore, expectedScope = expected.Target, expected.TargetScope
+        let actual = candidate (Some aggregateRegistry) (steppedClock ())
+        let actualStore, actualScope = actual.Target, actual.TargetScope
         let written = ResizeArray<Fact>()
 
         for draft in aggregateSeed do
@@ -1569,8 +1579,64 @@ let private liveTests (conn: string) =
     let registryFactory (registry: IMetricRegistry) : IFactStore * string * string =
         store (Some registry) (fun () -> DateTime.UtcNow) :> IFactStore, newScope (), newScope ()
 
-    let candidate (registry: IMetricRegistry option) (clock: unit -> DateTime) : IFactStore * string =
-        store registry clock :> IFactStore, newScope ()
+    // Facts at rest in the table: one row each, as an earlier store wrote
+    // it, with the payload in the legacy saved shape. Not through the
+    // store's own row projection, which writes the specification's encoding
+    // and so refuses a token the kernel no longer admits on write. A fact
+    // is a head unless another of `facts` supersedes it.
+    let insertAtRest (scope: string) (facts: Fact list) = async {
+        let superseded = facts |> List.choose _.Supersedes |> Set.ofList
+
+        for f in facts do
+            use cmd =
+                dataSource.CreateCommand(
+                    sprintf
+                        "INSERT INTO %s (scope, fact_id, hierarchy, path, metric, period_from_ticks, period_to_ticks, method_identity, lineage_hash, as_of_ticks, as_of, supersedes, is_head, magnitude, payload) VALUES (@scope, @id, @hierarchy, @path, @metric, @from, @to, @method, @lineage, @asOfTicks, @asOf, @supersedes, @head, @magnitude, @payload)"
+                        TestTable
+                )
+
+            let add (name: string) (value: obj) =
+                cmd.Parameters.AddWithValue(name, value) |> ignore
+
+            add "scope" scope
+            add "id" f.FactId
+            add "hierarchy" f.Subject.Hierarchy
+            add "path" (Array.ofList f.Subject.Path)
+            add "metric" f.Metric.Value
+            add "from" f.Period.From.Ticks
+            add "to" f.Period.To.Ticks
+            add "method" (Fact.methodIdentity f.Method)
+            add "lineage" (Fact.lineageDigest f)
+            add "asOfTicks" f.AsOf.Ticks
+            add "asOf" (DateTime(f.AsOf.Ticks, DateTimeKind.Utc))
+
+            add
+                "supersedes"
+                (match f.Supersedes with
+                 | Some id -> box id
+                 | None -> box DBNull.Value)
+
+            add "head" (not (superseded.Contains f.FactId))
+
+            add
+                "magnitude"
+                (match PopulationValue.comparable f.Value with
+                 | Some d -> box d
+                 | None -> box DBNull.Value)
+
+            add "payload" (JsonSerializer.Serialize(f, FactStorageJson.options))
+            let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+            ()
+    }
+
+    let candidate (registry: IMetricRegistry option) (clock: unit -> DateTime) : IFactStoreContract.FactStoreAtRest =
+        let scope = newScope ()
+
+        {
+            Target = store registry clock :> IFactStore
+            TargetScope = scope
+            SeedAtRest = insertAtRest scope
+        }
 
     let execute (sql: string) = async {
         use cmd = dataSource.CreateCommand sql
@@ -1625,6 +1691,9 @@ let private liveTests (conn: string) =
         // One seeded fact base, every query shape, value for value.
         IFactStoreContract.differentialTests "PostgresFactStore" blobReference candidate
 
+        // A write meeting a fact at rest it matches only by rendering.
+        IFactStoreContract.atRestTests "PostgresFactStore" (fun () -> candidate None (fun () -> DateTime.UtcNow))
+
         // The shapes the differential seed does not reach (Phase 940).
         aggregateTests blobReference candidate
 
@@ -1647,12 +1716,7 @@ let private liveTests (conn: string) =
                         let source, storage = blobSource ()
                         // The shape a blob store held its facts in before it wrote the
                         // specification's encoding, keyed by their old ids.
-                        let json = FactStorageJson.options
-
-                        for f in facts do
-                            let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(f, json))
-                            let! r = storage.Upload(scope, sprintf "_facts/%s.json" f.FactId, bytes)
-                            Expect.isOk r "seeded"
+                        do! IFactStoreContract.AtRest.toBlob storage scope false facts
 
                         let! copied =
                             FactStoreMigration.migrate source target (events ()) FactStoreMigrationOptions.defaults [
@@ -1660,6 +1724,29 @@ let private liveTests (conn: string) =
                             ]
 
                         Expect.isTrue copied.Passed "the legacy rows were copied as they are"
+                    }
+                Stored =
+                    fun () -> async {
+                        use cmd =
+                            dataSource.CreateCommand(sprintf "SELECT payload FROM %s WHERE scope = @scope" TestTable)
+
+                        cmd.Parameters.AddWithValue("scope", scope) |> ignore
+                        use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+                        let facts = ResizeArray<Fact>()
+
+                        let rec loop () = async {
+                            let! more = reader.ReadAsync() |> Async.AwaitTask
+
+                            if more then
+                                match FactIdMigrationRead.read (reader.GetString 0) with
+                                | Ok f -> facts.Add f
+                                | Error refusal -> failtestf "a row does not read: %s" (Refusal.describe refusal)
+
+                                return! loop ()
+                        }
+
+                        do! loop ()
+                        return List.ofSeq facts
                     }
                 Migrate = fun dryRun -> FactStoreMigration.migrateIds target scope dryRun
             }
