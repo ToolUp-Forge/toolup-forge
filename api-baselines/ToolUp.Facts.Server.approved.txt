@@ -1623,8 +1623,9 @@ ToolUp.Facts.GroundingCertificateModule.verify(ToolUp.ArtefactSigning.IArtefactV
 ToolUp.Facts.GroundingCertificateModule.verifyAttested(ToolUp.ArtefactSigning.IApplicationSigner, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AttestedCertificateVerdict]
 ToolUp.Facts.GroundingCertificateModule.verifyAttestedFor(ToolUp.ArtefactSigning.IApplicationSigner, System.String, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AttestedCertificateVerdict]
 ToolUp.Facts.GroundingPolicy (class)
-ToolUp.Facts.GroundingPolicy..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Facts.GroundingPolicy..ctor(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Text.RegularExpressions.Regex])
 ToolUp.Facts.GroundingPolicy.NumberWords : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Facts.GroundingPolicy.PeriodPatterns : Microsoft.FSharp.Collections.FSharpList`1[System.Text.RegularExpressions.Regex] { get }
 ToolUp.Facts.GroundingResolution (class)
 ToolUp.Facts.GroundingResolution.GroundingUnresolved : ToolUp.Facts.GroundingResolution { get }
 ToolUp.Facts.GroundingResolution.IsGroundingCurrent : System.Boolean { get }
@@ -1892,6 +1893,7 @@ ToolUp.Facts.NarrativeCalculationsModule.rederive(ToolUp.Facts.NarrativeCalculat
 ToolUp.Facts.NarrativeCalculationsModule.tools(ToolUp.Facts.NarrativeCalculations) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]
 ToolUp.Facts.NarrativeCalculationsModule.tryFind(System.String, ToolUp.Facts.NarrativeCalculations) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.CalculationDeclaration]
 ToolUp.Facts.NarrativeGrounding (class)
+ToolUp.Facts.NarrativeGrounding.AxisProp : System.String (literal)
 ToolUp.Facts.NarrativeGrounding.FactKind : System.String (literal)
 ToolUp.Facts.NarrativeGrounding.FactRefsProp : System.String (literal)
 ToolUp.Facts.NarrativeGrounding.admissionsWith(ToolUp.Facts.GroundingPolicy, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Facts.GroundingResolution], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], ToolUp.Platform.Compose.GroundingCheckOptions, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CertificateAdmission], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence]]
@@ -1903,6 +1905,7 @@ ToolUp.Facts.NarrativeGrounding.defaultPolicy : ToolUp.Facts.GroundingPolicy { g
 ToolUp.Facts.NarrativeGrounding.echoes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.NarrativeGrounding+NumberMention], ToolUp.Facts.NarrativeGrounding+NumberMention) : System.Boolean
 ToolUp.Facts.NarrativeGrounding.englishNumberWords : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Facts.NarrativeGrounding.factTools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
+ToolUp.Facts.NarrativeGrounding.isPeriodLabel(ToolUp.Facts.GroundingPolicy, System.String) : System.Boolean
 ToolUp.Facts.NarrativeGrounding.mentions(ToolUp.Facts.GroundingPolicy, System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.NarrativeGrounding+NumberMention]
 ToolUp.Facts.NarrativeGrounding.parseStated(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[System.Decimal, System.Decimal, System.Boolean]]
 ToolUp.Facts.NarrativeGrounding.referenceKind(System.String) : System.Tuple`2[System.String, System.String]
@@ -1910,14 +1913,20 @@ ToolUp.Facts.NarrativeGrounding.references(ToolUp.Platform.Narrative.NarrativeDo
 ToolUp.Facts.NarrativeGrounding.singular(System.String) : System.String
 ToolUp.Facts.NarrativeGrounding.statesNumber(ToolUp.Facts.GroundingPolicy, System.String) : System.Boolean
 ToolUp.Facts.NarrativeGrounding.statesValue(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], System.Boolean) : System.Boolean
+ToolUp.Facts.NarrativeGrounding.withPeriodPatterns(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.GroundingPolicy) : ToolUp.Facts.GroundingPolicy
 ToolUp.Facts.NarrativeGrounding+Claim (class)
 ToolUp.Facts.NarrativeGrounding+Claim.IsCitationClaim : System.Boolean { get }
+ToolUp.Facts.NarrativeGrounding+Claim.IsKeyClaim : System.Boolean { get }
 ToolUp.Facts.NarrativeGrounding+Claim.IsMetricClaim : System.Boolean { get }
 ToolUp.Facts.NarrativeGrounding+Claim.IsProseClaim : System.Boolean { get }
 ToolUp.Facts.NarrativeGrounding+Claim.Tag : System.Int32 { get }
 ToolUp.Facts.NarrativeGrounding+Claim+CitationClaim (class)
 ToolUp.Facts.NarrativeGrounding+Claim+CitationClaim.location : System.String { get }
 ToolUp.Facts.NarrativeGrounding+Claim+CitationClaim.reference : System.String { get }
+ToolUp.Facts.NarrativeGrounding+Claim+KeyClaim (class)
+ToolUp.Facts.NarrativeGrounding+Claim+KeyClaim.cited : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.NarrativeGrounding+Claim+KeyClaim.label : System.String { get }
+ToolUp.Facts.NarrativeGrounding+Claim+KeyClaim.location : System.String { get }
 ToolUp.Facts.NarrativeGrounding+Claim+MetricClaim (class)
 ToolUp.Facts.NarrativeGrounding+Claim+MetricClaim.label : System.String { get }
 ToolUp.Facts.NarrativeGrounding+Claim+MetricClaim.location : System.String { get }
@@ -1928,6 +1937,7 @@ ToolUp.Facts.NarrativeGrounding+Claim+ProseClaim.location : System.String { get 
 ToolUp.Facts.NarrativeGrounding+Claim+ProseClaim.text : System.String { get }
 ToolUp.Facts.NarrativeGrounding+Claim+Tags (class)
 ToolUp.Facts.NarrativeGrounding+Claim+Tags.CitationClaim : System.Int32 (literal)
+ToolUp.Facts.NarrativeGrounding+Claim+Tags.KeyClaim : System.Int32 (literal)
 ToolUp.Facts.NarrativeGrounding+Claim+Tags.MetricClaim : System.Int32 (literal)
 ToolUp.Facts.NarrativeGrounding+Claim+Tags.ProseClaim : System.Int32 (literal)
 ToolUp.Facts.NarrativeGrounding+NumberMention (class)

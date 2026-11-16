@@ -9,7 +9,7 @@ open ToolUp.Remoting.Json
 open ToolUp.Platform.AI
 open ToolUp.Facts
 
-// ─── The presentation request (Phase 1129) ──────────────────────────
+// ─── The presentation request ──────────────────────────
 //
 // A block a reader sees — a chart or a table of facts — is built from a
 // REQUEST and a gated read, never from rows anyone wrote. The request names
@@ -541,25 +541,28 @@ module PresentationRequest =
         | Some v -> ofJsonValue v
         | None -> Error PresentationRequestError.NotAnObject
 
-/// Phase 1136 — a presentation request drawn as the narrative elements a
-/// grounded narrative publishes: a `Table` whose every cell is a `Metric`
-/// span citing the Fact it states, so the narrative grounding gate checks
-/// each number as it checks the model's own citations. A chart is not drawn
-/// here: the gate reads a chart's props as prose, so its points would be
-/// refused, and a grounded narrative projects tables until a chart-shaped
-/// narrative element exists.
+/// A presentation request drawn as the narrative elements a grounded
+/// narrative publishes: a `Table` whose every value cell is a `Metric` span
+/// citing the Fact it states, so the narrative grounding gate checks each
+/// number as it checks the model's own citations. A chart is not drawn here:
+/// the gate checks a chart component's references with no stated value, so
+/// a drawn figure goes where its value is checked, in a table cell.
+///
+/// A row's first cell and each column header are key positions to the gate:
+/// a day is a key there, and so is a subject's label naming the subject of
+/// the Facts its row or column cites. A trend is therefore drawn as a table
+/// with a row per day and a column per subject.
 ///
 /// The builders' rule holds: a gap is never drawn as a number. A point the
 /// read withheld, or one with no single number, leaves its cell empty and
 /// is named, with its reason, in a note after the table. The note names a
-/// subject and a metric, never a count or a value.
+/// subject and a metric, never a day, a count or a value.
 ///
 /// What the gate would refuse is refused here first, by name and before
-/// any read: a trend (its rows are days, and a date is a figure to the
-/// gate) and annotations (they carry dates). A subject or metric whose NAME
-/// carries a digit is drawn, and the gate refuses the table — the grounded
-/// run then refuses that request on its audit row; it is never published
-/// with the figure unchecked.
+/// any read: annotations, which would be notes, and a date in a note is a
+/// figure. A metric whose NAME carries a digit is drawn, and the gate
+/// refuses the table — the grounded run then refuses that request on its
+/// audit row; it is never published with the figure unchecked.
 [<RequireQualifiedAccess>]
 module PresentationNarrative =
     open ToolUp.Platform.Narrative
@@ -593,13 +596,14 @@ module PresentationNarrative =
             ]
         | false, None -> Error "a fact with no single number (an absence or an interval)"
 
-    /// The title, the table, then a note per point not drawn. `headers` is
-    /// the subject column's then one per value column; each row is a
-    /// subject's label and one cell per value column.
+    /// The title, the table, then `notes`. `headers` is the key column's then
+    /// one per value column; each row is its key's label and one cell per
+    /// value column.
     let private tableOf
         (request: PresentationRequest)
         (headers: string list)
         (rows: (string * Result<InlineSpan list, string> list) list)
+        (notes: NarrativeElement list)
         : NarrativeElement list =
         let level = List.head headers
         let valueHeaders = List.tail headers
@@ -619,20 +623,6 @@ module PresentationNarrative =
                         | Ok spans -> spans
                         | Error _ -> [])))
 
-        let gaps =
-            rows
-            |> List.collect (fun (subject, cells) ->
-                List.zip valueHeaders cells
-                |> List.choose (fun (header, c) ->
-                    match c with
-                    | Error why ->
-                        Some(
-                            NarrativeElement.Paragraph [
-                                InlineSpan.Text(sprintf "Not shown: %s, %s, %s." subject header why)
-                            ]
-                        )
-                    | Ok _ -> None))
-
         [
             NarrativeElement.Heading(3, [ InlineSpan.Text heading ])
             NarrativeElement.Table(
@@ -640,17 +630,36 @@ module PresentationNarrative =
                 :: (valueHeaders |> List.map (fun h -> h, TableAlignment.Right)),
                 drawn
             )
-            yield! gaps
+            yield! notes
         ]
+
+    /// A subject table: `tableOf` with a note per point not drawn, naming
+    /// its subject, its column and why.
+    let private subjectTable
+        (request: PresentationRequest)
+        (headers: string list)
+        (rows: (string * Result<InlineSpan list, string> list) list)
+        : NarrativeElement list =
+        rows
+        |> List.collect (fun (subject, cells) ->
+            List.zip (List.tail headers) cells
+            |> List.choose (fun (header, c) ->
+                match c with
+                | Error why ->
+                    Some(
+                        NarrativeElement.Paragraph [
+                            InlineSpan.Text(sprintf "Not shown: %s, %s, %s." subject header why)
+                        ]
+                    )
+                | Ok _ -> None))
+        |> tableOf request headers rows
 
     /// Why `request` draws nothing in a grounded narrative whatever its
     /// facts, when it does not.
     let private undrawable (request: PresentationRequest) : string option =
-        if request.Kind = PresentationKind.Trend then
+        if not (List.isEmpty request.Annotations) then
             Some
-                "a trend is not drawn in a grounded narrative: its rows are days, which the grounding gate reads as figures; request a table, a breakdown or a comparison"
-        elif not (List.isEmpty request.Annotations) then
-            Some "annotations carry dates, which the grounding gate reads as figures; a projected table takes none"
+                "annotations would be drawn as notes, and a date in a note is a figure to the grounding gate; a projected table takes none"
         else
             None
 
@@ -689,6 +698,47 @@ module PresentationNarrative =
                     | None -> Error missing
 
                 match request.Kind with
+                | PresentationKind.Trend ->
+                    // A row per day the period holds a fact for, a column per
+                    // subject. A note names a subject, never a day.
+                    let metric = request.Metrics.Head
+                    let from, until = PresentationRequest.range request
+
+                    let points =
+                        first.Points
+                        |> List.filter (fun p -> dayOf p.PeriodFrom >= from && dayOf p.PeriodFrom < until)
+
+                    let days =
+                        points |> List.map (fun p -> dayOf p.PeriodFrom) |> List.distinct |> List.sort
+
+                    let order = subjects points
+                    let known = labels points
+
+                    let rows =
+                        days
+                        |> List.map (fun d ->
+                            PresentationDay.iso d, order |> List.map (at "no fact" metric (pointsOn d first)))
+
+                    let notes =
+                        rows
+                        |> List.collect (fun (_, cells) ->
+                            List.zip order cells
+                            |> List.choose (fun (s, c) ->
+                                match c with
+                                | Error why -> Some(s, why)
+                                | Ok _ -> None))
+                        |> List.distinct
+                        |> List.map (fun (s, why) ->
+                            NarrativeElement.Paragraph [
+                                InlineSpan.Text(
+                                    sprintf "Not shown on some days: %s, %s, %s." (labelOf known s) metric why
+                                )
+                            ])
+
+                    if List.isEmpty days then
+                        Error "the period holds no fact to draw"
+                    else
+                        Ok(tableOf request ("day" :: List.map (labelOf known) order) rows notes)
                 | _ when onDay |> List.forall List.isEmpty -> Error "the period's last day holds no fact to draw"
                 | PresentationKind.Breakdown ->
                     // Largest first; a point with no published number last.
@@ -700,7 +750,7 @@ module PresentationNarrative =
                         |> subjects
 
                     Ok(
-                        tableOf
+                        subjectTable
                             request
                             [ level; metric ]
                             (order
@@ -733,7 +783,7 @@ module PresentationNarrative =
                         let known = labels (onDay.Head @ earlier)
 
                         Ok(
-                            tableOf
+                            subjectTable
                                 request
                                 [ level; metric; header ]
                                 (subjects (onDay.Head @ earlier)
@@ -747,7 +797,7 @@ module PresentationNarrative =
                 | _ ->
                     // A table: subjects by metrics.
                     Ok(
-                        tableOf
+                        subjectTable
                             request
                             (level :: request.Metrics)
                             (subjects (List.concat onDay)

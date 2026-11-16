@@ -4465,6 +4465,399 @@ let admissionTests =
             }
         ]
 
+// ── K. Keys: a period or a subject in a key position is not a figure ──
+
+/// The subject of each Fact the key cases cite: two products whose names
+/// carry digits, and a brand.
+let private keyFacts: Map<string, string> =
+    Map.ofList [
+        String('6', 64), "product/tea>House Blend 500g Tin"
+        String('7', 64), "product/tea>Mint Tea 125g Caddy"
+        String('8', 64), "brand/acme"
+    ]
+
+let private houseBlend = String('6', 64)
+let private mintTea = String('7', 64)
+
+let private keyResolve (reference: string) =
+    if keyFacts.ContainsKey reference then
+        GroundingCurrent([ "100" ], Some 100m, false)
+    else
+        resolve reference
+
+let private checkKeysUnder (policy: GroundingPolicy) (elements: NarrativeElement list) =
+    NarrativeGrounding.checkWith policy keyResolve keyFacts.TryFind GroundingCheckOptions.none (docOf elements)
+
+let private checkKeys = checkKeysUnder NarrativeGrounding.defaultPolicy
+
+let private keyedPass (elements: NarrativeElement list) =
+    match checkKeys elements with
+    | Grounded citations -> citations
+    | Ungrounded offences ->
+        failtestf "expected a pass, refused: %s" (offences |> List.map GroundingOffence.describe |> String.concat "; ")
+
+/// A two-column table: a key column headed `key`, then a revenue column.
+let private keyTable (key: string) (rows: (InlineSpan list * InlineSpan list) list) =
+    NarrativeElement.Table(
+        [ key, TableAlignment.Left; "Revenue", TableAlignment.Right ],
+        rows |> List.map (fun (label, value) -> [ label; value ])
+    )
+
+let private cited = [ metric "" "1,248,300" (Some revenueId) ]
+
+let private day (d: int) =
+    DateTime(2026, 8, d, 0, 0, 0, DateTimeKind.Utc)
+
+let private seriesPoint (member': string) (d: DateTime) (withheld: bool) : FactSeriesPoint = {
+    Subject = "brand/" + member'
+    SubjectPath = [ member' ]
+    PeriodFrom = d
+    PeriodTo = d.AddDays 1.0
+    PeriodLabel = None
+    Value = if withheld then None else Some 100m
+    Rendering = if withheld then None else Some "100"
+    FactId = sprintf "%s-%s" member' (PresentationDay.iso d)
+    AsOf = d
+    Freshness = "fresh"
+    Withheld = withheld
+}
+
+let keyPositionTests =
+    testList "Phase 1217 K — a period or a subject label in a key position is a key, not a figure" [
+
+        test "a period table with every value cited passes; its periods are neither refused nor admitted" {
+            let table =
+                keyTable "Period" [
+                    for label in
+                        [
+                            "2026-08-03"
+                            "3 Aug 2026"
+                            "2026-W32"
+                            "Week 32"
+                            "2026-08"
+                            "August 2026"
+                            "Q3 2026"
+                            "2026-Q3"
+                            "2026"
+                        ] -> [ text label ], cited
+                ]
+
+            Expect.equal
+                (keyedPass [ table ])
+                [
+                    {
+                        ReferenceKind = NarrativeCitation.FactKind
+                        Reference = revenueId
+                    }
+                ]
+                "the one Fact it cites, and nothing for the periods"
+
+            Expect.equal
+                (NarrativeGrounding.admissionsWith
+                    NarrativeGrounding.defaultPolicy
+                    keyResolve
+                    keyFacts.TryFind
+                    GroundingCheckOptions.none
+                    (docOf [ table ]))
+                (Ok [])
+                "a key is not an admission: the certificate seals nothing for it"
+
+            let byColumn =
+                NarrativeElement.Table(
+                    [
+                        "Metric", TableAlignment.Left
+                        "2026-08-03", TableAlignment.Right
+                        "Q3 2026", TableAlignment.Right
+                    ],
+                    [ [ [ text "Revenue" ]; cited; cited ] ]
+                )
+
+            Expect.equal (keyedPass [ byColumn ] |> List.length) 1 "a period in a column header is a key too"
+        }
+
+        test "the same table with one uncited value is refused on that cell only" {
+            let offences =
+                offencesOf (
+                    checkKeys [
+                        keyTable "Day" [
+                            [ text "2026-08-03" ], cited
+                            [ text "2026-08-04" ], [ text "990" ]
+                            [ text "2026-08-05" ], cited
+                        ]
+                    ]
+                )
+
+            Expect.equal (offences |> List.map _.Reason) [ UnreferencedNumber ] "one offence"
+            Expect.stringContains offences.Head.Location "row 2 › column 2" "on the uncited cell"
+            Expect.equal offences.Head.Claim "990" "quoting the cell, not its period"
+        }
+
+        test "a number disguised as a label in a key position is refused" {
+            for label in
+                [
+                    "1,250"
+                    "£40"
+                    "12.5%"
+                    "1250"
+                    "1250 units"
+                    "2026-13"
+                    "Week 54"
+                    "2026-08-32"
+                ] do
+                let asRow = offencesOf (checkKeys [ keyTable "Day" [ [ text label ], cited ] ])
+                Expect.equal (asRow |> List.map _.Reason) [ UnreferencedNumber ] $"'{label}' in a row's first cell"
+                Expect.stringContains asRow.Head.Location "row 1 › column 1" "named at the cell"
+
+                let asHeader = offencesOf (checkKeys [ keyTable label [ [ text "Acme" ], cited ] ])
+                Expect.equal (asHeader |> List.map _.Reason) [ UnreferencedNumber ] $"'{label}' as a header"
+                Expect.stringContains asHeader.Head.Location "header 1" "named at the header"
+
+            Expect.equal
+                (reasonsOf (checkKeys [ NarrativeElement.KeyValueGrid [ "1,250", cited ] ]))
+                [ UnreferencedNumber ]
+                "and as a key/value grid's key"
+        }
+
+        test "a period stated in prose is judged as today" {
+            for prose in
+                [
+                    "In week 32 we sold more than ever."
+                    "Sales on 2026-08-03 rose."
+                    "Q3 2026 was strong."
+                ] do
+                Expect.equal (reasonsOf (checkKeys [ para [ text prose ] ])) [ UnreferencedNumber ] prose
+
+            Expect.equal
+                (reasonsOf (checkKeys [ para [ metric "Revenue 2026-W32" "1,248,300" (Some revenueId) ] ]))
+                [ UnreferencedNumber ]
+                "a metric's label is prose, not a key"
+        }
+
+        test "a chart axis of periods passes; a figure on the axis is refused at its tick" {
+            let chart (axis: string) =
+                NarrativeElement.Component("line-chart", Map.ofList [ "factRefs", revenueId; "axis", axis ])
+
+            Expect.equal (keyedPass [ chart "2026-08-03,2026-08-04, 2026-08-05" ] |> List.length) 1 "the axis is keys"
+
+            let offences = offencesOf (checkKeys [ chart "2026-08-03,1250" ])
+            Expect.equal (offences |> List.map _.Reason) [ UnreferencedNumber ] "the free number"
+            Expect.stringContains offences.Head.Location "prop 'axis' › tick 2" "named at its tick"
+        }
+
+        test "a key/value grid keyed by period passes" {
+            Expect.equal
+                (keyedPass [ NarrativeElement.KeyValueGrid [ "2026-W32", cited; "2026-W33", cited ] ]
+                 |> List.length)
+                1
+                "each key is a period"
+        }
+
+        test "a declared period is a key only under the policy that declares it" {
+            let fiscal =
+                NarrativeGrounding.defaultPolicy
+                |> NarrativeGrounding.withPeriodPatterns [ @"FY\d{2} P(0[1-9]|1[0-3])" ]
+
+            let table = keyTable "Period" [ [ text "FY26 P05" ], cited ]
+
+            Expect.equal (reasonsOf (checkKeys [ table ])) [ UnreferencedNumber ] "undeclared, it is a figure"
+
+            Expect.isTrue
+                (NarrativeGroundingVerdict.isGrounded (checkKeysUnder fiscal [ table ]))
+                "declared, it is a key"
+
+            Expect.isTrue (NarrativeGrounding.isPeriodLabel fiscal "fy26 p13") "matched ignoring case"
+            Expect.isFalse (NarrativeGrounding.isPeriodLabel fiscal "FY26 P14") "and only as declared"
+            Expect.isFalse (NarrativeGrounding.isPeriodLabel fiscal "FY26 P05 rose") "against the whole label"
+        }
+
+        test "a subject label carrying a digit keeps its row when it names the cited Fact's subject" {
+            let row (label: string) (factId: string) =
+                keyTable "Product" [ [ text label ], [ metric "" "100" (Some factId) ] ]
+
+            Expect.equal (keyedPass [ row "House Blend 500g Tin" houseBlend ] |> List.length) 1 "its last member"
+
+            Expect.equal
+                (keyedPass [ row "tea>House Blend 500g Tin" houseBlend ] |> List.length)
+                1
+                "a trailing run of its members"
+
+            let wrong = offencesOf (checkKeys [ row "House Blend 500g Tin" mintTea ])
+            Expect.equal (wrong |> List.map _.Reason) [ UnreferencedNumber ] "naming another Fact's subject"
+            Expect.stringContains wrong.Head.Location "row 1 › column 1" "refused at the label"
+
+            Expect.equal
+                (reasonsOf (checkKeys [ keyTable "Product" [ [ text "House Blend 500g Tin" ], [ text "n/a" ] ] ]))
+                [ UnreferencedNumber ]
+                "with no Fact to match"
+
+            Expect.equal
+                (reasonsOf (
+                    checkKeys [
+                        keyTable "Product" [
+                            [ text "House Blend 500g Tin" ],
+                            [ metric "" "100" (Some houseBlend); metric "" "100" (Some mintTea) ]
+                        ]
+                    ]
+                ))
+                [ UnreferencedNumber ]
+                "it must name the subject of EVERY Fact its row cites"
+
+            Expect.equal
+                (reasonsOf (checkKeys [ row "250" houseBlend ]))
+                [ UnreferencedNumber ]
+                "a free number is never a subject"
+        }
+
+        test "a column header names its column's subject" {
+            let table =
+                NarrativeElement.Table(
+                    [ "day", TableAlignment.Left; "House Blend 500g Tin", TableAlignment.Right ],
+                    [
+                        [ [ text "2026-08-03" ]; [ metric "" "100" (Some houseBlend) ] ]
+                        [ [ text "2026-08-04" ]; [ metric "" "100" (Some houseBlend) ] ]
+                    ]
+                )
+
+            Expect.equal (keyedPass [ table ] |> List.length) 1 "every Fact in the column is about it"
+
+            let mixed =
+                NarrativeElement.Table(
+                    [ "day", TableAlignment.Left; "House Blend 500g Tin", TableAlignment.Right ],
+                    [
+                        [ [ text "2026-08-03" ]; [ metric "" "100" (Some houseBlend) ] ]
+                        [ [ text "2026-08-04" ]; [ metric "" "100" (Some mintTea) ] ]
+                    ]
+                )
+
+            let offences = offencesOf (checkKeys [ mixed ])
+            Expect.equal (offences |> List.map _.Reason) [ UnreferencedNumber ] "a column of two subjects"
+            Expect.stringContains offences.Head.Location "header 2" "refused at the header"
+        }
+
+        test "a trend draws a row per day and a column per subject, and the gate passes it" {
+            let request: PresentationRequest = {
+                Kind = PresentationKind.Trend
+                TableId = "brand-sales"
+                Metrics = [ "revenue" ]
+                SubjectPrefix = []
+                SubjectLevel = None
+                Period = PresentationPeriod.Ending(day 5, 3)
+                CompareTo = None
+                Title = None
+                Annotations = []
+            }
+
+            let points = [
+                seriesPoint "acme" (day 3) false
+                seriesPoint "acme" (day 4) true
+                seriesPoint "acme" (day 5) false
+                seriesPoint "zenith" (day 3) false
+                seriesPoint "zenith" (day 4) false
+                seriesPoint "zenith" (day 9) false
+            ]
+
+            let series: FactSeries = {
+                TableId = "brand-sales"
+                Metric = "revenue"
+                SubjectPrefix = []
+                SubjectLevel = "brand"
+                PeriodFrom = day 3
+                PeriodTo = day 6
+                DisplayFormat = ""
+                Points = points
+                MaxPoints = 100
+                WithheldCount = 1
+                Withheld = []
+                View = None
+            }
+
+            let elements =
+                match PresentationNarrative.draw request [ series ] with
+                | Ok elements -> elements
+                | Error why -> failtestf "a trend must draw: %s" why
+
+            match tablesIn elements with
+            | [ columns, rows ] ->
+                Expect.equal (columns |> List.map fst) [ "day"; "acme"; "zenith" ] "a column per subject"
+
+                Expect.equal
+                    (rows
+                     |> List.map (function
+                         | [ InlineSpan.Text d ] :: _ -> d
+                         | other -> failtestf "unexpected row %A" other))
+                    [ "2026-08-03"; "2026-08-04"; "2026-08-05" ]
+                    "a row per day in the period, in order; a day outside it is not drawn"
+            | other -> failtestf "expected one table, got %A" other
+
+            let notes =
+                elements
+                |> List.choose paragraphText
+                |> List.filter (fun p -> p.StartsWith "Not shown")
+
+            Expect.equal
+                notes
+                [
+                    "Not shown on some days: acme, revenue, withheld from you by the disclosure gate."
+                    "Not shown on some days: zenith, revenue, no fact."
+                ]
+                "each gap is named by subject and reason, never by day"
+
+            let subjects = points |> List.map (fun p -> p.FactId, p.Subject) |> Map.ofList
+
+            let resolveDrawn (reference: string) =
+                if subjects.ContainsKey reference then
+                    GroundingCurrent([ "100" ], Some 100m, false)
+                else
+                    GroundingUnresolved
+
+            let document = docOf elements
+
+            Expect.isTrue
+                (NarrativeGroundingVerdict.isGrounded (
+                    NarrativeGrounding.checkWith
+                        NarrativeGrounding.defaultPolicy
+                        resolveDrawn
+                        subjects.TryFind
+                        GroundingCheckOptions.none
+                        document
+                ))
+                "its days and subjects are keys, and every value cites its Fact"
+        }
+
+        test "a requested trend renders through the fact-tier gate and the run publishes it" {
+            let definition =
+                summaryRun
+                |> GroundedNarrativeDefinition.withRequestBuilder "trend" (fun context request ->
+                    PresentationNarrative.project (readThrough context) request.Json)
+
+            let deployment =
+                deployFor definition (fun id rendering ->
+                    answerWith [ citing id rendering ] [ request "trend" [ "revenue" ] ])
+
+            let document, citations = publishedDocument (run deployment)
+            let revenue = brandFacts deployment "revenue"
+
+            match tablesIn (summaryElements document) with
+            | [ columns, rows ] ->
+                Expect.equal (columns |> List.map fst) [ "day"; "acme"; "zenith" ] "a column per brand"
+
+                match rows with
+                | [ [ [ InlineSpan.Text d ]
+                      [ InlineSpan.Metric(_, _, Some acme) ]
+                      [ InlineSpan.Metric(_, _, Some zenith) ] ] ] ->
+                    Expect.equal d "2026-10-28" "the trading day is the row's key"
+                    Expect.equal acme revenue.["acme"].FactId "acme's cell cites acme's Fact"
+                    Expect.equal zenith revenue.["zenith"].FactId "zenith's cell cites zenith's Fact"
+                    Expect.contains (NarrativeCitation.factIds citations) acme "a fact the gate admitted"
+                | other -> failtestf "unexpected rows %A" other
+            | other -> failtestf "expected one table, got %A" other
+
+            let row = lastRow deployment
+            Expect.equal (row.GetProperty("Projections").GetInt32()) 1 "the trend was drawn"
+            Expect.equal (row.GetProperty("ProjectionRefusals").GetArrayLength()) 0 "and nothing refused"
+        }
+    ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -4480,4 +4873,5 @@ let tests =
         triggerNameTests
         repairTests
         admissionTests
+        keyPositionTests
     ]

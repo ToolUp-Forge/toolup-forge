@@ -12,7 +12,7 @@ open System.Collections.Concurrent
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
 
-// ─── Grounded narratives (Phase 985) — the seams ─────────────────────
+// ─── Grounded narratives — the seams ─────────────────────
 //
 // A deployment with a fact tier can ask the model for a narrative report
 // and publish it ONLY if every number in it is a reference to a Fact. Four
@@ -114,8 +114,10 @@ type INarrativeGroundingGate =
     /// `principal`. Every numeric claim in the document's content must be a
     /// `Metric` span whose reference resolves to a current Fact (or a
     /// current declared reference) the surface may disclose, and whose
-    /// stated value is that reference's value. Refusals name every
-    /// offending span.
+    /// stated value is that reference's value. A label in a key position —
+    /// a table's header or row label, a grid's key, a chart's axis tick — is
+    /// a key, not a claim, when it is a period or names the subject of the
+    /// Facts beside it. Refusals name every offending span.
     abstract Check:
         scope: ResolvedScope * principal: string * surface: FactEgressSurface * document: NarrativeDocument ->
             Async<NarrativeGroundingVerdict>
@@ -255,7 +257,7 @@ type GroundedSectionShape = {
     Guidance: string
 }
 
-/// Phase 1136 — what a grounded run's projections are built under: the
+/// What a grounded run's projections are built under: the
 /// run's resolved scope, the principal it reads and publishes as, the
 /// surface its narrative is checked at, and the run's request context.
 ///
@@ -279,7 +281,7 @@ type GroundedProjectionContext = {
     Request: Microsoft.AspNetCore.Http.HttpContext
 }
 
-/// Phase 1136 — one projection a grounded run's model asked for: the
+/// One projection a grounded run's model asked for: the
 /// request's `kind` and the request itself, the JSON object the model wrote.
 /// The run reads nothing else of it; the builder registered for the kind
 /// does. It names what to draw and carries no number.
@@ -290,7 +292,7 @@ type GroundedProjectionRequest = {
     Json: string
 }
 
-/// Phase 1136 — builds the elements one requested projection draws, under
+/// Builds the elements one requested projection draws, under
 /// the run's projection context. `Error` names why the request cannot be
 /// drawn; the run refuses that request on its audit row and publishes the
 /// rest. Whatever it builds is checked by the grounding gate before it is
@@ -400,16 +402,16 @@ type GroundedNarrativeDefinition = {
     /// The deterministic projections — tables — built from Facts by
     /// deployment code (for example `NarrativeFromData`'s fact-bearing
     /// grids), keyed by section id, under the run's projection context
-    /// (Phase 1136; `withProjection` adapts a scope-id form). They are
+    /// (`withProjection` adapts a scope-id form). They are
     /// appended after the section's prose, before any requested projection,
     /// and checked by the same gate.
     Project: GroundedProjectionContext -> Async<Result<(string * NarrativeElement list) list, string>>
-    /// Phase 1136 — the builders for the projections the model may
+    /// The builders for the projections the model may
     /// request, by request kind. Empty (the default) means the model is
     /// told nothing of projections and a request it writes anyway is
     /// refused as an unregistered kind.
     RequestBuilders: Map<string, GroundedRequestBuilder>
-    /// Phase 1136 — whether the model is told it may write a hypothesis
+    /// Whether the model is told it may write a hypothesis
     /// marked as conjecture. A conjecture renders as a labelled callout
     /// and carries no figure; whether or not this is set, a conjecture the
     /// model writes is rendered so, never as plain prose. Off by default.
@@ -478,7 +480,7 @@ module GroundedNarrativeDefinition =
                 Project = fun context -> project context.Scope.ScopeId
         }
 
-    /// Phase 1136 — deterministic projections built under the run's
+    /// Deterministic projections built under the run's
     /// projection context, so they can read facts through its gated
     /// request (see `GroundedProjectionContext`).
     let withProjectionContext
@@ -487,7 +489,7 @@ module GroundedNarrativeDefinition =
         =
         { definition with Project = project }
 
-    /// Phase 1136 — let the model request projections of `kind`, built by
+    /// Let the model request projections of `kind`, built by
     /// `builder`. The run then tells the model the request form and the
     /// registered kinds; registering a kind again replaces its builder.
     let withRequestBuilder (kind: string) (builder: GroundedRequestBuilder) (definition: GroundedNarrativeDefinition) = {
@@ -495,7 +497,7 @@ module GroundedNarrativeDefinition =
             RequestBuilders = definition.RequestBuilders |> Map.add (kind.Trim().ToLowerInvariant()) builder
     }
 
-    /// Phase 1136 — tell the model it may write a hypothesis, marked as
+    /// Tell the model it may write a hypothesis, marked as
     /// conjecture (see `AllowsConjecture`).
     let withConjecture (definition: GroundedNarrativeDefinition) = {
         definition with
@@ -504,7 +506,7 @@ module GroundedNarrativeDefinition =
 
     let withTags (tags: string list) (definition: GroundedNarrativeDefinition) = { definition with Tags = tags }
 
-    /// Phase 1111 — the definition with an administrator's wording in place
+    /// The definition with an administrator's wording in place
     /// of the declared wording: `prompt` replaces `Prompt`, and each
     /// `(section id, guidance)` pair replaces that section's `Guidance`.
     /// Nothing else moves: the key, the title, the section ids, headings and
@@ -606,14 +608,14 @@ type GroundedNarrativeRequest = {
     RunKey: string
     /// The scope the run reads, publishes and indexes in. A RESOLVED scope,
     /// because the model reads facts through the request-path fact tools,
-    /// which take only a scope the platform resolved (Phase 797) — a job
+    /// which take only a scope the platform resolved — a job
     /// passes its `JobContext.Scope`. The anonymous scope is refused: it
     /// holds only what was asserted anonymously, so a run over it could
     /// cite nothing a reader cares about.
     Scope: ResolvedScope
     /// The access context the model provider is resolved under. `None`
     /// (what both triggers pass) resolves it under the scope the run
-    /// CARRIES (Phase 995): a team scope as a member of that team, a user
+    /// CARRIES: a team scope as a member of that team, a user
     /// scope as that user (`AccessContext.forConfigScope`), so the AI key
     /// configured at the scope that triggered the run is the key that funds
     /// it. Only a scope that names no team or user — which holds no AI
@@ -652,7 +654,7 @@ type GroundedNarrativeOutcome =
     /// The run's scope holds no AI provider it may use under the
     /// deployment's funding policy — no key configured there, a key for a
     /// provider the deployment does not offer, or a strict bring-your-own-
-    /// key policy with nothing brought (Phase 995). Nothing was generated or
+    /// key policy with nothing brought. Nothing was generated or
     /// published. Unlike `GroundedNarrativeFailed` this does not pass by
     /// waiting: another attempt resolves the same configuration the same
     /// way, so a trigger treats it as permanent. `reason` says what is
@@ -660,7 +662,7 @@ type GroundedNarrativeOutcome =
     /// outcome is `unfunded`.
     | GroundedNarrativeUnfunded of reason: string
     /// The model was still writing the narrative when a provider call
-    /// reached the run's call budget (Phase 1109). Nothing was published.
+    /// reached the run's call budget. Nothing was published.
     /// Like `GroundedNarrativeUnfunded` this does not pass by waiting:
     /// another attempt over the same facts meets the same budget, and each
     /// attempt is a paid, partial model call — so a trigger treats it as
@@ -714,11 +716,11 @@ module GroundedNarrativeOutcome =
         // A failure to produce a narrative (a provider outage, unparseable
         // model output) may not recur.
         | GroundedNarrativeFailed _ -> TransientFailure(describe outcome)
-        // A scope with no usable AI key (Phase 995) has none on the next
+        // A scope with no usable AI key has none on the next
         // attempt either: retrying would spend the backoff and publish
         // nothing.
         | GroundedNarrativeUnfunded _ -> PermanentFailure(describe outcome)
-        // A reply cut at the run's call budget (Phase 1109) is cut at the
+        // A reply cut at the run's call budget is cut at the
         // same budget next time, and each attempt is a paid, partial model
         // call: permanent, naming how to raise it.
         | GroundedNarrativeOverBudget _ -> PermanentFailure(describe outcome)
