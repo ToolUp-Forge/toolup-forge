@@ -540,6 +540,10 @@
     <InternalsVisibleTo Include="ToolUp.Platform.Tests.Infra" />
     <InternalsVisibleTo Include="ToolUp.Platform.Tests.Remoting" />
     <InternalsVisibleTo Include="ToolUp.AI.Client.Tests" />
+    <!-- The fact browse authors its pages as trees and lowers them through
+         the internal tree seam (TreeLowering), which stays internal so no
+         public signature names a tree node. -->
+    <InternalsVisibleTo Include="ToolUp.Facts.Client" />
   </ItemGroup>
   <ItemGroup>
     <!-- Explicit FSharp.Core reference: the SDK-bundled implicit

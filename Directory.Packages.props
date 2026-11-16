@@ -191,6 +191,11 @@
          npm imports (react, react-dom, ag-grid, ag-charts) are the ones the
          client tier's consumers already install. -->
     <PackageVersion Include="Fuaran.UI.Renderer" Version="$(FuaranUIVersion)" />
+    <!-- The published Apache-2.0 reference derivation of a tree's operable
+         surface (`Operability.derive` / `resolve`). Test-only here: the
+         client pack reads the fact browse's table select off its tree with
+         it. Same repository, same pin; Fable-clean. -->
+    <PackageVersion Include="Fuaran.UI.Operability" Version="$(FuaranUIVersion)" />
     <!-- The published Apache-2.0 op vocabulary a stored page's
          layers are written in (ToolUp.Platform.Server only): the hash-chained
          `Fuaran.Core.OpStream` each layer is, the tree-op vocabulary

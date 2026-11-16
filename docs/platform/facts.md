@@ -1407,36 +1407,54 @@ table runs over 200 SKUs, two months; each read warm):
 
 The browse (`FactBrowseView`, module `FactBrowseLinks.ModuleId`) is the client module every grounded deployment
 composes, so the instructions a user types about it, such as "open the category table", are the first worth resolving
-without a model turn. What a browser fast path can set is what the module's Elmish loop accepts as a message. A
-selection no message sets cannot be set by anything, whatever a declaration says about it.
+without a model turn. Since Phase 1164 its Tables page and its Table page are Fuaran-UI trees, lowered through the
+shell's tree seam, and what an instruction may set is read off those trees (`Fuaran.UI.Operability.derive`). Nothing in
+this SDK declares a field for it.
+
+**The table is the one control a tree names.** Both pages carry the select named `table`, labelled "Table":
+
+| On the tree | What it is |
+|---|---|
+| Node name | `table`, a `Select` |
+| Options | one per listed table (after the metric filter), each option's value and label the table id |
+| Value | `Model.SelectedTable`, when that table is listed |
+| Change | `Action.Dispatch (OpenTable tableId)` |
+| Phrasings | the derived `set table to {value}` and `change table to {value}`, the read `what is table`, and the declared `open {value}`, `open the {value} table` and `show the {value} table` |
+| Aliases | none: a table's description is not on the listing (below) |
+
+An instruction resolves only when one of those phrasings matches it whole and its value is a listed table id, so
+"open the costs table" sends `OpenTable "costs"` and "bring up the costs numbers" resolves to nothing. On the Tables
+page the page's own dispatch also shows the Table page after an `OpenTable`, as the listing's links did; on the Table
+page the change opens the chosen table in place. A host that operates the derived affordance through the module's
+dispatch rather than the tree's sets the selection and leaves the page where it is.
+
+**Each page is named.** The Tables page's root is a group labelled "Fact tables" and the Table page's a group labelled
+"Table", beside the module's declared pages (`TablesRoute`, `TableRoute`, `RowsRoute`), so a host can tell which page a
+derived control is on.
+
+What else the browse holds, and what sets it, is unchanged and is not on a tree yet:
 
 | Selection | Held in | Set by | Values |
 |---|---|---|---|
-| The table | `Model.SelectedTable` | `OpenTable tableId`, or the `FactBrowseLinks.OpenTableTopic` event | the ids in `Model.Tables`, the listing the server returned |
-| The metric filter | `Model.MetricFilter` | `FilterByMetric metric`, `ClearMetricFilter` | the listed tables' metrics |
-| The ranking | `Model.RowQuery` | `RowsRequested query` | the selected table's metrics, `TopOfRanking` or `BottomOfRanking`, a subject prefix, a page |
-| The run history page | `Model.Runs` | `RunsPageRequested page` | a page index |
+| The metric filter | `Model.MetricFilter` | `FilterByMetric metric`, `ClearMetricFilter` (the Tables page's "Show all tables" button) | the listed tables' metrics |
+| The ranking | `Model.RowQuery` | `RowsRequested query` (the Rows page, still Feliz) | the selected table's metrics, `TopOfRanking` or `BottomOfRanking`, a subject prefix, a page |
+| The run history page | `Model.Runs` | `RunsPageRequested page` (the Table page's run history, a React island in its tree) | a page index |
 | The opened fact | `Model.Fact` | `OpenFact factId`, `CloseFact` | a fact id from a page of rows |
-| The page | the shell's route | `NavigationRequest.request (FactBrowseLinks.sidebarId route)` | `TablesRoute`, `TableRoute`, `RowsRoute` |
 
-Three things an instruction might name are not selections here:
+Three things an instruction might name are not controls here:
 
 - **A day.** The browse reads each table's current run. Neither the model nor the read contract (`FactRowQuery`)
-  carries a day or an as-of; a row shows its period and nothing chooses one. A day control would be a read-contract
-  change before it could be a control.
-- **A level.** A table sits at one declared level (`FactTableListing.Level`), which the tables page and the table page
-  show. It is a property of the table, not a choice. The nearest selection is the ranking's subject prefix.
-- **A table's description as its name.** A description (see
+  carries a day or an as-of, so no tree has a day to name. A day control would be a read-contract change first.
+- **A level.** A table sits at one declared level (`FactTableListing.Level`), which both pages show. It is a property
+  of the table, not a choice.
+- **A table's description as an alias.** A description (see
   [What a declared table is for](#what-a-declared-table-is-for-its-description)) reaches the client on the selected
-  table's detail (`FactTableDetail.Description`), not on the listing, so the browse holds no description for a table it
-  has not opened.
+  table's detail (`FactTableDetail.Description`), not on the listing, so the select has no description to offer as an
+  option's alias. Carrying it on `FactTableListing` would let the select declare one alias per described table.
 
-The browse declares no fast-path fields. The field declarations a browser fast path reads belong to the resolver a host
-installs through `FastPathBridge.setResolver`, which builds on `ClientModule`, so no package in this SDK can depend on
-them. A declaration of that kind also composes the module's action decoder, so it needs the typed
-`ClientModule<Model, Msg>` before `ClientModule.register`, and `FactBrowseView.create` registers it internally and
-returns an `ErasedModule`. What would have to change, and why it is interim work until the browse moves off Feliz:
-[`1162-the-fact-browse-declares-its-controls.md`](../migrations/1162-the-fact-browse-declares-its-controls.md).
+Whether the browse gains a day control, and whether the listing carries descriptions, are open decisions; neither is
+built. The move from the Feliz pages:
+[`1164-the-fact-browse-renders-as-a-fuaran-ui-tree.md`](../migrations/1164-the-fact-browse-renders-as-a-fuaran-ui-tree.md).
 
 ## Composition
 

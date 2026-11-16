@@ -3,20 +3,27 @@
 
 module ToolUp.Facts.Client.FactBrowseView
 
-// ─── Fact browse — pages and module (Phase 895) ──────────────────────
+// ─── Fact browse — pages and module ──────────────────────────────────
 //
 // Three declared pages, summary first:
 //
 //   /tables — one row per declared table: owning module, metrics, level,
-//             row count, last refresh, freshness.
+//             row count, last refresh, freshness, latest run; and the
+//             table select. A Fuaran-UI tree.
 //   /table  — the selected table's declaration, population summary and
 //             run history (paged), with each committed run's change
-//             summary and, on request, its largest movers.
+//             summary and, on request, its largest movers; and the table
+//             select. A Fuaran-UI tree, its run history a React island.
 //   /rows   — the drill-down: rank by a metric column, top or bottom,
 //             under a subject prefix, one page at a time — answered from the
-//             table's held view slice (Phase 1127), or page by page from the
+//             table's held view slice, or page by page from the
 //             server when the slice was refused; and the
 //             opened fact with its provenance chain.
+//
+// The two trees are lowered through the shell's tree seam
+// (`TreeLowering.lower`), which loads the renderer on demand, so the
+// module's registration, its id and its topic subscriptions are those of
+// any other module.
 //
 // Every page has a considered empty state — no tables declared, no table
 // chosen, a table with no runs yet, a ranking with nothing to show — and
@@ -47,21 +54,6 @@ let private headerCell (label: string) =
 
 let private cell (value: string) =
     Html.td [ prop.className "px-3 py-2 text-sm text-gray-700"; prop.text value ]
-
-/// A column's metric id, with its declared description beneath it as the
-/// column's hint (and its tooltip). An undescribed column renders as `cell`.
-let private describedCell (value: string) (description: string option) =
-    match description with
-    | None -> cell value
-    | Some hint ->
-        Html.td [
-            prop.className "px-3 py-2 text-sm text-gray-700"
-            prop.title hint
-            prop.children [
-                Html.div [ prop.text value ]
-                Html.div [ prop.className "text-xs text-gray-500"; prop.text hint ]
-            ]
-        ]
 
 let private monoCell (value: string) =
     Html.td [
@@ -154,24 +146,12 @@ let private time (t: DateTime) = t.ToString("yyyy-MM-dd HH:mm")
 let private optionalTime (t: DateTime option) =
     t |> Option.map time |> Option.defaultValue "—"
 
-let private freshnessBadge (freshness: string) (overdueSeconds: int64 option) =
-    let colour =
-        match freshness with
-        | "fresh" -> "bg-green-100 text-green-700"
-        | "stale" -> "bg-amber-100 text-amber-700"
-        | "unavailable" -> "bg-red-100 text-red-700"
-        | _ -> "bg-gray-100 text-gray-600"
-
-    let text =
-        match freshness, overdueSeconds with
-        | "stale", Some s -> sprintf "stale · %dh overdue" (max 1L (s / 3600L))
-        | "never-refreshed", _ -> "never refreshed"
-        | other, _ -> other
-
-    Html.span [
-        prop.className (sprintf "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium %s" colour)
-        prop.text text
-    ]
+/// A table's standing in words: how fresh it is, and how overdue when stale.
+let private freshnessText (freshness: string) (overdueSeconds: int64 option) =
+    match freshness, overdueSeconds with
+    | "stale", Some s -> sprintf "stale · %dh overdue" (max 1L (s / 3600L))
+    | "never-refreshed", _ -> "never refreshed"
+    | other, _ -> other
 
 let private withheldNote (count: int) (withheld: FactWithheldCount list) (noun: string) =
     if count = 0 then
@@ -197,159 +177,7 @@ let private withheldNote (count: int) (withheld: FactWithheldCount list) (noun: 
 let private goTo (route: string) =
     NavigationRequest.request (FactBrowseLinks.sidebarId route)
 
-// ─── Tables page ─────────────────────────────────────────────────────
-
-/// The Tables page's markup: one row per declared table and its standing.
-/// Pure — `TablesPage` adds the per-run notification subscription.
-let tablesView (model: Model) (dispatch: Msg -> unit) =
-    let rows (tables: FactTableListing list) =
-        tables
-        |> List.map (fun t ->
-            Html.tr [
-                prop.key t.TableId
-                prop.children [
-                    Html.td [
-                        prop.className "px-3 py-2"
-                        prop.children [
-                            linkButton t.TableId (fun () ->
-                                dispatch (OpenTable t.TableId)
-                                goTo FactBrowseLinks.TableRoute)
-                        ]
-                    ]
-                    cell t.Module
-                    cell (String.concat ", " t.Metrics)
-                    cell (sprintf "%s · %s" t.Hierarchy t.Level)
-                    cell (t.RowCount |> Option.map string |> Option.defaultValue "—")
-                    cell (optionalTime t.LastRefreshedAt)
-                    Html.td [
-                        prop.className "px-3 py-2"
-                        prop.title (t.LatestRunReason |> Option.defaultValue "")
-                        prop.children [ freshnessBadge t.Freshness t.OverdueBySeconds ]
-                    ]
-                ]
-            ])
-
-    Html.div [
-        prop.className "p-6 space-y-3"
-        prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between"
-                prop.children [
-                    heading "Fact tables"
-                    button "Refresh" true (fun () -> dispatch RefreshTables)
-                ]
-            ]
-            match model.MetricFilter with
-            | Some metric ->
-                Html.div [
-                    prop.className "flex items-center gap-2 text-sm text-gray-700"
-                    prop.children [
-                        Html.span [ prop.text (sprintf "Showing the tables that carry metric '%s'." metric) ]
-                        linkButton "Show all tables" (fun () -> dispatch ClearMetricFilter)
-                    ]
-                ]
-            | None -> Html.none
-            match model.Tables with
-            | NotAsked
-            | Loading -> loadingNote ()
-            | LoadFailed message -> failed message
-            | Loaded [] ->
-                emptyState
-                    "No fact tables are declared in this deployment."
-                    "A module declares the tables it publishes; they appear here with their runs once it does."
-            | Loaded _ ->
-                match visibleTables model with
-                | [] ->
-                    emptyState
-                        "No declared table carries this metric."
-                        "The metric's facts may be asserted individually rather than published as a table."
-                | visible ->
-                    table [ "Table"; "Module"; "Metrics"; "Level"; "Rows"; "Last refresh"; "Freshness" ] (rows visible)
-        ]
-    ]
-
-/// The Tables page: `tablesView`, refreshed by the per-run notification.
-[<ReactComponent>]
-let TablesPage (model: Model) (dispatch: Msg -> unit) =
-    // The per-run notification: refresh standing when a run commits.
-    // Nothing subscribes per fact — there is no per-fact signal.
-    React.useEffectOnce (fun () ->
-        let dispose =
-            NotificationClient.subscribe (fun envelope ->
-                match envelope.Notification with
-                | Notification.CustomNotification(key, payloadJson) when
-                    key = FactBrowseLinks.RunCommittedNotificationKey
-                    ->
-                    try
-                        dispatch (RunCommitted(Json.parseAs<FactTableRunNotice> payloadJson))
-                    with _ ->
-                        ()
-                | _ -> ())
-
-        FsReact.createDisposable (fun () -> dispose ()))
-
-    Html.div [
-        prop.children [
-            // Phase 942 — who in the team sees restricted output, for every
-            // member who browses it (nothing until the deployment composes
-            // team output visibility).
-            Html.div [
-                prop.className "px-6 pt-4"
-                prop.children [ TeamConfigUI.TeamOutputVisibilityNotice() ]
-            ]
-            tablesView model dispatch
-        ]
-    ]
-
-// ─── Population summary ──────────────────────────────────────────────
-
-let private populationSummary (population: FactPopulationView) =
-    let stat (label: string) (value: string) =
-        Html.div [
-            prop.className "rounded border border-gray-200 bg-white px-3 py-2"
-            prop.children [
-                Html.div [ prop.className "text-xs text-gray-500"; prop.text label ]
-                Html.div [ prop.className "text-sm font-medium text-gray-900"; prop.text value ]
-            ]
-        ]
-
-    let magnitude (value: string option) =
-        match value with
-        | Some v -> v
-        | None when population.ValueStatisticsWithheld -> "withheld"
-        | None -> "—"
-
-    Html.div [
-        prop.children [
-            Html.div [
-                prop.className "grid grid-cols-2 md:grid-cols-4 gap-2"
-                prop.children [
-                    stat "Subjects" (string population.SubjectCount)
-                    stat "Facts" (string population.FactCount)
-                    stat "Fresh / stale" (sprintf "%d / %d" population.FreshCount population.StaleCount)
-                    stat
-                        "Period"
-                        (sprintf "%s → %s" (optionalTime population.PeriodFrom) (optionalTime population.PeriodTo))
-                    stat "Minimum" (magnitude population.Minimum)
-                    stat "Maximum" (magnitude population.Maximum)
-                    stat "Mean" (magnitude population.Mean)
-                    stat
-                        "Methods"
-                        (population.Methods
-                         |> List.map (fun m -> sprintf "%s (%d)" m.Method m.FactCount)
-                         |> String.concat ", ")
-                ]
-            ]
-            if population.ValueStatisticsWithheld then
-                Html.p [
-                    prop.className "text-xs text-gray-500 mt-1"
-                    prop.text
-                        "The minimum, maximum and mean are withheld because the ranking holds rows you may not see; the counts describe the whole table."
-                ]
-        ]
-    ]
-
-// ─── Table detail page ───────────────────────────────────────────────
+// ─── Run history ─────────────────────────────────────────────────────
 
 let private moversPanel (movers: Load<FactRunMovers>) =
     match movers with
@@ -482,101 +310,384 @@ let private RunsSection (tableId: string) (model: Model) (dispatch: Msg -> unit)
             prop.children [ runsTable model page dispatch ]
         ]
 
-/// The Table detail page: declaration, population summary, run history.
-let TablePage (model: Model) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className "p-6 space-y-3"
-        prop.children [
+// ─── The listing and the detail as trees ─────────────────────────────
+
+/// The Tables page and the Table page as Fuaran-UI trees. Each page is a
+/// group named for itself, and the table selection is the select named
+/// `table`: its options are the listed tables, the selected one is chosen,
+/// and a change sends `OpenTable`. What an instruction may set on the browse
+/// is therefore read off the tree (`Fuaran.UI.Operability.derive`), not off
+/// a declaration kept beside it. The run history keeps its held page, so it
+/// stays React inside the detail tree.
+module internal Trees =
+    open Fuaran.UI
+    open Fuaran.UI.Types
+
+    let private literal = TreeLowering.literal
+
+    /// A page's root: a group named for the page.
+    let private page (id: string) (name: string) (children: Node<Msg> list) : Node<Msg> =
+        TreeLowering.column id children
+        |> Node.withAccessibility (
+            Some {
+                Defaults.Accessibility.empty with
+                    Label = Some(Binding.Static(Some name))
+            }
+        )
+
+    let private note (id: string) (title: string) (detail: string) : Node<Msg> =
+        Fuaran.callout id {
+            Defaults.callout with
+                Tone = ToneVariant.Default
+                Heading = Some(literal title)
+                Body = literal detail
+        }
+
+    let private failure (id: string) (message: string) : Node<Msg> =
+        Fuaran.callout id {
+            Defaults.callout with
+                Tone = ToneVariant.Critical
+                Body = literal message
+        }
+
+    let private loading (id: string) : Node<Msg> = TreeLowering.text id "Loading…"
+
+    /// The phrasings the table select answers beyond the `set` and `change`
+    /// forms its label already yields.
+    let tablePatterns = [ "open {value}"; "open the {value} table"; "show the {value} table" ]
+
+    /// The table selection: one option per listed table, the selected one
+    /// chosen when it is listed, and `OpenTable` on a change.
+    let tableSelect (tables: FactTableListing list) (selected: string option) : Node<Msg> =
+        let options: SelectOption list =
+            tables |> List.map (fun t -> { Label = t.TableId; Value = t.TableId })
+
+        let chosen =
+            selected
+            |> Option.filter (fun id -> tables |> List.exists (fun t -> t.TableId = id))
+
+        Fuaran.select "table" {
+            Defaults.select with
+                Label = literal "Table"
+                Source = Binding.Static(Some options)
+                Value = Some(Binding.Static chosen)
+                Placeholder = Some(literal "Choose a table")
+                OnChange =
+                    Some(fun value ->
+                        match value with
+                        | Some tableId -> Action.dispatch (OpenTable tableId)
+                        | None -> Action.Chain [])
+                Affordance =
+                    Some {
+                        Defaults.affordance with
+                            Patterns = tablePatterns
+                            Description = Some "The declared fact table the browse shows."
+                    }
+        }
+
+    let private freshnessTone (freshness: string) : ToneVariant =
+        match freshness with
+        | "fresh" -> ToneVariant.Success
+        | "stale" -> ToneVariant.Warning
+        | "unavailable" -> ToneVariant.Critical
+        | _ -> ToneVariant.Default
+
+    /// The latest run's outcome and the reason it gave, which the Feliz
+    /// listing carried only as a hover title.
+    let private latestRun (t: FactTableListing) =
+        match t.LatestRunOutcome, t.LatestRunReason with
+        | Some outcome, Some reason -> sprintf "%s: %s" outcome reason
+        | Some outcome, None -> outcome
+        | None, Some reason -> reason
+        | None, None -> "—"
+
+    /// One row per listed table and its standing; the freshness cell is a pill
+    /// in the standing's tone, with the standing's own words.
+    let private listing (tables: FactTableListing list) : Node<Msg> =
+        let freshness (t: FactTableListing) =
+            freshnessText t.Freshness t.OverdueBySeconds
+
+        let tones =
+            tables
+            |> List.map (fun t -> freshness t, freshnessTone t.Freshness)
+            |> Map.ofList
+
+        let headers = [
+            "Table"
+            "Module"
+            "Metrics"
+            "Level"
+            "Rows"
+            "Last refresh"
+            "Freshness"
+            "Latest run"
+        ]
+
+        let columns =
+            headers
+            |> List.map (fun header ->
+                if header = "Freshness" then
+                    TableColumn.tonedPill header tones ToneVariant.Default
+                else
+                    TableColumn.text header)
+
+        Fuaran.tableWithColumns "fact-table-listing" columns {
+            Defaults.table with
+                Headers = headers |> List.map literal
+                Rows =
+                    tables
+                    |> List.map (fun t ->
+                        [
+                            t.TableId
+                            t.Module
+                            String.concat ", " t.Metrics
+                            sprintf "%s · %s" t.Hierarchy t.Level
+                            t.RowCount |> Option.map string |> Option.defaultValue "—"
+                            optionalTime t.LastRefreshedAt
+                            freshness t
+                            latestRun t
+                        ]
+                        |> List.map literal)
+        }
+
+    /// The Tables page: the declared tables, the table select over them, and
+    /// a considered empty state for no table and for a metric no table carries.
+    let tables (model: Model) : Node<Msg> =
+        page "fact-tables" "Fact tables" [
+            TreeLowering.row "fact-tables-header" [
+                TreeLowering.heading "fact-tables-heading" 2 "Fact tables"
+                TreeLowering.button "refresh-tables" ButtonVariant.Secondary "Refresh" false RefreshTables
+            ]
+            match model.MetricFilter with
+            | Some metric ->
+                TreeLowering.row "metric-filter" [
+                    TreeLowering.text "metric-filter-note" (sprintf "Showing the tables that carry metric '%s'." metric)
+                    TreeLowering.button
+                        "show-all-tables"
+                        ButtonVariant.Tertiary
+                        "Show all tables"
+                        false
+                        ClearMetricFilter
+                ]
+            | None -> ()
+            match model.Tables with
+            | NotAsked
+            | Loading -> loading "tables-loading"
+            | LoadFailed message -> failure "tables-failed" message
+            | Loaded [] ->
+                note
+                    "no-tables"
+                    "No fact tables are declared in this deployment."
+                    "A module declares the tables it publishes; they appear here with their runs once it does."
+            | Loaded _ ->
+                match visibleTables model with
+                | [] ->
+                    note
+                        "no-carrying-table"
+                        "No declared table carries this metric."
+                        "The metric's facts may be asserted individually rather than published as a table."
+                | visible ->
+                    tableSelect visible model.SelectedTable
+                    listing visible
+        ]
+
+    let private standing (listing: FactTableListing) : Node<Msg> =
+        let variant =
+            match listing.Freshness with
+            | "fresh" -> BadgeVariant.Success
+            | "stale" -> BadgeVariant.Warning
+            | "unavailable" -> BadgeVariant.Critical
+            | _ -> BadgeVariant.Neutral
+
+        TreeLowering.row "table-standing" [
+            Fuaran.badge "table-freshness" {
+                Label = literal (freshnessText listing.Freshness listing.OverdueBySeconds)
+                Variant = variant
+            }
+            TreeLowering.text
+                "table-rows"
+                (match listing.RowCount with
+                 | Some n -> sprintf "%d rows · last refresh %s" n (optionalTime listing.LastRefreshedAt)
+                 | None -> "No committed run yet")
+        ]
+
+    /// The declared columns, each with its description.
+    let private columns (detail: FactTableDetail) : Node<Msg> =
+        Fuaran.table "table-columns" {
+            Defaults.table with
+                Headers = [ "Metric"; "Description"; "Shape"; "Disclosure" ] |> List.map literal
+                Rows =
+                    detail.Columns
+                    |> List.map (fun c ->
+                        [ c.Metric; c.Description |> Option.defaultValue ""; c.Shape; c.Disclosure ]
+                        |> List.map literal)
+        }
+
+    let private population (rows: FactRowPage) : Node<Msg> =
+        let p = rows.Population
+
+        let magnitude (value: string option) =
+            match value with
+            | Some v -> v
+            | None when p.ValueStatisticsWithheld -> "withheld"
+            | None -> "—"
+
+        TreeLowering.column "population" [
+            TreeLowering.text "population-metric" (sprintf "Metric %s" rows.Metric)
+            TreeLowering.row "population-figures" [
+                Fuaran.fact "population-subjects" "Subjects" (string p.SubjectCount)
+                Fuaran.fact "population-facts" "Facts" (string p.FactCount)
+                Fuaran.fact "population-freshness" "Fresh / stale" (sprintf "%d / %d" p.FreshCount p.StaleCount)
+                Fuaran.fact
+                    "population-period"
+                    "Period"
+                    (sprintf "%s → %s" (optionalTime p.PeriodFrom) (optionalTime p.PeriodTo))
+                Fuaran.fact "population-minimum" "Minimum" (magnitude p.Minimum)
+                Fuaran.fact "population-maximum" "Maximum" (magnitude p.Maximum)
+                Fuaran.fact "population-mean" "Mean" (magnitude p.Mean)
+                Fuaran.fact
+                    "population-methods"
+                    "Methods"
+                    (p.Methods
+                     |> List.map (fun m -> sprintf "%s (%d)" m.Method m.FactCount)
+                     |> String.concat ", ")
+            ]
+            if p.ValueStatisticsWithheld then
+                TreeLowering.text
+                    "population-withheld"
+                    "The minimum, maximum and mean are withheld because the ranking holds rows you may not see; the counts describe the whole table."
+        ]
+
+    /// The Table page: the selected table's declaration, standing, columns,
+    /// population summary and run history, with the table select above them.
+    let table (model: Model) (dispatch: Msg -> unit) : Node<Msg> =
+        let listed =
+            match model.Tables with
+            | Loaded tables -> tables
+            | _ -> []
+
+        page "fact-table" "Table" [
             match model.SelectedTable, model.Detail with
             | None, _ ->
-                heading "Table"
+                TreeLowering.heading "fact-table-heading" 2 "Table"
 
-                emptyState
+                if not (List.isEmpty listed) then
+                    tableSelect listed None
+
+                note
+                    "no-table"
                     "No table is chosen."
-                    "Choose a table on the Tables page to see its refreshes and what each one changed."
-            | Some _, (NotAsked | Loading) -> loadingNote ()
-            | Some _, LoadFailed message -> failed message
-            | Some _, Loaded detail ->
+                    "Choose a table here or on the Tables page to see its refreshes and what each one changed."
+            | Some _, (NotAsked | Loading) -> loading "table-loading"
+            | Some _, LoadFailed message -> failure "table-failed" message
+            | Some selected, Loaded detail ->
                 let listing = detail.Listing
 
-                Html.div [
-                    prop.className "flex items-center justify-between"
-                    prop.children [
-                        heading listing.TableId
-                        linkButton "Browse rows" (fun () -> goTo FactBrowseLinks.RowsRoute)
-                    ]
+                TreeLowering.row "fact-table-header" [
+                    TreeLowering.heading "fact-table-heading" 2 listing.TableId
+                    TreeLowering.island "browse-rows" (fun () ->
+                        linkButton "Browse rows" (fun () -> goTo FactBrowseLinks.RowsRoute))
                 ]
+
+                if not (List.isEmpty listed) then
+                    tableSelect listed (Some selected)
 
                 match detail.Description with
-                | Some description -> Html.p [ prop.className "text-sm text-gray-700"; prop.text description ]
+                | Some description -> TreeLowering.text "table-description" description
                 | None -> ()
 
-                Html.p [
-                    prop.className "text-sm text-gray-600"
-                    prop.text (
-                        sprintf
-                            "Declared by %s · %s at level %s · %s grain · %s · refreshed every %dh · %s"
-                            listing.Module
-                            listing.Hierarchy
-                            listing.Level
-                            listing.PeriodGrain
-                            listing.HistoryMode
-                            (max 1L (detail.RefreshCadenceSeconds / 3600L))
-                            detail.Requirement
-                    )
-                ]
+                TreeLowering.text
+                    "table-declaration"
+                    (sprintf
+                        "Declared by %s · %s at level %s · %s grain · %s · refreshed every %dh · %s"
+                        listing.Module
+                        listing.Hierarchy
+                        listing.Level
+                        listing.PeriodGrain
+                        listing.HistoryMode
+                        (max 1L (detail.RefreshCadenceSeconds / 3600L))
+                        detail.Requirement)
 
-                Html.div [
-                    prop.className "flex items-center gap-2"
-                    prop.children [
-                        freshnessBadge listing.Freshness listing.OverdueBySeconds
-                        Html.span [
-                            prop.className "text-sm text-gray-600"
-                            prop.text (
-                                match listing.RowCount with
-                                | Some n -> sprintf "%d rows · last refresh %s" n (optionalTime listing.LastRefreshedAt)
-                                | None -> "No committed run yet"
-                            )
-                        ]
-                    ]
-                ]
-
-                sectionHeading "Columns"
-
-                table
-                    [ "Metric"; "Shape"; "Disclosure" ]
-                    (detail.Columns
-                     |> List.map (fun c ->
-                         Html.tr [
-                             prop.key c.Metric
-                             prop.children [ describedCell c.Metric c.Description; cell c.Shape; cell c.Disclosure ]
-                         ]))
-
-                sectionHeading "Population"
+                standing listing
+                TreeLowering.heading "columns-heading" 3 "Columns"
+                columns detail
+                TreeLowering.heading "population-heading" 3 "Population"
 
                 match model.Rows with
-                | Loaded page when page.TableId = listing.TableId ->
-                    Html.div [
-                        prop.children [
-                            Html.p [
-                                prop.className "text-xs text-gray-500 mb-1"
-                                prop.text (sprintf "Metric %s" page.Metric)
-                            ]
-                            populationSummary page.Population
-                        ]
-                    ]
-                | LoadFailed message -> failed message
+                | Loaded rows when rows.TableId = listing.TableId -> population rows
+                | LoadFailed message -> failure "population-failed" message
                 | Loaded _
-                | Loading -> loadingNote ()
-                | NotAsked ->
-                    Html.p [
-                        prop.className "text-sm text-gray-500 italic"
-                        prop.text "This table declares no metric column to summarise."
-                    ]
+                | Loading -> loading "population-loading"
+                | NotAsked -> TreeLowering.text "population-none" "This table declares no metric column to summarise."
 
-                sectionHeading "Runs"
+                TreeLowering.heading "runs-heading" 3 "Runs"
+                TreeLowering.island "fact-table-runs" (fun () -> RunsSection listing.TableId model dispatch)
+        ]
 
-                RunsSection listing.TableId model dispatch
+// ─── Tables page ─────────────────────────────────────────────────────
+
+/// The listing's dispatch: opening a table from the listing also shows its
+/// page, as the listing's links did before the page was a tree.
+let private showingTable (dispatch: Msg -> unit) (msg: Msg) =
+    dispatch msg
+
+    match msg with
+    | OpenTable _ -> goTo FactBrowseLinks.TableRoute
+    | _ -> ()
+
+/// The Tables page's tree, lowered: one row per declared table and its
+/// standing, and the table select. `TablesPage` adds the per-run
+/// notification subscription.
+let tablesView (model: Model) (dispatch: Msg -> unit) =
+    Html.div [
+        prop.className "p-6"
+        prop.children [
+            TreeLowering.lower HostBindingSources.empty (showingTable dispatch) (Trees.tables model)
+        ]
+    ]
+
+/// The Tables page: `tablesView`, refreshed by the per-run notification.
+[<ReactComponent>]
+let TablesPage (model: Model) (dispatch: Msg -> unit) =
+    // The per-run notification: refresh standing when a run commits.
+    // Nothing subscribes per fact — there is no per-fact signal.
+    React.useEffectOnce (fun () ->
+        let dispose =
+            NotificationClient.subscribe (fun envelope ->
+                match envelope.Notification with
+                | Notification.CustomNotification(key, payloadJson) when
+                    key = FactBrowseLinks.RunCommittedNotificationKey
+                    ->
+                    try
+                        dispatch (RunCommitted(Json.parseAs<FactTableRunNotice> payloadJson))
+                    with _ ->
+                        ()
+                | _ -> ())
+
+        FsReact.createDisposable (fun () -> dispose ()))
+
+    Html.div [
+        prop.children [
+            // Who in the team sees restricted output, for every member who
+            // browses it (nothing until the deployment composes team output
+            // visibility).
+            Html.div [
+                prop.className "px-6 pt-4"
+                prop.children [ TeamConfigUI.TeamOutputVisibilityNotice() ]
+            ]
+            tablesView model dispatch
+        ]
+    ]
+
+// ─── Table detail page ───────────────────────────────────────────────
+
+/// The Table detail page's tree, lowered: declaration, population summary,
+/// run history.
+let TablePage (model: Model) (dispatch: Msg -> unit) =
+    Html.div [
+        prop.className "p-6"
+        prop.children [
+            TreeLowering.lower HostBindingSources.empty dispatch (Trees.table model dispatch)
         ]
     ]
 

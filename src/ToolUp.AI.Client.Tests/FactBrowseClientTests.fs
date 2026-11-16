@@ -24,6 +24,7 @@ module ToolUp.AI.Client.Tests.FactBrowseClientTests
 // reflection, and rendering needs a JS runtime.
 
 open System
+open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open SharedTypes
@@ -33,6 +34,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Facts.Client
 open ToolUp.Facts.Client.FactBrowseModel
+open Fuaran.UI.Operability
 open ToolUp.AI.Client.Tests.NodeTest
 
 // ─── Fixtures ────────────────────────────────────────────────────────
@@ -175,6 +177,24 @@ let private redrawn (page: Model -> ReactElement) (first: Model) (next: Model) :
             button?click ())
         (Redraw first next page)
 
+/// The markup of a page that lowers a tree, refusing the renderer's loading
+/// placeholder: a mount that drew it measured the chunk's arrival, not the page.
+let private mountTree (element: ReactElement) : string =
+    let markup = ViewMount.mount element
+
+    if markup.Contains "animate-pulse rounded bg-gray-100" then
+        failwith $"the renderer chunk had not arrived, so the page drew its placeholder: {markup}"
+
+    markup
+
+/// A case over a page that lowers a tree. The renderer loads on demand, so
+/// the first mount asks for it and the case's assertions run once it has
+/// arrived, which is when a module page draws its tree in the shell too.
+let private treeCase (name: string) (body: unit -> unit) : TestItem =
+    testCaseDeferred name 3000 (fun () ->
+        ViewMount.mount (FactBrowseView.TablePage empty noop) |> ignore
+        body)
+
 // ─── Model ───────────────────────────────────────────────────────────
 
 let private modelTests =
@@ -259,17 +279,17 @@ let private modelTests =
 
 let private pageTests =
     testList "fact browse pages" [
-        testCase "the tables page states that no table is declared"
+        treeCase "the tables page states that no table is declared"
         <| fun _ ->
             let markup =
-                ViewMount.mount (FactBrowseView.tablesView { empty with Tables = Loaded [] } noop)
+                mountTree (FactBrowseView.tablesView { empty with Tables = Loaded [] } noop)
 
             Expect.isTrue (markup.Contains "No fact tables are declared") "a considered empty state"
 
-        testCase "the tables page lists a table that has never run"
+        treeCase "the tables page lists a table that has never run"
         <| fun _ ->
             let markup =
-                ViewMount.mount (
+                mountTree (
                     FactBrowseView.tablesView
                         {
                             empty with
@@ -281,7 +301,7 @@ let private pageTests =
             Expect.isTrue (markup.Contains "prices") "the table is listed"
             Expect.isTrue (markup.Contains "never refreshed") "its standing says so"
 
-        testCase "the table page renders a table with no runs yet"
+        treeCase "the table page renders a table with no runs yet"
         <| fun _ ->
             let model = {
                 empty with
@@ -291,11 +311,11 @@ let private pageTests =
                     Rows = NotAsked
             }
 
-            let markup = ViewMount.mount (FactBrowseView.TablePage model noop)
+            let markup = mountTree (FactBrowseView.TablePage model noop)
             Expect.isTrue (markup.Contains "not been refreshed yet") "the run history's empty state"
             Expect.isTrue (markup.Contains "elasticity") "the declared columns render"
 
-        testCase "the table page shows a declared description under the title, and each column's as its hint"
+        treeCase "the table page shows a declared description under the title, and each column's beside it"
         <| fun _ ->
             let model = {
                 empty with
@@ -305,7 +325,7 @@ let private pageTests =
                     Rows = NotAsked
             }
 
-            let markup = ViewMount.mount (FactBrowseView.TablePage model noop)
+            let markup = mountTree (FactBrowseView.TablePage model noop)
 
             Expect.isTrue
                 (markup.Contains "Monthly price response by SKU, from the price-test extract.")
@@ -314,10 +334,10 @@ let private pageTests =
             Expect.isTrue (markup.Contains "Own-price elasticity of unit volume.") "the column's description renders"
 
             Expect.isTrue
-                (markup.Contains "title=\"Own-price elasticity of unit volume.\"")
-                "the column's description is its hint"
+                (markup.Contains "<th" && markup.Contains ">Description<")
+                "in the columns table's Description column"
 
-        testCase "an undescribed table renders no description and no hint"
+        treeCase "an undescribed table renders no description and no hint"
         <| fun _ ->
             let model = {
                 empty with
@@ -327,13 +347,13 @@ let private pageTests =
                     Rows = NotAsked
             }
 
-            let markup = ViewMount.mount (FactBrowseView.TablePage model noop)
+            let markup = mountTree (FactBrowseView.TablePage model noop)
             Expect.isFalse (markup.Contains "Own-price elasticity") "no column hint"
             Expect.isFalse (markup.Contains "price-test extract") "no table description"
 
-        testCase "the table page with nothing chosen points at the tables page"
+        treeCase "the table page with nothing chosen points at the tables page"
         <| fun _ ->
-            let markup = ViewMount.mount (FactBrowseView.TablePage empty noop)
+            let markup = mountTree (FactBrowseView.TablePage empty noop)
             Expect.isTrue (markup.Contains "No table is chosen") "a considered empty state"
 
         testCase "an empty drill-down page says where bulk extraction lives"
@@ -349,7 +369,7 @@ let private pageTests =
             let markup = ViewMount.mount (FactBrowseView.RowsPage model noop)
             Expect.isTrue (markup.Contains "reporting path") "bulk extraction is an export, and the page says so"
 
-        testCase "the run history holds the page it shows while another is read"
+        treeCase "the run history holds the page it shows while another is read"
         <| fun _ ->
             let shown = {
                 empty with
@@ -360,6 +380,10 @@ let private pageTests =
 
             let markup =
                 redrawn (fun m -> FactBrowseView.TablePage m noop) shown { shown with Runs = Loading }
+
+            Expect.isFalse
+                (markup.Contains "animate-pulse rounded bg-gray-100")
+                "the tree is drawn, not its placeholder"
 
             Expect.isTrue (markup.Contains "not been refreshed yet") "the page it replaces stays on screen"
             Expect.isTrue (markup.Contains "aria-busy=\"true\"") "marked as on its way out"
@@ -411,6 +435,217 @@ let private pageTests =
                     other
 
             Expect.isTrue (markup.Contains "Loading…") "another table's rows are not this one's"
+    ]
+
+// ─── The table select, derived from the tree ─────────────────────────
+
+let private listedTables = [ listing "prices" [ "elasticity" ]; listing "costs" [ "margin" ] ]
+
+let private listingModel = {
+    empty with
+        Tables = Loaded listedTables
+}
+
+let private openedModel = {
+    listingModel with
+        SelectedTable = Some "prices"
+        Detail = Loaded(detail "prices")
+        Runs = Loaded(noRuns "prices")
+}
+
+/// The table select's `set` affordance, as the reference derivation reads it
+/// off the tree.
+let private tableSet (tree: Fuaran.UI.Types.Node<Msg>) =
+    Operability.derive None tree
+    |> List.tryFind (fun a -> a.Id = "table:set")
+    |> Option.defaultWith (fun () -> failwith "the tree has no table select to set")
+
+let private optionValues (tree: Fuaran.UI.Types.Node<Msg>) : string list =
+    match (tableSet tree).Slot with
+    | Some(Slot.Enumeration options) -> options |> List.map _.Value
+    | other -> failwith $"the table select's slot is not the listed tables: {other}"
+
+/// The message an instruction resolves to on `tree`, through the node's own
+/// action: `None` when nothing on the tree answers it.
+let private resolvedMessage (instruction: string) (tree: Fuaran.UI.Types.Node<Msg>) : Msg option =
+    let affordances = Operability.derive None tree
+
+    match Operability.resolve instruction affordances with
+    | Outcome.Resolved [ id, value ] ->
+        match (affordances |> List.find (fun a -> a.Id = id)).Resolve value with
+        | Some(Fuaran.UI.Generated.Action.Dispatch msg) -> Some msg
+        | other -> failwith $"'{instruction}' resolved to an action that is not a message: {other}"
+    | Outcome.Resolved many -> failwith $"'{instruction}' resolved to several clauses: {many}"
+    | Outcome.NotResolved -> None
+    | Outcome.Ambiguous ids -> failwith $"'{instruction}' is ambiguous between {ids}"
+
+/// React's own change handler for `element`: the harness installs jsdom after
+/// React has loaded, so a real `change` event never reaches `onChange`.
+[<Emit("$0[Object.keys($0).find(k => k.startsWith('__reactProps'))].onChange({ target: { value: $1 }, currentTarget: { value: $1 } })")>]
+let private invokeChange (element: obj) (value: string) : unit = jsNative
+
+/// Choose `value` in the table select of `page`; the messages it dispatched
+/// and the pages the shell was asked to show.
+let private choose (value: string) (page: (Msg -> unit) -> ReactElement) : Msg list * string list =
+    let seen = ResizeArray<Msg>()
+    let shown = ResizeArray<string>()
+    let stop = NavigationRequest.subscribe shown.Add
+
+    try
+        ViewMount.mountAndInteract
+            (fun host ->
+                let select: obj = host?querySelector "select"
+
+                if isNull select then
+                    failwith $"no select on the page: {host?innerHTML}"
+
+                invokeChange select value)
+            (page seen.Add)
+        |> ignore
+    finally
+        stop ()
+
+    List.ofSeq seen, List.ofSeq shown
+
+let private selectTests =
+    testList "the table select" [
+        testCase "the tables tree names the table select, with one option per listed table"
+        <| fun _ ->
+            let set = tableSet (FactBrowseView.Trees.tables listingModel)
+            Expect.equal set.Node "table" "the select is named"
+
+            Expect.equal
+                (optionValues (FactBrowseView.Trees.tables listingModel))
+                [ "prices"; "costs" ]
+                "the listed tables"
+
+        testCase "a metric filter narrows the options to the tables that carry it"
+        <| fun _ ->
+            let filtered = {
+                listingModel with
+                    MetricFilter = Some "margin"
+            }
+
+            Expect.equal (optionValues (FactBrowseView.Trees.tables filtered)) [ "costs" ] "only the carrying table"
+
+        testCase "the table page offers the same select over the listed tables"
+        <| fun _ ->
+            Expect.equal
+                (optionValues (FactBrowseView.Trees.table openedModel noop))
+                [ "prices"; "costs" ]
+                "the detail switches between the listed tables"
+
+        testCase "each declared phrasing opens the named table, on either page"
+        <| fun _ ->
+            for tree in
+                [
+                    FactBrowseView.Trees.tables listingModel
+                    FactBrowseView.Trees.table openedModel noop
+                ] do
+                for instruction in
+                    [
+                        "open costs"
+                        "open the costs table"
+                        "Show the costs table."
+                        "set table to costs"
+                        "change table to costs"
+                    ] do
+                    Expect.equal
+                        (resolvedMessage instruction tree)
+                        (Some(OpenTable "costs"))
+                        $"'{instruction}' sends OpenTable with the canonical id"
+
+        testCase "a paraphrase outside the declared phrasings, or a table not listed, resolves to nothing"
+        <| fun _ ->
+            let tree = FactBrowseView.Trees.tables listingModel
+
+            for instruction in [ "bring up the costs numbers"; "open the margins table"; "costs" ] do
+                Expect.isNone (resolvedMessage instruction tree) $"'{instruction}' falls through"
+
+        testCase "the select reads which table is open, and dispatches nothing for it"
+        <| fun _ ->
+            let affordances =
+                Operability.derive None (FactBrowseView.Trees.table openedModel noop)
+
+            match Operability.resolve "what is table?" affordances with
+            | Outcome.Resolved [ id, _ ] ->
+                Expect.equal id "table:read" "the read affordance answers"
+
+                Expect.isNone
+                    ((affordances |> List.find (fun a -> a.Id = id)).Resolve SlotValue.NoValue)
+                    "a read sends no message"
+            | other -> failwith $"the read did not resolve: {other}"
+
+        testCase "with no table listed there is no select to set"
+        <| fun _ ->
+            let affordances =
+                Operability.derive None (FactBrowseView.Trees.tables { empty with Tables = Loaded [] })
+
+            Expect.isFalse (affordances |> List.exists (fun a -> a.Node = "table")) "nothing to choose from"
+
+        treeCase "the lowered listing names the select and lists its options"
+        <| fun _ ->
+            let markup = mountTree (FactBrowseView.tablesView listingModel noop)
+            Expect.isTrue (markup.Contains "<select") "a native select"
+
+            Expect.isTrue
+                (markup.Contains "value=\"prices\"" && markup.Contains "value=\"costs\"")
+                "an option per table"
+
+            Expect.isTrue (markup.Contains "Fact tables") "the page is named"
+
+        treeCase "choosing a table on the listing opens it and shows its page"
+        <| fun _ ->
+            let seen, shown =
+                choose "costs" (fun dispatch -> FactBrowseView.tablesView listingModel dispatch)
+
+            Expect.equal seen [ OpenTable "costs" ] "the select's change sends OpenTable"
+            Expect.equal shown [ FactBrowseLinks.sidebarId FactBrowseLinks.TableRoute ] "and the Table page is shown"
+
+        treeCase "choosing a table on the table page opens it in place"
+        <| fun _ ->
+            let seen, shown =
+                choose "costs" (fun dispatch -> FactBrowseView.TablePage openedModel dispatch)
+
+            Expect.equal seen [ OpenTable "costs" ] "the select's change sends OpenTable"
+            Expect.equal shown [] "the page stays where it is"
+
+        treeCase "the listing and the detail pass the Strict floor in every state"
+        <| fun _ ->
+            let listingStates = [
+                empty
+                { empty with Tables = Loaded [] }
+                listingModel
+                {
+                    listingModel with
+                        MetricFilter = Some "absent"
+                }
+                {
+                    empty with
+                        Tables = LoadFailed "refused"
+                }
+            ]
+
+            for model in listingStates do
+                mountTree (FactBrowseView.tablesView model noop)
+                |> Accessibility.assertHtml Accessibility.Strict
+                |> ignore
+
+            let detailStates = [
+                empty
+                listingModel
+                { openedModel with Detail = Loading }
+                openedModel
+                {
+                    openedModel with
+                        Detail = Loaded(describedDetail "prices")
+                }
+            ]
+
+            for model in detailStates do
+                mountTree (FactBrowseView.TablePage model noop)
+                |> Accessibility.assertHtml Accessibility.Strict
+                |> ignore
     ]
 
 // ─── The knowledge base badge ────────────────────────────────────────
@@ -853,4 +1088,4 @@ let private sliceTests =
 
 /// Every Phase 895 client case.
 let tests =
-    testList "Phase 895 — fact browse client" [ modelTests; pageTests; badgeTests; sliceTests ]
+    testList "Phase 895 — fact browse client" [ modelTests; pageTests; selectTests; badgeTests; sliceTests ]
