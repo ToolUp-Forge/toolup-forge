@@ -37,6 +37,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
 open ToolUp.AI.AnswerVerifier
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -48,32 +49,23 @@ open ToolUp.Platform.Compose
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private july: TemporalExtent = {
-    From = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "2026-07"
 }
 
 let private august: TemporalExtent = {
-    From = DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "2026-08"
 }
 
 let private metric (id: string) (format: string) (rollUp: RollUp option) : MetricRegistration = {
     Module = "TestModule"
     Definition = {
-        Id = id
-        Name = id
-        Unit = "GBP"
-        Dimensionality = "currency"
-        Direction = HigherIsBetter
-        DisplayFormat = format
-        Staleness = UntilSuperseded
-        ProducingOperation = None
-        CanonicalMethod = None
-        RecomputePolicy = None
-        RollUp = rollUp
-        Context = None
+        ToolUp.Platform.Tests.KernelFixtures.metric id id "GBP" "currency" format with
+            Direction = HigherIsBetter
+            RollUp = rollUp
     }
 }
 
@@ -81,7 +73,7 @@ let private metric (id: string) (format: string) (rollUp: RollUp option) : Metri
 /// nothing. Stores nest categories under sites.
 let private registry: IMetricRegistry =
     MetricRegistry.build [
-        metric "revenue" "N0" (Some(Additive 1m))
+        metric "revenue" "N0" (Some(Additive(DecimalText.ofDecimal 1m)))
         metric "share" "P1" (Some NonAdditive)
         metric "units" "N0" None
     ] [
@@ -126,7 +118,7 @@ let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact
 
 /// One July revenue figure, disclosable.
 let private revenue (store: IFactStore) (scope: string) (path: string list) (value: decimal) : Fact =
-    assertFact store scope (draft "revenue" path (Scalar value) july Surfaceable "sales")
+    assertFact store scope (draft "revenue" path (Scalar(DecimalText.ofDecimal value)) july Surfaceable "sales")
 
 let private newScope () =
     "aggregate-" + Guid.NewGuid().ToString("N")
@@ -326,7 +318,10 @@ let private executorTests =
             let scope = newScope ()
             revenue store scope [ "site-a"; "bakery" ] 1200m |> ignore
 
-            assertFact store scope (draft "revenue" [ "site-b"; "bakery" ] (Scalar 800m) august Surfaceable "sales")
+            assertFact
+                store
+                scope
+                (draft "revenue" [ "site-b"; "bakery" ] (Scalar(DecimalText.ofDecimal 800m)) august Surfaceable "sales")
             |> ignore
 
             let el = parse (aggregate sp scope byCategory)
@@ -342,7 +337,10 @@ let private executorTests =
             let scope = newScope ()
             revenue store scope [ "site-a"; "bakery" ] 1200m |> ignore
 
-            assertFact store scope (draft "revenue" [ "site-a"; "bakery" ] (Scalar 1250m) july Surfaceable "audit")
+            assertFact
+                store
+                scope
+                (draft "revenue" [ "site-a"; "bakery" ] (Scalar(DecimalText.ofDecimal 1250m)) july Surfaceable "audit")
             |> ignore
 
             let el = parse (aggregate sp scope byCategory)
@@ -363,7 +361,13 @@ let private executorTests =
             assertFact
                 store
                 scope
-                (draft "revenue" [ "site-b"; "bakery" ] (Interval(700m, 900m)) july Surfaceable "sales")
+                (draft
+                    "revenue"
+                    [ "site-b"; "bakery" ]
+                    (Interval(DecimalText.ofDecimal 700m, DecimalText.ofDecimal 900m))
+                    july
+                    Surfaceable
+                    "sales")
             |> ignore
 
             Expect.stringContains (errorOf (aggregate sp scope byCategory)) "no single value" "never partly summed"
@@ -378,7 +382,13 @@ let private executorTests =
             assertFact
                 store
                 scope
-                (draft "revenue" [ "site-b"; "bakery" ] (Scalar 834m) july (Restricted "licence-x") "sales")
+                (draft
+                    "revenue"
+                    [ "site-b"; "bakery" ]
+                    (Scalar(DecimalText.ofDecimal 834m))
+                    july
+                    (Restricted "licence-x")
+                    "sales")
             |> ignore
 
             revenue store scope [ "site-a"; "dairy" ] 300m |> ignore
@@ -413,7 +423,13 @@ let private executorTests =
                 assertFact
                     store
                     scope
-                    (draft "revenue" [ site; "cellar" ] (Scalar 999m) july (Restricted "licence-x") "sales")
+                    (draft
+                        "revenue"
+                        [ site; "cellar" ]
+                        (Scalar(DecimalText.ofDecimal 999m))
+                        july
+                        (Restricted "licence-x")
+                        "sales")
                 |> ignore
 
             let json = aggregate sp scope byCategory
@@ -461,7 +477,13 @@ let private scopeTests =
             assertFact
                 store
                 scope
-                (draft "revenue" [ "site-b"; "bakery" ] (Scalar 834m) july (Restricted "licence-x") "sales")
+                (draft
+                    "revenue"
+                    [ "site-b"; "bakery" ]
+                    (Scalar(DecimalText.ofDecimal 834m))
+                    july
+                    (Restricted "licence-x")
+                    "sales")
             |> ignore
 
             let result =

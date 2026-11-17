@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -19,7 +21,7 @@ open ToolUp.Platform.Infra.Metrics
 // and the figures it prints are nobody's facts. This tool reads the
 // population once, groups the members at the requested level and sums each
 // group, but only for a metric whose registry declaration says its values add
-// up (`Grounding.RollUp.Additive`).
+// up (`Fuaran.Facts.RollUp.Additive`).
 //
 // **Every total names its inputs.** Each group's total carries the canonical
 // rendering of every fact it was summed from, beside its id, so the numeric
@@ -158,7 +160,7 @@ module AggregateMetricTool =
     let resolve
         (registry: Grounding.IMetricRegistry option)
         (query: AggregateQuery)
-        : Result<Grounding.MetricDefinition * int, AggregateRefusal> =
+        : Result<MetricDefinition * int, AggregateRefusal> =
         match registry with
         | None -> Error NoRegistry
         | Some registry ->
@@ -167,8 +169,8 @@ module AggregateMetricTool =
             | Some metric ->
                 match metric.RollUp with
                 | None -> Error(NotAdditive(metric.Id, "undeclared"))
-                | Some Grounding.NonAdditive -> Error(NotAdditive(metric.Id, "NonAdditive"))
-                | Some(Grounding.Additive _) ->
+                | Some RollUp.NonAdditive -> Error(NotAdditive(metric.Id, "NonAdditive"))
+                | Some(RollUp.Additive _) ->
                     match registry.TryGetSubject query.Hierarchy with
                     | None -> Error(UnknownHierarchy query.Hierarchy)
                     | Some subject ->
@@ -273,9 +275,10 @@ module AggregateMetricTool =
                         match periods, repeated with
                         | _ :: _ :: _, _ -> Some(GroupRefused(group, count, PeriodsDisagree periods.Length))
                         | _, Some(subject, _) ->
-                            Some(GroupRefused(group, count, CompetingMethods(SubjectRef.toString subject)))
+                            Some(GroupRefused(group, count, CompetingMethods(Fact.subjectRendering subject)))
                         | _ ->
-                            let inputs = disclosed |> List.sortBy (fun (f, _) -> SubjectRef.toString f.Subject)
+                            let inputs =
+                                disclosed |> List.sortBy (fun (f, _) -> Fact.subjectRendering f.Subject)
 
                             let total = inputs |> List.sumBy snd
 
@@ -329,8 +332,8 @@ module AggregateMetricTool =
     // ── Execution ─────────────────────────────────────────────────
 
     let private periodOf (period: TemporalExtent) = {|
-        periodFrom = period.From.ToUniversalTime().ToString "o"
-        periodTo = period.To.ToUniversalTime().ToString "o"
+        periodFrom = (Instant.toDateTime period.From).ToString "o"
+        periodTo = (Instant.toDateTime period.To).ToString "o"
         periodLabel = period.Label
     |}
 
@@ -338,7 +341,7 @@ module AggregateMetricTool =
     /// `rendering` and `inputFactIds`, and each input `factId`, `metric` and
     /// `rendering`: the shapes the numeric answer gate reads a fact tool's
     /// result by.
-    let private project (metricDef: Grounding.MetricDefinition) (result: AggregateResult) : obj =
+    let private project (metricDef: MetricDefinition) (result: AggregateResult) : obj =
         let totals =
             result.Groups
             |> List.choose (function
@@ -358,7 +361,7 @@ module AggregateMetricTool =
                             t.Inputs
                             |> List.map (fun i -> {|
                                 factId = i.FactId
-                                subject = SubjectRef.toString i.Subject
+                                subject = Fact.subjectRendering i.Subject
                                 metric = result.Metric
                                 rendering = i.Rendering
                             |})
@@ -446,7 +449,7 @@ module AggregateMetricTool =
                             |> Option.defaultValue (FactNotDisclosable "unknown-fact")
 
                         let render (value: decimal) =
-                            FactRendering.renderFor (Some metricDef) (Scalar value)
+                            FactRendering.renderFor (Some metricDef) (Scalar(DecimalText.ofDecimal value))
 
                         match rollUp query levelIndex render verdictFor population with
                         | Error refusal -> return refuse refusal

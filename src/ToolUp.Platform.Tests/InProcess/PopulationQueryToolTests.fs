@@ -17,6 +17,7 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
@@ -48,8 +49,8 @@ open ToolUp.Platform.Compose
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -71,12 +72,18 @@ let private draftFor (path: string list) (value: FactValue) (disclosure: Disclos
 }
 
 let private scalarDraft (sku: string) (value: decimal) : FactDraft =
-    draftFor [ sku ] (Scalar value) Surfaceable
+    draftFor [ sku ] (Scalar(DecimalText.ofDecimal value)) Surfaceable
 
 let private assertFact (store: IFactStore) (scope: string) (d: FactDraft) : Fact =
     match store.Assert(TestScope.resolved scope, d) |> Async.RunSynchronously with
     | Ok fact -> fact
     | Error e -> failtestf "assert failed: %s" (FactStoreError.describe e)
+
+/// The declared revenue metric, N0, with the given direction-of-better.
+let private revenueDefinition (direction: DirectionOfBetter) : MetricDefinition = {
+    ToolUp.Platform.Tests.KernelFixtures.metric "revenue" "Revenue" "GBP" "currency" "N0" with
+        Direction = direction
+}
 
 /// A real (Phase 519) registry carrying one declared metric with the
 /// given direction-of-better.
@@ -84,20 +91,7 @@ let private registryWith (direction: DirectionOfBetter) : IMetricRegistry =
     MetricRegistry.build [
         {
             Module = "TestModule"
-            Definition = {
-                Id = "revenue"
-                Name = "Revenue"
-                Unit = "GBP"
-                Dimensionality = "currency"
-                Direction = direction
-                DisplayFormat = "N0"
-                Staleness = UntilSuperseded
-                ProducingOperation = None
-                CanonicalMethod = None
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
-            }
+            Definition = revenueDefinition direction
         }
     ] []
 
@@ -420,18 +414,8 @@ let rankingTests =
                     {
                         Module = "TestModule"
                         Definition = {
-                            Id = "revenue"
-                            Name = "Revenue"
-                            Unit = "GBP"
-                            Dimensionality = "currency"
-                            Direction = HigherIsBetter
-                            DisplayFormat = "N0"
-                            Staleness = UntilSuperseded
-                            ProducingOperation = None
-                            CanonicalMethod = None
-                            RecomputePolicy = None
-                            RollUp = None
-                            Context = Some narrative
+                            revenueDefinition HigherIsBetter with
+                                Context = Some narrative
                         }
                     }
                 ] []
@@ -470,14 +454,14 @@ let rankingTests =
             // A competing method over the same (subject, period) — D19:
             // never merged, and now countable.
             assertFact store scope {
-                draftFor [ "sku-a" ] (Scalar 105m) Surfaceable with
+                draftFor [ "sku-a" ] (Scalar(DecimalText.ofDecimal 105m)) Surfaceable with
                     Method = Computed("mmm", "2", "p9")
             }
             |> ignore
 
             // …and a restricted member, so the magnitude block is
             // suppressed and the mix can be seen to survive it.
-            assertFact store scope (draftFor [ "sku-shut" ] (Scalar 900m) Internal)
+            assertFact store scope (draftFor [ "sku-shut" ] (Scalar(DecimalText.ofDecimal 900m)) Internal)
             |> ignore
 
             let el =
@@ -599,10 +583,13 @@ let disclosureTests =
             assertFact store scope (scalarDraft "sku-b" 4000m) |> ignore
             assertFact store scope (scalarDraft "sku-c" 3000m) |> ignore
 
-            assertFact store scope (draftFor [ "sku-top" ] (Scalar 9999m) Internal)
+            assertFact store scope (draftFor [ "sku-top" ] (Scalar(DecimalText.ofDecimal 9999m)) Internal)
             |> ignore
 
-            assertFact store scope (draftFor [ "sku-mid" ] (Scalar 4500m) (Restricted "licence-x"))
+            assertFact
+                store
+                scope
+                (draftFor [ "sku-mid" ] (Scalar(DecimalText.ofDecimal 4500m)) (Restricted "licence-x"))
             |> ignore
 
             let raw =
@@ -663,7 +650,8 @@ let disclosureTests =
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
-            assertFact store scope (draftFor [ "sku-x" ] (Scalar 19999m) Internal) |> ignore
+            assertFact store scope (draftFor [ "sku-x" ] (Scalar(DecimalText.ofDecimal 19999m)) Internal)
+            |> ignore
 
             let! _ = PopulationQueryTool.execute (contextFor sp scope "user-1") baseArgs
 
@@ -913,16 +901,16 @@ let subjectSetTests =
             let scope = newScope ()
             let store = sp.GetRequiredService<IFactStore>()
 
-            assertFact store scope (draftFor [ "acme" ] (Scalar 9000m) Surfaceable)
+            assertFact store scope (draftFor [ "acme" ] (Scalar(DecimalText.ofDecimal 9000m)) Surfaceable)
             |> ignore
 
-            assertFact store scope (draftFor [ "acme"; "widget" ] (Scalar 500m) Surfaceable)
+            assertFact store scope (draftFor [ "acme"; "widget" ] (Scalar(DecimalText.ofDecimal 500m)) Surfaceable)
             |> ignore
 
-            assertFact store scope (draftFor [ "acme"; "gadget" ] (Scalar 700m) Surfaceable)
+            assertFact store scope (draftFor [ "acme"; "gadget" ] (Scalar(DecimalText.ofDecimal 700m)) Surfaceable)
             |> ignore
 
-            assertFact store scope (draftFor [ "globex"; "thing" ] (Scalar 800m) Surfaceable)
+            assertFact store scope (draftFor [ "globex"; "thing" ] (Scalar(DecimalText.ofDecimal 800m)) Surfaceable)
             |> ignore
 
             let atLevelTwo =
@@ -957,7 +945,8 @@ let subjectSetTests =
                     [ "globex"; "thing" ], 800m
                     [ "initech"; "stapler" ], 900m
                 ] do
-                assertFact store scope (draftFor path (Scalar value) Surfaceable) |> ignore
+                assertFact store scope (draftFor path (Scalar(DecimalText.ofDecimal value)) Surfaceable)
+                |> ignore
 
             let anyOf =
                 executeVia
@@ -1167,7 +1156,11 @@ let demoTests =
             // expected string is derived from the same rendering path the
             // tool uses, so this asserts identity, not resemblance.
             let topSku, topValue = seeded |> List.maxBy snd
-            let expectedRendering = FactRendering.render "N0" (Scalar topValue)
+
+            let expectedRendering =
+                FactRendering.renderFor
+                    (Some(revenueDefinition HigherIsBetter))
+                    (Scalar(DecimalText.ofDecimal topValue))
 
             let finalContent =
                 finalMessages
@@ -1235,7 +1228,10 @@ let demoTests =
                 |> List.truncate topK
                 |> List.map (fun (sku, value) -> {
                     FactId = sku
-                    Value = FactRendering.render "N0" (Scalar value)
+                    Value =
+                        FactRendering.renderFor
+                            (Some(revenueDefinition HigherIsBetter))
+                            (Scalar(DecimalText.ofDecimal value))
                     Verdict = FactDisclosable
                     Scope = scope
                 })
@@ -1353,33 +1349,23 @@ let private companionRegistry: IMetricRegistry =
     let declared (id: string) (unit: string) : MetricRegistration = {
         Module = "TestModule"
         Definition = {
-            Id = id
-            Name = id
-            Unit = unit
-            Dimensionality = "count"
-            Direction = HigherIsBetter
-            DisplayFormat = "N0"
-            Staleness = UntilSuperseded
-            ProducingOperation = None
-            CanonicalMethod = None
-            RecomputePolicy = None
-            RollUp = None
-            Context = None
+            ToolUp.Platform.Tests.KernelFixtures.metric id id unit "count" "N0" with
+                Direction = HigherIsBetter
         }
     }
 
-    MetricRegistry.build [ declared "revenue" "GBP"; declared "shoppers" "shoppers" ] []
+    MetricRegistry.build [ declared "revenue" "GBP"; declared "shoppers" "count" ] []
 
 /// The whole of 2026: it overlaps Q2 and is not Q2.
 let private fy2026: TemporalExtent = {
-    From = DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "FY-2026"
 }
 
 /// `metric` = `value` for `brand/<sku>` over `period`, surfaceable.
 let private companionDraft (sku: string) (metric: string) (value: decimal) (period: TemporalExtent) : FactDraft = {
-    draftFor [ sku ] (Scalar value) Surfaceable with
+    draftFor [ sku ] (Scalar(DecimalText.ofDecimal value)) Surfaceable with
         Metric = MetricRef metric
         Period = period
         Evidence = {
@@ -1479,7 +1465,7 @@ let companionTests =
 
             Expect.equal
                 (recording.Queries
-                 |> List.map (fun q -> q.Subject |> Option.map SubjectRef.toString, q.Metric))
+                 |> List.map (fun q -> q.Subject |> Option.map Fact.subjectRendering, q.Metric))
                 [
                     Some "brand/sku-a", Some(MetricRef "shoppers")
                     Some "brand/sku-b", Some(MetricRef "shoppers")

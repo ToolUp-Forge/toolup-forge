@@ -29,7 +29,9 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -41,26 +43,16 @@ open ToolUp.Platform.Compose
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
 
-let private metric (id: string) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+let private revenueMetric: MetricDefinition = {
+    metric "revenue" "revenue" "count" "count" "" with
+        Direction = HigherIsBetter
 }
 
 let private registry: IMetricRegistry =
     MetricRegistry.build [
         {
             MetricRegistration.Module = "sales"
-            Definition = metric "revenue"
+            Definition = revenueMetric
         }
     ] [
         {
@@ -115,16 +107,16 @@ let private runsFor (tableId: string) =
     | Lines -> [ Daily ]
     | _ -> []
 
-let private day (n: int) : TemporalExtent = {
-    From = DateTime(2026, 9, n, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 9, n + 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some(sprintf "2026-09-%02d" n)
-}
+let private day (n: int) : TemporalExtent =
+    period
+        (DateTime(2026, 9, n, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 9, n + 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some(sprintf "2026-09-%02d" n))
 
 let private row (n: int) (sku: string) (revenue: decimal) : FactTableRow = {
     Subject = [ sku ]
     Period = day n
-    Values = Map.ofList [ "revenue", Scalar revenue ]
+    Values = Map.ofList [ "revenue", scalar revenue ]
 }
 
 let private delivered (n: int) (input: char) =
@@ -294,7 +286,11 @@ let private invalidated (registration: JobRegistration) =
 
 let private periodOf (n: int) =
     let extent = day n
-    sprintf "period:%s..%s" (extent.From.ToString "o") (extent.To.ToString "o")
+
+    sprintf
+        "period:%s..%s"
+        ((Instant.toDateTime extent.From).ToString "o")
+        ((Instant.toDateTime extent.To).ToString "o")
 
 // ─── The firing rule ──────────────────────────────────────────────────
 

@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform

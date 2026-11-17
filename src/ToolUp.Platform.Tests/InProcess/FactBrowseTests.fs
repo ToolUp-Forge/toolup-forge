@@ -46,7 +46,9 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AnswerVerifier
 open ToolUp.AI.AIToolRegistry
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -61,18 +63,8 @@ let private t0 = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 let private metric (id: string) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id id "count" "count" "" with
+        Direction = HigherIsBetter
 }
 
 let private products: SubjectDefinition = {
@@ -127,22 +119,22 @@ let private tables: IFactTableRegistry =
         }
     ] [ BindAllFactTables DefaultFactTableWriter.Destination ]
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+/// The month bounds the fixture's periods run between, as the clock values a
+/// series request carries.
+let private septemberStart = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+let private octoberStart = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+let private novemberStart = DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)
 
-let private october: TemporalExtent = {
-    From = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-10"
-}
+let private september: TemporalExtent =
+    KernelFixtures.period septemberStart octoberStart (Some "2026-09")
+
+let private october: TemporalExtent =
+    KernelFixtures.period octoberStart novemberStart (Some "2026-10")
 
 let private rowIn (period: TemporalExtent) (brand: string) (sku: string) (revenue: decimal) : FactTableRow = {
     Subject = [ brand; sku ]
     Period = period
-    Values = Map.ofList [ "revenue", Scalar revenue; "segment", Categorical "core" ]
+    Values = Map.ofList [ "revenue", KernelFixtures.scalar revenue; "segment", Categorical "core" ]
 }
 
 let private row (brand: string) (sku: string) (revenue: decimal) : FactTableRow = rowIn september brand sku revenue
@@ -336,9 +328,9 @@ let private syntheticFact (i: int) : Fact = {
         Path = [ "brand"; sprintf "sku-%06d" i ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar(decimal i)
+    Value = KernelFixtures.scalar (decimal i)
     Period = september
-    AsOf = t0
+    AsOf = KernelFixtures.instant t0
     Method = FactBrowseHandler.tableMethod skuTable
     Evidence = {
         ResultRef = None
@@ -363,8 +355,8 @@ let private largeStore () : IFactStore =
 
         let sorted =
             match query.Ordering with
-            | Ascending -> all |> List.sortBy (fun f -> f.Value)
-            | _ -> all |> List.sortByDescending (fun f -> f.Value)
+            | Ascending -> all |> List.sortBy (fun f -> PopulationValue.comparable f.Value)
+            | _ -> all |> List.sortByDescending (fun f -> PopulationValue.comparable f.Value)
 
         return
             Ok {
@@ -534,7 +526,9 @@ let private disclosureTests =
             let fact = revenueFacts w |> List.head
             ok "fact" (FactBrowseHandler.getFact w.Deps w.Scope "u" fact.FactId) |> ignore
 
-            ok "series" (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+            ok
+                "series"
+                (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" septemberStart novemberStart))
             |> ignore
 
             ignore runId
@@ -699,7 +693,8 @@ let private tableTests =
             run w [ row "acme" "a1" 10m ] |> ignore
             let secondRun, _ = run w [ row "acme" "a1" 15m ]
 
-            let current = revenueFacts w |> List.find (fun f -> f.Value = Scalar 15m)
+            let current =
+                revenueFacts w |> List.find (fun f -> f.Value = KernelFixtures.scalar 15m)
 
             let detail = ok "fact" (FactBrowseHandler.getFact w.Deps w.Scope "u" current.FactId)
             Expect.equal detail.TableId (Some skuTable.Id) "the table that wrote it"
@@ -1237,9 +1232,8 @@ let private composedDemoTests =
             let quoted = provider.Quoted
             Expect.equal quoted.Length demoTopK "the model was handed the bound, not the population"
 
-            let displayFormat =
+            let revenueMetric =
                 registry.TryGetMetric "revenue"
-                |> Option.map _.DisplayFormat
                 |> Option.defaultWith (fun () -> failtest "the metric must be registered")
 
             for factId, rendering in quoted do
@@ -1251,7 +1245,7 @@ let private composedDemoTests =
 
                 Expect.equal
                     rendering
-                    (FactRendering.render displayFormat stored.Value)
+                    (FactRendering.renderFor (Some revenueMetric) stored.Value)
                     "the rendering the model quoted is the stored fact's, byte for byte"
 
             let answer =
@@ -1370,7 +1364,7 @@ let private seriesTests =
             let s =
                 ok
                     "series"
-                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" septemberStart novemberStart))
 
             Expect.equal
                 (s.Points |> List.map (fun p -> p.SubjectPath, p.PeriodLabel, p.Value))
@@ -1404,7 +1398,7 @@ let private seriesTests =
             let septemberOnly =
                 ok
                     "september"
-                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From september.To))
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" septemberStart octoberStart))
 
             Expect.equal
                 (septemberOnly.Points |> List.map _.PeriodLabel)
@@ -1416,7 +1410,7 @@ let private seriesTests =
                 ok
                     "acme"
                     (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
-                        series "revenue" september.From october.To with
+                        series "revenue" septemberStart novemberStart with
                             SubjectPrefix = [ "acme" ]
                     })
 
@@ -1442,7 +1436,7 @@ let private seriesTests =
             let s =
                 ok
                     "series"
-                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" septemberStart novemberStart))
 
             Expect.equal
                 (s.Points |> List.map (fun p -> p.PeriodLabel, p.Value))
@@ -1480,7 +1474,7 @@ let private seriesTests =
             let s =
                 ok
                     "series"
-                    (FactBrowseHandler.querySeries gated w0.Scope "u" (series "revenue" september.From october.To))
+                    (FactBrowseHandler.querySeries gated w0.Scope "u" (series "revenue" septemberStart novemberStart))
 
             Expect.equal
                 (s.Points |> List.map _.SubjectPath)
@@ -1506,7 +1500,7 @@ let private seriesTests =
 
             match
                 FactBrowseHandler.querySeries w.Deps w.Scope "u" {
-                    series "revenue" september.From october.To with
+                    series "revenue" septemberStart novemberStart with
                         MaxPoints = 1
                 }
                 |> Async.RunSynchronously
@@ -1522,7 +1516,7 @@ let private seriesTests =
                 ok
                     "clamped"
                     (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
-                        series "revenue" september.From october.To with
+                        series "revenue" septemberStart novemberStart with
                             MaxPoints = 1_000_000
                     })
 
@@ -1541,7 +1535,7 @@ let private seriesTests =
                 | Ok _ -> failtestf "%s: must be refused" label
                 | Error message -> message
 
-            let base' = series "revenue" september.From october.To
+            let base' = series "revenue" septemberStart novemberStart
 
             Expect.stringContains (refused "table" { base' with TableId = "nope" }) "nope" "names the table"
             Expect.stringContains (refused "metric" { base' with Metric = "margin" }) "margin" "names the metric"
@@ -1584,7 +1578,7 @@ let private seriesTests =
             let s =
                 ok
                     "series"
-                    (FactBrowseHandler.querySeries w.Deps other "u" (series "revenue" september.From october.To))
+                    (FactBrowseHandler.querySeries w.Deps other "u" (series "revenue" septemberStart novemberStart))
 
             Expect.isEmpty s.Points "another scope's facts are structurally unreachable"
         }
@@ -1596,7 +1590,7 @@ let private seriesTests =
             let s =
                 ok
                     "series"
-                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" septemberStart novemberStart))
 
             let back = JsonSerializer.Deserialize<FactSeries>(wire s, jsonOptions)
             Expect.equal back s "round-trips through the ToolUp.Remoting JSON converters"
@@ -1658,7 +1652,7 @@ let private costTests =
                 ok
                     "chart"
                     (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
-                        series "revenue" september.From october.To with
+                        series "revenue" septemberStart novemberStart with
                             SubjectPrefix = [ "b03" ]
                     })
 
@@ -1729,7 +1723,7 @@ let private runTwentyBrands (w: World) (skus: int) =
 
 /// One brand's revenue chart over both months.
 let private brandChart (brand: string) : FactSeriesQuery = {
-    series "revenue" september.From october.To with
+    series "revenue" septemberStart novemberStart with
         SubjectPrefix = [ brand ]
 }
 
@@ -2048,14 +2042,14 @@ let private parityTests =
             let factPath = { w.Deps with Gate = heldOnly gate }
 
             let reads = [
-                "revenue, both months", series "revenue" september.From october.To
-                "revenue, September", series "revenue" september.From september.To
+                "revenue, both months", series "revenue" septemberStart novemberStart
+                "revenue, September", series "revenue" septemberStart octoberStart
                 "revenue, acme",
                 {
-                    series "revenue" september.From october.To with
+                    series "revenue" septemberStart novemberStart with
                         SubjectPrefix = [ "acme" ]
                 }
-                "segment (Internal), both months", series "segment" september.From october.To
+                "segment (Internal), both months", series "segment" septemberStart novemberStart
             ]
 
             let auditOf () =
@@ -2086,7 +2080,9 @@ let private parityTests =
                 Expect.equal (List.sort rowAudit) (List.sort factAudit) (sprintf "%s: the same audit rows" name)
 
             let all =
-                ok "all" (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+                ok
+                    "all"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" septemberStart novemberStart))
 
             Expect.equal
                 (all.Points
@@ -2105,7 +2101,7 @@ let private parityTests =
             let segment =
                 ok
                     "segment"
-                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "segment" september.From october.To))
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "segment" septemberStart novemberStart))
 
             Expect.allEqual (segment.Points |> List.map _.Withheld) true "every Internal point is withheld"
         }
@@ -2129,7 +2125,7 @@ let private parityTests =
 
             let rowPath = { w.Deps with Gate = gate }
             let factPath = { w.Deps with Gate = heldOnly gate }
-            let request = series "revenue" september.From october.To
+            let request = series "revenue" septemberStart novemberStart
 
             ok "warm" (FactBrowseHandler.querySeries rowPath w.Scope "u" request) |> ignore
 
@@ -2386,10 +2382,10 @@ let private sliceTests =
                 for metric in [ "revenue"; "segment" ] do
                     for from, until in
                         [
-                            september.From, october.To
-                            september.From, september.To
-                            october.From, october.To
-                            september.From.AddDays 10.0, october.From.AddDays 3.0
+                            septemberStart, novemberStart
+                            septemberStart, octoberStart
+                            octoberStart, novemberStart
+                            septemberStart.AddDays 10.0, octoberStart.AddDays 3.0
                         ] do
                         for prefix in [ []; [ "acme" ]; [ "zeta"; "z1" ] ] do
                             for cap in [ 1; FactBrowseApi.MaxSeriesPoints ] do
@@ -2554,7 +2550,7 @@ let private sessionSteps: (string * Choice<FactRowQuery, FactSeriesQuery>) list 
         }
     "open one chart",
     Choice2Of2 {
-        series "revenue" september.From october.To with
+        series "revenue" septemberStart novemberStart with
             SubjectPrefix = [ "b07" ]
     }
 ]
@@ -2658,8 +2654,8 @@ let private sessionCostTests =
                         FactId = sprintf "f%06d" i
                         Subject = sprintf "products/b%02d>s%05d" (i % 20) (i / 2)
                         SubjectPath = [ sprintf "b%02d" (i % 20); sprintf "s%05d" (i / 2) ]
-                        PeriodFrom = (if i % 2 = 0 then september else october).From
-                        PeriodTo = (if i % 2 = 0 then september else october).To
+                        PeriodFrom = (if i % 2 = 0 then septemberStart else octoberStart)
+                        PeriodTo = (if i % 2 = 0 then octoberStart else novemberStart)
                         PeriodLabel = (if i % 2 = 0 then september else october).Label
                         Value = Some(decimal i)
                         Rendering = Some(string i)

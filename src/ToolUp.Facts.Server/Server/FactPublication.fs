@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Collections.Concurrent
 open System.Text
@@ -411,8 +413,8 @@ module internal Consolidation =
                                     |> List.map (fun (metric, d) -> {
                                         Subject = r.Row.Subject
                                         Metric = metric
-                                        From = r.Row.Period.From
-                                        To = r.Row.Period.To
+                                        From = Instant.toDateTime r.Row.Period.From
+                                        To = Instant.toDateTime r.Row.Period.To
                                         Disclosure = d
                                     }))
                         })

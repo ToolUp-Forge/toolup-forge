@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 open System
 open System.Collections.Generic
 open ToolUp.Platform.Grounding
@@ -268,7 +270,7 @@ module FactDraft =
     /// `AssertBatch` contract for why (GP 11: a scalar `Assert` that
     /// began refusing drafts it accepts today is a break, and the scalar
     /// path has no atomicity claim that a pre-flight protects).
-    let defects (draft: FactDraft) : string list = [
+    let private basicDefects (draft: FactDraft) : string list = [
         if String.IsNullOrWhiteSpace draft.Metric.Value then
             "metric id is empty"
 
@@ -298,6 +300,40 @@ module FactDraft =
             if String.IsNullOrWhiteSpace certificateRef then
                 "method certificate ref is empty"
     ]
+
+    /// Why a draft cannot be written, or nothing: the draft's own shape
+    /// first, then every rule the specification puts on a written fact —
+    /// the tokens inside identity among them (`>` or `|` in a path member,
+    /// `/` or `|` in a hierarchy, `|` in a metric id, `:` in a computed
+    /// method's operation or version, `=` or `;` in a distribution key). A
+    /// fact stored before those rules reads as stored; no new one carries
+    /// them.
+    let defects (draft: FactDraft) : string list =
+        match basicDefects draft with
+        | [] ->
+            let candidate: Fact = {
+                FactId = ""
+                Subject = draft.Subject
+                Metric = draft.Metric
+                Value = draft.Value
+                Period = draft.Period
+                AsOf = draft.Period.From
+                Method = draft.Method
+                Evidence = draft.Evidence
+                Confidence = draft.Confidence
+                Supersedes = None
+                Disclosure = draft.Disclosure
+            }
+
+            match
+                FactWire.writeFact {
+                    candidate with
+                        FactId = Fact.computeFor candidate
+                }
+            with
+            | Ok _ -> []
+            | Error refusal -> [ sprintf "the Fact kernel refuses it: %s" (Refusal.describe refusal) ]
+        | shape -> shape
 
 // ─── The plan ──────────────────────────────────────────────────────
 
@@ -399,7 +435,7 @@ module FactStoreError =
                     sprintf
                         "#%d %s / %s: %s"
                         d.Position
-                        (SubjectRef.toString d.Draft.Subject)
+                        (Fact.subjectRendering d.Draft.Subject)
                         d.Draft.Metric.Value
                         (String.concat ", " d.Defects))
                 |> String.concat "; "
@@ -502,6 +538,11 @@ module FactCompetition =
         |> List.filter (fun identity -> identity <> ownMethod)
         |> List.distinct
 
+/// A write refused because a stored fact matches it only by rendering
+/// (`FactWrite.collisions`): raised inside a store's write transaction so it
+/// rolls back, and answered as `FactStoreError.Refused`.
+exception FactWriteCollision of string
+
 /// The write core: pre-flight, then the plan.
 [<RequireQualifiedAccess>]
 module FactWrite =
@@ -517,7 +558,7 @@ module FactWrite =
                 draft.Period
                 draft.Method
                 (Fact.effectiveInputHashes draft.Method draft.Evidence draft.Value)
-        Lineage = Fact.lineageKey draft.Subject draft.Metric draft.Period draft.Method
+        Lineage = FactLineage.keyOf draft.Subject draft.Metric draft.Period draft.Method
     }
 
     /// The fact a draft is, stored at `asOf` behind `supersedes`.
@@ -527,7 +568,7 @@ module FactWrite =
         Metric = draft.Draft.Metric
         Value = draft.Draft.Value
         Period = draft.Draft.Period
-        AsOf = asOf
+        AsOf = Instant.ofDateTime asOf
         Method = draft.Draft.Method
         Evidence = draft.Draft.Evidence
         Confidence = draft.Draft.Confidence
@@ -575,25 +616,67 @@ module FactWrite =
             }
         | _ -> Error(MalformedDrafts(List.length drafts, offenders))
 
-    /// The plan. `isStored` says whether a content address is already
-    /// stored; `stored` carries stored facts of the lineages the request
-    /// writes into, in read order (a fact of any other lineage is never a
-    /// head here, and a lineage with no fact in it has no head). `now` is the
-    /// store's clock, read once for the write.
-    ///
-    /// Per draft, in submission order: an address already stored, or
-    /// produced by an earlier draft of this request, is `Unchanged` (law L2);
-    /// otherwise the fact is stamped `AsOf = now`, or one tick after its
-    /// lineage's head when the head is not earlier than `now` (law L3 —
-    /// strictly increasing even under a coarse or frozen clock), supersedes
-    /// that head, and becomes the head for the drafts after it. So a request
-    /// carrying two versions of one lineage settles exactly as two
-    /// sequential scalar asserts would.
+    /// Whether a stored fact's lineage members (subject, metric, method)
+    /// carry a token the kernel refuses on write (specification §3.5): a
+    /// path member holding `>` or `|`, an empty one, a hierarchy holding `/`,
+    /// a computed method part holding `:`. Such a fact reads as stored, but
+    /// its lineage key can equal that of a different fact a writer accepts
+    /// today (`["a>b"]` and `["a";"b"]` render alike).
+    let private lineageTolerated (f: Fact) : bool =
+        let probe = {
+            f with
+                FactId = ""
+                Value = Absent "probe"
+                Confidence = None
+                Supersedes = None
+        }
+
+        Result.isError (
+            FactWire.writeFact {
+                probe with
+                    FactId = Fact.computeFor probe
+            }
+        )
+
+    /// The drafts that a stored fact matches only by rendering, as (draft id,
+    /// stored fact id): the stored fact shares the draft's lineage key while
+    /// its lineage members carry a refused token, or shares the draft's id
+    /// while holding another value (a distribution key holding `=` or `;`
+    /// renders like a clean one). A draft never carries a refused token, so
+    /// each pair is two different facts. A store refuses the write rather
+    /// than supersede, skip as idempotent, or merge across them. `stored` is
+    /// the facts the store loaded for the lineages the request touches.
+    let collisions (stored: Fact list) (request: WriteRequest) : (string * string) list =
+        let byLineage =
+            stored
+            |> List.filter lineageTolerated
+            |> List.map (fun f -> Fact.lineageKey f, f.FactId)
+
+        [
+            for d in request.Drafts do
+                for key, storedId in byLineage do
+                    if key = d.Lineage then
+                        d.FactId, storedId
+
+                for f in stored do
+                    if f.FactId = d.FactId && f.Value <> d.Draft.Value then
+                        d.FactId, f.FactId
+        ]
+        |> List.distinct
+
+    /// The refusal a store answers a colliding write with, naming each pair.
+    let describeCollisions (pairs: (string * string) list) : string =
+        pairs
+        |> List.map (fun (draft, stored) -> sprintf "draft %s against stored fact %s" draft stored)
+        |> String.concat "; "
+        |> sprintf
+            "refused: a stored fact holding a token the kernel no longer admits matches this write only by rendering (%s); re-assert the stored facts under admissible tokens to clear it"
+
     let plan (now: DateTime) (isStored: string -> bool) (stored: Fact list) (request: WriteRequest) : WritePlan =
         let heads = Dictionary<string, Fact>(StringComparer.Ordinal)
 
         for f in stored do
-            let key = Fact.lineageKey f.Subject f.Metric f.Period f.Method
+            let key = Fact.lineageKey f
 
             match heads.TryGetValue key with
             | true, existing when existing.AsOf >= f.AsOf -> ()
@@ -617,8 +700,10 @@ module FactWrite =
                     | _ -> None
 
                 let asOf =
-                    match head with
-                    | Some head when head.AsOf >= now -> head.AsOf.AddTicks 1L
+                    let headAsOf = head |> Option.map (fun h -> Instant.toDateTime h.AsOf)
+
+                    match headAsOf with
+                    | Some headAsOf when headAsOf >= now -> headAsOf.AddTicks 1L
                     | _ -> now
 
                 let fact = factOf draft asOf (head |> Option.map _.FactId)
@@ -640,11 +725,11 @@ module FactWrite =
                 for f in facts do
                     FactAuditEvent.AssertedRow {
                         FactId = f.FactId
-                        Subject = SubjectRef.toString f.Subject
+                        Subject = Fact.subjectRendering f.Subject
                         Metric = f.Metric.Value
                         Method = Fact.methodIdentity f.Method
                         Disclosure = Disclosure.toString f.Disclosure
-                        AsOf = f.AsOf
+                        AsOf = Instant.toDateTime f.AsOf
                     }
 
                     match f.Supersedes with
@@ -652,9 +737,9 @@ module FactWrite =
                         FactAuditEvent.SupersededRow {
                             NewFactId = f.FactId
                             SupersededFactId = superseded
-                            Subject = SubjectRef.toString f.Subject
+                            Subject = Fact.subjectRendering f.Subject
                             Metric = f.Metric.Value
-                            AsOf = f.AsOf
+                            AsOf = Instant.toDateTime f.AsOf
                         }
                     | None -> ()
               ]
@@ -669,7 +754,7 @@ module FactWrite =
                     AsOf =
                         match facts with
                         | [] -> now
-                        | _ -> facts |> List.map _.AsOf |> List.max
+                        | _ -> facts |> List.map (fun f -> Instant.toDateTime f.AsOf) |> List.max
                 }
               ]
 

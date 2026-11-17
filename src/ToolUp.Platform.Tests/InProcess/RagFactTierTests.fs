@@ -37,6 +37,7 @@ open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI.SystemPromptBuilder
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
@@ -56,18 +57,8 @@ let private brands: SubjectDefinition = {
 }
 
 let private revenue: MetricDefinition = {
-    Id = "revenue"
-    Name = "revenue"
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    ToolUp.Platform.Tests.KernelFixtures.metric "revenue" "revenue" "GBP" "currency" "" with
+        Direction = HigherIsBetter
 }
 
 let private metrics: IMetricRegistry =
@@ -107,8 +98,8 @@ let private tables: IFactTableRegistry =
     ] [ BindAllFactTables DefaultFactTableWriter.Destination ]
 
 let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "2026-09"
 }
 
@@ -255,7 +246,7 @@ let private writeThroughTable (sp: IServiceProvider) (teamId: string) (value: de
             {
                 Subject = [ "acme" ]
                 Period = september
-                Values = Map.ofList [ "revenue", Scalar value ]
+                Values = Map.ofList [ "revenue", Scalar(DecimalText.ofDecimal value) ]
             }
         ]
     )

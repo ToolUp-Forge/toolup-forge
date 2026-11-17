@@ -13,7 +13,9 @@ open ToolUp.Platform.Narrative
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.ArtefactSigning
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -328,11 +330,11 @@ let differentialTests =
 
 // ── The tool and the gate over a real fact store ──────────────────
 
-let private period (month: int) : TemporalExtent = {
-    From = DateTime(2026, month, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, month + 1, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some(sprintf "2026-%02d" month)
-}
+let private period (month: int) : TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, month, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, month + 1, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some(sprintf "2026-%02d" month))
 
 let private draft (metricId: string) (month: int) (value: decimal) (disclosure: Disclosure) : FactDraft = {
     Subject = {
@@ -340,7 +342,7 @@ let private draft (metricId: string) (month: int) (value: decimal) (disclosure: 
         Path = [ "acme" ]
     }
     Metric = MetricRef metricId
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = period month
     Method = HumanAsserted "analyst"
     Evidence = {
@@ -353,18 +355,8 @@ let private draft (metricId: string) (month: int) (value: decimal) (disclosure: 
 }
 
 let private metricDefinition (id: string) (unit: string) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = unit
-    Dimensionality = (if unit = "count" then "count" else "currency")
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id id unit (if unit = "count" then "count" else "currency") "" with
+        Direction = HigherIsBetter
 }
 
 let private registry: IMetricRegistry =
@@ -667,7 +659,7 @@ let gateTests =
 
             Expect.stringContains
                 (refusalOf f calculations (Some registry) "revenue-gap" [ september.FactId; units.FactId ])
-                (sprintf "input '%s' is in 'count', and the calculation is declared in GBP" units.FactId)
+                (sprintf "input '%s' is in '1', and the calculation is declared in GBP" units.FactId)
                 "the currency check"
 
             Expect.stringContains

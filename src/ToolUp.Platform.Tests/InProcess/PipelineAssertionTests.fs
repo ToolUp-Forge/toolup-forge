@@ -45,8 +45,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
 open ToolUp.AI.AnswerVerifier
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
 open ToolUp.Platform.Tests.InProcess.PipelineToolTests.PipelineFixtures
@@ -61,18 +63,10 @@ open ToolUp.Platform.Compose
 let private definition (id: string) (format: string) (producing: string option) : MetricRegistration = {
     Module = "trade"
     Definition = {
-        Id = id
-        Name = id
-        Unit = "GBP"
-        Dimensionality = "currency"
-        Direction = HigherIsBetter
-        DisplayFormat = format
-        Staleness = UntilSuperseded
-        ProducingOperation = producing
-        CanonicalMethod = None
-        RecomputePolicy = None
-        RollUp = Some(Additive 0.01m)
-        Context = None
+        metric id id "GBP" "currency" format with
+            Direction = HigherIsBetter
+            ProducingOperation = producing
+            RollUp = Some(Additive(DecimalText.ofDecimal 0.01m))
     }
 }
 
@@ -161,6 +155,10 @@ let private revenueInputs (w: World) (name: string) : string list =
 /// The fixture's revenue total per site over the three days.
 let private totalOf (name: string) : decimal =
     [ 0..2 ] |> List.sumBy (fun day -> revenueOn day name)
+
+/// A site total as the derived metric's display format renders it.
+let private renderedTotal (name: string) : string =
+    FactRendering.renderFor (derivedRegistry.TryGetMetric "site_total") (scalar (totalOf name))
 
 // ─── 1. Refused by name ──────────────────────────────────────────────
 
@@ -315,7 +313,7 @@ let private draftTests =
             let result = answered w (revenueArgs perSubject)
 
             Expect.equal (drafts |> List.map _.Subject) [ site "s1"; site "s2" ] "one per subject, in result order"
-            Expect.equal (drafts |> List.map _.Value) [ Scalar(totalOf "s1"); Scalar(totalOf "s2") ] "the totals"
+            Expect.equal (drafts |> List.map _.Value) [ scalar (totalOf "s1"); scalar (totalOf "s2") ] "the totals"
 
             for d in drafts do
                 Expect.equal
@@ -324,7 +322,12 @@ let private draftTests =
                     "the method identity"
 
                 Expect.equal d.Metric (MetricRef "site_total") "the derived metric"
-                Expect.equal (d.Period.From, d.Period.To) (day1, day1.AddDays 3.0) "the slice's period"
+
+                Expect.equal
+                    (d.Period.From, d.Period.To)
+                    (instant day1, instant (day1.AddDays 3.0))
+                    "the slice's period"
+
                 Expect.equal d.Disclosure Surfaceable "a registered metric's fact"
                 Expect.equal d.Evidence.TriggerRef (Some "trigger") "the trigger"
 
@@ -369,15 +372,11 @@ let private correctFirstDay (w: World) =
             for name in [ "s1"; "s2" ] do
                 {
                     Subject = [ "north"; name ]
-                    Period = {
-                        From = day1.AddDays(float day)
-                        To = day1.AddDays(float day + 1.0)
-                        Label = None
-                    }
+                    Period = period (day1.AddDays(float day)) (day1.AddDays(float day + 1.0)) None
                     Values =
                         Map.ofList [
                             "revenue",
-                            Scalar(
+                            scalar (
                                 if day = 0 && name = "s1" then
                                     revenueOn day name + 50m
                                 else
@@ -414,10 +413,7 @@ let private writeTests =
 
             Expect.equal
                 (assertion.Facts |> List.map _.Rendering)
-                [
-                    Some(FactRendering.render "N2" (Scalar(totalOf "s1")))
-                    Some(FactRendering.render "N2" (Scalar(totalOf "s2")))
-                ]
+                [ Some(renderedTotal "s1"); Some(renderedTotal "s2") ]
                 "rendered with the derived metric's display format"
 
             let stored =
@@ -460,7 +456,7 @@ let private writeTests =
                     (Some first.Facts.Head.FactId)
                     "the derived fact supersedes its predecessor"
 
-                Expect.equal fact.Value (Scalar(totalOf "s1" + 50m)) "with the corrected total"
+                Expect.equal fact.Value (scalar (totalOf "s1" + 50m)) "with the corrected total"
             | None -> failtest "the superseding fact is not in the store"
 
             Expect.equal corrected.Facts[1].FactId first.Facts[1].FactId "the other site's fact is unchanged"
@@ -734,7 +730,7 @@ let private endToEndTests =
                 "revenue"
 
             let reply = chatTurn (requestFor sp scopeId)
-            let expected = FactRendering.render "N2" (Scalar(totalOf "s1"))
+            let expected = renderedTotal "s1"
 
             Expect.equal
                 reply.Content

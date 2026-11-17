@@ -2,12 +2,14 @@ module ToolUp.Platform.Tests.Contracts.IFactStoreContract
 
 open System
 open Expecto
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Jobs
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── IFactStore contract pack (Phase 520) ────────────────────────────
 //
@@ -18,11 +20,11 @@ open ToolUp.Platform.Jobs
 // reconstruction (L4), competing facts never merged (D19), scope
 // isolation (GP 4), and the disclosure / Absent field round-trips.
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft subjectMember metricId inputHash value : FactDraft = {
     Subject = {
@@ -30,7 +32,7 @@ let private draft subjectMember metricId inputHash value : FactDraft = {
         Path = [ subjectMember ]
     }
     Metric = MetricRef metricId
-    Value = Scalar value
+    Value = scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -121,22 +123,22 @@ type private SeededPopulation = {
 /// is later than every other member's — an `AsOf` replay at that instant
 /// therefore sees the whole population with `uk` still at 15.
 let private seedPopulation (store: IFactStore) (scope: string) : Async<SeededPopulation> = async {
-    let! _ = assertOk "root" store scope (popDraft [] "h-root" (Scalar 50m))
-    let! _ = assertOk "eu" store scope (popDraft [ "eu" ] "h-eu" (Scalar 10m))
-    let! _ = assertOk "na" store scope (popDraft [ "na" ] "h-na" (Scalar 40m))
-    let! _ = assertOk "fr" store scope (popDraft [ "eu"; "fr" ] "h-fr" (Scalar 20m))
+    let! _ = assertOk "root" store scope (popDraft [] "h-root" (scalar 50m))
+    let! _ = assertOk "eu" store scope (popDraft [ "eu" ] "h-eu" (scalar 10m))
+    let! _ = assertOk "na" store scope (popDraft [ "na" ] "h-na" (scalar 40m))
+    let! _ = assertOk "fr" store scope (popDraft [ "eu"; "fr" ] "h-fr" (scalar 20m))
 
     let! frCompeting =
         assertOk "fr-estimator" store scope {
-            popDraft [ "eu"; "fr" ] "h-fr-est" (Scalar 99m) with
+            popDraft [ "eu"; "fr" ] "h-fr-est" (scalar 99m) with
                 Method = Computed("estimator", "1", "p0")
         }
 
-    let! _ = assertOk "us" store scope (popDraft [ "na"; "us" ] "h-us" (Scalar 60m))
+    let! _ = assertOk "us" store scope (popDraft [ "na"; "us" ] "h-us" (scalar 60m))
     let! _ = assertOk "ca" store scope (popDraft [ "na"; "ca" ] "h-ca" (Categorical "not measured"))
     let! _ = assertOk "mx" store scope (popDraft [ "na"; "mx" ] "h-mx" (Absent "no data loaded"))
-    let! ukFirst = assertOk "uk-v1" store scope (popDraft [ "eu"; "uk" ] "h-uk-1" (Scalar 15m))
-    let! ukHead = assertOk "uk-v2" store scope (popDraft [ "eu"; "uk" ] "h-uk-2" (Scalar 30m))
+    let! ukFirst = assertOk "uk-v1" store scope (popDraft [ "eu"; "uk" ] "h-uk-1" (scalar 15m))
+    let! ukHead = assertOk "uk-v2" store scope (popDraft [ "eu"; "uk" ] "h-uk-2" (scalar 30m))
 
     return {
         UkFirst = ukFirst
@@ -169,8 +171,190 @@ let private scalars (facts: Fact list) =
     facts
     |> List.map (fun f ->
         match f.Value with
-        | Scalar d -> d
+        | Scalar d -> DecimalText.toDecimal d
         | other -> failtestf "expected a Scalar in the ranking, got %A" other)
+
+// ─── Facts at rest ───────────────────────────────────────────────────
+//
+// The Fact kernel refuses some tokens on write that a stored fact may still
+// carry (a path member holding `>` or `|`, an empty one, an empty period
+// label), and every read admits such a fact as it was stored. A test that
+// needs one puts it in place as an earlier store left it, rather than
+// through `Assert`, which refuses it.
+
+/// A store with a way to put facts into it exactly as given — id,
+/// transaction time and supersession link as stated, in the saved shape an
+/// earlier store wrote — bypassing `Assert`.
+type FactStoreAtRest = {
+    Target: IFactStore
+    TargetScope: string
+    SeedAtRest: Fact list -> Async<unit>
+}
+
+[<RequireQualifiedAccess>]
+module AtRest =
+
+    /// The fact a store holds for `d` written at `asOf` behind
+    /// `supersedes`: the id the write path addresses it by, and the time
+    /// and link a store's plan would have stamped.
+    let fact (d: FactDraft) (asOf: DateTime) (supersedes: Fact option) : Fact = {
+        FactWrite.recordedAt d asOf with
+            Supersedes = supersedes |> Option.map _.FactId
+    }
+
+    /// The same drafts as one store would have written them one at a time,
+    /// in order: each at the next reading of `clock`, superseding the
+    /// latest earlier fact of its lineage.
+    let facts (clock: unit -> DateTime) (drafts: FactDraft list) : Fact list =
+        drafts
+        |> List.fold
+            (fun (written: Fact list) d ->
+                let lineage = FactLineage.keyOf d.Subject d.Metric d.Period d.Method
+
+                let head =
+                    written
+                    |> List.filter (fun f -> Fact.lineageKey f = lineage)
+                    |> FactWrite.headOf
+
+                written @ [ fact d (clock().ToUniversalTime()) head ])
+            []
+
+    /// The blob store's saved layout: each fact as the platform JSON of the
+    /// record under `_facts/<id>.json`, and, with `withLeaves`, the
+    /// point-read index leaf the store that saved it wrote beside it. A
+    /// refused leaf upload is ignored, as the store ignores it.
+    let toBlob (storage: BlobStorage.IBlobStorage) (scope: string) (withLeaves: bool) (facts: Fact list) = async {
+        for f in facts do
+            let bytes =
+                Text.Encoding.UTF8.GetBytes(Text.Json.JsonSerializer.Serialize(f, FactStorageJson.options))
+
+            let! written = storage.Upload(scope, sprintf "_facts/%s.json" f.FactId, bytes)
+
+            match written with
+            | Ok _ -> ()
+            | Error e -> failtestf "could not put %s at rest: %s" f.FactId e
+
+            if withLeaves then
+                let! _ = storage.Upload(scope, FactIndexLayout.leafName f, Array.empty)
+                ()
+    }
+
+/// One draft per token the Fact kernel refuses on write and the draft's own
+/// shape does not, each otherwise well formed.
+let private kernelRefusedDrafts: (string * FactDraft) list =
+    let d = popDraft [ "eu"; "de" ] "h-refused" (scalar 1m)
+
+    let distribution key =
+        Distribution(Map.ofList [ key, DecimalText.ofDecimal 1m ])
+
+    [
+        "a path member holding '>'",
+        {
+            d with
+                Subject.Path = [ "eu"; "a>b" ]
+        }
+        "a path member holding '|'",
+        {
+            d with
+                Subject.Path = [ "eu"; "a|b" ]
+        }
+        "a hierarchy holding '/'",
+        {
+            d with
+                Subject.Hierarchy = "geo/graphy"
+        }
+        "a hierarchy holding '|'",
+        {
+            d with
+                Subject.Hierarchy = "geo|graphy"
+        }
+        "a metric id holding '|'",
+        {
+            d with
+                Metric = MetricRef "elas|ticity"
+        }
+        "a computed operation holding ':'",
+        {
+            d with
+                Method = Computed("roll:up", "1", "p0")
+        }
+        "a computed version holding ':'",
+        {
+            d with
+                Method = Computed("rollup", "1:0", "p0")
+        }
+        "a distribution key holding '='", { d with Value = distribution "a=b" }
+        "a distribution key holding ';'", { d with Value = distribution "a;b" }
+        "an empty period label", { d with Period.Label = Some "" }
+    ]
+
+/// The collision law over facts at rest: a stored fact whose lineage
+/// members carry a token the kernel refuses on write renders like a clean
+/// fact a writer may submit today (`["a>b"]` and `["a"; "b"]` are one
+/// subject rendering). A write that meets one is refused — never merged
+/// into it, skipped as idempotent, or allowed to supersede it — and the
+/// stored fact reads as it was.
+let atRestTests (name: string) (harness: unit -> FactStoreAtRest) =
+    let stored = popDraft [ "a>b" ] "h-ab" (scalar 10m)
+    let clean = popDraft [ "a"; "b" ] "h-ab" (scalar 10m)
+    let asOf = DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc)
+
+    let expectRefusedAndUnchanged (label: string) (batchToo: bool) (draft: FactDraft) = async {
+        let h = harness ()
+        let atRest = AtRest.fact stored asOf None
+        do! h.SeedAtRest [ atRest ]
+
+        let refused (what: string) (r: Result<'T, FactStoreError>) =
+            match r with
+            | Error(FactStoreError.Refused reason) ->
+                Expect.stringContains
+                    reason
+                    atRest.FactId
+                    (sprintf "%s, %s: the refusal names the stored fact" label what)
+            | Error other -> failtestf "%s, %s: expected a refusal, got %s" label what (FactStoreError.describe other)
+            | Ok answer -> failtestf "%s, %s: expected a refusal, got %A" label what answer
+
+        let! scalarWrite = h.Target.Assert(TestScope.resolved h.TargetScope, draft)
+        refused "scalar" scalarWrite
+
+        if batchToo then
+            let! batchWrite = h.Target.AssertBatch(TestScope.resolved h.TargetScope, [ draft ])
+            refused "batch" batchWrite
+
+        let! after = wholeStore h.Target h.TargetScope
+        Expect.equal after [ atRest ] (sprintf "%s: nothing was stored, and the stored fact is unchanged" label)
+
+        let! got = h.Target.Get(TestScope.resolved h.TargetScope, atRest.FactId) |> TestScope.ok
+        Expect.equal got (Some atRest) (sprintf "%s: and reads as it was stored" label)
+    }
+
+    testList $"{name} — a write meeting a fact at rest that it matches only by rendering" [
+
+        testCase "the two drafts share an id and a lineage"
+        <| fun () ->
+            let a = FactWrite.recordedAt stored asOf
+            let b = FactWrite.recordedAt clean asOf
+            Expect.notEqual a.Subject.Path b.Subject.Path "two subjects"
+            Expect.equal b.FactId a.FactId "one id"
+            Expect.equal (Fact.lineageKey b) (Fact.lineageKey a) "one lineage key"
+
+        // A scalar assert reads the fact it would return as already stored,
+        // and so meets the collision. A batch whose every address is already
+        // stored is answered from the census alone, without reading a fact,
+        // which is what keeps re-running an unchanged population to one round
+        // trip; it is not asserted here.
+        testCaseAsync "a scalar draft under the same id is refused, never taken as already stored"
+        <| expectRefusedAndUnchanged "same id" false clean
+
+        testCaseAsync "a draft that would supersede it is refused"
+        <| expectRefusedAndUnchanged "supersession" true {
+            clean with
+                Evidence = {
+                    clean.Evidence with
+                        InputHashes = [ "h-ab-2" ]
+                }
+        }
+    ]
 
 // ─── Phase 1089 — the id law and the id migration law ────────────────
 
@@ -184,7 +368,10 @@ let legacyFactId (f: Fact) : string =
     let subject = sprintf "%s/%s" f.Subject.Hierarchy (String.concat ">" f.Subject.Path)
 
     let period =
-        sprintf "%s..%s" (f.Period.From.ToUniversalTime().ToString("o")) (f.Period.To.ToUniversalTime().ToString("o"))
+        sprintf
+            "%s..%s"
+            ((Instant.toDateTime f.Period.From).ToString("o"))
+            ((Instant.toDateTime f.Period.To).ToString("o"))
 
     let inputs =
         Fact.effectiveInputHashes f.Method f.Evidence f.Value
@@ -199,12 +386,15 @@ let legacyFactId (f: Fact) : string =
 
 /// What the id migration law needs from a store: the store, a scope, a way
 /// to write facts exactly as given (ids, transaction times, supersession
-/// links — bypassing `Assert`, which would re-address them), and the
+/// links — bypassing `Assert`, which would re-address them), the facts as
+/// stored, read without verifying their ids (the migration's own export:
+/// every ordinary read of a fact under a legacy id faults), and the
 /// store's migration.
 type FactIdMigrationHarness = {
     Store: IFactStore
     Scope: string
     SeedRaw: Fact list -> Async<unit>
+    Stored: unit -> Async<Fact list>
     Migrate: bool -> Async<Result<FactIdMigrationReport, string>>
 }
 
@@ -219,7 +409,7 @@ let private legacyFact (d: FactDraft) (asOf: DateTime) (supersedes: Fact option)
         Metric = d.Metric
         Value = d.Value
         Period = d.Period
-        AsOf = asOf
+        AsOf = Instant.ofDateTime asOf
         Method = d.Method
         Evidence = d.Evidence
         Confidence = d.Confidence
@@ -243,9 +433,29 @@ let private migrated (report: Result<FactIdMigrationReport, string>) =
     | Ok r -> r
     | Error e -> failtestf "expected the migration to run, got %s" e
 
+/// The legacy scope's facts as the migration must leave them: the same
+/// fields under the recomputed ids, the supersession link following its
+/// predecessor's move.
+let private canonicalScope () =
+    let v1, v2, fr = legacyScope ()
+    let c1 = { v1 with FactId = Fact.computeFor v1 }
+
+    let c2 = {
+        v2 with
+            FactId = Fact.computeFor v2
+            Supersedes = Some c1.FactId
+    }
+
+    let cfr = { fr with FactId = Fact.computeFor fr }
+    c1, c2, cfr
+
+let private byId (facts: Fact list) = facts |> List.sortBy _.FactId
+
 /// Phase 1089 — the migration law: a store migrated by its tool answers
-/// every pre-migration query by content, under the recomputed ids, and a
-/// second run changes nothing.
+/// every query by content, under the recomputed ids, and a second run
+/// changes nothing. A fact under a legacy id faults on every ordinary
+/// read, so nothing is asked of the store before it is migrated except
+/// through the migration's own export.
 let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
     testList $"{name} — fact id migration (Phase 1089)" [
 
@@ -254,6 +464,9 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             let h = harness ()
             let v1, v2, fr = legacyScope ()
             do! h.SeedRaw [ v1; v2; fr ]
+            let! before = h.Stored()
+            Expect.equal (byId before) (byId [ v1; v2; fr ]) "the scope holds the legacy facts as seeded"
+
             let! report = h.Migrate true
             let r = migrated report
 
@@ -262,83 +475,104 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             Expect.equal r.Rekeyed 3 "every legacy id would move"
             Expect.isSome r.FirstDivergent "the first divergent id is named"
 
-            let! stillLegacy = h.Store.Get(TestScope.resolved h.Scope, v2.FactId) |> TestScope.ok
-            Expect.isSome stillLegacy "nothing was written: the legacy id still resolves"
-            let! notYet = h.Store.Get(TestScope.resolved h.Scope, Fact.computeFor v2) |> TestScope.ok
-            Expect.isNone notYet "and the new id does not yet"
+            let! after = h.Stored()
+            Expect.equal (byId after) (byId before) "nothing was written: every fact still under its legacy id"
+
+            Expect.isFalse
+                (after |> List.exists (fun f -> f.FactId = Fact.computeFor v2))
+                "and no fact is under a new id yet"
         }
 
-        testCaseAsync "a migrated store answers every pre-migration query by content"
+        testCaseAsync "an ordinary read of an unmigrated scope faults rather than answer"
         <| async {
             let h = harness ()
             let v1, v2, fr = legacyScope ()
             do! h.SeedRaw [ v1; v2; fr ]
 
-            let byContent (f: Fact) = f.Subject, f.Metric, f.Value, f.AsOf
+            let faults label (read: Async<Result<'T, FactStoreError>>) = async {
+                match! read with
+                | Error(FactStoreError.StorageFault _) -> ()
+                | Error other -> failtestf "%s: expected a storage fault, got %s" label (FactStoreError.describe other)
+                | Ok answer -> failtestf "%s: expected a storage fault, got an answer: %A" label answer
+            }
 
-            let! headBefore =
-                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
-                |> TestScope.ok
+            do!
+                faults
+                    "the current head"
+                    (h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric))
 
-            let! asOfBefore =
-                h.Store.Query(
-                    TestScope.resolved h.Scope,
-                    FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1
-                )
-                |> TestScope.ok
+            do! faults "the legacy id" (h.Store.Get(TestScope.resolved h.Scope, v2.FactId))
+        }
 
-            let! frBefore =
-                h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
-                |> TestScope.ok
+        testCaseAsync "a migrated store answers every query by content, under the recomputed ids"
+        <| async {
+            let h = harness ()
+            let v1, v2, fr = legacyScope ()
+            let c1, c2, cfr = canonicalScope ()
+            do! h.SeedRaw [ v1; v2; fr ]
 
             let! report = h.Migrate false
             let r = migrated report
             Expect.equal r.Rekeyed 3 "every legacy id moved"
 
-            let! headAfter =
+            let! head =
                 h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric v2.Subject v2.Metric)
                 |> TestScope.ok
 
-            let! asOfAfter =
+            let! asOf =
                 h.Store.Query(
                     TestScope.resolved h.Scope,
                     FactQuery.forSubjectMetric v1.Subject v1.Metric |> FactQuery.asOf t1
                 )
                 |> TestScope.ok
 
-            let! frAfter =
+            let! history =
+                h.Store.Query(
+                    TestScope.resolved h.Scope,
+                    {
+                        FactQuery.forSubjectMetric v1.Subject v1.Metric with
+                            IncludeSuperseded = true
+                    }
+                )
+                |> TestScope.ok
+
+            let! other =
                 h.Store.Query(TestScope.resolved h.Scope, FactQuery.forSubjectMetric fr.Subject fr.Metric)
                 |> TestScope.ok
 
-            Expect.equal (headAfter |> List.map byContent) (headBefore |> List.map byContent) "the current head"
-            Expect.equal (asOfAfter |> List.map byContent) (asOfBefore |> List.map byContent) "the AsOf read"
-            Expect.equal (frAfter |> List.map byContent) (frBefore |> List.map byContent) "the other lineage"
-
-            for f in headAfter @ asOfAfter @ frAfter do
-                Expect.equal f.FactId (Fact.computeFor f) "every fact is under its recomputed id"
-
-            let newV1 = Fact.computeFor v1
-            let newV2 = Fact.computeFor v2
+            Expect.equal head [ c2 ] "the current head is the second version, re-keyed"
+            Expect.equal asOf [ c1 ] "the AsOf read before the second version sees the first, re-keyed"
+            Expect.equal (byId history) (byId [ c1; c2 ]) "the lineage's history, re-keyed"
+            Expect.equal other [ cfr ] "the other lineage, re-keyed"
 
             let! chain =
-                h.Store.QuerySupersessionChain(TestScope.resolved h.Scope, newV2)
+                h.Store.QuerySupersessionChain(TestScope.resolved h.Scope, c2.FactId)
                 |> TestScope.ok
 
-            Expect.equal (chain |> List.map _.FactId |> Set.ofList) (Set.ofList [ newV1; newV2 ]) "the chain, re-keyed"
+            Expect.equal (byId chain) (byId [ c1; c2 ]) "the chain, re-keyed"
 
             Expect.equal
-                (chain |> List.tryFind (fun f -> f.FactId = newV2) |> Option.bind _.Supersedes)
-                (Some newV1)
+                (chain
+                 |> List.tryFind (fun f -> f.FactId = c2.FactId)
+                 |> Option.bind _.Supersedes)
+                (Some c1.FactId)
                 "the supersession link names the predecessor's new id"
+
+            let! got = h.Store.Get(TestScope.resolved h.Scope, c2.FactId) |> TestScope.ok
+            Expect.equal got (Some c2) "the new id resolves to the fact"
 
             let! legacy = h.Store.Get(TestScope.resolved h.Scope, v2.FactId) |> TestScope.ok
             Expect.isNone legacy "the legacy id is gone — moved, not dual-read"
+
+            let! stored = h.Stored()
+            Expect.equal (byId stored) (byId [ c1; c2; cfr ]) "the scope holds exactly the re-keyed facts"
         }
 
         testCaseAsync "a second run changes nothing"
         <| async {
             let h = harness ()
             let v1, v2, fr = legacyScope ()
+            let c1, c2, cfr = canonicalScope ()
             do! h.SeedRaw [ v1; v2; fr ]
             let! _ = h.Migrate false
             let! again = h.Migrate false
@@ -347,6 +581,9 @@ let idMigrationTests (name: string) (harness: unit -> FactIdMigrationHarness) =
             Expect.equal (r.Rekeyed, r.Relinked) (0, 0) "idempotent"
             Expect.isNone r.FirstDivergent "nothing diverges"
             Expect.equal r.FactsRead 3 "and nothing was lost or duplicated"
+
+            let! stored = h.Stored()
+            Expect.equal (byId stored) (byId [ c1; c2; cfr ]) "the scope still holds exactly the re-keyed facts"
         }
     ]
 
@@ -402,7 +639,11 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 
             let! after = wholeStore store scopeA
             let written = after |> List.filter (fun f -> not (storedIds.Contains f.FactId))
-            let timeless (f: Fact) = { f with AsOf = DateTime.MinValue }
+
+            let timeless (f: Fact) = {
+                f with
+                    AsOf = Instant.ofDateTime DateTime.MinValue
+            }
 
             let byId (facts: Fact list) =
                 facts |> List.map timeless |> List.sortBy _.FactId
@@ -435,8 +676,17 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! f = assertOk "scalar" store scopeA next
 
             Expect.equal
-                [ { f with AsOf = DateTime.MinValue } ]
-                (expected.Facts |> List.map (fun e -> { e with AsOf = DateTime.MinValue }))
+                [
+                    {
+                        f with
+                            AsOf = Instant.ofDateTime DateTime.MinValue
+                    }
+                ]
+                (expected.Facts
+                 |> List.map (fun e -> {
+                     e with
+                         AsOf = Instant.ofDateTime DateTime.MinValue
+                 }))
                 "the asserted fact is the plan's"
         }
 
@@ -513,7 +763,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! atF1 =
                 store.Query(
                     TestScope.resolved scopeA,
-                    FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f1.AsOf
+                    FactQuery.forSubjectMetric f1.Subject f1.Metric
+                    |> FactQuery.asOf (Instant.toDateTime f1.AsOf)
                 )
                 |> TestScope.ok
 
@@ -523,7 +774,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! atF2 =
                 store.Query(
                     TestScope.resolved scopeA,
-                    FactQuery.forSubjectMetric f1.Subject f1.Metric |> FactQuery.asOf f2.AsOf
+                    FactQuery.forSubjectMetric f1.Subject f1.Metric
+                    |> FactQuery.asOf (Instant.toDateTime f2.AsOf)
                 )
                 |> TestScope.ok
 
@@ -620,11 +872,11 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
 
-            let quarter (k: int) : TemporalExtent = {
-                From = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k)
-                To = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k + 3)
-                Label = None
-            }
+            let quarter (k: int) : TemporalExtent =
+                period
+                    (DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k))
+                    (DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k + 3))
+                    None
 
             let! facts =
                 [ 0..3 ]
@@ -678,11 +930,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! _ =
                 assertOk "neighbour period" store scopeA {
                     draft "uk" "revenue" "hashN" 90m with
-                        Period = {
-                            From = q2.To
-                            To = q2.To.AddMonths 3
-                            Label = None
-                        }
+                        Period = period (Instant.toDateTime q2.To) ((Instant.toDateTime q2.To).AddMonths 3) None
                 }
 
             let! chain =
@@ -696,11 +944,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
 
-            let unmarked: TemporalExtent = {
-                From = DateTime(2026, 1, 1)
-                To = DateTime(2026, 2, 1)
-                Label = None
-            }
+            let unmarked: TemporalExtent =
+                period (DateTime(2026, 1, 1)) (DateTime(2026, 2, 1)) None
 
             let! f1 =
                 assertOk "v1" store scopeA {
@@ -742,7 +987,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let store, scopeA, _ = factory ()
 
             let drafts = [
-                for i in 1..12 -> popDraft [ "eu"; sprintf "m%d" i ] (sprintf "h%d" i) (Scalar(decimal i))
+                for i in 1..12 -> popDraft [ "eu"; sprintf "m%d" i ] (sprintf "h%d" i) (scalar (decimal i))
             ]
 
             let! first = assertBatchOk "first" store scopeA drafts
@@ -769,14 +1014,14 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
 
-            let a = popDraft [ "eu"; "a" ] "h-a" (Scalar 1m)
-            let b = popDraft [ "eu"; "b" ] "h-b" (Scalar 2m)
+            let a = popDraft [ "eu"; "a" ] "h-a" (scalar 1m)
+            let b = popDraft [ "eu"; "b" ] "h-b" (scalar 2m)
             let! _ = assertBatchOk "seed" store scopeA [ a; b ]
 
             // `a` unchanged, `b` recomputed from a new input (so it
             // supersedes within its lineage), `c` brand new.
-            let bPrime = popDraft [ "eu"; "b" ] "h-b2" (Scalar 22m)
-            let c = popDraft [ "eu"; "c" ] "h-c" (Scalar 3m)
+            let bPrime = popDraft [ "eu"; "b" ] "h-b2" (scalar 22m)
+            let c = popDraft [ "eu"; "c" ] "h-c" (scalar 3m)
             let! mixed = assertBatchOk "mixed" store scopeA [ a; bPrime; c ]
 
             Expect.equal mixed.DraftCount 3 "three drafts submitted"
@@ -805,13 +1050,13 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let store, scopeA, scopeB = factory ()
 
             let drafts = [
-                popDraft [ "eu"; "fr" ] "h-fr" (Scalar 20m)
-                popDraft [ "eu"; "uk" ] "h-uk-1" (Scalar 15m)
+                popDraft [ "eu"; "fr" ] "h-fr" (scalar 20m)
+                popDraft [ "eu"; "uk" ] "h-uk-1" (scalar 15m)
                 // Same lineage as the draft above — it must supersede it
                 // WITHIN the batch, which is the case a naive batch
                 // implementation gets wrong by deriving every head from
                 // one pre-batch snapshot of the log.
-                popDraft [ "eu"; "uk" ] "h-uk-2" (Scalar 30m)
+                popDraft [ "eu"; "uk" ] "h-uk-2" (scalar 30m)
                 popDraft [ "na"; "us" ] "h-us" (Categorical "not measured")
             ]
 
@@ -827,9 +1072,9 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                 |> List.sortBy (fun (factId, _, _) -> factId)
 
             let! batched = wholeStore store scopeA
-            let! scalar = wholeStore store scopeB
+            let! oneByOne = wholeStore store scopeB
 
-            Expect.equal (identity batched) (identity scalar) "same facts, same derived supersession edges"
+            Expect.equal (identity batched) (identity oneByOne) "same facts, same derived supersession edges"
 
             let! batchedHeads = store.Query(TestScope.resolved scopeA, FactQuery.all) |> TestScope.ok
             let! scalarHeads = store.Query(TestScope.resolved scopeB, FactQuery.all) |> TestScope.ok
@@ -845,14 +1090,14 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
                 store.Query(TestScope.resolved scopeA, FactQuery.forSubjectMetric drafts[1].Subject drafts[1].Metric)
                 |> TestScope.ok
 
-            Expect.equal (uk |> List.map _.Value) [ Scalar 30m ] "the batch's later draft is the current head"
+            Expect.equal (uk |> List.map _.Value) [ scalar 30m ] "the batch's later draft is the current head"
         }
 
         testCaseAsync "a batch is confined to its scope"
         <| async {
             let store, scopeA, scopeB = factory ()
 
-            let drafts = [ popDraft [ "eu" ] "h-eu" (Scalar 10m); popDraft [ "na" ] "h-na" (Scalar 40m) ]
+            let drafts = [ popDraft [ "eu" ] "h-eu" (scalar 10m); popDraft [ "na" ] "h-na" (scalar 40m) ]
 
             let! _ = assertBatchOk "batch" store scopeA drafts
 
@@ -871,14 +1116,14 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
         <| async {
             let store, scopeA, _ = factory ()
 
-            let good1 = popDraft [ "eu"; "fr" ] "h-fr" (Scalar 20m)
-            let good2 = popDraft [ "eu"; "uk" ] "h-uk" (Scalar 30m)
+            let good1 = popDraft [ "eu"; "fr" ] "h-fr" (scalar 20m)
+            let good2 = popDraft [ "eu"; "uk" ] "h-uk" (scalar 30m)
 
             // A degenerate valid-time extent: no period-overlap clause can
             // ever match `[From, From)`, so the fact would be written and
             // then invisible to every read that filters by period.
             let malformed = {
-                popDraft [ "eu"; "de" ] "h-de" (Scalar 40m) with
+                popDraft [ "eu"; "de" ] "h-de" (scalar 40m) with
                     Period = { q2 with To = q2.From }
             }
 
@@ -897,14 +1142,61 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             Expect.isEmpty stored "a rejected batch writes nothing at all — not even its well-formed drafts"
         }
 
+        testCaseAsync "a draft carrying a token the Fact kernel refuses is never written"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let good = popDraft [ "eu"; "fr" ] "h-fr" (scalar 20m)
+
+            for label, refused in kernelRefusedDrafts do
+                let! batch = store.AssertBatch(TestScope.resolved scopeA, [ good; refused ])
+
+                match batch with
+                | Error(FactStoreError.MalformedDrafts(count, [ offender ]) as error) ->
+                    Expect.equal count 2 (sprintf "%s: the refusal counts the batch" label)
+                    Expect.equal offender.Position 1 (sprintf "%s: and names the offender" label)
+
+                    Expect.stringContains
+                        (FactStoreError.describe error)
+                        "the Fact kernel refuses it"
+                        (sprintf "%s: as the kernel's refusal" label)
+                | Error other ->
+                    failtestf "%s: expected a malformed-batch refusal, got %s" label (FactStoreError.describe other)
+                | Ok receipt ->
+                    failtestf "%s: expected a refusal, got a receipt over %d drafts" label receipt.DraftCount
+
+                // The scalar path has no pre-flight; the store still writes
+                // nothing it cannot write.
+                let! scalarWrite = store.Assert(TestScope.resolved scopeA, refused)
+                Expect.isError scalarWrite (sprintf "%s: a scalar assert of it fails" label)
+
+                let! stored = wholeStore store scopeA
+                Expect.isEmpty stored (sprintf "%s: and nothing was written" label)
+        }
+
+        testCaseAsync "an empty path member is refused by the draft's shape, before the kernel is asked"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let empty = popDraft [ "eu"; "" ] "h-empty" (scalar 20m)
+            let! batch = store.AssertBatch(TestScope.resolved scopeA, [ empty ])
+
+            match batch with
+            | Error(FactStoreError.MalformedDrafts(1, [ offender ])) ->
+                Expect.equal offender.Defects [ "subject path has an empty member id" ] "the shape defect, alone"
+            | Error other -> failtestf "expected a malformed-batch refusal, got %s" (FactStoreError.describe other)
+            | Ok receipt -> failtestf "expected a refusal, got a receipt over %d drafts" receipt.DraftCount
+
+            let! stored = wholeStore store scopeA
+            Expect.isEmpty stored "nothing was written"
+        }
+
         testCaseAsync "a batch keeps the population read model current"
         <| async {
             let store, scopeA, _ = factory ()
 
             let! _ =
                 assertBatchOk "seed" store scopeA [
-                    popDraft [ "eu"; "fr" ] "h-fr" (Scalar 20m)
-                    popDraft [ "na"; "us" ] "h-us" (Scalar 60m)
+                    popDraft [ "eu"; "fr" ] "h-fr" (scalar 20m)
+                    popDraft [ "na"; "us" ] "h-us" (scalar 60m)
                 ]
 
             // Read FIRST, so an implementation that maintains a derived
@@ -918,8 +1210,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             // subject the model has never seen.
             let! _ =
                 assertBatchOk "second" store scopeA [
-                    popDraft [ "eu"; "fr" ] "h-fr-2" (Scalar 99m)
-                    popDraft [ "na"; "ca" ] "h-ca" (Scalar 5m)
+                    popDraft [ "eu"; "fr" ] "h-fr-2" (scalar 99m)
+                    popDraft [ "na"; "ca" ] "h-ca" (scalar 5m)
                 ]
 
             let! after = store.QueryPopulation(TestScope.resolved scopeA, level2Descending)
@@ -944,7 +1236,7 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let size = BatchAssertReceipt.IdListCap + 5
 
             let drafts = [
-                for i in 1..size -> popDraft [ "eu"; sprintf "m%d" i ] (sprintf "h%d" i) (Scalar(decimal i))
+                for i in 1..size -> popDraft [ "eu"; sprintf "m%d" i ] (sprintf "h%d" i) (scalar (decimal i))
             ]
 
             let! receipt = assertBatchOk "capped" store scopeA drafts
@@ -1239,7 +1531,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             let! r =
                 store.QueryPopulation(
                     TestScope.resolved scopeA,
-                    level2Descending |> PopulationQuery.asOf seeded.UkFirst.AsOf
+                    level2Descending
+                    |> PopulationQuery.asOf (Instant.toDateTime seeded.UkFirst.AsOf)
                 )
 
             let population = okResult "as-of replay" r
@@ -1509,8 +1802,8 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             Expect.equal stats.Minimum (Some 20m) "smallest comparable value"
             Expect.equal stats.Maximum (Some 99m) "largest comparable value"
             Expect.equal stats.Mean (Some 52.25m) "mean over the comparable members only"
-            Expect.equal stats.PeriodFrom (Some q2.From) "period coverage lower bound"
-            Expect.equal stats.PeriodTo (Some q2.To) "period coverage upper bound"
+            Expect.equal stats.PeriodFrom (Some(Instant.toDateTime q2.From)) "period coverage lower bound"
+            Expect.equal stats.PeriodTo (Some(Instant.toDateTime q2.To)) "period coverage upper bound"
 
             Expect.equal
                 (stats.Freshness.FreshCount + stats.Freshness.StaleCount)
@@ -1681,18 +1974,9 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
 let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> IFactStore * string * string) =
 
     let metric (direction: DirectionOfBetter) (canonical: string option) : MetricDefinition = {
-        Id = "elasticity"
-        Name = "Elasticity"
-        Unit = "ratio"
-        Dimensionality = "ratio"
-        Direction = direction
-        DisplayFormat = "N2"
-        Staleness = UntilSuperseded
-        ProducingOperation = None
-        CanonicalMethod = canonical
-        RecomputePolicy = None
-        RollUp = None
-        Context = None
+        ToolUp.Platform.Tests.KernelFixtures.metric "elasticity" "Elasticity" "ratio" "ratio" "N2" with
+            Direction = direction
+            CanonicalMethod = canonical
     }
 
     let registryOf (direction: DirectionOfBetter) (canonical: string option) =
@@ -1950,39 +2234,21 @@ let private differentialRegistry: IMetricRegistry =
         {
             Module = "test"
             Definition = {
-                Id = "elasticity"
-                Name = "Elasticity"
-                Unit = "ratio"
-                Dimensionality = "ratio"
-                Direction = HigherIsBetter
-                DisplayFormat = "N2"
-                Staleness = UntilSuperseded
-                ProducingOperation = None
-                CanonicalMethod = Some "computed:rollup"
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
+                metric "elasticity" "Elasticity" "ratio" "ratio" "N2" with
+                    Direction = HigherIsBetter
+                    CanonicalMethod = Some "computed:rollup"
             }
         }
     ] []
 
-let private q3Differential: TemporalExtent = {
-    From = q2.To
-    To = q2.To.AddMonths 3
-    Label = Some "Q3-2026"
-}
+let private q3Differential: TemporalExtent =
+    period (Instant.toDateTime q2.To) ((Instant.toDateTime q2.To).AddMonths 3) (Some "Q3-2026")
 
-let private unmarkedDifferential: TemporalExtent = {
-    From = DateTime(2026, 1, 1)
-    To = DateTime(2026, 2, 1)
-    Label = None
-}
+let private unmarkedDifferential: TemporalExtent =
+    period (DateTime(2026, 1, 1)) (DateTime(2026, 2, 1)) None
 
-let private localDifferential: TemporalExtent = {
-    From = DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Local)
-    To = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Local)
-    Label = None
-}
+let private localDifferential: TemporalExtent =
+    period (DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Local)) (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Local)) None
 
 let private rollupMethod = Computed("rollup", "1", "p0")
 let private estimatorMethod = Computed("estimator", "1", "p0")
@@ -2017,71 +2283,97 @@ let private differentialDraft
 /// non-comparable shapes, a second depth, a neighbouring metric, awkward
 /// and empty path segments, equal magnitudes at different scales) plus the
 /// Phase 890 point-read shapes (several periods, unmarked and local-kind
-/// periods, supersession within each), asserted one draft at a time — then
-/// a batch carrying one lineage twice.
+/// periods, supersession within each), one draft at a time — then a batch
+/// carrying one lineage twice. A draft the write path refuses (a path
+/// segment holding `>` or `|`, an empty one) is put at rest instead, as an
+/// earlier store left it (`seedDifferential`).
 let private differentialDrafts: FactDraft list = [
     for i in 0..5 do
         differentialDraft
             [ "eu"; sprintf "sku-%06d" i ]
             "elasticity"
             rollupMethod
-            (Scalar(decimal (10 * i)))
+            (scalar (decimal (10 * i)))
             (sprintf "h%d" i)
-    differentialDraft [ "eu"; "sku-000000" ] "elasticity" rollupMethod (Scalar 95m) "h0-v2"
-    differentialDraft [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar 77m) "cfo-1"
+    differentialDraft [ "eu"; "sku-000000" ] "elasticity" rollupMethod (scalar 95m) "h0-v2"
+    differentialDraft [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (scalar 77m) "cfo-1"
     differentialDraft [ "eu"; "sku-000006" ] "elasticity" rollupMethod (Absent "no data loaded") "h6"
     differentialDraft [ "eu"; "sku-000007" ] "elasticity" rollupMethod (Categorical "n/a") "h7"
-    differentialDraft [ "eu"; "sku-000008" ] "elasticity" rollupMethod (Interval(1m, 2m)) "h8"
-    differentialDraft [ "eu" ] "elasticity" rollupMethod (Scalar 500m) "hroot"
-    differentialDraft [ "eu"; "sku-000000" ] "revenue" rollupMethod (Scalar 1234m) "rev0"
-    differentialDraft [ "eu"; "we>ird\tta\\b\nnl" ] "elasticity" rollupMethod (Scalar 42m) "hodd"
-    differentialDraft [ "eu"; "" ] "elasticity" rollupMethod (Scalar 43.0m) "hempty"
-    differentialDraft [ "eu"; "sku-000009" ] "elasticity" rollupMethod (Scalar 43.00m) "htie"
-    differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 1m) "uk-q2-v1"
-    differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 2m) "uk-q2-v2"
-    differentialDraft [ "uk" ] "revenue" estimatorMethod (Scalar 3m) "uk-q2-est"
+    differentialDraft
+        [ "eu"; "sku-000008" ]
+        "elasticity"
+        rollupMethod
+        (Interval(DecimalText.ofDecimal 1m, DecimalText.ofDecimal 2m))
+        "h8"
+    differentialDraft [ "eu" ] "elasticity" rollupMethod (scalar 500m) "hroot"
+    differentialDraft [ "eu"; "sku-000000" ] "revenue" rollupMethod (scalar 1234m) "rev0"
+    differentialDraft [ "eu"; "we>ird\tta\\b\nnl" ] "elasticity" rollupMethod (scalar 42m) "hodd"
+    differentialDraft [ "eu"; "" ] "elasticity" rollupMethod (scalar 43.0m) "hempty"
+    differentialDraft [ "eu"; "sku-000009" ] "elasticity" rollupMethod (scalar 43.00m) "htie"
+    differentialDraft [ "uk" ] "revenue" rollupMethod (scalar 1m) "uk-q2-v1"
+    differentialDraft [ "uk" ] "revenue" rollupMethod (scalar 2m) "uk-q2-v2"
+    differentialDraft [ "uk" ] "revenue" estimatorMethod (scalar 3m) "uk-q2-est"
     {
-        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 4m) "uk-q3" with
+        differentialDraft [ "uk" ] "revenue" rollupMethod (scalar 4m) "uk-q3" with
             Period = q3Differential
     }
     {
-        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 5m) "uk-un-v1" with
+        differentialDraft [ "uk" ] "revenue" rollupMethod (scalar 5m) "uk-un-v1" with
             Period = unmarkedDifferential
     }
     {
-        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 6m) "uk-un-v2" with
+        differentialDraft [ "uk" ] "revenue" rollupMethod (scalar 6m) "uk-un-v2" with
             Period = unmarkedDifferential
     }
     {
-        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 7m) "uk-loc" with
+        differentialDraft [ "uk" ] "revenue" rollupMethod (scalar 7m) "uk-loc" with
             Period = localDifferential
     }
-    differentialDraft [ "uk" ] "cost" rollupMethod (Scalar 8m) "uk-cost"
-    differentialDraft [ "fr" ] "revenue" rollupMethod (Scalar 9m) "fr-q2"
-    differentialDraft awkwardDifferentialPath "revenue" rollupMethod (Scalar 10m) "awk-v1"
-    differentialDraft awkwardDifferentialPath "revenue" rollupMethod (Scalar 11m) "awk-v2"
-    differentialDraft [ "de" ] "elasticity" rollupMethod (Scalar 12m) "de-rollup"
-    differentialDraft [ "de" ] "elasticity" estimatorMethod (Scalar 13m) "de-est"
+    differentialDraft [ "uk" ] "cost" rollupMethod (scalar 8m) "uk-cost"
+    differentialDraft [ "fr" ] "revenue" rollupMethod (scalar 9m) "fr-q2"
+    differentialDraft awkwardDifferentialPath "revenue" rollupMethod (scalar 10m) "awk-v1"
+    differentialDraft awkwardDifferentialPath "revenue" rollupMethod (scalar 11m) "awk-v2"
+    differentialDraft [ "de" ] "elasticity" rollupMethod (scalar 12m) "de-rollup"
+    differentialDraft [ "de" ] "elasticity" estimatorMethod (scalar 13m) "de-est"
     // An idempotent replay — no new fact and no clock read, in either store.
-    differentialDraft [ "fr" ] "revenue" rollupMethod (Scalar 9m) "fr-q2"
+    differentialDraft [ "fr" ] "revenue" rollupMethod (scalar 9m) "fr-q2"
 ]
 
 let private differentialBatch: FactDraft list = [
-    differentialDraft [ "eu"; "sku-000003" ] "elasticity" rollupMethod (Scalar 999m) "h3-v2"
-    differentialDraft [ "eu"; "sku-000003" ] "elasticity" rollupMethod (Scalar 998m) "h3-v3"
-    differentialDraft [ "eu"; "sku-000004" ] "elasticity" (HumanAsserted "cfo") (Scalar 61m) "cfo-4"
-    differentialDraft [ "eu"; "sku-000010" ] "elasticity" rollupMethod (Scalar 88m) "h10"
-    differentialDraft [ "eu"; "sku-000002" ] "elasticity" rollupMethod (Scalar 20m) "h2"
+    differentialDraft [ "eu"; "sku-000003" ] "elasticity" rollupMethod (scalar 999m) "h3-v2"
+    differentialDraft [ "eu"; "sku-000003" ] "elasticity" rollupMethod (scalar 998m) "h3-v3"
+    differentialDraft [ "eu"; "sku-000004" ] "elasticity" (HumanAsserted "cfo") (scalar 61m) "cfo-4"
+    differentialDraft [ "eu"; "sku-000010" ] "elasticity" rollupMethod (scalar 88m) "h10"
+    differentialDraft [ "eu"; "sku-000002" ] "elasticity" rollupMethod (scalar 20m) "h2"
 ]
 
-let private seedDifferential (store: IFactStore) (scope: string) : Async<Fact list * BatchAssertReceipt> = async {
+/// Assert the seed's drafts in order, putting each run of consecutive
+/// drafts the write path refuses at rest in one step, each at the next
+/// reading of the store's own `clock` — what an assert would have stamped —
+/// so every fact, and every transaction time after it, is what the store
+/// held before the kernel refused those tokens.
+let private seedDifferential (h: FactStoreAtRest) (clock: unit -> DateTime) : Async<Fact list * BatchAssertReceipt> = async {
     let written = ResizeArray<Fact>()
+    let pending = ResizeArray<FactDraft>()
+
+    let flush () = async {
+        if pending.Count > 0 then
+            let facts = AtRest.facts clock (List.ofSeq pending)
+            pending.Clear()
+            do! h.SeedAtRest facts
+            written.AddRange facts
+    }
 
     for d in differentialDrafts do
-        let! f = assertOk "differential seed" store scope d
-        written.Add f
+        if List.isEmpty (FactDraft.defects d) then
+            do! flush ()
+            let! f = assertOk "differential seed" h.Target h.TargetScope d
+            written.Add f
+        else
+            pending.Add d
 
-    let! receipt = assertBatchOk "differential batch" store scope differentialBatch
+    do! flush ()
+    let! receipt = assertBatchOk "differential batch" h.Target h.TargetScope differentialBatch
     return List.ofSeq written, receipt
 }
 
@@ -2090,11 +2382,8 @@ let private populationMatrix: (string * PopulationQuery) list =
     let baseQuery = PopulationQuery.create (MetricRef "elasticity") "geography"
     let level2 = { baseQuery with Level = Some 2 }
 
-    let noWhen = {
-        From = DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-        To = DateTime(2020, 2, 1, 0, 0, 0, DateTimeKind.Utc)
-        Label = None
-    }
+    let noWhen =
+        period (DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)) (DateTime(2020, 2, 1, 0, 0, 0, DateTimeKind.Utc)) None
 
     [
         "registry-directed, default top-k", level2
@@ -2368,18 +2657,28 @@ let private expectContractOrder (label: string) (facts: Fact list) =
 
 /// Hold `candidate` to `reference` over one seeded fact base and every
 /// query shape (Phase 888). Each factory builds a FRESH store over the
-/// supplied registry and clock, and returns it with a scope to seed.
+/// supplied registry and clock, and returns it with a scope to seed and a
+/// way to put facts in that scope at rest.
 let differentialTests
     (name: string)
-    (referenceFactory: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
-    (candidateFactory: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
+    (referenceFactory: IMetricRegistry option -> (unit -> DateTime) -> FactStoreAtRest)
+    (candidateFactory: IMetricRegistry option -> (unit -> DateTime) -> FactStoreAtRest)
     =
 
     let bothOver (registry: IMetricRegistry option) = async {
-        let reference, referenceScope = referenceFactory registry (differentialClock ())
-        let candidate, candidateScope = candidateFactory registry (differentialClock ())
-        let! referenceFacts, referenceReceipt = seedDifferential reference referenceScope
-        let! candidateFacts, candidateReceipt = seedDifferential candidate candidateScope
+        let referenceClock = differentialClock ()
+        let candidateClock = differentialClock ()
+        let referenceHarness = referenceFactory registry referenceClock
+        let candidateHarness = candidateFactory registry candidateClock
+
+        let reference, referenceScope =
+            referenceHarness.Target, referenceHarness.TargetScope
+
+        let candidate, candidateScope =
+            candidateHarness.Target, candidateHarness.TargetScope
+
+        let! referenceFacts, referenceReceipt = seedDifferential referenceHarness referenceClock
+        let! candidateFacts, candidateReceipt = seedDifferential candidateHarness candidateClock
 
         Expect.equal candidateFacts referenceFacts "the seed wrote the same facts, with the same transaction times"
         Expect.equal candidateReceipt referenceReceipt "the batch settled identically, digest included"
@@ -2389,7 +2688,7 @@ let differentialTests
 
     let comparePopulation (registry: IMetricRegistry option) = async {
         let! reference, referenceScope, candidate, candidateScope, facts = bothOver registry
-        let midpoint = facts[12].AsOf
+        let midpoint = Instant.toDateTime facts[12].AsOf
 
         let queries =
             populationMatrix
@@ -2404,7 +2703,9 @@ let differentialTests
 
     let comparePoints (registry: IMetricRegistry option) = async {
         let! reference, referenceScope, candidate, candidateScope, facts = bothOver registry
-        let instants = [ facts[0].AsOf; facts[13].AsOf; facts[20].AsOf ]
+
+        let instants =
+            [ facts[0].AsOf; facts[13].AsOf; facts[20].AsOf ] |> List.map Instant.toDateTime
 
         let renderCompetition (xs: FactWithCompetition list) =
             xs

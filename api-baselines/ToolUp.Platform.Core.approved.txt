@@ -7137,8 +7137,6 @@ ToolUp.Platform.GraphStoreMode.Tag : System.Int32 { get }
 ToolUp.Platform.GraphStoreMode+Tags (class)
 ToolUp.Platform.GraphStoreMode+Tags.CustomGraphStore : System.Int32 (literal)
 ToolUp.Platform.GraphStoreMode+Tags.InMemoryGraphStore : System.Int32 (literal)
-ToolUp.Platform.Grounding.CanonicalMethod (class)
-ToolUp.Platform.Grounding.CanonicalMethod.matches(System.String, System.String) : System.Boolean
 ToolUp.Platform.Grounding.DatasetModelDeclaration (class)
 ToolUp.Platform.Grounding.DatasetModelDeclaration..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRelation], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableMeasure])
 ToolUp.Platform.Grounding.DatasetModelDeclaration.Measures : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableMeasure] { get }
@@ -7151,18 +7149,6 @@ ToolUp.Platform.Grounding.DatasetModelRegistration (class)
 ToolUp.Platform.Grounding.DatasetModelRegistration..ctor(System.String, ToolUp.Platform.Grounding.DatasetModelDeclaration)
 ToolUp.Platform.Grounding.DatasetModelRegistration.Model : ToolUp.Platform.Grounding.DatasetModelDeclaration { get }
 ToolUp.Platform.Grounding.DatasetModelRegistration.Module : System.String { get }
-ToolUp.Platform.Grounding.DirectionOfBetter (class)
-ToolUp.Platform.Grounding.DirectionOfBetter.HigherIsBetter : ToolUp.Platform.Grounding.DirectionOfBetter { get }
-ToolUp.Platform.Grounding.DirectionOfBetter.IsHigherIsBetter : System.Boolean { get }
-ToolUp.Platform.Grounding.DirectionOfBetter.IsLowerIsBetter : System.Boolean { get }
-ToolUp.Platform.Grounding.DirectionOfBetter.IsNeutral : System.Boolean { get }
-ToolUp.Platform.Grounding.DirectionOfBetter.LowerIsBetter : ToolUp.Platform.Grounding.DirectionOfBetter { get }
-ToolUp.Platform.Grounding.DirectionOfBetter.Neutral : ToolUp.Platform.Grounding.DirectionOfBetter { get }
-ToolUp.Platform.Grounding.DirectionOfBetter.Tag : System.Int32 { get }
-ToolUp.Platform.Grounding.DirectionOfBetter+Tags (class)
-ToolUp.Platform.Grounding.DirectionOfBetter+Tags.HigherIsBetter : System.Int32 (literal)
-ToolUp.Platform.Grounding.DirectionOfBetter+Tags.LowerIsBetter : System.Int32 (literal)
-ToolUp.Platform.Grounding.DirectionOfBetter+Tags.Neutral : System.Int32 (literal)
 ToolUp.Platform.Grounding.FactTableBinding (class)
 ToolUp.Platform.Grounding.FactTableBinding.IsBindAllFactTables : System.Boolean { get }
 ToolUp.Platform.Grounding.FactTableBinding.IsBindFactTable : System.Boolean { get }
@@ -7215,7 +7201,7 @@ ToolUp.Platform.Grounding.FactTableDefinition.SchemaVersion : System.Int32 { get
 ToolUp.Platform.Grounding.FactTableDefinitionModule (class)
 ToolUp.Platform.Grounding.FactTableDefinitionModule.column(System.String, ToolUp.Platform.Grounding.FactTableValueShape) : ToolUp.Platform.Grounding.FactTableColumn
 ToolUp.Platform.Grounding.FactTableDefinitionModule.columnDisclosure(ToolUp.Platform.Grounding.FactTableDefinition, ToolUp.Platform.Grounding.FactTableColumn) : ToolUp.Platform.Grounding.FactTableDisclosure
-ToolUp.Platform.Grounding.FactTableDefinitionModule.levelDepth(ToolUp.Platform.Grounding.SubjectDefinition, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
+ToolUp.Platform.Grounding.FactTableDefinitionModule.levelDepth(Fuaran.Facts.SubjectDefinition, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
 ToolUp.Platform.Grounding.FactTableDefinitionModule.metrics(ToolUp.Platform.Grounding.FactTableDefinition) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Grounding.FactTableDescription (class)
 ToolUp.Platform.Grounding.FactTableDescription..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
@@ -7460,29 +7446,15 @@ ToolUp.Platform.Grounding.IFactTableRegistry.Tables : Microsoft.FSharp.Collectio
 ToolUp.Platform.Grounding.IFactTableRegistry.TablesByModule(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDefinition]
 ToolUp.Platform.Grounding.IFactTableRegistry.TryGetTable(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDefinition]
 ToolUp.Platform.Grounding.IMetricRegistry (interface)
-ToolUp.Platform.Grounding.IMetricRegistry.Metrics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition] { get }
-ToolUp.Platform.Grounding.IMetricRegistry.MetricsByModule(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition]
-ToolUp.Platform.Grounding.IMetricRegistry.MetricsByOperation(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition]
-ToolUp.Platform.Grounding.IMetricRegistry.Subjects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition] { get }
-ToolUp.Platform.Grounding.IMetricRegistry.TryGetMetric(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.MetricDefinition]
-ToolUp.Platform.Grounding.IMetricRegistry.TryGetSubject(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition]
-ToolUp.Platform.Grounding.MetricDefinition (class)
-ToolUp.Platform.Grounding.MetricDefinition..ctor(System.String, System.String, System.String, System.String, ToolUp.Platform.Grounding.DirectionOfBetter, System.String, ToolUp.Platform.Grounding.StalenessPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RecomputePolicy], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RollUp], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Platform.Grounding.MetricDefinition.CanonicalMethod : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Grounding.MetricDefinition.Context : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Grounding.MetricDefinition.Dimensionality : System.String { get }
-ToolUp.Platform.Grounding.MetricDefinition.Direction : ToolUp.Platform.Grounding.DirectionOfBetter { get }
-ToolUp.Platform.Grounding.MetricDefinition.DisplayFormat : System.String { get }
-ToolUp.Platform.Grounding.MetricDefinition.Id : System.String { get }
-ToolUp.Platform.Grounding.MetricDefinition.Name : System.String { get }
-ToolUp.Platform.Grounding.MetricDefinition.ProducingOperation : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Grounding.MetricDefinition.RecomputePolicy : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RecomputePolicy] { get }
-ToolUp.Platform.Grounding.MetricDefinition.RollUp : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RollUp] { get }
-ToolUp.Platform.Grounding.MetricDefinition.Staleness : ToolUp.Platform.Grounding.StalenessPolicy { get }
-ToolUp.Platform.Grounding.MetricDefinition.Unit : System.String { get }
+ToolUp.Platform.Grounding.IMetricRegistry.Metrics : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.MetricDefinition] { get }
+ToolUp.Platform.Grounding.IMetricRegistry.MetricsByModule(System.String) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.MetricDefinition]
+ToolUp.Platform.Grounding.IMetricRegistry.MetricsByOperation(System.String) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.MetricDefinition]
+ToolUp.Platform.Grounding.IMetricRegistry.Subjects : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Facts.SubjectDefinition] { get }
+ToolUp.Platform.Grounding.IMetricRegistry.TryGetMetric(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.MetricDefinition]
+ToolUp.Platform.Grounding.IMetricRegistry.TryGetSubject(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.SubjectDefinition]
 ToolUp.Platform.Grounding.MetricRegistration (class)
-ToolUp.Platform.Grounding.MetricRegistration..ctor(System.String, ToolUp.Platform.Grounding.MetricDefinition)
-ToolUp.Platform.Grounding.MetricRegistration.Definition : ToolUp.Platform.Grounding.MetricDefinition { get }
+ToolUp.Platform.Grounding.MetricRegistration..ctor(System.String, Fuaran.Facts.MetricDefinition)
+ToolUp.Platform.Grounding.MetricRegistration.Definition : Fuaran.Facts.MetricDefinition { get }
 ToolUp.Platform.Grounding.MetricRegistration.Module : System.String { get }
 ToolUp.Platform.Grounding.MetricRegistry (class)
 ToolUp.Platform.Grounding.MetricRegistry.build(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectRegistration]) : ToolUp.Platform.Grounding.IMetricRegistry
@@ -7495,50 +7467,9 @@ ToolUp.Platform.Grounding.MetricRegistry.trySubjectDescription(ToolUp.Platform.G
 ToolUp.Platform.Grounding.OpenFactTableRun (class)
 ToolUp.Platform.Grounding.OpenFactTableRun.Record : ToolUp.Platform.Grounding.FactTableRunRecord { get }
 ToolUp.Platform.Grounding.RecomputePolicy (class)
-ToolUp.Platform.Grounding.RecomputePolicy.Eager : ToolUp.Platform.Grounding.RecomputePolicy { get }
-ToolUp.Platform.Grounding.RecomputePolicy.IsEager : System.Boolean { get }
-ToolUp.Platform.Grounding.RecomputePolicy.IsManual : System.Boolean { get }
-ToolUp.Platform.Grounding.RecomputePolicy.IsOnQuery : System.Boolean { get }
-ToolUp.Platform.Grounding.RecomputePolicy.Manual : ToolUp.Platform.Grounding.RecomputePolicy { get }
-ToolUp.Platform.Grounding.RecomputePolicy.OnQuery : ToolUp.Platform.Grounding.RecomputePolicy { get }
-ToolUp.Platform.Grounding.RecomputePolicy.Tag : System.Int32 { get }
-ToolUp.Platform.Grounding.RecomputePolicy+Tags (class)
-ToolUp.Platform.Grounding.RecomputePolicy+Tags.Eager : System.Int32 (literal)
-ToolUp.Platform.Grounding.RecomputePolicy+Tags.Manual : System.Int32 (literal)
-ToolUp.Platform.Grounding.RecomputePolicy+Tags.OnQuery : System.Int32 (literal)
-ToolUp.Platform.Grounding.RecomputePolicyModule (class)
-ToolUp.Platform.Grounding.RecomputePolicyModule.resolve(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RecomputePolicy]) : ToolUp.Platform.Grounding.RecomputePolicy
+ToolUp.Platform.Grounding.RecomputePolicy.resolve(Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.RecomputePolicy]) : Fuaran.Facts.RecomputePolicy
 ToolUp.Platform.Grounding.RollUp (class)
-ToolUp.Platform.Grounding.RollUp.IsAdditive : System.Boolean { get }
-ToolUp.Platform.Grounding.RollUp.IsNonAdditive : System.Boolean { get }
-ToolUp.Platform.Grounding.RollUp.NonAdditive : ToolUp.Platform.Grounding.RollUp { get }
-ToolUp.Platform.Grounding.RollUp.Tag : System.Int32 { get }
-ToolUp.Platform.Grounding.RollUp+Additive (class)
-ToolUp.Platform.Grounding.RollUp+Additive.tolerance : System.Decimal { get }
-ToolUp.Platform.Grounding.RollUp+Tags (class)
-ToolUp.Platform.Grounding.RollUp+Tags.Additive : System.Int32 (literal)
-ToolUp.Platform.Grounding.RollUp+Tags.NonAdditive : System.Int32 (literal)
-ToolUp.Platform.Grounding.RollUpModule (class)
-ToolUp.Platform.Grounding.RollUpModule.additiveTolerance(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.RollUp]) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
-ToolUp.Platform.Grounding.StalenessPolicy (class)
-ToolUp.Platform.Grounding.StalenessPolicy.IsFreshFor : System.Boolean { get }
-ToolUp.Platform.Grounding.StalenessPolicy.IsUntilSuperseded : System.Boolean { get }
-ToolUp.Platform.Grounding.StalenessPolicy.IsUntilUpstreamChange : System.Boolean { get }
-ToolUp.Platform.Grounding.StalenessPolicy.Tag : System.Int32 { get }
-ToolUp.Platform.Grounding.StalenessPolicy.UntilSuperseded : ToolUp.Platform.Grounding.StalenessPolicy { get }
-ToolUp.Platform.Grounding.StalenessPolicy.UntilUpstreamChange : ToolUp.Platform.Grounding.StalenessPolicy { get }
-ToolUp.Platform.Grounding.StalenessPolicy+FreshFor (class)
-ToolUp.Platform.Grounding.StalenessPolicy+FreshFor.Item : System.TimeSpan { get }
-ToolUp.Platform.Grounding.StalenessPolicy+Tags (class)
-ToolUp.Platform.Grounding.StalenessPolicy+Tags.FreshFor : System.Int32 (literal)
-ToolUp.Platform.Grounding.StalenessPolicy+Tags.UntilSuperseded : System.Int32 (literal)
-ToolUp.Platform.Grounding.StalenessPolicy+Tags.UntilUpstreamChange : System.Int32 (literal)
-ToolUp.Platform.Grounding.SubjectDefinition (class)
-ToolUp.Platform.Grounding.SubjectDefinition..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
-ToolUp.Platform.Grounding.SubjectDefinition.Calendar : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.Grounding.SubjectDefinition.Id : System.String { get }
-ToolUp.Platform.Grounding.SubjectDefinition.Levels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Platform.Grounding.SubjectDefinition.Name : System.String { get }
+ToolUp.Platform.Grounding.RollUp.additiveTolerance(Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.RollUp]) : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.Facts.DecimalText]
 ToolUp.Platform.Grounding.SubjectDescription (class)
 ToolUp.Platform.Grounding.SubjectDescription..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.Grounding.SubjectDescription.Description : System.String { get }
@@ -7549,8 +7480,8 @@ ToolUp.Platform.Grounding.SubjectDescriptionRegistration..ctor(System.String, To
 ToolUp.Platform.Grounding.SubjectDescriptionRegistration.Description : ToolUp.Platform.Grounding.SubjectDescription { get }
 ToolUp.Platform.Grounding.SubjectDescriptionRegistration.Module : System.String { get }
 ToolUp.Platform.Grounding.SubjectRegistration (class)
-ToolUp.Platform.Grounding.SubjectRegistration..ctor(System.String, ToolUp.Platform.Grounding.SubjectDefinition)
-ToolUp.Platform.Grounding.SubjectRegistration.Definition : ToolUp.Platform.Grounding.SubjectDefinition { get }
+ToolUp.Platform.Grounding.SubjectRegistration..ctor(System.String, Fuaran.Facts.SubjectDefinition)
+ToolUp.Platform.Grounding.SubjectRegistration.Definition : Fuaran.Facts.SubjectDefinition { get }
 ToolUp.Platform.Grounding.SubjectRegistration.Module : System.String { get }
 ToolUp.Platform.GroundingEnvelopeMutatedPayload (class)
 ToolUp.Platform.GroundingEnvelopeMutatedPayload..ctor(System.String, System.String, System.String, System.String, System.Int32, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTimeOffset)

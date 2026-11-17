@@ -13,6 +13,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
@@ -22,6 +23,7 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Scope
 open ToolUp.Platform.Jobs
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── Phase 623 — reactive recomputation, ACTIVATED ───────────────────
 //
@@ -53,11 +55,11 @@ let private silentLogger =
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 /// The data object every fact in this file is computed from. The id is
 /// what the fact cites in `Evidence.InputHashes` — the same string space
@@ -72,7 +74,7 @@ let private draftFor (metric: string) (inputId: string) (value: decimal) : FactD
         Path = [ "acme" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -94,18 +96,11 @@ let private clauseFor (metric: string) : FactClause = {
 }
 
 let private metricDef (id: string) (staleness: StalenessPolicy) (policy: RecomputePolicy option) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = staleness
-    ProducingOperation = Some "rollup"
-    CanonicalMethod = None
-    RecomputePolicy = policy
-    RollUp = None
-    Context = None
+    metric id id "GBP" "currency" "" with
+        Direction = HigherIsBetter
+        Staleness = staleness
+        ProducingOperation = Some "rollup"
+        RecomputePolicy = policy
 }
 
 let private registryWith (defs: MetricDefinition list) : IMetricRegistry =
@@ -634,7 +629,7 @@ let endToEndTests =
 
             // Nothing has changed yet — the fact base is quiet.
             let! before = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
-            Expect.equal (before |> List.map _.Value) [ Scalar 100m ] "the original value stands before the change"
+            Expect.equal (before |> List.map _.Value) [ scalar 100m ] "the original value stands before the change"
 
             // The one line the whole phase exists for: a data-object
             // version lands on the store the deployment composed, and the
@@ -660,7 +655,7 @@ let endToEndTests =
 
             let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
             Expect.hasLength heads 1 "one current head after the recompute"
-            Expect.equal heads.Head.Value (Scalar 120m) "the head is the recomputed value"
+            Expect.equal heads.Head.Value (scalar 120m) "the head is the recomputed value"
 
             Expect.equal
                 heads.Head.Supersedes
@@ -698,7 +693,7 @@ let endToEndTests =
                 "no recompute is scheduled under a scope nobody resolved"
 
             let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
-            Expect.equal (heads |> List.map _.Value) [ Scalar 100m ] "the fact stands unrecomputed"
+            Expect.equal (heads |> List.map _.Value) [ scalar 100m ] "the fact stands unrecomputed"
         }
 
         testCaseAsync "an unrelated object landing invalidates nothing (the walk is not a blanket sweep)"
@@ -736,7 +731,7 @@ let endToEndTests =
                 "no fact cited the object that landed"
 
             let! heads = store.Query(TestScope.resolved scope, FactQuery.all) |> TestScope.ok
-            Expect.equal (heads |> List.map _.Value) [ Scalar 100m ] "the fact base is untouched"
+            Expect.equal (heads |> List.map _.Value) [ scalar 100m ] "the fact base is untouched"
         }
 
         testCaseAsync "declaring no reactive policy costs nothing at save time (the declaration IS the opt-in)"

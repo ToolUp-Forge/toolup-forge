@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Text.Json
 open System.Threading.Tasks

@@ -8,7 +8,9 @@ open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
@@ -35,18 +37,9 @@ open ToolUp.Platform.Testing
 // ─── Fixtures ────────────────────────────────────────────────────────
 
 let private metric id canonical : MetricDefinition = {
-    Id = id
-    Name = id.ToUpperInvariant()
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = "N0"
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = canonical
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id (id.ToUpperInvariant()) "count" "count" "N0" with
+        Direction = HigherIsBetter
+        CanonicalMethod = canonical
 }
 
 let private subject id : SubjectDefinition = {

@@ -18,6 +18,7 @@ open ToolUp.Platform.Infra.IVectorStore
 open ToolUp.Platform.Infra.IEmbeddingProvider
 open ToolUp.Platform.Infra.IRetrievalPipeline
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
@@ -32,7 +33,7 @@ open ToolUp.Platform.Testing
 // The concrete `IFactStore`-backed `IFactResolver` (closing the Phase
 // 522.B seam) and its compose pickup. Covered here: the clause →
 // `FactQuery` mapping over the real store, registry-driven freshness
-// (`Grounding.StalenessPolicy` via `Freshness.derive`) + the canonical
+// (the metric's `StalenessPolicy` via `Freshness.derive`) + the canonical
 // `DisplayFormat` rendering, the supersession pointer on stale heads,
 // store-boundary scope filtering (GP 4), the one-knob DI registration
 // (`FactsCompose.withFactStore` registers store + gate + resolver
@@ -45,8 +46,8 @@ open ToolUp.Platform.Testing
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -56,7 +57,7 @@ let private draft (metric: string) (period: TemporalExtent) (inputHashes: string
         Path = [ "acme" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = Scalar(DecimalText.ofDecimal value)
     Period = period
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -79,18 +80,9 @@ let private registryWith (staleness: StalenessPolicy) (displayFormat: string) : 
         {
             Module = "TestModule"
             Definition = {
-                Id = "revenue"
-                Name = "Revenue"
-                Unit = "GBP"
-                Dimensionality = "currency"
-                Direction = HigherIsBetter
-                DisplayFormat = displayFormat
-                Staleness = staleness
-                ProducingOperation = None
-                CanonicalMethod = None
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
+                ToolUp.Platform.Tests.KernelFixtures.metric "revenue" "Revenue" "GBP" "currency" displayFormat with
+                    Direction = HigherIsBetter
+                    Staleness = staleness
             }
         }
     ] []
@@ -151,7 +143,7 @@ let resolverTests =
                     TestScope.resolved scope,
                     {
                         clauseFor "revenue" with
-                            AsOf = Some original.AsOf
+                            AsOf = Some(Instant.toDateTime original.AsOf)
                     }
                 )
 
@@ -161,7 +153,7 @@ let resolverTests =
 
                 Expect.equal
                     r.Freshness
-                    (FactStale(original.AsOf.ToUniversalTime().ToString "o"))
+                    (FactStale((Instant.toDateTime original.AsOf).ToString "o"))
                     "superseded ⇒ stale under UntilSuperseded, stamped per Freshness.derive"
 
                 Expect.equal r.SupersededBy (Some successor.FactId) "the supersession pointer names the correction"
@@ -188,7 +180,7 @@ let resolverTests =
             let scope = newScope ()
             let fact = assertFact store scope (draft "revenue" q2 [ "h1" ] 100m)
 
-            let registry = Some(registryWith (FreshFor(TimeSpan.FromHours 1.0)) "")
+            let registry = Some(registryWith (FreshFor 3600) "")
 
             // Inside the window: fresh.
             let insideWindow =
@@ -207,7 +199,7 @@ let resolverTests =
             | [ r ] ->
                 Expect.equal
                     r.Freshness
-                    (FactStale((fact.AsOf.AddHours 1.0).ToUniversalTime().ToString "o"))
+                    (FactStale(((Instant.toDateTime fact.AsOf).AddHours 1.0).ToString "o"))
                     "stale since the window expiry instant"
 
                 Expect.isNone r.SupersededBy "age-stale, not superseded — no pointer"
@@ -236,8 +228,8 @@ let resolverTests =
             let scope = newScope ()
 
             let q1: TemporalExtent = {
-                From = DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                To = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
+                From = Instant.ofDateTime (DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+                To = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
                 Label = Some "Q1-2026"
             }
 
@@ -251,8 +243,8 @@ let resolverTests =
                     TestScope.resolved scope,
                     {
                         clauseFor "revenue" with
-                            PeriodFrom = Some q1.From
-                            PeriodTo = Some q1.To
+                            PeriodFrom = Some(Instant.toDateTime q1.From)
+                            PeriodTo = Some(Instant.toDateTime q1.To)
                     }
                 )
 

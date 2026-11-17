@@ -25,6 +25,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
@@ -64,18 +65,8 @@ let private Band = "band"
 let private Change = "reading-change"
 
 let private metric (id: string) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "unit"
-    Dimensionality = "unit"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    ToolUp.Platform.Tests.KernelFixtures.metric id id "1" "unit" "" with
+        Direction = HigherIsBetter
 }
 
 let private registry: IMetricRegistry =
@@ -138,8 +129,8 @@ let private trigger (tolerance: Tolerance) : ToleranceTrigger = {
 }
 
 let private day (n: int) : TemporalExtent = {
-    From = DateTime(2026, 9, n, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 9, n + 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 9, n, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 9, n + 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some(sprintf "2026-09-%02d" n)
 }
 
@@ -150,7 +141,7 @@ let private cell (n: int) (subject: string) (column: string) (value: FactValue) 
 }
 
 let private row (n: int) (subject: string) (value: decimal) =
-    cell n subject Temperature (Scalar value)
+    cell n subject Temperature (Scalar(DecimalText.ofDecimal value))
 
 /// A logger that keeps what it is told.
 type private ToleranceLogger() =
@@ -377,7 +368,7 @@ let private firingTests =
 
                 Expect.exists
                     (entries registration)
-                    (fun e -> e = "period:" + (day 2).From.ToString "o")
+                    (fun e -> e = "period:" + (Instant.toDateTime (day 2).From).ToString "o")
                     "at the newest period"
             | fired -> failtestf "expected one firing, got %d" fired.Length
 
@@ -596,7 +587,13 @@ let private onceTests =
 
             let publish (n: int) (input: char) (value: decimal) =
                 inUnit scope (fun () ->
-                    world.Publish(scope, Pressures, n, input, [ cell n "north" Pressure (Scalar value) ]))
+                    world.Publish(
+                        scope,
+                        Pressures,
+                        n,
+                        input,
+                        [ cell n "north" Pressure (Scalar(DecimalText.ofDecimal value)) ]
+                    ))
 
             do! publish 1 'a' 10m
             do! publish 2 'b' 20m
@@ -630,7 +627,16 @@ let private onceTests =
             let both (n: int) (input: char) (value: decimal) =
                 inUnit scope (fun () -> async {
                     do! world.Publish(scope, Readings, n, input, [ row n "north" value ])
-                    do! world.Publish(scope, Humidities, n, input, [ cell n "north" Humidity (Scalar value) ])
+
+                    do!
+                        world.Publish(
+                            scope,
+                            Humidities,
+                            n,
+                            input,
+                            [ cell n "north" Humidity (Scalar(DecimalText.ofDecimal value)) ]
+                        )
+
                     Expect.isEmpty world.Fired "nothing fires until the unit completes"
                 })
 
@@ -667,7 +673,13 @@ let private onceTests =
 
             do!
                 inUnit scope (fun () ->
-                    world.Publish(scope, Humidities, 1, 'a', [ cell 1 "north" Humidity (Scalar 1m) ]))
+                    world.Publish(
+                        scope,
+                        Humidities,
+                        1,
+                        'a',
+                        [ cell 1 "north" Humidity (Scalar(DecimalText.ofDecimal 1m)) ]
+                    ))
 
             Expect.hasLength world.Fired 2 "not watched"
             Expect.hasLength world.Infos 2 "only the two first-delivery lines"

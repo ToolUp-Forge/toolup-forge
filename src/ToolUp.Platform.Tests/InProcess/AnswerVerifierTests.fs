@@ -6,11 +6,13 @@ module ToolUp.Platform.Tests.InProcess.AnswerVerifierTests
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AnswerVerifier
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── Phase 523 — numeric-fidelity answer gate ────────────────────────
 //
@@ -31,18 +33,8 @@ let private silentLogger =
 /// A metric registered with a percent display format (P1) — exercises the
 /// registry-driven precision path in `verify`.
 let private shareMetric: MetricDefinition = {
-    Id = "share"
-    Name = "Share of Voice"
-    Unit = "%"
-    Dimensionality = "ratio"
-    Direction = HigherIsBetter
-    DisplayFormat = "P1"
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    metric "share" "Share of Voice" "%" "ratio" "P1" with
+        Direction = HigherIsBetter
 }
 
 let private registry: IMetricRegistry =
@@ -101,10 +93,10 @@ let private revenueMetric: MetricDefinition = {
     shareMetric with
         Id = "revenue"
         Name = "Revenue"
-        Unit = "GBP"
+        Unit = unitOf "GBP"
         Dimensionality = "currency"
-        DisplayFormat = "N0"
-        RollUp = Some(Additive 1m)
+        DisplayFormat = formatOf "N0"
+        RollUp = Some(Additive(DecimalText.ofDecimal 1m))
 }
 
 let private derivedRegistry: IMetricRegistry =
@@ -172,13 +164,13 @@ let tests =
             <| fun _ -> Expect.isFalse (Canonical.valuesMatch 0 25000m 21800m) "£25,000 ≠ £21,800"
 
             testCase "format precision: P1 is three fraction decimals"
-            <| fun _ -> Expect.equal (Canonical.formatPrecision "P1") (Some 3) "percent scales by 100"
+            <| fun _ -> Expect.equal (Canonical.formatPrecision (formatOf "P1")) (Some 3) "percent scales by 100"
 
             testCase "format precision: C0 is zero"
-            <| fun _ -> Expect.equal (Canonical.formatPrecision "C0") (Some 0) "currency, no decimals"
+            <| fun _ -> Expect.equal (Canonical.formatPrecision (formatOf "C0")) (Some 0) "currency, no decimals"
 
             testCase "empty format has no precision"
-            <| fun _ -> Expect.isNone (Canonical.formatPrecision "") "verbatim"
+            <| fun _ -> Expect.isNone (Canonical.formatPrecision (formatOf "")) "verbatim"
         ]
 
         // ── 523.B — verdicts across the three states ──────────────────
@@ -505,14 +497,13 @@ let tests =
             let gbp = {
                 revenueMetric with
                     Id = "revenue_gbp"
-                    DisplayFormat = "C0"
+                    DisplayFormat = formatOf "C0"
                     RollUp = None
             }
 
             let gbpRegistry = MetricRegistry.build [ { Module = "test"; Definition = gbp } ] []
 
-            let rendering =
-                ToolUp.Facts.FactRendering.renderFor (Some gbp) (ToolUp.Facts.Scalar 21240.4m)
+            let rendering = FactRendering.renderFor (Some gbp) (scalar 21240.4m)
 
             let verify answer facts =
                 NumericFidelity.verify answer facts (Some gbpRegistry) "Strict"
@@ -536,9 +527,9 @@ let tests =
 
             testCase "the fact's precision is read off its rendering, so a custom format verifies alike"
             <| fun _ ->
-                // A custom format declares no precision the gate can read,
-                // and the gate needs none: the rendering carries it.
-                Expect.isNone (Canonical.formatPrecision "£#,##0") "a custom format names no precision"
+                // A custom format is not a display format the kernel admits,
+                // and the gate needs none: the rendering carries the precision.
+                Expect.isError (Legacy.displayFormatOf "£#,##0") "a custom format is refused"
 
                 let custom = verify "Revenue was £21,240." [ scoped "f1" "£21,240" "" ]
 

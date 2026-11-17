@@ -36,7 +36,9 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
 open ToolUp.Platform.Infra
@@ -49,18 +51,9 @@ open ToolUp.Platform.Compose
 module TableFixtures =
 
     let private metric (id: string) (context: string option) : MetricDefinition = {
-        Id = id
-        Name = sprintf "%s (net)" id
-        Unit = "GBP"
-        Dimensionality = "currency"
-        Direction = HigherIsBetter
-        DisplayFormat = "#,##0.00"
-        Staleness = UntilSuperseded
-        ProducingOperation = None
-        CanonicalMethod = None
-        RecomputePolicy = None
-        RollUp = None
-        Context = context
+        KernelFixtures.metric id (sprintf "%s (net)" id) "GBP" "currency" "#,##0.00" with
+            Direction = HigherIsBetter
+            Context = context
     }
 
     /// The revenue metric's declared context.
@@ -264,8 +257,8 @@ let private listingTests =
                     {
                         Metric = "revenue"
                         Name = Some "revenue (net)"
-                        Unit = Some "GBP"
-                        DisplayFormat = Some "#,##0.00"
+                        Unit = Some "[GBP]"
+                        DisplayFormat = Some "N2"
                         Context = Some RevenueContext
                         Description = Some RevenueColumn
                         Shape = "Scalar"

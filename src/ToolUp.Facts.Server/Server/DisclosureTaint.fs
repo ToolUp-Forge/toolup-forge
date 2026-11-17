@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System.Collections.Generic
 open ToolUp.Platform
 open ToolUp.Platform.Infra

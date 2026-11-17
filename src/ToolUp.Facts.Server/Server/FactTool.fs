@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Globalization
 open System.Text.Json
@@ -166,8 +168,8 @@ module FactTool =
         | Ok f, Ok t ->
             Ok(
                 Some {
-                    From = f |> Option.defaultValue DateTime.MinValue
-                    To = t |> Option.defaultValue DateTime.MaxValue
+                    From = Instant.ofDateTime (f |> Option.defaultValue DateTime.MinValue)
+                    To = Instant.ofDateTime (t |> Option.defaultValue DateTime.MaxValue)
                     Label = None
                 }
             )

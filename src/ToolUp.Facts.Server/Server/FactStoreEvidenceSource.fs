@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open ToolUp.Platform
 open ToolUp.Platform.Infra
 
@@ -26,7 +28,7 @@ type FactStoreEvidenceSource(store: IFactStore) =
     // provenance surface matches the audit trail exactly.
     let toEvidence (f: Fact) : FactEvidence = {
         FactId = f.FactId
-        Subject = SubjectRef.toString f.Subject
+        Subject = Fact.subjectRendering f.Subject
         Metric = f.Metric.Value
         Disclosure = Disclosure.toString f.Disclosure
         ResultRef = f.Evidence.ResultRef

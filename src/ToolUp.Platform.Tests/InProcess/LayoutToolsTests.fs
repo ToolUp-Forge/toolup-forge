@@ -28,6 +28,7 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.AI
 open ToolUp.AI.AICompose
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Facts.Presentation
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
@@ -424,22 +425,23 @@ let private acceptanceTests =
                                 {
                                     Subject = [ "north"; site ]
                                     Period = {
-                                        From = day1.AddDays(float day)
-                                        To = day1.AddDays(float day + 1.0)
+                                        From = Instant.ofDateTime (day1.AddDays(float day))
+                                        To = Instant.ofDateTime (day1.AddDays(float day + 1.0))
                                         Label = None
                                     }
-                                    Values = Map.ofList [ "revenue", Scalar(revenueOn day site) ]
+                                    Values =
+                                        Map.ofList [ "revenue", Scalar(DecimalText.ofDecimal (revenueOn day site)) ]
                                 }
                         for before in [ 7.0; 364.0 ] do
                             for site, value in [ "s1", 900.25M; "s2", 800.75M ] do
                                 {
                                     Subject = [ "north"; site ]
                                     Period = {
-                                        From = lastDay.AddDays -before
-                                        To = lastDay.AddDays(1.0 - before)
+                                        From = Instant.ofDateTime (lastDay.AddDays -before)
+                                        To = Instant.ofDateTime (lastDay.AddDays(1.0 - before))
                                         Label = None
                                     }
-                                    Values = Map.ofList [ "revenue", Scalar value ]
+                                    Values = Map.ofList [ "revenue", Scalar(DecimalText.ofDecimal value) ]
                                 }
                     ]
                 ))

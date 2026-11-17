@@ -10,7 +10,9 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
@@ -69,18 +71,8 @@ type FactTableWriterFactory =
 let private t0 = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
 
 let private metric id : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "count"
-    Dimensionality = "count"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+    KernelFixtures.metric id id "count" "count" "" with
+        Direction = HigherIsBetter
 }
 
 let private products: SubjectDefinition = {
@@ -133,16 +125,16 @@ let private skuTable
         Requirement = requirement
     }
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+let private september: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "2026-09")
 
 let private row (brand: string) (sku: string) (revenue: decimal) (segment: string) : FactTableRow = {
     Subject = [ brand; sku ]
     Period = september
-    Values = Map.ofList [ "revenue", Scalar revenue; "segment", Categorical segment ]
+    Values = Map.ofList [ "revenue", KernelFixtures.scalar revenue; "segment", Categorical segment ]
 }
 
 let private ok label (r: Async<Result<'T, FactTableWriteError>>) : 'T =
@@ -288,7 +280,7 @@ let tests (name: string) (factory: FactTableWriterFactory) =
                 row "acme" "a1" 10m "core" // 0: valid
                 {
                     (row "acme" "a2" 1m "core") with
-                        Values = Map.ofList [ "revenue", Scalar 1m ]
+                        Values = Map.ofList [ "revenue", KernelFixtures.scalar 1m ]
                 } // 1: missing column
                 {
                     (row "acme" "a3" 1m "core") with
@@ -296,7 +288,9 @@ let tests (name: string) (factory: FactTableWriterFactory) =
                 } // 2: wrong shape
                 {
                     (row "acme" "a4" 1m "core") with
-                        Values = (row "acme" "a4" 1m "core").Values |> Map.add "margin" (Scalar 1m)
+                        Values =
+                            (row "acme" "a4" 1m "core").Values
+                            |> Map.add "margin" (KernelFixtures.scalar 1m)
                 } // 3: undeclared column
                 row "acme" "a1" 11m "core" // 4: duplicate key of row 0
                 {
@@ -381,7 +375,7 @@ let tests (name: string) (factory: FactTableWriterFactory) =
 
             Expect.equal
                 (valueAt f.Facts f.ScopeA "revenue" [ "acme"; "a2" ])
-                (Some(Scalar 50m))
+                (Some(KernelFixtures.scalar 50m))
                 "the new value is current"
         }
 
@@ -437,7 +431,7 @@ let tests (name: string) (factory: FactTableWriterFactory) =
 
             Expect.equal
                 (valueAt f.Facts f.ScopeA "revenue" [ "acme"; "a1" ])
-                (Some(Scalar 2m))
+                (Some(KernelFixtures.scalar 2m))
                 "the stale run wrote nothing"
         }
 
@@ -808,7 +802,7 @@ let defaultWriterObligationTests =
                     {
                         Subject = [ sprintf "b%d" (i % 100); sprintf "s%d" i ]
                         Period = september
-                        Values = Map.ofList [ "revenue", Scalar(decimal i) ]
+                        Values = Map.ofList [ "revenue", KernelFixtures.scalar (decimal i) ]
                     }
             ]
 
@@ -837,7 +831,11 @@ let defaultWriterObligationTests =
 
                 Expect.equal
                     (result.Ranked |> List.map _.Value)
-                    [ Scalar 10_000m; Scalar 9_999m; Scalar 9_998m ]
+                    [
+                        KernelFixtures.scalar 10_000m
+                        KernelFixtures.scalar 9_999m
+                        KernelFixtures.scalar 9_998m
+                    ]
                     "ranked"
             | Error e -> failtestf "population read refused: %s" (FactStoreError.describe e)
 
@@ -864,8 +862,8 @@ let private cellFacts (facts: IFactStore) (scope: string) (metricId: string) (pa
 let private importedCell (brand: string) (sku: string) (metricId: string) (d: Disclosure) : FactTableImportedCell = {
     Subject = [ brand; sku ]
     Metric = metricId
-    From = september.From
-    To = september.To
+    From = Instant.toDateTime september.From
+    To = Instant.toDateTime september.To
     Disclosure = d
 }
 
@@ -1008,7 +1006,7 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
                 | other -> failtestf "expected one current %s fact at %A, got %d" metricId path other.Length
 
             let a1 = factAt "revenue" [ "acme"; "a1" ]
-            Expect.equal a1.Value (Scalar 10m) "the row's value"
+            Expect.equal a1.Value (KernelFixtures.scalar 10m) "the row's value"
             Expect.equal a1.Method (Imported "cert:acme") "an origin's row is Imported, naming its certificate"
             Expect.equal a1.Evidence.TriggerRef (Some "import:acme") "and its evidence names the origin"
 
@@ -1146,13 +1144,13 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
             let after = oneCurrent f f.ScopeA "revenue" [ "acme"; "a1" ]
             let zetaAfter = oneCurrent f f.ScopeA "revenue" [ "zeta"; "z1" ]
 
-            Expect.equal after.Value (Scalar 10m) "the unchanged value"
+            Expect.equal after.Value (KernelFixtures.scalar 10m) "the unchanged value"
             Expect.equal (DeclaredMethod.ofEvidence after.Evidence) (Some m2) "is now M2's fact"
             Expect.notEqual after.FactId before.FactId "a new fact, not an idempotent skip"
             Expect.equal after.Supersedes (Some before.FactId) "superseding M1's within one lineage"
             Expect.equal after.Method before.Method "the lineage is the table's, whatever method wrote it"
 
-            Expect.equal zetaAfter.Value (Scalar 6m) "the changed value"
+            Expect.equal zetaAfter.Value (KernelFixtures.scalar 6m) "the changed value"
             Expect.equal (DeclaredMethod.ofEvidence zetaAfter.Evidence) (Some m2) "names M2"
             Expect.equal zetaAfter.Supersedes (Some zetaBefore.FactId) "and supersedes M1's"
 
@@ -1196,11 +1194,11 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
 let private inputHash (c: char) : string = "sha256:" + String(c, 64)
 
 /// Day `n` of September 2026, as a one-day half-open extent.
-let private day (n: int) : TemporalExtent = {
-    From = DateTime(2026, 9, n, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 9, n + 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some(sprintf "2026-09-%02d" n)
-}
+let private day (n: int) : TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 9, n, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 9, n + 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some(sprintf "2026-09-%02d" n))
 
 /// A two-column table at the `sku` level whose rows are days.
 let private dailyTable (id: string) (history: FactTableHistoryMode) : FactTableDefinition = {
@@ -1407,7 +1405,7 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
                     3, [ "zeta"; "z1" ], 6m, 'c'
                 ] do
                 let fact = oneAt f.Facts f.ScopeA "revenue" path (day n)
-                Expect.equal fact.Value (Scalar value) (sprintf "day %d at %A stands" n path)
+                Expect.equal fact.Value (KernelFixtures.scalar value) (sprintf "day %d at %A stands" n path)
 
                 Expect.equal
                     (InputHash.named fact.Evidence)
@@ -1447,7 +1445,7 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
             // the run to withdraw (a delegate holds only what was quoted).
             Expect.equal
                 (oneAt f.Facts f.ScopeA "revenue" [ "zeta"; "z1" ] (day 1)).Value
-                (Scalar 5m)
+                (KernelFixtures.scalar 5m)
                 "day one's zeta before the redelivery"
 
             // Day one re-delivered without zeta.
@@ -1464,11 +1462,11 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
 
             Expect.equal
                 (oneAt f.Facts f.ScopeA "revenue" [ "zeta"; "z1" ] (day 2)).Value
-                (Scalar 7m)
+                (KernelFixtures.scalar 7m)
                 "the day outside the slice stands"
 
             let a1 = oneAt f.Facts f.ScopeA "revenue" [ "acme"; "a1" ] (day 1)
-            Expect.equal a1.Value (Scalar 10m) "the kept row's value"
+            Expect.equal a1.Value (KernelFixtures.scalar 10m) "the kept row's value"
 
             Expect.equal
                 (InputHash.named a1.Evidence)
@@ -1549,7 +1547,7 @@ let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
 
             Expect.equal
                 (cellFacts f.Facts f.ScopeA "revenue" [ "acme"; "a1" ] |> List.map _.Value)
-                [ Scalar 10m ]
+                [ KernelFixtures.scalar 10m ]
                 "the committed row stands"
 
             ok "the refused run released the table" (f.Writer.OpenRun(TestScope.resolved f.ScopeA, table.Id))

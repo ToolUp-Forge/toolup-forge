@@ -1352,8 +1352,8 @@ module FactTablePreflight =
             composition.Metrics
             |> List.choose (fun m ->
                 match m.Definition.RecomputePolicy with
-                | Some Grounding.Eager
-                | Some Grounding.OnQuery -> Some(m.Definition.Id, m)
+                | Some Fuaran.Facts.Eager
+                | Some Fuaran.Facts.OnQuery -> Some(m.Definition.Id, m)
                 | _ -> None)
             |> Map.ofList
 

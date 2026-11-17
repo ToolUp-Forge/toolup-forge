@@ -47,6 +47,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Jobs.DeliveryCompleted
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Scope.StorageScopeResolver
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -673,11 +674,11 @@ let private jobTests =
 let private reconciliationTests =
     let scopeId = "team-reconcile"
 
-    let extent: ToolUp.Facts.TemporalExtent = {
-        From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-        To = DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)
-        Label = None
-    }
+    let extent: Fuaran.Facts.TemporalExtent =
+        KernelFixtures.period
+            (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+            (DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc))
+            None
 
     let options (input: char) =
         ToolUp.Facts.FactTableRunOptions.none
@@ -687,7 +688,7 @@ let private reconciliationTests =
     let row: ToolUp.Facts.FactTableRow = {
         Subject = [ "a1" ]
         Period = extent
-        Values = Map.ofList [ "revenue", ToolUp.Facts.Scalar 10m ]
+        Values = Map.ofList [ "revenue", KernelFixtures.scalar 10m ]
     }
 
     /// One request: `ingest` the tables, then commit the fact table, as the

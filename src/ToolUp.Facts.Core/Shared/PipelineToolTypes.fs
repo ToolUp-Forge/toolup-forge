@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 open System
 
 // ─── evaluate_pipeline ───────────────────────────────────────────────

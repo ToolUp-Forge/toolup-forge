@@ -7,6 +7,7 @@ open System
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -43,8 +44,8 @@ type HeldGateHarness = {
 }
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -54,7 +55,7 @@ let private draftWith (metric: string) (disclosure: Disclosure) : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef metric
-    Value = Scalar 100m
+    Value = Scalar(DecimalText.ofDecimal 100m)
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
@@ -235,7 +237,7 @@ module ReactiveDataChange =
             reg.Metrics
             |> List.exists (fun metric ->
                 match metric.RecomputePolicy with
-                | Some policy -> policy <> Grounding.Manual
+                | Some policy -> policy <> RecomputePolicy.Manual
                 | None -> false)
 
     /// The decorator's short-circuit, evaluated before any store read: is
@@ -644,7 +646,7 @@ module GroundedNarrativeTrigger =
                             pending
                             |> List.filter (fun fact ->
                                 depends.Contains fact.Metric.Value
-                                && FactInvalidation.policyFor metrics fact = Grounding.Eager)
+                                && FactInvalidation.policyFor metrics fact = RecomputePolicy.Eager)
 
                         if not (List.isEmpty racing) && ctx.Attempt < retryPolicy.MaxAttempts then
                             return

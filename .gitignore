@@ -64,6 +64,8 @@ docs-snippets/generated/
 # A checkout of the federation-seam specification home, which this repository
 # certifies against but does not own. See docs/interplatform/FEDERATION_WIRE.md.
 /fuaran-federation-spec/
+# The Fact wire specification clone the fact store's conformance list reads (CI checks it out here).
+/fuaran-fact-specification/
 
 # Phase 192 — the perf-budget gate's measurement file, and (retroactively)
 # the Core-Web-Vitals gate's Lighthouse reports beside it. Both are

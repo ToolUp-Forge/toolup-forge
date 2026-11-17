@@ -45,12 +45,14 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
 open ToolUp.ArtefactSigning
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.JobSchedulers
 open ToolUp.Platform.JobSchedulers.QuartzScheduler
@@ -409,11 +411,11 @@ let carriedScopeTests =
 
 // ── B. The scheduled grounded report, end to end ──────────────────
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+let private september: TemporalExtent =
+    period
+        (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "2026-09")
 
 let private revenue (value: decimal) : FactDraft = {
     Subject = {
@@ -421,7 +423,7 @@ let private revenue (value: decimal) : FactDraft = {
         Path = [ "acme" ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar value
+    Value = scalar value
     Period = september
     Method = HumanAsserted "analyst"
     Evidence = {
@@ -438,18 +440,8 @@ let private metrics: IMetricRegistry =
         {
             MetricRegistration.Module = "sales"
             Definition = {
-                Id = "revenue"
-                Name = "revenue"
-                Unit = "GBP"
-                Dimensionality = "currency"
-                Direction = HigherIsBetter
-                DisplayFormat = ""
-                Staleness = UntilSuperseded
-                ProducingOperation = None
-                CanonicalMethod = None
-                RecomputePolicy = None
-                RollUp = None
-                Context = None
+                metric "revenue" "revenue" "GBP" "currency" "" with
+                    Direction = HigherIsBetter
             }
         }
     ] [

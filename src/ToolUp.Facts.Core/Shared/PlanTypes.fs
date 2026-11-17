@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 open System
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -39,7 +41,7 @@ type TripleCandidate = {
     /// Ordered member path from the hierarchy root down (empty = the
     /// hierarchy-root roll-up).
     SubjectPath: string list
-    /// Registered metric id (Phase 519 `MetricDefinition.Id`).
+    /// Registered metric id (Phase 519 `Fuaran.Facts.MetricDefinition.Id`).
     Metric: string
     /// Optional valid-time window the answer is about — half-open
     /// `[From, To)` in UTC; either bound may be absent.

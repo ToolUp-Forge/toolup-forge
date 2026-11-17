@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Jobs
@@ -151,7 +153,7 @@ module RecomputeJobHandler =
     /// with the scheduler (a `Manual` trigger — recompute jobs are fired
     /// on demand by `reactToDataChange`, never on a schedule). Fold this
     /// into `ServerApp`'s scheduled-job declarations when composing the
-    /// fact tier with `RecomputePolicy.Eager` metrics in play. Handoff:
+    /// fact tier with `Fuaran.Facts.RecomputePolicy.Eager` metrics in play. Handoff:
     /// the compose hookup lives in `FactsCompose.fs` (a sibling's lease) —
     /// this declaration is ready to register there.
     let declaration (store: IFactStore) (recomputer: IFactRecomputer) (logger: ILogger) : ScheduledJobDeclaration =
@@ -202,7 +204,7 @@ module RecomputeJobHandler =
 
             for fact in heads do
                 match FactInvalidation.policyFor registry fact with
-                | Grounding.Eager ->
+                | RecomputePolicy.Eager ->
                     let! scheduled = scheduleRecompute scheduler scope fact
 
                     match scheduled with
@@ -226,8 +228,8 @@ module RecomputeJobHandler =
 
                             outcomes <- ScheduleFailed(fact.FactId, error) :: outcomes
                     | Error err -> outcomes <- ScheduleFailed(fact.FactId, sprintf "%A" err) :: outcomes
-                | Grounding.OnQuery -> outcomes <- DeferredToQuery fact.FactId :: outcomes
-                | Grounding.Manual -> outcomes <- SurfacedOnly fact.FactId :: outcomes
+                | RecomputePolicy.OnQuery -> outcomes <- DeferredToQuery fact.FactId :: outcomes
+                | RecomputePolicy.Manual -> outcomes <- SurfacedOnly fact.FactId :: outcomes
 
             return List.rev outcomes
         }

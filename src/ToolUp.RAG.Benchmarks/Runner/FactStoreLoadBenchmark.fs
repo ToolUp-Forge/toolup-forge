@@ -9,7 +9,7 @@ open System.Text
 open System.Text.Json
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
-open ToolUp.Remoting.Json.SystemTextJson
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.FactStores.Postgres
 open ToolUp.RAG.Benchmarks.ConcurrentLoadBenchmark
@@ -115,8 +115,6 @@ module PostgresTable =
         Keep = false
     }
 
-let private json = PlatformJson.options
-
 let private hierarchy = "load"
 let private yearStart = DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc)
 let private harnessMethod = Computed("load-harness", "1", "p0")
@@ -129,8 +127,8 @@ let private subjectOf (i: int) : SubjectRef = {
 let private metricOf (m: int) = MetricRef(sprintf "metric-%02d" m)
 
 let private week (w: int) : TemporalExtent = {
-    From = yearStart.AddDays(7.0 * float w)
-    To = yearStart.AddDays(7.0 * float (w + 1))
+    From = Instant.ofDateTime (yearStart.AddDays(7.0 * float w))
+    To = Instant.ofDateTime (yearStart.AddDays(7.0 * float (w + 1)))
     Label = Some(sprintf "W%02d" (w + 1))
 }
 
@@ -145,7 +143,9 @@ let private seededFact (subject: int) (metric: int) (w: int) : Fact =
     let m = metricOf metric
     let p = week w
     let e = evidence "seed"
-    let value = Scalar(decimal ((subject * 7 + metric * 13 + w) % 100_000))
+
+    let value =
+        Scalar(DecimalText.ofDecimal (decimal ((subject * 7 + metric * 13 + w) % 100_000)))
 
     {
         FactId = Fact.compute s m p harnessMethod (Fact.effectiveInputHashes harnessMethod e value)
@@ -153,7 +153,7 @@ let private seededFact (subject: int) (metric: int) (w: int) : Fact =
         Metric = m
         Value = value
         Period = p
-        AsOf = (p.To).AddHours 1.0
+        AsOf = Instant.ofDateTime ((Instant.toDateTime p.To).AddHours 1.0)
         Method = harnessMethod
         Evidence = e
         Confidence = None
@@ -181,7 +181,7 @@ let private seededDraft (subject: int) (metric: int) (w: int) : FactDraft =
 let private draftFor (subject: int) (metric: int) (w: int) (tag: string) : FactDraft = {
     Subject = subjectOf subject
     Metric = metricOf metric
-    Value = Scalar(decimal (subject % 997))
+    Value = Scalar(DecimalText.ofDecimal (decimal (subject % 997)))
     Period = week w
     Method = harnessMethod
     Evidence = evidence tag
@@ -257,7 +257,12 @@ let private seedBlobs (storage: IBlobStorage) (scope: string) (total: int) (coor
             |> List.map (fun n -> async {
                 let subject, metric, w = coords n
                 let fact = seededFact subject metric w
-                let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+
+                let payload =
+                    match FactWire.writeFact fact with
+                    | Ok text -> Encoding.UTF8.GetBytes text
+                    | Error r -> failwithf "seeding failed: %s" (Refusal.describe r)
+
                 let! r = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
 
                 match r with

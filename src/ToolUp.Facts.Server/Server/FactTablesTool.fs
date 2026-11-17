@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Text.Json
 open Microsoft.AspNetCore.Http
@@ -426,8 +428,10 @@ module FactTablesTool =
         {
             Metric = view.Metric
             Name = definition |> Option.map _.Name
-            Unit = definition |> Option.map _.Unit
-            DisplayFormat = definition |> Option.bind (fun d -> someText d.DisplayFormat)
+            Unit = definition |> Option.map (fun d -> MetricUnit.text d.Unit)
+            DisplayFormat =
+                definition
+                |> Option.bind (fun d -> someText (DisplayFormatText.ofFormat d.DisplayFormat))
             Context = definition |> Option.bind _.Context
             Description = view.Description
             Shape = view.Shape

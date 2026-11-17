@@ -9,6 +9,7 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
+open Fuaran.Facts
 open ToolUp.Facts
 open ProcessedDataTypes
 open DailyTrade.SharedTypes
@@ -33,7 +34,21 @@ let ModuleName = "DailyTrade"
 [<Literal>]
 let IngestOperation = "dailyTrade.ingest"
 
-let private metric id name unit dimensionality format rollUp : Grounding.MetricDefinition = {
+/// A unit from its canonical text (`[GBP]` is pounds sterling); `1` is a
+/// count or a ratio.
+let private unitOf (text: string) : Fuaran.Core.UnitOfMeasure =
+    match MetricUnit.tryParse text with
+    | Ok unit -> unit
+    | Error refusal -> failwith (Refusal.describe refusal)
+
+/// A grouped number or currency with `digits` fraction digits.
+let private shown style digits : DisplayFormat = {
+    Style = style
+    FractionDigits = Some digits
+    Grouping = true
+}
+
+let private metric id name unit dimensionality format rollUp : MetricDefinition = {
     Id = id
     Name = name
     Unit = unit
@@ -48,12 +63,15 @@ let private metric id name unit dimensionality format rollUp : Grounding.MetricD
     Context = None
 }
 
-let metrics: Grounding.MetricDefinition list = [
-    metric "orders" "Orders" "count" "count" "N0" (Additive 0m)
-    metric "shoppers" "Shoppers" "count" "count" "N0" NonAdditive
-    metric "revenue" "Revenue" "GBP" "currency" "C0" (Additive 0.01m)
-    metric "units" "Units" "count" "count" "N0" (Additive 0m)
-    metric "aov" "Average order value" "GBP" "currency" "C2" NonAdditive
+let metrics: MetricDefinition list = [
+    let count = unitOf "1"
+    let pounds = unitOf "[GBP]"
+    let exact = DecimalText.ofDecimal 0m
+    metric "orders" "Orders" count "count" (shown DisplayStyle.Number 0) (Additive exact)
+    metric "shoppers" "Shoppers" count "count" (shown DisplayStyle.Number 0) NonAdditive
+    metric "revenue" "Revenue" pounds "currency" (shown DisplayStyle.Currency 0) (Additive(DecimalText.ofDecimal 0.01m))
+    metric "units" "Units" count "count" (shown DisplayStyle.Number 0) (Additive exact)
+    metric "aov" "Average order value" pounds "currency" (shown DisplayStyle.Currency 2) NonAdditive
 ]
 
 let subjects: SubjectDefinition list = [
@@ -242,10 +260,13 @@ let private dayOf (fiscalWeek: DateOnly -> string option) (date: DateOnly) : Tem
     let from = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
 
     {
-        From = from
-        To = from.AddDays 1.0
+        From = Instant.ofDateTime from
+        To = Instant.ofDateTime (from.AddDays 1.0)
         Label = fiscalWeek date
     }
+
+/// A scalar fact value. The decimal's scale is kept: `12.50` stays `12.50`.
+let private amount (value: decimal) : FactValue = Scalar(DecimalText.ofDecimal value)
 
 /// The site table's rows: channels summed per site and day, with the
 /// average order value computed from the sums.
@@ -261,14 +282,14 @@ let siteRows (fiscalWeek: DateOnly -> string option) (lines: TradeLine list) : F
             Period = dayOf fiscalWeek date
             Values =
                 Map [
-                    "orders", Scalar orders
-                    "revenue", Scalar revenue
-                    "units", Scalar(group |> List.sumBy _.Units)
+                    "orders", amount orders
+                    "revenue", amount revenue
+                    "units", amount (group |> List.sumBy _.Units)
                     "aov",
                     (if orders = 0m then
                          Absent "no orders"
                      else
-                         Scalar(Math.Round(revenue / orders, 2)))
+                         amount (Math.Round(revenue / orders, 2)))
                 ]
         })
 
@@ -280,9 +301,9 @@ let channelRows (fiscalWeek: DateOnly -> string option) (lines: TradeLine list) 
         Period = dayOf fiscalWeek l.Date
         Values =
             Map [
-                "orders", Scalar l.Orders
-                "shoppers", Scalar l.Shoppers
-                "revenue", Scalar l.Revenue
+                "orders", amount l.Orders
+                "shoppers", amount l.Shoppers
+                "revenue", amount l.Revenue
             ]
     })
 

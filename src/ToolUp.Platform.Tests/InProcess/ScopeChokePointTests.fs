@@ -50,8 +50,10 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -61,11 +63,11 @@ open ToolUp.Platform.Compose
 
 // ── Harness ───────────────────────────────────────────────────────
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft (value: decimal) : FactDraft = {
     Subject = {
@@ -73,7 +75,7 @@ let private draft (value: decimal) : FactDraft = {
         Path = [ "acme" ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar value
+    Value = scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {
@@ -563,19 +565,12 @@ let private draftCiting (inputHash: string) (value: decimal) : FactDraft = {
 }
 
 let private eagerRegistry () : Grounding.IMetricRegistry =
-    let revenue: Grounding.MetricDefinition = {
-        Id = "revenue"
-        Name = "revenue"
-        Unit = "GBP"
-        Dimensionality = "currency"
-        Direction = Grounding.HigherIsBetter
-        DisplayFormat = "C0"
-        Staleness = Grounding.UntilUpstreamChange
-        ProducingOperation = Some "rollup"
-        CanonicalMethod = None
-        RecomputePolicy = Some Grounding.Eager
-        RollUp = None
-        Context = None
+    let revenue: MetricDefinition = {
+        metric "revenue" "revenue" "GBP" "currency" "C0" with
+            Direction = HigherIsBetter
+            Staleness = UntilUpstreamChange
+            ProducingOperation = Some "rollup"
+            RecomputePolicy = Some RecomputePolicy.Eager
     }
 
     let registration: Grounding.MetricRegistration = {
@@ -822,7 +817,7 @@ let private reactivePathTests =
                 "under the scope the write was made under"
 
             Expect.equal scheduler.Results [ JobResult.Success ] "the job ran"
-            Expect.equal (headValues store resolved) [ Scalar 120m ] "and recomputed the resolved shard's fact"
+            Expect.equal (headValues store resolved) [ scalar 120m ] "and recomputed the resolved shard's fact"
 
             Expect.equal
                 (headValues store ResolvedScope.anonymous)
@@ -872,7 +867,7 @@ let private reactivePathTests =
 
                 Expect.equal
                     (headValues store shard)
-                    [ Scalar 100m ]
+                    [ scalar 100m ]
                     (sprintf "%s: the shard's fact was not recomputed under a scope nobody resolved" label)
 
                 Expect.equal
@@ -908,7 +903,7 @@ let private reactivePathTests =
             | JobResult.PermanentFailure _ -> ()
             | other -> failtestf "expected a refusal, got %A" other
 
-            Expect.equal (headValues store otherShard) [ Scalar 100m ] "the other shard's fact is untouched"
+            Expect.equal (headValues store otherShard) [ scalar 100m ] "the other shard's fact is untouched"
         }
 
         testCaseAsync "the job-admin API schedules under the request's resolved scope, through the typed overload"
@@ -1214,7 +1209,7 @@ let private carrierTests =
                 ScopeId = scopeId
                 Handler = "h"
                 Payload = ""
-                Trigger = Manual
+                Trigger = Trigger.Manual
                 Idempotency = None
                 RetryPolicy = JobRetryPolicy.defaults
                 ShardKey = None

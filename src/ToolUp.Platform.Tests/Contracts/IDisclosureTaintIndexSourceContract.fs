@@ -5,10 +5,12 @@ module ToolUp.Platform.Tests.Contracts.IDisclosureTaintIndexSourceContract
 
 open System
 open Expecto
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── IDisclosureTaintIndexSource — the conformance pack ──────────────
 //
@@ -35,11 +37,11 @@ type TaintIndexHarness = {
     Rebuilds: (unit -> int64) option
 }
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft (subjectMember: string) (metric: string) (inputs: string list) (value: FactValue) : FactDraft = {
     Subject = {
@@ -61,16 +63,16 @@ let private draft (subjectMember: string) (metric: string) (inputs: string list)
 
 /// A tainted producer, a fact derived from it, and an unrelated fact.
 let private producer = {
-    draft "uk" "raw" [ "dov-in" ] (Series "dov-raw") with
+    draft "uk" "raw" [ "dov-in" ] (Series(HostKey "dov-raw", None)) with
         Disclosure = Restricted "licensed"
 }
 
 let private derived = {
-    draft "uk" "derived" [ "dov-raw" ] (Scalar 1m) with
+    draft "uk" "derived" [ "dov-raw" ] (scalar 1m) with
         Method = Computed("passthrough", "1", "p0")
 }
 
-let private unrelated = draft "fr" "revenue" [ "sha256:fr" ] (Scalar 2m)
+let private unrelated = draft "fr" "revenue" [ "sha256:fr" ] (scalar 2m)
 
 /// The producer's next version in its lineage: it supersedes the first.
 let private producerV2 = {

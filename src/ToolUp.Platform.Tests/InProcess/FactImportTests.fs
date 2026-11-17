@@ -12,6 +12,7 @@ open ToolUp.Facts.FactsAuditEvents
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.ArtefactSigning
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Infra
@@ -19,6 +20,7 @@ open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Testing
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── Certificate-verified fact import ────────────────────────────────────
 //
@@ -47,11 +49,11 @@ let private auditedAs (audit: TestAuditLog) (name: string) =
 let private scopeA = "team-issuer"
 let private scopeB = "team-importer"
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft metric value disclosure : FactDraft = {
     Subject = {
@@ -59,7 +61,7 @@ let private draft metric value disclosure : FactDraft = {
         Path = [ "uk"; "north" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = scalar value
     Period = q2
     Method = Computed("rollup", "3", "p7")
     Evidence = {
@@ -635,7 +637,10 @@ let tests =
                 "the period",
                 {
                     honest with
-                        Period = { q2 with To = q2.To.AddDays 1.0 }
+                        Period = {
+                            q2 with
+                                To = instant ((Instant.toDateTime q2.To).AddDays 1.0)
+                        }
                 }
                 "the method",
                 {

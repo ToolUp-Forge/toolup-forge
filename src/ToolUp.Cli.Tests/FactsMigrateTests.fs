@@ -17,6 +17,7 @@ open Npgsql
 open ToolUp.Cli
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.FactStores.Postgres
 open ToolUp.Platform.Infra
@@ -263,8 +264,8 @@ let private grammarTests =
 let private Table = "toolup_facts_cli_migrate"
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -274,7 +275,7 @@ let private draft (member': string) (inputHash: string) (value: decimal) : FactD
         Path = [ member' ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar value
+    Value = Scalar(DecimalText.ofDecimal value)
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

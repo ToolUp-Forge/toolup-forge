@@ -9,6 +9,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
@@ -164,8 +165,8 @@ let private countersign (registry: ICountersignatureRegistry) (a: BudgetAmendmen
 // ── Store + fact builders (the Phase 675 shapes) ──────────────────
 
 let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+    From = Instant.ofDateTime (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+    To = Instant.ofDateTime (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
     Label = Some "Q2-2026"
 }
 
@@ -207,10 +208,16 @@ let private assertFact (store: IFactStore) (scope: string) (draft: FactDraft) : 
 /// One restricted contribution plus a declassifying aggregate over it —
 /// the single-party shape whose budget is accounted under `_unscoped`.
 let private seed (store: IFactStore) (scope: string) : Fact =
-    assertFact store scope (draftOf "raw-a" (Computed("load", "1", "p")) (Series "dov-a") (Restricted policyA) [])
+    assertFact
+        store
+        scope
+        (draftOf "raw-a" (Computed("load", "1", "p")) (Series(HostKey "dov-a", None)) (Restricted policyA) [])
     |> ignore
 
-    assertFact store scope (draftOf "agg" (Computed(aggregateOp, "1", "p")) (Scalar 42m) Surfaceable [ "dov-a" ])
+    assertFact
+        store
+        scope
+        (draftOf "agg" (Computed(aggregateOp, "1", "p")) (Scalar(DecimalText.ofDecimal 42m)) Surfaceable [ "dov-a" ])
 
 let private taintCfg =
     DisclosureTaintConfig.ofLists [

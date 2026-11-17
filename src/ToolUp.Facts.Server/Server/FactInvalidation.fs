@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open ToolUp.Platform
 open ToolUp.Platform.Infra
 
@@ -10,7 +12,7 @@ open ToolUp.Platform.Infra
 //
 // Ladder rung 2 of the continuous-intelligence ladder: data lands → the
 // lineage walk (Phase 8a) marks descendant facts `InputsChanged` → a
-// per-metric recompute policy (Phase 561 `Grounding.RecomputePolicy`)
+// per-metric recompute policy (Phase 561 `RecomputePolicy`)
 // decides what executes. This file holds the **pure derivation** (which
 // facts are invalidated, and the upstream-aware freshness that gives the
 // `UntilUpstreamChange` policy its real trigger) plus the deployment seam
@@ -159,7 +161,7 @@ module FactInvalidation =
     /// policy, or `Manual` when the metric is unregistered or declares
     /// none (GP 11). `None` registry (a deployment with no grounding
     /// vocabulary) is `Manual` for every fact.
-    let policyFor (registry: Grounding.IMetricRegistry option) (fact: Fact) : Grounding.RecomputePolicy =
+    let policyFor (registry: Grounding.IMetricRegistry option) (fact: Fact) : RecomputePolicy =
         registry
         |> Option.bind (fun reg -> reg.TryGetMetric fact.Metric.Value)
         |> Option.bind _.RecomputePolicy
@@ -174,15 +176,17 @@ module FactInvalidation =
     /// unchanged — and `inputsChanged = false` is byte-for-byte the
     /// Stage-0 behaviour (GP 11).
     let deriveFreshness
-        (policy: Grounding.StalenessPolicy)
+        (policy: StalenessPolicy)
         (fact: Fact)
         (isCurrent: bool)
         (inputsChanged: bool)
         (now: System.DateTime)
         : FactFreshness =
+        let at = Instant.ofDateTime now
+
         match policy with
-        | Grounding.UntilUpstreamChange when isCurrent && inputsChanged -> Stale now
-        | _ -> Freshness.derive policy fact isCurrent now
+        | StalenessPolicy.UntilUpstreamChange when isCurrent && inputsChanged -> Stale at
+        | _ -> Freshness.derive policy fact isCurrent at
 
     /// OnQuery inline recompute (task 561.C, the `OnQuery` arm): recompute
     /// a stale fact on the read path. `Ok (Some fact)` is the re-asserted

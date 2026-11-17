@@ -41,9 +41,11 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Tests.Contracts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -96,19 +98,9 @@ let private asUser (userId: string) (teamId: string) (body: Async<'T>) : 'T =
     }
     |> Async.RunSynchronously
 
-let private metric (id: string) : MetricDefinition = {
-    Id = id
-    Name = id
-    Unit = "GBP"
-    Dimensionality = "currency"
-    Direction = HigherIsBetter
-    DisplayFormat = ""
-    Staleness = UntilSuperseded
-    ProducingOperation = None
-    CanonicalMethod = None
-    RecomputePolicy = None
-    RollUp = None
-    Context = None
+let private salesMetric (id: string) : MetricDefinition = {
+    metric id id "GBP" "currency" "" with
+        Direction = HigherIsBetter
 }
 
 let private products: SubjectDefinition = {
@@ -130,7 +122,7 @@ let private registry: IMetricRegistry =
         for id in [ "revenue"; "margin" ] do
             {
                 MetricRegistration.Module = "sales"
-                Definition = metric id
+                Definition = salesMetric id
             }
     ] [
         {
@@ -191,16 +183,16 @@ let private tables: IFactTableRegistry =
 
 let private groupTarget = FactPublicationTarget.create "group-sales" "region"
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+let private september: TemporalExtent =
+    period
+        (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "2026-09")
 
 let private row (sku: string) (revenue: decimal) (margin: decimal) : FactTableRow = {
     Subject = [ sku ]
     Period = september
-    Values = Map.ofList [ "revenue", Scalar revenue; "margin", Scalar margin ]
+    Values = Map.ofList [ "revenue", scalar revenue; "margin", scalar margin ]
 }
 
 /// A `Restricted` policy the deployment permits at every door, so what
@@ -593,7 +585,7 @@ let private consolidationTests =
                 |> List.map (fun f -> f.Subject.Path, f.Value)
                 |> Map.ofList
 
-            Expect.equal revenue[[ north; "sku-1" ]] (Scalar 120m) "the new value is the current one"
+            Expect.equal revenue[[ north; "sku-1" ]] (scalar 120m) "the new value is the current one"
             Expect.equal revenue.Count 2 "no duplicate current heads"
         }
 
@@ -1437,7 +1429,7 @@ let private restartTests =
             |> ignore
 
             match revenueOf w "sku-1" with
-            | Some fact -> Expect.equal fact.Value (Scalar 150m) "the consolidation received the post-restart run"
+            | Some fact -> Expect.equal fact.Value (scalar 150m) "the consolidation received the post-restart run"
             | None -> failtest "the origin's rows are gone after a restart"
         }
 
@@ -1640,7 +1632,7 @@ let private delegateTargetTests =
 
             match cellAt w "revenue" [ north; "sku-1" ] with
             | [ fact ] ->
-                Expect.equal fact.Value (Scalar 100m) "the origin's value"
+                Expect.equal fact.Value (scalar 100m) "the origin's value"
 
                 Expect.equal
                     fact.Method

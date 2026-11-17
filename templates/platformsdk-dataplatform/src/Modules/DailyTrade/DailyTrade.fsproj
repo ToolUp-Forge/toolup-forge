@@ -15,7 +15,7 @@
     <PackageReference Include="ToolUp.Platform.Core" />
     <!-- IDataSource, IGroundedNarrativeRun and the request's resolved scope. -->
     <PackageReference Include="ToolUp.Platform.Server" />
-    <!-- FactValue / TemporalExtent and the IFactTableWriter the module writes through. -->
+    <!-- The IFactTableWriter the module writes through; it brings Fuaran.Facts (FactValue, TemporalExtent, MetricDefinition). -->
     <PackageReference Include="ToolUp.Facts.Core" />
     <PackageReference Include="ToolUp.Facts.Server" />
   </ItemGroup>

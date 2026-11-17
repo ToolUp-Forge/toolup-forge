@@ -147,7 +147,7 @@
     <ToolUpEncryptionVersion Condition="'$(ToolUpEncryptionVersion)' == ''">0.39.3</ToolUpEncryptionVersion>
     <ToolUpEntityStoresVersion Condition="'$(ToolUpEntityStoresVersion)' == ''">0.39.3</ToolUpEntityStoresVersion>
     <ToolUpExperimentsVersion Condition="'$(ToolUpExperimentsVersion)' == ''">0.1.0-alpha</ToolUpExperimentsVersion>
-    <ToolUpFactStoresVersion Condition="'$(ToolUpFactStoresVersion)' == ''">0.39.3</ToolUpFactStoresVersion>
+    <ToolUpFactStoresVersion Condition="'$(ToolUpFactStoresVersion)' == ''">0.40.0</ToolUpFactStoresVersion>
     <ToolUpFeatureFlagProvidersVersion Condition="'$(ToolUpFeatureFlagProvidersVersion)' == ''">0.1.4-alpha</ToolUpFeatureFlagProvidersVersion>
     <ToolUpHostsVersion Condition="'$(ToolUpHostsVersion)' == ''">0.39.3</ToolUpHostsVersion>
     <ToolUpIngestionQueuesVersion Condition="'$(ToolUpIngestionQueuesVersion)' == ''">0.39.3</ToolUpIngestionQueuesVersion>

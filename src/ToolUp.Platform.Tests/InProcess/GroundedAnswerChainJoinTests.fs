@@ -11,7 +11,9 @@ open ToolUp.Platform.AuditSinks.ChainedLedger
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.AI
 open ToolUp.AI.AnswerVerifier
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
@@ -48,11 +50,11 @@ open ToolUp.Platform.Testing
 
 let private scopeId = "team-chain-join"
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 // ─── The fact tier ───────────────────────────────────────────────────
 
@@ -62,7 +64,7 @@ let private draft (sku: string) (value: decimal) (inputHash: string) : FactDraft
         Path = [ sku ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

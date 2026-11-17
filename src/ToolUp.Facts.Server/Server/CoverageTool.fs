@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Text.Json
 open Microsoft.AspNetCore.Http
@@ -27,7 +29,7 @@ open ToolUp.Platform.Infra
 // to make the unregistered-metric refusal unreachable**: a model that can
 // list the metrics never guesses one.
 //
-// The other half is interpretive. `MetricDefinition.Context` (task 705.A)
+// The other half is interpretive. `Fuaran.Facts.MetricDefinition.Context` (task 705.A)
 // gives the analyst's narrative for a metric FAMILY a home beside the
 // declaration, rather than duplicated into a knowledge chunk per subject.
 // It is read here, and carried on a population answer beside the metric
@@ -172,21 +174,22 @@ module CoverageTool =
 
     // ── Registry rendering (705.A / 705.C) ────────────────────────
 
-    let private directionLabel (d: Grounding.DirectionOfBetter) =
+    let private directionLabel (d: DirectionOfBetter) =
         match d with
-        | Grounding.HigherIsBetter -> "HigherIsBetter"
-        | Grounding.LowerIsBetter -> "LowerIsBetter"
-        | Grounding.Neutral -> "Neutral"
+        | DirectionOfBetter.HigherIsBetter -> "HigherIsBetter"
+        | DirectionOfBetter.LowerIsBetter -> "LowerIsBetter"
+        | DirectionOfBetter.Neutral -> "Neutral"
 
     /// The staleness policy as a readable token. `FreshFor` carries its
     /// window, because "fresh for a day" and "fresh for an hour" are
     /// different answers to "how current is this?" and the discovery
     /// surface is where that question is asked.
-    let private stalenessLabel (s: Grounding.StalenessPolicy) =
+    let private stalenessLabel (s: StalenessPolicy) =
         match s with
-        | Grounding.FreshFor window -> sprintf "FreshFor %s" (window.ToString())
-        | Grounding.UntilSuperseded -> "UntilSuperseded"
-        | Grounding.UntilUpstreamChange -> "UntilUpstreamChange"
+        | StalenessPolicy.FreshFor windowSeconds ->
+            sprintf "FreshFor %s" (TimeSpan.FromSeconds(float windowSeconds).ToString())
+        | StalenessPolicy.UntilSuperseded -> "UntilSuperseded"
+        | StalenessPolicy.UntilUpstreamChange -> "UntilUpstreamChange"
 
     let private instant (t: DateTime) = t.ToUniversalTime().ToString "o"
 
@@ -271,7 +274,7 @@ module CoverageTool =
     /// shapes — makes the withheld case the one a careless consumer
     /// mis-reads, and that is the case whose handling matters most.
     let private populationRow
-        (subject: Grounding.SubjectDefinition)
+        (subject: SubjectDefinition)
         (withheld: bool)
         (withheldReason: string option)
         (policies: string list)
@@ -311,7 +314,7 @@ module CoverageTool =
         (scope: ResolvedScope)
         (principal: string)
         (metricId: string)
-        (subject: Grounding.SubjectDefinition)
+        (subject: SubjectDefinition)
         =
         async {
             let! outcome = store.QueryPopulation(scope, coverageQuery metricId subject.Id)
@@ -377,7 +380,7 @@ module CoverageTool =
     /// subject is and what its described levels hold; a hierarchy with none
     /// serialises exactly as it did before descriptions existed — the
     /// fields are absent, not null.
-    let private subjectRow (registry: Grounding.IMetricRegistry) (s: Grounding.SubjectDefinition) : obj =
+    let private subjectRow (registry: Grounding.IMetricRegistry) (s: SubjectDefinition) : obj =
         match Grounding.MetricRegistry.trySubjectDescription registry s.Id with
         | None ->
             box {|
@@ -479,7 +482,7 @@ module CoverageTool =
                             return {|
                                 id = def.Id
                                 name = def.Name
-                                unit = def.Unit
+                                unit = MetricUnit.text def.Unit
                                 dimensionality = def.Dimensionality
                                 direction = directionLabel def.Direction
                                 // The discriminator that decides whether
@@ -487,8 +490,8 @@ module CoverageTool =
                                 // ordering resolves — Phase 701's OTHER
                                 // typed refusal, answered here before it
                                 // can be provoked.
-                                supportsBestFirst = def.Direction <> Grounding.Neutral
-                                displayFormat = def.DisplayFormat
+                                supportsBestFirst = def.Direction <> DirectionOfBetter.Neutral
+                                displayFormat = DisplayFormatText.ofFormat def.DisplayFormat
                                 staleness = stalenessLabel def.Staleness
                                 context = def.Context
                                 producingOperation = def.ProducingOperation

@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -20,7 +22,7 @@ open ToolUp.Platform.Infra
 //     money metric names) — the canonical display form the answer quotes
 //     verbatim and the numeric-fidelity gate canonicalises against. An
 //     unregistered metric (or an empty format) renders verbatim.
-//   - **Freshness** derived per the metric's `Grounding.StalenessPolicy`
+//   - **Freshness** derived per the metric's `StalenessPolicy`
 //     via `FactInvalidation.deriveFreshness` — never stored, so it cannot
 //     drift from the truth the timestamps state. An unregistered metric
 //     defaults to `UntilSuperseded` (the registry's documented slow-moving
@@ -62,7 +64,7 @@ open ToolUp.Platform.Infra
 // `inputsChanged = false` IS `Freshness.derive` (GP 11).
 //
 // **The `OnQuery` recompute arm.** A fact whose metric declares
-// `RecomputePolicy.OnQuery` and whose inputs have changed is recomputed
+// `Fuaran.Facts.RecomputePolicy.OnQuery` and whose inputs have changed is recomputed
 // *at read* through `FactInvalidation.recomputeNow` — the deployment's
 // `IFactRecomputer` produces a fresh draft and it re-asserts through the
 // ordinary `IFactStore.Assert` path (supersession stays derived; content
@@ -111,8 +113,8 @@ type FactStoreFactResolver
             | None, None -> None
             | from, to' ->
                 Some {
-                    From = from |> Option.defaultValue DateTime.MinValue
-                    To = to' |> Option.defaultValue DateTime.MaxValue
+                    From = Instant.ofDateTime (from |> Option.defaultValue DateTime.MinValue)
+                    To = Instant.ofDateTime (to' |> Option.defaultValue DateTime.MaxValue)
                     Label = None
                 }
         Method = None
@@ -152,7 +154,8 @@ type FactStoreFactResolver
             let! latest = objects.ListObjects scopeId
 
             let candidates =
-                latest |> List.filter (fun o -> o.CreatedAt.ToUniversalTime() > fact.AsOf)
+                latest
+                |> List.filter (fun o -> Instant.ofDateTime (o.CreatedAt.ToUniversalTime()) > fact.AsOf)
 
             if List.isEmpty candidates then
                 return false
@@ -168,7 +171,7 @@ type FactStoreFactResolver
                     histories
                     |> Array.exists (
                         List.exists (fun version ->
-                            version.CreatedAt.ToUniversalTime() <= fact.AsOf
+                            Instant.ofDateTime (version.CreatedAt.ToUniversalTime()) <= fact.AsOf
                             && inputs.Contains version.ContentHash)
                     )
           }
@@ -187,7 +190,7 @@ type FactStoreFactResolver
             let policy =
                 metric
                 |> Option.map _.Staleness
-                |> Option.defaultValue Grounding.UntilSuperseded
+                |> Option.defaultValue StalenessPolicy.UntilSuperseded
 
             let recomputePolicy =
                 metric |> Option.bind _.RecomputePolicy |> Grounding.RecomputePolicy.resolve
@@ -199,7 +202,8 @@ type FactStoreFactResolver
             // takes the pre-623 path with the pre-623 number of store
             // calls (GP 13).
             let probeUpstream =
-                policy = Grounding.UntilUpstreamChange || recomputePolicy = Grounding.OnQuery
+                policy = StalenessPolicy.UntilUpstreamChange
+                || recomputePolicy = RecomputePolicy.OnQuery
 
             let now = clock().ToUniversalTime()
 
@@ -219,7 +223,7 @@ type FactStoreFactResolver
                     // leaves the existing head standing, stale-stamped.
                     let! fact =
                         match recomputer with
-                        | Some engine when changed && recomputePolicy = Grounding.OnQuery -> async {
+                        | Some engine when changed && recomputePolicy = RecomputePolicy.OnQuery -> async {
                             let! recomputed = FactInvalidation.recomputeNow store engine scope head
 
                             return
@@ -246,7 +250,7 @@ type FactStoreFactResolver
                     let freshness =
                         match FactInvalidation.deriveFreshness policy fact successor.IsNone stillChanged now with
                         | Fresh -> FactFresh
-                        | Stale since -> FactStale(since.ToUniversalTime().ToString "o")
+                        | Stale since -> FactStale((Instant.toDateTime since).ToString "o")
 
                     return {
                         FactId = fact.FactId

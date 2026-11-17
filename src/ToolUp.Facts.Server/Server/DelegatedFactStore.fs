@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -171,8 +173,8 @@ module DelegateMint =
     /// The period a delegate's record fact spans: fixed, so every refresh
     /// of one delegate lands in ONE lineage and supersedes the last.
     let RecordPeriod: TemporalExtent = {
-        From = DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-        To = DateTime(9999, 12, 31, 0, 0, 0, DateTimeKind.Utc)
+        From = Instant.ofDateTime (DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+        To = Instant.ofDateTime (DateTime(9999, 12, 31, 0, 0, 0, DateTimeKind.Utc))
         Label = Some "delegate"
     }
 
@@ -261,7 +263,7 @@ module DelegateMint =
                 Path = []
             }
             Metric = delegateFact.Metric
-            Value = Series token
+            Value = Series(HostKey token, None)
             Period = RecordPeriod
             Method = delegateFact.Method
             Evidence = {
@@ -700,8 +702,8 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                                 Path = row.Subject
                             }
                             Magnitude = PopulationValue.comparable row.Value
-                            PeriodFrom = row.Period.From
-                            PeriodTo = row.Period.To
+                            PeriodFrom = Instant.toDateTime row.Period.From
+                            PeriodTo = Instant.toDateTime row.Period.To
                             AsOf = minted.Run.Watermark.CommittedAt
                             MethodIdentity = Fact.methodIdentity draft.Method
                         },
@@ -741,7 +743,7 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                                     children
                                     |> Array.sumBy (fun c ->
                                         match c.Value with
-                                        | Scalar d -> d
+                                        | Scalar d -> DecimalText.toDecimal d
                                         | _ -> 0m)
                                 ChildCount = children.Length
                                 AbsentCount =
@@ -758,18 +760,36 @@ type internal DelegateTableStore(storage: IBlobStorage) =
         }
 
     /// A reconstruction recorded beside the log, by id. A quote that cannot
-    /// be read is an `Error`, never an absent quote.
+    /// be read is an `Error`, never an absent quote. A quote is a stored
+    /// fact: the specification's encoding, or the legacy saved shape a quote
+    /// recorded before it (`FactStoreCodec.read`).
     member this.Quote(scopeId: string, factId: string) : Async<Result<Fact option, string>> = async {
-        match! FactTableBlobIo.tryGet<Fact> storage scopeId (this.QuoteName factId) with
-        | Ok found -> return Ok found
-        | Error e -> return Error(FactTableWriteError.describe e)
+        let name = this.QuoteName factId
+        let! exists = storage.Exists(scopeId, name)
+
+        if not exists then
+            return Ok None
+        else
+            match! storage.Download(scopeId, name) with
+            | Ok bytes ->
+                return
+                    FactStoreCodec.read (Text.Encoding.UTF8.GetString bytes)
+                    |> Result.map Some
+                    |> Result.mapError (fun refusal -> sprintf "'%s' is unreadable: %s" name (Refusal.describe refusal))
+            | Error e -> return Error(sprintf "read of '%s' failed: %s" name e)
     }
 
-    /// Record a reconstruction beside the log (idempotent by id).
+    /// Record a reconstruction beside the log (idempotent by id), in the
+    /// specification's encoding (`FactWire.writeFact`).
     member this.RecordQuote(scopeId: string, fact: Fact) : Async<Result<unit, string>> = async {
-        match! FactTableBlobIo.put storage scopeId (this.QuoteName fact.FactId) fact with
-        | Ok() -> return Ok()
-        | Error e -> return Error(FactTableWriteError.describe e)
+        let name = this.QuoteName fact.FactId
+
+        match FactWire.writeFact fact with
+        | Error refusal -> return Error(sprintf "fact %s cannot be written: %s" fact.FactId (Refusal.describe refusal))
+        | Ok text ->
+            match! storage.Upload(scopeId, name, Text.Encoding.UTF8.GetBytes text) with
+            | Ok _ -> return Ok()
+            | Error e -> return Error(sprintf "write of '%s' failed: %s" name e)
     }
 
 /// The lineages a delegate's quoted facts sit in (Phase 938): its own
@@ -1012,7 +1032,14 @@ type DelegatedFactStore
 
     let read (scope: ResolvedScope) (d: DelegateFact) (run: DelegateRun) (r: DelegateTableRead) (at: DateTime) =
         let policy = policyOf d.Metric
-        tables.Read(scope.ScopeId, d, run, r, (fun m -> Freshness.deriveAt policy m.AsOf true at))
+
+        tables.Read(
+            scope.ScopeId,
+            d,
+            run,
+            r,
+            (fun m -> Freshness.deriveAt policy (Instant.ofDateTime m.AsOf) true (Instant.ofDateTime at))
+        )
 
     // Mint rows of the CURRENT image as ordinary facts, in order, each under
     // the run that wrote it. A repeated read of an unchanged table re-asserts
@@ -1839,16 +1866,16 @@ type DelegateTableWriter
                 if List.isEmpty rows then
                     None
                 else
-                    Some(rows |> List.map _.Period.From |> List.min)
+                    Some(rows |> List.map _.Period.From |> List.min |> Instant.toDateTime)
             PeriodTo =
                 if List.isEmpty rows then
                     None
                 else
-                    Some(rows |> List.map _.Period.To |> List.max)
+                    Some(rows |> List.map _.Period.To |> List.max |> Instant.toDateTime)
         }
 
     let periodText (period: TemporalExtent) =
-        sprintf "%s..%s" (period.From.ToString "o") (period.To.ToString "o")
+        sprintf "%s..%s" ((Instant.toDateTime period.From).ToString "o") ((Instant.toDateTime period.To).ToString "o")
 
     // Why a period slice cannot be taken over an image holding rows stored
     // before rows were attributed: the slice would carry them forward, and a

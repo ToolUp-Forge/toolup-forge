@@ -32,7 +32,9 @@ open ToolUp.Platform.Scope.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
@@ -43,11 +45,11 @@ open ToolUp.Platform.Compose
 let private queryArgs =
     """{"subject_hierarchy":"brand","subject_path":"acme","metric":"revenue"}"""
 
-let private september: TemporalExtent = {
-    From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "2026-09"
-}
+let private september: TemporalExtent =
+    KernelFixtures.period
+        (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "2026-09")
 
 let private revenue (value: decimal) : FactDraft = {
     Subject = {
@@ -55,7 +57,7 @@ let private revenue (value: decimal) : FactDraft = {
         Path = [ "acme" ]
     }
     Metric = MetricRef "revenue"
-    Value = Scalar value
+    Value = KernelFixtures.scalar value
     Period = september
     Method = HumanAsserted "analyst"
     Evidence = {

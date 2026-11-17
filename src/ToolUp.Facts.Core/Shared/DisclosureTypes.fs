@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+
 open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── Disclosure egress predicate (Phase 525) ─────────────────────────
@@ -981,7 +983,7 @@ module DisclosureTaintNode =
         Inputs = fact.Evidence.InputHashes
         Produces =
             match fact.Value with
-            | Series version -> [ version ]
+            | Series(address, _) -> [ address.Text ]
             | _ -> []
     }
 

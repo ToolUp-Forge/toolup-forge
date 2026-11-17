@@ -3,6 +3,8 @@
 
 namespace ToolUp.Facts
 
+open Fuaran.Facts
+open ToolUp.Facts
 open System
 open System.Collections.Generic
 open System.Globalization
@@ -550,8 +552,10 @@ module internal FactSurfaceCodec =
     [<Literal>]
     let Version = 3
 
-    // The value column's JSON shape: the converters the fact blobs use.
-    let private jsonOptions = PlatformJson.options
+    // The value column's JSON shape: the stored shape of a fact value
+    // (`FactStorageJson`), which a snapshot written before the values' numbers
+    // were decimal text also holds.
+    let private jsonOptions = FactStorageJson.options
 
     /// Bytes per census cell on the wire: a 32-bit count, a 64-bit key sum
     /// and a 32-bit check sum, little-endian.
@@ -849,7 +853,7 @@ module internal FactSurfaceCodec =
 
                             let value =
                                 match textUnescaped 10, magnitude with
-                                | "", Some d -> Some(Scalar d)
+                                | "", Some d -> Some(Scalar(DecimalText.ofDecimal d))
                                 | "", None -> None
                                 | json, _ -> Some(JsonSerializer.Deserialize<FactValue>(json, jsonOptions))
 
@@ -1159,7 +1163,8 @@ module internal FactSurfaceRead =
             let admits =
                 PopulationQuery.matchesSubject query m.Subject
                 && (query.PeriodOverlaps
-                    |> Option.forall (fun p -> p.From < m.PeriodTo && m.PeriodFrom < p.To))
+                    |> Option.forall (fun p ->
+                        p.From < Instant.ofDateTime m.PeriodTo && Instant.ofDateTime m.PeriodFrom < p.To))
 
             if admits then Some m else None)
 

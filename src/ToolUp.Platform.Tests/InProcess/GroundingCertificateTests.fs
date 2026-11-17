@@ -5,6 +5,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.Secrets
+open Fuaran.Facts
 open ToolUp.Facts
 open ToolUp.ArtefactSigning
 open ToolUp.Platform.Tests.Contracts
@@ -12,6 +13,7 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Testing
+open ToolUp.Platform.Tests.KernelFixtures
 
 // ─── Phase 565 — grounding certificates ──────────────────────────────
 //
@@ -24,11 +26,11 @@ open ToolUp.Platform.Testing
 
 let private scope = "team-cert"
 
-let private q2: TemporalExtent = {
-    From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
-    To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
-    Label = Some "Q2-2026"
-}
+let private q2: TemporalExtent =
+    period
+        (DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc))
+        (DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc))
+        (Some "Q2-2026")
 
 let private draft metric disclosure inputHash value : FactDraft = {
     Subject = {
@@ -36,7 +38,7 @@ let private draft metric disclosure inputHash value : FactDraft = {
         Path = [ "uk" ]
     }
     Metric = MetricRef metric
-    Value = Scalar value
+    Value = scalar value
     Period = q2
     Method = Computed("rollup", "1", "p0")
     Evidence = {

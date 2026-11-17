@@ -36,7 +36,9 @@ open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.Infra
 open ToolUp.Platform.Compose
+open Fuaran.Facts
 open ToolUp.Facts
+open ToolUp.Platform.Tests.KernelFixtures
 open ToolUp.Platform.Tests.InProcess.FactRenderToolTests.RenderFixtures
 open ToolUp.Platform.Tests.InProcess.PipelineToolTests.PipelineFixtures
 
@@ -263,18 +265,10 @@ let private meanRegistry: IMetricRegistry =
     let registration (id: string) (producing: string option) : MetricRegistration = {
         Module = "trade"
         Definition = {
-            Id = id
-            Name = id
-            Unit = "GBP"
-            Dimensionality = "currency"
-            Direction = HigherIsBetter
-            DisplayFormat = "N2"
-            Staleness = UntilSuperseded
-            ProducingOperation = producing
-            CanonicalMethod = None
-            RecomputePolicy = None
-            RollUp = Some(Additive 0.01m)
-            Context = None
+            metric id id "GBP" "currency" "N2" with
+                Direction = HigherIsBetter
+                ProducingOperation = producing
+                RollUp = Some(Additive(DecimalText.ofDecimal 0.01m))
         }
     }
 

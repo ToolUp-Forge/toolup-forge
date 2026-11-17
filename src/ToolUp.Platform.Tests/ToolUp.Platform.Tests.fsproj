@@ -29,6 +29,7 @@
         <Compile Include="TestSupport\AccessContexts.fs" />
         <Compile Include="Contracts\Approval.fs" />
         <Compile Include="Support\TestScope.fs" />
+        <Compile Include="Contracts\KernelFixtures.fs" />
         <Compile Include="Contracts\IBlobStorageContract.fs" />
         <Compile Include="Contracts\ITeamProviderResolverContract.fs" />
         <Compile Include="Contracts\IProviderOAuthFlowContract.fs" />
@@ -122,6 +123,8 @@
         <Compile Include="InProcess\MetricRegistryTests.fs" />
         <Compile Include="InProcess\CanonicalFrameTests.fs" />
         <Compile Include="InProcess\FactStoreTests.fs" />
+        <Compile Include="InProcess\FactKernelEquivalenceTests.fs" />
+        <Compile Include="Conformance\FactSpecConformance.fs" />
         <Compile Include="InProcess\FactWriteTests.fs" />
         <Compile Include="InProcess\CanonicalMethodTests.fs" />
         <Compile Include="InProcess\FactInvalidationTests.fs" />
