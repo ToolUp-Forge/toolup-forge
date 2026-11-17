@@ -2,7 +2,7 @@
   "specification": "app-composition-wire",
   "coreVersion": 1,
   "profile": "server-app-host",
-  "profileVersion": "7.5",
+  "profileVersion": "7.6",
   "note": "The machine-readable rendering of composition-profile.md sections P2, P3 and P8. Normative; the composition-profile surface check in this repository compares the two renderings and fails when they disagree. Counts appear nowhere: this file is the enumeration.",
   "tokens": {
     "appRoot.base": {
@@ -194,6 +194,10 @@
       "closure": "closed",
       "tokens": ["hash"]
     },
+    "clientShell.adminArea": {
+      "closure": "closed",
+      "tokens": ["separate"]
+    },
     "datasetModel.measures.aggregate": {
       "closure": "closed",
       "tokens": ["sum", "mean", "min", "max", "count", "median", "stddev", "first", "last", "countDistinct"]
@@ -207,7 +211,8 @@
     "clientShell": {
       "members": [
         { "name": "home", "type": "array of home entry objects", "presence": "optional; absent when the shell declares none, never empty" },
-        { "name": "browserHistory", "type": "token", "presence": "optional; absent when the client has none" }
+        { "name": "browserHistory", "type": "token", "presence": "optional; absent when the client has none" },
+        { "name": "adminArea", "type": "token", "presence": "optional; absent when administration modules appear inline" }
       ],
       "leaf": true
     },
