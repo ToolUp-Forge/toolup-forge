@@ -102,7 +102,7 @@ ToolUp.Facts.Shared 288/336
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
 ToolUp.Forms.Core 169/533
-ToolUp.Forms.Server 88/177
+ToolUp.Forms.Server 87/173
 ToolUp.Graph.AGE 47/75
 ToolUp.Graph.Core 39/133
 ToolUp.Graph.InMemory 6/14

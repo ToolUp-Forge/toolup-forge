@@ -5,7 +5,6 @@ open System.Threading
 open System.Threading.Tasks
 open Expecto
 open Microsoft.AspNetCore.Http
-open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Infra.IEntityStore
@@ -19,6 +18,7 @@ open ToolUp.Forms.PublicFormApi
 open ToolUp.Forms.IFormStore
 open ToolUp.Forms.FormStore
 open ToolUp.Forms.FormApiHandler
+open ToolUp.Forms.FormsCompose
 open ToolUp.Forms.Tests.InProcess.InMemoryEntityStore
 open ToolUp.Forms.Tests.InProcess.InMemoryAuditLog
 
@@ -270,30 +270,33 @@ let tests =
                     Window = TimeSpan.FromMinutes 1.0
                 }
 
-                Expect.equal PublicFormLinkRateLimit.standard.RateLimit (Some expected) "the stated default"
+                Expect.equal FormsOptions.defaultPublicLinkRateLimit expected "the stated default"
 
-                Expect.isOk
-                    (ShareTokenTypes.validateRateLimit PublicFormLinkRateLimit.standard.RateLimit)
-                    "valid at issue"
+                Expect.equal
+                    (FormsOptions.create ()).PublicLinkRateLimit
+                    (Some expected)
+                    "a deployment that says nothing gets the default"
 
-                Expect.equal (PublicFormLinkRateLimit.resolve null) (Some expected) "no services: the default"
+                Expect.isOk (ShareTokenTypes.validateRateLimit (Some expected)) "valid at issue"
 
-            testCase "a deployment replaces the default by registering its own"
+            testCase "a deployment replaces the default, or opts out"
             <| fun () ->
                 let rate: ShareTokenRateLimit = {
                     MaxUses = 5
                     Window = TimeSpan.FromMinutes 10.0
                 }
 
-                let services =
-                    ServiceCollection().AddSingleton(PublicFormLinkRateLimit.ofRate (Some rate)).BuildServiceProvider()
+                let options = FormsOptions.create ()
 
-                Expect.equal (PublicFormLinkRateLimit.resolve services) (Some rate) "the registered rate"
+                Expect.equal
+                    (FormsOptions.withPublicLinkRateLimit (Some rate) options).PublicLinkRateLimit
+                    (Some rate)
+                    "the deployment's rate"
 
-                let none =
-                    ServiceCollection().AddSingleton(PublicFormLinkRateLimit.ofRate None).BuildServiceProvider()
-
-                Expect.equal (PublicFormLinkRateLimit.resolve none) None "a deployment may opt out"
+                Expect.equal
+                    (FormsOptions.withPublicLinkRateLimit None options).PublicLinkRateLimit
+                    None
+                    "no per-window limit"
 
             testCaseAsync "IssueTokens stamps the default on every link"
             <| async {
@@ -316,6 +319,7 @@ let tests =
                         None
                         AnalyserCache.noOpCache
                         []
+                        (FormsOptions.create ()).PublicLinkRateLimit
                         ctx
 
                 let! issued =
@@ -339,7 +343,7 @@ let tests =
 
                 Expect.equal
                     (claims |> List.map _.RateLimit)
-                    [ PublicFormLinkRateLimit.standard.RateLimit ]
+                    [ Some FormsOptions.defaultPublicLinkRateLimit ]
                     "the issued link carries the default"
             }
         ]

@@ -193,9 +193,23 @@ type FormsOptions = {
     /// Distributed deployments wire a Redis / `IRateLimitStore`-backed
     /// companion here.
     ShareTokenRateLimiter: IShareTokenRateLimiter option
+    /// The per-window rate limit stamped on every public form link the
+    /// Forms API issues (`IssueTokens`, `DispatchInvitationsByEmail`), so a
+    /// leaked link cannot be exercised at full request rate until its use
+    /// limit runs out. Defaults to `FormsOptions.defaultPublicLinkRateLimit`
+    /// (30 uses per rolling minute); set with `withPublicLinkRateLimit`. A
+    /// link keeps the rate it was issued with.
+    PublicLinkRateLimit: ShareTokenRateLimit option
 }
 
 module FormsOptions =
+
+    /// 30 uses per rolling minute: enough for a respondent's page loads and
+    /// retries, and a bound on a leaked link.
+    let defaultPublicLinkRateLimit: ShareTokenRateLimit = {
+        MaxUses = 30
+        Window = System.TimeSpan.FromMinutes 1.0
+    }
 
     /// No schemas, workflows, validators, guards or actions; every seam at
     /// its default.
@@ -209,6 +223,7 @@ module FormsOptions =
         ActionLedger = None
         ActionPolicies = Map.empty
         ShareTokenRateLimiter = None
+        PublicLinkRateLimit = Some defaultPublicLinkRateLimit
     }
 
     /// Phase 21c — opt into persistent analyser-output caching.
@@ -346,6 +361,16 @@ module FormsOptions =
     let withShareTokenRateLimiter (rateLimiter: IShareTokenRateLimiter) (options: FormsOptions) : FormsOptions = {
         options with
             ShareTokenRateLimiter = Some rateLimiter
+    }
+
+    /// Sets the per-window rate limit stamped on every public form link the
+    /// Forms API issues, replacing `defaultPublicLinkRateLimit`. `None`
+    /// issues links with no per-window limit, leaving the use limit as the
+    /// only throttle. Rejected at issue time when `MaxUses < 1` or
+    /// `Window < 1s`.
+    let withPublicLinkRateLimit (rate: ShareTokenRateLimit option) (options: FormsOptions) : FormsOptions = {
+        options with
+            PublicLinkRateLimit = rate
     }
 
 /// The Forms companion's `apply`: every Forms-specific contribution
@@ -638,6 +663,7 @@ let composeForms (options: FormsOptions) (app: ServerApp) : ServerApp =
                 blobStorage
                 analyserCache
                 analysers
+                options.PublicLinkRateLimit
                 ctx)
 
     // 3b. Phase 21b — public-form ToolUp.Remoting handler at

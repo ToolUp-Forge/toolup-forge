@@ -11,8 +11,9 @@
   the use stays spent and the link fails closed; the handler logs the failure at Error.
 - **Issued links carry a default rate limit: 30 uses per rolling minute.** `IssueTokens` and
   `DispatchInvitationsByEmail` used to issue with no per-window limit. The default is
-  `ToolUp.Forms.FormApiHandler.PublicFormLinkRateLimit.standard`; a deployment replaces it by registering its own
-  value in DI (below). Links issued before the upgrade keep the rate they were issued with.
+  `FormsOptions.defaultPublicLinkRateLimit`, held on the new `FormsOptions.PublicLinkRateLimit` field; a deployment
+  replaces it with `FormsOptions.withPublicLinkRateLimit` (below). Links issued before the upgrade keep the rate they
+  were issued with.
 - Team invite links are unchanged: an invite consumes its use before it adds the member, and a use spent on a
   failed add stays spent.
 
@@ -44,16 +45,24 @@ Which shipped stores implement it conditionally:
 | `StoreIdSanitising` share-token decorator | forwards after validating the ids |
 | `RevokeOnIssuerRemoved` decorator | forwards |
 
+## Breaking: `FormsOptions` gains `PublicLinkRateLimit`, and `formApi` takes it
+
+A deployment that builds `FormsOptions` with `FormsOptions.create ()` and the `with*` builders is unaffected. A full
+record literal of `FormsOptions` adds the field (`PublicLinkRateLimit = Some FormsOptions.defaultPublicLinkRateLimit`
+keeps the default). A direct caller of `FormApiHandler.formApi` passes the rate limit after the analyser list.
+
 ## Changing the default rate limit
 
 ```fsharp skip=fragment
 app
-|> ServerApp.addServiceConfig (fun services ->
-    services.AddSingleton(PublicFormLinkRateLimit.ofRate (Some { MaxUses = 5; Window = TimeSpan.FromMinutes 1.0 })))
+|> FormsCompose.withForms (
+    FormsOptions.create ()
+    |> FormsOptions.withPublicLinkRateLimit (Some { MaxUses = 5; Window = TimeSpan.FromMinutes 1.0 })
+)
 ```
 
-`PublicFormLinkRateLimit.ofRate None` issues links with no per-window limit. The limit is enforced by the composed
-`IShareTokenRateLimiter` (`FormsOptions.withShareTokenRateLimiter`); the in-memory default is single-replica.
+`FormsOptions.withPublicLinkRateLimit None` issues links with no per-window limit. The limit is enforced by the
+composed `IShareTokenRateLimiter` (`FormsOptions.withShareTokenRateLimiter`); the in-memory default is single-replica.
 
 ## Verification
 

@@ -618,9 +618,14 @@ type FormsOptions = {
     ActionLedger: IActionLedger option
     ActionPolicies: Map<string, ActionFailurePolicy>
     ShareTokenRateLimiter: IShareTokenRateLimiter option
+    /// Stamped on every link IssueTokens / DispatchInvitationsByEmail issue.
+    PublicLinkRateLimit: ShareTokenRateLimit option
 }
 
 module FormsOptions =
+    /// 30 uses per rolling minute — the PublicLinkRateLimit create sets.
+    val defaultPublicLinkRateLimit : ShareTokenRateLimit
+
     val create : unit -> FormsOptions
 
     /// Register a compose-time default schema available in every
@@ -647,6 +652,8 @@ module FormsOptions =
         FormsOptions ->
         FormsOptions
     val withShareTokenRateLimiter : IShareTokenRateLimiter -> FormsOptions -> FormsOptions
+    /// None issues links with no per-window limit.
+    val withPublicLinkRateLimit : ShareTokenRateLimit option -> FormsOptions -> FormsOptions
 
 val withForms : FormsOptions -> ServerApp -> ServerApp
 ```
