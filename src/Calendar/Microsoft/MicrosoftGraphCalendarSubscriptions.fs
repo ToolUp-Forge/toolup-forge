@@ -286,10 +286,14 @@ let withSubscriptionRenewal
     let renewal =
         Hosting.deferredJobs "microsoft-graph-subscription-renewal" [ renewalDeclaration bridge scopes trigger ]
 
+    let owner = ComponentId.forCompanionSlot "ToolUp.Calendar.Microsoft"
+
+    // The renewal runs under each listed tenant scope and keeps that
+    // tenant's subscriptions alive, so it is declared protected: the job
+    // API stops it for a platform administrator only.
     app
-    |> ServerApp.addContribution (
-        Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Microsoft") renewal
-    )
+    |> ServerApp.addContribution (Contribution.service owner (JobApiHandler.declareProtected RenewalHandlerName))
+    |> ServerApp.addContribution (Contribution.hosted owner renewal)
 
 /// Compose the Microsoft Graph bridge and — when it declares change
 /// notifications — the hourly subscription-renewal job over `scopes`. A

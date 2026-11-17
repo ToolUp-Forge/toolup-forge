@@ -1282,6 +1282,11 @@ module DeclaredDelivery =
     /// Removing a declared source is declaring the set without it: the
     /// next start retires it. Stop registering the service only once a
     /// start with an empty `Sources` has retired everything.
+    ///
+    /// The watch job runs under each declared source's tenant scope, so its
+    /// handler is declared protected here: the job API lets only a platform
+    /// administrator cancel, disable or enable it, and the deployment cannot
+    /// also declare it wire-schedulable.
     let withDeclaredDataSources
         (config: ServerConfig)
         (declared: DeclaredDataSources)
@@ -1289,7 +1294,7 @@ module DeclaredDelivery =
         (services: IServiceCollection)
         : IServiceCollection =
         Hosting.register
-            services
+            (JobApiHandler.declareProtected WatchJobHandlerName services)
             (BackgroundUnit.create "declared-data-sources" OnceAtStart (fun sp ->
                 let composed: DeclaredDeliveryServices = {
                     Configs =

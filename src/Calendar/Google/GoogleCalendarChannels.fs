@@ -159,8 +159,14 @@ let withChannelRenewal (bridge: ICalendarBridge) (scopes: string list) (trigger:
     let renewal =
         Hosting.deferredJobs "google-calendar-channel-renewal" [ renewalDeclaration bridge scopes trigger ]
 
+    let owner = ComponentId.forCompanionSlot "ToolUp.Calendar.Google"
+
+    // The renewal runs under each listed tenant scope and keeps that
+    // tenant's channels alive, so it is declared protected: the job API
+    // stops it for a platform administrator only.
     app
-    |> ServerApp.addContribution (Contribution.hosted (ComponentId.forCompanionSlot "ToolUp.Calendar.Google") renewal)
+    |> ServerApp.addContribution (Contribution.service owner (JobApiHandler.declareProtected RenewalHandlerName))
+    |> ServerApp.addContribution (Contribution.hosted owner renewal)
 
 // ─── The notification route ─────────────────────────────────────────
 
