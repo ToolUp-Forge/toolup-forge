@@ -171,7 +171,22 @@ let private lookupsOf (runtime: PasskeyRuntime) (ctx: HttpContext) : Registratio
                     | None -> return false
             }
         ClaimIdentity = runtime.Credentials.ClaimIdentity
-        ReleaseIdentity = runtime.Credentials.ReleaseIdentity
+        // A release runs only on the way to a refusal the user already gets
+        // (the grant could not be spent), and that refusal names what they
+        // can act on; a storage fault in the release is the operator's, so it
+        // is logged with the claim to remove and the refusal stands.
+        ReleaseIdentity =
+            fun userId -> async {
+                match! runtime.Credentials.ReleaseIdentity userId with
+                | Ok() -> ()
+                | Error e ->
+                    let logger =
+                        tryGetService<ILogger> ctx
+                        |> Option.defaultWith (fun () ->
+                            ToolUp.Platform.Config.ConsoleLogger.ConsoleLogger() :> ILogger)
+
+                    logger.Warn $"passkey: {e}; the username stays unenrollable until that blob is removed"
+            }
         ValidateInvite =
             fun token -> async {
                 match shareTokens with
