@@ -903,7 +903,7 @@ module FactsCompose =
     ///
     /// Reactive recomputation stays dormant until a module's grounding
     /// declarations ask for it: a metric declaring
-    /// `RecomputePolicy.Eager` recomputes off a scheduled job when its
+    /// `Fuaran.Facts.RecomputePolicy.Eager` recomputes off a scheduled job when its
     /// inputs change, `OnQuery` recomputes at the next read, and the
     /// default `Manual` surfaces the changed state only. Wire a real
     /// `IFactRecomputer` into DI to give any of them a value to compute.

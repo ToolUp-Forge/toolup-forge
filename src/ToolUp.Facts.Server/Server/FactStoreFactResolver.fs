@@ -64,7 +64,7 @@ open ToolUp.Platform.Infra
 // `inputsChanged = false` IS `Freshness.derive` (GP 11).
 //
 // **The `OnQuery` recompute arm.** A fact whose metric declares
-// `RecomputePolicy.OnQuery` and whose inputs have changed is recomputed
+// `Fuaran.Facts.RecomputePolicy.OnQuery` and whose inputs have changed is recomputed
 // *at read* through `FactInvalidation.recomputeNow` — the deployment's
 // `IFactRecomputer` produces a fresh draft and it re-asserts through the
 // ordinary `IFactStore.Assert` path (supersession stays derived; content

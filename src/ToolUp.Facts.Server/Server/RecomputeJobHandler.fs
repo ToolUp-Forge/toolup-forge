@@ -153,7 +153,7 @@ module RecomputeJobHandler =
     /// with the scheduler (a `Manual` trigger — recompute jobs are fired
     /// on demand by `reactToDataChange`, never on a schedule). Fold this
     /// into `ServerApp`'s scheduled-job declarations when composing the
-    /// fact tier with `RecomputePolicy.Eager` metrics in play. Handoff:
+    /// fact tier with `Fuaran.Facts.RecomputePolicy.Eager` metrics in play. Handoff:
     /// the compose hookup lives in `FactsCompose.fs` (a sibling's lease) —
     /// this declaration is ready to register there.
     let declaration (store: IFactStore) (recomputer: IFactRecomputer) (logger: ILogger) : ScheduledJobDeclaration =

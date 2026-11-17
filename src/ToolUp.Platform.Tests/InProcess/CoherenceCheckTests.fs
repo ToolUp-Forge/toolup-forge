@@ -315,7 +315,7 @@ let tests =
         // ── Per-metric vintage windows (derived from StalenessPolicy) ──
         //
         // Everything else in this check is registry-derived —
-        // comparability from `RollUp.Additive`, tolerance from the same
+        // comparability from `Fuaran.Facts.RollUp.Additive`, tolerance from the same
         // declaration. The vintage window was the last global heuristic,
         // which serves a deployment mixing an hourly metric with a
         // quarterly one badly in both directions.

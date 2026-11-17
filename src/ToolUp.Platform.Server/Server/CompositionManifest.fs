@@ -87,7 +87,7 @@ type ConfigKnob = { Name: string; Value: string }
 /// before this phase be read as what it is — silent on the selector,
 /// which is not the same as recording that nothing changed.
 type MetricCanonicalMethod = {
-    /// The declaring metric's registry id (`MetricDefinition.Id`) — the
+    /// The declaring metric's registry id (`Fuaran.Facts.MetricDefinition.Id`) — the
     /// same string `metricEntry` carries as its `Label`.
     MetricId: string
     /// The declared selector, matched against method-identity strings per

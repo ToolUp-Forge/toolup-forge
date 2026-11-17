@@ -97,7 +97,7 @@ type CoherenceFinding = {
 
 /// Cause-classification heuristics + the scope the health probe reads.
 /// The numeric *tolerance* is NOT here — it is per-metric registry data
-/// (`RollUp.Additive`); these are the cross-cutting knobs the classifier
+/// (`Fuaran.Facts.RollUp.Additive`); these are the cross-cutting knobs the classifier
 /// and the composed surface need. `CoherenceConfig.defaults` is the
 /// zero-config posture.
 type CoherenceConfig = {
@@ -118,7 +118,7 @@ type CoherenceConfig = {
     /// `StalenessPolicy` instead of applying `VintageWindow` globally.
     ///
     /// The rest of this check is already registry-derived —
-    /// comparability comes from `RollUp.Additive` and the registered
+    /// comparability comes from `Fuaran.Facts.RollUp.Additive` and the registered
     /// hierarchy, and the numeric tolerance is registry data. The
     /// vintage window was the one heuristic left on a single global
     /// knob, which is a poor fit for a deployment mixing an hourly
@@ -301,7 +301,7 @@ module CoherenceCheck =
     /// The pure check (task 563.A/B): over a set of current-head facts,
     /// derive the coherence findings. Comparability is derived wholly from
     /// the registry — a metric participates only when it declares
-    /// `RollUp.Additive` and its subject hierarchy is registered — never
+    /// `Fuaran.Facts.RollUp.Additive` and its subject hierarchy is registered — never
     /// from any per-fact annotation. No registry (or no additive metric) ⇒
     /// no findings (GP 11 / GP 13). Never mutates anything; the input list
     /// is read-only.

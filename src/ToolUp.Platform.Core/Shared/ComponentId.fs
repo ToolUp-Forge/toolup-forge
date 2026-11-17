@@ -147,7 +147,7 @@ module ComponentId =
     let forTool (toolName: string) : ComponentId = scoped ToolSlot toolName
 
     /// Derive a grounding metric's id from its declared registry id (Phase
-    /// 519 `Grounding.MetricDefinition.Id`). Rename-stable, slot-namespaced.
+    /// 519 `Fuaran.Facts.MetricDefinition.Id`). Rename-stable, slot-namespaced.
     let forMetric (metricId: string) : ComponentId = scoped MetricSlot metricId
 
     /// Derive a grounding subject-hierarchy's id from its declared registry

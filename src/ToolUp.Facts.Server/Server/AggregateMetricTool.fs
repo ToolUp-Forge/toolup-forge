@@ -21,7 +21,7 @@ open ToolUp.Platform.Infra.Metrics
 // and the figures it prints are nobody's facts. This tool reads the
 // population once, groups the members at the requested level and sums each
 // group, but only for a metric whose registry declaration says its values add
-// up (`RollUp.Additive`).
+// up (`Fuaran.Facts.RollUp.Additive`).
 //
 // **Every total names its inputs.** Each group's total carries the canonical
 // rendering of every fact it was summed from, beside its id, so the numeric

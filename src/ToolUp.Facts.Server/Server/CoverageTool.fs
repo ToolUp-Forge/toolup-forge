@@ -29,7 +29,7 @@ open ToolUp.Platform.Infra
 // to make the unregistered-metric refusal unreachable**: a model that can
 // list the metrics never guesses one.
 //
-// The other half is interpretive. `MetricDefinition.Context` (task 705.A)
+// The other half is interpretive. `Fuaran.Facts.MetricDefinition.Context` (task 705.A)
 // gives the analyst's narrative for a metric FAMILY a home beside the
 // declaration, rather than duplicated into a knowledge chunk per subject.
 // It is read here, and carried on a population answer beside the metric

@@ -110,7 +110,7 @@ type FactTableRequirement =
 /// shape its cells take, and an optional disclosure overriding the table's
 /// default for this column.
 type FactTableColumn = {
-    /// The registered metric id (`MetricDefinition.Id`) this column
+    /// The registered metric id (`Fuaran.Facts.MetricDefinition.Id`) this column
     /// carries. Checked against the composed metric registry at compose.
     Metric: string
     /// The `FactValue` case every cell of this column must take.
@@ -281,7 +281,7 @@ type FactTableMeasure = {
     /// The aggregate's wire spelling (`sum`, `mean`, `min`, `max`, `count`,
     /// `median`, `stddev`, `first`, `last`, `countDistinct`).
     Aggregate: string
-    /// The registered metric (`MetricDefinition.Id`) the measure publishes.
+    /// The registered metric (`Fuaran.Facts.MetricDefinition.Id`) the measure publishes.
     Publishes: string
 }
 

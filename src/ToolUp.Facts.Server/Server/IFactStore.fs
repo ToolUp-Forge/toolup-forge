@@ -115,7 +115,7 @@ type FactQuery = {
     /// picking one among *competing* facts (plan D19: several methods
     /// computing one metric is normal; the store never merges them).
     /// `None` defaults to the metric's registry-declared canonical method
-    /// when one exists (Phase 566 — `MetricDefinition.CanonicalMethod`);
+    /// when one exists (Phase 566 — `Fuaran.Facts.MetricDefinition.CanonicalMethod`);
     /// naming a method here always overrides that default, and a metric
     /// with no declaration surfaces every competing head as before.
     Method: MethodRef option
