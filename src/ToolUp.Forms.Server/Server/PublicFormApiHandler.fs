@@ -11,7 +11,7 @@ open ToolUp.Forms.FormValidator
 open ToolUp.Forms.IFormStore
 open ToolUp.Platform.Scope
 
-// ─── Phase 21b — Public-form ToolUp.Remoting handler ────────────────
+// ─── Public-form ToolUp.Remoting handler ─────────────────────────────
 //
 // Per-request `IPublicFormApi` builder. Resolves DI dependencies
 // (`IShareTokenStore`, `IFormStore`, `IAuditLog`,
@@ -19,7 +19,7 @@ open ToolUp.Platform.Scope
 //
 // **Identity model.** This handler does NOT consult `AccessContext`
 // — `FormsCompose` declares `SurfaceRequirement.claimBearerOnly` on
-// both `IPublicFormApi` routes via the Phase 66 Stream B.6 per-route
+// both `IPublicFormApi` routes via the per-route
 // override API, so `SurfaceEnforcementMiddleware` rejects every
 // subject whose kind is not `ClaimBearerKind` before the handler
 // runs. The handler then re-reads the token from the request body
@@ -34,7 +34,7 @@ open ToolUp.Platform.Scope
 // expired token, or a token whose use limit has been reached fails
 // closed regardless of what the wire string carries. The defence-in-
 // depth shape (middleware admits by subject kind, handler re-validates
-// the claim) is preserved across Phase 66.
+// the claim) is deliberate.
 
 let private toFormError (e: ShareTokenError) : FormError =
     match e with
@@ -44,7 +44,7 @@ let private toFormError (e: ShareTokenError) : FormError =
     | ShareTokenError.Expired -> FormError.NotFound("token", "expired")
     | ShareTokenError.RevokedToken -> FormError.NotFound("token", "revoked")
     | ShareTokenError.UseLimitExceeded -> FormError.NotFound("token", "use-limit-exceeded")
-    // Phase 21e — per-token rate-limit denial. Distinct from the
+    // Per-token rate-limit denial. Distinct from the
     // four other token-failure cases server-side so audit log can
     // still tell them apart; `PublicEmbed.describeError` collapses
     // to the same user-visible string as the rest (L1).
@@ -105,7 +105,7 @@ let publicFormApi
                 match! resolveTokenAndSchema shareTokenStore formStore req.Token with
                 | Error err -> return Error err
                 | Ok(claim, schema) ->
-                    // Phase 21e (L2) — consult the per-token rate
+                    // Consult the per-token rate
                     // limiter before any validation or persistence
                     // side-effect. A token whose claim has no
                     // `RateLimit` configured skips this gate entirely
@@ -118,54 +118,54 @@ let publicFormApi
                     match rateDecision with
                     | Error err -> return Error(toFormError err)
                     | Ok() ->
-                        // Validate FIRST so a bad submission doesn't burn the
-                        // respondent's only use slot. The token is only marked
-                        // used after the submission persists.
+                        // Validate FIRST so a bad submission does not take the
+                        // respondent's use.
                         match FormValidator.validate validatorRegistry schema req.Values with
                         | Error errors -> return Error(FormError.ValidationFailed errors)
                         | Ok() ->
-                            let submission: Submission = {
-                                Id = allocateSubmissionId ()
-                                Type = Submission.entityType
-                                Version = 1
-                                FormId = schema.Id
-                                SchemaVersion = schema.Version
-                                SubmittedAt = DateTimeOffset.UtcNow
-                                Author = InvitedRespondent(claim.TokenId, claim.AttributedHandle)
-                                Values = req.Values
-                                State = Submitted
-                                WorkflowId = None
-                            }
+                            // Reserve the use BEFORE the submission is stored.
+                            // `MarkUsed` is atomic across concurrent callers, so
+                            // of N simultaneous submissions on a `UseLimit = K`
+                            // link exactly K reserve and the rest are refused
+                            // before anything is persisted.
+                            match! shareTokenStore.MarkUsed(claim.ScopeId, claim.TokenId) with
+                            | Error markErr -> return Error(toFormError markErr)
+                            | Ok() ->
+                                let submission: Submission = {
+                                    Id = allocateSubmissionId ()
+                                    Type = Submission.entityType
+                                    Version = 1
+                                    FormId = schema.Id
+                                    SchemaVersion = schema.Version
+                                    SubmittedAt = DateTimeOffset.UtcNow
+                                    Author = InvitedRespondent(claim.TokenId, claim.AttributedHandle)
+                                    Values = req.Values
+                                    State = Submitted
+                                    WorkflowId = None
+                                }
 
-                            match! formStore.SaveSubmission(claim.ScopeId, submission) with
-                            | Error err -> return Error err
-                            | Ok saved ->
-                                // Bump the use count AFTER successful persist.
-                                // Phase 116 — the result was previously
-                                // discarded (`let! _ = ...`), so a storage
-                                // failure, a token revoked between validation
-                                // and now, or a use-limit lost to a concurrent
-                                // submitter all returned success silently —
-                                // letting a `UseLimit = 1` token be consumed
-                                // more than once. Surface it instead: the
-                                // submission is already durable, but the
-                                // response is an error so the caller and the
-                                // use-count invariant both see the truth.
-                                match! shareTokenStore.MarkUsed(claim.ScopeId, claim.TokenId) with
-                                | Error markErr ->
-                                    logger.Error(
-                                        sprintf
-                                            "[PublicFormApi] submission %s persisted for form %s but MarkUsed failed (token %s, scope %s): %A"
-                                            saved.Id
-                                            saved.FormId
-                                            claim.TokenId
-                                            claim.ScopeId
-                                            markErr,
-                                        None
-                                    )
+                                match! formStore.SaveSubmission(claim.ScopeId, submission) with
+                                | Error err ->
+                                    // A failed submission returns the use. The
+                                    // release is a conditional write, so it cannot
+                                    // overwrite a concurrent reservation. If it
+                                    // fails, the use stays spent: the link fails
+                                    // closed rather than risk admitting twice.
+                                    match! shareTokenStore.ReleaseUse(claim.ScopeId, claim.TokenId) with
+                                    | Ok() -> ()
+                                    | Error releaseErr ->
+                                        logger.Error(
+                                            sprintf
+                                                "[PublicFormApi] submission for form %s was not stored and its reserved use could not be returned; the use stays spent (token %s, scope %s): %A"
+                                                schema.Id
+                                                claim.TokenId
+                                                claim.ScopeId
+                                                releaseErr,
+                                            None
+                                        )
 
-                                    return Error(toFormError markErr)
-                                | Ok() ->
+                                    return Error err
+                                | Ok saved ->
                                     // FormSubmitted audit carries the synthesised
                                     // respondent identity (`respondent:{tokenId}`)
                                     // — never the raw email.

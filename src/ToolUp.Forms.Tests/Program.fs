@@ -1,6 +1,7 @@
 module ToolUp.Forms.Tests.Program
 
 open Expecto
+open ToolUp.Forms.Tests
 open ToolUp.Forms.Tests.InProcess
 open System.Reflection
 open ToolUp.Platform.Tests.Support
@@ -19,6 +20,7 @@ let private registeredTests =
         ValidationBridgeTests.tests
         MatrixFieldTests.tests
         FormApiInHandlerGateTests.tests
+        PublicFormUseLimitTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

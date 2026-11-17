@@ -102,7 +102,7 @@ ToolUp.Facts.Shared 288/336
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
 ToolUp.Forms.Core 169/533
-ToolUp.Forms.Server 84/170
+ToolUp.Forms.Server 88/177
 ToolUp.Graph.AGE 47/75
 ToolUp.Graph.Core 39/133
 ToolUp.Graph.InMemory 6/14
@@ -147,7 +147,7 @@ ToolUp.Platform.Server.Config 396/662
 ToolUp.Platform.Server.Infra 2271/3878
 ToolUp.Platform.Server.Jobs 933/1744
 ToolUp.Platform.Server.Remoting 360/1027
-ToolUp.Platform.Server.Scope 459/829
+ToolUp.Platform.Server.Scope 460/830
 ToolUp.Platform.Testing 166/339
 ToolUp.Platform.Transport 48/96
 ToolUp.Platform.UI 115/284

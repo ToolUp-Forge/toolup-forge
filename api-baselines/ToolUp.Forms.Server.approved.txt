@@ -34,6 +34,13 @@ ToolUp.Forms.EntityRegistrations.formSchemaRegistration : ToolUp.Platform.Entity
 ToolUp.Forms.EntityRegistrations.submissionRegistration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.Forms.FormSubmission+Submission] { get }
 ToolUp.Forms.FormApiHandler (class)
 ToolUp.Forms.FormApiHandler.formApi(ToolUp.Forms.IFormStore+IFormStore, ToolUp.Forms.IWorkflowEngine+IWorkflowEngine, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], ToolUp.Platform.IAuditLog, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Forms.Workflow+WorkflowDefinition], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Scope.IShareTokenStore], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], ToolUp.Forms.AnalyserCache+IAnalyserCache, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Forms.IFormSubmissionAnalyser+IFormSubmissionAnalyser], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Forms.FormApi+IFormApi
+ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimit (class)
+ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimit..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenRateLimit])
+ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimit.RateLimit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenRateLimit] { get }
+ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimitModule (class)
+ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimitModule.ofRate(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenRateLimit]) : ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimit
+ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimitModule.resolve(System.IServiceProvider) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenRateLimit]
+ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimitModule.standard : ToolUp.Forms.FormApiHandler+PublicFormLinkRateLimit { get }
 ToolUp.Forms.FormStore (class)
 ToolUp.Forms.FormStore.ListSchemasLoadFailedTotal : System.String (literal)
 ToolUp.Forms.FormStore.metricRegistrations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricRegistration] { get }

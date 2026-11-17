@@ -40,6 +40,7 @@ type private FixedClaimStore(claim: ShareTokenClaim) =
         member _.Issue _ = failwith "not on the middleware path"
         member _.Validate _ = async { return Ok claim }
         member _.MarkUsed(_, _) = failwith "not on the middleware path"
+        member _.ReleaseUse(_, _) = failwith "not on the middleware path"
         member _.Revoke(_, _, _) = failwith "not on the middleware path"
         member _.ListByResource(_, _, _) = failwith "not on the middleware path"
         member _.ListByIssuer(_, _) = failwith "not on the middleware path"

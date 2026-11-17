@@ -362,7 +362,9 @@ type ShareTokenRateLimit = {
 }
 ```
 
-`None` (the default) means no per-window rate limit — only the static `UseLimit` cap applies. Set `Some { MaxUses = 5; Window = TimeSpan.FromMinutes 1.0 }` to cap a leaked token's blast radius at 5 submissions/minute. `MaxUses < 1` or `Window < 1s` is rejected at issue-time (`ShareTokenError.StorageFailed`).
+Every link `IssueTokens` and `DispatchInvitationsByEmail` issue carries **30 uses per rolling minute** by default (`PublicFormLinkRateLimit.standard`, in `ToolUp.Forms.FormApiHandler`). A deployment changes it by registering its own `PublicFormLinkRateLimit` in DI — `ServerApp.addServiceConfig (fun services -> services.AddSingleton(PublicFormLinkRateLimit.ofRate (Some { MaxUses = 5; Window = TimeSpan.FromMinutes 1.0 })))` — and `ofRate None` issues links with no per-window limit, leaving the `UseLimit` cap as the only throttle. A link keeps the rate it was issued with. `MaxUses < 1` or `Window < 1s` is rejected at issue-time (`ShareTokenError.StorageFailed`).
+
+`SubmitWithToken` reserves the link's use (`IShareTokenStore.MarkUsed`) after the values validate and **before** the submission is stored, so concurrent submissions on a `UseLimit = 1` link store exactly one. A submission that fails to store returns the use (`IShareTokenStore.ReleaseUse`, a conditional write); if the return itself fails, the use stays spent and the link fails closed.
 
 `IPublicFormApi.SubmitWithToken` consults the registered `IShareTokenRateLimiter` before any validation or persistence side-effect; rejection returns `FormError.RateLimited`. The SDK default is `InMemoryShareTokenRateLimiter` (single-instance only); distributed deployments wire a Redis / `IRateLimitStore`-backed companion via `FormsOptions.withShareTokenRateLimiter` so per-token windows are shared across replicas.
 

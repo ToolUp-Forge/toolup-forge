@@ -46,6 +46,50 @@ open ToolUp.Platform.Compose
 // `ScopeId` / `Author` / `SubmittedAt` are server-set from
 // `AccessContext` — never trust client-supplied identity.
 
+/// The per-window rate limit stamped on every public form link the Forms API
+/// issues (`IssueTokens`, `DispatchInvitationsByEmail`), so a leaked link
+/// cannot be exercised at full request rate until its use limit runs out.
+///
+/// **The default is 30 uses per rolling minute** (`PublicFormLinkRateLimit.standard`),
+/// enough for a respondent's page loads and retries. A deployment changes it
+/// by registering its own value in DI, which the handler reads per request:
+///
+/// ```fsharp skip=fragment
+/// app
+/// |> ServerApp.addServiceConfig (fun services ->
+///     services.AddSingleton(PublicFormLinkRateLimit.ofRate (Some { MaxUses = 5; Window = TimeSpan.FromMinutes 1.0 })))
+/// ```
+///
+/// `ofRate None` issues links with no per-window limit (the use limit is then
+/// the only throttle). The value applies to links issued after it is set; a
+/// link carries the rate it was issued with.
+type PublicFormLinkRateLimit = {
+    RateLimit: ShareTokenRateLimit option
+}
+
+module PublicFormLinkRateLimit =
+
+    /// 30 uses per rolling minute.
+    let standard: PublicFormLinkRateLimit = {
+        RateLimit =
+            Some {
+                MaxUses = 30
+                Window = TimeSpan.FromMinutes 1.0
+            }
+    }
+
+    /// The setting a deployment registers to replace `standard`.
+    let ofRate (rate: ShareTokenRateLimit option) : PublicFormLinkRateLimit = { RateLimit = rate }
+
+    /// The registered setting, else `standard`.
+    let resolve (services: IServiceProvider) : ShareTokenRateLimit option =
+        match services with
+        | null -> standard.RateLimit
+        | services ->
+            match services.GetService(typeof<PublicFormLinkRateLimit>) with
+            | :? PublicFormLinkRateLimit as configured -> configured.RateLimit
+            | _ -> standard.RateLimit
+
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match AccessContext.ofItems ctx.Items with
     | Some ac -> ac
@@ -497,7 +541,7 @@ let formApi
                                     IssuedBy = userId
                                     ExpiresAt = req.ExpiresAt
                                     UseLimit = req.UseLimit
-                                    RateLimit = None
+                                    RateLimit = PublicFormLinkRateLimit.resolve ctx.RequestServices
                                 }
 
                                 match! store.Issue issueRequest with
@@ -703,7 +747,7 @@ let formApi
                                     IssuedBy = userId
                                     ExpiresAt = req.ExpiresAt
                                     UseLimit = req.UseLimit
-                                    RateLimit = None
+                                    RateLimit = PublicFormLinkRateLimit.resolve ctx.RequestServices
                                 }
 
                                 match! store.Issue issueRequest with

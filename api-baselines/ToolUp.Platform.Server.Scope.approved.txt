@@ -297,6 +297,7 @@ ToolUp.Platform.Scope.IShareTokenStore.Issue(ToolUp.Platform.ShareTokenIssueRequ
 ToolUp.Platform.Scope.IShareTokenStore.ListByIssuer(System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShareTokenClaim]]
 ToolUp.Platform.Scope.IShareTokenStore.ListByResource(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShareTokenClaim]]
 ToolUp.Platform.Scope.IShareTokenStore.MarkUsed(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ShareTokenError]]
+ToolUp.Platform.Scope.IShareTokenStore.ReleaseUse(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ShareTokenError]]
 ToolUp.Platform.Scope.IShareTokenStore.Revoke(System.String, System.String, ToolUp.Platform.UserId) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ShareTokenError]]
 ToolUp.Platform.Scope.IShareTokenStore.Validate(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ShareTokenClaim, ToolUp.Platform.ShareTokenError]]
 ToolUp.Platform.Scope.InviteEmailCapabilityValidator (class)

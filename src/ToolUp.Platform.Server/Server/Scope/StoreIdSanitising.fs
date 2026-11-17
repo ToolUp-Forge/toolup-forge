@@ -206,6 +206,10 @@ type SanitisingShareTokenStore(inner: IShareTokenStore) =
             guardResult (both (validate "scopeId" scopeId) (validate "tokenId" tokenId)) (fun () ->
                 inner.MarkUsed(scopeId, tokenId))
 
+        member _.ReleaseUse(scopeId, tokenId) =
+            guardResult (both (validate "scopeId" scopeId) (validate "tokenId" tokenId)) (fun () ->
+                inner.ReleaseUse(scopeId, tokenId))
+
         member _.Revoke(scopeId, tokenId, actorUserId) =
             guardResult (both (validate "scopeId" scopeId) (validate "tokenId" tokenId)) (fun () ->
                 inner.Revoke(scopeId, tokenId, actorUserId))
