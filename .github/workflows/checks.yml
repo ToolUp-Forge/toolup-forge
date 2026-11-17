@@ -1053,7 +1053,9 @@ jobs:
   # the six packages.
   templates:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # VerifyTemplates bundles four template clients (a Fable transpile and a
+    # Vite build each, about 2.5 min apiece on a developer machine).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
@@ -1061,6 +1063,13 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+
+      # VerifyTemplates installs each template client's npm packages and
+      # bundles it with Vite.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Cache NuGet packages
         uses: actions/cache@v4

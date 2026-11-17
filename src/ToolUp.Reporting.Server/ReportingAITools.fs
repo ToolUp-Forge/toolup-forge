@@ -1214,8 +1214,16 @@ let withReportingAITools (deps: ReportingAIToolDeps) (app: ServerApp) : ServerAp
             DeferredScheduledJobDeclaration.ofHandler RenderJobHandlerName Manual (renderJobHandler deps)
         ]
 
+    // A long render runs under the caller's own scope, so its handler is
+    // declared protected: the job API stops it for a platform administrator
+    // only.
     let withJobs =
         app
+        |> ServerApp.addContribution (
+            Contribution.service
+                (ComponentId.ofModule SourceModule)
+                (JobApiHandler.declareProtected RenderJobHandlerName)
+        )
         |> ServerApp.addContribution (Contribution.hosted (ComponentId.ofModule SourceModule) rendering)
 
     ServerApp.addModule toolModule withJobs

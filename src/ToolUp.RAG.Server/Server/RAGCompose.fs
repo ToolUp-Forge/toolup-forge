@@ -1455,6 +1455,11 @@ let composeRAG (options: RagOptions) (app: ServerApp) : ServerApp =
                     | Some _ -> SharedWork
                     | None -> ProcessLocal
 
+                // A durable ingestion retry runs under the document's own
+                // scope, so its handler is declared protected: the job API
+                // stops it for a platform administrator only.
+                JobApiHandler.declareProtected RetryHandlerName s |> ignore
+
                 // Built from the host provider, so it lazily resolves the
                 // (downstream-built) `IJobScheduler` for durable retries.
                 let ingestion =

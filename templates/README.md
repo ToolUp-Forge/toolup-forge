@@ -113,8 +113,9 @@ The acceptance bar requires byte-identical output from `dotnet new` and direct p
   stops MSBuild's walk before the root, so each one either restates the rule or is exempt.
   `platformsdk-module-packaged` and `platformsdk-dataplatform` restate it: an instantiated module or
   data platform is born holding exhaustiveness as an error, and their scaffold gates fail on an
-  incomplete match. `safer` and `platformsdk-solution` are exempt: no gate instantiates and builds
-  them, so a rule stated there would be asserted on code nothing here compiles. The
+  incomplete match. `safer` and `platformsdk-solution` are exempt: no gate builds their solutions
+  (`VerifyTemplates` transpiles only their clients, with Fable), so a rule stated there would be
+  asserted on code nothing here compiles. The
   root-inheriting templates get the rule from the root. An architecture-fitness test discovers every
   walk-stopping `Directory.Build.props` and fails on one that is neither the root, a named exemption,
   nor a restatement of the rule.
@@ -129,6 +130,22 @@ The acceptance bar requires byte-identical output from `dotnet new` and direct p
   the block, the pins and the copied files, and `VerifyTemplates` runs it, so a template cannot fall
   behind the canonical block without a red gate. The contract and how to re-stamp:
   [`client-styling/tailwind/README.md`](../client-styling/tailwind/README.md).
+- **Every template with a client bundles and mounts the shell.** Each of those four clients declares
+  the npm packages the `ToolUp.Platform.Client` bundle imports (the grid, chart and drag-and-drop
+  packages, `yjs` and the rest) at the versions the SDK pins, adds the `vite-plugin-svgr` and
+  `@vitejs/plugin-react` plugins after the styling plugins, `svgr` before `react`, and mounts
+  `<div id="elmish-app">`. The SDK publishes no dependency list a template could import, so the
+  contract is read from where the repository keeps it: the npm list and plugin order from
+  `samples/MinimalClient` (the maintained consumer the browser-smoke fixture also mirrors) and the
+  mount id from the `Program.withReactStore` call in `Client.run`
+  (`src/ToolUp.Platform.Client/Client/SDK.Client.fs`). `VerifyTemplates` holds every template client
+  to all three before it packs anything, so a package the SDK client gains, a plugin it needs or a
+  renamed mount id reddens it by name. It then instantiates each template with a client outside the
+  repository (`platformsdk-application` inside a fresh `platformsdk-solution`), restores the client
+  against the gate-version packages, installs its npm packages (`npm ci` where the template commits a
+  lock file), transpiles it with Fable and runs `vite build`, and fails on any template whose client
+  does not bundle. It does not serve the bundle or open a browser; the mount id is held by the
+  static check instead, so a shell that mounts and then fails at runtime is not caught here.
 - ToolUp.* packages are consumed via the `ToolUpSdkVersion` property in `Directory.Packages.props`; bump the property to bump every transitive ToolUp package.
 - The `platformsdk-solution` template includes a `Directory.Build.props`, `Directory.Packages.props`, `nuget.config`, `global.json`, and `.gitignore` so the scaffold is a complete buildable repo root.
 - Modules ship the same 4-file convention demonstrated by `samples/HelloWorld/HelloWorld.Module/`.

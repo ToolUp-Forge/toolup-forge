@@ -8,9 +8,20 @@ import nugetContent from "./vite-fuaran-content.mjs";
 // SDK shell's classes live, and MUST precede `tailwindcss()`.
 import tailwindcss from "@tailwindcss/vite";
 import fableTailwindGitignore from "./vite-fable-tailwind.mjs";
+// The two plugins the SDK client bundle's sources need: `svgr` turns the
+// shell's `./icons/*.svg?react` imports into React components and MUST
+// precede `react()`.
+import react from "@vitejs/plugin-react";
+import svgr from "vite-plugin-svgr";
 
 export default defineConfig({
-  plugins: [nugetContent(), fableTailwindGitignore(), tailwindcss()],
+  plugins: [
+    nugetContent(),
+    fableTailwindGitignore(),
+    tailwindcss(),
+    svgr({ svgrOptions: { dimensions: false } }),
+    react()
+  ],
   server: {
     port: 9080,
     proxy: {

@@ -1018,7 +1018,12 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
         // Once at start: the sweep runs as a scheduler job, placed by the
         // scheduler's own unit; the root admits the unit against the final
         // configuration.
+        // The sweep runs under each listed tenant scope, so it is declared
+        // protected: the job API stops it for a platform administrator only.
         withPolicy
+        |> ServerApp.addContribution (
+            Contribution.service owner (JobApiHandler.declareProtected ConversationRetention.SweepHandlerName)
+        )
         |> ServerApp.addContribution (
             Contribution.hosted
                 owner

@@ -848,6 +848,16 @@ module FactsCompose =
         //     by `reactToDataChange`, never on a cadence. Once at start,
         //     like (3) below: a scheduler registration, placed by the
         //     scheduler's own unit.
+        //
+        //     A recompute and a grounded-narrative run are platform work
+        //     scheduled under the tenant's own scope, so both handlers are
+        //     declared protected: the job API stops their jobs for a
+        //     platform administrator only.
+        services
+        |> JobApiHandler.declareProtected RecomputeJobHandler.HandlerName
+        |> JobApiHandler.declareProtected GroundedNarrativeTrigger.HandlerName
+        |> ignore
+
         Hosting.register
             services
             (Hosting.deferredJobs "reactive-fact-recomputation" [
@@ -1644,7 +1654,13 @@ module FactsCompose =
         // Schedule the standing check on the opt-in cadence. The scheduler +
         // metric registry are only resolvable from the built container, so
         // registration happens in a startup hosted service — once at start:
-        // a scheduler registration, placed by the scheduler's own unit.
+        // a scheduler registration, placed by the scheduler's own unit. The
+        // check runs under each declared principal's tenant scope, so its
+        // handler is declared protected: the job API stops it for a
+        // platform administrator only.
+        JobApiHandler.declareProtected CoherenceJobHandler.HandlerName services
+        |> ignore
+
         Hosting.register
             services
             (BackgroundUnit.create "fact-coherence-check-scheduling" OnceAtStart (fun sp ->

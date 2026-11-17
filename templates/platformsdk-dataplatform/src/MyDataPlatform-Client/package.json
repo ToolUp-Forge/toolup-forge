@@ -8,13 +8,25 @@
     "build": "vite build",
     "preview": "vite preview"
   },
+  "//": "dependencies: the npm packages the ToolUp.Platform.Client bundle imports, at the versions the SDK pins. Move them when you move the SDK version, not separately.",
   "dependencies": {
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "@clerk/react": "^6.6.4",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "ag-charts-community": "13.3.0",
+    "ag-charts-react": "13.3.0",
+    "ag-grid-community": "35.3.0",
+    "ag-grid-react": "35.3.0",
+    "react": "~19.2.6",
+    "react-dom": "~19.2.6",
+    "yjs": "^13.6.27"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "tailwindcss": "4.3.0",
-    "vite": "^8.0.13"
+    "vite": "^8.0.13",
+    "vite-plugin-svgr": "^5.2.0"
   }
 }

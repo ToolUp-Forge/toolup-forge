@@ -494,8 +494,9 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     elsewhere "SourceCitations" (LegKind.Body b.SourceCitations) [ Site.Ci "source-citations" ] [ Input.Tree ]
     elsewhere "UploadResults" (LegKind.Body b.UploadResults) [ Site.Ci "source-citations" ] [ Input.Tree ]
     // The three template gates pack a closure from source and restore the
-    // rest from nuget.org.
-    elsewhere "Templates" (LegKind.Body b.Templates) [ Site.Ci "templates" ] [ Input.Tree; Input.Network ]
+    // rest from nuget.org. `Templates` also installs each template client's
+    // npm packages and bundles it with Vite.
+    elsewhere "Templates" (LegKind.Body b.Templates) [ Site.Ci "templates" ] [ Input.Tree; Input.Network; Input.Node ]
     elsewhere "PackagedModuleTemplate" (LegKind.Body b.PackagedModuleTemplate) [ Site.Ci "templates" ] [
         Input.Tree
         Input.Network
@@ -883,6 +884,11 @@ let notRead: (string * string) list = [
     "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
     "templates/**/launchSettings.json",
     "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
+    "templates/**/package.json",
+    "a template client's npm manifest, held to the SDK client contract and installed by the Templates row (VerifyTemplates), which the templates CI job runs and VerifyAll does not"
+    "templates/**/package-lock.json",
+    "a template client's lock file, installed by the Templates row (CI-only) when it bundles the client"
+    "templates/**/index.html", "a template client's page, held to the shell's mount id by the Templates row (CI-only)"
     "client-styling/check-drift.ps1",
     "run by the Templates row (VerifyTemplates), which the templates CI job runs and VerifyAll does not"
     "client-styling/tailwind/**",

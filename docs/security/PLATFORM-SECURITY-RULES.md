@@ -233,14 +233,32 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 >   one exception is a job registered under the platform container, which may
 >   name a tenant (the OAuth token refresh).
 >
+> **A tenant cannot stop platform work in its own scope.** The platform
+> registers some of its own jobs under a tenant's scope (the offboarding
+> grace-period poll, the tenant lifecycle run, data-ingestion runs, the
+> provider token refresh and status probe, data-subject exports, retention and
+> orphan sweeps, fact recomputation and coherence checks, narrative runs,
+> asset derivatives, ingestion retries, report renders). Each such handler is
+> declared protected where it is registered (`declareProtected`), and the job
+> API answers `Cancel`, `Disable` and `Enable` on a protected handler's job with
+> a fixed refusal (`ProtectedHandlerRefusal`, an `Error`, not an exception) for
+> every caller but a platform administrator. The job is read in the caller's
+> own scope, so a job id from another scope is answered as an unknown id and
+> the refusal reveals nothing about it. A handler cannot be declared both
+> wire-schedulable and protected: the composition is refused.
+>
 > **Evidence (jobs):**
 > `src/ToolUp.Platform.Server/Server/JobApiHandler.fs`
-> (`declareWireSchedulable`) ·
+> (`declareWireSchedulable`, `declareProtected`) ·
+> `src/ToolUp.Platform.Server/Server/Compose/ComposeTenantLifecycle.fs` and
+> `src/ToolUp.Platform.Server/Server/Compose/ComposeJobs.fs` (the platform's
+> own declarations) ·
 > `src/ToolUp.Platform.Server/Server/IJobHandler.fs` (`JobPayloadScope`) ·
 > `src/ToolUp.Platform.Server/Server/LifecycleJobHandler.fs` ·
 > `src/ToolUp.Platform.Server/Server/ScheduledDeprovisionJobHandler.fs` ·
 > `src/ToolUp.Platform.Tests/JobApiHandlerNamespaceTests.fs` ·
-> `docs/migrations/1283-wire-schedulable-job-handlers.md` (Phase 1283)
+> `docs/migrations/1283-wire-schedulable-job-handlers.md` (Phase 1283) ·
+> `docs/migrations/1360-protected-job-handlers.md` (Phase 1360)
 
 > **TI-1b — Membership caches are invalidated by event, and a deprovisioned
 > tenant's cache entries are evicted, so a warm cache cannot resolve a revoked

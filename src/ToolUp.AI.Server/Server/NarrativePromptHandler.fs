@@ -737,7 +737,10 @@ let withPromptAdmin (app: ServerApp) : ServerApp =
                 NarrativeRegenerateJob.hostedService)
         |> ignore
 
-        s
+        // A regeneration runs under the caller's own scope, so the handler is
+        // declared protected: the job API stops it for a platform
+        // administrator only.
+        JobApiHandler.declareProtected NarrativeRegenerateJob.HandlerName s
 
     {
         app with

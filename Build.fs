@@ -985,11 +985,357 @@ let main args =
 
     Target.create "VerifyBrowserSmoke" (fun _ -> ensure "BrowserSmoke" (runVerifyBrowserSmoke ()))
 
+    // ── The template clients: what the SDK bundle needs, and a bundle ──
+    //
+    // A template's client is a consumer of the SDK client bundle, so it has to
+    // carry what that bundle needs: the npm packages its sources import, the
+    // Vite plugins they need, and the element the shell mounts into. The SDK
+    // publishes none of that as data, so the contract is read from where the
+    // repository keeps it: the npm list and the plugin order from
+    // `samples/MinimalClient` (the maintained consumer the browser-smoke
+    // fixture and the Fable test harness already mirror), and the mount id
+    // from the `Client.run` source. The check below holds every template
+    // client to them; the bundle below proves the result builds.
+
+    /// The maintained consumer whose `package.json` and `vite.config.mts` are
+    /// the SDK client bundle's npm and plugin contract.
+    let sdkClientContractDir = "samples/MinimalClient"
+
+    /// The source that names the element `Client.run` mounts the shell into.
+    let shellMountSource = "src/ToolUp.Platform.Client/Client/SDK.Client.fs"
+
+    /// The function calls in a Vite config's `plugins: [ … ]` array, in order.
+    let vitePluginCalls (configText: string) : string list =
+        let text =
+            configText.Split('\n')
+            |> Array.map (fun line ->
+                match line.IndexOf "//" with
+                | -1 -> line
+                | i -> line.Substring(0, i))
+            |> String.concat "\n"
+
+        match text.IndexOf "plugins:" with
+        | -1 -> []
+        | start ->
+            let openAt = text.IndexOf('[', start)
+
+            let rec close i depth =
+                if i >= text.Length then
+                    text.Length
+                else
+                    match text[i] with
+                    | '[' -> close (i + 1) (depth + 1)
+                    | ']' when depth = 1 -> i
+                    | ']' -> close (i + 1) (depth - 1)
+                    | _ -> close (i + 1) depth
+
+            let body = text.Substring(openAt, close openAt 0 - openAt)
+
+            [
+                for m in System.Text.RegularExpressions.Regex.Matches(body, @"(?<![\w.$])([A-Za-z_$][\w$]*)\s*\(") ->
+                    m.Groups[1].Value
+            ]
+
+    /// `{ name: spec }` of one section of a `package.json`, empty when absent.
+    let packageSection (packageJson: string) (section: string) : Map<string, string> =
+        use doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText packageJson)
+
+        match doc.RootElement.TryGetProperty section with
+        | true, deps ->
+            deps.EnumerateObject()
+            |> Seq.map (fun p -> p.Name, p.Value.GetString())
+            |> Map.ofSeq
+        | _ -> Map.empty
+
+    /// The element id `Client.run` mounts into, read from its source; a
+    /// source naming more than one id is refused, since a template can then
+    /// be held to none of them.
+    let shellMountId () : string =
+        let ids =
+            System.Text.RegularExpressions.Regex.Matches(
+                File.ReadAllText shellMountSource,
+                @"withReactStore(?:Hydrate)?\s+\w+\s+""([^""]+)"""
+            )
+            |> Seq.map _.Groups[1].Value
+            |> Seq.distinct
+            |> List.ofSeq
+
+        match ids with
+        | [ id ] -> id
+        | _ ->
+            failwithf
+                "VerifyTemplates: %s names %d shell mount ids (%s), not one; the template clients cannot be held to it."
+                shellMountSource
+                ids.Length
+                (String.concat ", " ids)
+
+    /// Every template client under `templates/`, the same set the styling
+    /// drift check covers: `templates/<template>/src/<App>-Client` with a
+    /// `vite.config.mts`.
+    let templateClientDirs () : string list =
+        Directory.GetDirectories "templates"
+        |> Array.collect (fun t ->
+            let src = Path.Combine(t, "src")
+
+            if Directory.Exists src then
+                Directory.GetDirectories(src, "*-Client")
+            else
+                [||])
+        |> Array.filter (fun d -> File.Exists(Path.Combine(d, "vite.config.mts")))
+        |> Array.map (fun d -> d.Replace('\\', '/'))
+        |> Array.sort
+        |> List.ofArray
+
+    /// What a template client lacks against the SDK client contract: an npm
+    /// package or plugin the maintained consumer declares, at another spec or
+    /// not at all; a plugin out of the canonical order; a mount element other
+    /// than the shell's. One line per finding.
+    let templateClientFindings (mountId: string) (clientDir: string) : string list =
+        let canonPackage = Path.Combine(sdkClientContractDir, "package.json")
+        let canonDeps = packageSection canonPackage "dependencies"
+        let canonDev = packageSection canonPackage "devDependencies"
+
+        let canonPlugins =
+            vitePluginCalls (File.ReadAllText(Path.Combine(sdkClientContractDir, "vite.config.mts")))
+
+        let package = Path.Combine(clientDir, "package.json")
+        let deps = packageSection package "dependencies"
+        let dev = packageSection package "devDependencies"
+
+        let plugins =
+            vitePluginCalls (File.ReadAllText(Path.Combine(clientDir, "vite.config.mts")))
+
+        let missing section (canon: Map<string, string>) (have: Map<string, string>) = [
+            for KeyValue(name, spec) in canon do
+                match have.TryFind name with
+                | Some s when s = spec -> ()
+                | Some s -> sprintf "%s: %s '%s' is '%s' in %s/package.json" clientDir name s spec sdkClientContractDir
+                | None ->
+                    sprintf
+                        "%s: %s lacks '%s' (%s in %s/package.json), which the SDK client bundle needs"
+                        clientDir
+                        section
+                        name
+                        spec
+                        sdkClientContractDir
+        ]
+
+        // The canonical plugins must appear in the template's array in the
+        // canonical order; the template may interleave its own.
+        let rec subsequence canon have =
+            match canon, have with
+            | [], _ -> true
+            | _, [] -> false
+            | c :: cs, h :: hs when c = h -> subsequence cs hs
+            | _, _ :: hs -> subsequence canon hs
+
+        let pluginFindings =
+            if subsequence canonPlugins plugins then
+                []
+            else
+                [
+                    sprintf
+                        "%s: vite.config.mts plugins [%s] do not carry [%s] in that order (%s/vite.config.mts)"
+                        clientDir
+                        (String.concat ", " plugins)
+                        (String.concat ", " canonPlugins)
+                        sdkClientContractDir
+                ]
+
+        let html = File.ReadAllText(Path.Combine(clientDir, "index.html"))
+
+        let mountFindings =
+            if html.Contains(sprintf "id=\"%s\"" mountId) then
+                []
+            else
+                [
+                    sprintf
+                        "%s: index.html has no element with id \"%s\", the id Client.run mounts the shell into (%s)"
+                        clientDir
+                        mountId
+                        shellMountSource
+                ]
+
+        missing "dependencies" canonDeps deps
+        @ missing "devDependencies" canonDev dev
+        @ pluginFindings
+        @ mountFindings
+
+    /// One template client the gate instantiates and bundles. `Host` is the
+    /// template an item template is added to, scaffolded first in the same
+    /// directory; `Client` is the client directory in the scaffold.
+    let bundledTemplateClients = [
+        {|
+            Template = "templates/platformsdk-application"
+            ShortName = "platformsdk-application"
+            Name = "GateApp"
+            Args = [ "--port-server"; "9000"; "--port-client-vite"; "9080" ]
+            Host =
+                Some(
+                    "templates/platformsdk-solution",
+                    "platformsdk-solution",
+                    [ "-n"; "GateHost"; "--skipRestore"; "true" ]
+                )
+            Client = "src/GateApp-Client"
+        |}
+        {|
+            Template = "templates/platformsdk-dataplatform"
+            ShortName = "platformsdk-dataplatform"
+            Name = "GateData"
+            Args = [ "--sdk-version"; TemplateGate.version; "--feed"; "../local-nuget-feed" ]
+            Host = None
+            Client = "src/GateData-Client"
+        |}
+        {|
+            Template = "templates/platformsdk-solution"
+            ShortName = "platformsdk-solution"
+            Name = "GateSln"
+            Args = [ "--skipRestore"; "true" ]
+            Host = None
+            Client = "src/GateSln-Client"
+        |}
+        {|
+            Template = "templates/safer"
+            ShortName = "toolup-safer"
+            Name = "GateSafer"
+            Args = [ "--toolUpSdkVersion"; TemplateGate.version; "--skipRestore"; "true" ]
+            Host = None
+            Client = "src/GateSafer-Client"
+        |}
+    ]
+
+    /// Instantiate each template with a client outside the repository, install
+    /// its npm packages, transpile it with Fable against the gate-version
+    /// packages and bundle it with Vite. Every template is tried; the failures
+    /// are reported together. It does not serve the bundle: the mount id is
+    /// held statically by `templateClientFindings`.
+    let bundleTemplateClients () =
+        let feedDir = Path.getFullName TemplateGatePackages.verifyTemplates.Feed
+        let packages = TemplateGate.privatePackagesFolder (Path.getFullName ".")
+        System.Environment.SetEnvironmentVariable("NUGET_PACKAGES", packages)
+
+        let npm =
+            Proc.onPath
+                (sprintf
+                    "VerifyTemplates: `%s` was not found on PATH. Bundling a template client needs Node.js (>= 20).")
+                "npm"
+
+        let scratchRoot = Scratch.root "tu-tcb"
+
+        // Each scaffold's nuget.config names `../local-nuget-feed`, the folder
+        // feed beside an app; the gate's packages arrive through the restore
+        // below, so the folder exists and stays empty, as it does in CI.
+        Directory.ensure (Path.Combine(scratchRoot, "local-nuget-feed"))
+
+        let bundle
+            (tc:
+                {|
+                    Template: string
+                    ShortName: string
+                    Name: string
+                    Args: string list
+                    Host: (string * string * string list) option
+                    Client: string
+                |})
+            =
+
+            let scaffold = Path.Combine(scratchRoot, tc.Name)
+            Shell.deleteDir scaffold
+            Directory.ensure scaffold
+            let started = System.Diagnostics.Stopwatch.StartNew()
+
+            let step (what: string) (exe: string) (args: string list) (dir: string) =
+                Trace.tracefn "▶ VerifyTemplates [%s]: %s" tc.Name what
+                let r = Proc.exec exe args dir
+
+                if r.ExitCode <> 0 then
+                    failwithf "%s: %s exited %d" tc.Template what r.ExitCode
+
+            let instantiate (templateDir: string) (shortName: string) (args: string list) =
+                let path = Path.getFullName templateDir
+                Proc.exec "dotnet" [ "new"; "uninstall"; path ] "." |> ignore
+                step (sprintf "dotnet new install %s" templateDir) "dotnet" [ "new"; "install"; path ] "."
+
+                try
+                    step (sprintf "dotnet new %s" shortName) "dotnet" ([ "new"; shortName; "-o"; scaffold ] @ args) "."
+                finally
+                    Proc.exec "dotnet" [ "new"; "uninstall"; path ] "." |> ignore
+
+            match tc.Host with
+            | Some(hostDir, hostShort, hostArgs) -> instantiate hostDir hostShort hostArgs
+            | None -> ()
+
+            instantiate tc.Template tc.ShortName ([ "-n"; tc.Name ] @ tc.Args)
+            let clientDir = Path.Combine(scaffold, tc.Client)
+            let project = Path.Combine(clientDir, Path.GetFileName tc.Client + ".fsproj")
+
+            if not (File.Exists project) then
+                failwithf "%s: the scaffold has no client project at %s" tc.Template project
+
+            step "dotnet tool restore" "dotnet" [ "tool"; "restore" ] clientDir
+
+            // Restore pins the gate version as a global property, which wins
+            // over the scaffold's own pin, and Fable reads that restore
+            // (`--noRestore`) rather than re-resolving the scaffold's pin.
+            step
+                "dotnet restore (gate-version packages)"
+                "dotnet"
+                [
+                    "restore"
+                    project
+                    sprintf "-p:ToolUpSdkVersion=%s" TemplateGate.version
+                    sprintf "-p:RestoreAdditionalProjectSources=%s" feedDir
+                    "-warnaserror:NU1603"
+                ]
+                clientDir
+
+            // `ci` where the template commits a lock file, as its own launcher
+            // installs; `install` where it commits none.
+            let install =
+                if File.Exists(Path.Combine(clientDir, "package-lock.json")) then
+                    "ci"
+                else
+                    "install"
+
+            step (sprintf "npm %s" install) npm [ install; "--no-fund"; "--no-audit" ] clientDir
+            step "dotnet fable -o output" "dotnet" [ "fable"; "-o"; "output"; "--noRestore" ] clientDir
+            step "npm run build (vite build)" npm [ "run"; "build" ] clientDir
+
+            let dist = Path.Combine(clientDir, "dist", "index.html")
+
+            if not (File.Exists dist) then
+                failwithf "%s: vite build exited 0 and wrote no %s" tc.Template dist
+
+            Trace.tracefn "▶ VerifyTemplates [%s]: bundled in %.0f s" tc.Name started.Elapsed.TotalSeconds
+            Shell.deleteDir scaffold
+
+        let failures = [
+            for tc in bundledTemplateClients do
+                try
+                    bundle tc
+                with e ->
+                    Trace.traceErrorfn "VerifyTemplates [%s]: %s" tc.Name e.Message
+                    yield sprintf "%s: %s" tc.Template e.Message
+        ]
+
+        // A failed scaffold is left in place for diagnosis; a clean run leaves nothing.
+        if failures.IsEmpty then
+            Shell.deleteDir scratchRoot
+        else
+            failwithf
+                "VerifyTemplates: %d of %d template client(s) did not bundle (scaffolds kept under %s):\n  %s"
+                failures.Length
+                bundledTemplateClients.Length
+                scratchRoot
+                (String.concat "\n  " failures)
+
     // The template-content compile gate. Its rationale and its spec are
     // `TemplateGatePackages.verifyTemplates`; the mechanism is `TemplateGate.run`.
     // It first holds every template client to the canonical styling block and
     // pins (`client-styling/check-drift.ps1`), scoped to this repository so the
-    // check reads the templates and nothing beside the clone.
+    // check reads the templates and nothing beside the clone, and to the SDK
+    // client contract (`templateClientFindings`). After the compile it bundles
+    // every template client from a fresh instantiation (`bundleTemplateClients`).
     let runVerifyTemplates () =
         let drift =
             Proc.exec
@@ -1002,7 +1348,33 @@ let main args =
                 "VerifyTemplates: client-styling/check-drift.ps1 exited %d; a template client has drifted from the canonical styling block or its pins (the lines above name which)."
                 drift.ExitCode
 
+        let mountId = shellMountId ()
+        let clients = templateClientDirs ()
+
+        let unbundled =
+            clients
+            |> List.filter (fun d ->
+                not (
+                    bundledTemplateClients
+                    |> List.exists (fun tc -> d.StartsWith(tc.Template + "/"))
+                ))
+            |> List.map (
+                sprintf "%s: a template client the bundle step does not instantiate; add it to bundledTemplateClients"
+            )
+
+        match unbundled @ List.collect (templateClientFindings mountId) clients with
+        | [] -> Trace.tracefn "▶ VerifyTemplates: %d template client(s) carry the SDK client contract" clients.Length
+        | findings ->
+            findings |> List.iter (Trace.traceErrorfn "  %s")
+
+            failwithf
+                "VerifyTemplates: %d finding(s) against the SDK client contract (%s/package.json and vite.config.mts, and the shell mount id in %s); the lines above name each."
+                findings.Length
+                sdkClientContractDir
+                shellMountSource
+
         TemplateGate.run TemplateGatePackages.verifyTemplates
+        bundleTemplateClients ()
 
     Target.create "VerifyTemplates" (fun _ -> runVerifyTemplates ())
 

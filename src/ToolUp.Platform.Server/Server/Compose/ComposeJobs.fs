@@ -609,6 +609,11 @@ let registerDataIngestion
         let configStoreInstance = DataSourceConfigStore.create resolvedBlobStorage
         services.AddSingleton<IDataSourceConfigStore>(configStoreInstance) |> ignore
 
+        // An ingestion run is platform work scheduled under the tenant's own
+        // scope: the job API stops it for a platform administrator only.
+        JobApiHandler.declareProtected DataIngestionJobHandler.JobHandlerName services
+        |> ignore
+
         services.AddSingleton<IDataIngestor>(fun sp ->
             let connectors =
                 sp.GetServices(typeof<IDataSource>) |> Seq.cast<IDataSource> |> List.ofSeq
@@ -844,7 +849,13 @@ let registerProviderOAuth
                     "[Phase 43.B] Provider-profile OAuth flows / status probe are wired but JobScheduler = NoJobScheduler — token auto-refresh and the live-status probe will not run. Pair with JobScheduler = InProcessJobScheduler."
                 )
             | Some scheduler ->
+                // Both handlers are platform work scheduled under the tenant's
+                // own scope, so each is declared protected: the job API stops
+                // their jobs for a platform administrator only.
                 if not providerFlows.IsEmpty then
+                    JobApiHandler.declareProtected ProviderOAuthRefreshJobHandler.HandlerName services
+                    |> ignore
+
                     scheduler.RegisterHandler(
                         ProviderOAuthRefreshJobHandler.HandlerName,
                         ProviderOAuthRefreshJobHandler.create
@@ -857,6 +868,9 @@ let registerProviderOAuth
 
                 match probeOpt with
                 | Some probe ->
+                    JobApiHandler.declareProtected ProviderStatusProbeJobHandler.HandlerName services
+                    |> ignore
+
                     scheduler.RegisterHandler(
                         ProviderStatusProbeJobHandler.HandlerName,
                         ProviderStatusProbeJobHandler.create providerProfile probe resolvedLogger
@@ -1008,6 +1022,12 @@ let registerDataSubjectRequestJobs
             services.AddSingleton<IBackgroundExportStore>(store) |> ignore
 
             let audit = DataSubjectRequestApiHandler.auditToLog auditLog
+
+            // An export is platform work the platform owes the data subject,
+            // scheduled under the requester's own scope: the job API stops it
+            // for a platform administrator only.
+            JobApiHandler.declareProtected DataSubjectRequestApiHandler.DsrJobs.ExportHandler services
+            |> ignore
 
             // Once at start: a handler registration, placed by the
             // scheduler's own unit.

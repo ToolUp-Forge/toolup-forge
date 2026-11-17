@@ -294,6 +294,24 @@ The 49,990 bytes are 3.3 % of the shell's JavaScript first load above. They are 
 all: without the block none of the shell's utility classes (`bg-sidebar`, `bg-brand`, `border-border`, …) is
 generated, and the shell renders unstyled.
 
+**The whole first load of a template app (Phase 1365).** Once the template clients declare the SDK bundle's npm
+packages and plugins, a freshly instantiated template bundles with no edit. Measured 2026-11-16 on an unmodified
+`safer` app (the gate-version SDK packages from this tree, `vite` 8.3.8), production `vite build`, the files
+`index.html` loads before the shell draws:
+
+| Asset | Bytes | Gzipped |
+|---|---:|---:|
+| entry JavaScript | 1,409,451 | 354.58 kB |
+| preloaded `react` chunk | 8,195 | 3.16 kB |
+| CSS entry (the canonical block, the reference stylesheet, the bridge) | 118,807 | 19.50 kB |
+| first load | 1,536,453 | 377.24 kB |
+
+The grid and chart runtimes stay on demand (1,139,797 and 1,178,166 bytes, fetched only by a surface that draws
+one), as in the shell's own bundle above. The other three templates' entries measured within 6 KB of this one
+(1,403,750 to 1,407,800 bytes) with the same CSS. That split depends on the bundler: the same clients locked to
+`vite` 8.0.13 (`rolldown` 1.0.1) inlined both runtimes into a 3,696,270-byte entry, so the template lock files were
+regenerated from a fresh resolution rather than patched.
+
 The split points came from the bundle, by package (rendered bytes, before minifying):
 
 | Candidate | KiB | Decision |
