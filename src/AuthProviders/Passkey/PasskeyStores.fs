@@ -226,9 +226,14 @@ type PasskeyCredentialStore(blobs: IBlobStorage) =
     }
 
     /// Release a claim whose enrolment was refused after it was taken.
-    member _.ReleaseIdentity(userId: UserId) : Async<unit> = async {
-        let! _ = blobs.Delete(container, PasskeyConfig.IdentityClaimPrefix + userHandleFor userId.Value + ".json")
-        return ()
+    /// `Error` when the store could not delete the claim: the username stays
+    /// unenrollable until the claim blob the message names is removed.
+    member _.ReleaseIdentity(userId: UserId) : Async<Result<unit, string>> = async {
+        let claim = PasskeyConfig.IdentityClaimPrefix + userHandleFor userId.Value + ".json"
+
+        match! blobs.Delete(container, claim) with
+        | Ok() -> return Ok()
+        | Error e -> return Error $"the identity claim {container}/{claim} could not be released: {e}"
     }
 
 // ─── Session signing secret ──────────────────────────────────────────

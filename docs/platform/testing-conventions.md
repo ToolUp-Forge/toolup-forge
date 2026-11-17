@@ -208,6 +208,32 @@ Everything that used to restate the list is a render of the rows, and each rende
 
 `dotnet run --project Build.fsproj -- Gate --run <row>` runs one row on its own (building what it names), which is how the CI-only jobs invoke theirs. A consumer's `Build.fs` that sets `TestPacks` and calls `VerifyLeg.register` is unchanged: both are derived views onto `Gate.register`.
 
+### Checks that run only in CI, and what to run before you push
+
+`verify.ps1` runs the `Local` rows. A row whose `Where` names only a CI job is not in it, so a landing gated green
+locally can still turn a CI job red on `main`. The trailer `VerifyAll` prints at the end of every run names those
+rows and what they read; that trailer is the current list. At the time of writing it is:
+
+| CI job | Rows | Before pushing, run |
+|---|---|---|
+| `source-citations` | `SourceCitations`, `UploadResults` | `dotnet run --project Build.fsproj -- VerifySourceCitations` and `-- VerifyUploadResults` (seconds; no compile) |
+| `doc-snippets` | `DocSnippets` | `dotnet run --project Build.fsproj -- VerifyDocSnippets` (compiles every in-scope doc block; minutes) |
+| `fable-wire-smoke`, `ai-wire-conformance` | `WireTests`, `WireFable`, `WireConformance`, `WireConformanceFable` | `dotnet run --project Build.fsproj -- Gate --run <row>` |
+| `templates` | `Templates`, `PackagedModuleTemplate`, `DataPlatformTemplate` | `-- VerifyTemplates`, `-- VerifyPackagedModuleTemplate`, `-- Gate --run DataPlatformTemplate` (need Node and the network) |
+| `browser-smoke` | `BrowserSmoke` | `-- Gate --run BrowserSmoke` (needs Node and a browser) |
+| `perf-budget`, `proofs` | `PerfBudget`, `Proofs` | `-- Gate --run <row>` |
+
+`spdx-headers` and `dco` have no row: the first lints the Fable-packed sources' headers, the second the commit
+messages of a PR. `fantomas` runs in `verify.ps1` too.
+
+Which of them a change needs is a question about what it touches, not a ritual. The two `source-citations` rows
+read only the tree and cost seconds, so run them on any change under `src/` or `docs/`. `UploadResults` refuses a
+production line that discards the result of a blob write or delete (the rule:
+[`storage-write-results.md`](storage-write-results.md)), which a local gate cannot see, so a discarded `Delete`
+lands green and fails CI on `main`. Run `DocSnippets` when a change moves a public signature a documentation
+block may call or edits a fenced block. Run a `templates` or `browser-smoke` row when a change touches the client
+tier, the templates or the package closure they restore.
+
 ## What the gate costs: `gate-timings.json`
 
 How long the gate takes is a committed record, not a figure to quote: read `gate-timings.json` at the repository root.

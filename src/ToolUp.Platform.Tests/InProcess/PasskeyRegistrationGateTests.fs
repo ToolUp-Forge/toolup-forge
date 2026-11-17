@@ -136,8 +136,13 @@ let private freshDeployment (admins: string list) : Deployment =
     }
 
 /// One replica: its own process (its own challenge store), the
-/// deployment's shared substrate.
-let private replica (deployment: Deployment) (config: PasskeyConfig) (user: AuthenticatedUser) =
+/// deployment's shared substrate, and `extra` registrations on top.
+let private replicaWith
+    (extra: IServiceCollection -> unit)
+    (deployment: Deployment)
+    (config: PasskeyConfig)
+    (user: AuthenticatedUser)
+    =
     let runtime: PasskeyRuntime = {
         Config = config
         Fido2 = ceremonyFido2 config
@@ -161,13 +166,65 @@ let private replica (deployment: Deployment) (config: PasskeyConfig) (user: Auth
                         services.AddSingleton<ITeamStore>(deployment.Teams) |> ignore
                         services.AddSingleton<IShareTokenStore>(deployment.ShareTokens) |> ignore
                         services.AddSingleton<IPendingInviteStore>(deployment.PendingInvites) |> ignore
-                        services.AddSingleton<IPlatformAdminStore>(deployment.Admins) |> ignore)
+                        services.AddSingleton<IPlatformAdminStore>(deployment.Admins) |> ignore
+                        extra services)
                     .Configure(fun (app: IApplicationBuilder) -> app.UseGiraffe routes)
                 |> ignore)
             .Build()
 
     host.Start()
     host.GetTestClient(), runtime, host
+
+let private replica = replicaWith ignore
+
+/// A conditional blob store whose `Delete` fails, passing everything else
+/// through to an in-memory store: a claim can be taken but not released.
+type private DeleteRefusingBlobStorage() =
+    let inner = InMemoryBlobStorage()
+    let blobs = inner :> IBlobStorage
+    let cas = inner :> IConditionalBlobStorage
+
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(container, blobName) =
+            cas.DownloadWithETag(container, blobName)
+
+        member _.UploadWithETag(container, blobName, content, condition) =
+            cas.UploadWithETag(container, blobName, content, condition)
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = blobs.CanComposeFrom
+
+        member _.ComposeFrom(container, target, sources) =
+            blobs.ComposeFrom(container, target, sources)
+
+        member _.Upload(container, blobName, content) =
+            blobs.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = blobs.Download(container, blobName)
+        member _.Delete(_, _) = async { return Error "simulated storage delete failure" }
+        member _.List(container, prefix) = blobs.List(container, prefix)
+        member _.Exists(container, blobName) = blobs.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = blobs.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            blobs.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            blobs.Erase(container, prefix, policy, dryRun)
+
+/// A logger that keeps every warning and error it is given.
+let private recordingLogger () =
+    let lines = System.Collections.Concurrent.ConcurrentQueue<string>()
+
+    let logger =
+        { new ILogger with
+            member _.Debug _ = ()
+            member _.Info _ = ()
+            member _.Warn m = lines.Enqueue m
+            member _.Error(m, _) = lines.Enqueue m
+        }
+
+    logger, lines
 
 let private post (client: HttpClient) (path: string) (body: string) : HttpStatusCode * string =
     let req =
@@ -557,6 +614,58 @@ let tests =
                     (outcomes |> List.filter ((=) HttpStatusCode.OK) |> List.length)
                     1
                     $"exactly one ceremony is signed in on the bootstrap token: %A{outcomes}")
+        }
+
+        testCaseAsync "a claim the store cannot release is logged with its handle, and the refusal stands"
+        <| async {
+            let deployment = {
+                freshDeployment [] with
+                    Blobs = DeleteRefusingBlobStorage() :> IBlobStorage
+            }
+
+            let cfg = {
+                baseConfig with
+                    BootstrapToken = Some "first-run-secret"
+            }
+
+            let logger, lines = recordingLogger ()
+
+            let withLogger (services: IServiceCollection) =
+                services.AddSingleton<ILogger>(logger) |> ignore
+
+            onReplica (replicaWith withLogger deployment cfg anonymous) (fun client _ ->
+                // Both begin before either completes, so the loser claims its
+                // id at completion and only then finds the token spent: the
+                // claim is released on the way to its refusal.
+                let _, bodyA =
+                    post
+                        client
+                        "/api/passkey/register/begin"
+                        """{"username":"a","bootstrapToken":"first-run-secret"}"""
+
+                let _, bodyB =
+                    post
+                        client
+                        "/api/passkey/register/begin"
+                        """{"username":"b","bootstrapToken":"first-run-secret"}"""
+
+                let complete (body: string) =
+                    let options = JsonSerializer.Deserialize<CeremonyOptionsResponse>(body, jsonOptions)
+                    fst (post client $"/api/passkey/register/complete?challenge={options.ChallengeId}" "{}")
+
+                let first = complete bodyA
+                let second = complete bodyB
+
+                Expect.equal first HttpStatusCode.OK "the first ceremony spends the token"
+                Expect.notEqual second HttpStatusCode.OK "the second is refused, release or no release"
+
+                let handle = userHandleFor "b"
+                let logged = lines |> Seq.toList
+
+                Expect.exists
+                    logged
+                    (fun l -> l.Contains(PasskeyConfig.IdentityClaimPrefix + handle))
+                    $"the failed release names the claim to remove: %A{logged}")
         }
 
         testCaseAsync "two ceremonies racing to enrol the same new user id cannot both be signed in as it"
