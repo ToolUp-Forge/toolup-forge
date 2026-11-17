@@ -1,6 +1,6 @@
 # forge composition profile — `server-app-host`
 
-**Profile version 7.5.** forge's evaluator profile of the **App-composition wire specification, format version 1**
+**Profile version 7.6.** forge's evaluator profile of the **App-composition wire specification, format version 1**
 (<https://github.com/Fuaran-Build/fuaran-app-composition-specification>, cited throughout as *core*). Sections §P1–§P8 are **normative** within this profile. §P0 and Appendix P-A
 are not.
 
@@ -47,7 +47,7 @@ Each shape this profile fills in is the core's, cited by its section: the root (
 | | |
 |---|---|
 | Profile identifier | `server-app-host` |
-| Profile version | 7.5 |
+| Profile version | 7.6 |
 | Profile kind | vocabulary (core §8.6) |
 | Core | App-composition wire specification, format version 1 — <https://github.com/Fuaran-Build/fuaran-app-composition-specification> |
 | Core version | 1 |
@@ -423,6 +423,15 @@ described result columns and a pipeline in the `Fuaran.Compute` wire form. Its t
 and the cost of a read, never its disclosure: it declares no grant, and a host judges every cell a view reads as it
 judges any other read. Every 7.4 composition carries no `datasetModel`, so it encodes byte for byte as before and is
 valid at 7.5 with the same verdict.
+
+**7.5 → 7.6 lets a client shell declare the Administration area, additively.** Until 7.6 a composition could not say that
+its bundled client splits its sidebar into a product area and an administration area: the setting lives in the client's
+configuration, the client entry is reduction output, and a hand edit to it is overwritten by the next reduction and never
+appears in the composition's record. 7.6 gives `clientShell` the OPTIONAL `adminArea` member (§P3.1), whose closed
+vocabulary (§P2.26) has the one token `separate`. No composition rule is added: a token outside the vocabulary is
+`token-unregistered`, and "inline" has one spelling, the absent member. The member says nothing about who administers,
+which stays the deployment's roles. Every 7.5 composition carries no `adminArea`, so it encodes byte for byte as before
+and is valid at 7.6 with the same verdict.
 
 ## §P2. Token vocabularies
 
@@ -978,6 +987,17 @@ The type of a value a caller supplies to a view (7.5, §P3.19).
 
 A token outside this set is `token-unregistered`.
 
+### §P2.26 `clientShell.adminArea` — **closed**
+
+How the bundled client's sidebar presents its administration modules (7.6, §P3.1).
+
+| Token | The bundled client |
+|---|---|
+| `separate` | Splits its sidebar into a product area and an administration area, and moves its built-in administration modules, led by the administration landing, into the second. |
+
+A token outside this set is `token-unregistered`. No token means "inline": a client whose administration modules appear
+as groups among the product's own is a shell without the member.
+
 ## §P3. Profile-only node kinds
 
 All of them are declared by this profile and none exists in the core (core §5.9). A `core` reader
@@ -989,6 +1009,7 @@ encountering one refuses it as `node-kind-unknown`, which is correct (core §8.3
 |---|---|---|
 | `home` | array of home entry objects | OPTIONAL (6.5); absent when the shell declares none, never empty |
 | `browserHistory` | profile token (§P2.23) | OPTIONAL (7.2); absent when the client has none |
+| `adminArea` | profile token (§P2.26) | OPTIONAL (7.6); absent when administration modules appear inline |
 
 A home entry object:
 
@@ -1011,6 +1032,15 @@ access grant: a reader who follows it meets the page's own audience (§P3.3).
 client what §P2.23 states. An absent member is a client whose active view lives in its own state, which neither reads
 nor changes the URL, and it reduces as it did before 7.2. A view's URL is an address and never an access grant: a reader
 who opens one meets the view's own guard.
+
+`adminArea` says whether the bundled client presents administration apart from the product (7.6). Under `separate` a host
+renders the product area by default; gives the area switcher only to a caller whom the administration groups' own role
+predicates admit, so a caller they refuse sees the product area alone and no switcher; keeps the caller's active team
+across a flip between the areas; and flips to the administration area when a deep link opens an administration route.
+An absent member is a client whose administration modules are groups among the product's own, and it reduces as it did
+before 7.6. The member says nothing about who administers: that stays the deployment's roles, and the area is a way of
+presenting what those roles admit, never a grant. A switcher shown to a caller is a convenience and never an access grant:
+a reader who opens an administration route meets the route's own guard.
 
 ### §P3.2 `layoutRef`
 

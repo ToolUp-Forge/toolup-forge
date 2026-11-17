@@ -1,6 +1,6 @@
 {
   "profile": "server-app-host",
-  "profileVersion": "7.5",
+  "profileVersion": "7.6",
   "note": "forge's binding of the profile's registered tokens to its own composable surface. Not part of the wire format and not normative for any other evaluator: a token is a wire spelling, and this file says which forge type, field or builder each one reduces to. It also names the parts of forge's reflected surface the profile deliberately does not register, each with its reason, so a forge release that grows its surface fails the surface check until the profile either registers the addition or says here why it does not.",
   "bases": {
     "serverApp": { "assembly": "ToolUp.Platform.Server", "type": "ToolUp.Platform.Compose.ServerApp" },
@@ -136,6 +136,12 @@
       "field": "Shell.BrowserHistory",
       "absent": "NoBrowserHistory",
       "tokens": { "hash": "HashHistory" }
+    },
+    "adminArea": {
+      "note": "What the member of profile section P3.1 reduces to in forge: the Administration row of the client's chrome configuration, which a reduction writes into the client entry it generates. The field is named by its path from ClientConfig (Chrome.AdminArea: the row sits in the Chrome concern record). The field's union has one case per token, and one for the absent member.",
+      "field": "Chrome.AdminArea",
+      "absent": "Off",
+      "tokens": { "separate": "On" }
     }
   },
   "unregisteredSettings": {

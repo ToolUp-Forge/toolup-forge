@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "profile": "server-app-host",
   "profileKind": "vocabulary",
-  "profileVersion": "7.5",
+  "profileVersion": "7.6",
   "registry": "../registry.json",
   "conformanceFamilies": [
     "document",
@@ -2050,6 +2050,28 @@
       "reject": "token-unregistered",
       "detect": "profile",
       "description": "A client shell whose browser history, off, is not section P2.23's one token: the slot is closed, and a shell with no browser history has one spelling, the absent member."
+    },
+    {
+      "id": "profile-server-app-host/client-shell-admin-area",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "round-trip",
+      "file": "profile-server-app-host/client-shell-admin-area.json",
+      "sha256": "528ced8ed1cda59ece60ba29274a111a06facf961ed2205c978e6e70f79d66ef",
+      "description": "A client shell that declares the Administration area (7.6, section P3.1) beside its home entries and browser history, so the vector pins the member's place after browserHistory. Every other member is the client-shell-browser-history round-trip vector's."
+    },
+    {
+      "id": "profile-server-app-host/reject-token-unregistered-admin-area",
+      "family": "profile-server-app-host",
+      "profile": "server-app-host",
+      "home": "server-app-host",
+      "kind": "reject",
+      "file": "profile-server-app-host/reject-token-unregistered-admin-area.json",
+      "sha256": "c13a16d00be6864f8caa6eb21c4f0257cf03b1719e06278bd1d6814893df4342",
+      "reject": "token-unregistered",
+      "detect": "profile",
+      "description": "A client shell whose Administration area, inline, is not section P2.26's one token: the slot is closed, and a shell whose administration modules appear inline has one spelling, the absent member."
     },
     {
       "id": "profile-server-app-host/tolerance-trigger",

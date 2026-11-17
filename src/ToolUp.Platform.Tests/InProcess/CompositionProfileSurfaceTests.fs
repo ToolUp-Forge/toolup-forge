@@ -263,6 +263,7 @@ let private tokenSections = [
     "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "pageRef.content.mode"
     "§P2.22 `pageRef.content` and `layoutRef.content` `mode`", "layoutRef.content.mode"
     "§P2.23 `clientShell.browserHistory`", "clientShell.browserHistory"
+    "§P2.26 `clientShell.adminArea`", "clientShell.adminArea"
     "§P2.24 `datasetModel.measures.aggregate`", "datasetModel.measures.aggregate"
     "§P2.25 `datasetModel.views.parameters.type`", "datasetModel.views.parameters.type"
     "§P2.8.1 A column's `shape`", "moduleRef.factTables.definition.columns.shape"
@@ -1323,35 +1324,33 @@ let surfaceFindings (p: Profile) (surface: Surface) : string list = [
     | Some target -> yield! resolveTarget "groundedNarrative.triggers" target
     | None -> "groundedNarrative.triggers: the surface binding names no builder"
 
-    // Browser history: each token reduces to a case of the client's field, and every case is a token or the absent member.
-    let history = prop "clientShell" b |> Option.bind (prop "browserHistory")
+    // Browser history and the Administration area: each token reduces to a case of the client's field, and every
+    // case is a token or the absent member.
+    for name in [ "browserHistory"; "adminArea" ] do
+        let path = "clientShell." + name
+        let bound = prop "clientShell" b |> Option.bind (prop name)
 
-    let boundHistory =
-        history
-        |> Option.bind (prop "tokens")
-        |> members
-        |> List.map (fun (k, v) -> k, v.GetString())
+        let boundTokens =
+            bound
+            |> Option.bind (prop "tokens")
+            |> members
+            |> List.map (fun (k, v) -> k, v.GetString())
 
-    yield!
-        both
-            "clientShell.browserHistory"
-            ("the registry", registryTokens "clientShell.browserHistory")
-            ("the surface binding", boundHistory |> List.map fst)
+        yield! both path ("the registry", registryTokens path) ("the surface binding", boundTokens |> List.map fst)
 
-    let historyField = history |> Option.bind (str "field") |> Option.defaultValue "?"
+        let field = bound |> Option.bind (str "field") |> Option.defaultValue "?"
 
-    match surface.ClientFields |> List.tryFind (fst >> (=) historyField) with
-    | None -> sprintf "clientShell.browserHistory: ClientConfig has no field %s" historyField
-    | Some(_, t) when not (FSharpType.IsUnion t) ->
-        sprintf "clientShell.browserHistory: ClientConfig.%s is not a union" historyField
-    | Some(_, t) ->
-        yield!
-            both
-                "clientShell.browserHistory values"
-                ("ClientConfig." + historyField, FSharpType.GetUnionCases t |> Array.map _.Name |> List.ofArray)
-                ("the profile (bound or the absent member)",
-                 (boundHistory |> List.map snd)
-                 @ Option.toList (history |> Option.bind (str "absent")))
+        match surface.ClientFields |> List.tryFind (fst >> (=) field) with
+        | None -> sprintf "%s: ClientConfig has no field %s" path field
+        | Some(_, t) when not (FSharpType.IsUnion t) -> sprintf "%s: ClientConfig.%s is not a union" path field
+        | Some(_, t) ->
+            yield!
+                both
+                    (path + " values")
+                    ("ClientConfig." + field, FSharpType.GetUnionCases t |> Array.map _.Name |> List.ofArray)
+                    ("the profile (bound or the absent member)",
+                     (boundTokens |> List.map snd)
+                     @ Option.toList (bound |> Option.bind (str "absent")))
 ]
 
 // ── the suite ─────────────────────────────────────────────────────────
@@ -1509,6 +1508,12 @@ let tests =
                 surfaceFindings
                     (withBinding (fun t -> t.Replace("\"absent\": \"NoBrowserHistory\"", "\"_\": 0")))
                     surface
+                // a token reduces to a case the Administration row does not have.
+                "an Administration-area token bound to no case",
+                surfaceFindings (withBinding (fun t -> t.Replace("\"On\"", "\"PlantedOn\""))) surface
+                // the Administration row grows a case nobody registered.
+                "an Administration-area case nobody registered",
+                surfaceFindings (withBinding (fun t -> t.Replace("\"absent\": \"Off\"", "\"_\": 0"))) surface
                 // the document's member table drops a registered member.
                 "a member table missing a member",
                 documentFindings {

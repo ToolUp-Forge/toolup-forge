@@ -9,7 +9,7 @@ layers, companion slots and settings forge composes, registered as found on forg
 
 ## Which profile version this release satisfies
 
-**This release of forge satisfies `server-app-host` 7.5**, the version in `spec/composition-profile.md`, its
+**This release of forge satisfies `server-app-host` 7.6**, the version in `spec/composition-profile.md`, its
 registry and its fixture manifest. The profile is versioned with the surface it describes, so the version a forge
 release satisfies is the one in that release's own `spec/` folder. Pin a profile version, not a forge commit; a
 profile version moves only when its vocabulary does (§P1 of the profile).
@@ -38,6 +38,11 @@ resolves. It is distinct from a publication's reading principal, as §P3.13 stat
 runs (`FactTablePreflight.datasetModelDefects`), and §P4.88 is the check `ViewRegistry.register` runs over each view. It
 is additive: a composition without the node encodes byte for byte as before. What it asks of a composition, and of an
 evaluator that reduces one: [`docs/migrations/1348-dataset-model-and-views.md`](../migrations/1348-dataset-model-and-views.md).
+
+7.6 lets a client shell declare the Administration area (§P3.1, §P2.26): the optional `adminArea` member, whose one token
+`separate` reduces to `ClientConfig.Chrome.AdminArea = ChromeFill.On()`. It is additive: a composition without the member
+encodes byte for byte as before, and an evaluator that reduces one with it writes the setting into the client entry it
+generates. The member says nothing about who administers, which stays the deployment's roles.
 
 ## How the check works
 
@@ -77,6 +82,10 @@ prefix must be the registry's, and the route by which a content security policy 
 
 **Browser history.** Each token of `clientShell.browserHistory` is bound to a case of the union behind
 `ClientConfig.Shell.BrowserHistory`, and the binding names the case an absent member means. Every case of that union must be
+one of the two, so a new mode fails the check until the profile registers it.
+
+**The Administration area.** Each token of `clientShell.adminArea` is bound to a case of the union behind
+`ClientConfig.Chrome.AdminArea`, and the binding names the case an absent member means. Every case of that union must be
 one of the two, so a new mode fails the check until the profile registers it.
 
 **The tolerance triggers.** `groundedNarrative.triggers` is bound to the builder it reduces to, and the builder must
