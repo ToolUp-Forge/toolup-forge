@@ -12,12 +12,13 @@ importSideEffects "./index.css"
 //   let private modules = [ Starter.ClientView.register () ]
 let private modules: ErasedModule list = []
 
-// Phase 11.G — `ClientConfigDefaults.fromBundleConstants` reads the
-// three Vite-injected constants (`__TOOLUP_MODULE__`,
-// `__AG_GRID_LICENSE__`, `__CLERK_PUBLISHABLE_KEY__`) via
-// `BundleConstants.fs`. The default `ClientConfigOverrides.empty` keeps
-// every field at its `ClientConfig.defaults` value.
+// `ClientConfigDefaults.fromBundleConstants` reads the Vite-injected
+// constants (`__TOOLUP_MODULE__`, `__AG_GRID_LICENSE__`,
+// `__CLERK_PUBLISHABLE_KEY__`, ...) via `BundleConstants.fs`. The default
+// `ClientConfigOverrides.empty` keeps every field at its
+// `ClientConfig.defaults` value. Both names live inside the
+// `ClientConfigDefaults` module, so the overrides stay module-qualified.
 let private config =
-    ClientConfigDefaults.fromBundleConstants ClientConfigOverrides.empty
+    ClientConfigDefaults.fromBundleConstants ClientConfigDefaults.ClientConfigOverrides.empty
 
 Client.run config modules
