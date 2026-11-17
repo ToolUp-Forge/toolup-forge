@@ -111,6 +111,11 @@ let formApi
     /// so deployments that register multiple analysers (one per concern
     /// — sentiment + topic, etc.) compose cleanly.
     (analysers: IFormSubmissionAnalyser list)
+    /// The per-window rate limit stamped on every public form link
+    /// `IssueTokens` and `DispatchInvitationsByEmail` issue
+    /// (`FormsOptions.PublicLinkRateLimit`). `None` issues links with no
+    /// per-window limit.
+    (publicLinkRateLimit: ShareTokenRateLimit option)
     (ctx: HttpContext)
     : IFormApi =
     let accessContext = resolveAccessContext ctx
@@ -497,7 +502,7 @@ let formApi
                                     IssuedBy = userId
                                     ExpiresAt = req.ExpiresAt
                                     UseLimit = req.UseLimit
-                                    RateLimit = None
+                                    RateLimit = publicLinkRateLimit
                                 }
 
                                 match! store.Issue issueRequest with
@@ -703,7 +708,7 @@ let formApi
                                     IssuedBy = userId
                                     ExpiresAt = req.ExpiresAt
                                     UseLimit = req.UseLimit
-                                    RateLimit = None
+                                    RateLimit = publicLinkRateLimit
                                 }
 
                                 match! store.Issue issueRequest with

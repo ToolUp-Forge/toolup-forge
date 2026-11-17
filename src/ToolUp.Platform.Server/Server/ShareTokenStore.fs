@@ -589,6 +589,35 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
                 claimWriteLock.Release() |> ignore
         }
 
+        member _.ReleaseUse(scopeId, tokenId) = async {
+            // The same guarded read-modify-write as `MarkUsed`, run the other
+            // way: the decrement is conditional on the claim not having
+            // changed since it was read, so it never overwrites a concurrent
+            // reservation. A spent count of zero has nothing to return.
+            do! claimWriteLock.WaitAsync() |> Async.AwaitTask
+
+            try
+                let! outcome =
+                    updateClaim scopeId tokenId (function
+                        | None -> BlobUpdate.Keep(Error ShareTokenError.NotFound)
+                        | Some claim when claim.UsedCount <= 0 -> BlobUpdate.Keep(Ok())
+                        | Some claim ->
+                            BlobUpdate.Write(
+                                {
+                                    claim with
+                                        UsedCount = claim.UsedCount - 1
+                                },
+                                Ok()
+                            ))
+
+                match outcome with
+                | Error err
+                | Ok(Error err) -> return Error err
+                | Ok(Ok()) -> return Ok()
+            finally
+                claimWriteLock.Release() |> ignore
+        }
+
         member _.Revoke(scopeId, tokenId, actorUserId) = async {
             // Same guarded RMW as `MarkUsed` — a revoke racing a use must not
             // be lost to a stale-read overwrite (Phase 116), on any node

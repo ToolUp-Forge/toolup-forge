@@ -82,6 +82,18 @@ type private InMemoryShareTokenStore() =
                     return Ok()
         }
 
+        member _.ReleaseUse(_scopeId: string, tokenId: string) = async {
+            match claims.TryGetValue tokenId with
+            | false, _ -> return Error ShareTokenError.NotFound
+            | true, c ->
+                claims[tokenId] <- {
+                    c with
+                        UsedCount = max 0 (c.UsedCount - 1)
+                }
+
+                return Ok()
+        }
+
         member _.Revoke(_scopeId, tokenId, _actor) = async {
             match claims.TryGetValue tokenId with
             | true, c ->

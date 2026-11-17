@@ -129,6 +129,7 @@ type RevokeOnIssuerRemovedStore(inner: IShareTokenStore, notifications: INotific
         member _.Issue request = inner.Issue request
         member _.Validate token = inner.Validate token
         member _.MarkUsed(scopeId, tokenId) = inner.MarkUsed(scopeId, tokenId)
+        member _.ReleaseUse(scopeId, tokenId) = inner.ReleaseUse(scopeId, tokenId)
 
         member _.Revoke(scopeId, tokenId, actorUserId) =
             inner.Revoke(scopeId, tokenId, actorUserId)

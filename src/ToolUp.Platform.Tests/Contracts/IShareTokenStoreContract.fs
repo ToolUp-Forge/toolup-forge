@@ -213,6 +213,119 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
                 | other -> failtestf "the token is spent after its limit, got %A" other
             }
 
+        // ─── ReleaseUse returns a reserved use ────────────────────
+        //
+        // A caller that reserves a use before the work it admits (a public
+        // form submission) gives it back when that work fails. The release
+        // is a conditional write: it never overwrites a concurrent
+        // reservation, and it never takes the count below zero.
+
+        testCaseAsync "ReleaseUse returns a spent use — the token validates and reserves again"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! issued = store.Issue(mkRequest scopeA "forms.publishable" "form-release" None)
+            let token = okOrFail "Issue" issued
+
+            let! used = store.MarkUsed(scopeA, token.Claim.TokenId)
+            okOrFail "MarkUsed" used
+            let! released = store.ReleaseUse(scopeA, token.Claim.TokenId)
+            okOrFail "ReleaseUse" released
+
+            let! revalidated = store.Validate token.Token
+            let claim = okOrFail "Validate after release" revalidated
+            Expect.equal claim.UsedCount 0 "the use is returned"
+
+            let! again = store.MarkUsed(scopeA, token.Claim.TokenId)
+            okOrFail "MarkUsed after release" again
+        }
+
+        testCaseAsync "ReleaseUse of an unused token leaves UsedCount at zero"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! issued = store.Issue(mkRequest scopeA "forms.publishable" "form-release-zero" None)
+            let token = okOrFail "Issue" issued
+
+            let! released = store.ReleaseUse(scopeA, token.Claim.TokenId)
+            okOrFail "ReleaseUse" released
+
+            let! validated = store.Validate token.Token
+            let claim = okOrFail "Validate" validated
+            Expect.equal claim.UsedCount 0 "never below zero"
+        }
+
+        testCaseAsync "ReleaseUse of an unknown token is NotFound"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            match! store.ReleaseUse(scopeA, "no-such-token") with
+            | Error ShareTokenError.NotFound -> ()
+            | other -> failtestf "Expected NotFound, got %A" other
+        }
+
+        testCaseAsync "ReleaseUse does not lift a revocation"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! issued = store.Issue(mkRequest scopeA "forms.publishable" "form-release-revoked" None)
+            let token = okOrFail "Issue" issued
+
+            let! used = store.MarkUsed(scopeA, token.Claim.TokenId)
+            okOrFail "MarkUsed" used
+            let! used = store.Revoke(scopeA, token.Claim.TokenId, UserId "alice")
+            okOrFail "Revoke" used
+            let! _ = store.ReleaseUse(scopeA, token.Claim.TokenId)
+
+            match! store.Validate token.Token with
+            | Error ShareTokenError.RevokedToken -> ()
+            | other -> failtestf "Expected RevokedToken, got %A" other
+        }
+
+        testCaseAsync "ReleaseUse racing 12 reservations on a spent UseLimit=3 token loses no reservation"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let req = {
+                mkRequest scopeA "forms.publishable" "form-release-race" None with
+                    UseLimit = Some(Some 3)
+            }
+
+            let! issued = store.Issue req
+            let token = okOrFail "Issue" issued
+
+            for i in 1..3 do
+                let! used = store.MarkUsed(scopeA, token.Claim.TokenId)
+                okOrFail $"MarkUsed {i}" used
+
+            let release = async {
+                let! r = store.ReleaseUse(scopeA, token.Claim.TokenId)
+                return Choice1Of2 r
+            }
+
+            let reserve = async {
+                let! r = store.MarkUsed(scopeA, token.Claim.TokenId)
+                return Choice2Of2 r
+            }
+
+            let! outcomes = release :: List.init 12 (fun _ -> reserve) |> Async.Parallel
+
+            outcomes
+            |> Array.iter (function
+                | Choice1Of2 r -> okOrFail "ReleaseUse" r
+                | Choice2Of2 _ -> ())
+
+            let reserved =
+                outcomes
+                |> Array.filter (function
+                    | Choice2Of2(Ok()) -> true
+                    | _ -> false)
+                |> Array.length
+
+            Expect.isLessThanOrEqual reserved 1 "the one returned use is reserved at most once"
+
+            let! claims = store.ListByResource(scopeA, "forms.publishable", "form-release-race")
+            let claim = claims |> List.exactlyOne
+            Expect.equal claim.UsedCount (2 + reserved) "every reservation and the release are counted"
+        }
+
         // ─── Revocation ───────────────────────────────────────────
 
         testCaseAsync "Revoke marks token RevokedToken on subsequent Validate"
@@ -284,7 +397,7 @@ let tests (name: string) (factory: unit -> IShareTokenStore * string * string) =
             Expect.equal fromB.Length 0 "scopeB sees none of scopeA's tokens"
         }
 
-        // ─── ListByIssuer (Phase 66 C.4) ──────────────────────────
+        // ─── ListByIssuer ─────────────────────────────────────────
 
         testCaseAsync "ListByIssuer returns only the named issuer's claims across resources"
         <| async {

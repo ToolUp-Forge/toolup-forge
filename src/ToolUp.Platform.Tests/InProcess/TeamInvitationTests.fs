@@ -142,6 +142,7 @@ type private HoldFirstConsume(inner: IShareTokenStore, expected: int) =
             return! inner.MarkUsed(scopeId, tokenId)
         }
 
+        member _.ReleaseUse(scopeId, tokenId) = inner.ReleaseUse(scopeId, tokenId)
         member _.Revoke(scopeId, tokenId, actor) = inner.Revoke(scopeId, tokenId, actor)
         member _.ListByResource(scopeId, kind, id) = inner.ListByResource(scopeId, kind, id)
         member _.ListByIssuer(scopeId, issuer) = inner.ListByIssuer(scopeId, issuer)
@@ -153,6 +154,7 @@ type private FailingConsume(inner: IShareTokenStore) =
         member _.Validate token = inner.Validate token
 
         member _.MarkUsed(_, _) = async { return Error(ShareTokenError.StorageFailed "the claim could not be written") }
+        member _.ReleaseUse(scopeId, tokenId) = inner.ReleaseUse(scopeId, tokenId)
 
         member _.Revoke(scopeId, tokenId, actor) = inner.Revoke(scopeId, tokenId, actor)
         member _.ListByResource(scopeId, kind, id) = inner.ListByResource(scopeId, kind, id)
