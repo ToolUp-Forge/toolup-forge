@@ -3,6 +3,7 @@ module ToolUp.Platform.Jobs.JobApiHandler
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.DependencyInjection.Extensions
 open ToolUp.Platform
 open ToolUp.Platform.Config.TeamManagement
 open ToolUp.Platform.Config
@@ -93,6 +94,20 @@ let private refuseBoth (handler: string) =
     invalidOp
         $"Job handler '{handler}' is declared both wire-schedulable and protected. A wire caller could then register a job it may not stop, so the two declarations are refused together; declare the handler one way only."
 
+/// The handler declarations the job API reads, folded once from the
+/// declared singletons by the factory `registerDeclarations` adds, so a
+/// request resolves one value rather than each declaration list.
+type internal JobHandlerDeclarations = {
+    WireSchedulable: Set<string>
+    Protected: Set<string>
+}
+
+let private registerDeclarations (services: IServiceCollection) =
+    services.TryAddSingleton<JobHandlerDeclarations>(fun sp -> {
+        WireSchedulable = sp.GetServices<WireSchedulableJobHandler>() |> Seq.map _.Handler |> Set.ofSeq
+        Protected = sp.GetServices<ProtectedJobHandler>() |> Seq.map _.Handler |> Set.ofSeq
+    })
+
 /// Adds `handler` to the handlers a caller may name over the job API. A
 /// handler nobody declares is not wire-schedulable. A handler declared
 /// protected (`declareProtected`) cannot also be declared wire-schedulable:
@@ -101,6 +116,7 @@ let declareWireSchedulable (handler: string) (services: IServiceCollection) : IS
     if declaredIn<ProtectedJobHandler> services _.Handler handler then
         refuseBoth handler
 
+    registerDeclarations services
     services.AddSingleton<WireSchedulableJobHandler>({ Handler = handler })
 
 /// Adds `handler` to the protected handlers: the job API answers `Cancel`,
@@ -112,6 +128,8 @@ let declareWireSchedulable (handler: string) (services: IServiceCollection) : IS
 let declareProtected (handler: string) (services: IServiceCollection) : IServiceCollection =
     if declaredIn<WireSchedulableJobHandler> services _.Handler handler then
         refuseBoth handler
+
+    registerDeclarations services
 
     services.AddSingleton<ProtectedJobHandler>(
         {
@@ -150,17 +168,19 @@ let jobApi (ctx: HttpContext) : JobApi =
         AccessContext.configScope accessContext
         |> Option.filter (fun scope -> scope.ScopeId <> ScopeKey.PlatformContainer)
 
-    // The handlers the deployment declared wire-schedulable.
-    let declared =
-        match ctx.RequestServices.GetService(typeof<seq<WireSchedulableJobHandler>>) with
-        | :? seq<WireSchedulableJobHandler> as handlers -> handlers |> Seq.map _.Handler |> Set.ofSeq
-        | _ -> Set.empty
+    // The handlers the deployment declared wire-schedulable and protected,
+    // folded once by the singleton factory the declarations add; a
+    // deployment that declared none has both sets empty.
+    let declarations =
+        match ctx.RequestServices.GetService(typeof<JobHandlerDeclarations>) with
+        | :? JobHandlerDeclarations as declarations -> declarations
+        | _ -> {
+            WireSchedulable = Set.empty
+            Protected = Set.empty
+          }
 
-    // The handlers the deployment declared protected.
-    let protectedHandlers =
-        match ctx.RequestServices.GetService(typeof<seq<ProtectedJobHandler>>) with
-        | :? seq<ProtectedJobHandler> as handlers -> handlers |> Seq.map _.Handler |> Set.ofSeq
-        | _ -> Set.empty
+    let declared = declarations.WireSchedulable
+    let protectedHandlers = declarations.Protected
 
     // The scope the middleware resolved and recorded for this
     // request. `ScopeResolution.forRequest` compiles after this file, so the
