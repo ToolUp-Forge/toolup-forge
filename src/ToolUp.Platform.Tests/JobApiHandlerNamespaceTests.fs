@@ -861,6 +861,101 @@ let private protectedHandlers =
                 "the lifecycle and grace-period poll handlers are protected"
     ]
 
+// ─── The companions declare their tenant-scoped handlers ─────────────
+//
+// The declared-delivery watch (data-sources) and the Google and Microsoft
+// renewal jobs (calendar) run under the tenant scopes a deployment lists.
+// A deployment that composes the companion and declares nothing of its own
+// gets the protection: each composition declares its handler.
+
+/// A bridge the renewal compositions only close over; no member is called.
+let private unusedBridge: ToolUp.Scheduling.ICalendarBridge.ICalendarBridge =
+    { new ToolUp.Scheduling.ICalendarBridge.ICalendarBridge with
+        member _.Kind = "unused"
+        member _.Capabilities = failwith "not used"
+        member _.LinkResource _ = failwith "not used"
+        member _.UnlinkResource _ = failwith "not used"
+        member _.Push(_, _, _) = failwith "not used"
+        member _.Pull(_, _, _) = failwith "not used"
+        member _.HandleWebhook(_, _) = failwith "not used"
+    }
+
+/// Applies a composed app's service configuration, as `ServerApp.run` does.
+let private composedFrom (app: ServerApp) (services: IServiceCollection) =
+    match ServerApp.serviceConfig app with
+    | Some configure -> configure services |> ignore
+    | None -> failtest "the composition registers nothing"
+
+let private renewalCron = CronTrigger "0 * * * *"
+
+/// Each companion family: its handler, and the companion composed with no
+/// declaration of the deployment's own.
+let private companionFamilies: (string * string * (IServiceCollection -> unit)) list = [
+    "the declared-delivery watch",
+    ToolUp.DataSources.Common.DeclaredDelivery.WatchJobHandlerName,
+    (fun services ->
+        ToolUp.DataSources.Common.DeclaredDelivery.withDeclaredDataSources
+            ServerConfig.defaults
+            { Principals = []; Sources = [] }
+            ToolUp.DataSources.Common.DeclaredDelivery.DefaultWatchPoll
+            services
+        |> ignore)
+
+    "the Google channel renewal",
+    ToolUp.Calendar.GoogleCalendarChannels.RenewalHandlerName,
+    composedFrom (
+        ServerApp.empty
+        |> ToolUp.Calendar.GoogleCalendarChannels.withChannelRenewal unusedBridge [ attackerTeam ] renewalCron
+    )
+
+    "the Microsoft subscription renewal",
+    ToolUp.Calendar.MicrosoftGraphSubscriptions.RenewalHandlerName,
+    composedFrom (
+        ServerApp.empty
+        |> ToolUp.Calendar.MicrosoftGraphSubscriptions.withSubscriptionRenewal unusedBridge [ attackerTeam ] renewalCron
+    )
+]
+
+let private companionHandlers =
+    testList "a companion's tenant-scoped job is stopped by a platform administrator only" [
+
+        for family, handler, compose in companionFamilies do
+            for verb, call in verbs do
+                testCaseAsync $"a team admin cannot {verb} {family} job in a deployment declaring nothing"
+                <| async {
+                    let scheduler = RecordingScheduler()
+                    let jobId = scheduler.Seed(attackerTeam, handler, "")
+                    let api = jobApiFor teamAdmin scheduler compose
+                    let! answered = call api jobId
+
+                    Expect.equal
+                        answered
+                        (Error JobApiHandler.ProtectedHandlerRefusal)
+                        "the companion declared its handler protected"
+
+                    Expect.isEmpty scheduler.Transitions "nothing reached the scheduler"
+                }
+
+                testCaseAsync $"a platform administrator can {verb} {family} job"
+                <| async {
+                    let scheduler = RecordingScheduler()
+                    let jobId = scheduler.Seed(attackerTeam, handler, "")
+                    let api = jobApiFor platformAdmin scheduler compose
+                    let! answered = call api jobId
+                    Expect.isOk answered "a platform administrator manages the job"
+                    Expect.equal scheduler.Transitions [ verb, attackerTeam, jobId ] "the transition ran once, in scope"
+                }
+
+            testCase $"{family} cannot also be declared wire-schedulable"
+            <| fun () ->
+                let services = ServiceCollection()
+                compose services
+
+                Expect.throws
+                    (fun () -> JobApiHandler.declareWireSchedulable handler services |> ignore)
+                    "the companion's protected handler is refused as wire-schedulable"
+    ]
+
 let tests =
     testList "The job API schedules only handlers a caller may name" [
         wireRefusals
@@ -870,4 +965,5 @@ let tests =
         helperTests
         stillRuns
         protectedHandlers
+        companionHandlers
     ]

@@ -137,11 +137,11 @@
     <ToolUpArtefactSigningVersion Condition="'$(ToolUpArtefactSigningVersion)' == ''">0.39.3</ToolUpArtefactSigningVersion>
     <ToolUpAuditSinksVersion Condition="'$(ToolUpAuditSinksVersion)' == ''">0.39.3</ToolUpAuditSinksVersion>
     <ToolUpAuthProvidersVersion Condition="'$(ToolUpAuthProvidersVersion)' == ''">0.41.0</ToolUpAuthProvidersVersion>
-    <ToolUpCalendarVersion Condition="'$(ToolUpCalendarVersion)' == ''">0.39.3</ToolUpCalendarVersion>
+    <ToolUpCalendarVersion Condition="'$(ToolUpCalendarVersion)' == ''">0.39.4</ToolUpCalendarVersion>
     <ToolUpCloudVersion Condition="'$(ToolUpCloudVersion)' == ''">0.39.1</ToolUpCloudVersion>
     <ToolUpContainerSchedulersVersion Condition="'$(ToolUpContainerSchedulersVersion)' == ''">0.39.3</ToolUpContainerSchedulersVersion>
     <ToolUpContentScannersVersion Condition="'$(ToolUpContentScannersVersion)' == ''">0.39.3</ToolUpContentScannersVersion>
-    <ToolUpDataSourcesVersion Condition="'$(ToolUpDataSourcesVersion)' == ''">0.40.0</ToolUpDataSourcesVersion>
+    <ToolUpDataSourcesVersion Condition="'$(ToolUpDataSourcesVersion)' == ''">0.40.1</ToolUpDataSourcesVersion>
     <ToolUpEmbeddingCachesVersion Condition="'$(ToolUpEmbeddingCachesVersion)' == ''">0.39.3</ToolUpEmbeddingCachesVersion>
     <ToolUpEmbeddingProvidersVersion Condition="'$(ToolUpEmbeddingProvidersVersion)' == ''">0.39.3</ToolUpEmbeddingProvidersVersion>
     <ToolUpEncryptionVersion Condition="'$(ToolUpEncryptionVersion)' == ''">0.39.3</ToolUpEncryptionVersion>

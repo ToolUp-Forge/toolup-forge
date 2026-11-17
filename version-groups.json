@@ -86,7 +86,7 @@
     {
       "id": "calendar",
       "property": "ToolUpCalendarVersion",
-      "version": "0.39.3",
+      "version": "0.39.4",
       "projects": [
         "src/Calendar/**"
       ]
@@ -118,7 +118,7 @@
     {
       "id": "data-sources",
       "property": "ToolUpDataSourcesVersion",
-      "version": "0.40.0",
+      "version": "0.40.1",
       "projects": [
         "src/DataSources/**"
       ]

@@ -238,7 +238,12 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 > grace-period poll, the tenant lifecycle run, data-ingestion runs, the
 > provider token refresh and status probe, data-subject exports, retention and
 > orphan sweeps, fact recomputation and coherence checks, narrative runs,
-> asset derivatives, ingestion retries, report renders). Each such handler is
+> asset derivatives, ingestion retries, report renders), and the shipped
+> companions register two more families under the tenant scopes a deployment
+> lists (the declared-delivery watch in `ToolUp.DataSources.Common`, from
+> data-sources 0.40.1; the Google channel and Microsoft subscription renewals
+> in `ToolUp.Calendar.Google` and `ToolUp.Calendar.Microsoft`, from calendar
+> 0.39.4). Each such handler is
 > declared protected where it is registered (`declareProtected`), and the job
 > API answers `Cancel`, `Disable` and `Enable` on a protected handler's job with
 > a fixed refusal (`ProtectedHandlerRefusal`, an `Error`, not an exception) for
@@ -253,12 +258,16 @@ by a "remember to add the WHERE clause" convention. This is Guiding Principle 4.
 > `src/ToolUp.Platform.Server/Server/Compose/ComposeTenantLifecycle.fs` and
 > `src/ToolUp.Platform.Server/Server/Compose/ComposeJobs.fs` (the platform's
 > own declarations) ·
+> `src/DataSources/Common/DeclaredDelivery.fs` (`withDeclaredDataSources`),
+> `src/Calendar/Google/GoogleCalendarChannels.fs` (`withChannelRenewal`) and
+> `src/Calendar/Microsoft/MicrosoftGraphCalendarSubscriptions.fs`
+> (`withSubscriptionRenewal`) (the companions' declarations) ·
 > `src/ToolUp.Platform.Server/Server/IJobHandler.fs` (`JobPayloadScope`) ·
 > `src/ToolUp.Platform.Server/Server/LifecycleJobHandler.fs` ·
 > `src/ToolUp.Platform.Server/Server/ScheduledDeprovisionJobHandler.fs` ·
 > `src/ToolUp.Platform.Tests/JobApiHandlerNamespaceTests.fs` ·
 > `docs/migrations/1283-wire-schedulable-job-handlers.md` (Phase 1283) ·
-> `docs/migrations/1360-protected-job-handlers.md` (Phase 1360)
+> `docs/migrations/1360-protected-job-handlers.md` (Phases 1360, 1370)
 
 > **TI-1b — Membership caches are invalidated by event, and a deprovisioned
 > tenant's cache entries are evicted, so a warm cache cannot resolve a revoked

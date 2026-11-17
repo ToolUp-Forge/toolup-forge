@@ -1055,11 +1055,11 @@
     <ToolUpArtefactSigningVersion>0.39.3</ToolUpArtefactSigningVersion>
     <ToolUpAuditSinksVersion>0.39.3</ToolUpAuditSinksVersion>
     <ToolUpAuthProvidersVersion>0.41.0</ToolUpAuthProvidersVersion>
-    <ToolUpCalendarVersion>0.39.3</ToolUpCalendarVersion>
+    <ToolUpCalendarVersion>0.39.4</ToolUpCalendarVersion>
     <ToolUpCloudVersion>0.39.1</ToolUpCloudVersion>
     <ToolUpContainerSchedulersVersion>0.39.3</ToolUpContainerSchedulersVersion>
     <ToolUpContentScannersVersion>0.39.3</ToolUpContentScannersVersion>
-    <ToolUpDataSourcesVersion>0.40.0</ToolUpDataSourcesVersion>
+    <ToolUpDataSourcesVersion>0.40.1</ToolUpDataSourcesVersion>
     <ToolUpEmbeddingCachesVersion>0.39.3</ToolUpEmbeddingCachesVersion>
     <ToolUpEmbeddingProvidersVersion>0.39.3</ToolUpEmbeddingProvidersVersion>
     <ToolUpEncryptionVersion>0.39.3</ToolUpEncryptionVersion>

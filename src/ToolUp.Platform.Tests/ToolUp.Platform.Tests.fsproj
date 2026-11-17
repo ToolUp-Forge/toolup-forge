@@ -608,6 +608,8 @@
         <ProjectReference Include="..\DataSources\Parquet\ToolUp.DataSources.Parquet.fsproj" />
         <ProjectReference Include="..\DataSources\GoogleAnalytics\ToolUp.DataSources.GoogleAnalytics.fsproj" />
         <ProjectReference Include="..\DataSources\Common\ToolUp.DataSources.Common.fsproj" />
+        <ProjectReference Include="..\Calendar\Google\ToolUp.Calendar.Google.fsproj" />
+        <ProjectReference Include="..\Calendar\Microsoft\ToolUp.Calendar.Microsoft.fsproj" />
         <ProjectReference Include="..\AuthProviders\LdapActiveDirectory\LdapActiveDirectory.fsproj" />
         <ProjectReference Include="..\AuthProviders\Scim\Scim.fsproj" />
         <ProjectReference Include="..\ToolUp.Reporting.Core\ToolUp.Reporting.Core.fsproj" />

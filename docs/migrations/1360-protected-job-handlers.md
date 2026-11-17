@@ -37,10 +37,17 @@ app
 |> ServerApp.addServiceConfig (JobApiHandler.declareProtected "billing.usage-snapshot")
 ```
 
-The declarative-delivery watch job (`ToolUp.DataSources.Common`) and the calendar renewal jobs
-(`ToolUp.Calendar.*`) ship on their own companion version lines and are not declared by this change. A
-deployment that composes them under tenant scopes and wants them protected declares them the same way, by
-`DeclaredDelivery.WatchJobHandlerName` and the bridge's `RenewalHandlerName`.
+The companions declare their own tenant-scoped handlers, so a deployment that composes them declares nothing:
+the declared-delivery watch job from `ToolUp.DataSources.Common` 0.40.1 (`DeclaredDelivery.withDeclaredDataSources`),
+and the calendar renewal jobs from `ToolUp.Calendar.Google` and `ToolUp.Calendar.Microsoft` 0.39.4
+(`withChannelRenewal`, `withSubscriptionRenewal`, and `MicrosoftGraphSubscriptions.compose`). Remove a
+declaration of `DeclaredDelivery.WatchJobHandlerName` or a bridge's `RenewalHandlerName` you added for an earlier
+companion version; it is harmless but redundant. A deployment that declared one of those handlers
+wire-schedulable is refused at composition from those versions, as for any protected handler.
+
+A Stripe deployment registers the billing reconcile handler (`Reconciliation.HandlerName`, `ToolUp.Stripe.Server`)
+itself, because that companion does not reference the job layer; if it schedules the reconcile under a tenant
+scope, it declares that handler protected where it registers it.
 
 A client that shows the result of `Cancel`, `Disable` or `Enable` shows the `Error` text as it does any other
 refusal. The background-jobs admin page offers none of the three verbs, so it needs no change.
