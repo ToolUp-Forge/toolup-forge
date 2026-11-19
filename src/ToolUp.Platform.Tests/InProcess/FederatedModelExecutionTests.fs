@@ -409,13 +409,25 @@ let private dataHost (bindings: Map<string, string>) =
         Decisions = decisions
     }
 
+/// A fresh in-memory privacy-budget meter: one perpetual budget of
+/// `ceiling` ε per template and counterparty, charged per call as the
+/// governed-diagnostics contract charges it.
+let private meterOf (ceiling: decimal) : IPrivacyBudgetLedger * PrivacyBudgetMeter =
+    let ledger =
+        InMemoryPrivacyBudgetLedger(fun () -> DateTimeOffset.UtcNow) :> IPrivacyBudgetLedger
+
+    ledger, PrivacyBudgetMeter.create ledger (PrivacyBudgetPolicy.create ceiling 1m)
+
 /// Register the governed-diagnostics contract on an existing data host,
-/// with a projection the caller chooses. `declared` is the template's
-/// allowed-method set, which IS the deployment's declaration.
-let private withDiagnostics
+/// gated by `template`, answering the vintage projections with `project`
+/// and reading fit outcomes back through `observations`.
+let private registerDiagnostics
     (instance: DataHostInstance)
-    (declared: Set<string>)
+    (template: CleanRoomTemplate)
     (project: ModelExecutionPeerBinding -> string -> ModelExecutionPeerDiagnosticRequest -> Async<CohortResult>)
+    (observations: string -> ModelExecutionFitObservation list option)
+    (budget: PrivacyBudgetMeter)
+    (noise: INoiseMechanism option)
     (bindings: Map<string, string>)
     =
     let resolveBinding (peerId: string) = async {
@@ -429,10 +441,9 @@ let private withDiagnostics
                     Api = instance.Backend.Api
                     Visibility = PeerVisibilityBinding.default'
                     Egress = None
-                    // Phase 644 — no transition granted, which is the
-                    // fail-closed default and the pre-644 behaviour: an
-                    // invocation is refused whether or not the operation
-                    // is declared.
+                    // No transition granted: the fail-closed default, so
+                    // an invocation is refused whether or not the
+                    // operation is declared.
                     TransitionAuthority = ModelTransitionAuthority.none
                 }
     }
@@ -440,18 +451,49 @@ let private withDiagnostics
     let deps: ModelExecutionDiagnosticsDeps = {
         ResolveBinding = resolveBinding
         Project = project
+        FitObservations = fun _ outcomeId -> async { return observations outcomeId }
     }
-
-    let template = ModelExecutionProfile.template "governed-diagnostics" floor declared
 
     let sink: PeerCleanRoomDecisionPayload -> Async<unit> =
         fun payload -> async { lock instance.Decisions (fun () -> instance.Decisions.Add payload) }
 
-    let gated =
-        ModelExecutionPeerContract.governedDiagnostics (CleanRoomBroker.create ()) template sink deps
+    let gate: ModelExecutionDiagnosticsGate = {
+        Broker = CleanRoomBroker.create ()
+        Template = template
+        Approval = None
+        Budget = budget
+        Noise = noise
+        Audit = sink
+    }
 
-    instance.Peer.RegisterContract gated.Registration
+    match ModelExecutionPeerContract.governedDiagnostics gate deps with
+    | Ok gated -> instance.Peer.RegisterContract gated.Registration
+    | Error refusals ->
+        failtestf
+            "the governed-diagnostics composition was refused: %s"
+            (refusals
+             |> List.map ModelExecutionTemplateRefusal.describe
+             |> String.concat "; ")
+
     instance
+
+/// Register the governed-diagnostics contract on an existing data host,
+/// with a projection the caller chooses. `declared` is the template's
+/// allowed-method set, which IS the deployment's declaration.
+let private withDiagnostics
+    (instance: DataHostInstance)
+    (declared: Set<string>)
+    (project: ModelExecutionPeerBinding -> string -> ModelExecutionPeerDiagnosticRequest -> Async<CohortResult>)
+    (bindings: Map<string, string>)
+    =
+    registerDiagnostics
+        instance
+        (ModelExecutionProfile.template "governed-diagnostics" floor declared)
+        project
+        (fun _ -> None)
+        (snd (meterOf 1000m))
+        None
+        bindings
 
 /// The modeller side's call context — what the data host's transport
 /// would have derived from a validated credential. Built here rather
@@ -812,6 +854,481 @@ let private diagnosticsTests =
                 template.AllowedMethods
                 (Set.singleton "Collinearity")
                 "a template that declares an undefined projection offers only the defined ones — an operator must not be able to read an offer that nothing could dispatch"
+        }
+    ]
+
+// ─── Fit diagnostics ─────────────────────────────────────────────────
+
+/// Sixty observations of a classifier's fit: predicted probabilities
+/// spread over (0.05, 0.95), observed classes, a quarter of the points at
+/// high leverage, and ONE point whose standardised residual lies beyond
+/// 3σ, which the open upper bin must hold without locating it.
+let private fitObservations: ModelExecutionFitObservation list = [
+    for i in 0..59 ->
+        let fitted = 0.05 + 0.9 * float i / 59.0
+        let observed = if (i * 7) % 10 < int (fitted * 10.0) then 1.0 else 0.0
+        let residual = observed - fitted
+
+        {
+            Fitted = fitted
+            Residual = residual
+            Standardised = if i = 59 then 4.0 else residual / 0.5
+            Leverage = Some(if i % 4 = 0 then 0.4 else 0.05)
+        }
+]
+
+let private referenceOutcomeId = "sha256:60303ae2"
+
+/// One declaration per fit diagnostic, as a data host would approve them.
+let private fitDeclarations: (string * FitDiagnosticDeclaration) list =
+    let plain = {
+        Bins = None
+        Points = []
+        Precision = 0.01m
+        ResidualThreshold = None
+        LeverageThreshold = None
+    }
+
+    [
+        FitDiagnostics.ResidualHistogram,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.Edges [ -3m; -2m; -1m; 0m; 1m; 2m; 3m ])
+        }
+        FitDiagnostics.ResidualSummaryByBin,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.FixedWidth 4)
+        }
+        FitDiagnostics.QuantileComparison,
+        {
+            plain with
+                Points = [ 0.05m; 0.25m; 0.5m; 0.75m; 0.95m ]
+        }
+        FitDiagnostics.Calibration,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.Quantiles 3)
+        }
+        FitDiagnostics.ThresholdCurve,
+        {
+            plain with
+                Points = [ 0.25m; 0.5m; 0.75m ]
+        }
+        FitDiagnostics.InfluenceSummary,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.FixedWidth 2)
+                ResidualThreshold = Some 2m
+                LeverageThreshold = Some 0.2m
+        }
+    ]
+
+/// The fit-diagnostics template: every fit diagnostic declared with its
+/// binning, over the shared floor.
+let private fitTemplate: CleanRoomTemplate =
+    fitDeclarations
+    |> List.fold
+        (fun template (diagnostic, declaration) ->
+            ModelExecutionProfile.withFitDiagnostic diagnostic declaration template)
+        (ModelExecutionProfile.template "fit-diagnostics" floor Set.empty)
+
+let private withFitDiagnostics
+    (template: CleanRoomTemplate)
+    (observations: ModelExecutionFitObservation list)
+    (budget: PrivacyBudgetMeter)
+    (noise: INoiseMechanism option)
+    =
+    registerDiagnostics
+        (dataHost boundOnly)
+        template
+        (fun _ _ _ -> async { return aggregateProjection 182 })
+        (fun outcomeId ->
+            if outcomeId = referenceOutcomeId then
+                Some observations
+            else
+                None)
+        budget
+        noise
+        boundOnly
+
+let private fitScope (templateId: string) : BudgetScope = {
+    TemplateId = templateId
+    CounterpartyPeerId = modellerPeerId
+    Epoch = "perpetual"
+}
+
+let private fitRequest (diagnostic: string) =
+    ModelExecutionPeerContract.fitDiagnosticRequest diagnostic referenceOutcomeId
+
+let private fitDiagnosticTests =
+    testList "fit diagnostics release binned aggregates under the template" [
+        testCaseAsync "each fit diagnostic releases only cells above the floor and names the withheld ones"
+        <| async {
+            let instance =
+                withFitDiagnostics fitTemplate fitObservations (snd (meterOf 1000m)) None
+
+            for diagnostic, _ in fitDeclarations do
+                let! answer = callDiagnostic instance modellerPeerId (fitRequest diagnostic)
+
+                match answer with
+                | Ok json ->
+                    let released = JsonRpc.deserialize<ReleasedCohort> json
+                    Expect.isNonEmpty released.Cells $"'{diagnostic}' releases cells"
+
+                    for cell in released.Cells do
+                        Expect.isGreaterThanOrEqual
+                            cell.Count
+                            floor.SuppressionThreshold
+                            $"'{diagnostic}' released '{cell.Label}' over {cell.Count} rows, below the suppression threshold"
+
+                    Expect.isLessThan
+                        released.Cells.Length
+                        (List.length fitObservations)
+                        $"'{diagnostic}' answers bins, never one cell per row"
+
+                    Expect.isEmpty
+                        (Set.intersect (released.Cells |> List.map _.Label |> Set.ofList) (Set.ofList released.Withheld))
+                        "a label is released or withheld, never both"
+                | Error e -> failtestf "'%s' over a floor-clearing fit must be released; got %A" diagnostic e
+
+            let! histogram = callDiagnostic instance modellerPeerId (fitRequest FitDiagnostics.ResidualHistogram)
+
+            match histogram with
+            | Ok json ->
+                let released = JsonRpc.deserialize<ReleasedCohort> json
+
+                Expect.equal
+                    released.Withheld
+                    [ "[3,+inf)" ]
+                    "the one point beyond 3σ is in the open upper bin, and that bin is withheld by name rather than located"
+
+                let declared = Set.ofList [ "[-2,-1)"; "[-1,0)"; "[0,1)"; "[1,2)" ]
+
+                Expect.isTrue
+                    (released.Cells |> List.forall (fun c -> Set.contains c.Label declared))
+                    "every released label is one of the template's declared bins"
+            | Error e -> failtestf "the residual histogram must be released; got %A" e
+
+            let! quantiles = callDiagnostic instance modellerPeerId (fitRequest FitDiagnostics.QuantileComparison)
+
+            match quantiles with
+            | Ok json ->
+                let released = JsonRpc.deserialize<ReleasedCohort> json
+
+                Expect.equal
+                    released.Withheld
+                    [ "0.05"; "0.95" ]
+                    "a quantile whose tail holds fewer rows than the threshold sits near an extreme record, and is withheld"
+
+                for cell in released.Cells do
+                    let value = Expect.wantSome cell.Value "a quantile cell carries its value"
+
+                    Expect.equal
+                        value
+                        (Math.Round(value, 2))
+                        "every released quantile is rounded to the template's precision"
+            | Error e -> failtestf "the quantile comparison must be released; got %A" e
+        }
+
+        testCaseAsync "a fit too small for the floor is withheld whole"
+        <| async {
+            let instance =
+                withFitDiagnostics fitTemplate (List.truncate 8 fitObservations) (snd (meterOf 1000m)) None
+
+            let! answer = callDiagnostic instance modellerPeerId (fitRequest FitDiagnostics.ResidualSummaryByBin)
+
+            match answer with
+            | Error(PeerCleanRoomWithheld templateId) ->
+                Expect.equal templateId "fit-diagnostics" "the withhold names the template and nothing else"
+            | other -> failtestf "a fit of eight rows must be withheld under a floor of ten; got %A" other
+        }
+
+        testCaseAsync "a request carrying a binning parameter is refused, naming the member"
+        <| async {
+            let request = {
+                fitRequest FitDiagnostics.ResidualHistogram with
+                    Body = $"""{{"OutcomeId":"{referenceOutcomeId}","Bins":"edges:-0.5,0,0.5"}}"""
+            }
+
+            let admission = ModelExecutionAdmission.create ModelExecutionProfile.diagnostics
+
+            match ModelExecutionPeerContract.read admission hostScope (JsonRpc.serialize request) with
+            | Error(ModelExecutionPeerRefusal.DiagnosticParameterRefused(operation, parameter)) ->
+                Expect.equal operation FitDiagnostics.ResidualHistogram "the refusal names the diagnostic"
+                Expect.equal parameter "Bins" "the refusal names the member the caller tried to set"
+            | other -> failtestf "a call setting the bins must be refused; got %A" other
+
+            let instance =
+                withFitDiagnostics fitTemplate fitObservations (snd (meterOf 1000m)) None
+
+            let! answer = callDiagnostic instance modellerPeerId request
+
+            match answer with
+            | Error(PeerHandler reason) -> Expect.stringContains reason "'Bins'" "the wire refusal names the member"
+            | other -> failtestf "a call setting the bins must be refused at the seam; got %A" other
+        }
+
+        testCaseAsync "an outcome outside the peer's scope is not answered"
+        <| async {
+            let instance =
+                withFitDiagnostics fitTemplate fitObservations (snd (meterOf 1000m)) None
+
+            let! answer =
+                callDiagnostic
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.fitDiagnosticRequest FitDiagnostics.Calibration "sha256:not-ours")
+
+            match answer with
+            | Error(PeerHandler _) -> ()
+            | other -> failtestf "an outcome the scope does not hold must be refused; got %A" other
+        }
+
+        test "a template offering a fit diagnostic without its binning is refused at composition, by name" {
+            let deps: ModelExecutionDiagnosticsDeps = {
+                ResolveBinding = fun _ -> async { return None }
+                Project = fun _ _ _ -> async { return aggregateProjection 182 }
+                FitObservations = fun _ _ -> async { return None }
+            }
+
+            let gate template : ModelExecutionDiagnosticsGate = {
+                Broker = CleanRoomBroker.create ()
+                Template = template
+                Approval = None
+                Budget = snd (meterOf 1000m)
+                Noise = None
+                Audit = CleanRoomGate.noAudit
+            }
+
+            let unbinned =
+                ModelExecutionProfile.template "unbinned" floor (Set.ofList [ FitDiagnostics.ResidualHistogram ])
+
+            match ModelExecutionPeerContract.governedDiagnostics (gate unbinned) deps with
+            | Error [ ModelExecutionTemplateRefusal.BinningUndeclared diagnostic ] ->
+                Expect.equal diagnostic FitDiagnostics.ResidualHistogram "the refusal names the diagnostic"
+            | Error other -> failtestf "an unbinned fit diagnostic must be refused as such; got %A" other
+            | Ok _ -> failtest "a template offering an unbinned fit diagnostic must be refused"
+
+            let fixedWidthResiduals =
+                ModelExecutionProfile.template "fixed" floor Set.empty
+                |> ModelExecutionProfile.withFitDiagnostic FitDiagnostics.ResidualHistogram {
+                    Bins = Some(FitDiagnosticBins.FixedWidth 10)
+                    Points = []
+                    Precision = 0.01m
+                    ResidualThreshold = None
+                    LeverageThreshold = None
+                }
+
+            match ModelExecutionPeerContract.governedDiagnostics (gate fixedWidthResiduals) deps with
+            | Error [ ModelExecutionTemplateRefusal.DeclarationInvalid(diagnostic, _) ] ->
+                Expect.equal
+                    diagnostic
+                    FitDiagnostics.ResidualHistogram
+                    "a residual histogram over the observed range would locate its extremes; only declared edges with open outer bins are admitted"
+            | Error other ->
+                failtestf "a residual histogram without declared edges must be refused as such; got %A" other
+            | Ok _ -> failtest "a residual histogram without declared edges must be refused"
+
+            let noisedWithoutMechanism =
+                fitTemplate
+                |> ModelExecutionProfile.withNoise (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0.5m))
+
+            match ModelExecutionPeerContract.governedDiagnostics (gate noisedWithoutMechanism) deps with
+            | Error [ ModelExecutionTemplateRefusal.NoiseMechanismAbsent _ ] -> ()
+            | Error other -> failtestf "a noised template with no mechanism must be refused as such; got %A" other
+            | Ok _ -> failtest "a noised template with no mechanism must be refused"
+        }
+
+        testCaseAsync "a noised template spends its ε and an un-noised one spends none"
+        <| async {
+            let request = fitRequest FitDiagnostics.ResidualSummaryByBin
+
+            let plainLedger, plainMeter = meterOf 1000m
+            let plain = withFitDiagnostics fitTemplate fitObservations plainMeter None
+            let! plainAnswer = callDiagnostic plain modellerPeerId request
+            Expect.isOk plainAnswer "the un-noised release is answered"
+            let! plainBudget = plainLedger.RemainingBudget(fitScope "fit-diagnostics", 1000m)
+            Expect.equal plainBudget.QueryCount 1 "the un-noised release is charged to the ledger: it is counted"
+            Expect.equal plainBudget.EpsilonCommitted 0m "and it spends no ε, since no privacy loss is claimed"
+
+            let policy = NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0.5m)
+            let noisedTemplate = fitTemplate |> ModelExecutionProfile.withNoise policy
+            let noisedLedger, noisedMeter = meterOf 1000m
+
+            let noised =
+                withFitDiagnostics
+                    noisedTemplate
+                    fitObservations
+                    noisedMeter
+                    (Some(NoiseMechanism.seeded "fit-diagnostics"))
+
+            let! noisedAnswer = callDiagnostic noised modellerPeerId request
+            Expect.isOk noisedAnswer "the noised release is answered"
+            let! noisedBudget = noisedLedger.RemainingBudget(fitScope "fit-diagnostics", 1000m)
+            Expect.equal noisedBudget.QueryCount 1 "the noised release is counted"
+
+            Expect.equal
+                noisedBudget.EpsilonCommitted
+                (NoisedReleasePolicy.totalEpsilon policy)
+                "and it spends the template's ε"
+        }
+
+        testCaseAsync "an exhausted budget is a recorded withhold"
+        <| async {
+            let policy = NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0.5m)
+            let noisedTemplate = fitTemplate |> ModelExecutionProfile.withNoise policy
+            let _, meter = meterOf 0.5m
+
+            let instance =
+                withFitDiagnostics noisedTemplate fitObservations meter (Some(NoiseMechanism.seeded "fit-diagnostics"))
+
+            let request = fitRequest FitDiagnostics.Calibration
+            let! first = callDiagnostic instance modellerPeerId request
+            Expect.isOk first "the first release fits the budget"
+            let! second = callDiagnostic instance modellerPeerId request
+
+            match second with
+            | Error(PeerCleanRoomWithheld _) -> ()
+            | other -> failtestf "a release beyond the budget must be withheld; got %A" other
+
+            Expect.isTrue
+                (instance.Decisions
+                 |> Seq.exists (fun d -> not d.Released && d.MethodName = FitDiagnostics.Calibration))
+                "the exhausted-budget withhold is an audited decision"
+        }
+
+        testCaseAsync "an answer carrying rows fails the gate's checkability invariant"
+        <| async {
+            let decisions = ResizeArray<PeerCleanRoomDecisionPayload>()
+
+            let rowLeaking: PeerContractRegistration = {
+                ContractId = ModelExecutionProfile.DiagnosticsContractId
+                Versions = [ ModelExecutionProfile.contractVersion ]
+                Dispatch = fun _ _ _ -> async { return Ok(JsonRpc.serialize fitObservations) }
+            }
+
+            let gated =
+                CleanRoomGate.wrapNoised
+                    (CleanRoomBroker.create ())
+                    fitTemplate
+                    None
+                    None
+                    None
+                    (fun d -> async { decisions.Add d })
+                    rowLeaking
+
+            let! answer =
+                gated.Registration.Dispatch
+                    (contextFor modellerPeerId)
+                    FitDiagnostics.ResidualHistogram
+                    (ModelExecutionPeerContract.arguments (fitRequest FitDiagnostics.ResidualHistogram))
+
+            match answer with
+            | Error(PeerCleanRoomWithheld _) -> ()
+            | other -> failtestf "an answer that is rows must be withheld, never released; got %A" other
+
+            Expect.isNonEmpty decisions "the withhold is recorded"
+            Expect.isTrue (decisions |> Seq.forall (fun d -> not d.Released)) "and nothing was released"
+        }
+
+        test "a fit diagnostic request declares the profile version that defined it" {
+            let fit = fitRequest FitDiagnostics.ThresholdCurve
+            Expect.equal fit.ProfileVersion 2 "a fit diagnostic entered the profile at version 2"
+
+            let collinearity =
+                ModelExecutionPeerContract.diagnosticRequest "Collinearity" {
+                    Vintage = referenceSubmission.Vintage
+                    Terms = [ "price" ]
+                }
+
+            Expect.equal
+                collinearity.ProfileVersion
+                1
+                "a request for an operation version 1 defined still declares 1, so a host that predates the fit diagnostics reads it"
+
+            let olderHost = {
+                ModelExecutionAdmission.create ModelExecutionProfile.diagnostics with
+                    ProfileVersion = 1
+            }
+
+            match ModelExecutionPeerContract.read olderHost hostScope (JsonRpc.serialize fit) with
+            | Error(ModelExecutionPeerRefusal.ProfileVersionUnsupported(2, 1)) -> ()
+            | other ->
+                failtestf "a host at version 1 must refuse a fit diagnostic as a version it does not read; got %A" other
+        }
+
+        testCaseAsync "a one-dimensional answer may not carry the grid separator in a label"
+        <| async {
+            let instance =
+                withDiagnostics
+                    (dataHost boundOnly)
+                    declaredDiagnostics
+                    (fun _ _ _ -> async {
+                        return {
+                            Shape = Histogram
+                            Cells = [
+                                {
+                                    Label = "price" + CellLabel.GridSeparator + "promo"
+                                    Count = 182
+                                    Value = Some 0.4
+                                }
+                            ]
+                        }
+                    })
+                    boundOnly
+
+            let! answer =
+                callDiagnostic
+                    instance
+                    modellerPeerId
+                    (ModelExecutionPeerContract.diagnosticRequest "Collinearity" {
+                        Vintage = referenceSubmission.Vintage
+                        Terms = [ "price"; "promo" ]
+                    })
+
+            match answer with
+            | Error(PeerHandler reason) -> Expect.stringContains reason "U+241F" "the refusal names the collision"
+            | other -> failtestf "a label colliding with the grid grammar must be refused; got %A" other
+        }
+
+        test "the two-dimensional label grammar round-trips and refuses a collision" {
+            let label =
+                Expect.wantOk (CellLabel.grid "[0,1)" "[-1,0)") "two plain parts make a grid label"
+
+            Expect.equal label ("[0,1)" + CellLabel.GridSeparator + "[-1,0)") "the parts are joined by the separator"
+            Expect.equal (int CellLabel.GridSeparator[0]) 0x241F "the separator is U+241F"
+            Expect.equal (CellLabel.tryGrid label) (Some("[0,1)", "[-1,0)")) "a grid label reads back to its parts"
+            Expect.isNone (CellLabel.tryGrid "[0,1)") "a plain label is not a grid cell"
+
+            Expect.isError
+                (CellLabel.grid ("a" + CellLabel.GridSeparator + "b") "c")
+                "a row carrying the separator is refused"
+
+            Expect.isError
+                (CellLabel.grid "a" ("b" + CellLabel.GridSeparator))
+                "a column carrying the separator is refused"
+        }
+
+        test "a declaration has one canonical spelling" {
+            for diagnostic, declaration in fitDeclarations do
+                let text = FitDiagnosticDeclaration.render declaration
+
+                Expect.equal
+                    (FitDiagnosticDeclaration.parse text)
+                    (Ok declaration)
+                    $"'{diagnostic}' reads back from its canonical text"
+
+                Expect.isOk (FitDiagnostics.check diagnostic declaration) $"'{diagnostic}' is a complete declaration"
+
+            Expect.equal
+                (FitDiagnosticDeclaration.render (snd fitDeclarations.Head))
+                "bins=edges:-3,-2,-1,0,1,2,3;precision=0.01"
+                "the canonical text is pinned"
+
+            Expect.isError
+                (FitDiagnosticDeclaration.parse "bins=edges:-3,-2,-1,0,1,2,3;precision=0.010")
+                "a second spelling of the same declaration is refused, since it would hash as a second template"
         }
     ]
 
@@ -2983,6 +3500,7 @@ let tests =
         roundTripTests
         noRowSurfaceTests
         diagnosticsTests
+        fitDiagnosticTests
         scopeTests
         submitterVocabularyTests
         // Phase 642 — declared authority levels over the same seam.

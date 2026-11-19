@@ -23,6 +23,7 @@ let private template: CleanRoomTemplate = {
     TemplateId = "reach"
     AllowedMethods = Set.ofList [ "estimateReach"; "histogram" ]
     Floor = floor
+    Release = ReleaseTerms.none
 }
 
 let private cell label count = {

@@ -76,6 +76,7 @@ let private template: CleanRoomTemplate = {
     TemplateId = "reach"
     AllowedMethods = Set.ofList [ "EstimateReach"; "Histogram" ]
     Floor = floor
+    Release = ReleaseTerms.none
 }
 
 let private v1: ContractVersion = { Major = 1; Minor = 0 }

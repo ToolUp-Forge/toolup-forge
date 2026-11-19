@@ -127,6 +127,7 @@ let private template: CleanRoomTemplate = {
         SuppressionThreshold = 5
         PermittedShapes = Set.ofList [ Count; Histogram ]
     }
+    Release = ReleaseTerms.none
 }
 
 /// A cohort answer carrying the marker as a cell label, so a leak of the

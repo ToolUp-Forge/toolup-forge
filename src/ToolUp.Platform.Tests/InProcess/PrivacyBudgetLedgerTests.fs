@@ -646,6 +646,7 @@ let private template: CleanRoomTemplate = {
     // the surface invariant — that is the refund path.
     AllowedMethods = Set.ofList [ "EstimateReach"; "Absent" ]
     Floor = cleanRoomFloor
+    Release = ReleaseTerms.none
 }
 
 let private v1: ContractVersion = { Major = 1; Minor = 0 }

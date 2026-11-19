@@ -503,4 +503,5 @@ module ActivationCanonical =
                 auth.Destination.Floor with
                     MinCohortSize = auth.Cohort.Constraints.MinCohortSize
             }
+        Release = ReleaseTerms.none
     }

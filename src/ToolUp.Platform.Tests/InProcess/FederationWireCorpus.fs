@@ -867,7 +867,7 @@ let private referenceEnvelope: HostEnvelope = {
 let modelExecutionBoundScope = "consortium-north"
 
 /// What the reference data host admits: the whole submitter surface and
-/// all three declared diagnostics. The reject vectors are read against
+/// every diagnostic the profile defines. The reject vectors are read against
 /// exactly this, so "undeclared" means undeclared by a deployment that
 /// declared everything the profile defines.
 let referenceAdmission =
@@ -1609,6 +1609,7 @@ let private referenceRefusals: ModelExecutionPeerAnswer list =
         ModelExecutionPeerRefusal.PromotionRefused(
             ModelPromotionRefusal.SigningFailed(referenceArtifactKey, "the signing key is unavailable")
         )
+        ModelExecutionPeerRefusal.DiagnosticParameterRefused(FitDiagnostics.ResidualHistogram, "Bins")
     ]
     |> List.map ModelExecutionPeerAnswer.Refused
 
@@ -1625,6 +1626,122 @@ let private outcomeAnswer () =
 let private diagnosticAnswers () =
     referenceDiagnostics
     |> List.map (fun result -> ModelExecutionPeerAnswer.Answered(JsonRpc.serialize result))
+
+/// The reference fit diagnostics' declarations: each of the six with its
+/// binning, as the reference template carries them.
+let private referenceFitDeclarations: (string * FitDiagnosticDeclaration) list =
+    let plain = {
+        Bins = None
+        Points = []
+        Precision = 0.01m
+        ResidualThreshold = None
+        LeverageThreshold = None
+    }
+
+    [
+        FitDiagnostics.ResidualHistogram,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.Edges [ -3m; -2m; -1m; 0m; 1m; 2m; 3m ])
+        }
+        FitDiagnostics.ResidualSummaryByBin,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.FixedWidth 4)
+        }
+        FitDiagnostics.QuantileComparison,
+        {
+            plain with
+                Points = [ 0.05m; 0.25m; 0.5m; 0.75m; 0.95m ]
+        }
+        FitDiagnostics.Calibration,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.Quantiles 3)
+        }
+        FitDiagnostics.ThresholdCurve,
+        {
+            plain with
+                Points = [ 0.25m; 0.5m; 0.75m ]
+        }
+        FitDiagnostics.InfluenceSummary,
+        {
+            plain with
+                Bins = Some(FitDiagnosticBins.FixedWidth 2)
+                ResidualThreshold = Some 2m
+                LeverageThreshold = Some 0.2m
+        }
+    ]
+
+/// A stored fit's observations as the reference data host reads them
+/// back: forty points of a classifier's fit, a third at high leverage, and
+/// one whose standardised residual lies beyond 3σ. They never appear in
+/// the corpus; the answers computed over them do.
+let private referenceFitObservations: ModelExecutionFitObservation list = [
+    for i in 0..39 ->
+        let fitted = 0.1 + 0.8 * float i / 39.0
+        let observed = if (i * 3) % 5 < int (fitted * 5.0) then 1.0 else 0.0
+        let residual = observed - fitted
+
+        {
+            Fitted = fitted
+            Residual = residual
+            Standardised = if i = 39 then 3.5 else residual / 0.5
+            Leverage = Some(if i % 3 = 0 then 0.3 else 0.04)
+        }
+]
+
+/// The six fit-diagnostic answers, each computed by the live projection
+/// and released by the live broker under the reference template, so the
+/// corpus pins the binning, the label grammar and the withheld labels as
+/// well as the encoding.
+let private fitDiagnosticAnswers () =
+    let floor: PrivacyGate = {
+        MinCohortSize = 10
+        SuppressionThreshold = 5
+        PermittedShapes = Set.ofList [ Count; Aggregate; Histogram ]
+    }
+
+    let template =
+        referenceFitDeclarations
+        |> List.fold
+            (fun template (diagnostic, declaration) ->
+                ModelExecutionProfile.withFitDiagnostic diagnostic declaration template)
+            (ModelExecutionProfile.template "fit-diagnostics" floor Set.empty)
+
+    let broker = CleanRoomBroker.create ()
+
+    referenceFitDeclarations
+    |> List.map (fun (diagnostic, declaration) ->
+        match FitDiagnostics.project diagnostic declaration floor referenceFitObservations with
+        | Error reason -> failwithf "the reference '%s' could not be computed: %s" diagnostic reason
+        | Ok cohort ->
+            match broker.Enforce(template, diagnostic, None, cohort) with
+            | Released(released, withheld) ->
+                let answer: ReleasedCohort = {
+                    Shape = released.Shape
+                    Cells = released.Cells
+                    Withheld = withheld
+                }
+
+                ModelExecutionPeerAnswer.Answered(JsonRpc.serialize answer)
+            | other -> failwithf "the reference '%s' must be released; the broker decided %A" diagnostic other)
+
+/// A fit-diagnostic request over the reference outcome, built through the
+/// live constructor, so the profile version it declares is the one the
+/// profile assigns the operation.
+let private fitDiagnosticRequest () =
+    ModelExecutionPeerContract.fitDiagnosticRequest FitDiagnostics.ResidualHistogram referenceOutcome.CompositeKeyHash
+
+/// The same request with a bin edge set by the caller. The binning is the
+/// approved template's, so the member is refused by name.
+let private binningParameterRequest () = {
+    fitDiagnosticRequest () with
+        Body =
+            "{\"OutcomeId\":\""
+            + referenceOutcome.CompositeKeyHash
+            + "\",\"Bins\":\"edges:-0.5,0,0.5\"}"
+}
 
 /// A request naming a row-level read. The profile serves no such
 /// surface, so the document exists only to be refused.
@@ -1959,6 +2076,24 @@ let vectors () : WireVector list =
             (JsonRpc.serialize referenceRefusals)
 
         vector
+            "model-execution/fit-diagnostic-request"
+            "model-execution"
+            Modeller
+            RoundTrip
+            "A fit-diagnostic request: the operation is the diagnostic, the body names the stored outcome and nothing else, and the envelope declares profile version 2, the version that defined the fit diagnostics."
+            "model-execution/fit-diagnostic-request.json"
+            (JsonRpc.serialize (fitDiagnosticRequest ()))
+
+        vector
+            "model-execution/fit-diagnostics"
+            "model-execution"
+            DataHost
+            RoundTrip
+            "The six fit diagnostics over one stored fit, each binned as the approved template declares and released through the floor: cells at or above the suppression threshold, and the labels of the cells it withheld, so a withheld bin is named rather than drawn as empty."
+            "model-execution/fit-diagnostics.json"
+            (JsonRpc.serialize (fitDiagnosticAnswers ()))
+
+        vector
             "model-execution/view-request"
             "model-execution"
             Modeller
@@ -2121,6 +2256,18 @@ let vectors () : WireVector list =
                 "model-execution/reject-undeclared-diagnostic.json"
                 (JsonRpc.serialize (undeclaredDiagnosticRequest ())) with
                 Reject = Some "model-execution-undeclared-diagnostic"
+        }
+
+        {
+            vector
+                "model-execution/reject-diagnostic-binning-parameter"
+                "model-execution"
+                DataHost
+                Reject
+                "A fit-diagnostic request that sets a bin edge. The binning is the approved template's and a call carries none, so the member is refused by name before anything is computed; a reader that dropped it silently would let the caller believe it had been honoured."
+                "model-execution/reject-diagnostic-binning-parameter.json"
+                (JsonRpc.serialize (binningParameterRequest ())) with
+                Reject = Some "model-execution-diagnostic-parameter-refused"
         }
 
         {

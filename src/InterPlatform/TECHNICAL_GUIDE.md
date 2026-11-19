@@ -189,6 +189,24 @@ A withhold reaches the caller as `PeerCleanRoomWithheld templateId` (code `-3200
 
 A composition that never calls `withCleanRoomTemplate` wraps nothing, probes nothing, and registers the same `PeerContractRegistration` values it did before (GP 11 / GP 13). The raw `ICleanRoomBroker` API is unchanged for bespoke callers — notably any caller that has a caller-requested gate to compose, which the peer wire format does not carry.
 
+**Release terms** (`CleanRoomTemplate.Release`) carry what a template agrees beyond the floor, as template data the canonical encoding covers, so an edit to any of them is a new template version and needs approving again:
+
+- **Per-method declarations** — opaque to the broker and the gate; the projection family answering a method owns the grammar and refuses, at composition, a declaration it cannot read. The model-execution fit diagnostics keep their binning here (`FitDiagnosticDeclaration`).
+- **Calibrated noise** — off by default. A gate composed for a template that declares noise, without the same `NoisedReleasePolicy` and a mechanism, withholds every answer and records why: a template approved as noised is never answered un-noised.
+- **Naming withheld cells** — off by default, which keeps the suppressed labels receiver-side. On, a release is a `ReleasedCohort`: the released cells and the labels the floor withheld, so a caller that draws the answer can show a withheld cell as withheld rather than as empty.
+
+A template whose release terms are `ReleaseTerms.none` encodes exactly as it did before the terms existed, so its approvals still bind.
+
+### Governed fit diagnostics
+
+The model-execution governed-diagnostics contract (`ModelExecutionPeerContract.governedDiagnostics`) answers six fit diagnostics beside `Collinearity`, `Coverage` and `TransformPreview`: `ResidualHistogram`, `ResidualSummaryByBin`, `QuantileComparison`, `Calibration`, `ThresholdCurve` and `InfluenceSummary`. Each takes the composite key of an outcome the caller's own `SubmitFit` produced and nothing else; the reader refuses any other body member by name (`DiagnosticParameterRefused`), because the binning is the template's. The data host reads the outcome's observations back through `FitObservations`, and `FitDiagnostics.project` bins them as the template declares:
+
+- Edges are declared, or computed from the fit and rounded to the declared precision; every released value is rounded to it. An unrounded quantile or range end is an observed value. A residual histogram's edges are always declared, with open outer bins, so no extreme is located.
+- A bin with no rows is absent and is not answered; a bin with rows is answered with its count, and the gate releases or withholds it. A quantile's count is its smaller tail, so a quantile near an extreme record is withheld.
+- Where two statistics share rows (a calibration bin's mean prediction and observed rate), the whole-result floor is checked on the distinct rows, since the gate's sum would count them twice.
+
+The contract is composed from a `ModelExecutionDiagnosticsGate` value — broker, template, approval check, privacy-budget meter, noise mechanism, audit sink — and refused at composition, by name, when the template offers a fit diagnostic without a usable binning or switches noise on with no mechanism. Every release is charged to the meter: at zero ε under an un-noised template, which counts the release and bounds nothing, and at the template's ε under a noised one. A cell label in a one-dimensional answer may not contain U+241F, the separator of the two-dimensional grammar (`CellLabel.grid`), which no diagnostic uses yet. The wire shapes are §5.7.6 of the federation-seam specification. The differencing guard against two outcomes whose row sets differ by one record is not here: it is forge#1278's.
+
 ## Audit emission
 
 The foundation ships **one** audit event — `PeerCallCompleted` — emitted best-effort per inbound call by the contract handler after dispatch reaches a terminal outcome (`auditPeerCall`). It resolves `IAuditLog` per-request; a partial test host without one registered simply records nothing.

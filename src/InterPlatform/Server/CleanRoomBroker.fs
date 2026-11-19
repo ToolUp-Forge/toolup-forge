@@ -124,6 +124,66 @@ type GateDecision =
     /// broker-noised answer carries none for it to check.
     | NoisedRelease of result: CohortResult * suppressedCells: string list * noise: NoisedReleasePolicy
 
+/// The terms a template releases its answers on, beyond the
+/// floor: how each declared method's answer is binned and parameterised,
+/// and whether the released cells carry calibrated noise.
+///
+/// **Template data, never call data.** Both members are covered by the
+/// template's canonical encoding (`TemplateCanonical`), so its content
+/// hash moves with them and a bilateral approval binds to
+/// them: moving a bin edge or switching noise on makes a different
+/// template, which has to be approved again. A caller that could set a
+/// bin edge could place two edges either side of one record and read it
+/// off the difference between two releases; a template it cannot edit
+/// leaves it nothing to nudge.
+type ReleaseTerms = {
+    /// Per-method release declarations, keyed by method name. Opaque to
+    /// the broker and the gate: the projection family that answers a
+    /// method owns its declaration's grammar and refuses, at composition,
+    /// a template whose declaration it cannot read. Empty for a template
+    /// that declares none.
+    Declarations: Map<string, string>
+    /// Calibrated noise the released cells carry, spending the
+    /// policy's ε per release. `None`, the default, is k-suppression only,
+    /// for which no differential-privacy claim is made. A gate composed
+    /// for a template that declares noise, without the same policy and a
+    /// mechanism to draw it, withholds every answer rather than releasing
+    /// one un-noised.
+    Noise: NoisedReleasePolicy option
+    /// Whether a released answer names to the caller the labels of the
+    /// cells the floor withheld, as a `ReleasedCohort`. `false`, the
+    /// default, records them receiver-side only. A caller that draws the
+    /// answer needs them: a withheld cell (1 to k−1 rows) drawn as a
+    /// missing value reads as "none", which is false, so a template whose
+    /// answers are drawn on the caller's side names them, and its approval
+    /// records that both parties agreed it would.
+    NamesWithheld: bool
+}
+
+/// Constructors for `ReleaseTerms`.
+[<RequireQualifiedAccess>]
+module ReleaseTerms =
+    /// No declarations and no noise: the terms of a template that declares
+    /// neither, whose canonical encoding (and so its approvals) it leaves unchanged.
+    let none: ReleaseTerms = {
+        Declarations = Map.empty
+        Noise = None
+        NamesWithheld = false
+    }
+
+/// A released answer that names the cells the floor withheld, for a
+/// template whose release terms say so. `Cells` are the released cells;
+/// `Withheld` the labels of the suppressed ones, in the order the answer
+/// carried them. A label in neither is a cell the answer never had.
+type ReleasedCohort = {
+    /// The answer's declared shape.
+    Shape: OutputShape
+    /// The cells the floor released.
+    Cells: PrivacyCell list
+    /// The labels of the cells the floor withheld.
+    Withheld: string list
+}
+
 /// A declarative clean-room contract: the query surface a counterparty
 /// may invoke, plus the privacy floor every answer must clear. Registered
 /// alongside the deployment's peer contracts.
@@ -136,7 +196,51 @@ type CleanRoomTemplate = {
     /// The privacy floor. A caller may tighten it per call, never loosen
     /// it.
     Floor: PrivacyGate
+    /// The release terms beyond the floor: per-method
+    /// declarations and calibrated noise. `ReleaseTerms.none` for a
+    /// template that declares neither.
+    Release: ReleaseTerms
 }
+
+/// The cell-label grammar for a two-dimensional cell.
+///
+/// A 2-D answer stays an `OutputShape.Histogram`: the gate's check is per
+/// cell count whichever way the cells are arranged, so a grid case on
+/// `OutputShape` would buy structure and nothing on disclosure, and would
+/// break every exhaustive match on that union. A grid cell is instead
+/// labelled `row␟column`, the separator being U+241F (SYMBOL FOR UNIT
+/// SEPARATOR), and the label vocabulary is refused from containing it, so
+/// a label parses as a grid cell exactly when it was built as one.
+[<RequireQualifiedAccess>]
+module CellLabel =
+
+    /// The row/column separator, U+241F.
+    [<Literal>]
+    let GridSeparator = "␟"
+
+    /// True when `label` is an ordinary one-dimensional label: it does not
+    /// contain the grid separator.
+    let isPlain (label: string) : bool =
+        not (label.Contains(GridSeparator, System.StringComparison.Ordinal))
+
+    /// The label of the grid cell at (`row`, `column`). Refused when either
+    /// part contains the separator, since the label would then read back as
+    /// a different cell: a collision is an error, never a guess.
+    let grid (row: string) (column: string) : Result<string, string> =
+        if not (isPlain row) then
+            Error $"the row label '{row}' contains the grid separator U+241F"
+        elif not (isPlain column) then
+            Error $"the column label '{column}' contains the grid separator U+241F"
+        else
+            Ok(row + GridSeparator + column)
+
+    /// Read a grid label back into its row and column. `None` for a plain
+    /// label, and for a label carrying more than one separator, which no
+    /// `grid` call produces.
+    let tryGrid (label: string) : (string * string) option =
+        match label.Split(GridSeparator) with
+        | [| row; column |] -> Some(row, column)
+        | _ -> None
 
 [<RequireQualifiedAccess>]
 module PrivacyGate =

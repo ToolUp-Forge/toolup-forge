@@ -74,6 +74,7 @@ let private templateT: CleanRoomTemplate = {
     TemplateId = "reach"
     AllowedMethods = Set.ofList [ "EstimateReach" ]
     Floor = floorAt 10
+    Release = ReleaseTerms.none
 }
 
 /// The edit. Same id, same surface, a LOOSER floor — the change an
@@ -409,6 +410,83 @@ let mutationTests =
             match sink.Rows with
             | [ row ] -> Expect.isTrue row.Released "the decision row records a release"
             | other -> failtestf "Expected exactly one decision row, got %i" (List.length other)
+        }
+        test "a template that declares no release terms keeps the version it had before they existed" {
+            Expect.equal
+                (TemplateCanonical.version templateT)
+                "sha256:6733ed06c07f520d204dc8360609e0d10d311b46c76a51c05811061a353edd34"
+                "the release terms are encoded only when declared, so every approval of an existing template still binds"
+        }
+
+        test "a changed binning changes the template's version, so its approval is sought again" {
+            let declaration edges = {
+                Bins = Some(FitDiagnosticBins.Edges edges)
+                Points = []
+                Precision = 0.01m
+                ResidualThreshold = None
+                LeverageThreshold = None
+            }
+
+            let binned edges =
+                templateT
+                |> ModelExecutionProfile.withFitDiagnostic FitDiagnostics.ResidualHistogram (declaration edges)
+
+            let approved = binned [ -2m; -1m; 0m; 1m; 2m ]
+            let nudged = binned [ -2m; -1m; 0m; 0.5m; 1m; 2m ]
+
+            Expect.notEqual
+                (TemplateCanonical.version approved)
+                (TemplateCanonical.version nudged)
+                "an added edge is a different template: a caller-side nudge has nothing to ride on, and a host-side one needs a new approval"
+
+            let registry = freshRegistry ()
+            approveBilaterally registry approved
+            let records = registry.Records(Some approved.TemplateId) |> Async.RunSynchronously
+            let now = DateTimeOffset.UtcNow
+
+            match
+                TemplateApproval.status
+                    TemplateApproval.defaultSkew
+                    seller
+                    buyer
+                    (TemplateCanonical.version approved)
+                    now
+                    records
+            with
+            | BilaterallyApproved _ -> ()
+            | other -> failtestf "CONTROL: the approved binning must evaluate as approved, got %A" other
+
+            match
+                TemplateApproval.status
+                    TemplateApproval.defaultSkew
+                    seller
+                    buyer
+                    (TemplateCanonical.version nudged)
+                    now
+                    records
+            with
+            | BilaterallyApproved _ -> failtest "an approval of one binning must not approve another"
+            | _ -> ()
+        }
+
+        test "switching noise on, or naming withheld cells, is a different template" {
+            let noised =
+                templateT
+                |> ModelExecutionProfile.withNoise (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 0.5m))
+
+            let louder =
+                templateT
+                |> ModelExecutionProfile.withNoise (NoisedReleasePolicy.forCounts (NoiseSpec.laplace 1.0 1m))
+
+            let naming = {
+                templateT with
+                    Release.NamesWithheld = true
+            }
+
+            let versions =
+                [ templateT; noised; louder; naming ] |> List.map TemplateCanonical.version
+
+            Expect.equal (List.distinct versions) versions "each release term is covered by the version"
         }
     ]
 

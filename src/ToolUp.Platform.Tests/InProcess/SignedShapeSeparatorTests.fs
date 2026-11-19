@@ -65,6 +65,7 @@ let private fixedTemplate: CleanRoomTemplate = {
     TemplateId = "phase-654-pinned"
     AllowedMethods = Set.ofList [ "EstimateReach" ]
     Floor = fixedGate
+    Release = ReleaseTerms.none
 }
 
 /// A fixed instant rather than `DateTimeOffset.UtcNow`: the record's

@@ -304,7 +304,7 @@ module TemplateCanonical =
     let private sortedSet = CountersignatureCanonical.sortedSet
 
     /// The canonical UTF-8 encoding of a template. Every field of
-    /// `CleanRoomTemplate` and `PrivacyGate` is covered — a template
+    /// `CleanRoomTemplate`, `PrivacyGate` and `ReleaseTerms` is covered — a template
     /// differing in any one of them encodes differently, so approving a
     /// k=50 floor does not approve the k=5 edit of it.
     let templateBytes (template: CleanRoomTemplate) : byte[] =
@@ -315,6 +315,63 @@ module TemplateCanonical =
         field sb (string template.Floor.MinCohortSize)
         field sb (string template.Floor.SuppressionThreshold)
         sortedSet sb (template.Floor.PermittedShapes |> Seq.map shapeName)
+
+        // The release terms are encoded only when the template declares
+        // some, so a template that declares none encodes, hashes and
+        // stays approved exactly as it did before the terms existed. The
+        // encoding is self-delimiting (every set is count-first), so the
+        // appended section cannot make two templates collide.
+        if template.Release <> ReleaseTerms.none then
+            field sb "release"
+
+            let declarations =
+                template.Release.Declarations
+                |> Map.toList
+                |> List.sortWith (fun (a, _) (b, _) -> String.CompareOrdinal(a, b))
+
+            field sb (string (List.length declarations))
+
+            for methodName, declaration in declarations do
+                field sb methodName
+                field sb declaration
+
+            match template.Release.Noise with
+            | None -> field sb "noise:none"
+            | Some policy ->
+                let spec (label: string) (noise: NoiseSpec option) =
+                    match noise with
+                    | None -> field sb $"{label}:none"
+                    | Some s ->
+                        field sb label
+
+                        field
+                            sb
+                            (match s.Distribution with
+                             | LaplaceNoise -> "laplace"
+                             | GaussianNoise -> "gaussian")
+
+                        field sb (s.Sensitivity.ToString("R", Globalization.CultureInfo.InvariantCulture))
+                        field sb (s.Epsilon.ToString(Globalization.CultureInfo.InvariantCulture))
+
+                        field
+                            sb
+                            (s.Delta
+                             |> Option.map _.ToString(Globalization.CultureInfo.InvariantCulture)
+                             |> Option.defaultValue "none")
+
+                        field sb (s.Granularity.ToString("R", Globalization.CultureInfo.InvariantCulture))
+
+                field sb "noise"
+                spec "count" policy.CountNoise
+                spec "value" policy.ValueNoise
+
+            field
+                sb
+                (if template.Release.NamesWithheld then
+                     "withheld:named"
+                 else
+                     "withheld:unnamed")
+
         Encoding.UTF8.GetBytes(sb.ToString())
 
     /// Lowercase hex SHA-256, the estate's existing digest presentation

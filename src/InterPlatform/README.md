@@ -241,6 +241,7 @@ let reachTemplate: CleanRoomTemplate = {
         SuppressionThreshold = 50
         PermittedShapes = Set.ofList [ Count; Histogram ]
     }
+    Release = ReleaseTerms.none
 }
 
 ServerApp.empty

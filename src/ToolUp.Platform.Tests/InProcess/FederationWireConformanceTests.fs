@@ -126,7 +126,8 @@ let private reserialise (entry: ManifestEntry) (document: string) : string =
     | "model-execution", "model-execution/submission"
     | "model-execution", "model-execution/view-request"
     | "model-execution", "model-execution/transition-request"
-    | "model-execution", "model-execution/promotion-request" ->
+    | "model-execution", "model-execution/promotion-request"
+    | "model-execution", "model-execution/fit-diagnostic-request" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerRequest> document)
     | "model-execution", "model-execution/outcome"
     | "model-execution", "model-execution/transition"
@@ -134,7 +135,8 @@ let private reserialise (entry: ManifestEntry) (document: string) : string =
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer> document)
     | "model-execution", "model-execution/diagnostics"
     | "model-execution", "model-execution/refusals"
-    | "model-execution", "model-execution/view" ->
+    | "model-execution", "model-execution/view"
+    | "model-execution", "model-execution/fit-diagnostics" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer list> document)
     | family, id -> failwithf "no specified shape is bound to corpus family '%s' (vector '%s')" family id
 

@@ -286,6 +286,20 @@ module CleanRoomGate =
         (registration: PeerContractRegistration)
         : GatedContractRegistration =
 
+        // The released bytes: the answer itself, or, under a template whose
+        // release terms name withheld cells, the answer and their labels.
+        let releasedJson (answer: CohortResult) (withheld: string list) =
+            if template.Release.NamesWithheld then
+                let release: ReleasedCohort = {
+                    Shape = answer.Shape
+                    Cells = answer.Cells
+                    Withheld = withheld
+                }
+
+                JsonRpc.serialize release
+            else
+                JsonRpc.serialize answer
+
         let gatedDispatch: PeerDispatch =
             fun context methodName argsJson -> async {
                 let decision
@@ -401,7 +415,7 @@ module CleanRoomGate =
                                         match final with
                                         | Released(answer, cells) ->
                                             do! record sink (decision true cells "")
-                                            return Ok(JsonRpc.serialize answer)
+                                            return Ok(releasedJson answer cells)
                                         | NoisedRelease(answer, cells, applied) ->
                                             // The calibration is recorded
                                             // receiver-side beside the
@@ -417,7 +431,7 @@ module CleanRoomGate =
                                                         cells
                                                         $"released with calibrated noise — {NoisedReleasePolicy.describe applied}")
 
-                                            return Ok(JsonRpc.serialize answer)
+                                            return Ok(releasedJson answer cells)
                                         | Withheld reason ->
                                             // Unreachable: `applyTo` never
                                             // withholds a `Released`. Kept
@@ -530,25 +544,48 @@ module CleanRoomGate =
                                 return outcome
                 }
 
-                // Invariant 0 — bilateral approval (Phase 480). `None` is
-                // a composition that declared no approval registry: the
-                // call goes straight to Phase 311's invariants, having
-                // read no store and allocated nothing (GP 11 / GP 13).
-                match approval with
-                | None -> return! metered ()
-                | Some check ->
-                    let! approved = check context template
+                // The template's declared noise is honoured, or nothing is
+                // released. A template that declares calibrated noise was
+                // approved on the understanding that its answers carry it;
+                // a composition holding no mechanism for it, or composing a
+                // different policy, would release answers the template
+                // never agreed to.
+                let noiseHonoured =
+                    match template.Release.Noise, noise with
+                    | None, _ -> true
+                    | Some declared, Some(_, composed) -> declared = composed
+                    | Some _, None -> false
 
-                    match approved with
-                    | Error reason ->
-                        // The reason names the missing / revoked /
-                        // expired party and is recorded here only. The
-                        // caller gets `PeerCleanRoomWithheld` carrying
-                        // the template id, exactly as every other
-                        // withhold does.
-                        do! record sink (decision false [] reason)
-                        return withheld template
-                    | Ok() -> return! metered ()
+                if not noiseHonoured then
+                    do!
+                        record
+                            sink
+                            (decision
+                                false
+                                []
+                                $"clean-room template '{template.TemplateId}' declares calibrated noise this composition does not apply; compose the same NoisedReleasePolicy with an INoiseMechanism")
+
+                    return withheld template
+                else
+                    // Invariant 0 — bilateral approval (Phase 480). `None` is
+                    // a composition that declared no approval registry: the
+                    // call goes straight to Phase 311's invariants, having
+                    // read no store and allocated nothing (GP 11 / GP 13).
+                    match approval with
+                    | None -> return! metered ()
+                    | Some check ->
+                        let! approved = check context template
+
+                        match approved with
+                        | Error reason ->
+                            // The reason names the missing / revoked /
+                            // expired party and is recorded here only. The
+                            // caller gets `PeerCleanRoomWithheld` carrying
+                            // the template id, exactly as every other
+                            // withhold does.
+                            do! record sink (decision false [] reason)
+                            return withheld template
+                        | Ok() -> return! metered ()
             }
 
         Gated {

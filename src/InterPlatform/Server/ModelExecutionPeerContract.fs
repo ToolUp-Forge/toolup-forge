@@ -35,7 +35,8 @@ open ToolUp.Platform.Compose
 //     (`ModelExecutionProfile.DiagnosticsContractId`) carries the
 //     aggregate projections a remote modeller needs in order to model
 //     responsibly without eyeballing the raw series — collinearity,
-//     coverage, transform previews. Those answers ARE derived from rows,
+//     coverage, transform previews, and the binned fit diagnostics a
+//     modeller judges a fit by. Those answers ARE derived from rows,
 //     so they do not travel on a bare registration at all: the only
 //     construction route is `governedDiagnostics`, whose signature
 //     demands an `ICleanRoomBroker` and a `CleanRoomTemplate` and whose
@@ -217,6 +218,632 @@ type ModelExecutionPeerDiagnosticRequest = {
     Terms: string list
 }
 
+/// A fit-diagnostic request: which stored outcome the diagnostic is over,
+/// and nothing else. The outcome is one this peer's `SubmitFit` already
+/// produced, so the row set is the fit's, never one the call selects; and
+/// the binning is the approved template's, never the call's. A body
+/// carrying any other member is refused, by name, before anything is
+/// computed.
+type ModelExecutionPeerFitDiagnosticRequest = {
+    /// The outcome's `CompositeKeyHash`.
+    OutcomeId: string
+}
+
+// ─── Fit diagnostics: the template's binning, and the projections ────
+//
+// A remote modeller judging a fit needs to see how it fits: residuals,
+// calibration, threshold curves. Each of those, drawn raw, is the rows
+// again, so each is released here as a binned aggregate the clean-room
+// gate checks like any other. Two things make the binning safe to rely
+// on. The edges are the TEMPLATE's (a call carries none), so a caller
+// cannot place two edges either side of one record. And every edge and
+// every released value is rounded to the template's declared precision,
+// because an unrounded quantile or domain end is an observed value, which
+// is a record.
+
+/// How a fit diagnostic's bin edges are placed.
+[<RequireQualifiedAccess>]
+type FitDiagnosticBins =
+    /// `count` equal-width bins over the observed range, its ends rounded
+    /// outward to the declaration's precision and each edge rounded to it.
+    | FixedWidth of count: int
+    /// `count` bins whose edges are the observed quantiles, each rounded
+    /// to the declaration's precision.
+    | Quantiles of count: int
+    /// Edges the template fixes, strictly increasing and on the
+    /// precision's lattice, with an open-ended bin below the first and
+    /// another above the last, so no extreme is located.
+    | Edges of edges: decimal list
+
+/// What a template declares for one fit diagnostic. Which members a
+/// diagnostic reads, and which it refuses, is `FitDiagnostics.check`.
+type FitDiagnosticDeclaration = {
+    /// The bins the diagnostic's axis is cut into.
+    Bins: FitDiagnosticBins option
+    /// `QuantileComparison`'s probabilities, strictly inside (0, 1), or
+    /// `ThresholdCurve`'s threshold grid. Strictly increasing.
+    Points: decimal list
+    /// Every released value, and every computed edge, is rounded to this.
+    Precision: decimal
+    /// `InfluenceSummary`: the absolute standardised residual above which
+    /// a point is counted.
+    ResidualThreshold: decimal option
+    /// `InfluenceSummary`: the leverage above which a point is counted.
+    LeverageThreshold: decimal option
+}
+
+/// One observation of a stored fit, as the data host reads it back. It
+/// never leaves the data host: the projections bin it, and the gate
+/// checks what they produce.
+type ModelExecutionFitObservation = {
+    /// The fitted value (for a classifier, the predicted probability).
+    Fitted: float
+    /// Observed minus fitted.
+    Residual: float
+    /// The residual over the fit's estimated scale, as the fitter computes
+    /// it (studentised where it can).
+    Standardised: float
+    /// The point's leverage, where the fitter reports one.
+    Leverage: float option
+}
+
+/// The canonical text of a `FitDiagnosticDeclaration`: the bytes a
+/// template's release terms carry for one fit diagnostic.
+[<RequireQualifiedAccess>]
+module FitDiagnosticDeclaration =
+
+    let private invariant = Globalization.CultureInfo.InvariantCulture
+
+    /// A decimal in its shortest invariant form, so one value has one
+    /// spelling in a template and in a label.
+    let number (d: decimal) : string =
+        d.ToString("0.############################", invariant)
+
+    let private tryNumber (s: string) : decimal option =
+        match
+            Decimal.TryParse(
+                s,
+                Globalization.NumberStyles.AllowLeadingSign
+                ||| Globalization.NumberStyles.AllowDecimalPoint,
+                invariant
+            )
+        with
+        | true, d -> Some d
+        | _ -> None
+
+    let private numbers (ds: decimal list) =
+        ds |> List.map number |> String.concat ","
+
+    /// The declaration's canonical text: the bytes the template's release
+    /// terms carry, and so the bytes its content hash covers.
+    let render (declaration: FitDiagnosticDeclaration) : string =
+        [
+            match declaration.Bins with
+            | Some(FitDiagnosticBins.FixedWidth count) -> $"bins=fixed:{count}"
+            | Some(FitDiagnosticBins.Quantiles count) -> $"bins=quantiles:{count}"
+            | Some(FitDiagnosticBins.Edges edges) -> $"bins=edges:{numbers edges}"
+            | None -> ()
+            if not declaration.Points.IsEmpty then
+                $"points={numbers declaration.Points}"
+            $"precision={number declaration.Precision}"
+            match declaration.ResidualThreshold with
+            | Some r -> $"residual={number r}"
+            | None -> ()
+            match declaration.LeverageThreshold with
+            | Some l -> $"leverage={number l}"
+            | None -> ()
+        ]
+        |> String.concat ";"
+
+    /// Read a declaration from its canonical text. Text that is not
+    /// exactly the canonical rendering of what it parses to is refused:
+    /// two spellings of one declaration would hash as two templates.
+    let parse (text: string) : Result<FitDiagnosticDeclaration, string> =
+        let list (s: string) =
+            let parts = s.Split(',') |> Array.map tryNumber
+
+            if parts |> Array.forall Option.isSome then
+                Some(parts |> Array.choose id |> Array.toList)
+            else
+                None
+
+        let segments =
+            (if isNull text then "" else text).Split(';')
+            |> Array.map (fun segment ->
+                match segment.IndexOf '=' with
+                | i when i > 0 -> Some(segment.Substring(0, i), segment.Substring(i + 1))
+                | _ -> None)
+
+        if segments |> Array.exists Option.isNone then
+            Error $"'{text}' is not a fit-diagnostic declaration: every segment is key=value"
+        else
+            let pairs = segments |> Array.choose id |> Map.ofArray
+
+            let bins =
+                match Map.tryFind "bins" pairs with
+                | None -> Ok None
+                | Some v when v.StartsWith "fixed:" ->
+                    match Int32.TryParse(v.Substring 6, Globalization.NumberStyles.None, invariant) with
+                    | true, n -> Ok(Some(FitDiagnosticBins.FixedWidth n))
+                    | _ -> Error $"bins '{v}' does not name a bin count"
+                | Some v when v.StartsWith "quantiles:" ->
+                    match Int32.TryParse(v.Substring 10, Globalization.NumberStyles.None, invariant) with
+                    | true, n -> Ok(Some(FitDiagnosticBins.Quantiles n))
+                    | _ -> Error $"bins '{v}' does not name a bin count"
+                | Some v when v.StartsWith "edges:" ->
+                    match list (v.Substring 6) with
+                    | Some edges -> Ok(Some(FitDiagnosticBins.Edges edges))
+                    | None -> Error $"bins '{v}' does not list numeric edges"
+                | Some v -> Error $"bins '{v}' is not fixed:, quantiles: or edges:"
+
+            let optional key =
+                match Map.tryFind key pairs with
+                | None -> Ok None
+                | Some v ->
+                    match tryNumber v with
+                    | Some d -> Ok(Some d)
+                    | None -> Error $"{key} '{v}' is not a number"
+
+            let points =
+                match Map.tryFind "points" pairs with
+                | None -> Ok []
+                | Some v ->
+                    match list v with
+                    | Some ds -> Ok ds
+                    | None -> Error $"points '{v}' is not a list of numbers"
+
+            match bins, points, optional "precision", optional "residual", optional "leverage" with
+            | Ok bins, Ok points, Ok(Some precision), Ok residual, Ok leverage ->
+                let declaration = {
+                    Bins = bins
+                    Points = points
+                    Precision = precision
+                    ResidualThreshold = residual
+                    LeverageThreshold = leverage
+                }
+
+                if render declaration = text then
+                    Ok declaration
+                else
+                    Error $"'{text}' is not in canonical form; its canonical spelling is '{render declaration}'"
+            | Ok _, Ok _, Ok None, _, _ -> Error $"'{text}' declares no precision"
+            | Error e, _, _, _, _
+            | _, Error e, _, _, _
+            | _, _, Error e, _, _
+            | _, _, _, Error e, _
+            | _, _, _, _, Error e -> Error e
+
+/// The six fit diagnostics, computed on the data host over a stored
+/// outcome's observations and answered as a `CohortResult` for the gate.
+///
+/// **Three states a cell can be in, and the projection keeps them apart.**
+/// A bin with no rows is ABSENT and is not emitted. A bin with rows is
+/// emitted with its count, and the gate either releases it or, below the
+/// suppression threshold, WITHHOLDS it and names its label to the caller.
+/// Emitting an empty bin would make the gate name it as withheld, which
+/// says "between 1 and k−1" where the truth is "none".
+///
+/// **The whole-result floor binds on the distinct cohort.** Several of
+/// these answer more than one statistic over the same rows (a bin's mean
+/// prediction and its observed rate), and the gate's floor sums cell
+/// counts, which would count those rows twice. So the projection checks
+/// the floor itself on the distinct rows behind the cells that would
+/// clear suppression, and answers no cells when they fall short.
+[<RequireQualifiedAccess>]
+module FitDiagnostics =
+
+    /// Counts per standardised-residual bin, over the template's declared
+    /// edges, with open-ended outer bins.
+    [<Literal>]
+    let ResidualHistogram = "ResidualHistogram"
+
+    /// The mean residual per fitted-value bin.
+    [<Literal>]
+    let ResidualSummaryByBin = "ResidualSummaryByBin"
+
+    /// Interior quantiles of the standardised residuals, at the template's
+    /// declared probabilities.
+    [<Literal>]
+    let QuantileComparison = "QuantileComparison"
+
+    /// The mean prediction and the observed rate per predicted-value bin.
+    [<Literal>]
+    let Calibration = "Calibration"
+
+    /// True- and false-positive rates on the template's threshold grid.
+    [<Literal>]
+    let ThresholdCurve = "ThresholdCurve"
+
+    /// Per fitted-value bin, how many points lie beyond the declared
+    /// standardised-residual and leverage thresholds.
+    [<Literal>]
+    let InfluenceSummary = "InfluenceSummary"
+
+    /// The fit diagnostics the profile defines.
+    let all: Set<string> =
+        Set.ofList [
+            ResidualHistogram
+            ResidualSummaryByBin
+            QuantileComparison
+            Calibration
+            ThresholdCurve
+            InfluenceSummary
+        ]
+
+    let private increasing (ds: decimal list) =
+        ds |> List.pairwise |> List.forall (fun (a, b) -> a < b)
+
+    let private onLattice (precision: decimal) (d: decimal) = d % precision = 0m
+
+    /// Is `declaration` a complete, well-formed declaration for
+    /// `diagnostic`? A member the diagnostic does not read is refused
+    /// rather than ignored: a template that appears to declare something
+    /// it does not apply is a lie an approver would read.
+    let check (diagnostic: string) (declaration: FitDiagnosticDeclaration) : Result<unit, string> =
+        let binsWellFormed () =
+            match declaration.Bins with
+            | Some(FitDiagnosticBins.FixedWidth n)
+            | Some(FitDiagnosticBins.Quantiles n) when n < 1 || n > 1000 ->
+                Error $"a bin count must be between 1 and 1000, not {n}"
+            | Some(FitDiagnosticBins.Edges edges) when edges.IsEmpty -> Error "an edge list must name at least one edge"
+            | Some(FitDiagnosticBins.Edges edges) when not (increasing edges) ->
+                Error "edges must be strictly increasing"
+            | Some(FitDiagnosticBins.Edges edges) when not (edges |> List.forall (onLattice declaration.Precision)) ->
+                Error "every edge must lie on the declared precision"
+            | _ -> Ok()
+
+        let needsBins () =
+            match declaration.Bins with
+            | None -> Error "it needs bins"
+            | Some _ -> Ok()
+
+        let noBins () =
+            match declaration.Bins with
+            | None -> Ok()
+            | Some _ -> Error "it takes no bins"
+
+        let noPoints () =
+            if declaration.Points.IsEmpty then
+                Ok()
+            else
+                Error "it takes no points"
+
+        let needsPoints (inside: decimal -> bool) (what: string) () =
+            if declaration.Points.IsEmpty then
+                Error "it needs points"
+            elif not (increasing declaration.Points) then
+                Error "points must be strictly increasing"
+            elif not (declaration.Points |> List.forall inside) then
+                Error $"every point must be {what}"
+            else
+                Ok()
+
+        let noThresholds () =
+            match declaration.ResidualThreshold, declaration.LeverageThreshold with
+            | None, None -> Ok()
+            | _ -> Error "it takes no influence thresholds"
+
+        let needsThresholds () =
+            match declaration.ResidualThreshold, declaration.LeverageThreshold with
+            | Some r, Some l when r > 0m && l > 0m -> Ok()
+            | _ -> Error "it needs a positive residual threshold and a positive leverage threshold"
+
+        let edgesOnly () =
+            match declaration.Bins with
+            | Some(FitDiagnosticBins.Edges _) -> Ok()
+            | _ -> Error "its bins must be declared edges, in standardised-residual units"
+
+        let rules =
+            match diagnostic with
+            | ResidualHistogram -> Some [ edgesOnly; noPoints; noThresholds ]
+            | ResidualSummaryByBin
+            | Calibration -> Some [ needsBins; noPoints; noThresholds ]
+            | QuantileComparison ->
+                Some [
+                    noBins
+                    needsPoints (fun p -> p > 0m && p < 1m) "strictly inside (0, 1)"
+                    noThresholds
+                ]
+            | ThresholdCurve -> Some [ noBins; needsPoints (fun _ -> true) ""; noThresholds ]
+            | InfluenceSummary -> Some [ needsBins; noPoints; needsThresholds ]
+            | _ -> None
+
+        match rules with
+        | None -> Error $"'{diagnostic}' is not a fit diagnostic"
+        | Some _ when declaration.Precision <= 0m -> Error "the precision must be positive"
+        | Some rules ->
+            (binsWellFormed () :: (rules |> List.map (fun rule -> rule ())))
+            |> List.tryPick (function
+                | Error e -> Some e
+                | Ok() -> None)
+            |> function
+                | None -> Ok()
+                | Some e -> Error $"'{diagnostic}': {e}"
+
+    /// A candidate cell: its label, the rows behind it and its value.
+    type private Candidate = {
+        Label: string
+        Rows: int list
+        Value: float option
+    }
+
+    let private number = FitDiagnosticDeclaration.number
+
+    let private roundTo (precision: decimal) (value: float) : float =
+        float (Math.Round(decimal value / precision, MidpointRounding.ToEven) * precision)
+
+    let private floorTo (precision: decimal) (value: float) : decimal =
+        Math.Floor(decimal value / precision) * precision
+
+    let private ceilTo (precision: decimal) (value: float) : decimal =
+        Math.Ceiling(decimal value / precision) * precision
+
+    let private nearest (precision: decimal) (value: float) : decimal =
+        Math.Round(decimal value / precision, MidpointRounding.ToEven) * precision
+
+    /// The type-7 sample quantile of an ascending array.
+    let private quantile (sorted: float[]) (p: float) : float =
+        let h = float (sorted.Length - 1) * p
+        let lo = int (Math.Floor h)
+        let hi = min (lo + 1) (sorted.Length - 1)
+        sorted[lo] + (h - float lo) * (sorted[hi] - sorted[lo])
+
+    /// Cut `values` into the declared bins: each bin's label and the
+    /// indices of the rows in it, lowest first, empty bins included.
+    let private bin (precision: decimal) (bins: FitDiagnosticBins) (values: float[]) : (string * int list) list =
+        let label (lo: string) (hi: string) (closed: bool) =
+            $"""[{lo},{hi}{if closed then "]" else ")"}"""
+
+        let rowsWhere (keep: float -> bool) =
+            values
+            |> Array.indexed
+            |> Array.choose (fun (i, v) -> if keep v then Some i else None)
+            |> Array.toList
+
+        // The observed range, its ends rounded outward to the precision.
+        let range () =
+            let lo = floorTo precision (Array.min values)
+            let hi = ceilTo precision (Array.max values)
+            lo, (if hi <= lo then lo + precision else hi)
+
+        // Bins over computed edges: each closed below and open above, the
+        // last closed at both ends so the range's top value is in it.
+        let closedBins (raw: decimal[]) =
+            let edges = raw |> Array.distinct |> Array.sort
+            let es = edges |> Array.map float
+            let names = edges |> Array.map number
+            let last = es.Length - 1
+
+            [
+                for i in 0 .. last - 1 ->
+                    let closed = i = last - 1
+
+                    label names[i] names[i + 1] closed,
+                    rowsWhere (fun v -> v >= es[i] && (v < es[i + 1] || closed && v <= es[i + 1]))
+            ]
+
+        match bins with
+        | FitDiagnosticBins.Edges edges ->
+            let es = edges |> List.map float |> Array.ofList
+            let names = edges |> List.map number |> Array.ofList
+            let last = es.Length - 1
+
+            [
+                $"(-inf,{names[0]})", rowsWhere (fun v -> v < es[0])
+                for i in 0 .. last - 1 do
+                    label names[i] names[i + 1] false, rowsWhere (fun v -> v >= es[i] && v < es[i + 1])
+                $"[{names[last]},+inf)", rowsWhere (fun v -> v >= es[last])
+            ]
+        | FitDiagnosticBins.FixedWidth count ->
+            let lo, hi = range ()
+            let width = (hi - lo) / decimal count
+
+            closedBins [|
+                for i in 0..count ->
+                    if i = count then
+                        hi
+                    else
+                        nearest precision (float (lo + width * decimal i))
+            |]
+        | FitDiagnosticBins.Quantiles count ->
+            let lo, hi = range ()
+            let sorted = Array.sort values
+
+            closedBins [|
+                for i in 0..count ->
+                    if i = 0 then
+                        lo
+                    elif i = count then
+                        hi
+                    else
+                        nearest precision (quantile sorted (float i / float count))
+            |]
+
+    let private mean (select: int -> float) (rows: int list) = rows |> List.averageBy select
+
+    let private finite (o: ModelExecutionFitObservation) =
+        let ok (v: float) =
+            not (Double.IsNaN v || Double.IsInfinity v) && abs v < 1e15
+
+        ok o.Fitted
+        && ok o.Residual
+        && ok o.Standardised
+        && (o.Leverage |> Option.forall ok)
+
+    /// Compute `diagnostic` over `observations` as `declaration` bins it,
+    /// checking the whole-result floor of `floor` on the distinct cohort.
+    /// `Error` names why it could not be computed; an answer that cannot
+    /// clear the floor is `Ok` with no cells, which the gate withholds.
+    let project
+        (diagnostic: string)
+        (declaration: FitDiagnosticDeclaration)
+        (floor: PrivacyGate)
+        (observations: ModelExecutionFitObservation list)
+        : Result<CohortResult, string> =
+        let rows = Array.ofList observations
+        let p = declaration.Precision
+
+        let shape =
+            match diagnostic with
+            | ResidualHistogram
+            | InfluenceSummary -> Histogram
+            | _ -> Aggregate
+
+        let candidates () : Result<Candidate list, string> =
+            let fitted = rows |> Array.map _.Fitted
+            let observed i = rows[i].Fitted + rows[i].Residual
+
+            let axisBins (values: float[]) =
+                match declaration.Bins with
+                | Some bins -> bin p bins values
+                | None -> []
+
+            match diagnostic with
+            | ResidualHistogram ->
+                axisBins (rows |> Array.map _.Standardised)
+                |> List.map (fun (label, members) -> {
+                    Label = label
+                    Rows = members
+                    Value = None
+                })
+                |> Ok
+            | ResidualSummaryByBin ->
+                axisBins fitted
+                |> List.filter (fun (_, members) -> not members.IsEmpty)
+                |> List.map (fun (label, members) -> {
+                    Label = label
+                    Rows = members
+                    Value = Some(roundTo p (mean (fun i -> rows[i].Residual) members))
+                })
+                |> Ok
+            | Calibration ->
+                axisBins fitted
+                |> List.filter (fun (_, members) -> not members.IsEmpty)
+                |> List.collect (fun (label, members) -> [
+                    {
+                        Label = $"predicted:{label}"
+                        Rows = members
+                        Value = Some(roundTo p (mean (fun i -> rows[i].Fitted) members))
+                    }
+                    {
+                        Label = $"observed:{label}"
+                        Rows = members
+                        Value = Some(roundTo p (mean observed members))
+                    }
+                ])
+                |> Ok
+            | QuantileComparison ->
+                let standardised = rows |> Array.map _.Standardised
+                let sorted = Array.sort standardised
+
+                declaration.Points
+                |> List.map (fun point ->
+                    let q = quantile sorted (float point)
+
+                    let below = [
+                        for i in 0 .. rows.Length - 1 do
+                            if standardised[i] <= q then
+                                i
+                    ]
+
+                    let above = [
+                        for i in 0 .. rows.Length - 1 do
+                            if standardised[i] >= q then
+                                i
+                    ]
+
+                    {
+                        Label = number point
+                        Rows = if below.Length <= above.Length then below else above
+                        Value = Some(roundTo p q)
+                    })
+                |> Ok
+            | ThresholdCurve ->
+                let positives = [
+                    for i in 0 .. rows.Length - 1 do
+                        if observed i >= 0.5 then
+                            i
+                ]
+
+                let negatives = [
+                    for i in 0 .. rows.Length - 1 do
+                        if observed i < 0.5 then
+                            i
+                ]
+
+                let rate (members: int list) (threshold: decimal) =
+                    let hits = members |> List.filter (fun i -> rows[i].Fitted >= float threshold)
+                    roundTo p (float hits.Length / float members.Length)
+
+                declaration.Points
+                |> List.collect (fun threshold -> [
+                    if not positives.IsEmpty then
+                        {
+                            Label = $"tpr:{number threshold}"
+                            Rows = positives
+                            Value = Some(rate positives threshold)
+                        }
+                    if not negatives.IsEmpty then
+                        {
+                            Label = $"fpr:{number threshold}"
+                            Rows = negatives
+                            Value = Some(rate negatives threshold)
+                        }
+                ])
+                |> Ok
+            | InfluenceSummary ->
+                if rows |> Array.exists (fun o -> o.Leverage.IsNone) then
+                    Error "InfluenceSummary needs every observation's leverage, and this fit did not report one"
+                else
+                    let residual = float (defaultArg declaration.ResidualThreshold 0m)
+                    let leverage = float (defaultArg declaration.LeverageThreshold 0m)
+
+                    axisBins fitted
+                    |> List.collect (fun (label, members) -> [
+                        {
+                            Label = $"residual:{label}"
+                            Rows = members |> List.filter (fun i -> abs rows[i].Standardised > residual)
+                            Value = None
+                        }
+                        {
+                            Label = $"leverage:{label}"
+                            Rows = members |> List.filter (fun i -> rows[i].Leverage.Value > leverage)
+                            Value = None
+                        }
+                    ])
+                    |> Ok
+            | other -> Error $"'{other}' is not a fit diagnostic"
+
+        if not (rows |> Array.forall finite) then
+            Error "the fit's observations include a non-finite or out-of-range value"
+        elif rows.Length = 0 then
+            Ok { Shape = shape; Cells = [] }
+        else
+            match candidates () with
+            | Error e -> Error e
+            | Ok candidates ->
+                let present = candidates |> List.filter (fun c -> not c.Rows.IsEmpty)
+
+                let cohort =
+                    present
+                    |> List.filter (fun c -> c.Rows.Length >= floor.SuppressionThreshold)
+                    |> List.collect _.Rows
+                    |> List.distinct
+                    |> List.length
+
+                let cells =
+                    if cohort < floor.MinCohortSize then
+                        []
+                    else
+                        present
+                        |> List.map (fun c -> {
+                            Label = c.Label
+                            Count = c.Rows.Length
+                            Value = c.Value
+                        })
+
+                Ok { Shape = shape; Cells = cells }
+
 /// Why a model-execution request was refused at the seam.
 ///
 /// Three of these classes exist because the profile is closed rather
@@ -333,6 +960,12 @@ type ModelExecutionPeerRefusal =
     /// transition cannot — corrupt bytes, an oversized set, a key already
     /// held with different content — earn a class of their own.
     | PromotionRefused of refusal: ModelPromotionRefusal
+    /// A fit-diagnostic request carried a member other than the outcome
+    /// it is over — a bin edge, a bin count, a row filter. The binning is
+    /// the approved template's and the rows are the fit's, so a call has
+    /// nothing to set; `parameter` names the member, because "you may not
+    /// set the bins" is the remedy and a generic unreadable would hide it.
+    | DiagnosticParameterRefused of operation: string * parameter: string
 
 [<RequireQualifiedAccess>]
 module ModelExecutionPeerRefusal =
@@ -368,6 +1001,7 @@ module ModelExecutionPeerRefusal =
         // is where the lifecycle arm folds back onto §5.7.11's classes
         // rather than minting parallel ones for the same decision.
         | ModelExecutionPeerRefusal.PromotionRefused refusal -> PeerPromotion.className refusal
+        | ModelExecutionPeerRefusal.DiagnosticParameterRefused _ -> "model-execution-diagnostic-parameter-refused"
 
     /// Human-readable one-line description (logs + operator display; the
     /// case, not this string, is the contract).
@@ -395,6 +1029,8 @@ module ModelExecutionPeerRefusal =
         | ModelExecutionPeerRefusal.ViewRefused refusal -> PeerViewRefusal.describe refusal
         | ModelExecutionPeerRefusal.TransitionRefused refusal -> ModelTransitionRefusal.describe refusal
         | ModelExecutionPeerRefusal.PromotionRefused refusal -> ModelPromotionRefusal.describe refusal
+        | ModelExecutionPeerRefusal.DiagnosticParameterRefused(operation, parameter) ->
+            $"'{operation}' takes only the outcome it is over; '{parameter}' is not a member a caller may set, since the binning is the approved template's"
 
     /// Phase 640 — the seam's refusal read in the **submitter** face's own
     /// closed vocabulary, given the operation names this deployment serves.
@@ -512,6 +1148,10 @@ module ModelExecutionPeerRefusal =
             ModelExecutionRefusal.SubstrateDisabled "promoted-artifact signer"
         | ModelExecutionPeerRefusal.PromotionRefused(ModelPromotionRefusal.TransitionRefused inner) ->
             toSubmitterRefusal known (ModelExecutionPeerRefusal.TransitionRefused inner)
+        // The request, not the caller, is wrong, and the description names
+        // the member to drop.
+        | ModelExecutionPeerRefusal.DiagnosticParameterRefused _ as refusal ->
+            ModelExecutionRefusal.InvalidSubmission(describe refusal)
 
 /// The versioned envelope every model-execution request rides in.
 ///
@@ -555,9 +1195,10 @@ type ModelExecutionPeerAnswer =
 [<RequireQualifiedAccess>]
 module ModelExecutionProfile =
 
-    /// The model-execution profile's own version.
+    /// The model-execution profile's own version: the highest this
+    /// deployment reads. Version 2 added the fit diagnostics.
     [<Literal>]
-    let Version = 1
+    let Version = 2
 
     /// The submitter contract's id.
     // OSS-BOUNDARY-EXEMPT: a wire value defined by the public, Apache-2.0
@@ -585,7 +1226,16 @@ module ModelExecutionProfile =
     /// DEPLOYMENT declares the subset it answers (see `template`); this
     /// is the vocabulary, not the offer.
     let diagnostics: Set<string> =
-        Set.ofList [ "Collinearity"; "Coverage"; "TransformPreview" ]
+        Set.union (Set.ofList [ "Collinearity"; "Coverage"; "TransformPreview" ]) FitDiagnostics.all
+
+    /// The profile version an operation was defined at, which is the
+    /// version a request for it declares. A request names the version its
+    /// operation needs rather than the newest the sender reads, so a data
+    /// host that predates the fit diagnostics still reads every request
+    /// it can answer, and refuses one for a fit diagnostic as a version it
+    /// does not read: the remedy, an upgrade, is then the one it names.
+    let operationVersion (operation: string) : int =
+        if Set.contains operation FitDiagnostics.all then 2 else 1
 
     /// Operation names that denote row-level access. The profile serves
     /// none of them; they are enumerated so that asking for one is
@@ -720,6 +1370,39 @@ module ModelExecutionProfile =
         TemplateId = templateId
         AllowedMethods = Set.intersect declared diagnostics
         Floor = floor
+        Release = ReleaseTerms.none
+    }
+
+    /// Declare a fit diagnostic on `template`: put it on the surface and
+    /// carry its binning in the template's release terms, where the
+    /// template's content hash covers it, so changing a bin edge is a new
+    /// template that has to be approved again. It also makes the template
+    /// name its withheld cells to the caller. A name that is not a fit
+    /// diagnostic leaves the template unchanged, as `template` drops one.
+    let withFitDiagnostic
+        (diagnostic: string)
+        (declaration: FitDiagnosticDeclaration)
+        (template: CleanRoomTemplate)
+        : CleanRoomTemplate =
+        if Set.contains diagnostic FitDiagnostics.all then
+            {
+                template with
+                    AllowedMethods = Set.add diagnostic template.AllowedMethods
+                    Release.Declarations =
+                        Map.add diagnostic (FitDiagnosticDeclaration.render declaration) template.Release.Declarations
+                    // A fit diagnostic is drawn on the modeller's side, where
+                    // a withheld bin must be named, never drawn as empty.
+                    Release.NamesWithheld = true
+            }
+        else
+            template
+
+    /// Switch calibrated noise on for `template`'s released cells. Off by
+    /// default: k-suppression alone, for which no differential-privacy
+    /// claim is made. With it on, every release spends `policy`'s ε.
+    let withNoise (policy: NoisedReleasePolicy) (template: CleanRoomTemplate) : CleanRoomTemplate = {
+        template with
+            Release.Noise = Some policy
     }
 
 // ─── Admission ───────────────────────────────────────────────────────
@@ -991,7 +1674,87 @@ type ModelExecutionDiagnosticsDeps = {
     /// is no way for an implementation of this function to release rows
     /// by returning them.
     Project: ModelExecutionPeerBinding -> string -> ModelExecutionPeerDiagnosticRequest -> Async<CohortResult>
+    /// Read back a stored fit outcome's observations, for the fit
+    /// diagnostics: the outcome named by its composite key, in the
+    /// binding's scope, or `None` when the scope holds no such outcome.
+    /// **This only reads.** The binning is the template's and the
+    /// projection is the profile's (`FitDiagnostics.project`), so an
+    /// implementation of this function decides neither what is computed
+    /// nor what is released.
+    FitObservations: ModelExecutionPeerBinding -> string -> Async<ModelExecutionFitObservation list option>
 }
+
+/// What the governed-diagnostics contract is gated by: the clean-room
+/// broker and template, the bilateral approval check, the privacy-budget
+/// meter every release is charged to, and the noise mechanism a template
+/// that switches noise on draws from.
+type ModelExecutionDiagnosticsGate = {
+    /// The clean-room broker the gate enforces the floor through.
+    Broker: ICleanRoomBroker
+    /// The template whose `AllowedMethods` is the declaration of what this
+    /// deployment answers, and whose release terms carry each fit
+    /// diagnostic's binning and the optional noise.
+    Template: CleanRoomTemplate
+    /// The bilateral approval check, or `None` for a composition that
+    /// declares no approval registry.
+    Approval: CleanRoomApprovalCheck option
+    /// The shared privacy-budget ledger every diagnostic release is charged
+    /// to, keyed by template, counterparty peer and epoch. A release under
+    /// an un-noised template is charged zero ε: it is counted, and it spends
+    /// nothing, because without noise there is no privacy loss the ledger
+    /// could honestly bound. A noised template's release spends its policy's
+    /// ε, and an exhausted budget is a withhold the audit records.
+    Budget: PrivacyBudgetMeter
+    /// The mechanism a noised template draws from. Required exactly when
+    /// the template switches noise on.
+    Noise: INoiseMechanism option
+    /// The decision sink (`CleanRoomGate.noAudit` to record nothing).
+    Audit: PeerCleanRoomDecisionPayload -> Async<unit>
+}
+
+/// Why a governed-diagnostics composition was refused.
+[<RequireQualifiedAccess>]
+type ModelExecutionTemplateRefusal =
+    /// The template offers a fit diagnostic and declares no binning for
+    /// it. Refused rather than defaulted: a default bin is a binning no
+    /// counterparty approved.
+    | BinningUndeclared of diagnostic: string
+    /// The template's declaration for a fit diagnostic is unreadable or
+    /// incomplete; `reason` says which.
+    | DeclarationInvalid of diagnostic: string * reason: string
+    /// The template switches noise on and the composition holds no
+    /// mechanism to draw it from.
+    | NoiseMechanismAbsent of templateId: string
+
+/// Reading and checking a governed-diagnostics template's refusals.
+[<RequireQualifiedAccess>]
+module ModelExecutionTemplateRefusal =
+
+    /// Human-readable one-line description.
+    let describe =
+        function
+        | ModelExecutionTemplateRefusal.BinningUndeclared diagnostic ->
+            $"the template offers '{diagnostic}' and declares no binning for it"
+        | ModelExecutionTemplateRefusal.DeclarationInvalid(diagnostic, reason) ->
+            $"the template's declaration for '{diagnostic}' cannot be used: {reason}"
+        | ModelExecutionTemplateRefusal.NoiseMechanismAbsent templateId ->
+            $"template '{templateId}' switches calibrated noise on and no INoiseMechanism is composed"
+
+    /// Every reason `template` cannot govern the diagnostics contract, in
+    /// method order; empty when it can.
+    let check (template: CleanRoomTemplate) : ModelExecutionTemplateRefusal list =
+        Set.intersect template.AllowedMethods FitDiagnostics.all
+        |> Set.toList
+        |> List.choose (fun diagnostic ->
+            match Map.tryFind diagnostic template.Release.Declarations with
+            | None -> Some(ModelExecutionTemplateRefusal.BinningUndeclared diagnostic)
+            | Some text ->
+                match
+                    FitDiagnosticDeclaration.parse text
+                    |> Result.bind (FitDiagnostics.check diagnostic)
+                with
+                | Ok() -> None
+                | Error reason -> Some(ModelExecutionTemplateRefusal.DeclarationInvalid(diagnostic, reason)))
 
 // ─── The binding ─────────────────────────────────────────────────────
 
@@ -1161,6 +1924,41 @@ module ModelExecutionPeerContract =
                 Error(ModelExecutionPeerRefusal.ScopeWideningRefused asserted)
             | _ -> Ok()
 
+    /// Read a fit-diagnostic body strictly: an object whose one member is
+    /// the `OutcomeId` string. Any other member is refused by name, which
+    /// is what makes "a call carries no binning" a property of the reader
+    /// rather than of a well-behaved caller — a lenient decode would drop
+    /// a `Bins` member silently, and the caller would believe it had been
+    /// honoured.
+    let readFitDiagnostic
+        (operation: string)
+        (body: string)
+        : Result<ModelExecutionPeerFitDiagnosticRequest, ModelExecutionPeerRefusal> =
+        try
+            use document = Text.Json.JsonDocument.Parse(if isNull body then "" else body)
+            let root = document.RootElement
+
+            if root.ValueKind <> Text.Json.JsonValueKind.Object then
+                Error(ModelExecutionPeerRefusal.RequestUnreadable "a fit-diagnostic body is a JSON object")
+            else
+                let members = root.EnumerateObject() |> Seq.toList
+
+                match members |> List.tryFind (fun m -> m.Name <> "OutcomeId") with
+                | Some extra -> Error(ModelExecutionPeerRefusal.DiagnosticParameterRefused(operation, extra.Name))
+                | None ->
+                    match members with
+                    | [ outcome ] when outcome.Value.ValueKind = Text.Json.JsonValueKind.String ->
+                        Ok {
+                            OutcomeId = outcome.Value.GetString()
+                        }
+                    | _ ->
+                        Error(
+                            ModelExecutionPeerRefusal.RequestUnreadable
+                                "a fit-diagnostic body names the outcome it is over, as the string OutcomeId"
+                        )
+        with ex ->
+            Error(ModelExecutionPeerRefusal.RequestUnreadable ex.Message)
+
     /// Read a request envelope and admit it in one step — the reader an
     /// implementation certifies the profile's `reject` vectors against.
     ///
@@ -1192,6 +1990,9 @@ module ModelExecutionPeerContract =
         | Ok request ->
             match admit admission boundScope request with
             | Error refusal -> Error refusal
+            | Ok() when Set.contains request.Operation FitDiagnostics.all ->
+                readFitDiagnostic request.Operation request.Body
+                |> Result.map (fun _ -> request)
             | Ok() -> Ok request
 
     // ── Envelope helpers ─────────────────────────────────────────────
@@ -1200,7 +2001,7 @@ module ModelExecutionPeerContract =
     /// embedded document. The modeller side's one construction route, so
     /// a caller cannot forget the profile version.
     let request (operation: string) (body: 'T) : ModelExecutionPeerRequest = {
-        ProfileVersion = ModelExecutionProfile.Version
+        ProfileVersion = ModelExecutionProfile.operationVersion operation
         Operation = operation
         AssertedScope = None
         Body = JsonRpc.serialize body
@@ -1271,6 +2072,12 @@ module ModelExecutionPeerContract =
             projection with
                 Terms = projection.Terms |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
         }
+
+    /// A fit-diagnostic request envelope for `diagnostic` over the stored
+    /// outcome `outcomeId`. It carries no binning: there is no member for
+    /// one.
+    let fitDiagnosticRequest (diagnostic: string) (outcomeId: string) : ModelExecutionPeerRequest =
+        request diagnostic { OutcomeId = outcomeId }
 
     /// Decode an `Answered` body into the operation's own shape.
     /// `Refused` is returned as the typed refusal it carries — a caller
@@ -1983,7 +2790,10 @@ module ModelExecutionPeerContract =
     /// `GatedContractRegistration` — so a composition cannot register
     /// the projections without the gate, because there is no value of
     /// the right shape to hand it.
-    let private diagnosticsRegistration (deps: ModelExecutionDiagnosticsDeps) : PeerContractRegistration =
+    let private diagnosticsRegistration
+        (template: CleanRoomTemplate)
+        (deps: ModelExecutionDiagnosticsDeps)
+        : PeerContractRegistration =
         let dispatch: PeerDispatch =
             fun context methodName argsJson -> async {
                 match! deps.ResolveBinding context.Peer.PeerId with
@@ -2013,12 +2823,64 @@ module ModelExecutionPeerContract =
 
                         match read admission binding.ScopeId document with
                         | Error refusal -> return Error(PeerHandler(ModelExecutionPeerRefusal.describe refusal))
+                        // The method the gate checked against the surface
+                        // and the operation the envelope names must be the
+                        // same projection, or one would be judged and the
+                        // other answered.
+                        | Ok request when request.Operation <> methodName ->
+                            return
+                                Error(
+                                    PeerHandler
+                                        $"the envelope names '{request.Operation}' and the call is to '{methodName}'"
+                                )
                         | Ok request ->
-                            let projection =
-                                JsonRpc.deserialize<ModelExecutionPeerDiagnosticRequest> request.Body
+                            let! result =
+                                if Set.contains methodName FitDiagnostics.all then
+                                    async {
+                                        let fit =
+                                            JsonRpc.deserialize<ModelExecutionPeerFitDiagnosticRequest> request.Body
 
-                            let! result = deps.Project binding methodName projection
-                            return Ok(JsonRpc.serialize result)
+                                        // Composition refused a template whose
+                                        // declaration does not read, so this is
+                                        // the declaration the approval covers.
+                                        match
+                                            Map.tryFind methodName template.Release.Declarations
+                                            |> Option.map FitDiagnosticDeclaration.parse
+                                        with
+                                        | Some(Ok declaration) ->
+                                            match! deps.FitObservations binding fit.OutcomeId with
+                                            | None ->
+                                                return Error $"no fit outcome '{fit.OutcomeId}' in this peer's scope"
+                                            | Some observations ->
+                                                return
+                                                    FitDiagnostics.project
+                                                        methodName
+                                                        declaration
+                                                        template.Floor
+                                                        observations
+                                        | _ -> return Error $"the template declares no binning for '{methodName}'"
+                                    }
+                                else
+                                    async {
+                                        let projection =
+                                            JsonRpc.deserialize<ModelExecutionPeerDiagnosticRequest> request.Body
+
+                                        let! result = deps.Project binding methodName projection
+                                        return Ok result
+                                    }
+
+                            match result with
+                            | Error reason -> return Error(PeerHandler reason)
+                            // Every answer here is one-dimensional, so a label
+                            // carrying the grid separator would read back as a
+                            // grid cell it is not: refused, never released.
+                            | Ok cohort when not (cohort.Cells |> List.forall (fun c -> CellLabel.isPlain c.Label)) ->
+                                return
+                                    Error(
+                                        PeerHandler
+                                            $"'{methodName}' answered a cell label containing the grid separator U+241F"
+                                    )
+                            | Ok cohort -> return Ok(JsonRpc.serialize cohort)
             }
 
         {
@@ -2029,20 +2891,58 @@ module ModelExecutionPeerContract =
 
     /// The governed-diagnostics contract, gated.
     ///
-    /// **The only construction route**, and the reason it takes a broker
-    /// and a template rather than reading them from a composition: a
-    /// deployment cannot end up believing it gated a surface it did not,
-    /// because there is no un-gated value of this contract to register.
+    /// **The only construction route**, and the reason it takes the gate
+    /// as a value rather than reading it from a composition: a deployment
+    /// cannot end up believing it gated a surface it did not, because
+    /// there is no un-gated value of this contract to register.
     ///
-    /// `template.AllowedMethods` is the declaration of what this
+    /// `gate.Template.AllowedMethods` is the declaration of what this
     /// deployment answers. The gate refuses anything off it before the
     /// projection runs, and withholds any answer that is not a
-    /// `CohortResult` — which is what closes the surface against row
-    /// egress rather than merely discouraging it.
+    /// `CohortResult`, which is what closes the surface against row egress
+    /// rather than merely discouraging it. Every release is charged to
+    /// `gate.Budget`, and a template that switches noise on has its
+    /// released cells noised from `gate.Noise`.
+    ///
+    /// Refused at composition, by name, when the template offers a fit
+    /// diagnostic without a usable binning, or switches noise on with no
+    /// mechanism to draw it.
     let governedDiagnostics
-        (broker: ICleanRoomBroker)
-        (template: CleanRoomTemplate)
-        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (gate: ModelExecutionDiagnosticsGate)
         (deps: ModelExecutionDiagnosticsDeps)
-        : GatedContractRegistration =
-        CleanRoomGate.wrap broker template sink (diagnosticsRegistration deps)
+        : Result<GatedContractRegistration, ModelExecutionTemplateRefusal list> =
+        let refusals =
+            ModelExecutionTemplateRefusal.check gate.Template
+            @ (match gate.Template.Release.Noise, gate.Noise with
+               | Some _, None -> [ ModelExecutionTemplateRefusal.NoiseMechanismAbsent gate.Template.TemplateId ]
+               | _ -> [])
+
+        if not refusals.IsEmpty then
+            Error refusals
+        else
+            // An un-noised release is counted at zero ε; a noised one is
+            // charged its policy's ε by the gate itself, which reads the
+            // noise policy in place of this schedule.
+            let meter = {
+                gate.Budget with
+                    Policy = {
+                        gate.Budget.Policy with
+                            EpsilonPerQuery = 0m
+                            MethodEpsilon = Map.empty
+                    }
+            }
+
+            let noise =
+                gate.Template.Release.Noise
+                |> Option.bind (fun policy -> gate.Noise |> Option.map (fun mechanism -> mechanism, policy))
+
+            Ok(
+                CleanRoomGate.wrapNoised
+                    gate.Broker
+                    gate.Template
+                    gate.Approval
+                    (Some meter)
+                    noise
+                    gate.Audit
+                    (diagnosticsRegistration gate.Template deps)
+            )

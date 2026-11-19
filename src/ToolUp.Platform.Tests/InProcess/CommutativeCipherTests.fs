@@ -399,6 +399,7 @@ let private gateTemplate (methods: string list) (floor: PrivacyGate) : CleanRoom
     TemplateId = "psi-479"
     AllowedMethods = Set.ofList methods
     Floor = floor
+    Release = ReleaseTerms.none
 }
 
 let private releaseGate (template: CleanRoomTemplate) (methodName: string) (requested: PrivacyGate option) = {
