@@ -64,6 +64,13 @@
 # load, and the teeth check feeds it a manifest with the renderer imported
 # statically.
 #
+# The Fuaran-UI node vocabulary is the fourth: a tree surface builds its tree in
+# a file reached only through TreeSurface.deferred, so the vocabulary loads with
+# the renderer. The shell build names any vocabulary module in its first load
+# into FuaranUIVocabularyAtBoot and the check refuses it; the renderer's chunk is
+# on demand when any dynamic import of the first load reaches it, directly or
+# through a deferred surface's chunk. The teeth check feeds it both shapes.
+#
 # ── The load half (Phase 886) ────────────────────────────────────────────
 #
 # Last, the script measures the FACT and RETRIEVAL paths under concurrent
@@ -580,7 +587,23 @@ function Get-ShellChunkFinding {
         }
     }
 
-    $reachedLater = @($seen.Keys | ForEach-Object { $manifest[$_].dynamicImports } | Where-Object { $_ })
+    # What loads later: every chunk a dynamic import of the first load reaches, through that chunk's static imports
+    # and its own dynamic imports in turn. A deferred tree surface's chunk imports the renderer's chunk statically,
+    # so the renderer is on demand without being a dynamic import of the first load itself.
+    $later = @{}
+    $pendingLater = [System.Collections.Generic.Queue[string]]::new()
+    foreach ($import in @($seen.Keys | ForEach-Object { $manifest[$_].dynamicImports } | Where-Object { $_ })) {
+        $pendingLater.Enqueue($import)
+    }
+    while ($pendingLater.Count -gt 0) {
+        $key = $pendingLater.Dequeue()
+        if ($later.ContainsKey($key) -or $seen.ContainsKey($key) -or -not $manifest.ContainsKey($key)) { continue }
+        $later[$key] = $true
+        foreach ($import in @($manifest[$key].imports) + @($manifest[$key].dynamicImports)) {
+            if ($import) { $pendingLater.Enqueue($import) }
+        }
+    }
+    $reachedLater = @($later.Keys)
 
     foreach ($runtime in @("AgGridRuntime", "AgChartRuntime")) {
         if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0) {
@@ -598,13 +621,19 @@ function Get-ShellChunkFinding {
     if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/FuaranUIRendererAtBoot-" }).Count -gt 0) {
         return "the Fuaran-UI renderer is in the shell's first load (FuaranUIRendererAtBoot); a static reference from a boot path collapsed its chunk"
     }
+    # The node vocabulary: vite.shell.config.mts names any `Fuaran.UI` module in the entry's static closure into
+    # FuaranUIVocabularyAtBoot. A surface that builds its tree in a file reached through TreeSurface.deferred never
+    # puts it there; one that builds its tree on a boot path does, and pays its closure on every first load.
+    if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/FuaranUIVocabularyAtBoot-" }).Count -gt 0) {
+        return "the Fuaran-UI node vocabulary is in the shell's first load (FuaranUIVocabularyAtBoot); a tree surface builds its tree on a boot path instead of behind TreeSurface.deferred"
+    }
     $runtime = "TreeLoweringRuntime"
     if (@($seen.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0) {
         return "$runtime, the Fuaran-UI renderer's chunk, is in the shell's first load; a static reference collapsed its chunk"
     }
     $runtimeBuilt = @($manifest.Keys | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -gt 0
     if ($runtimeBuilt -and @($reachedLater | Where-Object { $manifest[$_].file -match "/$runtime-" }).Count -eq 0) {
-        return "$runtime, the Fuaran-UI renderer's chunk, is not a dynamic import of the shell's first load, so it is no longer loaded on demand"
+        return "$runtime, the Fuaran-UI renderer's chunk, is not reached from a dynamic import of the shell's first load, so it is no longer loaded on demand"
     }
 
     return $null
@@ -980,6 +1009,46 @@ if ($TeethCheck) {
     }
     finally {
         Remove-Item $staticRendererManifest -ErrorAction SilentlyContinue
+    }
+
+    # A build whose entry builds a tree on a boot path: the vocabulary in the first load, the renderer on demand.
+    # And its control, the deferred surface's shape: the entry dynamically imports the surface's tree chunk, which
+    # imports the renderer's chunk statically. The first must be refused by name and the second must pass, so the
+    # check is shown to tell the two apart rather than to refuse anything with a renderer in it.
+    $vocabularyManifest = Join-Path ([IO.Path]::GetTempPath()) "toolup-perf-teeth-static-vocabulary-manifest.json"
+    $deferredManifest = Join-Path ([IO.Path]::GetTempPath()) "toolup-perf-teeth-deferred-surface-manifest.json"
+    @'
+{
+  "SDK.Client.js": { "file": "assets/SDK.Client-x.js", "isEntry": true, "imports": ["_FuaranUIVocabularyAtBoot-x.js"], "dynamicImports": ["AgGridRuntime.js", "AgChartRuntime.js", "TreeLoweringRuntime.js"] },
+  "_FuaranUIVocabularyAtBoot-x.js": { "file": "assets/FuaranUIVocabularyAtBoot-x.js" },
+  "TreeLoweringRuntime.js": { "file": "assets/TreeLoweringRuntime-x.js", "isDynamicEntry": true },
+  "AgGridRuntime.js": { "file": "assets/AgGridRuntime-x.js", "isDynamicEntry": true },
+  "AgChartRuntime.js": { "file": "assets/AgChartRuntime-x.js", "isDynamicEntry": true }
+}
+'@ | Set-Content -Path $vocabularyManifest -Encoding utf8
+    @'
+{
+  "SDK.Client.js": { "file": "assets/SDK.Client-x.js", "isEntry": true, "dynamicImports": ["AgGridRuntime.js", "AgChartRuntime.js", "SurfaceTree.js"] },
+  "SurfaceTree.js": { "file": "assets/SurfaceTree-x.js", "isDynamicEntry": true, "imports": ["_TreeLoweringRuntime-x.js"] },
+  "_TreeLoweringRuntime-x.js": { "file": "assets/TreeLoweringRuntime-x.js" },
+  "AgGridRuntime.js": { "file": "assets/AgGridRuntime-x.js", "isDynamicEntry": true },
+  "AgChartRuntime.js": { "file": "assets/AgChartRuntime-x.js", "isDynamicEntry": true }
+}
+'@ | Set-Content -Path $deferredManifest -Encoding utf8
+    try {
+        $vocabularyFinding = Get-ShellChunkFinding -ManifestPath $vocabularyManifest
+        if (-not $vocabularyFinding -or $vocabularyFinding -notmatch "vocabulary") {
+            Write-Error "perf-budget: TEETH CHECK FAILED — the chunk check passed a build with the Fuaran-UI vocabulary in the first load. A tree built on a boot path would not go red."
+            exit 1
+        }
+        $deferredFinding = Get-ShellChunkFinding -ManifestPath $deferredManifest
+        if ($deferredFinding) {
+            Write-Error "perf-budget: TEETH CHECK FAILED — the chunk check refused a deferred tree surface's build: $deferredFinding."
+            exit 1
+        }
+    }
+    finally {
+        Remove-Item $vocabularyManifest, $deferredManifest -ErrorAction SilentlyContinue
     }
 
     if ($bundleTeeth -eq 0) {
