@@ -630,6 +630,20 @@ let restartTests (name: string) (factory: unit -> RestartableScheduler) =
                 (waitFor 30_000 (fun () -> succeededRuns first () >= 1))
                 "and the first run reached a terminal row"
 
+            // A run writes its row first and folds its outcome into the
+            // definition second. The run is over only once both have landed;
+            // a restart between the two is a different question from this one.
+            let lastFolded = ref None
+
+            let folded () =
+                lastFolded.Value <- first.Get(scope, jobId) |> Async.RunSynchronously |> Option.bind _.LastRunStatus
+
+                lastFolded.Value = Some Succeeded
+
+            Expect.isTrue
+                (waitFor 30_000 folded)
+                $"and its outcome folded into the definition (the definition's last run status read %A{lastFolded.Value})"
+
             // ─── the simulated process death ─────────────────────
             binding.Close first
 

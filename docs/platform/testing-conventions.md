@@ -123,6 +123,33 @@ no write signals is polled through a `Clock` (`Clock.waitUntil`). A timeout is a
 a loaded machine never reaches it, never the mechanism the assertion relies on: a longer deadline only
 widens a race, it does not remove it.
 
+### A timing-sensitive test is proved under load
+
+A test that waits passes on a quiet machine whether it waits on the right thing or not, so a green run says
+nothing about the wait. Four tests went red on a busy developer machine with every other test green (Phase
+1374), and each was the same mistake: the test waited on the FIRST sign that the work happened and then
+read a state the work writes LAST.
+
+- **Wait on the end, not the start.** A fired job writes its run row and only then folds the outcome into
+  its definition; an assistant turn writes the conversation back and only then reports its terminal
+  status. Wait on the last write, or on the producer's own signal that it finished (Quartz's
+  `JobWasExecuted`, the turn's terminal status through `GetTaskStatus`), never on an earlier one.
+- **A fixture stops what writes before it deletes what is written to.** A scheduler fixture stops its
+  scheduler, which waits for the dispatches in flight; a store with a background flush is disposed, and
+  waits for a flush already writing. See [`docs/testing/temp-directories.md`](../testing/temp-directories.md).
+- **A fixed sleep proves only a negative.** A quiet window before asserting that something did NOT happen
+  is a sleep by design. A sleep followed by an assertion that something DID happen stands in for a signal:
+  wait on the signal instead.
+
+**The method.** Before fixing such a test, make it fail on demand: put the delay the loaded machine would
+have caused at the point the test races (a store whose definition write lags, a blob store whose writes
+stay visible before the call returns, a disk write that takes half a second, a handler that is still
+running when the case ends), and watch the unfixed test go red. Then fix the wait and run the same
+reproduction again. Keep the delay in the test as a double (`LaggingFoldStore`, the `writeLag` of
+`ReadRecordingStorage`, `SlowWriteStorage`): a test that runs over the pessimal double on every run cannot
+quietly regress to the early wait. Then run the fixed tests repeatedly while the machine is busy (a
+parallel solution build beside them), enough times that a race losing one run in ten would have shown.
+
 ## Audit checklist
 
 Every `let mutable` at module scope in `toolup-forge/src/` MUST fall into one of two classes:

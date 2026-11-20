@@ -283,10 +283,35 @@ let main args =
 
             let byFamily = left |> List.countBy fst |> List.sortBy fst
 
-            for family, count in byFamily do
-                Trace.tracefn "  TempHygiene: %s left %d director%s" family count (if count = 1 then "y" else "ies")
+            // What a surviving directory holds says what wrote it: its paths
+            // name the store, and a write time after the case ended says the
+            // write came late. By now the pack's process has exited, so no
+            // handle is still open; a removal that fails anyway names the file
+            // the system refused and why.
+            let contents (dir: string) =
+                try
+                    let files =
+                        Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
+                        |> Seq.truncate 5
+                        |> Seq.map (fun file ->
+                            let info = FileInfo file
 
-            for _, dir in left do
+                            sprintf
+                                "%s (%d bytes, written %s UTC)"
+                                (Path.GetRelativePath(dir, file).Replace('\\', '/'))
+                                info.Length
+                                (info.LastWriteTimeUtc.ToString "HH:mm:ss.fff"))
+                        |> List.ofSeq
+
+                    match files with
+                    | [] -> "no files"
+                    | _ -> String.concat "; " files
+                with ex ->
+                    sprintf "its files could not be listed: %s" ex.Message
+
+            for family, dir in left do
+                Trace.tracefn "  TempHygiene: %s left %s, holding %s" family dir (contents dir)
+
                 try
                     Directory.Delete(dir, true)
                 with ex ->
@@ -295,6 +320,9 @@ let main args =
             let leaked =
                 byFamily
                 |> List.filter (fun (family, _) -> not (tempLeakAllowance.ContainsKey family))
+
+            let pathsOf family =
+                left |> List.filter (fst >> (=) family) |> List.map snd
 
             let stale =
                 if verifyLane = TestLane.Lane.Full then
@@ -322,12 +350,20 @@ let main args =
                         family
                 )
 
+            // One line, led by this check's name: the summary prints a
+            // verdict's first line beside the row that ran it.
             match leaked, stale with
             | [], [] -> Verdict.Pass None
             | _ ->
-                Verdict.Fail(
-                    sprintf "%d leaking famil(ies), %d stale allowance(s), named above." leaked.Length stale.Length
-                )
+                let leaks =
+                    leaked
+                    |> List.map (fun (family, _) ->
+                        sprintf "family '%s' left %s" family (String.concat ", " (pathsOf family)))
+
+                let stales =
+                    stale |> List.map (sprintf "family '%s' is allowed to leak and left nothing")
+
+                Verdict.Fail("TempHygiene: " + String.concat "; " (leaks @ stales))
 
     /// Every test project runs or is excluded by name, and `gate-reads.json`
     /// is the render of the manifest's read declarations. Pure file reading
@@ -377,7 +413,7 @@ let main args =
             for f in findings do
                 Trace.traceError (sprintf "GateReconcile: %s" f)
 
-            Verdict.Fail(sprintf "%d finding(s), named above." findings.Length)
+            Verdict.Fail(sprintf "GateReconcile: %d finding(s), named above." findings.Length)
 
     // The `affected` lane's selection, written as a manifest and the lists
     // file the Platform family's packs read.
@@ -4401,11 +4437,12 @@ let main args =
     let bodies: GateManifest.Bodies = {
         // The temp hygiene check rides the GateReconcile leg: the first leg
         // after the packs, in every lane, and the gate's other "the run
-        // reconciles with the tree" check.
+        // reconciles with the tree" check. Each check's verdict leads with
+        // its own name, so the row's failure says which of the two failed.
         GateReconcile =
             fun () ->
                 match runGateReconcile (), runTempHygiene () with
-                | Verdict.Fail a, Verdict.Fail b -> Verdict.Fail(a + " " + b)
+                | Verdict.Fail a, Verdict.Fail b -> Verdict.Fail(a + "; " + b)
                 | Verdict.Fail a, _
                 | _, Verdict.Fail a -> Verdict.Fail a
                 | reconciled, _ -> reconciled
