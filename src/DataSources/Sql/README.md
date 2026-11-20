@@ -32,6 +32,8 @@ under its own discriminator with `SqlDataSource.createWithKind "Postgres" (Some 
 | `connection_string` | yes | ADO connection string for that backend, **without** the password when the password comes from `ISecretStore`. |
 | `schema` | no | Schema / owner the catalogue queries scope to. Defaults to `public` (Postgres) or `dbo` (SQL Server); the other four self-scope — see below. SQLite **refuses** this key, because it has no schema catalogue and silently ignoring it would leave an operator believing a scope had been applied. |
 | `command_timeout_seconds` | no | Per-command timeout. Must be positive. Omitted leaves the provider default. |
+| `statement_policy` | no | `raw-allowed` (the default) or `bound-only`: whether `Query` admits statement text, or only a bare table name and the bound form. See [Statement policy and read-only intent](#statement-policy-and-read-only-intent). |
+| `read_only` | no | `true` opens the connection read-only, by the means the backend offers; `false` (the default) opens it with whatever the account allows. |
 
 The credential is **optional**: when present it is folded into the connection string as `Password`,
 and it never overwrites a password the operator put in the connection string themselves.
@@ -122,6 +124,51 @@ refused, before it reaches the provider, when:
 
 A statement's `Timeout` is the command's, overriding `command_timeout_seconds`.
 
+## Statement policy and read-only intent
+
+What a source may be asked is configuration, declared per source by two `ConnectionScope` keys. With
+neither set a source behaves exactly as it always has: statement text is admitted and the connection
+opens with whatever its account allows.
+
+**`statement_policy=bound-only`** refuses statement text by name, before anything is sent: `Query` and
+`GetSchema` admit a bare table name (still expanded to a whole-table select) and nothing else, and a
+statement runs only as a bound statement through `BoundQuery.run`. The refusal is a `SchemaMismatch`
+naming the source and the policy.
+
+**`read_only=true`** opens the connection read-only, by the means each backend offers, and a backend
+that offers none refuses the key by name at connect, so the key is never silently ignored. A write the
+database refuses is a `SchemaMismatch` naming the source and the declared intent, never
+`SourceUnreachable`: the source was reached.
+
+| Backend | How `read_only` is honoured | A refused write |
+|---|---|---|
+| PostgreSQL | connection string: `Options=-c default_transaction_read_only=on`, appended to any options already there | SQLSTATE `25006` |
+| MySQL / MariaDB | each call runs in a read-only transaction (`START TRANSACTION READ ONLY`) | error `1792` |
+| SQL Server | connection string: `ApplicationIntent=ReadOnly`, which only routes; the database the connection reaches must report `Updateability = READ_ONLY` (a readable secondary, a read scale-out replica, a `READ_ONLY` database), or the key is **refused at connect**: SQL Server has no read-only session | error `3906` |
+| SQLite | connection string: `Mode=ReadOnly`; a `Mode=Memory` database cannot be opened read-only and the key is **refused at connect** | `SQLITE_READONLY` |
+| Oracle | each call runs in a read-only transaction (`SET TRANSACTION READ ONLY`) | `ORA-01456` |
+| ClickHouse | connection string: the `readonly=2` setting (`set_readonly=2`), which reads data and admits settings but not a change of `readonly` itself | code `164` |
+
+The two keys are a guard against an accident, and together they are a containment. Under
+`raw-allowed`, statement text can undo a session-level intent (PostgreSQL's
+`SET default_transaction_read_only = off; …`, MySQL's `COMMIT; …`), because the text may carry a
+second statement. Under `bound-only` a statement is one statement per call, so it cannot; SQL Server
+is the exception, because it runs an unseparated batch the scanner cannot see. The containment that
+holds whatever the text is remains an account that cannot write. Preflight reports each source's
+posture: see `SqlDataSource.SourcePosturePreflight` below.
+
+### The posture at start-up
+
+`SqlDataSource.SourcePosturePreflight(sources, report)` is a structural-class `IConfigValidator` over
+the SQL sources a deployment configures. It hands `report` one line per source with its policy and its
+intent, warns naming every source that admits raw text and may write (or whose posture keys do not
+read), and passes silently for a deployment with no sources. It never refuses a start.
+
+```fsharp skip=fragment
+services.AddSingleton<ConfigValidation.IConfigValidator>(
+    SqlDataSource.SourcePosturePreflight(sqlSources, logger.Info))
+```
+
 ## Queries and output
 
 `Query` executes `sql` verbatim against the backend, **except** that a bare identifier is expanded to
@@ -173,8 +220,9 @@ The ANSI table classifies the obvious families. Per-backend overrides exist only
   small, low-latency query. For a scheduled ingestion that may run for minutes — or against a
   Serverless workgroup with no externally reachable wire endpoint — use `ToolUp.DataSources.Redshift`,
   which goes through the Redshift Data API instead.
-- **Ingestion is read-only by design.** Nothing here issues DDL or DML. Give the connector's database
-  role `SELECT` and catalogue-read rights and nothing more.
+- **Ingestion is read-only by design.** The connector itself issues no DDL or DML. Give its database
+  role `SELECT` and catalogue-read rights and nothing more; `read_only=true` makes the same intent the
+  connection's, and preflight says which sources have not declared it.
 - **Cancellation rides the ambient `Async` cancellation token.** `DataSourceCallContext` carries no
   token field, so the connector reads `Async.CancellationToken` and threads it into every ADO
   `*Async` call — a cancelled ingestion aborts the in-flight statement rather than waiting it out.

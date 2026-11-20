@@ -43,8 +43,16 @@ ToolUp.DataSources.Sql.SqlDataSource.composeConnectionString(System.String, Micr
 ToolUp.DataSources.Sql.SqlDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Sql.SqlDataSource.createWithKind(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore]) : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Sql.SqlDataSource.createWithoutSecrets() : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Sql.SqlDataSource.readOnlyConnectionString(ToolUp.DataSources.Sql.SqlBackend, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDataSource.resolveStatement(ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflight (class)
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflight..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit])
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule (class)
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.ValidatorName : System.String (literal)
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.flagged(ToolUp.Platform.DataSourceConfig) : System.Boolean
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.lines(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.result(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig]) : ToolUp.Platform.ConfigValidation+ValidationResult
 ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings (class)
 ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings..ctor(ToolUp.DataSources.Sql.SqlBackend, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings.Backend : ToolUp.DataSources.Sql.SqlBackend { get }
