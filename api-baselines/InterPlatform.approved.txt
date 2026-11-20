@@ -553,6 +553,23 @@ ToolUp.InterPlatform.FeedTick+Tags.FeedHalted : System.Int32 (literal)
 ToolUp.InterPlatform.FeedTick+Tags.FeedNotDue : System.Int32 (literal)
 ToolUp.InterPlatform.FeedTick+Tags.FeedRedelivered : System.Int32 (literal)
 ToolUp.InterPlatform.FeedTick+Tags.FeedUnavailable : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticAnswer (class)
+ToolUp.InterPlatform.FitDiagnosticAnswer.IsNamed : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticAnswer.IsUnnamed : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticAnswer.IsWithheld : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticAnswer.Tag : System.Int32 { get }
+ToolUp.InterPlatform.FitDiagnosticAnswer+Named (class)
+ToolUp.InterPlatform.FitDiagnosticAnswer+Named.release : ToolUp.InterPlatform.ReleasedCohort { get }
+ToolUp.InterPlatform.FitDiagnosticAnswer+Tags (class)
+ToolUp.InterPlatform.FitDiagnosticAnswer+Tags.Named : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticAnswer+Tags.Unnamed : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticAnswer+Tags.Withheld : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticAnswer+Unnamed (class)
+ToolUp.InterPlatform.FitDiagnosticAnswer+Unnamed.result : ToolUp.InterPlatform.CohortResult { get }
+ToolUp.InterPlatform.FitDiagnosticAnswer+Withheld (class)
+ToolUp.InterPlatform.FitDiagnosticAnswer+Withheld.reason : System.String { get }
+ToolUp.InterPlatform.FitDiagnosticAnswerModule (class)
+ToolUp.InterPlatform.FitDiagnosticAnswerModule.ofReply(ToolUp.InterPlatform.CleanRoomTemplate, Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.InterPlatform.PeerError]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FitDiagnosticAnswer, ToolUp.InterPlatform.PeerError]
 ToolUp.InterPlatform.FitDiagnosticBins (class)
 ToolUp.InterPlatform.FitDiagnosticBins.IsEdges : System.Boolean { get }
 ToolUp.InterPlatform.FitDiagnosticBins.IsFixedWidth : System.Boolean { get }
@@ -568,6 +585,38 @@ ToolUp.InterPlatform.FitDiagnosticBins+Tags (class)
 ToolUp.InterPlatform.FitDiagnosticBins+Tags.Edges : System.Int32 (literal)
 ToolUp.InterPlatform.FitDiagnosticBins+Tags.FixedWidth : System.Int32 (literal)
 ToolUp.InterPlatform.FitDiagnosticBins+Tags.Quantiles : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal (class)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal.IsCellUnreadable : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal.IsChartRefused : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal.IsNotAFitDiagnostic : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal.IsShapeMismatch : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal.Tag : System.Int32 { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+CellUnreadable (class)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+CellUnreadable.diagnostic : System.String { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+CellUnreadable.label : System.String { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+CellUnreadable.reason : System.String { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+ChartRefused (class)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+ChartRefused.reason : System.String { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+NotAFitDiagnostic (class)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+NotAFitDiagnostic.name : System.String { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+ShapeMismatch (class)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+ShapeMismatch.actual : ToolUp.InterPlatform.OutputShape { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+ShapeMismatch.diagnostic : System.String { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+ShapeMismatch.expected : ToolUp.InterPlatform.OutputShape { get }
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+Tags (class)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+Tags.CellUnreadable : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+Tags.ChartRefused : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+Tags.NotAFitDiagnostic : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticChartRefusal+Tags.ShapeMismatch : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticChartRefusalModule (class)
+ToolUp.InterPlatform.FitDiagnosticChartRefusalModule.describe(ToolUp.InterPlatform.FitDiagnosticChartRefusal) : System.String
+ToolUp.InterPlatform.FitDiagnosticChart`1 (class)
+ToolUp.InterPlatform.FitDiagnosticChart`1..ctor(Microsoft.FSharp.Core.FSharpOption`1[Fuaran.UI.Generated+Node`1[Msg]], ToolUp.InterPlatform.FitDiagnosticWithheld, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.FitDiagnosticChart`1.Chart : Microsoft.FSharp.Core.FSharpOption`1[Fuaran.UI.Generated+Node`1[Msg]] { get }
+ToolUp.InterPlatform.FitDiagnosticChart`1.Notes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.FitDiagnosticChart`1.Withheld : ToolUp.InterPlatform.FitDiagnosticWithheld { get }
+ToolUp.InterPlatform.FitDiagnosticCharts (class)
+ToolUp.InterPlatform.FitDiagnosticCharts.toChart`1(System.String, System.String, ToolUp.InterPlatform.FitDiagnosticDeclaration, ToolUp.InterPlatform.FitDiagnosticAnswer) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FitDiagnosticChart`1[Msg], ToolUp.InterPlatform.FitDiagnosticChartRefusal]
 ToolUp.InterPlatform.FitDiagnosticDeclaration (class)
 ToolUp.InterPlatform.FitDiagnosticDeclaration..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.FitDiagnosticBins], Microsoft.FSharp.Collections.FSharpList`1[System.Decimal], System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal])
 ToolUp.InterPlatform.FitDiagnosticDeclaration.Bins : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.FitDiagnosticBins] { get }
@@ -579,6 +628,20 @@ ToolUp.InterPlatform.FitDiagnosticDeclarationModule (class)
 ToolUp.InterPlatform.FitDiagnosticDeclarationModule.number(System.Decimal) : System.String
 ToolUp.InterPlatform.FitDiagnosticDeclarationModule.parse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.FitDiagnosticDeclaration, System.String]
 ToolUp.InterPlatform.FitDiagnosticDeclarationModule.render(ToolUp.InterPlatform.FitDiagnosticDeclaration) : System.String
+ToolUp.InterPlatform.FitDiagnosticWithheld (class)
+ToolUp.InterPlatform.FitDiagnosticWithheld.IsNamed : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticWithheld.IsUnstated : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticWithheld.IsWhole : System.Boolean { get }
+ToolUp.InterPlatform.FitDiagnosticWithheld.Tag : System.Int32 { get }
+ToolUp.InterPlatform.FitDiagnosticWithheld.Unstated : ToolUp.InterPlatform.FitDiagnosticWithheld { get }
+ToolUp.InterPlatform.FitDiagnosticWithheld+Named (class)
+ToolUp.InterPlatform.FitDiagnosticWithheld+Named.labels : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.InterPlatform.FitDiagnosticWithheld+Tags (class)
+ToolUp.InterPlatform.FitDiagnosticWithheld+Tags.Named : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticWithheld+Tags.Unstated : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticWithheld+Tags.Whole : System.Int32 (literal)
+ToolUp.InterPlatform.FitDiagnosticWithheld+Whole (class)
+ToolUp.InterPlatform.FitDiagnosticWithheld+Whole.reason : System.String { get }
 ToolUp.InterPlatform.FitDiagnostics (class)
 ToolUp.InterPlatform.FitDiagnostics.Calibration : System.String (literal)
 ToolUp.InterPlatform.FitDiagnostics.InfluenceSummary : System.String (literal)

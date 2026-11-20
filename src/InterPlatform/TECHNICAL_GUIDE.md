@@ -207,6 +207,18 @@ The model-execution governed-diagnostics contract (`ModelExecutionPeerContract.g
 
 The contract is composed from a `ModelExecutionDiagnosticsGate` value — broker, template, approval check, privacy-budget meter, noise mechanism, audit sink — and refused at composition, by name, when the template offers a fit diagnostic without a usable binning or switches noise on with no mechanism. Every release is charged to the meter: at zero ε under an un-noised template, which counts the release and bounds nothing, and at the template's ε under a noised one. A cell label in a one-dimensional answer may not contain U+241F, the separator of the two-dimensional grammar (`CellLabel.grid`), which no diagnostic uses yet. The wire shapes are §5.7.6 of the federation-seam specification. The differencing guard against two outcomes whose row sets differ by one record is not here: it is forge#1278's.
 
+### Drawing a fit diagnostic on the modeller's side
+
+`FitDiagnosticCharts.toChart id diagnostic declaration answer` turns the answer a modeller received into a validated Fuaran-UI `Chart` node, with one arm per diagnostic: `ResidualHistogram` and `InfluenceSummary` as bars, `ResidualSummaryByBin`, `Calibration` and `ThresholdCurve` as lines, `QuantileComparison` as a scatter over its probabilities. `FitDiagnosticAnswer.ofReply template reply` reads the reply under the approved template: a `ReleasedCohort` when the template names withheld cells, a bare `CohortResult` when it does not, and the gate's whole-result withhold in the gate's own words. The function reads the released answer only, never an outcome, spec or row, so the drawing cannot carry more than the gate released; the disclosure control stays on the release.
+
+A cell is released, absent or withheld, and the drawing keeps the three apart:
+
+- **Released** cells are the chart's rows, exactly, in the answer's order; a released zero is drawn as zero. The axis is the released cells' only, and the value axis takes the template's precision (counts as whole numbers).
+- **Withheld** cells are never drawn: the shipped chart arms read a missing value as zero, which for a withheld cell (1 to k−1 rows) is the one reading certainly false. They are named in the notes beside the chart. When the template does not name withheld cells, the notes say plainly that the answer does not say whether any were withheld.
+- **Absent** cells (no rows) are not answered and not drawn. Inside a drawn bin of a count diagnostic, a series the answer neither releases nor names as withheld counted no rows and is drawn as zero; without the withheld names that inference is not made.
+
+A bin is drawn only when every drawn series has a value there; otherwise it is left out and the note says why. A wholly withheld result yields no chart and a note carrying the gate's reason. An answer that is not the diagnostic's (another shape, a label naming none of its series, a two-dimensional label, an aggregate cell without a value, a repeated cell) is refused as a `FitDiagnosticChartRefusal`, never drawn as a guess.
+
 ## Audit emission
 
 The foundation ships **one** audit event — `PeerCallCompleted` — emitted best-effort per inbound call by the contract handler after dispatch reaches a terminal outcome (`auditPeerCall`). It resolves `IAuditLog` per-request; a partial test host without one registered simply records nothing.

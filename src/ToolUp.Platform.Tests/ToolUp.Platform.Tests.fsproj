@@ -526,6 +526,7 @@
         <Compile Include="InProcess\ExternalCallbackTests.fs" />
         <Compile Include="InProcess\HttpComputeDispatcherTests.fs" />
         <Compile Include="InProcess\FederatedModelExecutionTests.fs" />
+        <Compile Include="InProcess\FitDiagnosticChartsTests.fs" />
         <Compile Include="InProcess\ExternalModelFitTests.fs" />
         <Compile Include="InProcess\ScopeEnumerationSweepTests.fs" />
         <Compile Include="InProcess\CountersignatureRegistryTests.fs" />

@@ -286,6 +286,11 @@
          dependency runs one way. -->
     <Compile Include="Server\PeerPromotionContract.fs" />
     <Compile Include="Server\ModelExecutionPeerContract.fs" />
+    <!-- A released fit diagnostic drawn as a Fuaran-UI chart on the
+         modeller's side. Reads only the released answer; compiles after
+         ModelExecutionPeerContract.fs, whose fit-diagnostic vocabulary it
+         draws. -->
+    <Compile Include="Server\FitDiagnosticCharts.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
@@ -304,6 +309,20 @@
          MIT-licensed (GP 2). Nothing vendor-typed reaches the public
          surface: keys and group elements are byte[]. -->
     <PackageReference Include="BouncyCastle.Cryptography" />
+    <!-- The published Apache-2.0 Fuaran libraries a fit-diagnostic chart is
+         drawn with: the columnar table its rows are embedded as
+         (Fuaran.Core.Column, at the Fuaran.Core pin), the node vocabulary
+         and its pre-emit validator (Fuaran.UI), and the chart lowering the
+         built chart is checked against (Fuaran.UI.Charts). Not a vendor SDK
+         (GP 1): Fuaran.UI and Fuaran.Core.Column already reach this
+         project through ToolUp.Platform.Server's Fuaran.UI.Ops, and the
+         lowering adds Fuaran.UI.Charts, Fuaran.UI.Renderer.Core and
+         Fuaran.UI.Operability from the same release. Pinned
+         in Directory.Packages.props, one property for the producing
+         repository; restored from nuget.org. -->
+    <PackageReference Include="Fuaran.Core.Column" />
+    <PackageReference Include="Fuaran.UI" />
+    <PackageReference Include="Fuaran.UI.Charts" />
   </ItemGroup>
   <!-- ToolUp.Remoting.Json.SystemTextJson (FableConverters) + Giraffe +
        ASP.NET Core flow transitively from ToolUp.Platform.Server.

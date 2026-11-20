@@ -635,6 +635,7 @@ let private registeredTests =
         ExternalCallbackTests.tests
         HttpComputeDispatcherTests.tests
         FederatedModelExecutionTests.tests
+        FitDiagnosticChartsTests.tests
         ExternalModelFitTests.tests
         ScopeEnumerationSweepTests.tests
         CountersignatureRegistryTests.subjectTests

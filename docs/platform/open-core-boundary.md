@@ -173,6 +173,16 @@ repository, and a released ToolUp package that carries them restores anonymously
 - **Fable-clean.** Both packages ship their sources under `fable/`, so the builders compile
   in a browser as well as on a server.
 
+**A second consumer of the pin: InterPlatform's fit-diagnostic charts (Phase 1385).**
+`ToolUp.InterPlatform` draws a released fit diagnostic as a Fuaran-UI `Chart` node on the
+modeller's side (`FitDiagnosticCharts.toChart`), so it references `Fuaran.UI`,
+`Fuaran.UI.Charts` and `Fuaran.Core.Column` at the same `FuaranUIVersion` and
+`FuaranCoreVersion` pins. No new pin and no new producing repository: `Fuaran.UI` and
+`Fuaran.Core.Column` already reached InterPlatform through `ToolUp.Platform.Server`'s
+`Fuaran.UI.Ops*` references, and the chart lowering adds `Fuaran.UI.Charts`,
+`Fuaran.UI.Renderer.Core` and `Fuaran.UI.Operability` from the same release. The drawing reads only the released answer,
+so the disclosure control stays on the clean-room gate's release, never on the chart.
+
 ### The third instance: the dataset model (Phase 1348)
 
 `ToolUp.Facts.Server` checks a module's dataset model and its views with `Fuaran.DB`, the
