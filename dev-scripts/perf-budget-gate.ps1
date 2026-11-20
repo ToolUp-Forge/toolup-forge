@@ -71,6 +71,15 @@
 # on demand when any dynamic import of the first load reaches it, directly or
 # through a deferred surface's chunk. The teeth check feeds it both shapes.
 #
+# ClientBench also times one dispatch of the 200-row table, as Feliz and as a
+# Fuaran-UI tree, in a headless browser with React's commit and a forced layout
+# (src/ToolUp.AI.Client.Tests/client-bench-browser.mjs, over the shell sample's
+# Vite). The figures are recorded in the measurement file as the lever
+# `browserDispatch` and decided on nothing: viewPerDispatchUs sees construction
+# only, and this is the figure a tree surface is judged on. A machine with no
+# Edge or Chrome records the absence; TOOLUP_BENCH_BROWSER names another
+# Chromium-family executable.
+#
 # ── The load half (Phase 886) ────────────────────────────────────────────
 #
 # Last, the script measures the FACT and RETRIEVAL paths under concurrent
@@ -714,7 +723,7 @@ if (-not $SkipClient -and -not $EvaluateOnly) {
         try {
             node --import ./register-loader.mjs output/Program.js ClientBench `
                 --out $clientMeasurementsPath --seed $ClientSeed --boot-samples $ClientBoots `
-                --minimal-bundle $minimalBundlePath --shell-bundle $shellBundlePath | Out-Host
+                --minimal-bundle $minimalBundlePath --shell-bundle $shellBundlePath --browser-dispatch | Out-Host
             $benchExit = $LASTEXITCODE
         }
         finally {

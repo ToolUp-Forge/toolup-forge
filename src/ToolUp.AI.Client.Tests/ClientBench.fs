@@ -60,6 +60,12 @@
 ///     the entry chunk and its static imports, walked through the manifest
 ///     the shell build writes. The whole-bundle figure above sums every file
 ///     and so cannot see a split.
+///   * DISPATCH IN A BROWSER — with `--browser-dispatch`, one host dispatch
+///     of the 200-row table as Feliz and as a Fuaran-UI tree, timed in a
+///     headless browser with React's commit and a forced layout
+///     (`client-bench-browser.mjs` over `ClientBenchTables`). A lever: the
+///     figure a tree surface is judged on, where `viewPerDispatchUs` sees
+///     construction only.
 ///   * COMPOSITION-ROUTE SCOPE (Phase 910) — the same counts on the AI
 ///     composer, whole tree and over its own store, plus renders of the
 ///     shell's context readers (flags, branding, tiles, catalog) per
@@ -85,6 +91,7 @@
 ///   node --import ./register-loader.mjs output/Program.js ClientBench
 ///        [--out <measurements.json>] [--seed <n>] [--boot-samples <n>]
 ///        [--rounds <n>] [--minimal-bundle <dir>] [--shell-bundle <dir>]
+///        [--browser-dispatch]
 ///
 /// With `--out`, the run is written as a `toolup.perf-measurements/v1`
 /// document the `VerifyClientPerfBudget` target decides against the
@@ -99,6 +106,7 @@ open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.Client.ElmishProofDifferential
+open ToolUp.AI.Client.Tests.ClientBenchTables
 
 // ─── Host surface ──────────────────────────────────────────────────────
 
@@ -186,6 +194,9 @@ type private Options = {
     /// sample and of the SDK shell, when the caller built them.
     MinimalBundle: string option
     ShellBundle: string option
+    /// Time the 200-row table's dispatch in a headless browser as well
+    /// (`client-bench-browser.mjs`). Recorded, never gated.
+    BrowserDispatch: bool
 }
 
 let private parseOptions (argv: string[]) : Options =
@@ -209,6 +220,7 @@ let private parseOptions (argv: string[]) : Options =
         Rounds = intOf "--rounds" 9
         MinimalBundle = valueOf "--minimal-bundle"
         ShellBundle = valueOf "--shell-bundle"
+        BrowserDispatch = Array.contains "--browser-dispatch" argv
     }
 
 type private Stats = {
@@ -365,6 +377,47 @@ let private runBootChild (moduleRelative: string) (mode: string) : BootChild =
             CounterState = r?counterState
             Detail = if isNull error then "" else error
         }
+
+// ─── Dispatch in a browser ─────────────────────────────────────────────
+
+/// The 200-row table's dispatch timed in a headless browser, with commit and
+/// layout, as Feliz and as a tree: `client-bench-browser.mjs` bundles
+/// `ClientBenchTables` for a page and drives the browser over CDP. Its report
+/// is recorded as a lever as it stands; a run that could not measure (no
+/// browser on the machine, a bundle that did not build) records why, and
+/// nothing is decided on it either way.
+let private measureBrowserDispatch () : obj =
+    let result =
+        spawnSync (
+            execPath (),
+            [| "client-bench-browser.mjs" |],
+            createObj [
+                "cwd" ==> testDir ()
+                "encoding" ==> "utf8"
+                "timeout" ==> 900000
+                "maxBuffer" ==> 64 * 1024 * 1024
+            ]
+        )
+
+    let stdout: string = if isNull result?stdout then "" else result?stdout
+    let stderr: string = if isNull result?stderr then "" else result?stderr
+
+    let report =
+        stdout.Split('\n')
+        |> Array.map _.Trim()
+        |> Array.tryFindBack _.StartsWith("CLIENTBENCH-BROWSER ")
+
+    match report with
+    | Some line -> jsonParse (line.Substring "CLIENTBENCH-BROWSER ".Length)
+    | None ->
+        let tail (s: string) =
+            if s.Length > 1500 then s.Substring(s.Length - 1500) else s
+
+        createObj [
+            "observed" ==> false
+            "reason"
+            ==> sprintf "the browser leg printed no report (exit %O). stderr tail: %s" result?status (tail stderr)
+        ]
 
 // ─── Bundle size (Phase 909) ───────────────────────────────────────────
 
@@ -588,42 +641,6 @@ let private perFixture (rounds: int) (ops: int) (f: DecodeFixture) (op: DecodeFi
     |> List.min
 
 // ─── Dispatch to render hook ───────────────────────────────────────────
-
-type private Row = { Id: int; Label: string; Value: int }
-
-type private BenchModel = { Rows: Row[]; Tick: int }
-
-type private BenchMsg =
-    | Bump of index: int
-    | Burst of count: int
-    | Step
-    | StartAsync
-    | AsyncDone
-
-/// A representative module-sized view: a table of rows, each with a text
-/// cell, a value cell and a button carrying a dispatch closure.
-let private benchView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
-    Html.div [
-        prop.className "bench"
-        prop.children [
-            Html.h2 [ prop.text (sprintf "Tick %d" model.Tick) ]
-            Html.table [
-                Html.tbody [
-                    for i in 0 .. model.Rows.Length - 1 do
-                        let row = model.Rows[i]
-
-                        Html.tr [
-                            prop.key row.Id
-                            prop.children [
-                                Html.td [ prop.text row.Label ]
-                                Html.td [ prop.text (string row.Value) ]
-                                Html.td [ Html.button [ prop.text "+"; prop.onClick (fun _ -> dispatch (Bump i)) ] ]
-                            ]
-                        ]
-                ]
-            ]
-        ]
-    ]
 
 type private LoopProbe() =
     member val RenderCalls = 0 with get, set
@@ -1091,6 +1108,23 @@ let private runAsync (argv: string[]) : Async<int> = async {
     for r in [ composerWholeTree; composerStore; shellContexts ] do
         say (ComposerScope.describe r)
 
+    // ── Dispatch in a browser ──
+    // Recorded, not gated: the figure a tree surface is judged on, beside
+    // `viewPerDispatchUs`, which sees construction only.
+    let browserDispatch =
+        if options.BrowserDispatch then
+            let report = measureBrowserDispatch ()
+
+            if unbox<bool> report?observed then
+                say (sprintf "browser dispatch: %s" (string report?summary))
+            else
+                say (sprintf "browser dispatch: NOT observed — %s" (string report?reason))
+
+            report
+        else
+            say "browser dispatch: not measured (pass --browser-dispatch; the perf-budget gate script does)"
+            null
+
     // ── The measurement document ──
     let samples = [|
         sample
@@ -1149,6 +1183,7 @@ let private runAsync (argv: string[]) : Async<int> = async {
             "renderScopeComposerWholeTree" ==> ComposerScope.deltas composerWholeTree
             "renderScopeComposerStore" ==> ComposerScope.deltas composerStore
             "renderScopeShellContexts" ==> ComposerScope.deltas shellContexts
+            "browserDispatch" ==> browserDispatch
         ]
 
     let document =
