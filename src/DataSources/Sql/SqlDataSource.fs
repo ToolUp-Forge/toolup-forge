@@ -447,12 +447,12 @@ let private openReadOnly
 /// Whether the database refused `ex`'s statement because the session or
 /// the database is read-only.
 let private isWriteRefusal (ex: DbException) : bool =
-    match ex with
-    | :? global.Microsoft.Data.Sqlite.SqliteException as e -> e.SqliteErrorCode = 8 // SQLITE_READONLY
-    | :? global.Microsoft.Data.SqlClient.SqlException as e -> e.Number = 3906
-    | :? global.Oracle.ManagedDataAccess.Client.OracleException as e -> e.Number = 1456
-    | :? global.ClickHouse.Client.ClickHouseServerException as e -> e.ErrorCode = 164 // READONLY
-    | :? global.MySqlConnector.MySqlException as e -> e.Number = 1792
+    match ex :> exn with
+    | ProviderException(e: global.Microsoft.Data.Sqlite.SqliteException) -> e.SqliteErrorCode = 8 // SQLITE_READONLY
+    | ProviderException(e: global.Microsoft.Data.SqlClient.SqlException) -> e.Number = 3906
+    | ProviderException(e: global.Oracle.ManagedDataAccess.Client.OracleException) -> e.Number = 1456
+    | ProviderException(e: global.ClickHouse.Client.ClickHouseServerException) -> e.ErrorCode = 164 // READONLY
+    | ProviderException(e: global.MySqlConnector.MySqlException) -> e.Number = 1792
     // PostgreSQL's read_only_sql_transaction, which MySQL reports too.
     | _ -> ex.SqlState = "25006"
 
