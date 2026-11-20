@@ -53,7 +53,7 @@ let benchView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
         ]
     ]
 
-/// The same rows as a tree, the shape forge#1160's surfaces author: a heading
+/// The same rows as a tree, in the shape a settings surface authors: a heading
 /// and, per row, the label and value as text and a button dispatching `Bump`.
 let benchTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
     TreeLowering.column "bench" [
