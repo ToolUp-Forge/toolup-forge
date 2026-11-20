@@ -3,7 +3,7 @@
 
 module ToolUp.Platform.Tests.Conformance.ModelExecutionSpecConformance
 
-// Phase 602 — certification against the external model-execution
+// Certification against the external model-execution
 // conformance corpus. The corpus is canonical over this
 // implementation, not emitted from it, so this family can find a
 // defect no in-repo fixture ever would. Its non-vacuity arm
@@ -70,6 +70,16 @@ module ToolUp.Platform.Tests.Conformance.ModelExecutionSpecConformance
 // worktree's transiently-present directories are some other session's
 // state, not a corpus to certify against.
 //
+// With the env var unset and the corpus found NOT at the pin, the
+// clone it sits in is asked for the pinned revision: when the clone
+// contains `Pin.commit` (a clone pulled past the pin), the corpus at
+// that revision is read out of the clone's own history into a scratch
+// directory, certified against, and removed when the run exits; the
+// run says so in one line. A clone that does not contain the pin is
+// used as found, and the pin list fails by name with the remedy. The
+// env var is never second-guessed: a corpus named explicitly is the
+// corpus certified against.
+//
 // **An absent corpus is a loud failure, never a skip.** A conformance
 // suite that quietly does nothing when its corpus is missing is
 // indistinguishable from one that passes, and is worse than no suite at
@@ -104,6 +114,7 @@ open System
 open System.Collections.Generic
 open System.Globalization
 open System.IO
+open System.IO.Compression
 open System.Reflection
 open System.Security.Cryptography
 open System.Text
@@ -113,7 +124,7 @@ open FSharp.Reflection
 open ToolUp.Platform
 open ToolUp.Platform.Tests.Support
 
-// ─── Pins (602.B) ────────────────────────────────────────────────────
+// ─── Pins ────────────────────────────────────────────────────────────
 
 [<RequireQualifiedAccess>]
 module Pin =
@@ -121,12 +132,12 @@ module Pin =
     /// The corpus revision this harness is certified against. CI checks
     /// the corpus out at exactly this revision. Bumping it is a
     /// deliberate commit with a diff review — never an incidental edit.
-    let commit = "7ba0cd2368fe01206b07abb61ae1cfaba9b6bcbb"
+    let commit = "3da2b3eae2ff4ea7d3b0fc873ffd624222b0dc8e"
 
     /// SHA-256 over the corpus manifest's bytes. See the header: this is
     /// the value that moves whenever anything in the corpus moves.
     let manifestDigest =
-        "900d1a3c5f5ebd2c2512a02c412202452aac9ad924ff734ea98752a047fc7f7c"
+        "7c15eb590d064f70a399fcd503ce3fb150dc7e8b42d6b5ce8077c8fd77afdf1f"
 
     /// The specification this harness certifies against, as the corpus
     /// names itself. Used to identify a corpus by content rather than by
@@ -140,12 +151,25 @@ module Pin =
     /// unfalsifiable, so it is asserted rather than merely written down.
     let profile = "executor"
 
+// ─── Digests ─────────────────────────────────────────────────────────
+
+[<RequireQualifiedAccess>]
+module Digest =
+
+    let hex (data: byte[]) =
+        SHA256.HashData data |> Convert.ToHexString |> _.ToLowerInvariant()
+
+    /// The content-address form the specification uses: the algorithm is
+    /// named inside the value so a future change is a visible
+    /// discontinuity rather than a silent one.
+    let contentAddress (data: byte[]) = "sha256:" + hex data
+
 // ─── Corpus location ─────────────────────────────────────────────────
 
 [<RequireQualifiedAccess>]
 module Corpus =
 
-    let private envVar = "TOOLUP_MODEL_EXECUTION_CORPUS"
+    let envVar = "TOOLUP_MODEL_EXECUTION_CORPUS"
 
     /// Directories that never contain a corpus and are expensive to walk.
     let private pruned =
@@ -241,9 +265,88 @@ module Corpus =
 
         if Directory.Exists root then go root 0 else None
 
-    /// The resolved fixture directory, or a failure naming what was
-    /// tried. Never returns "absent" as a success.
-    let locate () : string =
+    /// `git <arguments>` in `workingDir`, its standard output exactly as
+    /// written. Byte-exact because the archive read below is binary,
+    /// which is why this is not `CorpusAnchor`'s helper (that one trims
+    /// text). A non-zero exit is an `Error` carrying git's own account.
+    let git (workingDir: string) (arguments: string list) : Result<byte[], string> =
+        let shown = String.concat " " arguments
+
+        try
+            let psi = Diagnostics.ProcessStartInfo "git"
+
+            for argument in arguments do
+                psi.ArgumentList.Add argument
+
+            psi.WorkingDirectory <- workingDir
+            psi.RedirectStandardOutput <- true
+            psi.RedirectStandardError <- true
+            psi.UseShellExecute <- false
+            psi.CreateNoWindow <- true
+
+            use proc = Diagnostics.Process.Start psi
+            let stderr = proc.StandardError.ReadToEndAsync()
+            use buffer = new MemoryStream()
+            proc.StandardOutput.BaseStream.CopyTo buffer
+
+            if not (proc.WaitForExit 60000) then
+                proc.Kill true
+                Error $"git {shown} did not finish within a minute"
+            elif proc.ExitCode <> 0 then
+                Error $"git {shown} exited {proc.ExitCode}: {stderr.Result.Trim()}"
+            else
+                Ok(buffer.ToArray())
+        with ex ->
+            Error $"git {shown} could not be run: {ex.Message}"
+
+    /// The corpus at `commit`, read out of the history of the git clone
+    /// `fixtureDir` sits in, into a scratch directory that is removed
+    /// when the process exits. Refused when the clone does not contain
+    /// `commit`, or when the manifest read there does not hash to
+    /// `manifestDigest` — the two pins name one revision, so a mismatch
+    /// is a defect in the pins, never a corpus to certify against.
+    let readAt (fixtureDir: string) (commit: string) (manifestDigest: string) : Result<string, string> =
+        match git fixtureDir [ "merge-base"; "--is-ancestor"; commit; "HEAD" ] with
+        | Error _ -> Error $"the git clone holding '{fixtureDir}' does not contain revision {commit}"
+        | Ok _ ->
+            // Run from the fixture directory, `git archive` writes that
+            // directory's tree at the revision, entries relative to it.
+            match git fixtureDir [ "archive"; "--format=zip"; commit ] with
+            | Error why -> Error $"revision {commit} could not be read from the clone's history: {why}"
+            | Ok zip ->
+                let scratch =
+                    Path.Combine(Path.GetTempPath(), "toolup-model-execution-corpus-" + Guid.NewGuid().ToString "N")
+
+                let remove () =
+                    try
+                        if Directory.Exists scratch then
+                            Directory.Delete(scratch, true)
+                    with _ ->
+                        ()
+
+                AppDomain.CurrentDomain.ProcessExit.Add(fun _ -> remove ())
+
+                try
+                    use archive = new ZipArchive(new MemoryStream(zip), ZipArchiveMode.Read)
+
+                    archive.ExtractToDirectory scratch
+                    let digest = Digest.hex (File.ReadAllBytes(Path.Combine(scratch, "manifest.json")))
+
+                    if digest = manifestDigest then
+                        Ok scratch
+                    else
+                        remove ()
+
+                        Error
+                            $"the corpus manifest at revision {commit} hashes to {digest}, not to the pinned {manifestDigest}: the two pins disagree, and they move together"
+                with ex ->
+                    remove ()
+                    Error $"the corpus at revision {commit} could not be unpacked: {ex.Message}"
+
+    /// The resolved fixture directory and one sentence saying how it was
+    /// reached, or a failure naming what was tried. Never returns
+    /// "absent" as a success.
+    let locate () : string * string =
         let fromEnv =
             match Environment.GetEnvironmentVariable envVar with
             | null
@@ -261,10 +364,22 @@ module Corpus =
                         Pin.specification
 
         match fromEnv with
-        | Some found -> found
+        | Some found -> found, $"{envVar} names '{found}'"
         | None ->
             match searchRoots () |> List.tryPick (fun root -> search root 3) with
-            | Some found -> found
+            | Some found when Digest.hex (File.ReadAllBytes(Path.Combine(found, "manifest.json"))) = Pin.manifestDigest ->
+                found, $"the corpus found at '{found}' is at the pinned revision"
+            | Some found ->
+                match readAt found Pin.commit Pin.manifestDigest with
+                | Ok scratch ->
+                    let note =
+                        $"the corpus found at '{found}' is not at the pinned revision, so this run certifies against revision {Pin.commit} read from that clone's own history (into '{scratch}', removed when the run exits)"
+
+                    eprintfn "model-execution conformance: %s." note
+                    scratch, note
+                | Error why ->
+                    found,
+                    $"the corpus found at '{found}' is not at the pinned revision, and the pinned revision could not be read from its history: {why}"
             | None ->
                 let worktreeNote =
                     match CorpusAnchor.mainWorkingTree (repoRoot ()) with
@@ -273,32 +388,29 @@ module Corpus =
                     | None -> ""
 
                 failwithf
-                    "ENVIRONMENTAL FAILURE — the model-execution conformance corpus is absent; this is not a defect in the code under test. Set %s to a corpus checkout: a directory whose manifest.json declares specification '%s', or the directory holding that under wire-fixtures/. With the env var unset, the corpus is searched for within three directory levels of each of: %s.%s A corpus under a different git worktree of this repository is never accepted. The hard failure is by design — a conformance run without its corpus certifies nothing, so it must not be mistaken for a pass. The corpus revision this build is pinned to is %s."
+                    "ENVIRONMENTAL FAILURE — the model-execution conformance corpus is absent; this is not a defect in the code under test. Set %s to a corpus checkout: a directory whose manifest.json declares specification '%s', or the directory holding that under wire-fixtures/. With the env var unset, the corpus is searched for within three directory levels of each of: %s.%s A corpus under a different git worktree of this repository is never accepted. The hard failure is by design — a conformance run without its corpus certifies nothing, so it must not be mistaken for a pass. The corpus revision this build is pinned to is %s; `git -C <clone> worktree add <path> <that revision>` makes a checkout of it."
                     envVar
                     Pin.specification
                     (searchRoots () |> String.concat "; ")
                     worktreeNote
                     Pin.commit
 
-    let dir = lazy (locate ())
+    let private resolved = lazy (locate ())
+
+    let dir = lazy (fst resolved.Value)
+
+    /// How this run reached its corpus, in one sentence.
+    let provenance () = snd resolved.Value
+
+    /// What a machine whose corpus is not at the pin does about it. The
+    /// same remedy the testing conventions give.
+    let remedy =
+        $"Set {envVar} to a checkout of the specification at revision {Pin.commit} (a worktree beside the clone does it: `git -C <clone> worktree add ../fuaran-model-execution-spec-pin {Pin.commit}`, then point {envVar} at its wire-fixtures directory), or pull the clone so that it contains {Pin.commit} and leave {envVar} unset: the harness then reads that revision from the clone's own history."
 
     let path (relative: string) =
         Path.Combine(dir.Value, relative.Replace('/', Path.DirectorySeparatorChar))
 
     let bytes (relative: string) = File.ReadAllBytes(path relative)
-
-// ─── Digests ─────────────────────────────────────────────────────────
-
-[<RequireQualifiedAccess>]
-module Digest =
-
-    let hex (data: byte[]) =
-        SHA256.HashData data |> Convert.ToHexString |> _.ToLowerInvariant()
-
-    /// The content-address form the specification uses: the algorithm is
-    /// named inside the value so a future change is a visible
-    /// discontinuity rather than a silent one.
-    let contentAddress (data: byte[]) = "sha256:" + hex data
 
 // ─── Canonical JSON (§3) ─────────────────────────────────────────────
 
@@ -1656,6 +1768,54 @@ module Decode =
         | Refused(cls, r) -> Error(cls, r)
         | :? JsonException as ex -> Error("envelope-malformed", InvalidSubmission ex.Message)
 
+// ─── The registered minting rules, partitioned (§7.4, §9.4) ──────────
+
+/// What this harness does with a spec-hash vector, by the minting rule
+/// its own submission names. The specification registers two rules and
+/// they are not interchangeable over one payload (they write numbers
+/// differently), so a vector is recomputed only under the rule it names.
+[<RequireQualifiedAccess>]
+type MintingSupport =
+    /// Minted here: §4.5 canonicalises the payload, then digests it.
+    | Minted
+    /// Not minted here. The vectors certify carriage (§9.4): each payload
+    /// is already the rule's canonical document, so its digest is the
+    /// SHA-256 of its bytes and no encoder for the rule is involved.
+    | CarriageOnly of why: string
+
+[<RequireQualifiedAccess>]
+module MintingRules =
+
+    /// The pipeline hash, registered by citation of the Compute pipeline
+    /// wire specification.
+    let pipelineHash = "compute-pipeline-sha256-v1"
+
+    /// Every rule the harness recognises. A vector naming any other rule
+    /// fails by name, because the harness has no recomputation for it.
+    let registered: (string * MintingSupport) list = [
+        Minting.algorithm, MintingSupport.Minted
+        pipelineHash,
+        MintingSupport.CarriageOnly
+            "this repository mints no pipeline hash, in shipped code or here; minting one belongs to the Compute package, and docs/platform/testing-conventions.md says where it lands"
+    ]
+
+    let tryFind (algorithm: string) =
+        registered |> List.tryFind (fst >> (=) algorithm) |> Option.map snd
+
+    /// The bytes a spec-hash vector's digest is computed over, under the
+    /// rule its submission names: §4.5's canonical bytes for a rule
+    /// minted here, the payload's own bytes for one certified as
+    /// carriage.
+    let canonicalBytes (submission: SpecFitSubmission) : Result<byte[], string> =
+        match tryFind submission.SpecHashAlgorithm with
+        | Some MintingSupport.Minted -> Ok(Minting.canonicalBytes submission.SpecPayload)
+        | Some(MintingSupport.CarriageOnly _) -> Ok(UTF8Encoding(false).GetBytes submission.SpecPayload)
+        | None ->
+            let known = registered |> List.map fst |> String.concat ", "
+
+            Error
+                $"no recomputation is defined for a spec-hash vector minted under '{submission.SpecHashAlgorithm}'; the rules this harness partitions are {known}. A corpus registering a new rule moves the pin, and the change that moves it decides how the rule is certified."
+
 // ─── The submitter's pre-emit obligation (§4.2 rule 5) ───────────────
 
 [<RequireQualifiedAccess>]
@@ -1768,9 +1928,8 @@ module Manifest =
 /// carry.
 ///
 /// Declared ahead of the shape residues because the receipt's rejected
-/// items carry refusals, and since Phase 640 they carry them *as
-/// refusals* rather than as flattened class names — so the receipt's
-/// residue is now expressed in terms of this one.
+/// items carry refusals *as refusals* rather than as flattened class
+/// names — so the receipt's residue is expressed in terms of this one.
 type RefusalResidue = {
     UnknownProviderKnown: string list
     BudgetUnit: string
@@ -1779,12 +1938,9 @@ type RefusalResidue = {
 }
 
 /// Members of a `fitSubmission` the platform's submission record does
-/// not carry.
-///
-/// _(Phase 640 removed `SpecHashAlgorithm`: the submission record now
-/// carries the minting rule verbatim. The opacity posture is unchanged —
-/// forge still never re-derives the hash — but a rotation is now visible
-/// on this face instead of silent.)_
+/// not carry. The minting rule is not among them: the submission
+/// record carries it verbatim, so a rotation is visible on this face,
+/// and forge still never re-derives the hash.
 type SubmissionResidue = {
     /// A submitter-resolved content ref on the pinned vintage. The
     /// submission record pins by `(datasetId, version)` alone, which
@@ -1793,31 +1949,21 @@ type SubmissionResidue = {
 }
 
 /// Members of a `submissionReceipt` the platform's receipt record does
-/// not carry.
-///
-/// _(Phase 640 removed `AcceptedJobIds` — the handle is an opaque string
-/// on both sides now, so nothing is lost inbound — and reduced
-/// `RejectedRefusals` to `RejectedResidues`: the receipt carries the
-/// typed refusal itself, and what remains is only the refusal family's
-/// own residue, inventoried once below rather than a second time here.)_
+/// not carry. The handle is an opaque string on both sides, so nothing
+/// is lost inbound, and the receipt carries each typed refusal itself:
+/// what remains is only the refusal family's own residue, inventoried
+/// once below rather than a second time here.
 type ReceiptResidue = {
     /// Per rejected index, the residue of that item's refusal.
     RejectedResidues: (int * RefusalResidue) list
 }
 
 /// Members of a `fitOutcome` the platform's outcome record does not
-/// carry.
-///
-/// _(Phase 640 removed `ArtifactAbsent`, `ArtifactFormat`, `Timing` and
-/// `Cost`: the outcome record carries an optional artifact reference with
-/// its format, plus timing and cost. What forge's own registry retains
+/// carry. The artifact reference with its format, timing, cost, the
+/// diagnostics' units and each verdict's unit are not among them: the
+/// outcome record carries all of them. What forge's own registry retains
 /// for a given outcome is a separate question from what this face can
-/// express — the residue was only ever about the latter.)_
-///
-/// _(Phase 1011 removed `DiagnosticUnits` and `GateVerdictUnits`: the
-/// outcome record carries its diagnostics' units beside them and each
-/// verdict carries its unit, as the gate and submission records do, so the
-/// units the corpus states are no longer a gap on any family.)_
+/// express — the residue is only ever about the latter.
 type OutcomeResidue = {
     /// The outcome record keys the vintage as a composed string, which
     /// cannot express a content ref.
@@ -1895,23 +2041,16 @@ module Bridge =
     // ── refusal ──────────────────────────────────────────────────────
     //
     // Kept ahead of the shape families because a receipt's rejected items
-    // carry refusals, and since Phase 640 they carry them as refusals.
+    // carry refusals, as refusals.
 
     /// The refusal classes the platform's closed refusal DU has no case
     /// for. Pinned as a set rather than described in prose: if a case is
     /// added, this pin fails and its author decides deliberately whether
     /// the gap is closed.
     ///
-    /// Phase 640 emptied it, adding the four that were missing
-    /// (`envelopeVersionMismatch`, `unknownDocumentKind`, `gateFailed`,
-    /// `policyRefused`); it was kept as a named list so that the next
-    /// class registered against the specification would land here first.
-    ///
-    /// **`gateUnitMismatch`** was that class: registered after version 1
-    /// for §5.3's gate rule, declared here by Phase 1010 when the platform's
-    /// DU had no case for it, and closed by Phase 1011, which gave the DU
-    /// the case and the gate, verdict and outcome records the units the rule
-    /// compares. Empty again, and still a named list for the next class.
+    /// Empty: the DU covers every registered class. It stays a named list
+    /// so that the next class registered against the specification lands
+    /// here first, as `gateUnitMismatch` (§5.3's gate rule) last did.
     let unmappedRefusalClasses: string list = []
 
     let emptyRefusalResidue = {
@@ -2057,8 +2196,7 @@ module Bridge =
             SpecPayload = s.SpecPayload
             // Stored exactly as handed. Never re-derived — §4.2 rule 2.
             SpecHash = s.SpecHash
-            // Carried since Phase 640, and carrying it changes nothing
-            // about rule 2: the platform stores the identifier without
+            // Carrying it changes nothing about rule 2: the platform stores the identifier without
             // acting on it, which is what makes a rotation visible without
             // making the hash checkable.
             SpecHashAlgorithm = s.SpecHashAlgorithm
@@ -2124,9 +2262,8 @@ module Bridge =
 
     // ── receipt ──────────────────────────────────────────────────────
 
-    // The `handleGuid` stand-in this section used until Phase 640 is gone
-    // with the gap that required it: the receipt's handle is a string on
-    // both sides now, so there is nothing to derive and nothing to invert.
+    // The receipt's handle is a string on both sides, so there is nothing
+    // to derive and nothing to invert.
 
     let toReceipt (r: SpecSubmissionReceipt) : ModelExecutionReceipt * ReceiptResidue =
         let rejected =
@@ -2456,7 +2593,34 @@ let private pinTests =
             Expect.equal
                 (Digest.hex m.Bytes)
                 Pin.manifestDigest
-                $"the corpus has drifted from the pin. This harness is certified against corpus revision {Pin.commit}; check that revision out, or bump Pin.commit and Pin.manifestDigest together in a reviewed commit after reading the corpus diff (602.B)."
+                $"the corpus has drifted from the pin. This harness is certified against corpus revision {Pin.commit}, and {Corpus.provenance ()}. {Corpus.remedy} To move the pin instead, bump Pin.commit, Pin.manifestDigest and the corpus checkout's ref in .github/workflows/checks.yml together, in a reviewed commit, after reading the corpus diff."
+        }
+
+        test "CI checks the corpus out at the pinned revision" {
+            // The workflow's checkout and the harness's pin are one
+            // revision written twice; this is what keeps them one.
+            let workflow =
+                Path.Combine(Corpus.repoRoot (), ".github", "workflows", "checks.yml")
+                |> File.ReadAllLines
+                |> Array.map _.Trim()
+
+            let step =
+                workflow
+                |> Array.tryFindIndex ((=) "- name: Check out the model-execution conformance corpus")
+                |> Option.defaultWith (fun () ->
+                    failtest "checks.yml must carry the model-execution corpus checkout step")
+
+            let pinned =
+                workflow
+                |> Array.skip step
+                |> Array.tryFind _.StartsWith("ref:")
+                |> Option.map _.Substring("ref:".Length).Trim()
+                |> Option.defaultWith (fun () -> failtest "the corpus checkout step must name a ref")
+
+            Expect.equal
+                pinned
+                Pin.commit
+                "CI must check the specification out at the revision the harness pins, never at its head, so a specification change cannot redden this build before it has been read here"
         }
 
         test "the claimed profile exists and requires every family" {
@@ -2524,16 +2688,23 @@ let private hashTests =
                 // specHash from the document's own payload. A different
                 // recomputation from the one above, on the same vector
                 // kind.
+                // Under the rule the document itself names (§7.4): a
+                // vector is never recomputed under the other rule.
                 | "spec-hash", BFitSubmission submission ->
-                    Expect.equal
-                        (Encoding.UTF8.GetString(Minting.canonicalBytes submission.SpecPayload))
-                        (Option.get v.CanonicalPayload)
-                        "the minting intermediate must match the corpus's own, so a divergence names where it happened (§9.4)"
+                    let canonical =
+                        match MintingRules.canonicalBytes submission with
+                        | Ok bytes -> bytes
+                        | Error why -> failtestf "%s: %s" v.Id why
 
                     Expect.equal
-                        (Minting.mint submission.SpecPayload)
+                        (Encoding.UTF8.GetString canonical)
+                        (Option.get v.CanonicalPayload)
+                        "the intermediate bytes under the rule the vector names must match the corpus's own, so a divergence names where it happened (§9.4)"
+
+                    Expect.equal
+                        (Digest.contentAddress canonical)
                         digest
-                        "the minted specHash must match the manifest"
+                        "the specHash recomputed under the rule the vector names must match the manifest"
 
                     Expect.equal
                         submission.SpecHash
@@ -2933,7 +3104,152 @@ let private opaqueHashTests =
         }
     ]
 
-// ── The carry-gap inventory (602.B drift policy) ─────────────────────
+// ── The spec-hash family, partitioned by minting rule (§7.4, §9.4) ───
+
+let private mintingRuleTests =
+    testList "spec-hash-rules" [
+        test "every spec-hash vector names a rule this harness partitions, and the partition is reported" {
+            let byRule =
+                manifest.Value.Vectors
+                |> List.filter (fun v -> v.Family = "spec-hash")
+                |> List.map (fun v ->
+                    match (decoded v).Body with
+                    | BFitSubmission submission -> submission.SpecHashAlgorithm, v.Id
+                    | other -> failtestf "%s decoded to an unexpected body: %A" v.Id other)
+                |> List.groupBy fst
+                |> List.map (fun (rule, vectors) -> rule, List.map snd vectors)
+
+            for rule, ids in byRule do
+                let handling =
+                    match MintingRules.tryFind rule with
+                    | Some MintingSupport.Minted -> "minted here (§4.5)"
+                    | Some(MintingSupport.CarriageOnly why) -> $"certified as carriage only: {why}"
+                    | None -> "NO recomputation defined"
+
+                printfn "model-execution conformance: spec-hash rule '%s': %d vector(s), %s" rule ids.Length handling
+
+            let unknown =
+                byRule
+                |> List.filter (fun (rule, _) -> Option.isNone (MintingRules.tryFind rule))
+
+            Expect.isEmpty
+                unknown
+                "a vector under a rule this harness does not partition is neither run nor skipped: the change that moves the pin decides how the rule is certified"
+
+            for rule, _ in MintingRules.registered do
+                Expect.isTrue
+                    (byRule |> List.exists (fst >> (=) rule))
+                    $"the corpus carries no vector under '{rule}': a rule nothing exercises is certified by nothing"
+        }
+
+        test "running a carriage-only vector under the other rule would go red" {
+            // The partition is load-bearing only if the two rules disagree
+            // somewhere in the corpus: the specification says they write
+            // numbers differently, and a vector whose §4.5 minting differs
+            // from its digest is that disagreement made observable.
+            let disagreeing =
+                manifest.Value.Vectors
+                |> List.filter (fun v -> v.Family = "spec-hash" && v.Kind = "hash")
+                |> List.filter (fun v ->
+                    match (decoded v).Body with
+                    | BFitSubmission submission ->
+                        (match MintingRules.tryFind submission.SpecHashAlgorithm with
+                         | Some(MintingSupport.CarriageOnly _) -> true
+                         | _ -> false)
+                        && Minting.mint submission.SpecPayload <> Option.get v.Digest
+                    | _ -> false)
+
+            Expect.isNonEmpty
+                disagreeing
+                "no carriage-only vector distinguishes its rule from §4.5, so a harness running every vector under §4.5 would read exactly as green as this one"
+        }
+
+        test "the pinned revision is read from a clone's history, and only from one that contains it" {
+            // A throwaway clone: the corpus at revision A, then moved on
+            // to revision B. Read at A, the corpus is A's bytes; a
+            // revision the clone does not contain, or a digest the bytes
+            // at the revision do not have, is refused by name.
+            let root =
+                Path.Combine(Path.GetTempPath(), "toolup-mes-history-" + Guid.NewGuid().ToString "N")
+
+            let fixtures = Path.Combine(root, "wire-fixtures")
+            Directory.CreateDirectory fixtures |> ignore
+
+            let run arguments =
+                match Corpus.git root ([ "-c"; "core.autocrlf=false" ] @ arguments) with
+                | Ok out -> Encoding.UTF8.GetString(out).Trim()
+                | Error why -> failtest why
+
+            let commit message =
+                run [ "add"; "-A" ] |> ignore
+
+                run [
+                    "-c"
+                    "user.name=t"
+                    "-c"
+                    "user.email=t@example.invalid"
+                    "-c"
+                    "commit.gpgsign=false"
+                    "commit"
+                    "-q"
+                    "-m"
+                    message
+                ]
+                |> ignore
+
+                run [ "rev-parse"; "HEAD" ]
+
+            try
+                run [ "init"; "-q" ] |> ignore
+
+                let pinned =
+                    UTF8Encoding(false).GetBytes """{"specification":"model-execution-wire","at":"A"}"""
+
+                File.WriteAllBytes(Path.Combine(fixtures, "manifest.json"), pinned)
+                File.WriteAllText(Path.Combine(root, "README.md"), "outside the corpus")
+                let a = commit "A"
+
+                File.WriteAllText(
+                    Path.Combine(fixtures, "manifest.json"),
+                    """{"specification":"model-execution-wire","at":"B"}"""
+                )
+
+                commit "B" |> ignore
+
+                match Corpus.readAt fixtures a (Digest.hex pinned) with
+                | Error why -> failtestf "the clone contains revision A and must yield it: %s" why
+                | Ok dir ->
+                    Expect.equal
+                        (File.ReadAllBytes(Path.Combine(dir, "manifest.json")))
+                        pinned
+                        "the corpus read at the revision is that revision's bytes, not the working tree's"
+
+                    Expect.isFalse
+                        (File.Exists(Path.Combine(dir, "README.md")))
+                        "only the corpus directory is read, never the rest of the clone"
+
+                    Directory.Delete(dir, true)
+
+                match Corpus.readAt fixtures a (String('0', 64)) with
+                | Ok _ -> failtest "bytes at the revision that do not hash to the pinned digest must be refused"
+                | Error why -> Expect.stringContains why "the two pins disagree" "the refusal names the disagreement"
+
+                match Corpus.readAt fixtures (String('1', 40)) (Digest.hex pinned) with
+                | Ok _ -> failtest "a revision the clone does not contain must be refused"
+                | Error why -> Expect.stringContains why "does not contain" "the refusal names the missing revision"
+            finally
+                try
+                    // git marks its object files read-only.
+                    for file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories) do
+                        File.SetAttributes(file, FileAttributes.Normal)
+
+                    Directory.Delete(root, true)
+                with _ ->
+                    ()
+        }
+    ]
+
+// ── The carry-gap inventory (drift policy) ───────────────────────────
 
 let private carryGapTests =
     testList "carry-gap-inventory" [
@@ -2980,8 +3296,8 @@ let private carryGapTests =
                 ]
                 "the outcome record moved — re-derive OutcomeResidue against the specification's fitOutcome"
 
-            // Phase 640 added three records to this face; each is pinned
-            // for exactly the reason the ones above are. An optional
+            // The artifact-ref, timing and cost records are pinned for
+            // exactly the reason the ones above are. An optional
             // artifact whose reference silently grew a member, or a timing
             // that quietly lost one, would otherwise change what this
             // harness certifies without changing anything it checks.
@@ -2999,8 +3315,8 @@ let private carryGapTests =
         }
 
         test "the gate and verdict records carry the unit the gate rule compares" {
-            // Phase 1011 widened both, so each is pinned: a unit dropped from
-            // either would put §5.3's units back in a residue, or nowhere.
+            // Each is pinned: a unit dropped from either would put §5.3's
+            // units back in a residue, or nowhere.
             Expect.equal
                 (recordFieldNames<ModelExecutionGate> ())
                 [ "Name"; "Threshold"; "Unit"; "Direction" ]
@@ -3069,7 +3385,7 @@ let private carryGapTests =
 
             Expect.isEmpty
                 Bridge.unmappedRefusalClasses
-                "every registered class has a case (Phase 1011 closed gateUnitMismatch); an entry here is a class the DU stopped covering"
+                "every registered class has a case; an entry here is a class the DU stopped covering"
         }
 
         test "every class the specification registers is expressed by the platform's DU or declared as a gap" {
@@ -3235,6 +3551,7 @@ let tests =
             acceptTests
             bridgeTests
             opaqueHashTests
+            mintingRuleTests
             carryGapTests
             // Last: it counts what the arms above executed.
             nonVacuityTests

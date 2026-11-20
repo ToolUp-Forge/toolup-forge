@@ -803,6 +803,50 @@ its author decides deliberately whether the new field closes a gap.
 it is unset. The specification's home is public, so no read token is involved — the checkout uses
 the job's default credentials, and fork PRs run the family like any other job.
 
+### Which revision a machine certifies against, and the minting rules the corpus registers (Phase 1376)
+
+**CI checks the specification out at the pinned revision, never at its head.** The `ref:` of the
+corpus checkout in `checks.yml` is the same commit as the harness's `Pin.commit`, and the harness's
+`pin` list fails when the two disagree, so a specification change cannot redden this repository's
+CI before someone here has read it and moved the pin.
+
+**A developer machine gets the pinned revision in one of three ways**, tried in this order:
+
+1. `TOOLUP_MODEL_EXECUTION_CORPUS` names a corpus checkout, which is used exactly as found. Point it
+   at a checkout at `Pin.commit`; a checkout beside the clone does it,
+   `git -C <clone> worktree add ../fuaran-model-execution-spec-pin <Pin.commit>`, with the variable set
+   to that worktree's `wire-fixtures` directory.
+2. With the variable unset, the corpus the search finds is used as it stands when its manifest hashes
+   to `Pin.manifestDigest`.
+3. When it does not, and the clone it sits in CONTAINS `Pin.commit` (the usual case after a pull moves
+   the clone past the pin), the harness reads the corpus at `Pin.commit` out of the clone's own history
+   (one `git archive` into a temporary directory, removed when the run exits) and certifies against
+   that. The run prints one line saying so, naming the clone and the revision. A clone that does not
+   contain the pin, or a corpus whose bytes at the pin do not hash to `Pin.manifestDigest`, still fails
+   the `pin` list by name, and the failure carries the remedy above.
+
+Reading the pin from history is preferred to failing because a clone at the specification's head is the
+normal state of a machine that syncs the workspace, and the failure it used to produce was the same four
+tests every time, on every gate that machine ran, with a remedy each gate had to carry by hand.
+
+**The spec-hash family is partitioned by the rule each vector names.** The specification registers two
+minting rules (its §7.4): `canonical-json-sha256-v1`, its own §4.5, and `compute-pipeline-sha256-v1`,
+the pipeline hash of the Compute pipeline wire specification. A vector is recomputed under the rule its
+own submission's `specHashAlgorithm` names, and a vector naming a rule the harness has no recomputation
+for fails by name; none is skipped and none is run under the other rule. The run prints how many vectors
+fell under each rule, and the non-vacuity count covers every vector the manifest enumerates.
+
+**This repository does not implement the pipeline hash.** It mints under neither rule in shipped code: an
+executor stores the `specHash` it was handed and never re-derives it (§4.2), so a deployment accepts a
+submission minted under the pipeline hash today and keys it by the hash as handed. The harness certifies
+that rule's vectors as **carriage**, which is all the specification asks of them (§9.4): each payload is
+already the canonical pipeline document, so its digest is the SHA-256 of its bytes, and the vectors prove
+the submission names the rule and carries the hash of the document it travels with. Minting a pipeline
+hash belongs to the Compute package (`Pipeline.hash`), which is not in the Compute release this
+repository pins; the encoder is certified against the pipeline specification's own corpus, not here. The
+rule lands where this repository first has to mint one, which is Phase 1279, when the composition
+profile carries a Compute payload, and there it calls the package rather than writing a second encoder.
+
 ## The template gates use a PRIVATE packages folder, never a guessed shared one (Phase 903)
 
 `VerifyTemplates` and `VerifyPackagedModuleTemplate` both restore scratch-fed `dotnet new` scaffolds
