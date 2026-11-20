@@ -122,6 +122,7 @@ open System.Text.Json
 open Expecto
 open FSharp.Reflection
 open ToolUp.Platform
+open ToolUp.Platform.Testing
 open ToolUp.Platform.Tests.Support
 
 // ─── Pins ────────────────────────────────────────────────────────────
@@ -314,26 +315,19 @@ module Corpus =
             match git fixtureDir [ "archive"; "--format=zip"; commit ] with
             | Error why -> Error $"revision {commit} could not be read from the clone's history: {why}"
             | Ok zip ->
-                let scratch =
-                    Path.Combine(Path.GetTempPath(), "toolup-model-execution-corpus-" + Guid.NewGuid().ToString "N")
-
-                let remove () =
-                    try
-                        if Directory.Exists scratch then
-                            Directory.Delete(scratch, true)
-                    with _ ->
-                        ()
-
-                AppDomain.CurrentDomain.ProcessExit.Add(fun _ -> remove ())
+                // Owned by the run: the corpus is read for as long as the
+                // test process lives, and deleted when it exits.
+                let scratch = TempDir.forRun "model-execution-corpus"
+                let remove () = (scratch :> IDisposable).Dispose()
 
                 try
                     use archive = new ZipArchive(new MemoryStream(zip), ZipArchiveMode.Read)
 
-                    archive.ExtractToDirectory scratch
-                    let digest = Digest.hex (File.ReadAllBytes(Path.Combine(scratch, "manifest.json")))
+                    archive.ExtractToDirectory scratch.Path
+                    let digest = Digest.hex (File.ReadAllBytes(scratch.File "manifest.json"))
 
                     if digest = manifestDigest then
-                        Ok scratch
+                        Ok scratch.Path
                     else
                         remove ()
 
@@ -3169,11 +3163,9 @@ let private mintingRuleTests =
             // to revision B. Read at A, the corpus is A's bytes; a
             // revision the clone does not contain, or a digest the bytes
             // at the revision do not have, is refused by name.
-            let root =
-                Path.Combine(Path.GetTempPath(), "toolup-mes-history-" + Guid.NewGuid().ToString "N")
-
-            let fixtures = Path.Combine(root, "wire-fixtures")
-            Directory.CreateDirectory fixtures |> ignore
+            use clone = TempDir.create "model-execution-history"
+            let root = clone.Path
+            let fixtures = clone.Sub "wire-fixtures"
 
             let run arguments =
                 match Corpus.git root ([ "-c"; "core.autocrlf=false" ] @ arguments) with
@@ -3199,53 +3191,41 @@ let private mintingRuleTests =
 
                 run [ "rev-parse"; "HEAD" ]
 
-            try
-                run [ "init"; "-q" ] |> ignore
+            run [ "init"; "-q" ] |> ignore
 
-                let pinned =
-                    UTF8Encoding(false).GetBytes """{"specification":"model-execution-wire","at":"A"}"""
+            let pinned =
+                UTF8Encoding(false).GetBytes """{"specification":"model-execution-wire","at":"A"}"""
 
-                File.WriteAllBytes(Path.Combine(fixtures, "manifest.json"), pinned)
-                File.WriteAllText(Path.Combine(root, "README.md"), "outside the corpus")
-                let a = commit "A"
+            File.WriteAllBytes(Path.Combine(fixtures, "manifest.json"), pinned)
+            File.WriteAllText(Path.Combine(root, "README.md"), "outside the corpus")
+            let a = commit "A"
 
-                File.WriteAllText(
-                    Path.Combine(fixtures, "manifest.json"),
-                    """{"specification":"model-execution-wire","at":"B"}"""
-                )
+            File.WriteAllText(
+                Path.Combine(fixtures, "manifest.json"),
+                """{"specification":"model-execution-wire","at":"B"}"""
+            )
 
-                commit "B" |> ignore
+            commit "B" |> ignore
 
-                match Corpus.readAt fixtures a (Digest.hex pinned) with
-                | Error why -> failtestf "the clone contains revision A and must yield it: %s" why
-                | Ok dir ->
-                    Expect.equal
-                        (File.ReadAllBytes(Path.Combine(dir, "manifest.json")))
-                        pinned
-                        "the corpus read at the revision is that revision's bytes, not the working tree's"
+            match Corpus.readAt fixtures a (Digest.hex pinned) with
+            | Error why -> failtestf "the clone contains revision A and must yield it: %s" why
+            | Ok dir ->
+                Expect.equal
+                    (File.ReadAllBytes(Path.Combine(dir, "manifest.json")))
+                    pinned
+                    "the corpus read at the revision is that revision's bytes, not the working tree's"
 
-                    Expect.isFalse
-                        (File.Exists(Path.Combine(dir, "README.md")))
-                        "only the corpus directory is read, never the rest of the clone"
+                Expect.isFalse
+                    (File.Exists(Path.Combine(dir, "README.md")))
+                    "only the corpus directory is read, never the rest of the clone"
 
-                    Directory.Delete(dir, true)
+            match Corpus.readAt fixtures a (String('0', 64)) with
+            | Ok _ -> failtest "bytes at the revision that do not hash to the pinned digest must be refused"
+            | Error why -> Expect.stringContains why "the two pins disagree" "the refusal names the disagreement"
 
-                match Corpus.readAt fixtures a (String('0', 64)) with
-                | Ok _ -> failtest "bytes at the revision that do not hash to the pinned digest must be refused"
-                | Error why -> Expect.stringContains why "the two pins disagree" "the refusal names the disagreement"
-
-                match Corpus.readAt fixtures (String('1', 40)) (Digest.hex pinned) with
-                | Ok _ -> failtest "a revision the clone does not contain must be refused"
-                | Error why -> Expect.stringContains why "does not contain" "the refusal names the missing revision"
-            finally
-                try
-                    // git marks its object files read-only.
-                    for file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories) do
-                        File.SetAttributes(file, FileAttributes.Normal)
-
-                    Directory.Delete(root, true)
-                with _ ->
-                    ()
+            match Corpus.readAt fixtures (String('1', 40)) (Digest.hex pinned) with
+            | Ok _ -> failtest "a revision the clone does not contain must be refused"
+            | Error why -> Expect.stringContains why "does not contain" "the refusal names the missing revision"
         }
     ]
 
