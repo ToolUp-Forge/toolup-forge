@@ -21,6 +21,7 @@
     "dev-scripts/perf-budget-gate.ps1",
     "docs/**",
     "dotnet-tools.json",
+    "feliz-census.json",
     "fuaran-ui-floors.json",
     "icon.png",
     "perf-budgets.json",

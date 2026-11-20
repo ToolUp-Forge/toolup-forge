@@ -100,6 +100,7 @@ let private registeredTests =
         BuildCensusTests.tests
         ServerPartsBaselineTests.tests
         SubsystemNamespacesTests.tests
+        FelizRatchetTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

@@ -140,6 +140,8 @@
         <Compile Include="BuildCensusTests.fs" />
         <Compile Include="ServerPartsBaselineTests.fs" />
         <Compile Include="SubsystemNamespacesTests.fs" />
+        <!-- The Feliz ratchet: the census gate, its teeth and its writer. -->
+        <Compile Include="FelizRatchetTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
