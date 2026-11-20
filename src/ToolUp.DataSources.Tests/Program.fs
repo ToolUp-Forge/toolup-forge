@@ -13,6 +13,7 @@ let private registeredTests =
         ConnectorSupportTests.tests
         SqlDataSourceTests.tests
         SqlBindingTests.tests
+        SynapseBindingTests.tests
         BigQueryDataSourceTests.tests
         AthenaDataSourceTests.tests
         RedshiftDataSourceTests.tests
@@ -28,7 +29,7 @@ let private registeredTests =
         FileSourceScopeTests.tests
     ]
 
-/// Phase 722 — the registered list plus the guard that makes an
+/// The registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
 /// this pack runs an explicitly-enumerated list, not Expecto's
 /// `[<Tests>]` auto-discovery, so an attributed binding absent from
@@ -39,7 +40,7 @@ let allTests =
 // Sequenced by default — Expecto deadlocks when parallel tests write
 // to the console. `--parallel` still overrides. See
 // docs/platform/testing-conventions.md § "Every Expecto pack runs
-// sequenced by default". (Phase 617.)
+// sequenced by default".
 [<EntryPoint>]
 let main argv =
     runTestsWithCLIArgs [ CLIArguments.Sequenced ] argv allTests

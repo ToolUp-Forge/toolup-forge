@@ -350,7 +350,7 @@ let tests =
                 SnowflakeDataSource.createWithKeyFile ())
             IDataSourceContract.capabilities "SqlDataSource" [ ConnectorCapability.Binds ] (fun () ->
                 SqlDataSource.createWithoutSecrets ())
-            IDataSourceContract.capabilities "SynapseDataSource" [] (fun () ->
+            IDataSourceContract.capabilities "SynapseDataSource" [ ConnectorCapability.Binds ] (fun () ->
                 SynapseDataSource.createWithDefaultCredentials ())
             IDataSourceContract.capabilities "GoogleAnalyticsDataSource" [] googleAnalytics
             IDataSourceContract.capabilities "CsvDataSource" [ ConnectorCapability.Watchable ] (fun () ->
