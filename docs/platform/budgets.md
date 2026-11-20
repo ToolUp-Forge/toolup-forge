@@ -344,6 +344,49 @@ module's response decoders on first use rather than at import, and found nothing
 figures, and why the decoders stay built at import, are beside the emitter in
 `ToolUp.Remoting.Generator`.
 
+### The Feliz census: a count that may only fall
+
+The client tier is moving off Feliz to typed trees, one project at a time. The risk in a migration that
+long is stalling half done with two idioms in the tree, so it has a number, and the number may only
+fall. [`feliz-census.json`](../../feliz-census.json) at the repository root holds it, cell by cell:
+
+| Class | One cell per | Counts | May it rise? |
+|---|---|---|---|
+| `sources` | project | non-test `.fs` / `.fsx` files with an `open Feliz` line | no |
+| `tests` | project | the same, over test files | yes, recorded |
+| `baselines` | assembly | lines of `api-baselines/<assembly>.approved.txt` naming `ReactElement` | no |
+
+**What it counts.** A file counts once, however much Feliz it uses, when a line of it is `open Feliz`:
+the React DSL itself. Its cell is the nearest directory above it holding a `.fsproj`. A baseline line
+naming `ReactElement` is public surface a consumer's code is written against, so a view that leaves
+Feliz but still hands out a `ReactElement` has not left it.
+
+**What it does not count.** `open Feliz.AgGrid`, `open Feliz.AgCharts`, `open Feliz.ViewEngine` and the
+other `Feliz.*` namespaces, which are separate packages with their own exits; a file that names a Feliz
+type fully qualified, without the open; build output and tooling directories (`bin`, `obj`,
+`node_modules`, `fable_modules`, `output`, `artifacts`, any directory starting with `.`); and the
+documentation fragments under `docs-snippets/`, which the documentation gates hold as prose. A test file
+(a path segment named `tests`, or a project directory ending `.Tests`) is counted in `tests`, apart from
+the code it tests: a view's tests move with the view, so that count may rise while a migration is in
+flight, and is recorded rather than refused.
+
+**The gate.** The `Build` test pack, which `VerifyAll` runs in every lane, holds the committed census
+against the tree. It is red in both directions. A cell that rose is new Feliz, refused: remove it rather
+than raise the number. A cell that fell is a census that does not record the fall: rewrite it in the same
+change, so every decrease is a line in a reviewed diff and the number never drifts down unnoticed. A
+`tests` cell that rose is a stale census too, and the writer records it.
+
+```powershell
+pwsh ./dev-scripts/feliz-ratchet.ps1           # the gate's check, on its own
+pwsh ./dev-scripts/feliz-ratchet.ps1 -Write    # rewrite the census from the tree
+```
+
+Both run the build driver's `FelizRatchet` target (`dotnet run --project Build.fsproj -- FelizRatchet
+[--write]`). The writer refuses, and writes nothing, when it would raise a `sources` or `baselines`
+cell. The one way up is a hand edit of the committed file, which a reviewer sees. The first census,
+written 2026-11-20, was 145 source files, 29 test files and 320 baseline lines. When the migration
+ends, the gate becomes a ban.
+
 ---
 
 ## How refusals surface
