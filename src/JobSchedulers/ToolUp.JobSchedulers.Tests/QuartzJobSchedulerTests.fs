@@ -114,21 +114,107 @@ let private composeOver (store: IJobStore) (started: bool) =
 
 let private compose (started: bool) = composeOver (tempJobStore ()) started
 
-/// Poll `predicate` until it holds or `timeoutMs` elapses. The timeout
-/// is a FAILURE PATH, never a schedule: a green run never spends it, so
-/// making it generous costs nothing. (Same rule, and the same reason, as
-/// `JobSchedulerTests.waitFor` — dispatch is asynchronous, so an
-/// assertion downstream of a fire waits on the production path's own
-/// observable state rather than on a wall-clock guess.)
-let private waitFor (timeoutMs: int) (predicate: unit -> bool) : bool =
-    let deadline = DateTime.UtcNow.AddMilliseconds(float timeoutMs)
-    let mutable ok = predicate ()
+/// A canonical store whose definition writes land `lag` late, and every
+/// other member delegated. A fired run writes its run row first and folds
+/// the outcome into the definition second, so this store holds that second
+/// write back for as long as a loaded machine might. The dispatch cases run
+/// over it: an assertion that reads the definition as soon as the run row
+/// appears is red on every run here, rather than once in a while on a busy
+/// machine.
+type private LaggingFoldStore(inner: IJobStore, lag: TimeSpan) =
+    interface IJobStore with
+        member _.Save definition = inner.Save definition
 
-    while not ok && DateTime.UtcNow < deadline do
-        Thread.Sleep 25
-        ok <- predicate ()
+        member _.Update definition = async {
+            do! Async.Sleep lag
+            return! inner.Update definition
+        }
 
-    ok
+        member _.Get(scopeId, jobId) = inner.Get(scopeId, jobId)
+        member _.ListJobs scopeId = inner.ListJobs scopeId
+
+        member _.FindByIdempotencyKey(scopeId, key, ttlSeconds, now) =
+            inner.FindByIdempotencyKey(scopeId, key, ttlSeconds, now)
+
+        member _.RecordRun run = inner.RecordRun run
+
+        member _.GetRecentRuns(scopeId, jobId, count) =
+            inner.GetRecentRuns(scopeId, jobId, count)
+
+        member _.DueJobs(scopeId, now) = inner.DueJobs(scopeId, now)
+
+        member _.AwaitingExternalRuns(scopeId, limit) =
+            inner.AwaitingExternalRuns(scopeId, limit)
+
+        member _.ListScopesWithJobs() = inner.ListScopesWithJobs()
+
+/// How long the lagging store holds a definition write back.
+let private foldLag = TimeSpan.FromMilliseconds 400.0
+
+/// How long a fire may take before the wait gives up. A failure path,
+/// never a schedule: a green run ends the moment Quartz says the fire is
+/// over.
+let private fireDeadline = TimeSpan.FromSeconds 60.0
+
+/// Fire `jobId` once and return when Quartz reports the fire over.
+///
+/// Quartz raises `JobWasExecuted` after the job's `Execute` task has
+/// completed, and that task ends after BOTH of a run's writes: the run row
+/// and the outcome folded into the definition. The run row alone is not
+/// the end of the run, so a wait on it reads the definition early. Past
+/// the deadline the failure says what the store held at that moment.
+let private fireAndAwaitTerminal (companion: QuartzJobScheduler) (scope: string) (jobId: JobId) (user: string) = async {
+    let scheduler = companion :> IJobScheduler
+    let quartz = companion.QuartzScheduler
+
+    let finished =
+        Tasks.TaskCompletionSource<JobExecutionException option>(
+            Tasks.TaskCreationOptions.RunContinuationsAsynchronously
+        )
+
+    let listenerName = "fire-terminal-" + uniqueSuffix ()
+
+    let listener =
+        { new IJobListener with
+            member _.Name = listenerName
+            member _.JobToBeExecuted(_, _) = Tasks.ValueTask.CompletedTask
+            member _.JobExecutionVetoed(_, _) = Tasks.ValueTask.CompletedTask
+
+            member _.JobWasExecuted(_, error, _) =
+                finished.TrySetResult(Option.ofObj error) |> ignore
+                Tasks.ValueTask.CompletedTask
+        }
+
+    quartz.ListenerManager.AddJobListener(
+        listener,
+        [| Matchers.Key(QuartzMapping.jobKey scope jobId) :> IMatcher<JobKey> |]
+    )
+
+    try
+        match! scheduler.TriggerOnce(scope, jobId, UserId user) with
+        | Ok() -> ()
+        | Error e -> failtestf "TriggerOnce: %A" e
+
+        let! ended =
+            Tasks.Task.WhenAny(finished.Task, Tasks.Task.Delay fireDeadline)
+            |> Async.AwaitTask
+
+        if not (obj.ReferenceEquals(ended, finished.Task)) then
+            let! runs = scheduler.GetRecentRuns(scope, jobId, 5)
+            let! definition = scheduler.Get(scope, jobId)
+
+            failtestf
+                "Quartz did not report the fire over within %O. Run rows: %A; the definition's last run status: %A"
+                fireDeadline
+                (runs |> List.map _.Status)
+                (definition |> Option.map _.LastRunStatus)
+        else
+            match finished.Task.Result with
+            | Some error -> failtestf "the job raised to Quartz: %s" error.Message
+            | None -> ()
+    finally
+        quartz.ListenerManager.RemoveJobListener listenerName |> ignore
+}
 
 let private nullHandler =
     { new IJobHandler with
@@ -438,7 +524,7 @@ let dispatchTests =
 
         testCaseAsync "a manual fire reaches the handler and records a Succeeded run"
         <| async {
-            let companion = compose true
+            let companion = composeOver (LaggingFoldStore(tempJobStore (), foldLag)) true
             let scheduler = companion :> IJobScheduler
             let host = companion :> Microsoft.Extensions.Hosting.IHostedService
             let scope = "team-" + uniqueSuffix ()
@@ -476,19 +562,14 @@ let dispatchTests =
                     | Ok(Scheduled id | Coalesced id) -> id
                     | Error e -> failtestf "Schedule: %A" e
 
-                match! scheduler.TriggerOnce(scope, jobId, UserId "alice") with
-                | Ok() -> ()
-                | Error e -> failtestf "TriggerOnce: %A" e
+                do! fireAndAwaitTerminal companion scope jobId "alice"
+                Expect.isFalse executed.IsEmpty "the registered handler ran"
 
-                let ran = waitFor 15_000 (fun () -> not executed.IsEmpty)
-                Expect.isTrue ran "the registered handler ran"
+                let! runs = scheduler.GetRecentRuns(scope, jobId, 5)
 
-                let terminal () =
-                    scheduler.GetRecentRuns(scope, jobId, 5)
-                    |> Async.RunSynchronously
-                    |> List.exists (fun run -> run.Status = Succeeded)
-
-                Expect.isTrue (waitFor 15_000 terminal) "a Succeeded run row was recorded"
+                Expect.isTrue
+                    (runs |> List.exists (fun run -> run.Status = Succeeded))
+                    "a Succeeded run row was recorded"
 
                 let! definition = scheduler.Get(scope, jobId)
 
@@ -517,7 +598,7 @@ let dispatchTests =
 
         testCaseAsync "a permanent failure dead-letters without retrying"
         <| async {
-            let companion = compose true
+            let companion = composeOver (LaggingFoldStore(tempJobStore (), foldLag)) true
             let scheduler = companion :> IJobScheduler
             let host = companion :> Microsoft.Extensions.Hosting.IHostedService
             let scope = "team-" + uniqueSuffix ()
@@ -555,16 +636,13 @@ let dispatchTests =
                     | Ok(Scheduled id | Coalesced id) -> id
                     | Error e -> failtestf "Schedule: %A" e
 
-                match! scheduler.TriggerOnce(scope, jobId, UserId "alice") with
-                | Ok() -> ()
-                | Error e -> failtestf "TriggerOnce: %A" e
+                do! fireAndAwaitTerminal companion scope jobId "alice"
+                let! runs = scheduler.GetRecentRuns(scope, jobId, 5)
 
-                let deadLettered () =
-                    scheduler.GetRecentRuns(scope, jobId, 5)
-                    |> Async.RunSynchronously
-                    |> List.exists (fun run -> run.Status = DeadLettered)
+                Expect.isTrue
+                    (runs |> List.exists (fun run -> run.Status = DeadLettered))
+                    "a PermanentFailure dead-letters on the first attempt"
 
-                Expect.isTrue (waitFor 15_000 deadLettered) "a PermanentFailure dead-letters on the first attempt"
                 Expect.equal attempts 1 "and is never retried — that is what makes it permanent"
 
                 let! definition = scheduler.Get(scope, jobId)
