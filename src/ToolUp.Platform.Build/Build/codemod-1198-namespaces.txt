@@ -358,6 +358,7 @@ case ToolUp.Platform NotRun ToolUp.Platform.Compose
 case ToolUp.Platform NotSeeded ToolUp.Platform.Compose
 case ToolUp.Platform NotYetValid ToolUp.Platform.Compose
 case ToolUp.Platform NotificationSubsystem ToolUp.Platform.Compose
+case ToolUp.Platform NullWatermark ToolUp.Platform.Infra
 case ToolUp.Platform OAuthFlowFailed ToolUp.Platform.Infra
 case ToolUp.Platform ObjectAlreadyCurrent ToolUp.Platform.Config
 case ToolUp.Platform ObjectFailed ToolUp.Platform.Config
@@ -390,6 +391,7 @@ case ToolUp.Platform PlannedBy ToolUp.Platform.Infra
 case ToolUp.Platform Platform ToolUp.Platform.Compose
 case ToolUp.Platform PlatformAdminPrincipal ToolUp.Platform.Compose
 case ToolUp.Platform PlatformSubsystem ToolUp.Platform.Compose
+case ToolUp.Platform PolicyUnreadable ToolUp.Platform.Infra
 case ToolUp.Platform PolicyVerdict ToolUp.Platform.Infra
 case ToolUp.Platform Post ToolUp.Platform.Compose
 case ToolUp.Platform Pre ToolUp.Platform.Compose
@@ -451,6 +453,7 @@ case ToolUp.Platform RequireForIsolatingBackends ToolUp.Platform.Infra
 case ToolUp.Platform Required ToolUp.Platform.Infra
 case ToolUp.Platform RequirementCycle ToolUp.Platform.Compose
 case ToolUp.Platform Resample ToolUp.Platform.Infra
+case ToolUp.Platform ReservedParameter ToolUp.Platform.Infra
 case ToolUp.Platform Resolved ToolUp.Platform.Infra
 case ToolUp.Platform ResolverMissing ToolUp.Platform.Infra
 case ToolUp.Platform ResultRef ToolUp.Platform.Infra
@@ -522,6 +525,7 @@ case ToolUp.Platform StaleWrite ToolUp.Platform.Compose
 case ToolUp.Platform Standard ToolUp.Platform.Compose
 case ToolUp.Platform StartEmpty ToolUp.Platform.Infra
 case ToolUp.Platform StateMismatch ToolUp.Platform.Infra
+case ToolUp.Platform StatementTextRefused ToolUp.Platform.Infra
 case ToolUp.Platform Stepped ToolUp.Platform.Infra
 case ToolUp.Platform Storage ToolUp.Platform.Compose
 case ToolUp.Platform StorageFailure ToolUp.Platform.Infra
@@ -2021,6 +2025,7 @@ type ToolUp.Platform VerifyDetachedJws ToolUp.Platform.Compose
 type ToolUp.Platform VersionedBuildError ToolUp.Platform.Compose
 type ToolUp.Platform VersionedCompositionRule ToolUp.Platform.Compose
 type ToolUp.Platform VintageReevaluationJobHandler ToolUp.Platform.Jobs
+type ToolUp.Platform VirtualBindingRefusal ToolUp.Platform.Infra
 type ToolUp.Platform VirtualDatasetReader ToolUp.Platform.Infra
 type ToolUp.Platform WatchedObject ToolUp.Platform.Infra
 type ToolUp.Platform WebhookApiHandler ToolUp.Platform.Jobs
