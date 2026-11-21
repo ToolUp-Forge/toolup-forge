@@ -115,7 +115,9 @@ let private dotnet (workDir: string) (args: string list) =
 /// Pack `projectRel` into a scratch feed, restore it into a consumer, build
 /// the consumer, and return the consumer's output directory.
 let private deliverThroughPackageReference (scratch: string) (projectRel: string) (packageId: string) =
-    let version = "0.0.0-t768." + Guid.NewGuid().ToString("N").Substring(0, 8)
+    // The `g` keeps the identifier alphanumeric: eight hex digits can all be decimal, and a numeric
+    // prerelease identifier with a leading zero (0.0.0-t768.02968501) is not a valid version to NuGet.
+    let version = "0.0.0-t768.g" + Guid.NewGuid().ToString("N").Substring(0, 8)
     let feed = Path.Combine(scratch, "feed")
     let consumer = Path.Combine(scratch, "consumer")
     Directory.CreateDirectory feed |> ignore
