@@ -555,6 +555,7 @@ let private groupMembers () : AggregateMember list = [
                         ContractId = "example.orders"
                         Versions = [ v1; v11 ]
                         Routines = [ "_platform.peer.example.orders.ReconcileLedger" ]
+                        Bounds = None
                     }
                 ]
                 "deployment-managed"
@@ -576,6 +577,7 @@ let private groupMembers () : AggregateMember list = [
                         ContractId = "example.catalogue"
                         Versions = [ v1 ]
                         Routines = []
+                        Bounds = None
                     }
                 ]
                 // Divergent on exactly one facet — the aggregate must
@@ -599,6 +601,7 @@ let private groupMembers () : AggregateMember list = [
                         ContractId = "example.settlement"
                         Versions = [ v1 ]
                         Routines = []
+                        Bounds = None
                     }
                 ]
                 "deployment-managed"
@@ -1888,6 +1891,167 @@ let delegatedQueryAuthorityFor (vectorId: string) : PeerVisibilityResolution =
             delegatedQueryPeerId
     | _ -> PeerVisibility.unresolved delegatedQueryPeerId
 
+// ─── Reference values — delegated-query answer bounds ────────────────
+
+/// The instant the bound vectors are read at (the specification's §7.4).
+let delegatedQueryInstant = DateTimeOffset(2026, 7, 16, 12, 0, 0, TimeSpan.Zero)
+
+/// The corpus row count: a JSON-array answer counts its elements, any
+/// other answer one row.
+let private corpusRowCount (result: DelegatedQueryResult) =
+    use document = System.Text.Json.JsonDocument.Parse result.Answer
+
+    match document.RootElement.ValueKind with
+    | System.Text.Json.JsonValueKind.Array -> document.RootElement.GetArrayLength()
+    | _ -> 1
+
+/// The corpus window over a JSON-array answer.
+let private corpusWindow (result: DelegatedQueryResult) (offset: int) (count: int) =
+    use document = System.Text.Json.JsonDocument.Parse result.Answer
+
+    let items =
+        document.RootElement.EnumerateArray()
+        |> Seq.map _.GetRawText()
+        |> Seq.skip (min offset (document.RootElement.GetArrayLength()))
+        |> Seq.truncate count
+
+    {
+        result with
+            Answer = "[" + String.Join(",", items) + "]"
+    }
+
+/// The bounds the bound vectors are read under: two rows or 64 bytes an
+/// answer, continued for fifteen minutes under the key 0x00..0x1f.
+let delegatedQueryCorpusBounds: DelegatedQueryBounds =
+    DelegatedQueryBounds.declare 64
+    |> DelegatedQueryBounds.withRows 2 corpusRowCount
+    |> DelegatedQueryBounds.withContinuation {
+        Window = corpusWindow
+        Key = fun () -> async { return Array.init 32 byte }
+        Lifetime = TimeSpan.FromSeconds 900.0
+    }
+    |> DelegatedQueryBounds.withClock (fun () -> delegatedQueryInstant)
+
+/// The caller the bound vectors are read for: the reference requester at
+/// `Full`, bound to the reference scope.
+let delegatedQueryCorpusCaller: DelegatedQueryCaller = {
+    PeerId = delegatedQueryPeerId
+    ScopeId = delegatedQueryBoundScope
+    Authority = PeerDataVisibilityLevel.Full
+}
+
+/// The submission the bound vectors are presented with: the reference one.
+let delegatedQueryCorpusSubmission = referenceDelegatedSubmission
+
+/// A row-level answer of three rows, which pages as two and one.
+let private pagedResult: DelegatedQueryResult = {
+    Class = DelegatedQueryClass.RowLevel
+    Cohort = 1
+    Answer = """[{"amount":"120.00"},{"amount":"75.50"},{"amount":"9.99"}]"""
+}
+
+/// An aggregate answer above the corpus byte ceiling.
+let private aboveCeilingResult: DelegatedQueryResult = {
+    Class = DelegatedQueryClass.Aggregate
+    Cohort = 42
+    Answer = """{"histogram":[{"bin":1,"count":42},{"bin":2,"count":57},{"bin":3,"count":61}]}"""
+}
+
+/// The paged answer from `offset`, through the shipped bound step.
+let private pagedFrom (bounds: DelegatedQueryBounds) caller submission (offset: int) =
+    DelegatedQueryPeerContract.bound bounds caller submission offset (DelegatedQueryAnswer.Answered pagedResult)
+    |> Async.RunSynchronously
+
+let private tokenOf (answer: DelegatedQueryAnswer) =
+    match answer with
+    | DelegatedQueryAnswer.Continued page -> page.Continuation
+    | other -> failwithf "the corpus page must be continued, got %A" other
+
+/// The two pages of `pagedResult`: two rows with a token, then the last.
+let private referencePages () = [
+    pagedFrom delegatedQueryCorpusBounds delegatedQueryCorpusCaller referenceDelegatedSubmission 0
+    pagedFrom delegatedQueryCorpusBounds delegatedQueryCorpusCaller referenceDelegatedSubmission 2
+]
+
+/// A token issued to another requester.
+let private foreignToken () =
+    pagedFrom
+        delegatedQueryCorpusBounds
+        {
+            delegatedQueryCorpusCaller with
+                PeerId = "requester-other"
+        }
+        referenceDelegatedSubmission
+        0
+    |> tokenOf
+
+/// A token issued for the reference query under other parameters.
+let private mismatchedToken () =
+    pagedFrom
+        delegatedQueryCorpusBounds
+        delegatedQueryCorpusCaller
+        {
+            referenceDelegatedSubmission with
+                Parameters = referenceDelegatedSubmission.Parameters |> Map.add "region" "\"south\""
+        }
+        0
+    |> tokenOf
+
+/// A token issued sixteen minutes before the corpus instant, so it expired
+/// a minute before it.
+let private expiredToken () =
+    pagedFrom
+        (delegatedQueryCorpusBounds
+         |> DelegatedQueryBounds.withClock (fun () -> delegatedQueryInstant.AddSeconds -960.0))
+        delegatedQueryCorpusCaller
+        referenceDelegatedSubmission
+        0
+    |> tokenOf
+
+let private referenceBoundRefusals: DelegatedQueryAnswer list =
+    [
+        DelegatedQueryRefusal.AnswerBoundExceeded("bytes", 64, 78)
+        DelegatedQueryRefusal.ContinuationInvalid
+        DelegatedQueryRefusal.ContinuationForeign
+        DelegatedQueryRefusal.ContinuationMismatched
+        DelegatedQueryRefusal.ContinuationExpired
+    ]
+    |> List.map DelegatedQueryAnswer.Refused
+
+/// The reference deployment serving the delegated-query profile under the
+/// corpus bounds: the bound a counterparty pins before it calls.
+let private answerBoundsSurface () =
+    let gate: DelegatedQueryGate = {
+        Broker = CleanRoomBroker.create ()
+        Template =
+            DelegatedQueryProfile.template "delegated-query" {
+                MinCohortSize = 10
+                SuppressionThreshold = 10
+                PermittedShapes = Set.ofList [ Count; Aggregate ]
+            }
+        Approval = None
+        Budget = None
+        Audit = CleanRoomGate.noAudit
+    }
+
+    let deps: DelegatedQueryDeps = {
+        ResolveBinding = fun _ -> async { return None }
+        Handler = {
+            Describe = fun _ -> async { return Error "describing is not part of a surface" }
+            Evaluate = fun _ _ -> async { return Error "evaluating is not part of a surface" }
+        }
+        Leg = DelegatedQueryLeg.Immediate
+        ClassCheck = None
+        Audit = DelegatedQueryPeerContract.noAudit
+    }
+
+    match DelegatedQueryPeerContract.builderWithin delegatedQueryCorpusBounds gate deps with
+    | Error refusals -> failwithf "the corpus delegated-query contract was refused: %A" refusals
+    | Ok builder ->
+        referenceInstance ()
+        |> PeerComposition.options (PeerOptions.withContract builder)
+        |> PeerSurface.describe
+
 let private vector id family profile kind description file document : WireVector = {
     Id = id
     Family = family
@@ -1944,6 +2108,15 @@ let vectors () : WireVector list =
             "The same deployment declaring which registry lifecycle transitions it admits from a peer, at the DEFAULT data-visibility level. Two authority axes, and this vector is what separates them: an implementation that folded the transition grant into the visibility ladder would have to publish a raised level here, and does not. The grant is declared out of ordinal order and published sorted."
             "peer-surface/transition-grant.json"
             (PeerSurface.exportJson (transitionGrantSurface ()))
+
+        vector
+            "peer-surface/answer-bounds"
+            "peer-surface"
+            Participant
+            Hash
+            "The same deployment serving the delegated-query profile under declared answer bounds: two rows or 64 bytes an answer, continued. The bound rides the served contract, so a counterparty that pins the label pins the ceiling; every other contract publishes `null`, which is what each did before bounds existed."
+            "peer-surface/answer-bounds.json"
+            (PeerSurface.exportJson (answerBoundsSurface ()))
 
         // ── aggregate surface ─────────────────────────────────────────
         vector
@@ -2562,6 +2735,91 @@ let vectors () : WireVector list =
                 "delegated-query/reject-rows-narrowed.json"
                 (JsonRpc.serialize referenceRowResult) with
                 Reject = Some "delegated-query-authority-narrowed"
+        }
+
+        vector
+            "delegated-query/continued-submission"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "A Submit continuing an answer: the reference query and parameters, member for member, with the token the first page carried beside them. A body without the Continuation member is a first submission, so one reader reads both."
+            "delegated-query/continued-submission.json"
+            (JsonRpc.serialize (
+                DelegatedQueryPeerContract.continuationRequest
+                    referenceDelegatedSubmission
+                    (tokenOf (referencePages ()).Head)
+            ))
+
+        vector
+            "delegated-query/pages"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "A three-row answer under the corpus bounds, as the custodian answers it: the first page of two rows, continued with a token for the third, then the last page, answered. The token is the one the specification's format gives under the corpus key, caller, submission, offset and instant."
+            "delegated-query/pages.json"
+            (JsonRpc.serialize (referencePages ()))
+
+        vector
+            "delegated-query/bound-refusals"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "One refusal per bound class. The ceiling refusal names the bound, the ceiling and the size, and nothing of the answer; the token refusals name nothing at all, so a refused token discloses nothing about the answer it was for."
+            "delegated-query/bound-refusals.json"
+            (JsonRpc.serialize referenceBoundRefusals)
+
+        {
+            vector
+                "delegated-query/reject-above-ceiling"
+                "delegated-query"
+                Custodian
+                Reject
+                "A handler's aggregate result above the corpus byte ceiling, judged by the custodian's bound step. Refused, not paged, although the bounds offer continuation: an aggregate that does not fit is a query that should be narrower."
+                "delegated-query/reject-above-ceiling.json"
+                (JsonRpc.serialize aboveCeilingResult) with
+                Reject = Some "delegated-query-answer-bound-exceeded"
+        }
+
+        {
+            vector
+                "delegated-query/reject-foreign-token"
+                "delegated-query"
+                Custodian
+                Reject
+                "A continued Submit from the reference requester, carrying a token the custodian issued to another requester. The signature verifies, so the refusal is for the principal: a token is useless to anyone but the one it was issued to."
+                "delegated-query/reject-foreign-token.json"
+                (JsonRpc.serialize (
+                    DelegatedQueryPeerContract.continuationRequest referenceDelegatedSubmission (foreignToken ())
+                )) with
+                Reject = Some "delegated-query-continuation-foreign"
+        }
+
+        {
+            vector
+                "delegated-query/reject-mismatched-token"
+                "delegated-query"
+                Custodian
+                Reject
+                "A continued Submit presenting a token issued for the same query under other parameters. Refused for the submission: a token continues the answer it was issued for and no other."
+                "delegated-query/reject-mismatched-token.json"
+                (JsonRpc.serialize (
+                    DelegatedQueryPeerContract.continuationRequest referenceDelegatedSubmission (mismatchedToken ())
+                )) with
+                Reject = Some "delegated-query-continuation-mismatched"
+        }
+
+        {
+            vector
+                "delegated-query/reject-expired-token"
+                "delegated-query"
+                Custodian
+                Reject
+                "A continued Submit presenting a token whose fifteen-minute lifetime ended a minute before the corpus instant. Refused for the instant; everything else about it holds."
+                "delegated-query/reject-expired-token.json"
+                (JsonRpc.serialize (
+                    DelegatedQueryPeerContract.continuationRequest referenceDelegatedSubmission (expiredToken ())
+                )) with
+                Reject = Some "delegated-query-continuation-expired"
         }
     ]
 

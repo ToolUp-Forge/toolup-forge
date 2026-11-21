@@ -139,7 +139,9 @@ let private reserialise (entry: ManifestEntry) (document: string) : string =
     | "model-execution", "model-execution/fit-diagnostics" ->
         JsonRpc.serialize (JsonRpc.deserialize<ModelExecutionPeerAnswer list> document)
     | "delegated-query", "delegated-query/answers"
-    | "delegated-query", "delegated-query/refusals" ->
+    | "delegated-query", "delegated-query/refusals"
+    | "delegated-query", "delegated-query/pages"
+    | "delegated-query", "delegated-query/bound-refusals" ->
         JsonRpc.serialize (JsonRpc.deserialize<DelegatedQueryAnswer list> document)
     | "delegated-query", _ -> JsonRpc.serialize (JsonRpc.deserialize<DelegatedQueryRequest> document)
     | family, id -> failwithf "no specified shape is bound to corpus family '%s' (vector '%s')" family id
@@ -333,7 +335,46 @@ let private verifyModelExecutionRejection (entry: ManifestEntry) (reason: string
 /// the grant `delegatedQueryAuthorityFor` names for it.
 let private verifyDelegatedQueryRejection (entry: ManifestEntry) (reason: string) (document: string) : unit =
     let refusal =
-        if entry.Id.StartsWith "delegated-query/reject-rows-" then
+        if entry.Id = "delegated-query/reject-above-ceiling" then
+            // The custodian's bound step, under the corpus bounds.
+            let result = JsonRpc.deserialize<DelegatedQueryResult> document
+
+            match
+                DelegatedQueryPeerContract.bound
+                    delegatedQueryCorpusBounds
+                    delegatedQueryCorpusCaller
+                    delegatedQueryCorpusSubmission
+                    0
+                    (DelegatedQueryAnswer.Answered result)
+                |> Async.RunSynchronously
+            with
+            | DelegatedQueryAnswer.Refused refusal -> Some refusal
+            | _ -> None
+        elif entry.Id.EndsWith "-token" then
+            // The custodian's token reader, under the corpus continuation,
+            // for the reference requester, with the submission the request
+            // carries.
+            match
+                DelegatedQueryPeerContract.read DelegatedQueryProfile.SubmitOperation delegatedQueryBoundScope document
+            with
+            | Error refusal -> Some refusal
+            | Ok request ->
+                let body = JsonRpc.deserialize<DelegatedQueryContinuedSubmission> request.Body
+
+                match
+                    DelegatedQueryPeerContract.continuationOffset
+                        delegatedQueryCorpusBounds
+                        delegatedQueryCorpusCaller
+                        {
+                            Query = body.Query
+                            Parameters = body.Parameters
+                        }
+                        body.Continuation
+                    |> Async.RunSynchronously
+                with
+                | Error refusal -> Some refusal
+                | Ok _ -> None
+        elif entry.Id.StartsWith "delegated-query/reject-rows-" then
             let result = JsonRpc.deserialize<DelegatedQueryResult> document
             let authority = delegatedQueryAuthorityFor entry.Id
 

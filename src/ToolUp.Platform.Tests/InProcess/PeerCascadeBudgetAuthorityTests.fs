@@ -653,6 +653,7 @@ let cascadeCompatibilityTests =
                 // cascade bookkeeping under test is the only thing the
                 // dispatch does.
                 Routines = []
+                Bounds = None
             }
 
             let client = CapturingPeerClient()

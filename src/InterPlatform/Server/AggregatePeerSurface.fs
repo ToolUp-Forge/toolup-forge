@@ -162,6 +162,11 @@ type AggregateRoute = {
     /// projected onto the group's `PeerSurface`, where a routine means a
     /// handler fused onto *this* instance's job substrate.
     Routines: string list
+    /// The answer bound the owning member publishes for this contract,
+    /// taken verbatim from its `ServedContract.Bounds`. The member applies
+    /// it; the group's surface publishes it, so a counterparty of the group
+    /// knows the ceiling before it calls, as it would of the member.
+    Bounds: PeerAnswerBounds option
 }
 
 /// Derives one collective `PeerSurface` from a set of member surfaces
@@ -335,6 +340,7 @@ module AggregatePeerSurface =
                         Versions = served.Versions |> List.sort
                         Owner = owner.Target
                         Routines = served.Routines |> List.sort
+                        Bounds = served.Bounds
                     }
                 | candidates, None ->
                     Error [
@@ -351,6 +357,7 @@ module AggregatePeerSurface =
                             Versions = served.Versions |> List.sort
                             Owner = owner.Target
                             Routines = served.Routines |> List.sort
+                            Bounds = served.Bounds
                         }
                     | None when members |> List.exists (fun m -> m.Target.Peer.PeerId = ownerId) ->
                         Error [ ExposureOwnerDoesNotServe(exposed.ContractId, ownerId) ]
@@ -415,6 +422,10 @@ module AggregatePeerSurface =
                             // the routine set the dispatch closure needs
                             // rides `AggregateRoute.Routines` instead.
                             Routines = []
+                            // The owning member's bound, verbatim: the
+                            // gateway forwards the call and the member
+                            // applies it.
+                            Bounds = route.Bounds
                         })
                     Endpoints = PeerSurface.endpoints
                 }
@@ -595,6 +606,7 @@ module PeerGateway =
             // member owns the execution leg; the gateway owns only the
             // handle translation in front of it.
             JobHandlers = []
+            AnswerBounds = route.Bounds
         }
 
     /// The Phase 595 shape: forward the invoke leg, front no poll leg. A

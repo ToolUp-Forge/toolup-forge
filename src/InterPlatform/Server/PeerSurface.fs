@@ -15,7 +15,7 @@ open ToolUp.Platform.Jobs
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
 
-// ─── Phase 590 — PeerSurface: a deployment's cross-instance face ─────
+// ─── PeerSurface: a deployment's cross-instance face ───────────────
 //
 // Emits a deployment's **wire-facing face** as data: what it *serves*
 // (peer contract ids + versions, the mounted `/peer/v1` endpoints, and
@@ -70,6 +70,10 @@ type ServedContract = {
     /// composes no job substrate, mirroring what is actually
     /// dispatchable. Sorted ascending.
     Routines: string list
+    /// The ceiling the contract declares on one answer, from its
+    /// registration. `None` for a contract that declares none, which is
+    /// how a label published before bounds existed reads too.
+    Bounds: PeerAnswerBounds option
 }
 
 /// The serving half of the wire face: the contracts this instance hosts
@@ -141,7 +145,7 @@ type PeerSurface = {
     Consumes: ConsumedContract list
     TrustPosture: PeerTrustPosture option
     Budgets: PeerBudgetShape option
-    /// Phase 594 — the data-vocabulary packs this instance pins
+    /// The data-vocabulary packs this instance pins
     /// (`ServerConfig.PinnedVocabularyPacks`), each as `(PackId, Version,
     /// Hash)`. Federated data means the same thing across a contract edge
     /// only when both instances pin a compatible pack version — the Phase 591
@@ -149,7 +153,7 @@ type PeerSurface = {
     /// no pack surfaces `[]`; sorted by pack id then version for a
     /// registration-order-independent hash.
     PinnedVocabulary: VocabularyPackPin list
-    /// Phase 642 — what a remote peer may see of this deployment's data,
+    /// What a remote peer may see of this deployment's data,
     /// as the stable label of a `PeerDataVisibilityLevel`
     /// (`"AggregatesOnly"` | `"ViewOnly"` | `"Full"`).
     ///
@@ -170,7 +174,7 @@ type PeerSurface = {
     /// the fail-closed default a property of the READER, where a
     /// counterparty cannot affect it.
     DataVisibility: string
-    /// Phase 644 — the registry lifecycle transitions this deployment
+    /// The registry lifecycle transitions this deployment
     /// admits from a peer, as stable `ModelArtifactStatus` labels, sorted
     /// ordinally. `[]` — the default — admits none.
     ///
@@ -292,6 +296,7 @@ module PeerSurface =
             ContractId = host.Registration.ContractId
             Versions = host.Registration.Versions |> List.sort
             Routines = host.JobHandlers |> List.map fst |> List.sort
+            Bounds = host.AnswerBounds
         }
 
     /// The empty surface — what a non-federating deployment
@@ -305,13 +310,13 @@ module PeerSurface =
         TrustPosture = None
         Budgets = None
         PinnedVocabulary = []
-        // Phase 642 — a deployment with no wire face grants nothing, and
+        // A deployment with no wire face grants nothing, and
         // the narrowest level is how "nothing" is spelled. Stated rather
         // than left empty: an empty string would read as the default
         // anyway, and saying so is what makes the empty label's own
         // answer to "what may I see" legible instead of inferred.
         DataVisibility = PeerDataVisibilityLevel.label PeerDataVisibilityLevel.default'
-        // Phase 644 — a deployment with no wire face admits no
+        // A deployment with no wire face admits no
         // transition. The empty list is the grant of nothing, and it is
         // what an undeclared deployment publishes too: silence is not a
         // grant, so there is nothing to distinguish here.
@@ -329,7 +334,7 @@ module PeerSurface =
     let dataVisibility (surface: PeerSurface) : PeerDataVisibilityLevel =
         PeerDataVisibilityLevel.ofLabelOrDefault surface.DataVisibility
 
-    /// Phase 644 — **the fail-closed read of a surface's declared
+    /// **The fail-closed read of a surface's declared
     /// transition grant**, and the only route any consumer should take
     /// to it.
     ///
@@ -384,7 +389,7 @@ module PeerSurface =
 
             let authored = options.Contracts |> List.map (servedContract fusion)
 
-            // Phase 18a — the audit-transparency opt-in registers the
+            // The audit-transparency opt-in registers the
             // SDK-shipped contract under the same reserved id + version
             // constants read here (`PeerAuditContractHost.registration`).
             let auditContract =
@@ -394,12 +399,13 @@ module PeerSurface =
                             ContractId = PeerAudit.contractId
                             Versions = [ PeerAudit.v1 ]
                             Routines = []
+                            Bounds = None
                         }
                     ]
                 else
                     []
 
-            // Phase 480 — the bilateral-approval opt-in registers the
+            // The bilateral-approval opt-in registers the
             // reserved handshake contract under the same id + version
             // constants read here
             // (`TemplateApprovalContract.registration`). Projected on
@@ -414,6 +420,7 @@ module PeerSurface =
                             ContractId = TemplateApprovalContract.contractId
                             Versions = [ TemplateApprovalContract.v1 ]
                             Routines = []
+                            Bounds = None
                         }
                     ]
                 else
@@ -450,7 +457,7 @@ module PeerSurface =
                         CascadeGuard = "hop-budget-decrement-with-route-loop-detection"
                         LongRunningEnabled = config.JobScheduler <> NoJobScheduler
                     }
-                // Phase 594 — the pinned data-vocabulary packs, hashed +
+                // The pinned data-vocabulary packs, hashed +
                 // sorted so the export is order-independent. A counterparty
                 // pins these to require compatible data semantics across the
                 // contract edge; empty when the deployment pins no pack.
@@ -458,7 +465,7 @@ module PeerSurface =
                     config.PinnedVocabularyPacks
                     |> List.map DataVocabulary.pin
                     |> List.sortBy (fun p -> p.PackId, p.Version.Major, p.Version.Minor)
-                // Phase 642 — the composed declaration
+                // The composed declaration
                 // (`withDataVisibility`), which defaults to
                 // `AggregatesOnly`. Derived from the composition like
                 // every other member of this descriptor: a deployment
@@ -466,7 +473,7 @@ module PeerSurface =
                 // published label cannot disagree with what the seam
                 // enforces because both read this one value.
                 DataVisibility = PeerDataVisibilityLevel.label options.DataVisibility
-                // Phase 644 — the composed grant
+                // The composed grant
                 // (`withPeerTransitionAuthority`), which defaults to
                 // nothing. Derived from the composition like every other
                 // member, so the labels a counterparty pins and the
