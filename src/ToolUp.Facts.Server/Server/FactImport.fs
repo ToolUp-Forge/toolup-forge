@@ -335,6 +335,18 @@ module FactImportRefusal =
 /// resolver re-minted from an import job's carried `ScopeKey`), with no
 /// ordering promised across scopes; no timing
 /// primitive.
+///
+/// **The scope is the platform's mint, never the import's.** The one
+/// `Import` takes a `ResolvedScope` and has no string form, so neither the
+/// offer, the certificate nor a peer call can name the shard a fact lands
+/// in: it lands in, and is audited under, the scope its caller was handed.
+/// The peer host mints no scope for a peer call. Its validated principal
+/// names the CALLING deployment and that deployment's user, which this
+/// deployment's resolver has no standing to place in a shard here; a peer
+/// call's wire context carries no scope member at all. A deployment that
+/// serves imports over a peer contract therefore resolves the receiving
+/// scope from a principal it declared itself, through the platform's
+/// `DeclaredPrincipalResolver`.
 type IFactImportDoor =
     /// Import `offer` from `peerId` under the DSSE-wrapped certificate in
     /// `certificateJson` — either published projection, routed on the
