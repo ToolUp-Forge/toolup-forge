@@ -62,6 +62,7 @@
         <Compile Include="Tests\PayloadFormatDeclarationTests.fs" />
         <Compile Include="Tests\SqlBindingTests.fs" />
         <Compile Include="Tests\SqlPostureTests.fs" />
+        <Compile Include="Tests\SynapseBindingTests.fs" />
         <!-- Phase 836 - the IDataSource fidelity pack, source-linked from
              ToolUp.Platform.Tests, bound to every connector in this pack. -->
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\DataSourceFidelityContract.fs" Link="Contracts\DataSourceFidelityContract.fs" />

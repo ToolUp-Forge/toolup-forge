@@ -85,6 +85,47 @@ values, `DateTime` as ISO-8601 round-trip, `varbinary` as base64, `NULL` as the 
 A failure *after* the connection opened is reported as `SchemaMismatch`, not `SourceUnreachable` — the
 endpoint is reachable; the statement or the schema is the operator's to fix.
 
+## Bound statements
+
+The connector declares `ConnectorCapabilities.Binds`: a `BoundStatement` runs through `BoundQuery.run` with
+its values beside the text, bound by SqlClient as typed `SqlParameter`s and sent to the endpoint through
+`sp_executesql`. **No value is ever rendered into the statement text**, and nothing falls back to doing so: a
+statement the connector cannot bind is refused by name.
+
+**The marker form is T-SQL's own.** A statement names each parameter `@name`, which is what Synapse reads, so
+the text is sent exactly as written. `SynapseBinding.markers` reads it as T-SQL does: a marker inside a string
+literal (`'...'`, `N'...'`), a quoted identifier (`"..."`, `[...]`) or a comment (`--`, nesting `/* */`) is
+not a marker, and `@@name` is a system function. `SynapseBinding.command` builds the request (the
+`SqlCommand`, before any connection exists), so the request is unit-tested without a workspace.
+
+| Kind | Bound as | Notes |
+|---|---|---|
+| `Float` | `float` | |
+| `Int` | `bigint` | |
+| `Bool` | `bit` | |
+| `Text`, `Categorical` | `nvarchar` | |
+| `Timestamp` | `datetimeoffset` | the offset travels with the instant |
+| `Decimal` | `decimal(p, s)` | **exact**: the canonical digits become a `SqlDecimal`, which holds 38 digits where `System.Decimal` holds 28; `p` and `s` are the value's own |
+| any kind, absent | a typed `NULL` of that kind | |
+
+Every kind a bound value can carry is bound, so `UnbindableKind` is never this connector's refusal. What it
+refuses, before a connection opens:
+
+- what `BoundStatement.check` refuses (an invalid or repeated name, a decimal that is not canonical text);
+- a marker no parameter supplies (`MissingParameter`) and a parameter the text does not use (`UnusedParameter`);
+- a decimal beyond `DECIMAL(38, s)`, naming the parameter, as `Failed (SchemaMismatch …)`;
+- a text that ends inside a literal, an identifier or a comment, and a second statement after a `;` — the
+  bound path runs one statement per call. T-SQL also runs a batch whose statements no separator divides, which
+  no lexical reading can see; a bound value can never add one.
+
+The statement's `Timeout`, when set, is the command's (rounded up to whole seconds); otherwise
+`command_timeout_seconds` applies.
+
+**One reading of T-SQL, held in two places.** The SQL connector (`ToolUp.DataSources.Sql`, backend `sqlserver`)
+reads the same marker form with its multi-backend scanner. This companion does not reference that package,
+which would bring five other database providers with it, so it carries its own T-SQL reading; the test pack
+holds the two to the same answer on a shared corpus until they share one implementation.
+
 ## Schema mapping — T-SQL type → `ColumnType`
 
 `ColumnInfo.DataType` carries the **raw** T-SQL type name; `SynapseCatalogue.toColumnType` projects it
@@ -141,3 +182,19 @@ The remote arm binds `RemoteDataSourceContract` against a real workspace when th
 | `TOOLUP_SYNAPSE_SAMPLE_SQL` | no (defaults to a `TOP 5` select) |
 
 With them unset the arm reports one `Pending` case naming what it wanted.
+
+The **binding arm** runs the data source contract pack's binding laws (`IDataSourceContract.bindingLaws`, in
+the SQL Server dialect) against a real endpoint. It writes: the laws seed one table (`kept`) and drop it again,
+so point it at a **scratch dedicated SQL pool** (a serverless pool cannot create a table). The always-on part of
+the same file (`SynapseBindingTests`) covers the marker reading, the request and every refusal offline.
+
+| Variable | Required |
+|---|---|
+| `TOOLUP_SYNAPSE_BIND_SERVER` | yes |
+| `TOOLUP_SYNAPSE_BIND_DATABASE` | yes |
+| `TOOLUP_SYNAPSE_BIND_AUTH` | no (defaults to `aad-default`) |
+| `TOOLUP_SYNAPSE_BIND_USER` | when `auth = sql` |
+| `TOOLUP_SYNAPSE_BIND_CREDENTIAL` | password or AAD token, per the auth mode |
+| `TOOLUP_SYNAPSE_BIND_SCHEMA` | no (defaults to `dbo`) |
+
+With the two required ones unset it reports one `Pending` case naming them, never a failure.

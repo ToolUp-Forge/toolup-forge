@@ -6,6 +6,7 @@ namespace ToolUp.DataSources.Synapse
 open System
 open System.Data
 open System.Data.Common
+open System.Data.SqlTypes
 open Azure.Core
 open Azure.Identity
 open Microsoft.Data.SqlClient
@@ -43,6 +44,11 @@ open ToolUp.Platform.Compose
 //     -identity deployment wants.
 //
 // **Query output is RFC 4180 CSV** with a header row.
+//
+// **It binds what it is given** (`ConnectorCapabilities.Binds`): a bound
+// statement's `@name` markers are T-SQL's own, so its text runs as written
+// and each value travels beside it as a typed `SqlParameter`
+// (`SynapseBinding`), never rendered into the text.
 
 /// How the connector authenticates to the Synapse SQL endpoint.
 type SynapseAuth =
@@ -103,7 +109,7 @@ module SynapseCatalogue =
                 + $"WHERE TABLE_SCHEMA = '%s{SqlIdentifier.quoteLiteral schema}' AND TABLE_NAME = '%s{SqlIdentifier.quoteLiteral table}' "
                 + "ORDER BY ORDINAL_POSITION"))
 
-    /// Phase 1041 — T-SQL describing a STATEMENT's first result set without
+    /// T-SQL describing a STATEMENT's first result set without
     /// running it. The statement is bound as the `@tsql` parameter, never
     /// interpolated; the result names each column's `name`,
     /// `system_type_name` and `is_nullable`.
@@ -144,6 +150,212 @@ module SynapseCatalogue =
     /// `ColumnType`. The RAW name is stored on `ColumnInfo.DataType`.
     let toColumnType (nativeType: string) : ColumnType = TypeMap.classify overrides nativeType
 
+/// Binding a statement's values through SqlClient's own parameters. A bound
+/// statement names each parameter `@name`, which is T-SQL's own marker, so
+/// the text runs exactly as written and each value travels beside it as a
+/// typed `SqlParameter`, which SqlClient sends through `sp_executesql`: a
+/// value never becomes part of the text. Pure up to the command, so the
+/// request the connector sends is unit-tested without a workspace.
+module SynapseBinding =
+
+    /// The kinds the connector binds: every kind a bound value can carry.
+    /// A decimal binds exactly as `DECIMAL(p, s)`, up to 38 digits.
+    let bindableKinds: Set<DatasetDType> = Set.ofList BoundValue.kinds
+
+    let private isNameStart (c: char) =
+        (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '_'
+
+    let private isNameChar (c: char) = isNameStart c || (c >= '0' && c <= '9')
+
+    /// The `@name` markers `text` uses, in text order, a repeat named again.
+    /// The text is read as T-SQL reads it: a marker inside a string literal,
+    /// a quoted identifier (`"..."`, `[...]`) or a comment (`--`, nesting
+    /// `/* */`) is not a marker, and `@@name` is a system function. Refused,
+    /// naming why: a text that ends inside a literal, an identifier or a
+    /// comment, and a second statement after a `;`. T-SQL also runs a batch
+    /// whose statements no separator divides, which no lexical reading sees;
+    /// a bound value can never add one.
+    let markers (text: string) : Result<string list, string> =
+        let n = text.Length
+        let found = ResizeArray<string>()
+        let mutable i = 0
+        let mutable separated = false
+        let mutable error: string option = None
+
+        let at k = if k < n then text[k] else ' '
+
+        let nameEnd start =
+            let mutable j = start
+
+            while isNameChar (at j) do
+                j <- j + 1
+
+            j
+
+        // A quoted run opened at `i`, closed by `close`, a doubled `close`
+        // standing for itself.
+        let quoted (close: char) (what: string) =
+            let mutable j = i + 1
+            let mutable stop = -1
+
+            while stop < 0 && j < n do
+                if text[j] <> close then j <- j + 1
+                elif at (j + 1) = close then j <- j + 2
+                else stop <- j + 1
+
+            if stop < 0 then
+                error <- Some $"the text ends inside a %s{what}"
+            else
+                i <- stop
+
+        let blockComment () =
+            let mutable depth = 1
+            let mutable j = i + 2
+
+            while depth > 0 && j < n do
+                if text[j] = '*' && at (j + 1) = '/' then
+                    depth <- depth - 1
+                    j <- j + 2
+                elif text[j] = '/' && at (j + 1) = '*' then
+                    depth <- depth + 1
+                    j <- j + 2
+                else
+                    j <- j + 1
+
+            if depth > 0 then
+                error <- Some "the text ends inside a comment"
+            else
+                i <- j
+
+        while error.IsNone && i < n do
+            let c = text[i]
+            let next = at (i + 1)
+
+            if Char.IsWhiteSpace c then
+                i <- i + 1
+            elif c = ';' then
+                separated <- true
+                i <- i + 1
+            elif c = '-' && next = '-' then
+                let stop = text.IndexOf("\n", i, StringComparison.Ordinal)
+                i <- if stop < 0 then n else stop
+            elif c = '/' && next = '*' then
+                blockComment ()
+            elif separated then
+                error <- Some "the text holds more than one statement; the bound path runs one statement per call"
+            else
+                match c with
+                | '\'' -> quoted '\'' "string literal"
+                | '"' -> quoted '"' "quoted identifier"
+                | '[' -> quoted ']' "quoted identifier"
+                | '@' when next = '@' -> i <- nameEnd (i + 2)
+                | '@' when isNameStart next ->
+                    let stop = nameEnd (i + 1)
+                    found.Add(text.Substring(i + 1, stop - i - 1))
+                    i <- stop
+                | _ -> i <- i + 1
+
+        match error with
+        | Some reason -> Error reason
+        | None -> Ok(List.ofSeq found)
+
+    /// The digits a canonical decimal holds, before the point (none for a
+    /// lone `0`) and after it; at least one.
+    let private precision (digits: string) =
+        let body = digits.TrimStart '-'
+
+        let integerPart, fractionDigits =
+            match body.IndexOf '.' with
+            | -1 -> body, 0
+            | point -> body.Substring(0, point), body.Length - point - 1
+
+        max 1 ((if integerPart = "0" then 0 else integerPart.Length) + fractionDigits)
+
+    /// The provider parameter for `name`: its `SqlDbType` set from the
+    /// value's kind, never inferred from a boxed object, and the exact
+    /// decimal as a `SqlDecimal`, which holds 38 digits where
+    /// `System.Decimal` holds 28.
+    let private parameter (name: string) (value: BoundValue) : SqlParameter =
+        let p = SqlParameter()
+        p.ParameterName <- BoundStatement.marker name
+
+        p.SqlDbType <-
+            match BoundValue.kind value with
+            | DatasetDType.Float -> SqlDbType.Float
+            | DatasetDType.Int -> SqlDbType.BigInt
+            | DatasetDType.Bool -> SqlDbType.Bit
+            | DatasetDType.Text
+            | DatasetDType.Categorical -> SqlDbType.NVarChar
+            | DatasetDType.Timestamp -> SqlDbType.DateTimeOffset
+            | DatasetDType.Decimal -> SqlDbType.Decimal
+
+        match value with
+        | BoundValue.Float f -> p.Value <- box f
+        | BoundValue.Int i -> p.Value <- box i
+        | BoundValue.Bool b -> p.Value <- box b
+        | BoundValue.Text s
+        | BoundValue.Categorical s -> p.Value <- box s
+        | BoundValue.Timestamp t -> p.Value <- box t
+        | BoundValue.Decimal digits ->
+            let exact = SqlDecimal.Parse digits
+            p.Precision <- exact.Precision
+            p.Scale <- exact.Scale
+            p.SqlValue <- exact
+        | BoundValue.Null _ -> p.Value <- box DBNull.Value
+
+        p
+
+    let private refusedText (reason: string) =
+        BoundStatementError.Failed(SchemaMismatch $"Synapse refused the bound statement: %s{reason}")
+
+    /// The command `statement` runs as, before any connection: its text
+    /// exactly as written, each distinct parameter once as a typed
+    /// `SqlParameter` in marker order, and the statement's timeout. Refused
+    /// before any request exists: what `BoundStatement.check` refuses against
+    /// `bindableKinds`, a text `markers` refuses, a marker no parameter
+    /// supplies, a parameter the text does not use, and a decimal beyond
+    /// `DECIMAL(38, s)`. The caller disposes the command.
+    let command (statement: BoundStatement) : Result<SqlCommand, BoundStatementError> =
+        BoundStatement.check bindableKinds statement
+        |> Result.mapError BoundStatementError.Refused
+        |> Result.bind (fun () -> markers statement.Text |> Result.mapError refusedText)
+        |> Result.bind (fun markers ->
+            let used = List.distinct markers
+
+            let supplied =
+                statement.Parameters |> List.map (fun p -> p.Name, p.Value) |> Map.ofList
+
+            let beyond =
+                statement.Parameters
+                |> List.tryPick (fun p ->
+                    match p.Value with
+                    | BoundValue.Decimal digits when precision digits > 38 -> Some p.Name
+                    | _ -> None)
+
+            match used |> List.tryFind (supplied.ContainsKey >> not) with
+            | Some missing -> Error(BoundStatementError.Refused(BindingRefusal.MissingParameter missing))
+            | None ->
+                match statement.Parameters |> List.tryFind (fun p -> not (List.contains p.Name used)) with
+                | Some unused -> Error(BoundStatementError.Refused(BindingRefusal.UnusedParameter unused.Name))
+                | None ->
+                    match beyond with
+                    | Some name ->
+                        Error(
+                            refusedText $"parameter '%s{name}' is a decimal beyond DECIMAL(38, s), at most 38 digits"
+                        )
+                    | None ->
+                        let command = new SqlCommand(statement.Text)
+                        command.CommandType <- CommandType.Text
+
+                        match statement.Timeout with
+                        | Some span -> command.CommandTimeout <- max 1 (int (Math.Ceiling span.TotalSeconds))
+                        | None -> ()
+
+                        for name in used do
+                            command.Parameters.Add(parameter name supplied[name]) |> ignore
+
+                        Ok command)
+
 module SynapseDataSource =
 
     /// The `DataSourceConfig.Kind` this connector answers to.
@@ -154,18 +366,6 @@ module SynapseDataSource =
     /// `aad-default`. Azure SQL and Synapse share it.
     [<Literal>]
     let private SqlScope = "https://database.windows.net/.default"
-
-    // Driver exceptions can surface at the query `with` handler
-    // wrapped in `AggregateException`, so a direct `:? DbException`
-    // type test never fires — the class the first armed cloud-parity
-    // run (2026-08-27) proved live in the AWS companions. A wrapped
-    // `DbException` would escape to `Errors.guard` and lose the site's
-    // `SchemaMismatch` classification. Match through the wrapper:
-    // flatten and take the single inner exception a one-Task await
-    // carries; a bare exception passes through unchanged.
-    //
-    // Phase 972: the private `(|Unwrapped|)` this note introduced is now the
-    // shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
 
     /// Parse the `auth` ConnectionScope value.
     let parseAuth (raw: string option) : Result<SynapseAuth, IngestionError> =
@@ -290,28 +490,80 @@ module SynapseDataSource =
                     | SqlLogin, _ -> ()
 
                     do! connection.OpenAsync ct |> Async.AwaitTask
-                    return Ok(connection :> DbConnection)
+                    return Ok connection
                 with ex ->
                     connection.Dispose()
                     return Error(Errors.classify "Synapse connect" ex)
         }
 
-        let newCommand (settings: SynapseSourceSettings) (connection: DbConnection) (sql: string) =
-            let command = connection.CreateCommand()
-            command.CommandText <- sql
-            command.CommandType <- CommandType.Text
-
+        /// Set the source's command timeout on `command`, when it declares one.
+        let applyTimeout (settings: SynapseSourceSettings) (command: SqlCommand) =
             match settings.CommandTimeoutSeconds with
             | Some seconds -> command.CommandTimeout <- seconds
             | None -> ()
 
+        let newCommand (settings: SynapseSourceSettings) (connection: SqlConnection) (sql: string) =
+            let command = connection.CreateCommand()
+            command.CommandText <- sql
+            command.CommandType <- CommandType.Text
+            applyTimeout settings command
             command
+
+        /// Run `command` and read its result as CSV. The connection opened,
+        /// so the endpoint is reachable: a failure here is the statement or
+        /// the schema. A driver exception can arrive wrapped in an
+        /// `AggregateException`, so it is matched through `ProviderException`.
+        let readCsv (command: SqlCommand) : Async<Result<byte[], IngestionError>> = async {
+            let! ct = Async.CancellationToken
+
+            try
+                use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
+                let! bytes = Csv.ofReader reader
+                return Ok bytes
+            with ProviderException(ex: DbException) ->
+                return Error(SchemaMismatch $"Synapse query failed: %s{ex.Message}")
+        }
+
+        /// Run a bound statement. Everything `SynapseBinding.command` refuses
+        /// is refused before any connection opens; the values travel as
+        /// typed parameters, and the statement's timeout wins over the
+        /// source's.
+        let queryBound (ctx: DataSourceCallContext) (statement: BoundStatement) = async {
+            match readSettings ctx.Config.ConnectionScope with
+            | Error err -> return Error(BoundStatementError.Failed err)
+            | Ok settings ->
+                match SynapseBinding.command statement with
+                | Error refusal -> return Error refusal
+                | Ok command ->
+                    use command = command
+
+                    if statement.Timeout.IsNone then
+                        applyTimeout settings command
+
+                    let! result =
+                        Errors.guard "Synapse QueryBound" (fun () -> async {
+                            match! openConnection ctx settings with
+                            | Error err -> return Error err
+                            | Ok connection ->
+                                use connection = connection
+                                command.Connection <- connection
+                                return! readCsv command
+                        })
+
+                    return result |> Result.mapError BoundStatementError.Failed
+        }
+
+        let binds =
+            { new IBindsStatements with
+                member _.BindableKinds = SynapseBinding.bindableKinds
+                member _.QueryBound(ctx, statement) = queryBound ctx statement
+            }
 
         let readCatalogue
             (ctx: DataSourceCallContext)
             (context: string)
             (buildSql: SynapseSourceSettings -> Result<string, IngestionError>)
-            (configure: DbCommand -> unit)
+            (configure: SqlCommand -> unit)
             (project: DbDataReader -> 'T)
             : Async<Result<'T list, IngestionError>> =
             Errors.guard context (fun () -> async {
@@ -341,12 +593,12 @@ module SynapseDataSource =
                             return Ok(List.ofSeq rows)
             })
 
-        // Phase 834 — `Query` emits RFC 4180 CSV; declared, not implied.
+        // `Query` emits RFC 4180 CSV; declared, not implied.
         interface IDeclaresPayloadFormat with
             member _.PayloadFormat = PayloadFormat.Csv
 
-        // Phase 1017 — OPTIONAL: `sql-login` and `aad-token` read the stored
-        // secret (and refuse its absence themselves); `aad-default` takes
+        // OPTIONAL: `sql-login` and `aad-token` read the stored secret (and
+        // refuse its absence themselves); `aad-default` takes
         // `DefaultAzureCredential` and consults none.
         interface IDeclaresCredentialNeed with
             member _.CredentialNeed = CredentialNeed.Optional
@@ -354,10 +606,13 @@ module SynapseDataSource =
         interface IDataSource with
             member _.Kind = Kind
 
-            // Phase 1095 — a query against Synapse has no location a delivery can
-            // watch, and it emits only the CSV it declares: nothing beyond the five
-            // members (what the capability probes answered before the record).
-            member _.Capabilities = ConnectorCapabilities.none
+            // A query against Synapse has no location a delivery can watch,
+            // and it emits only the CSV it declares; it binds a statement's
+            // values.
+            member _.Capabilities = {
+                ConnectorCapabilities.none with
+                    Binds = Some binds
+            }
 
             member _.Connect(ctx) =
                 Errors.guard "Synapse Connect" (fun () -> async {
@@ -379,7 +634,7 @@ module SynapseDataSource =
                     ignore
                     (fun reader -> reader.GetValue 0 |> Csv.renderValue)
 
-            // Phase 1041 — a statement-shaped "table" (what `Query` passes
+            // A statement-shaped "table" (what `Query` passes
             // through verbatim) is described by its first result set through
             // `sp_describe_first_result_set`, the statement bound as a
             // parameter and never executed, so a statement ingested under a
@@ -437,19 +692,8 @@ module SynapseDataSource =
                             | Error err -> return Error err
                             | Ok connection ->
                                 use connection = connection
-                                let! ct = Async.CancellationToken
                                 use command = newCommand settings connection statement
-
-                                try
-                                    use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
-                                    let! bytes = Csv.ofReader reader
-                                    return Ok bytes
-                                with ProviderException(ex: DbException) ->
-                                    // The connection opened, so
-                                    // the endpoint is reachable —
-                                    // a failure HERE is the
-                                    // statement or the schema.
-                                    return Error(SchemaMismatch $"Synapse query failed: %s{ex.Message}")
+                                return! readCsv command
                 })
 
     /// Build the connector with an `ISecretStore`. Under `auth = sql`
