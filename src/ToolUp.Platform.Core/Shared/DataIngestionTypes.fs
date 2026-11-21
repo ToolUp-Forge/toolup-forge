@@ -362,6 +362,23 @@ module BoundStatement =
     /// The marker the statement text names `name` by.
     let marker (name: string) : string = "@" + name
 
+    /// Whether `statement`'s text names `@name` as a whole marker: the marker
+    /// not followed by a letter, digit or `_`. The connector's dialect still
+    /// judges whether that marker stands where a parameter can, so one inside
+    /// a literal is the connector's `UnusedParameter`.
+    let namesMarker (name: string) (statement: BoundStatement) : bool =
+        let text = statement.Text
+        let wanted = marker name
+
+        let namesAt (at: int) =
+            let next = at + wanted.Length
+
+            text.Substring(at, wanted.Length) = wanted
+            && not (next < text.Length && (isLetter text[next] || isDigit text[next]))
+
+        isValidName name
+        && Seq.exists namesAt (seq { 0 .. text.Length - wanted.Length })
+
     /// The refusals a statement earns before any connector reads it: a name
     /// that is not a parameter name, a name given twice, a value of a kind
     /// outside `bindable`, and a decimal whose text is not canonical. The
@@ -402,3 +419,99 @@ module BindingRefusal =
             $"parameter '{name}' is of kind {kind}, which the connector cannot bind"
         | BindingRefusal.NonCanonicalDecimal name ->
             $"parameter '{name}' is a decimal whose text is not canonical decimal text (DatasetDecimal.tryParse)"
+// ─── Statement policy ─────────────────────────────────
+//
+// Whether a source admits statement text at all is configuration, declared
+// per source in its `ConnectionScope`. It lives here, beside the bound
+// statement it points callers at, because two layers read it: a connector
+// before it sends text, and the platform before it defines a virtual
+// dataset over the source.
+
+/// Whether a source admits statement text at all, or only the bound
+/// form. Declared per source by the `statement_policy` key.
+[<RequireQualifiedAccess>]
+type StatementPolicy =
+    /// Any text handed to `Query` runs as a statement. The default, and
+    /// the behaviour of every source configured before the key existed.
+    | RawAllowed
+    /// `Query` admits a bare table name only; any other statement goes
+    /// through `IBindsStatements.QueryBound`, its values bound.
+    | BoundOnly
+
+/// Reading a source's statement policy.
+[<RequireQualifiedAccess>]
+module StatementPolicy =
+
+    /// The connection-scope key naming the statement policy.
+    [<Literal>]
+    let Key = "statement_policy"
+
+    /// Every policy, in declaration order.
+    let all: StatementPolicy list = [ StatementPolicy.RawAllowed; StatementPolicy.BoundOnly ]
+
+    /// The policy as the key spells it.
+    let token (policy: StatementPolicy) : string =
+        match policy with
+        | StatementPolicy.RawAllowed -> "raw-allowed"
+        | StatementPolicy.BoundOnly -> "bound-only"
+
+    /// Read the policy out of a `ConnectionScope`, case-insensitively. An
+    /// absent or whitespace-only key is `RawAllowed`; a value outside the
+    /// accepted set is refused by name, never read as the default.
+    let read (scope: Map<string, string>) : Result<StatementPolicy, string> =
+        match scope.TryFind Key with
+        | Some raw when not (String.IsNullOrWhiteSpace raw) ->
+            let normalised = raw.Trim().ToLowerInvariant()
+
+            match all |> List.tryFind (fun policy -> token policy = normalised) with
+            | Some policy -> Ok policy
+            | None ->
+                let accepted = String.Join(", ", all |> List.map token)
+                Error $"ConnectionScope key '%s{Key}' must be one of [%s{accepted}]; got '%s{raw}'"
+        | _ -> Ok StatementPolicy.RawAllowed
+
+// ─── Bound virtual bindings ───────────────────────────
+//
+// A virtual dataset version whose query is a bound statement. The statement's
+// text and its shared parameters are the same for every version of the
+// dataset; the watermark reaches the statement as one reserved parameter. So
+// two versions of one dataset carry one statement and differ in one value,
+// where a string binding renders the watermark into its text.
+
+/// A virtual dataset version's binding whose query is a bound statement.
+/// Immutable as a definition, exactly as `VirtualBinding` (GP 5): re-binding
+/// at a new watermark is a new version, and the same watermark re-read is
+/// reproducible to the source's `Fidelity`.
+type BoundVirtualBinding = {
+    /// `IDataSource.Kind` of the connector the version reads through. It
+    /// binds statements (`ConnectorCapabilities.Binds`).
+    SourceRef: string
+    /// The statement every version shares: its text, naming the watermark
+    /// as `@watermark` where it uses it, and the parameters that do not vary
+    /// with the vintage. None of them is named `watermark`.
+    Statement: BoundStatement
+    /// The vintage, typed: a snapshot id, a high-water timestamp, a query
+    /// hash. It is bound as the reserved parameter, of its own kind, which
+    /// the connector must declare it binds. Never a typed null.
+    Watermark: BoundValue
+    /// The source's snapshot-reproducibility contract for this watermark.
+    Fidelity: SnapshotFidelity
+}
+
+/// Building the statement a bound virtual binding runs.
+[<RequireQualifiedAccess>]
+module BoundVirtualBinding =
+
+    /// The reserved parameter the watermark is bound as.
+    [<Literal>]
+    let WatermarkParameter = "watermark"
+
+    /// The statement the connector runs at this binding's watermark: the
+    /// shared statement, with the watermark bound after its own parameters
+    /// when its text names `@watermark`. A statement that does not name it
+    /// runs as it is.
+    let statement (binding: BoundVirtualBinding) : BoundStatement =
+        if BoundStatement.namesMarker WatermarkParameter binding.Statement then
+            BoundStatement.bind WatermarkParameter binding.Watermark binding.Statement
+        else
+            binding.Statement

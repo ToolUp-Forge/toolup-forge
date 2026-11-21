@@ -3776,11 +3776,43 @@ ToolUp.Platform.Infra.UsageLog+UsageBatchFlusher.DropCount : System.Int64 { get 
 ToolUp.Platform.Infra.UsageLog+UsageBatchFlusher.Enqueue(ToolUp.Platform.Usage.UsageRecord) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Infra.UsageLog+UsageBatchFlusher.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.Infra.UsageLog+UsageBatchFlusher.StopAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.Infra.VirtualBindingRefusal (class)
+ToolUp.Platform.Infra.VirtualBindingRefusal.IsNotDeclared : System.Boolean { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.IsNullWatermark : System.Boolean { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.IsPolicyUnreadable : System.Boolean { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.IsRefused : System.Boolean { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.IsReservedParameter : System.Boolean { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.IsStatementTextRefused : System.Boolean { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.NullWatermark : ToolUp.Platform.Infra.VirtualBindingRefusal { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.ReservedParameter : ToolUp.Platform.Infra.VirtualBindingRefusal { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal+NotDeclared (class)
+ToolUp.Platform.Infra.VirtualBindingRefusal+NotDeclared.Item : ToolUp.Platform.Infra.CapabilityNotDeclared { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal+PolicyUnreadable (class)
+ToolUp.Platform.Infra.VirtualBindingRefusal+PolicyUnreadable.reason : System.String { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal+Refused (class)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Refused.Item : ToolUp.Platform.BindingRefusal { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal+StatementTextRefused (class)
+ToolUp.Platform.Infra.VirtualBindingRefusal+StatementTextRefused.sourceId : System.String { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags (class)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.NotDeclared : System.Int32 (literal)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.NullWatermark : System.Int32 (literal)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.PolicyUnreadable : System.Int32 (literal)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.ReservedParameter : System.Int32 (literal)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.StatementTextRefused : System.Int32 (literal)
+ToolUp.Platform.Infra.VirtualBindingRefusalModule (class)
+ToolUp.Platform.Infra.VirtualBindingRefusalModule.describe(ToolUp.Platform.Infra.VirtualBindingRefusal) : System.String
 ToolUp.Platform.Infra.VirtualDatasetReader (class)
 ToolUp.Platform.Infra.VirtualDatasetReader..ctor(ToolUp.Platform.Infra.IDataSource, ToolUp.Platform.Infra.IDatasetCodec, ToolUp.Platform.DatasetSchema, ToolUp.Platform.DataSourceConfig)
+ToolUp.Platform.Infra.VirtualDatasetReader.Bind(System.String, ToolUp.Platform.BoundVirtualBinding) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.Infra.VirtualDatasetReader.Bind(System.String, ToolUp.Platform.VirtualBinding) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.Infra.VirtualDatasetReader.Define(ToolUp.Platform.BoundVirtualBinding) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.VirtualBindingRefusal]
+ToolUp.Platform.Infra.VirtualDatasetReader.Define(ToolUp.Platform.VirtualBinding) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.VirtualBindingRefusal]
 ToolUp.Platform.Infra.VirtualDatasetReader.DeleteSpill(System.String, System.String, ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IAuditLog, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.Infra.VirtualDatasetReader.MaterialiseForHandoff(System.String, ToolUp.Platform.BoundVirtualBinding, ToolUp.Platform.Infra.IDataObjectStore, System.String, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel], ToolUp.Platform.IAuditLog, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.DatasetContentRef, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.Infra.VirtualDatasetReader.MaterialiseForHandoff(System.String, ToolUp.Platform.VirtualBinding, ToolUp.Platform.Infra.IDataObjectStore, System.String, System.TimeSpan, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel], ToolUp.Platform.IAuditLog, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Infra.DatasetContentRef, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.Infra.VirtualDatasetReader.ReadPage(System.String, ToolUp.Platform.BoundVirtualBinding, ToolUp.Platform.DatasetPageQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetPage, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.Infra.VirtualDatasetReader.ReadPage(System.String, ToolUp.Platform.VirtualBinding, ToolUp.Platform.DatasetPageQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetPage, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.Infra.VirtualDatasetReader.Schema : ToolUp.Platform.DatasetSchema { get }
 ToolUp.Platform.Infra.VirtualDatasetReaderModule (class)

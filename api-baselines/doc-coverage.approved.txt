@@ -70,7 +70,7 @@ ToolUp.ContentAuthoring 32/72
 ToolUp.ContentScanners.ClamAv 15/25
 ToolUp.DataSources.Athena 14/16
 ToolUp.DataSources.BigQuery 13/15
-ToolUp.DataSources.Common 281/519
+ToolUp.DataSources.Common 277/509
 ToolUp.DataSources.Csv 10/12
 ToolUp.DataSources.Excel 18/26
 ToolUp.DataSources.GitHub 10/17
@@ -140,11 +140,11 @@ ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 595/1073
 ToolUp.Platform.Client 2243/5649
-ToolUp.Platform.Core 8292/17223
+ToolUp.Platform.Core 8309/17247
 ToolUp.Platform.Server 3113/5586
 ToolUp.Platform.Server.Audit 376/696
 ToolUp.Platform.Server.Config 396/662
-ToolUp.Platform.Server.Infra 2271/3878
+ToolUp.Platform.Server.Infra 2285/3910
 ToolUp.Platform.Server.Jobs 933/1744
 ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 460/830
