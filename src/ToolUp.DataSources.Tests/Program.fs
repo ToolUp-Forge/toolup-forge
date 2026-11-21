@@ -14,6 +14,7 @@ let private registeredTests =
         SqlDataSourceTests.tests
         SqlBindingTests.tests
         SqlPostureTests.tests
+        SqlLeastPrivilegeTests.tests
         SynapseBindingTests.tests
         BigQueryDataSourceTests.tests
         AthenaDataSourceTests.tests

@@ -38,6 +38,16 @@ type SqlBackend =
     | Oracle
     | ClickHouse
 
+/// The two catalogue statements that say what the connected account may
+/// do, on a backend whose catalogue can say it. Both only read.
+type PrivilegeProbe = {
+    /// One row, one column: the account as the database names it.
+    Account: BoundStatement
+    /// One column, one row per privilege or role the account holds, in the
+    /// backend's own spelling.
+    Privileges: BoundStatement
+}
+
 module SqlDialect =
 
     /// Accepted `backend` values, in the spelling an operator writes
@@ -420,6 +430,140 @@ module SqlDialect =
             | Oracle -> nativeType
 
         TypeMap.classify (overridesFor backend) subject
+
+    // ─── Least-privilege probe ────────────────────────────────────
+    //
+    // What the connected account may do, asked of the backend's own
+    // catalogue. Every statement only reads: the probe exercises no
+    // privilege to find out whether it is held, because a probe that wrote
+    // to learn it could write would be the misuse it exists to find.
+
+    // The relations a reporting account reads, outside the system catalogues.
+    let private pgRelations = "pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+
+    let private pgUserSchema =
+        "n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'"
+
+    let private pgUserRelation =
+        $"c.relkind IN ('r', 'p', 'v', 'm', 'f') AND %s{pgUserSchema}"
+
+    let private pgPrivileges =
+        String.concat " UNION " [
+            "SELECT 'SUPERUSER' FROM pg_roles WHERE rolname = current_user AND rolsuper"
+            "SELECT 'CREATEROLE' FROM pg_roles WHERE rolname = current_user AND rolcreaterole"
+            "SELECT 'CREATEDB' FROM pg_roles WHERE rolname = current_user AND rolcreatedb"
+            "SELECT 'BYPASSRLS' FROM pg_roles WHERE rolname = current_user AND rolbypassrls"
+            "SELECT 'CREATE ON DATABASE' WHERE has_database_privilege(current_database(), 'CREATE')"
+            $"SELECT 'CREATE ON SCHEMA' FROM pg_namespace n WHERE %s{pgUserSchema} AND has_schema_privilege(n.oid, 'CREATE')"
+            $"SELECT p.privilege FROM %s{pgRelations} CROSS JOIN (VALUES ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('TRIGGER')) AS p(privilege) WHERE %s{pgUserRelation} AND has_table_privilege(c.oid, p.privilege)"
+            $"SELECT 'OWNER' FROM %s{pgRelations} WHERE %s{pgUserRelation} AND pg_has_role(c.relowner, 'USAGE')"
+        ]
+
+    /// The catalogue statements answering what the connected account may do
+    /// on `backend`, or why that backend's catalogue cannot answer.
+    let privilegeProbe (backend: SqlBackend) : Result<PrivilegeProbe, string> =
+        let probe account privileges =
+            Ok {
+                Account = BoundStatement.ofText account
+                Privileges = BoundStatement.ofText privileges
+            }
+
+        match backend with
+        | PostgreSql -> probe "SELECT current_user" pgPrivileges
+        | MySql ->
+            probe
+                "SELECT CURRENT_USER()"
+                ("SELECT DISTINCT CONCAT(p.PRIVILEGE_TYPE, IF(p.IS_GRANTABLE = 'YES', ' WITH GRANT OPTION', '')) FROM ("
+                 + "SELECT GRANTEE, PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.USER_PRIVILEGES"
+                 + " UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.SCHEMA_PRIVILEGES"
+                 + " UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.TABLE_PRIVILEGES"
+                 + " UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.COLUMN_PRIVILEGES) p"
+                 + " WHERE p.GRANTEE = CONCAT('''', SUBSTRING_INDEX(CURRENT_USER(), '@', 1), '''@''', SUBSTRING_INDEX(CURRENT_USER(), '@', -1), '''')")
+        | SqlServer ->
+            probe
+                "SELECT SUSER_SNAME()"
+                ("SELECT permission_name FROM fn_my_permissions(NULL, 'DATABASE')"
+                 + " UNION SELECT p.permission_name FROM sys.objects AS o"
+                 + " CROSS APPLY fn_my_permissions(QUOTENAME(SCHEMA_NAME(o.schema_id)) + '.' + QUOTENAME(o.name), 'OBJECT') AS p"
+                 + " WHERE o.is_ms_shipped = 0 AND o.type IN ('U', 'V')")
+        | Oracle ->
+            probe
+                "SELECT USER FROM DUAL"
+                ("SELECT PRIVILEGE FROM SESSION_PRIVS"
+                 + " UNION SELECT ROLE FROM SESSION_ROLES"
+                 + " UNION SELECT PRIVILEGE FROM ALL_TAB_PRIVS WHERE GRANTEE = USER OR GRANTEE IN (SELECT ROLE FROM SESSION_ROLES)"
+                 + " UNION SELECT 'OWNER' FROM DUAL WHERE EXISTS (SELECT 1 FROM USER_TABLES)")
+        | ClickHouse ->
+            probe
+                "SELECT currentUser()"
+                ("SELECT DISTINCT toString(access_type) FROM system.grants"
+                 + " WHERE is_partial_revoke = 0"
+                 + " AND (user_name = currentUser() OR role_name IN (SELECT role_name FROM system.enabled_roles))")
+        | Sqlite ->
+            Error "sqlite has no accounts: who may write is the database file's permissions, which no catalogue reports"
+
+    /// A word that names a change to data or schema, or the right to grant one.
+    let private changeWords =
+        set [
+            "INSERT"
+            "UPDATE"
+            "DELETE"
+            "CREATE"
+            "ALTER"
+            "DROP"
+            "TRUNCATE"
+            "TRIGGER"
+            "GRANT"
+        ]
+
+    /// Each backend's administrative privileges and roles that no change word names.
+    let private administrative (backend: SqlBackend) : Set<string> =
+        match backend with
+        | PostgreSql -> set [ "SUPERUSER"; "CREATEROLE"; "CREATEDB"; "BYPASSRLS"; "OWNER" ]
+        | MySql -> set [ "SUPER"; "FILE"; "SHUTDOWN"; "EVENT" ]
+        | SqlServer ->
+            set [
+                "CONTROL"
+                "TAKE OWNERSHIP"
+                "IMPERSONATE"
+                "ADMINISTER DATABASE BULK OPERATIONS"
+            ]
+        | Oracle -> set [ "DBA"; "SYSDBA"; "SYSOPER"; "BECOME USER"; "OWNER" ]
+        | ClickHouse -> set [ "ALL"; "ACCESS MANAGEMENT"; "OPTIMIZE" ]
+        | Sqlite -> Set.empty
+
+    /// Privileges a change word names that a reading account still needs.
+    let private needed (backend: SqlBackend) : Set<string> =
+        match backend with
+        | Oracle -> set [ "CREATE SESSION" ]
+        | PostgreSql
+        | MySql
+        | SqlServer
+        | Sqlite
+        | ClickHouse -> Set.empty
+
+    /// Whether `privilege`, as `backend` spells it, is more than a read-only
+    /// source needs: it changes data or schema, grants, or administers.
+    let isSurplusPrivilege (backend: SqlBackend) (privilege: string) : bool =
+        let name = (if isNull privilege then "" else privilege).Trim().ToUpperInvariant()
+        let words = name.Split([| ' '; '_' |], StringSplitOptions.RemoveEmptyEntries)
+
+        let administers =
+            (administrative backend).Contains name
+            || (backend = MySql && Array.contains "ADMIN" words)
+            || (backend = ClickHouse && Array.tryHead words = Some "SYSTEM")
+
+        not ((needed backend).Contains name)
+        && (administers || words |> Array.exists changeWords.Contains)
+
+    /// The privileges in `held` a read-only source does not need, once each,
+    /// in the database's spelling, ordered.
+    let surplusPrivileges (backend: SqlBackend) (held: string list) : string list =
+        held
+        |> List.filter (isSurplusPrivilege backend)
+        |> List.map _.Trim()
+        |> List.distinct
+        |> List.sort
 // ─── Bound statements, per backend (pure) ─────────────────────────
 //
 // A bound statement names each parameter `@name`; each backend's provider
