@@ -123,6 +123,33 @@ no write signals is polled through a `Clock` (`Clock.waitUntil`). A timeout is a
 a loaded machine never reaches it, never the mechanism the assertion relies on: a longer deadline only
 widens a race, it does not remove it.
 
+### A timing-sensitive test is proved under load
+
+A test that waits passes on a quiet machine whether it waits on the right thing or not, so a green run says
+nothing about the wait. Four tests went red on a busy developer machine with every other test green (Phase
+1374), and each was the same mistake: the test waited on the FIRST sign that the work happened and then
+read a state the work writes LAST.
+
+- **Wait on the end, not the start.** A fired job writes its run row and only then folds the outcome into
+  its definition; an assistant turn writes the conversation back and only then reports its terminal
+  status. Wait on the last write, or on the producer's own signal that it finished (Quartz's
+  `JobWasExecuted`, the turn's terminal status through `GetTaskStatus`), never on an earlier one.
+- **A fixture stops what writes before it deletes what is written to.** A scheduler fixture stops its
+  scheduler, which waits for the dispatches in flight; a store with a background flush is disposed, and
+  waits for a flush already writing. See [`docs/testing/temp-directories.md`](../testing/temp-directories.md).
+- **A fixed sleep proves only a negative.** A quiet window before asserting that something did NOT happen
+  is a sleep by design. A sleep followed by an assertion that something DID happen stands in for a signal:
+  wait on the signal instead.
+
+**The method.** Before fixing such a test, make it fail on demand: put the delay the loaded machine would
+have caused at the point the test races (a store whose definition write lags, a blob store whose writes
+stay visible before the call returns, a disk write that takes half a second, a handler that is still
+running when the case ends), and watch the unfixed test go red. Then fix the wait and run the same
+reproduction again. Keep the delay in the test as a double (`LaggingFoldStore`, the `writeLag` of
+`ReadRecordingStorage`, `SlowWriteStorage`): a test that runs over the pessimal double on every run cannot
+quietly regress to the early wait. Then run the fixed tests repeatedly while the machine is busy (a
+parallel solution build beside them), enough times that a race losing one run in ten would have shown.
+
 ## Audit checklist
 
 Every `let mutable` at module scope in `toolup-forge/src/` MUST fall into one of two classes:
@@ -802,6 +829,50 @@ its author decides deliberately whether the new field closes a gap.
 `verify-all` job; a repository variable names the corpus repository and the job fails by name when
 it is unset. The specification's home is public, so no read token is involved — the checkout uses
 the job's default credentials, and fork PRs run the family like any other job.
+
+### Which revision a machine certifies against, and the minting rules the corpus registers (Phase 1376)
+
+**CI checks the specification out at the pinned revision, never at its head.** The `ref:` of the
+corpus checkout in `checks.yml` is the same commit as the harness's `Pin.commit`, and the harness's
+`pin` list fails when the two disagree, so a specification change cannot redden this repository's
+CI before someone here has read it and moved the pin.
+
+**A developer machine gets the pinned revision in one of three ways**, tried in this order:
+
+1. `TOOLUP_MODEL_EXECUTION_CORPUS` names a corpus checkout, which is used exactly as found. Point it
+   at a checkout at `Pin.commit`; a checkout beside the clone does it,
+   `git -C <clone> worktree add ../fuaran-model-execution-spec-pin <Pin.commit>`, with the variable set
+   to that worktree's `wire-fixtures` directory.
+2. With the variable unset, the corpus the search finds is used as it stands when its manifest hashes
+   to `Pin.manifestDigest`.
+3. When it does not, and the clone it sits in CONTAINS `Pin.commit` (the usual case after a pull moves
+   the clone past the pin), the harness reads the corpus at `Pin.commit` out of the clone's own history
+   (one `git archive` into a temporary directory, removed when the run exits) and certifies against
+   that. The run prints one line saying so, naming the clone and the revision. A clone that does not
+   contain the pin, or a corpus whose bytes at the pin do not hash to `Pin.manifestDigest`, still fails
+   the `pin` list by name, and the failure carries the remedy above.
+
+Reading the pin from history is preferred to failing because a clone at the specification's head is the
+normal state of a machine that syncs the workspace, and the failure it used to produce was the same four
+tests every time, on every gate that machine ran, with a remedy each gate had to carry by hand.
+
+**The spec-hash family is partitioned by the rule each vector names.** The specification registers two
+minting rules (its §7.4): `canonical-json-sha256-v1`, its own §4.5, and `compute-pipeline-sha256-v1`,
+the pipeline hash of the Compute pipeline wire specification. A vector is recomputed under the rule its
+own submission's `specHashAlgorithm` names, and a vector naming a rule the harness has no recomputation
+for fails by name; none is skipped and none is run under the other rule. The run prints how many vectors
+fell under each rule, and the non-vacuity count covers every vector the manifest enumerates.
+
+**This repository does not implement the pipeline hash.** It mints under neither rule in shipped code: an
+executor stores the `specHash` it was handed and never re-derives it (§4.2), so a deployment accepts a
+submission minted under the pipeline hash today and keys it by the hash as handed. The harness certifies
+that rule's vectors as **carriage**, which is all the specification asks of them (§9.4): each payload is
+already the canonical pipeline document, so its digest is the SHA-256 of its bytes, and the vectors prove
+the submission names the rule and carries the hash of the document it travels with. Minting a pipeline
+hash belongs to the Compute package (`Pipeline.hash`), which is not in the Compute release this
+repository pins; the encoder is certified against the pipeline specification's own corpus, not here. The
+rule lands where this repository first has to mint one, which is Phase 1279, when the composition
+profile carries a Compute payload, and there it calls the package rather than writing a second encoder.
 
 ## The template gates use a PRIVATE packages folder, never a guessed shared one (Phase 903)
 

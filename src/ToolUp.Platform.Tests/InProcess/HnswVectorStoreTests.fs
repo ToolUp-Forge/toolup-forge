@@ -50,6 +50,50 @@ let private newStore () =
 
     store :> IVectorStore, disposingBoth store tempDir
 
+/// A blob store whose every write takes `lag` before it reaches `inner`,
+/// counting the writes still in flight. The lag is a blocking wait, not a
+/// cancellable one, because a write already handed to the disk is not
+/// cancelled by anything the caller does: this is a slow disk, not a slow
+/// caller.
+type private SlowWriteStorage(inner: IBlobStorage, lag: TimeSpan) =
+    let mutable inFlight = 0
+    let started = new Threading.ManualResetEventSlim(false)
+
+    /// Set once the first write has begun.
+    member _.WriteStarted = started
+
+    /// Writes begun and not yet finished.
+    member _.WritesInFlight = Threading.Volatile.Read(&inFlight)
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) = async {
+            Threading.Interlocked.Increment(&inFlight) |> ignore
+
+            try
+                started.Set()
+                Threading.Thread.Sleep lag
+                return! inner.Upload(container, blobName, content)
+            finally
+                Threading.Interlocked.Decrement(&inFlight) |> ignore
+        }
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
 let private newInMemoryStore () =
     let tempDir = TempDir.create "inmem-vec-test"
     let storage = LocalFileStorage.LocalFileStorage(tempDir.Path) :> IBlobStorage
@@ -160,6 +204,30 @@ let private searchFor (store: IVectorStore) (i: int) (topK: int) = async {
 let tests =
     testSequenced
     <| testList "HnswVectorStore" [
+        // A fixture deletes its directory right after disposing the store.
+        // A flush still writing at that moment lands after the delete and
+        // creates the directory again, so the store must not return from
+        // Dispose until that write is over.
+        testAsync "Dispose returns only once a flush already writing has finished" {
+            use dir = TempDir.create "hnsw-test"
+
+            let storage =
+                SlowWriteStorage(LocalFileStorage.LocalFileStorage(dir.Path), TimeSpan.FromMilliseconds 500.0)
+
+            let store =
+                new HnswVectorStore.HnswVectorStore(storage, Logger.silent, flushIntervalMs = 50)
+
+            do! (store :> IVectorStore).Upsert Platform "p-1" platformVec (chunk "platform note" "P")
+
+            Expect.isTrue
+                (storage.WriteStarted.Wait(TimeSpan.FromSeconds 60.0))
+                "the flush loop began writing the dirty scope"
+
+            (store :> IDisposable).Dispose()
+
+            Expect.equal storage.WritesInFlight 0 "no write is still in flight once Dispose has returned"
+        }
+
         testAsync "scope isolation: query against Team A returns no Team B chunks" {
             let store, dispose = newStore ()
 

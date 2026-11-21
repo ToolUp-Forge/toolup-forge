@@ -362,7 +362,7 @@ let private seeder (target: Target) : IDataSourceContract.Seeder =
 
 /// How the laws speak `backend`: a select of the parameters, and a cell read
 /// back as the kind it was bound as.
-let private harness (backend: SqlBackend) : IDataSourceContract.BindingHarness =
+let internal harness (backend: SqlBackend) : IDataSourceContract.BindingHarness =
     let select (names: string list) =
         let columns = names |> List.map BoundStatement.marker |> String.concat ", "
 

@@ -7,6 +7,10 @@ ToolUp.DataSources.Sql.BackendStatement (class)
 ToolUp.DataSources.Sql.BackendStatement..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Sql.ProviderBinding])
 ToolUp.DataSources.Sql.BackendStatement.Bindings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Sql.ProviderBinding] { get }
 ToolUp.DataSources.Sql.BackendStatement.Text : System.String { get }
+ToolUp.DataSources.Sql.PrivilegeProbe (class)
+ToolUp.DataSources.Sql.PrivilegeProbe..ctor(ToolUp.Platform.BoundStatement, ToolUp.Platform.BoundStatement)
+ToolUp.DataSources.Sql.PrivilegeProbe.Account : ToolUp.Platform.BoundStatement { get }
+ToolUp.DataSources.Sql.PrivilegeProbe.Privileges : ToolUp.Platform.BoundStatement { get }
 ToolUp.DataSources.Sql.ProviderBinding (class)
 ToolUp.DataSources.Sql.ProviderBinding..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.BoundValue)
 ToolUp.DataSources.Sql.ProviderBinding.Name : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -43,8 +47,39 @@ ToolUp.DataSources.Sql.SqlDataSource.composeConnectionString(System.String, Micr
 ToolUp.DataSources.Sql.SqlDataSource.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Sql.SqlDataSource.createWithKind(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore]) : ToolUp.Platform.Infra.IDataSource
 ToolUp.DataSources.Sql.SqlDataSource.createWithoutSecrets() : ToolUp.Platform.Infra.IDataSource
+ToolUp.DataSources.Sql.SqlDataSource.readOnlyConnectionString(ToolUp.DataSources.Sql.SqlBackend, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDataSource.readSettings(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDataSource.resolveStatement(ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbe (class)
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbe..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.DataSourceCallContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit])
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule (class)
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.ValidatorName : System.String (literal)
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.deadline : System.TimeSpan { get }
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.line(System.String, ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading) : System.String
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.probe(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Platform.Infra.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading]
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.probes(ToolUp.Platform.DataSourceConfig) : System.Boolean
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.result(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading]]) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.skipped(ToolUp.Platform.DataSourceConfig) : System.String
+ToolUp.DataSources.Sql.SqlDataSource+LeastPrivilegeProbeModule.validate(System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.DataSourceCallContext]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConfigValidation+ValidationResult]
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading (class)
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading.IsNotProbed : System.Boolean { get }
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading.IsProbed : System.Boolean { get }
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading.Tag : System.Int32 { get }
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+NotProbed (class)
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+NotProbed.reason : System.String { get }
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+Probed (class)
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+Probed.account : System.String { get }
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+Probed.surplus : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+Tags (class)
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+Tags.NotProbed : System.Int32 (literal)
+ToolUp.DataSources.Sql.SqlDataSource+PrivilegeReading+Tags.Probed : System.Int32 (literal)
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflight (class)
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflight..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit])
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule (class)
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.ValidatorName : System.String (literal)
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.flagged(ToolUp.Platform.DataSourceConfig) : System.Boolean
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.lines(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.DataSources.Sql.SqlDataSource+SourcePosturePreflightModule.result(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig]) : ToolUp.Platform.ConfigValidation+ValidationResult
 ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings (class)
 ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings..ctor(ToolUp.DataSources.Sql.SqlBackend, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.DataSources.Sql.SqlDataSource+SqlSourceSettings.Backend : ToolUp.DataSources.Sql.SqlBackend { get }
@@ -57,11 +92,14 @@ ToolUp.DataSources.Sql.SqlDialect.backendName(ToolUp.DataSources.Sql.SqlBackend)
 ToolUp.DataSources.Sql.SqlDialect.columnsSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BoundStatement, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDialect.defaultSchema(ToolUp.DataSources.Sql.SqlBackend) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.DataSources.Sql.SqlDialect.isSafeIdentifier(System.String) : System.Boolean
+ToolUp.DataSources.Sql.SqlDialect.isSurplusPrivilege(ToolUp.DataSources.Sql.SqlBackend, System.String) : System.Boolean
 ToolUp.DataSources.Sql.SqlDialect.listTablesSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.BoundStatement, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDialect.nullableFromToken(ToolUp.DataSources.Sql.SqlBackend, System.String) : System.Boolean
 ToolUp.DataSources.Sql.SqlDialect.parseBackend(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Sql.SqlBackend, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Sql.SqlDialect.privilegeProbe(ToolUp.DataSources.Sql.SqlBackend) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Sql.PrivilegeProbe, System.String]
 ToolUp.DataSources.Sql.SqlDialect.requireIdentifier(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Sql.SqlDialect.selectAllSql(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Sql.SqlDialect.surplusPrivileges(ToolUp.DataSources.Sql.SqlBackend, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.DataSources.Sql.SqlDialect.toColumnType(ToolUp.DataSources.Sql.SqlBackend, System.String) : DataManagementTypes+ColumnType
 ToolUp.DataSources.Sql.StatementPiece (class)
 ToolUp.DataSources.Sql.StatementPiece.IsMarker : System.Boolean { get }

@@ -161,8 +161,41 @@ let private staysFalseFor (window: TimeSpan) (predicate: unit -> bool) : bool =
 let private settle (window: TimeSpan) =
     Clock.system.Delay window |> Async.RunSynchronously
 
-/// The catch-up fixture over a store rooted in `dir`; the caller owns `dir`.
-let private buildCatchUpFixture (dir: TempDir) =
+/// Stop `scheduler`, waiting for every dispatch still in flight. A fixture
+/// does this before it deletes the directory the scheduler's store writes
+/// into: a dispatch outlives the case that started it (the case waits for
+/// the handler or the run row, and the dispatch then folds the outcome into
+/// the definition), and a write landing after the delete creates the
+/// directory again. The stop cancels the dispatches first, so they end at
+/// their next bind; the window (`Recording.defaultBackstop`) is a hang guard,
+/// as a host's shutdown window is, never a schedule.
+let private stopScheduler (scheduler: JobScheduler.InProcessJobScheduler) =
+    use window = new Threading.CancellationTokenSource(Recording.defaultBackstop)
+
+    scheduler.StopAsync window.Token |> Async.AwaitTask |> Async.RunSynchronously
+
+/// The catch-up fixture: a scheduler over a store rooted in a directory the
+/// fixture owns. Disposing it stops the scheduler (`stopScheduler`), then
+/// deletes the directory.
+type private CatchUpFixture = {
+    Dir: TempDir
+    Storage: IBlobStorage
+    EventStore: IEventStore
+    Scheduler: JobScheduler.InProcessJobScheduler
+    Watermark: JobTriggerWatermark.JobTriggerWatermark
+} with
+
+    interface IDisposable with
+        member fixture.Dispose() =
+            try
+                stopScheduler fixture.Scheduler
+            finally
+                (fixture.Dir :> IDisposable).Dispose()
+
+/// A catch-up fixture over a fresh directory; dispose it to stop the
+/// scheduler and delete the directory.
+let private catchUpFixture () : CatchUpFixture =
+    let dir = TempDir.create "jobsched-catchup"
     let storage = LocalFileStorage.LocalFileStorage(dir.Path) :> IBlobStorage
     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
     let jobStore = JobStore.create storage eventStore
@@ -191,7 +224,13 @@ let private buildCatchUpFixture (dir: TempDir) =
                     TriggerWatermark = Some watermark
             }
 
-    storage, eventStore, scheduler, watermark
+    {
+        Dir = dir
+        Storage = storage
+        EventStore = eventStore
+        Scheduler = scheduler
+        Watermark = watermark
+    }
 
 let private scheduleOnEventJob
     (scheduler: IJobScheduler)
@@ -250,8 +289,11 @@ let private catchUpTests =
         }
 
         test "watermark advance is monotonic and round-trips through flush + load" {
-            use dir = TempDir.create "jobsched-catchup"
-            let storage, _, _, watermark = buildCatchUpFixture dir
+            use fixture = catchUpFixture ()
+
+            let storage, _, _, watermark =
+                fixture.Storage, fixture.EventStore, fixture.Scheduler, fixture.Watermark
+
             let scope = freshScope ()
             let newer = eventAt scope "e" DateTime.UtcNow
             let older = eventAt scope "e" (DateTime.UtcNow.AddMinutes -5.0)
@@ -274,8 +316,11 @@ let private catchUpTests =
         }
 
         test "corrupt cursor blob loads as Unreadable, never Missing" {
-            use dir = TempDir.create "jobsched-catchup"
-            let storage, _, _, watermark = buildCatchUpFixture dir
+            use fixture = catchUpFixture ()
+
+            let storage, _, _, watermark =
+                fixture.Storage, fixture.EventStore, fixture.Scheduler, fixture.Watermark
+
             let scope = freshScope ()
 
             storage.Upload("_platform", $"job-triggers/{scope}.cursor", Encoding.UTF8.GetBytes "not-json{")
@@ -288,8 +333,11 @@ let private catchUpTests =
         }
 
         test "startup scan dispatches the actual missed event past the persisted cursor" {
-            use dir = TempDir.create "jobsched-catchup"
-            let _, eventStore, scheduler, watermark = buildCatchUpFixture dir
+            use fixture = catchUpFixture ()
+
+            let _, eventStore, scheduler, watermark =
+                fixture.Storage, fixture.EventStore, fixture.Scheduler, fixture.Watermark
+
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "inventory.moved"
@@ -314,8 +362,11 @@ let private catchUpTests =
         }
 
         test "first enable seeds the cursor to now and replays no history" {
-            use dir = TempDir.create "jobsched-catchup"
-            let storage, eventStore, scheduler, _ = buildCatchUpFixture dir
+            use fixture = catchUpFixture ()
+
+            let storage, eventStore, scheduler, _ =
+                fixture.Storage, fixture.EventStore, fixture.Scheduler, fixture.Watermark
+
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "inventory.moved"
@@ -342,8 +393,11 @@ let private catchUpTests =
         }
 
         test "events behind the cursor beyond the overlap window are not replayed" {
-            use dir = TempDir.create "jobsched-catchup"
-            let _, eventStore, scheduler, watermark = buildCatchUpFixture dir
+            use fixture = catchUpFixture ()
+
+            let _, eventStore, scheduler, watermark =
+                fixture.Storage, fixture.EventStore, fixture.Scheduler, fixture.Watermark
+
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "inventory.moved"
@@ -364,8 +418,11 @@ let private catchUpTests =
         }
 
         test "sweep dispatches settled events past the in-memory cursor and skips fresh ones" {
-            use dir = TempDir.create "jobsched-catchup"
-            let _, eventStore, scheduler, watermark = buildCatchUpFixture dir
+            use fixture = catchUpFixture ()
+
+            let _, eventStore, scheduler, watermark =
+                fixture.Storage, fixture.EventStore, fixture.Scheduler, fixture.Watermark
+
             let scope = freshScope ()
             let handler = RecordingHandler()
             scheduleOnEventJob (scheduler :> IJobScheduler) handler scope "sweep.event"
@@ -393,6 +450,56 @@ let private catchUpTests =
                     | other -> failtestf "expected ScheduledByEvent, got %A" other)
 
             Expect.equal dispatchedIds [ settled.Id ] "exactly the settled event, not the fresh one"
+        }
+
+        test "a fixture disposed while its dispatch still runs leaves no directory behind" {
+            let started = new Threading.ManualResetEventSlim(false)
+
+            let slow =
+                { new IJobHandler with
+                    member _.Execute _ = async {
+                        started.Set()
+                        do! Async.Sleep 500
+                        return Success
+                    }
+                }
+
+            let fixture = catchUpFixture ()
+            let path = fixture.Dir.Path
+            let scheduler = fixture.Scheduler :> IJobScheduler
+            let scope = freshScope ()
+            scheduler.RegisterHandler("catchup-slow-handler", slow)
+
+            let registration: JobRegistration = {
+                ScopeId = scope
+                Handler = "catchup-slow-handler"
+                Payload = ""
+                Trigger = Manual
+                Idempotency = None
+                RetryPolicy = JobRetryPolicy.defaults
+                ShardKey = None
+                Precision = Minute
+                CreatedBy = "test"
+                Tags = Map.empty
+            }
+
+            let jobId =
+                match scheduler.Schedule registration |> Async.RunSynchronously with
+                | Ok outcome -> ScheduleOutcome.jobId outcome
+                | Error e -> failtestf "schedule failed: %A" e
+
+            match scheduler.TriggerOnce(scope, jobId, UserId "test") |> Async.RunSynchronously with
+            | Ok() -> ()
+            | Error e -> failtestf "TriggerOnce: %A" e
+
+            Expect.isTrue (started.Wait(TimeSpan.FromSeconds 60.0)) "the dispatch reached the handler"
+            (fixture :> IDisposable).Dispose()
+
+            // The handler would have returned, and its dispatch written the
+            // run, well inside this window.
+            Expect.isTrue
+                (staysFalseFor (TimeSpan.FromMilliseconds 1500.0) (fun () -> Directory.Exists path))
+                "nothing wrote into the directory after the fixture deleted it"
         }
     ]
 
@@ -540,8 +647,9 @@ type private RecordingChannel() =
         member _.Subscribe(_, _) = async { return Guid.NewGuid() }
         member _.Unsubscribe(_) = async { return () }
 
-/// Disposing the fixture deletes its directory. Two fixtures built over one
-/// directory (the restart device) share it, and disposing either deletes it.
+/// Disposing the fixture stops its scheduler (`stopScheduler`), then deletes
+/// its directory. Two fixtures built over one directory (the restart device)
+/// share it, and disposing either deletes it.
 type private HandoffFixture = {
     Dir: TempDir
     Store: IJobStore
@@ -552,7 +660,11 @@ type private HandoffFixture = {
 } with
 
     interface IDisposable with
-        member fixture.Dispose() = (fixture.Dir :> IDisposable).Dispose()
+        member fixture.Dispose() =
+            try
+                stopScheduler fixture.Scheduler
+            finally
+                (fixture.Dir :> IDisposable).Dispose()
 
 /// Construct a scheduler wired to `dispatcher` over `dir`. Passing an
 /// explicit `IDistributedLock` (rather than letting the scheduler default
@@ -1203,6 +1315,12 @@ let private handoffTests =
                     : JobScheduler.SchedulerDeps)
                     JobScheduler.SchedulerOptions.defaults
 
+            // Disposed before `dir`: the scheduler stops before its directory goes.
+            use _stopped =
+                { new IDisposable with
+                    member _.Dispose() = stopScheduler scheduler
+                }
+
             let handler = RecordingHandler()
             let iface = scheduler :> IJobScheduler
             iface.RegisterHandler("plain", handler)
@@ -1794,7 +1912,11 @@ type private PinFixture = {
 } with
 
     interface IDisposable with
-        member fixture.Dispose() = (fixture.Dir :> IDisposable).Dispose()
+        member fixture.Dispose() =
+            try
+                stopScheduler fixture.Scheduler
+            finally
+                (fixture.Dir :> IDisposable).Dispose()
 
 let private pinStore (fixture: PinFixture) = fixture.Store :> IJobStore
 

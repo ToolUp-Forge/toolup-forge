@@ -15,6 +15,10 @@ ToolUp.DataSources.Synapse.SynapseAuth+Tags (class)
 ToolUp.DataSources.Synapse.SynapseAuth+Tags.AadDefault : System.Int32 (literal)
 ToolUp.DataSources.Synapse.SynapseAuth+Tags.AadToken : System.Int32 (literal)
 ToolUp.DataSources.Synapse.SynapseAuth+Tags.SqlLogin : System.Int32 (literal)
+ToolUp.DataSources.Synapse.SynapseBinding (class)
+ToolUp.DataSources.Synapse.SynapseBinding.bindableKinds : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DatasetDType] { get }
+ToolUp.DataSources.Synapse.SynapseBinding.command(ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.Data.SqlClient.SqlCommand, ToolUp.Platform.Infra.BoundStatementError]
+ToolUp.DataSources.Synapse.SynapseBinding.markers(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String]
 ToolUp.DataSources.Synapse.SynapseCatalogue (class)
 ToolUp.DataSources.Synapse.SynapseCatalogue.columnsSql(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Synapse.SynapseCatalogue.describeStatementSql : System.String (literal)
