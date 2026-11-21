@@ -68,15 +68,15 @@ let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : A
 /// `IDataObjectStore` object id derived from `(sourceId, table)`.
 /// Double-underscore separator avoids slash collision with the
 /// `IDataObjectStore` blob layout (`{container}/objects/{objectId}/...`).
-/// Mirrors the `ResultObjectId.make` pattern from Phase 8.
+/// Mirrors the `ResultObjectId.make` pattern.
 let private resultObjectId (sourceId: DataSourceId) (table: string) = $"_dataingestion__{sourceId}__{table}"
 
-/// Phase 1041 — the longest result object id this ingestor derives: one
+/// The longest result object id this ingestor derives: one
 /// path component on a file-backed or hierarchical blob store.
 [<Literal>]
 let MaxResultNameLength = 255
 
-/// Phase 1041 — refuse, before anything is queried, an ingestion whose
+/// Refuse, before anything is queried, an ingestion whose
 /// derived result name is past the path-component limit. Unlabelled, the
 /// name is the table — for a statement-shaped table, the statement — so the
 /// refusal names the caller-label option; without it the run would fail
@@ -101,10 +101,10 @@ let private resultNameRefusal (sourceId: DataSourceId) (table: string) (label: I
                     $"the caller label '{label.Value}' on source '{sourceId}' derives a result name of {objectId.Length} characters, past the {MaxResultNameLength}-character path-component limit; shorten the label or the source id. Nothing was queried or persisted"
             )
 
-/// Phase 834 — the payload formats this ingestor stores. It holds payload
+/// The payload formats this ingestor stores. It holds payload
 /// bytes opaquely, so "handles" means "a format this SDK names and a
 /// reader can be told about": `Csv` and `Json`. `Other` is refused —
-/// unless (Phase 837) the deployment composed an `IPayloadReader` for it,
+/// unless the deployment composed an `IPayloadReader` for it,
 /// in which case a module reading the payload has somewhere to ask.
 let private handlesPayloadFormat (readers: IPayloadReader list) (format: PayloadFormat) =
     match format with
@@ -112,7 +112,7 @@ let private handlesPayloadFormat (readers: IPayloadReader list) (format: Payload
     | PayloadFormat.Json -> true
     | PayloadFormat.Other _ -> PayloadReader.handles readers format
 
-/// Phase 837 — the connector's native emission, when it offers one AND the
+/// The connector's native emission, when it offers one AND the
 /// deployment composed a reader for that format. `None` means the
 /// connector's `Query` (its declared format) is used exactly as before, so
 /// a deployment composing no native reader is byte-for-byte unchanged.
@@ -122,7 +122,7 @@ let private nativeEmission (readers: IPayloadReader list) (connector: IDataSourc
 
 // ─── DataIngestor ─────────────────────────────────────────────────
 //
-// Phase 837 — native payload formats. `payloadReaders` are the
+// Native payload formats. `payloadReaders` are the
 // deployment's composed `IPayloadReader`s. A connector declaring
 // `Capabilities.Native` whose native format has a composed reader is
 // queried through `QueryNative`, and its bytes are stored UNCHANGED with
@@ -132,22 +132,31 @@ let private nativeEmission (readers: IPayloadReader list) (connector: IDataSourc
 // Default `IDataIngestor` implementation. Resolves the config + the
 // matching connector + the credential (via `ISecretStore` thunk
 // pattern, only when the connector's declared `CredentialNeed` says it
-// takes one — Phase 1017), runs `Connect → GetSchema → Query`, persists the schema as its own
-// content-addressed object (Phase 832), writes the resulting bytes
+// takes one), runs `Connect → GetSchema → Query`, persists the schema as its own
+// content-addressed object, writes the resulting bytes
 // through `IDataObjectStore.Save` with `Versioned` policy so each
-// refresh creates a new version while preserving history (Phase 7's
+// refresh creates a new version while preserving history (the store's
 // immutability guarantee).
 //
 // Persistence: one `IngestionRun` blob per attempt under
 // `_platform/data-sources/{scopeId}/runs/{sourceId}/{ts}-{runId:N}.json`.
 // ISO-ordered timestamp prefix means `GetRecentRuns(_, _, count)` is
 // `List + sortDescending + truncate count + Download` — the same
-// hot-path shape as Phase 9b's `IJobStore.GetRecentRuns`.
+// hot-path shape as `IJobStore.GetRecentRuns`.
 //
 // Lifecycle events: `IngestionRunCompleted` / `IngestionRunFailed`
 // emitted to `IEventStore` under `SourceModule = DataIngestion-
 // SourceModule` ("_platform.dataingestion") so audit + webhook
 // subscribers pick them up automatically.
+//
+// Query audit: every statement the ingestor sends to a connector, and every
+// one it refuses for the source's statement-text audit opt-in, is recorded as
+// one `DataSourceQueried` row in `audit`, attributed to the ingestor (it runs
+// as platform work and holds no principal). The answer's size and hash are
+// recorded; its rows are not counted, because the ingestor never parses the
+// payload. A row the log refuses fails the run before the payload is
+// persisted. Built without a log, the ingestor composes `NoOpAuditLog` and
+// pays nothing.
 
 type DataIngestor
     (
@@ -158,12 +167,13 @@ type DataIngestor
         connectors: IDataSource list,
         storage: IBlobStorage,
         logger: ILogger,
-        payloadReaders: IPayloadReader list
+        payloadReaders: IPayloadReader list,
+        audit: IAuditLog
     ) =
 
     let connectorByKind = connectors |> List.map (fun c -> c.Kind, c) |> Map.ofList
 
-    // Best-effort by design (Phase 863): the run history is a query-side
+    // Best-effort by design: the run history is a query-side
     // copy — `emitEvent` below carries the same serialised run to
     // `IEventStore`, the durable record. A refused write is logged at Warn
     // exactly as a raised one is.
@@ -189,7 +199,7 @@ type DataIngestor
             logger.Warn $"[DataIngestor] failed to write {eventType} event for run {run.RunId}: {ex.Message}"
     }
 
-    // Phase 1017 — step 3, read per the connector's declared
+    // Step 3, read per the connector's declared
     // `CredentialNeed`. NONE never touches the secret store, so a store
     // outage cannot fail a source that reads no credential; OPTIONAL (and
     // an undeclared connector) reads it with `None` permitted, as before;
@@ -227,10 +237,10 @@ type DataIngestor
         JobId = jobId
     }
 
-    // Phase 832 — fetch the connector's schema. Never fails the run: an
+    // Fetch the connector's schema. Never fails the run: an
     // `Error`, a throw, or a "schema not available" answer (`Columns = []`)
     // all read as "no schema", and the payload then saves exactly as it did
-    // before Phase 832 (no `schema-ref`).
+    // before the schema was recorded (no `schema-ref`).
     let fetchSchema (connector: IDataSource) (ctx: DataSourceCallContext) (table: string) = async {
         try
             match! connector.GetSchema(ctx, table) with
@@ -248,7 +258,7 @@ type DataIngestor
             return None
     }
 
-    // Phase 832 — persist the schema as its own content-addressed object,
+    // Persist the schema as its own content-addressed object,
     // BEFORE the payload that references it (so a dangling `schema-ref`
     // cannot occur; the worst case is an unreferenced schema version). The
     // schema object for `(sourceId, table)` gains a version only when the
@@ -294,8 +304,8 @@ type DataIngestor
             return! saved None
     }
 
-    /// The pre-Phase-837 shape: no payload reader composed, so every
-    /// connector is queried through `IDataSource.Query`.
+    /// No payload reader composed, so every connector is queried through
+    /// `IDataSource.Query`; no audit log composed, so no query row is recorded.
     new
         (
             configStore: IDataSourceConfigStore,
@@ -306,9 +316,34 @@ type DataIngestor
             storage: IBlobStorage,
             logger: ILogger
         ) =
-        DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, [])
+        DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, [], NoOpAuditLog())
 
-    // Phase 1041 — `statement` is what the connector runs, and reaches
+    /// The deployment's payload readers, and no audit log composed, so no
+    /// query row is recorded.
+    new
+        (
+            configStore: IDataSourceConfigStore,
+            secretStore: ISecretStore,
+            objectStore: IDataObjectStore,
+            eventStore: IEventStore,
+            connectors: IDataSource list,
+            storage: IBlobStorage,
+            logger: ILogger,
+            payloadReaders: IPayloadReader list
+        ) =
+        DataIngestor(
+            configStore,
+            secretStore,
+            objectStore,
+            eventStore,
+            connectors,
+            storage,
+            logger,
+            payloadReaders,
+            NoOpAuditLog()
+        )
+
+    // `statement` is what the connector runs, and reaches
     // `GetSchema` / `Query` untouched; `table` is what the ingestion is
     // filed under: the caller label when one is given, else the statement,
     // which is exactly the pre-1041 naming.
@@ -344,7 +379,7 @@ type DataIngestor
                     do! recordRun run
                     do! emitEvent scopeId RunFailedEventType run
                     return Error err
-                // 2a. The result name (Phase 1041): one past the path
+                // 2a. The result name: one past the path
                 // limit is refused here, before any probe or query.
                 | Some _ when nameRefusal.IsSome ->
                     let err = nameRefusal.Value
@@ -352,7 +387,7 @@ type DataIngestor
                     do! recordRun run
                     do! emitEvent scopeId RunFailedEventType run
                     return Error err
-                // 2b. The connector's declared payload format (Phase 834). A
+                // 2b. The connector's declared payload format. A
                 // format this ingestor cannot handle is refused HERE, at the
                 // connector boundary and naming the connector, before any
                 // probe, query or persistence — not weeks later in whichever
@@ -370,9 +405,20 @@ type DataIngestor
                     do! emitEvent scopeId RunFailedEventType run
                     return Error err
                 | Some connector ->
-                    // Phase 837 — the native path when the connector offers
+                    // The native path when the connector offers
                     // one and a reader for it is composed; else `Query`.
                     let native = nativeEmission payloadReaders connector
+
+                    let recordQuery recordText answer outcome =
+                        DataSourceQueryAudit.record audit scopeId (AuditSubject.system "DataIngestor") (fun () ->
+                            DataSourceQueryAudit.payload
+                                config
+                                connector.Kind
+                                recordText
+                                (DataSourceQueryAudit.ofText statement)
+                                answer
+                                None
+                                outcome)
 
                     let payloadFormat =
                         match native with
@@ -384,123 +430,163 @@ type DataIngestor
                         | Some emitter -> emitter.QueryNative(ctx, sql)
                         | None -> connector.Query(ctx, sql)
 
-                    // 3. Resolve credential, as the connector declares it
-                    // needs one (Phase 1017): a NONE connector's store is
-                    // never read, and `ctx.Credential` is `None`.
-                    let! credential = resolveCredential scopeId config connector
+                    // 2c. The source's statement-text audit opt-in: refused,
+                    // recorded, before anything is sent, where it is set under
+                    // a policy that admits raw text.
+                    match StatementTextAudit.read config.ConnectionScope with
+                    | Error reason ->
+                        do!
+                            recordQuery
+                                false
+                                None
+                                (DataSourceQueryOutcome.Refused DataSourceQueryAudit.StatementTextAuditRefused)
+                            |> AuditRow.bestEffort
 
-                    let ctx: DataSourceCallContext = {
-                        ScopeId = scopeId
-                        Config = config
-                        Credential = credential |> Result.defaultValue None
-                    }
+                        let err =
+                            SchemaMismatch $"Source '{sourceId}' is refused: {reason}. Nothing was queried or persisted"
 
-                    // 4. Probe the source. A REQUIRED credential that is
-                    // missing fails here without `Connect` being called;
-                    // either failure terminates before any persistence
-                    // side-effect.
-                    let probe =
-                        match credential with
-                        | Error err -> async { return Error err }
-                        | Ok _ -> connector.Connect ctx
-
-                    match! probe with
-                    | Error err ->
                         let run = runFailed scopeId sourceId table runId startedAt err None
                         do! recordRun run
                         do! emitEvent scopeId RunFailedEventType run
-                        return Ok run
-                    | Ok() ->
+                        return Error err
+                    | Ok recordText ->
 
-                        // 5. Fetch the schema (Phase 832) — between the probe
-                        // and the query; persisted only once the query has
-                        // produced a payload to attach it to.
-                        let! observedSchema = fetchSchema connector ctx statement
+                        // 3. Resolve credential, as the connector declares it
+                        // needs one: a NONE connector's store is
+                        // never read, and `ctx.Credential` is `None`.
+                        let! credential = resolveCredential scopeId config connector
 
-                        // 6. Run the query. Connector dialect varies — for
-                        // in-memory the SQL string is the table name; for
-                        // BigQuery / Redshift it is real SQL.
-                        match! query ctx statement with
+                        let ctx: DataSourceCallContext = {
+                            ScopeId = scopeId
+                            Config = config
+                            Credential = credential |> Result.defaultValue None
+                        }
+
+                        // 4. Probe the source. A REQUIRED credential that is
+                        // missing fails here without `Connect` being called;
+                        // either failure terminates before any persistence
+                        // side-effect.
+                        let probe =
+                            match credential with
+                            | Error err -> async { return Error err }
+                            | Ok _ -> connector.Connect ctx
+
+                        match! probe with
                         | Error err ->
                             let run = runFailed scopeId sourceId table runId startedAt err None
                             do! recordRun run
                             do! emitEvent scopeId RunFailedEventType run
                             return Ok run
-                        | Ok bytes ->
+                        | Ok() ->
 
-                            // 7. Persist the schema first (Phase 832), then the
-                            // payload through `IDataObjectStore` with `Versioned`
-                            // policy — each refresh creates a new version,
-                            // preserving history per Phase 7's contract.
-                            let objectId = resultObjectId sourceId table
+                            // 5. Fetch the schema — between the probe
+                            // and the query; persisted only once the query has
+                            // produced a payload to attach it to.
+                            let! observedSchema = fetchSchema connector ctx statement
 
-                            let! schemaRecord =
-                                match observedSchema with
-                                | Some schema -> persistSchema scopeId sourceId table schema
-                                | None -> async { return None }
+                            // 6. Run the query. Connector dialect varies — for
+                            // in-memory the SQL string is the table name; for
+                            // BigQuery / Redshift it is real SQL.
+                            match! query ctx statement with
+                            | Error err ->
+                                do!
+                                    recordQuery
+                                        recordText
+                                        None
+                                        (DataSourceQueryOutcome.Failed(DataSourceQueryAudit.failureOf err))
+                                    |> AuditRow.bestEffort
 
-                            let schemaKeys =
-                                match schemaRecord with
-                                | None -> []
-                                | Some(schemaRef, None) -> [ IngestedPayload.SchemaRefKey, schemaRef ]
-                                | Some(schemaRef, Some changed) ->
-                                    if changed then
-                                        logger.Info
-                                            $"[DataIngestor] schema drift on '{sourceId}'/{table}: schema-ref is now {schemaRef}"
-
-                                    [
-                                        IngestedPayload.SchemaRefKey, schemaRef
-                                        IngestedPayload.SchemaDriftKey, (if changed then "true" else "false")
-                                    ]
-
-                            let metadata =
-                                Map.ofList (
-                                    [
-                                        "source-id", sourceId
-                                        "table", table
-                                        "connector-kind", config.Kind
-                                        IngestedPayload.PayloadFormatKey, IngestedPayload.CurrentPayloadFormat
-                                        IngestedPayload.ContentFormatKey, PayloadFormat.token payloadFormat
-                                    ]
-                                    @ schemaKeys
-                                )
-
-                            let! saveResult =
-                                objectStore.Save(
-                                    scopeId,
-                                    objectId,
-                                    bytes,
-                                    "data-ingestion",
-                                    "_system",
-                                    metadata,
-                                    Versioned
-                                )
-
-                            match saveResult with
-                            | Error e ->
-                                let err = IngestionError.StorageFailure(string e)
                                 let run = runFailed scopeId sourceId table runId startedAt err None
                                 do! recordRun run
                                 do! emitEvent scopeId RunFailedEventType run
                                 return Ok run
-                            | Ok dataObject ->
-                                let run = {
-                                    RunId = runId
-                                    DataSourceId = sourceId
-                                    ScopeId = scopeId
-                                    Table = table
-                                    StartedAt = startedAt
-                                    CompletedAt = Some(DateTime.UtcNow)
-                                    Status = IngestionStatus.Succeeded
-                                    RowsIngested = None
-                                    ResultObjectId = Some dataObject.ObjectId
-                                    Error = None
-                                    JobId = None
-                                }
+                            | Ok bytes ->
 
-                                do! recordRun run
-                                do! emitEvent scopeId RunCompletedEventType run
-                                return Ok run
+                                match! recordQuery recordText (Some bytes) DataSourceQueryOutcome.Succeeded with
+                                | Error refusal ->
+                                    let err =
+                                        UnexpectedFailure
+                                            $"the query audit row for '{sourceId}' was refused, so its answer was not persisted: {AuditWriteError.describe refusal}"
+
+                                    let run = runFailed scopeId sourceId table runId startedAt err None
+                                    do! recordRun run
+                                    do! emitEvent scopeId RunFailedEventType run
+                                    return Ok run
+                                | Ok() ->
+
+                                    // 7. Persist the schema first, then the
+                                    // payload through `IDataObjectStore` with `Versioned`
+                                    // policy — each refresh creates a new version,
+                                    // preserving history per the store's contract.
+                                    let objectId = resultObjectId sourceId table
+
+                                    let! schemaRecord =
+                                        match observedSchema with
+                                        | Some schema -> persistSchema scopeId sourceId table schema
+                                        | None -> async { return None }
+
+                                    let schemaKeys =
+                                        match schemaRecord with
+                                        | None -> []
+                                        | Some(schemaRef, None) -> [ IngestedPayload.SchemaRefKey, schemaRef ]
+                                        | Some(schemaRef, Some changed) ->
+                                            if changed then
+                                                logger.Info
+                                                    $"[DataIngestor] schema drift on '{sourceId}'/{table}: schema-ref is now {schemaRef}"
+
+                                            [
+                                                IngestedPayload.SchemaRefKey, schemaRef
+                                                IngestedPayload.SchemaDriftKey, (if changed then "true" else "false")
+                                            ]
+
+                                    let metadata =
+                                        Map.ofList (
+                                            [
+                                                "source-id", sourceId
+                                                "table", table
+                                                "connector-kind", config.Kind
+                                                IngestedPayload.PayloadFormatKey, IngestedPayload.CurrentPayloadFormat
+                                                IngestedPayload.ContentFormatKey, PayloadFormat.token payloadFormat
+                                            ]
+                                            @ schemaKeys
+                                        )
+
+                                    let! saveResult =
+                                        objectStore.Save(
+                                            scopeId,
+                                            objectId,
+                                            bytes,
+                                            "data-ingestion",
+                                            "_system",
+                                            metadata,
+                                            Versioned
+                                        )
+
+                                    match saveResult with
+                                    | Error e ->
+                                        let err = IngestionError.StorageFailure(string e)
+                                        let run = runFailed scopeId sourceId table runId startedAt err None
+                                        do! recordRun run
+                                        do! emitEvent scopeId RunFailedEventType run
+                                        return Ok run
+                                    | Ok dataObject ->
+                                        let run = {
+                                            RunId = runId
+                                            DataSourceId = sourceId
+                                            ScopeId = scopeId
+                                            Table = table
+                                            StartedAt = startedAt
+                                            CompletedAt = Some(DateTime.UtcNow)
+                                            Status = IngestionStatus.Succeeded
+                                            RowsIngested = None
+                                            ResultObjectId = Some dataObject.ObjectId
+                                            Error = None
+                                            JobId = None
+                                        }
+
+                                        do! recordRun run
+                                        do! emitEvent scopeId RunCompletedEventType run
+                                        return Ok run
         }
 
     interface IDataIngestor with
@@ -526,9 +612,9 @@ let create
     (storage: IBlobStorage)
     (logger: ILogger)
     : IDataIngestor =
-    DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, []) :> IDataIngestor
+    DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger) :> IDataIngestor
 
-/// Phase 837 — `create` with the deployment's composed payload readers. A
+/// `create` with the deployment's composed payload readers. A
 /// connector that emits a native format whose reader is composed here has
 /// its native bytes stored unchanged; with `payloadReaders = []` this is
 /// exactly `create`.
@@ -543,4 +629,19 @@ let createWithReaders
     (payloadReaders: IPayloadReader list)
     : IDataIngestor =
     DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, payloadReaders)
+
+/// `createWithReaders` recording one `DataSourceQueried` row in `audit` for
+/// every statement the ingestor sends to a connector or refuses.
+let createAudited
+    (configStore: IDataSourceConfigStore)
+    (secretStore: ISecretStore)
+    (objectStore: IDataObjectStore)
+    (eventStore: IEventStore)
+    (connectors: IDataSource list)
+    (storage: IBlobStorage)
+    (logger: ILogger)
+    (payloadReaders: IPayloadReader list)
+    (audit: IAuditLog)
+    : IDataIngestor =
+    DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, payloadReaders, audit)
     :> IDataIngestor

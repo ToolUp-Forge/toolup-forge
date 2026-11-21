@@ -1,0 +1,15 @@
+{
+  "kind": "DataSourceQueried",
+  "samples": [
+    {
+      "row": "{\"SourceId\":\"\",\"ConnectorKind\":\"\",\"Form\":\"Text\",\"StatementHash\":\"\",\"Parameters\":[],\"StatementText\":null,\"RowCount\":null,\"ByteCount\":null,\"ContentHash\":null,\"Outcome\":\"Succeeded\"}",
+      "rowWithActor": "{\"SourceId\":\"\",\"ConnectorKind\":\"\",\"Form\":\"Text\",\"StatementHash\":\"\",\"Parameters\":[],\"StatementText\":null,\"RowCount\":null,\"ByteCount\":null,\"ContentHash\":null,\"Outcome\":\"Succeeded\",\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DataSourceQueried\":{\"SourceId\":\"\",\"ConnectorKind\":\"\",\"Form\":\"Text\",\"StatementHash\":\"\",\"Parameters\":[],\"StatementText\":null,\"RowCount\":null,\"ByteCount\":null,\"ContentHash\":null,\"Outcome\":\"Succeeded\"}}"
+    },
+    {
+      "row": "{\"SourceId\":\"s\",\"ConnectorKind\":\"s\",\"Form\":\"Bound\",\"StatementHash\":\"s\",\"Parameters\":[{\"Name\":\"s\",\"Kind\":\"s\"}],\"StatementText\":\"s\",\"RowCount\":\"+7\",\"ByteCount\":\"+7\",\"ContentHash\":\"s\",\"Outcome\":{\"Failed\":\"s\"}}",
+      "rowWithActor": "{\"SourceId\":\"s\",\"ConnectorKind\":\"s\",\"Form\":\"Bound\",\"StatementHash\":\"s\",\"Parameters\":[{\"Name\":\"s\",\"Kind\":\"s\"}],\"StatementText\":\"s\",\"RowCount\":\"+7\",\"ByteCount\":\"+7\",\"ContentHash\":\"s\",\"Outcome\":{\"Failed\":\"s\"},\"_actor\":{\"TeamAudit\":[\"corpus-user\",\"corpus-team\"]}}",
+      "archive": "{\"DataSourceQueried\":{\"SourceId\":\"s\",\"ConnectorKind\":\"s\",\"Form\":\"Bound\",\"StatementHash\":\"s\",\"Parameters\":[{\"Name\":\"s\",\"Kind\":\"s\"}],\"StatementText\":\"s\",\"RowCount\":\"+7\",\"ByteCount\":\"+7\",\"ContentHash\":\"s\",\"Outcome\":{\"Failed\":\"s\"}}}"
+    }
+  ]
+}
