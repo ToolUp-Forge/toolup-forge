@@ -150,7 +150,7 @@ ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 460/830
 ToolUp.Platform.Testing 166/339
 ToolUp.Platform.Transport 48/96
-ToolUp.Platform.UI 115/284
+ToolUp.Platform.UI 149/319
 ToolUp.PublicRendering 677/1159
 ToolUp.RAG.Core 80/130
 ToolUp.RAG.Server 346/617
