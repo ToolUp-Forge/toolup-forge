@@ -1,7 +1,8 @@
 # The gate declares what it reads: `gate-reads.json`
 
 **Ships in:** the repository's own gate (`GateManifest.fs`, `Build.fs`'s `Gate` target and `GateReconcile` row, the
-`ToolUp.Platform.Build.Tests` pack). No package surface moves and no consumer action is needed.
+`ToolUp.Platform.Build.Tests` pack); the build set in Phase 1211. No package surface moves and no consumer action is
+needed.
 
 **Affected:** contributors and automated workers who land commits on `main`, and anyone editing the gate manifest.
 
@@ -79,11 +80,40 @@ the Build pack opens. The record would have admitted neither, and a re-gate was 
 is the crossings that genuinely are inert (the list above). The minutes it saves are therefore not the 1197 figures
 (two re-gates, about 30 minutes each).
 
-`builds` / `notBuilt` are deliberately not declared. Undeclared, the landing tooling assumes the root solution and
-reports a project the gate does not reach as a Warning. Declared, an unreached project becomes an Error that refuses a
-landing, so it needs a `notBuilt` entry with a reason for every project outside `ToolUp.Forge.sln` (the template
-scaffolds, the browser-smoke and fuzz harnesses, the probes and tools outside the solution, the snippet projects).
-That is a separate decision.
+## The record also declares what the gate builds (Phase 1211)
+
+The record carries two more members, rendered from `GateManifest.fs` like the rest:
+
+- `builds`: what `verify.ps1` builds. That is `ToolUp.Forge.sln`, `Build.fsproj` (every row runs through it), and each
+  sample the `Samples` leg builds one at a time, since the samples sit outside the solution. The landing tooling takes
+  the closure of these over solution membership and `ProjectReference`.
+- `notBuilt`: each tracked project the gate deliberately does not build, as a path or a glob, with its reason. Today
+  that is the template scaffolds and the SAFER template pack (`templates/**`, built by the CI-only template rows), the
+  doc-snippet project and the browser-smoke pack and fixture (CI-only rows), the companion fuzz pack (an operator
+  run), the two tools outside the solution, the remoting dev harness, the directory probe, and the project file the
+  proof extraction writes beside the modules the solution's oracle project compiles. A test project `exclusions`
+  already names takes its reason from there.
+
+With `builds` declared, a tracked project outside the closure and named by no `notBuilt` entry is an Error that
+refuses a landing into this repository, and a `notBuilt` entry naming no tracked project is stale. The census checks
+both before a landing does, under the `what the gate builds` list of `GateReadsCensusTests`: every tracked project is
+reached or waived, every `notBuilt` entry names a tracked project and none names a project the gate builds, every
+`builds` entry is a tracked solution or project, and the samples in `builds` are exactly the ones `SampleGate` builds.
+A new project outside the solution therefore turns the gate red until it is built or waived, and a new sample until it
+is added to `builds`.
+
+**Shown red once.** With the `tools/ToolUp.PortGuard` entry removed from `notBuilt` and a `probes/Gone/Gone.fsproj`
+entry added in its place, the `what the gate builds` list failed two cases and passed six:
+
+```
+1 tracked project(s) the gate does not build are not in `notBuilt` of gate-reads.json, so a landing into this repository is refused. ...
+  tools/ToolUp.PortGuard/ToolUp.PortGuard.fsproj
+notBuilt entries that name no tracked project: ["probes/Gone/Gone.fsproj"]. Should be empty.
+```
+
+The entries were restored and the tests kept. Its go-red cases over fabricated trees run on every gate. Before this
+record declared `builds`, the landing tooling counted 305 tracked projects, 261 reached from the solution and 44
+unreached; with it, every one is built or named.
 
 ## Measured on the first landing
 
