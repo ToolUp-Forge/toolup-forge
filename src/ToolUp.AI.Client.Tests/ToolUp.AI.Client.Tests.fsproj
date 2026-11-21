@@ -284,6 +284,9 @@
         <!-- Every fuaran-* class a tree surface emits has a rule in the
              restored renderer's reference stylesheet. -->
         <Compile Include="TreeStylesheetTests.fs" />
+        <!-- The node toolkit's ids, Keep's identity table and the lowering's
+             kept render context, on the transpiled code. -->
+        <Compile Include="NodeToolkitTests.fs" />
         <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
         <!-- Phase 910 - the composition routes' render scope (the AI composer

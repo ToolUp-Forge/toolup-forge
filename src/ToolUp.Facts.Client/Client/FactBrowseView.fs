@@ -44,6 +44,8 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.Facts.Client.FactBrowseModel
 
+module Nodes = Toolup.UIToolkit.Nodes
+
 // ─── Shared view helpers ─────────────────────────────────────────────
 
 let private headerCell (label: string) =
@@ -323,11 +325,11 @@ module internal Trees =
     open Fuaran.UI
     open Fuaran.UI.Types
 
-    let private literal = TreeLowering.literal
+    let private literal = Nodes.literal
 
     /// A page's root: a group named for the page.
     let private page (id: string) (name: string) (children: Node<Msg> list) : Node<Msg> =
-        TreeLowering.column id children
+        Nodes.Layout.column id children
         |> Node.withAccessibility (
             Some {
                 Defaults.Accessibility.empty with
@@ -350,7 +352,7 @@ module internal Trees =
                 Body = literal message
         }
 
-    let private loading (id: string) : Node<Msg> = TreeLowering.text id "Loading…"
+    let private loading (id: string) : Node<Msg> = Nodes.text id "Loading…"
 
     /// The phrasings the table select answers beyond the `set` and `change`
     /// forms its label already yields.
@@ -454,15 +456,15 @@ module internal Trees =
     /// a considered empty state for no table and for a metric no table carries.
     let tables (model: Model) : Node<Msg> =
         page "fact-tables" "Fact tables" [
-            TreeLowering.row "fact-tables-header" [
-                TreeLowering.heading "fact-tables-heading" 2 "Fact tables"
-                TreeLowering.button "refresh-tables" ButtonVariant.Secondary "Refresh" false RefreshTables
+            Nodes.Layout.row "fact-tables-header" [
+                Nodes.heading "fact-tables-heading" 2 "Fact tables"
+                Nodes.Actions.button "refresh-tables" ButtonVariant.Secondary "Refresh" false RefreshTables
             ]
             match model.MetricFilter with
             | Some metric ->
-                TreeLowering.row "metric-filter" [
-                    TreeLowering.text "metric-filter-note" (sprintf "Showing the tables that carry metric '%s'." metric)
-                    TreeLowering.button
+                Nodes.Layout.row "metric-filter" [
+                    Nodes.text "metric-filter-note" (sprintf "Showing the tables that carry metric '%s'." metric)
+                    Nodes.Actions.button
                         "show-all-tables"
                         ButtonVariant.Tertiary
                         "Show all tables"
@@ -499,12 +501,12 @@ module internal Trees =
             | "unavailable" -> BadgeVariant.Critical
             | _ -> BadgeVariant.Neutral
 
-        TreeLowering.row "table-standing" [
+        Nodes.Layout.row "table-standing" [
             Fuaran.badge "table-freshness" {
                 Label = literal (freshnessText listing.Freshness listing.OverdueBySeconds)
                 Variant = variant
             }
-            TreeLowering.text
+            Nodes.text
                 "table-rows"
                 (match listing.RowCount with
                  | Some n -> sprintf "%d rows · last refresh %s" n (optionalTime listing.LastRefreshedAt)
@@ -532,9 +534,9 @@ module internal Trees =
             | None when p.ValueStatisticsWithheld -> "withheld"
             | None -> "—"
 
-        TreeLowering.column "population" [
-            TreeLowering.text "population-metric" (sprintf "Metric %s" rows.Metric)
-            TreeLowering.row "population-figures" [
+        Nodes.Layout.column "population" [
+            Nodes.text "population-metric" (sprintf "Metric %s" rows.Metric)
+            Nodes.Layout.row "population-figures" [
                 Fuaran.fact "population-subjects" "Subjects" (string p.SubjectCount)
                 Fuaran.fact "population-facts" "Facts" (string p.FactCount)
                 Fuaran.fact "population-freshness" "Fresh / stale" (sprintf "%d / %d" p.FreshCount p.StaleCount)
@@ -553,7 +555,7 @@ module internal Trees =
                      |> String.concat ", ")
             ]
             if p.ValueStatisticsWithheld then
-                TreeLowering.text
+                Nodes.text
                     "population-withheld"
                     "The minimum, maximum and mean are withheld because the ranking holds rows you may not see; the counts describe the whole table."
         ]
@@ -569,7 +571,7 @@ module internal Trees =
         page "fact-table" "Table" [
             match model.SelectedTable, model.Detail with
             | None, _ ->
-                TreeLowering.heading "fact-table-heading" 2 "Table"
+                Nodes.heading "fact-table-heading" 2 "Table"
 
                 if not (List.isEmpty listed) then
                     tableSelect listed None
@@ -583,8 +585,8 @@ module internal Trees =
             | Some selected, Loaded detail ->
                 let listing = detail.Listing
 
-                TreeLowering.row "fact-table-header" [
-                    TreeLowering.heading "fact-table-heading" 2 listing.TableId
+                Nodes.Layout.row "fact-table-header" [
+                    Nodes.heading "fact-table-heading" 2 listing.TableId
                     TreeLowering.island "browse-rows" (fun () ->
                         linkButton "Browse rows" (fun () -> goTo FactBrowseLinks.RowsRoute))
                 ]
@@ -593,10 +595,10 @@ module internal Trees =
                     tableSelect listed (Some selected)
 
                 match detail.Description with
-                | Some description -> TreeLowering.text "table-description" description
+                | Some description -> Nodes.text "table-description" description
                 | None -> ()
 
-                TreeLowering.text
+                Nodes.text
                     "table-declaration"
                     (sprintf
                         "Declared by %s · %s at level %s · %s grain · %s · refreshed every %dh · %s"
@@ -609,18 +611,18 @@ module internal Trees =
                         detail.Requirement)
 
                 standing listing
-                TreeLowering.heading "columns-heading" 3 "Columns"
+                Nodes.heading "columns-heading" 3 "Columns"
                 columns detail
-                TreeLowering.heading "population-heading" 3 "Population"
+                Nodes.heading "population-heading" 3 "Population"
 
                 match model.Rows with
                 | Loaded rows when rows.TableId = listing.TableId -> population rows
                 | LoadFailed message -> failure "population-failed" message
                 | Loaded _
                 | Loading -> loading "population-loading"
-                | NotAsked -> TreeLowering.text "population-none" "This table declares no metric column to summarise."
+                | NotAsked -> Nodes.text "population-none" "This table declares no metric column to summarise."
 
-                TreeLowering.heading "runs-heading" 3 "Runs"
+                Nodes.heading "runs-heading" 3 "Runs"
                 TreeLowering.island "fact-table-runs" (fun () -> RunsSection listing.TableId model dispatch)
         ]
 
@@ -642,7 +644,10 @@ let tablesView (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "p-6"
         prop.children [
-            TreeLowering.lower HostBindingSources.empty (showingTable dispatch) (Trees.tables model)
+            TreeLowering.lower
+                (TreeLowering.TreeHost.ofSources HostBindingSources.empty)
+                (showingTable dispatch)
+                (Trees.tables model)
         ]
     ]
 
@@ -687,7 +692,10 @@ let TablePage (model: Model) (dispatch: Msg -> unit) =
     Html.div [
         prop.className "p-6"
         prop.children [
-            TreeLowering.lower HostBindingSources.empty dispatch (Trees.table model dispatch)
+            TreeLowering.lower
+                (TreeLowering.TreeHost.ofSources HostBindingSources.empty)
+                dispatch
+                (Trees.table model dispatch)
         ]
     ]
 

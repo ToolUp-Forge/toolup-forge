@@ -60,7 +60,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>ToolUp.Platform.UI</PackageId>
     <AssemblyName>ToolUp.Platform.UI</AssemblyName>
-    <Description>The ToolUp UI toolkit — a Feliz component library: design tokens, typography, form controls, tabular and KPI views, empty/error/loading state views, the SVG icon-rendering primitives, and the typed data-/aria-/svg-attribute prop helpers. Fable-first: the source packs under fable/ so a Fable consumer compiles it directly. Depends on ToolUp.Platform.Core.</Description>
+    <Description>The ToolUp UI toolkit — a Feliz component library: design tokens, typography, form controls, tabular and KPI views, empty/error/loading state views, the SVG icon-rendering primitives, and the typed data-/aria-/svg-attribute prop helpers. Fable-first: the source packs under fable/ so a Fable consumer compiles it directly. Also the same shapes as Fuaran-UI node builders, and Keep, the identity-keyed table a kept subtree is built through. Depends on ToolUp.Platform.Core and Fuaran.UI.</Description>
     <PackageTags>fsharp;fable;feliz;react;ui;toolkit;components;sdk</PackageTags>
   </PropertyGroup>
   <ItemGroup>
@@ -101,6 +101,12 @@
     <Compile Include="Toolkit\Modal.fs" />
     <Compile Include="Toolkit\StateViews.fs" />
     <Compile Include="Toolkit\Kpi.fs" />
+    <!-- The toolkit's shapes as Fuaran-UI `Node<'Msg>` builders, and `Keep`,
+         the identity-keyed table a kept subtree is built through. Neither
+         opens Feliz: a file that builds a tree reaches the Fuaran-UI node
+         vocabulary through them, and nothing the shell imports at boot does. -->
+    <Compile Include="Toolkit\Nodes.fs" />
+    <Compile Include="Toolkit\Keep.fs" />
   </ItemGroup>
   <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
        under fable/. The library's own .fsproj + .fs files ship inside the
@@ -120,5 +126,8 @@
     <PackageReference Include="Fable.React.Types" />
     <PackageReference Include="Fable.Browser.Dom" />
     <PackageReference Include="Feliz" />
+    <!-- The node vocabulary `Toolkit/Nodes.fs` builds with, at the one
+         Fuaran-UI pin (`FuaranUIVersion`). -->
+    <PackageReference Include="Fuaran.UI" />
   </ItemGroup>
 </Project>

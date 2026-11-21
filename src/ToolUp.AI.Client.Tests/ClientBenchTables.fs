@@ -16,6 +16,7 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
+open Toolup.UIToolkit
 
 type Row = { Id: int; Label: string; Value: int }
 
@@ -56,23 +57,57 @@ let benchView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
 /// The same rows as a tree, in the shape a settings surface authors: a heading
 /// and, per row, the label and value as text and a button dispatching `Bump`.
 let benchTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
-    TreeLowering.column "bench" [
-        TreeLowering.heading "tick" 2 (sprintf "Tick %d" model.Tick)
+    Nodes.Layout.column "bench" [
+        Nodes.heading "tick" 2 (sprintf "Tick %d" model.Tick)
         for i in 0 .. model.Rows.Length - 1 do
             let row = model.Rows[i]
             let id = "r" + string row.Id
 
-            TreeLowering.row id [
-                TreeLowering.text (id + "-label") row.Label
-                TreeLowering.text (id + "-value") (string row.Value)
-                TreeLowering.button (id + "-bump") Fuaran.UI.Types.ButtonVariant.Secondary "+" false (Bump i)
+            Nodes.Layout.row id [
+                Nodes.text (id + "-label") row.Label
+                Nodes.text (id + "-value") (string row.Value)
+                Nodes.Actions.button (id + "-bump") Fuaran.UI.Types.ButtonVariant.Secondary "+" false (Bump i)
             ]
     ]
 
 /// The tree drawn as a deferred surface's file draws it: built and rendered in
 /// one render, through the renderer directly.
 let benchTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
-    TreeLoweringRuntime.Tree(TreeLowering.treeProps HostBindingSources.empty dispatch (benchTree model))
+    TreeLoweringRuntime.Tree(
+        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (benchTree model)
+    )
+
+/// One row of the kept table, built once per row record: the toolkit's idiom,
+/// every id derived from the row's identity and its message carrying the id.
+let private keptRow =
+    Keep.create (fun (row: Row) ->
+        let id = Nodes.Ids.keyed "r" (string row.Id)
+
+        Nodes.Layout.row id [
+            Nodes.text (Nodes.Ids.child id "label") row.Label
+            Nodes.text (Nodes.Ids.child id "value") (string row.Value)
+            Nodes.Actions.button
+                (Nodes.Ids.child id "bump")
+                Fuaran.UI.Types.ButtonVariant.Secondary
+                "+"
+                false
+                (Bump row.Id)
+        ])
+
+/// The same table with its rows kept: a dispatch that replaces one row record
+/// rebuilds that row's node and the heading, and the renderer's subtree memo
+/// serves every other row's element from the last render.
+let benchKeptTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
+    Nodes.Layout.column "bench" [
+        Nodes.heading "tick" 2 (sprintf "Tick %d" model.Tick)
+        yield! Keep.list keptRow model.Rows
+    ]
+
+/// The kept table drawn as `benchTreeView` draws the rebuilt one.
+let benchKeptTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
+    TreeLoweringRuntime.Tree(
+        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (benchKeptTree model)
+    )
 
 /// The rows a run measures, deterministic so the two tables carry the same data.
 let benchRows (count: int) : Row[] =
@@ -99,7 +134,7 @@ type private BodyProps = {|
 /// Both tables are built inside a component's render, as a module view is.
 let private Body (props: BodyProps) : ReactElement = props.View props.Model props.Dispatch
 
-/// Mount the table named `kind` (`feliz` or `tree`) into `container` and return
+/// Mount the table named `kind` (`feliz`, `tree` or `tree-kept`) into `container` and return
 /// a handle whose `dispatch` renders the next model synchronously: one row's
 /// value bumped and the tick advanced, the view rebuilt whole, as a host
 /// dispatch rebuilds it. Layout is the caller's to force and time.
@@ -108,7 +143,8 @@ let mount (kind: string) (rows: int) (container: obj) : obj =
         match kind with
         | "feliz" -> benchView
         | "tree" -> benchTreeView
-        | other -> failwithf "unknown table '%s': expected feliz or tree" other
+        | "tree-kept" -> benchKeptTreeView
+        | other -> failwithf "unknown table '%s': expected feliz, tree or tree-kept" other
 
     let root = createRoot container
     let mutable model = { Rows = benchRows rows; Tick = 0 }

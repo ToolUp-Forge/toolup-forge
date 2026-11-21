@@ -20,10 +20,15 @@ open ToolUp.Platform
 
 /// What `TreeLowering.lower` hands the chunk. `Node` and `Dispatch` are the
 /// caller's `Node<'Msg>` and `'Msg -> unit`, erased to `obj`: the message type
-/// is a compile-time fact the chunk does not need. `IsIsland` and `RenderIsland`
-/// answer the `Custom` nodes the authoring side's `island` registers.
+/// is a compile-time fact the chunk does not need. `Locale` is the shell's
+/// resolved locale (`Binding.Format` reads it when a binding names none) and
+/// `I18n` the host's resolver for `TextSource.I18n` keys, if it furnishes one.
+/// `IsIsland` and `RenderIsland` answer the `Custom` nodes the authoring side's
+/// `island` registers.
 type TreeProps = {|
     Host: HostBindingSources
+    Locale: string
+    I18n: IHostI18nResolver option
     Dispatch: obj -> unit
     Node: Node<obj>
     IsIsland: string -> bool
@@ -90,21 +95,104 @@ let private runtime =
              member _.TryLoadGuest scopeId = inner.TryLoadGuest scopeId
          })
 
-/// The renderer's sources for a host projection. Only the two namespaces a
-/// projection carries are filled; every other slot keeps its empty default.
-let private sourcesOf (host: HostBindingSources) : BindingResolver.BindingSources = {
+/// The host's resolver as the renderer's: `args` arrive resolved, so each is
+/// handed on as its string form.
+let private rendererI18n (resolver: IHostI18nResolver) (locale: string) : II18nResolver =
+    { new II18nResolver with
+        member _.Resolve(key, args) =
+            let args =
+                args
+                |> Option.map (Map.map (fun _ value -> string value))
+                |> Option.defaultValue Map.empty
+
+            resolver.Resolve key args (LocaleCode locale)
+    }
+
+/// The renderer's sources for a tree's props. Only the two namespaces a
+/// projection carries, the locale and the i18n resolver are filled; every
+/// other slot keeps its empty default.
+let private sourcesOf (props: TreeProps) : BindingResolver.BindingSources = {
     BindingResolver.empty with
-        QueryResults = host.QueryResults
-        State = host.State
+        QueryResults = props.Host.QueryResults
+        State = props.Host.State
+        Locale = props.Locale
+        I18nResolver =
+            match props.I18n with
+            | Some resolver -> rendererI18n resolver props.Locale
+            | None -> BindingResolver.empty.I18nResolver
 }
 
-/// The component the chunk exports: the tree drawn through the renderer.
+/// What one drawn tree keeps between renders: the context it rendered with and
+/// what that context was built from.
+type internal KeptContext = {
+    QueryResults: Map<string, obj>
+    State: Map<string, obj>
+    Locale: string
+    I18n: IHostI18nResolver option
+    Facts: Fuaran.UI.BindingWalk.RenderFacts<obj>
+    Context: Render.RenderContext<obj>
+}
+
+let private sameRef (a: 'a) (b: 'a) = obj.ReferenceEquals(a, b)
+
+let private sameResolver (a: IHostI18nResolver option) (b: IHostI18nResolver option) =
+    match a, b with
+    | None, None -> true
+    | Some a, Some b -> sameRef a b
+    | _ -> false
+
+/// Whether two trees declare the same state seeds, selection seeds and
+/// fragments. A context carries what its tree declares, so a tree declaring
+/// something new needs a new one; a fragment is the same only as the same node.
+let private sameDeclarations (a: Fuaran.UI.BindingWalk.RenderFacts<obj>) (b: Fuaran.UI.BindingWalk.RenderFacts<obj>) =
+    a.StateSeeds = b.StateSeeds
+    && a.SelectionSeeds = b.SelectionSeeds
+    && List.length a.Fragments = List.length b.Fragments
+    && List.forall2 (fun (n1, f1) (n2, f2) -> n1 = n2 && sameRef f1 f2) a.Fragments b.Fragments
+
+/// The context to render `props.Node` with: `previous`'s while the projected
+/// sources are the same objects, the locale and resolver unchanged and the tree
+/// declares what it declared, else a new one. The subtree memo serves an
+/// element only under the context it was built for, so keeping the context is
+/// what lets a node a view kept render once. `dispatch` is the drawn tree's
+/// stable dispatch, which forwards to the latest `props.Dispatch`.
+let internal keepContext (previous: KeptContext option) (props: TreeProps) (dispatch: obj -> unit) : KeptContext =
+    let prepared = Render.RenderContext.prepare props.Node
+
+    match previous with
+    | Some kept when
+        sameRef kept.QueryResults props.Host.QueryResults
+        && sameRef kept.State props.Host.State
+        && kept.Locale = props.Locale
+        && sameResolver kept.I18n props.I18n
+        && sameDeclarations kept.Facts prepared.Facts
+        ->
+        kept
+    | _ -> {
+        QueryResults = props.Host.QueryResults
+        State = props.Host.State
+        Locale = props.Locale
+        I18n = props.I18n
+        Facts = prepared.Facts
+        Context = {
+            Render.RenderContext.ofPrepared prepared (sourcesOf props) dispatch with
+                Runtime = runtime.Value
+                SubtreeMemo = true
+        }
+      }
+
+/// The component the chunk exports: the tree drawn through the renderer, with
+/// the subtree memo on and its context kept across renders (`keepContext`).
+/// It holds that context in hooks, so it runs inside a render: as the component
+/// the lowering's lazy import resolves to, or called from the render of the
+/// component a deferred surface's file exports.
 let Tree (props: TreeProps) : ReactElement =
     islands <- props.IsIsland, props.RenderIsland
 
-    Render.render
-        {
-            Render.RenderContext.create (sourcesOf props.Host) props.Dispatch props.Node with
-                Runtime = runtime.Value
-        }
-        props.Node
+    let latest = React.useRef props.Dispatch
+    latest.current <- props.Dispatch
+    let dispatch = React.useRef (fun (msg: obj) -> latest.current msg)
+    let kept = React.useRef None
+    let context = keepContext kept.current props dispatch.current
+    kept.current <- Some context
+    Render.render context.Context props.Node

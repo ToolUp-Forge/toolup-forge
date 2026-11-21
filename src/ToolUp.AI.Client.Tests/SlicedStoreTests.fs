@@ -24,6 +24,7 @@ open Feliz
 open ToolUp.Elmish
 open ToolUp.Elmish.React
 open ToolUp.Platform
+open Toolup.UIToolkit
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.RenderScope
 
@@ -565,10 +566,10 @@ let private arrayFrom (arrayLike: obj) : obj array = jsNative
 /// the loader seam, because a real import cannot be made to fail on demand.
 let private treeChunkTests =
     let tree () =
-        TreeLowering.column "tree" [ TreeLowering.heading "tree-heading" 2 "Tree from the chunk" ]
+        Nodes.Layout.column "tree" [ Nodes.heading "tree-heading" 2 "Tree from the chunk" ]
 
     let lowered () =
-        TreeLowering.lower HostBindingSources.empty ignore<unit> (tree ())
+        TreeLowering.lower (TreeLowering.TreeHost.ofSources HostBindingSources.empty) ignore<unit> (tree ())
 
     let headings (document: obj) =
         unbox<int> (document?querySelectorAll "h2")?length
@@ -691,8 +692,8 @@ let private resolved (value: obj) : JS.Promise<obj> = jsNative
 /// A deferred tree surface's body, the shape a surface's on-demand file
 /// exports: it builds its tree and draws it with the renderer directly.
 let private surfaceBody (props: {| Title: string |}) : ReactElement =
-    TreeLowering.column "surface" [ TreeLowering.heading "surface-heading" 2 props.Title ]
-    |> TreeLowering.treeProps HostBindingSources.empty ignore<unit>
+    Nodes.Layout.column "surface" [ Nodes.heading "surface-heading" 2 props.Title ]
+    |> TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) ignore<unit>
     |> TreeLoweringRuntime.Tree
 
 /// A surface mounted through `TreeSurface.deferred`: the placeholder until its

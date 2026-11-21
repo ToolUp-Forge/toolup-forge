@@ -23,6 +23,7 @@ open Fable.Core.JsInterop
 open Fuaran.UI
 open Fuaran.UI.Types
 open ToolUp.Platform
+open Toolup.UIToolkit
 open ToolUp.AI.Client.Tests.NodeTest
 
 [<Import("readFileSync", from = "node:fs")>]
@@ -73,10 +74,10 @@ let private referenceStylesheet () : string * string =
 
 type private Msg = | Go
 
-let private literal = TreeLowering.literal
+let private literal = Nodes.literal
 
 /// A surface over the vocabulary the SDK's tree surfaces are authored in: the
-/// `TreeLowering` helpers (card, row, column, heading, text, button, banner)
+/// toolkit's node builders (card, row, column, heading, text, button, banner)
 /// and the nodes the tree pages build beside them (callouts in every tone,
 /// badges, a plain table and a table with toned pill cells, a select, facts).
 let private surface: Node<Msg> =
@@ -90,18 +91,18 @@ let private surface: Node<Msg> =
         ToneVariant.Info
     ]
 
-    TreeLowering.column "surface" [
-        TreeLowering.card "settings" "Settings" [
-            TreeLowering.heading "settings-heading" 2 "Members"
-            TreeLowering.text "settings-note" "Running text with *no* markup."
-            TreeLowering.row "actions" [
-                TreeLowering.button "primary" ButtonVariant.Primary "Save" false Go
-                TreeLowering.button "secondary" ButtonVariant.Secondary "Refresh" false Go
-                TreeLowering.button "tertiary" ButtonVariant.Tertiary "Show all" false Go
-                TreeLowering.button "destructive" ButtonVariant.Destructive "Remove" false Go
-                TreeLowering.button "disabled" ButtonVariant.Primary "Held" true Go
+    Nodes.Layout.column "surface" [
+        Nodes.Panel.card "settings" "Settings" [
+            Nodes.heading "settings-heading" 2 "Members"
+            Nodes.text "settings-note" "Running text with *no* markup."
+            Nodes.Layout.row "actions" [
+                Nodes.Actions.button "primary" ButtonVariant.Primary "Save" false Go
+                Nodes.Actions.button "secondary" ButtonVariant.Secondary "Refresh" false Go
+                Nodes.Actions.button "tertiary" ButtonVariant.Tertiary "Show all" false Go
+                Nodes.Actions.button "destructive" ButtonVariant.Destructive "Remove" false Go
+                Nodes.Actions.button "disabled" ButtonVariant.Primary "Held" true Go
             ]
-            TreeLowering.banner "banner" ToneVariant.Success "Saved." "Dismiss" Go
+            Nodes.Actions.banner "banner" ToneVariant.Success "Saved." "Dismiss" Go
         ]
         yield!
             tones
@@ -112,7 +113,7 @@ let private surface: Node<Msg> =
                         Heading = Some(literal "Heading")
                         Body = literal "Body"
                 })
-        TreeLowering.row "badges" [
+        Nodes.Layout.row "badges" [
             for i, variant in
                 List.indexed [
                     BadgeVariant.Neutral
@@ -150,21 +151,16 @@ let private surface: Node<Msg> =
                 Value = Some(Binding.Static(Some "sales"))
                 Placeholder = Some(literal "Choose a table")
         }
-        TreeLowering.row "facts" [ Fuaran.fact "subjects" "Subjects" "12"; Fuaran.fact "facts" "Facts" "340" ]
+        Nodes.Layout.row "facts" [ Fuaran.fact "subjects" "Subjects" "12"; Fuaran.fact "facts" "Facts" "340" ]
     ]
 
 /// The tree drawn through the renderer chunk's component, as static markup:
 /// the class hooks are in the markup whether or not a stylesheet applies.
 let private markup () : string =
-    let props: TreeLoweringRuntime.TreeProps = {|
-        Host = HostBindingSources.empty
-        Dispatch = ignore
-        Node = unbox (box surface)
-        IsIsland = fun _ -> false
-        RenderIsland = fun _ -> Feliz.Html.none
-    |}
+    let props =
+        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) ignore<Msg> surface
 
-    renderToString (TreeLoweringRuntime.Tree props)
+    renderToString (Feliz.ReactLegacy.createElement (unbox<Feliz.ReactElement> TreeLoweringRuntime.Tree, box props))
 
 /// Every `fuaran-*` class in `html`, once each, sorted.
 let private fuaranClasses (html: string) : string list =

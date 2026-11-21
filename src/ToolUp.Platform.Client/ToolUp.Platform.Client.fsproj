@@ -305,6 +305,14 @@
              ClientHostBridge (it extends withElementView's shape) and the
              Core HostBindingSources type. -->
         <Compile Include="Client\HostStateProjection.fs" />
+        <!-- Phase 275 — hosted-tree i18n resolution seam: IHostI18nResolver
+             resolves key + placeholder + locale against the Phase 179 i18n
+             substrate (Translations / PseudoLocale / ApiError.applyPlaceholders,
+             all Core), with an observable missing-key sink feeding the coverage
+             signal. Neutral (no tree-language type), Core-only deps so it packs
+             under fable/ and resolves identically on both tiers. Ahead of
+             the tree lowering, which takes it. -->
+        <Compile Include="Client\HostI18nResolver.fs" />
         <!-- The internal lowering of a Fuaran-UI tree to the ReactElement the
              view contract still returns. After HostStateProjection, whose
              seams it wires. The runtime half holds the renderer and is reached
@@ -316,13 +324,6 @@
         <Compile Include="Client\UI\TreeSurface.fs" />
         <Compile Include="Client\UI\TreeLoweringRuntime.fs" />
         <Compile Include="Client\UI\TreeLowering.fs" />
-        <!-- Phase 275 — hosted-tree i18n resolution seam: IHostI18nResolver
-             resolves key + placeholder + locale against the Phase 179 i18n
-             substrate (Translations / PseudoLocale / ApiError.applyPlaceholders,
-             all Core), with an observable missing-key sink feeding the coverage
-             signal. Neutral (no tree-language type), Core-only deps so it packs
-             under fable/ and resolves identically on both tiers. -->
-        <Compile Include="Client\HostI18nResolver.fs" />
         <!-- Phase 278 — hosted-tree render-cost budget gate: HostRenderBudget
              (max nodes / depth / render-time) + a generic measureTree + an
              evaluate that names each breach; reports over-budget through the
