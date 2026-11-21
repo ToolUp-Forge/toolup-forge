@@ -35,6 +35,12 @@
              ahead of SDK.Build.fs, like SDK.Sbom.fs, because the `Codemod`
              target registerTargets registers is what runs it. -->
         <Compile Include="Build\SDK.Codemod.fs" />
+        <!-- The Feliz ratchet: the census of `open Feliz` files and
+             ReactElement baseline lines, which may only fall. FAKE-free
+             and internal; the `FelizRatchet` target registerTargets
+             registers is what runs it, and the Build pack holds the
+             committed census against the tree. -->
+        <Compile Include="Build\SDK.FelizRatchet.fs" />
         <Compile Include="Build\SDK.Build.fs" />
         <Compile Include="Build\SDK.HostPackaging.fs" />
         <!-- Phase 586 — packaged-module shadow-project conformance: the

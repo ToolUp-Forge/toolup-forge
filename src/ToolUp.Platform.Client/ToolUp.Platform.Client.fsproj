@@ -310,7 +310,10 @@
              seams it wires. The runtime half holds the renderer and is reached
              only through the dynamic import in TreeLowering, so it compiles
              first; TreeLoweringRuntime.js beside it is the re-export a feed
-             consumer's bundle resolves that import through. -->
+             consumer's bundle resolves that import through. TreeSurface, the
+             deferred mount a surface reaches either through, imports no
+             Fuaran package, so a file the shell imports at boot may use it. -->
+        <Compile Include="Client\UI\TreeSurface.fs" />
         <Compile Include="Client\UI\TreeLoweringRuntime.fs" />
         <Compile Include="Client\UI\TreeLowering.fs" />
         <!-- Phase 275 — hosted-tree i18n resolution seam: IHostI18nResolver

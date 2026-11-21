@@ -226,34 +226,123 @@ its `-TeethCheck` feeds that refusal a collapsed manifest. The binding files imp
 `ag-charts-react` only through `[<Import>]`, because neither package declares `sideEffects`: one unused import
 at the top of a file keeps the whole library in the entry.
 
-**The Fuaran-UI renderer (Phase 1202).** A forge surface authored as a Fuaran-UI tree is lowered through an internal
-seam in two files: `TreeLowering`, the authoring helpers and the `lower` call a view makes, and `TreeLoweringRuntime`,
-everything that imports the renderer, reached only through a dynamic import. While the chunk loads a tree shows the
-grid's placeholder (`role="status"`, `aria-busy`); a chunk that fails rejects into `ModuleBoundary`, whose
-**Reload module** fetches it again. The shell build names any renderer module its first load holds into a chunk called
-`FuaranUIRendererAtBoot`, and the gate script refuses a build that has one, or whose `TreeLoweringRuntime` chunk is in
-the first load or is not reached by a dynamic import. A shell with no tree surface builds neither and pays nothing.
+**The Fuaran-UI renderer and node vocabulary (Phases 1202, 1186).** A forge surface authored as a Fuaran-UI tree
+reaches the shell through an internal seam in three files. `TreeSurface` mounts a component that arrives on demand: a
+keyed `React.lazy` behind `Suspense`, which imports no Fuaran package, so a file the shell imports at boot may call it.
+`TreeLowering` holds the authoring helpers (`row`, `column`, `button`, …), the islands and `lower`. `TreeLoweringRuntime`
+holds everything that imports the renderer. While a deferred component loads, the surface shows the grid's placeholder
+(`role="status"`, `aria-busy`); a load that fails rejects into `ModuleBoundary`, whose **Reload module** loads it again.
+
+A surface can take either of two shapes, and only one is free at boot:
+
+- **Deferred, the shape for a surface the shell imports at boot.** The surface's static module (its definition and
+  `update`, which the shell reads at boot) calls `TreeSurface.deferred` with a dynamic import of a component in a file
+  of its own. That file builds the tree with the helpers and draws it with
+  `TreeLoweringRuntime.Tree (TreeLowering.treeProps host dispatch node)`. The vocabulary, its compute closure and the
+  renderer then arrive together when the surface first mounts. A file reached this way from a package a consumer
+  restores from a feed needs a `.js` re-export beside it, as `TreeLoweringRuntime.js` is.
+- **Lowered.** A view that builds its tree where it is and calls `TreeLowering.lower` keeps only the renderer on
+  demand. The helpers reach `Fuaran.UI`'s node vocabulary, whose closure holds `Fuaran.Compute.DataFrame` and
+  `Fuaran.Core.Column`, so the vocabulary is in the importing file's static closure. That is fine for a view nothing
+  imports at boot, and it is what the gate refuses for one the shell does.
+
+The shell build names any renderer module its first load holds into a chunk called `FuaranUIRendererAtBoot`, and any
+`Fuaran.UI` vocabulary module into `FuaranUIVocabularyAtBoot`. The gate script refuses a build that has either, one
+whose `TreeLoweringRuntime` chunk is in the first load, or one in which that chunk is built and no dynamic import of the
+first load reaches it, directly or through a deferred surface's chunk. Its `-TeethCheck` feeds it a static renderer and
+a static vocabulary, which must be refused by name, and the deferred shape, which must pass. A shell with no tree
+surface builds none of these chunks and pays nothing.
 
 | On-demand chunk | Bytes | Gzipped | Fetched when |
 |---|---:|---:|---|
 | `AgGridRuntime` | 1,140,619 | 316,514 | the first grid mounts |
 | `AgChartRuntime` | 1,178,697 | 343,679 | the first chart mounts |
-| `TreeLoweringRuntime` (the renderer: `Fuaran.UI.Renderer`, `.Renderer.Core`, `.Charts`) | 284,224 | 85,698 | the first tree surface mounts |
+| `TreeLoweringRuntime`, lowered surfaces (the renderer: `Fuaran.UI.Renderer`, `.Renderer.Core`, `.Charts`) | 284,224 | 85,698 | the first tree surface mounts |
+| `TreeLoweringRuntime`, deferred surfaces (the renderer, the vocabulary and its compute closure) | 616,023 | 171,522 | the first tree surface mounts |
+| a deferred surface's own chunk (the team manager's tree) | 11,605 | 4,258 | that surface mounts |
 
-The split does not make a tree surface free at boot. Measured 2026-11-03 with three real surfaces authored as trees
-(a team manager, a module-visibility admin, the command palette behind an island) in a scratch tree:
+Measured with three real surfaces authored as trees (a team manager, a module-visibility admin, the command palette
+behind an island): Phase 1160's surfaces restored over Phase 1202's tree (`0fc90bc4`, with `8d15b00e` reverted) in a
+scratch tree, the same three surfaces in each arm, a production `vite build` of the shell configuration above,
+2026-11-20. The scratch tree pins `Fuaran.UI` 0.98.1, as Phase 1202's measurement did:
 
-| Shell | First load, bytes | First load, KiB | Whole shell, KiB |
-|---|---:|---:|---:|
-| no tree surface (today) | 1,511,762 | 1,476.33 | 3,741.29 |
-| three surfaces, renderer imported statically | 2,128,132 | 2,078.25 | 4,343.34 |
-| three surfaces, renderer on demand | 1,847,215 | 1,803.92 | 4,346.47 |
+| Shell | First load, bytes | First load, KiB | × no tree surface | Whole shell, KiB |
+|---|---:|---:|---:|---:|
+| no tree surface | 1,511,762 | 1,476.33 | 1.00 | 3,741.29 |
+| three surfaces, renderer imported statically (refused: `FuaranUIRendererAtBoot`) | 2,128,132 | 2,078.25 | 1.41 | 4,343.34 |
+| three surfaces lowered, renderer on demand (refused: `FuaranUIVocabularyAtBoot`) | 1,846,729 | 1,803.45 | 1.22 | 4,346.15 |
+| three surfaces deferred | 1,507,893 | 1,472.55 | 1.00 | 4,353.46 |
 
-The import takes 280,917 bytes out of the first load, but the authoring helpers still reach `Fuaran.UI`'s node
-vocabulary statically, and its closure holds `Fuaran.Compute.DataFrame` and `Fuaran.Core.Column`: one shared chunk of
-379,258 bytes (100,275 gzipped) that both halves import. That leaves the first load 1.22x its baseline and over its
-ceiling, so a tree surface does not return to a view the shell imports at boot until that closure is cut on the
-Fuaran-UI side or the surface builds its tree behind the same import.
+The first three rows reproduce Phase 1202's figures to the byte, except the lowered row, which names the vocabulary
+into its own chunk and so splits 486 bytes differently. Deferring the trees takes the vocabulary's 379,258 bytes and
+the renderer out of the first load, which returns to its size with no tree surface; the falsifier is
+`Fuaran.Compute.DataFrame`, whose name occurs ten times in the first load of the lowered build and in no first-load
+file of the deferred one. The first surface to mount then pays the whole closure once. Phase 1202 named two routes to
+this figure: this one, and cutting the vocabulary's compute closure on the Fuaran-UI side (fuaran#2539), which had not
+landed when this was measured. Deferring closed the gap on its own; the Fuaran-UI cut would shrink what the first tree
+surface fetches, and on its own would not bring a lowered surface's first load back under its ceiling.
+
+**What a first load and a first tree surface cost in a browser.** Real Edge 157 over the DevTools protocol, the four
+builds above served side by side, one page per build that imports the shell and mounts nothing (`import()` to
+resolved, as Phase 1168 measured), then imports the chunks the first tree surface fetches (`tree`). 15 loads per cell
+with the arms alternated per load, median milliseconds. Cold loads transferred exactly each arm's gzipped first load and
+warm loads nothing. Measured 2026-11-20 on 16 logical cores:
+
+| Profile | Cache | No tree surface | Renderer eager | Lowered | Deferred | First tree surface, lowered | First tree surface, deferred |
+|---|---|---:|---:|---:|---:|---:|---:|
+| desktop, no throttle | cold | 76 | 78 | 76 | 52 | 10 | 20 |
+| desktop, no throttle | warm | 75 | 73 | 75 | 44 | 8 | 18 |
+| mid laptop: 4x CPU, 10 Mbps, 40 ms | cold | 625 | 789 | 722 | 565 | 148 | 257 |
+| mid laptop: 4x CPU, 10 Mbps, 40 ms | warm | 264 | 308 | 284 | 187 | 19 | 42 |
+| low phone: 6x CPU, 1.6 Mbps, 150 ms | cold | 2,940 | 3,612 | 3,163 | 2,499 | 640 | 1,158 |
+| low phone: 6x CPU, 1.6 Mbps, 150 ms | warm | 751 | 784 | 860 | 490 | 47 | 108 |
+
+The deferred first load is faster than the one with no tree surface, and mostly not because of the deferral: the
+bundler splits that first load into nine files, where the others have three to five, and the browser compiles
+separate files in parallel (the time after the last byte arrives, on the desktop, is 37 ms against 67). Read the
+first-load bytes for the like-for-like comparison and the last two columns for what deferring moves: the first tree
+surface pays the vocabulary as well as the renderer, about twice what a lowered surface pays, once. The warm cells on
+the low phone are the noisiest (the minimum of 15 is 410, 614, 537 and 245 ms across the four builds). The study's
+figures for the
+same profiles (forge#1160's spike, renderer eager, against main, 2026-10-31) were: desktop cold 85 and 117 ms, mid
+laptop cold 654 and 899 ms, low phone cold 2,495 and 3,987 ms. The renderer's chunk alone, imported after the first
+load, cost 24, 279 and 1,327 ms cold.
+
+### A tree surface is judged on a browser dispatch, not on `viewPerDispatchUs`
+
+`viewPerDispatchUs` times the construction of a 200-row Feliz view under Node: the render hook builds the element tree
+and the time is read. It cannot see React's commit, the browser's layout, or work a component defers into commit, and a
+tree surface does most of its work in components the renderer returns. It stays the regression guard for the shell's
+Feliz views, which is what its ceiling was set against, and it is no guide to a tree.
+
+The figure a tree surface is judged on is one host dispatch in a browser: the view rebuilt from a new model, React's
+render and commit, and a forced layout. `ClientBench --browser-dispatch` takes it, and the perf-budget gate script
+passes the flag. `client-bench-browser.mjs` bundles `ClientBenchTables` with the shell sample's Vite: the 200-row table
+as Feliz, and as a tree of the helpers' rows, text and buttons drawn the way a deferred surface draws it. It serves the
+bundle cross-origin isolated, so the clock resolves to 5 µs, under the renderer's reference stylesheet and the shell's
+bridge, and drives headless Edge over the DevTools protocol with `gc` exposed (Chrome when there is no Edge;
+`TOOLUP_BENCH_BROWSER` names another Chromium-family browser). Per profile (no throttling, and 6x CPU, the study's low
+phone) it mounts each table, runs 15 dispatches to warm, then times 30, each after `gc()`. The Feliz table is measured
+again last, as the control for drift across the run. A reading in which a mount built under 100 elements, a dispatch
+changed no DOM, the page was not isolated or `gc` was missing is refused. The result is the `browserDispatch` lever in
+the measurement file, recorded and never decided; a machine with no browser records the absence.
+
+Measured 2026-11-20 on this tree (`Fuaran.UI` 0.104.0, React 19.2, Edge 157, 16 logical cores), two runs of 30
+samples each, median milliseconds per dispatch (render and commit + forced layout):
+
+| Profile | Feliz table | Tree table | Feliz table again (control) | The study, Feliz / tree (renderer 0.98.1) |
+|---|---:|---:|---:|---:|
+| desktop | 1.56 / 1.52 (1.25 + 0.35) | 14.76 / 13.11 (14.54 + 0.23) | 1.86 / 1.64 | 1.2 / 16.8–20.5 |
+| low phone: 6x CPU | 22.8 / 20.0 (16.9 + 5.4) | 208.2 / 190.8 (205.7 + 2.7) | 22.2 / 20.1 | 19 / 355 |
+
+The tree table mounts 2,004 elements and the Feliz table 1,004; each dispatch changed two DOM records on both (the
+tick and the bumped value), where the study counted 400 `innerHTML` reparses per dispatch on the 0.98.1 renderer, so
+that defect is gone from the renderer this tree pins. The tree's dispatch is about nine times the Feliz table's on both
+profiles, almost all of it render and commit, not layout.
+
+The frame is the ceiling that matters for a tree: 16.7 ms on a desktop, and on the low phone the equivalent of about
+100 ms. A rebuilt 200-row tree fits the first and is about twice the second; the study's subtree memoisation (its
+lever 1) is what would take a rebuilt table under both.
 
 ### The Fuaran-UI stylesheet
 
@@ -343,6 +432,49 @@ the SDK shell 3,944,367 bytes (1,058,664 gzipped). The same phase measured build
 module's response decoders on first use rather than at import, and found nothing to buy — the
 figures, and why the decoders stay built at import, are beside the emitter in
 `ToolUp.Remoting.Generator`.
+
+### The Feliz census: a count that may only fall
+
+The client tier is moving off Feliz to typed trees, one project at a time. The risk in a migration that
+long is stalling half done with two idioms in the tree, so it has a number, and the number may only
+fall. [`feliz-census.json`](../../feliz-census.json) at the repository root holds it, cell by cell:
+
+| Class | One cell per | Counts | May it rise? |
+|---|---|---|---|
+| `sources` | project | non-test `.fs` / `.fsx` files with an `open Feliz` line | no |
+| `tests` | project | the same, over test files | yes, recorded |
+| `baselines` | assembly | lines of `api-baselines/<assembly>.approved.txt` naming `ReactElement` | no |
+
+**What it counts.** A file counts once, however much Feliz it uses, when a line of it is `open Feliz`:
+the React DSL itself. Its cell is the nearest directory above it holding a `.fsproj`. A baseline line
+naming `ReactElement` is public surface a consumer's code is written against, so a view that leaves
+Feliz but still hands out a `ReactElement` has not left it.
+
+**What it does not count.** `open Feliz.AgGrid`, `open Feliz.AgCharts`, `open Feliz.ViewEngine` and the
+other `Feliz.*` namespaces, which are separate packages with their own exits; a file that names a Feliz
+type fully qualified, without the open; build output and tooling directories (`bin`, `obj`,
+`node_modules`, `fable_modules`, `output`, `artifacts`, any directory starting with `.`); and the
+documentation fragments under `docs-snippets/`, which the documentation gates hold as prose. A test file
+(a path segment named `tests`, or a project directory ending `.Tests`) is counted in `tests`, apart from
+the code it tests: a view's tests move with the view, so that count may rise while a migration is in
+flight, and is recorded rather than refused.
+
+**The gate.** The `Build` test pack, which `VerifyAll` runs in every lane, holds the committed census
+against the tree. It is red in both directions. A cell that rose is new Feliz, refused: remove it rather
+than raise the number. A cell that fell is a census that does not record the fall: rewrite it in the same
+change, so every decrease is a line in a reviewed diff and the number never drifts down unnoticed. A
+`tests` cell that rose is a stale census too, and the writer records it.
+
+```powershell
+pwsh ./dev-scripts/feliz-ratchet.ps1           # the gate's check, on its own
+pwsh ./dev-scripts/feliz-ratchet.ps1 -Write    # rewrite the census from the tree
+```
+
+Both run the build driver's `FelizRatchet` target (`dotnet run --project Build.fsproj -- FelizRatchet
+[--write]`). The writer refuses, and writes nothing, when it would raise a `sources` or `baselines`
+cell. The one way up is a hand edit of the committed file, which a reviewer sees. The first census,
+written 2026-11-20, was 145 source files, 29 test files and 320 baseline lines. When the migration
+ends, the gate becomes a ban.
 
 ---
 

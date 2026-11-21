@@ -850,6 +850,7 @@ let rowReads: (string * string list) list = [
         "dev-scripts/perf-budget-gate.ps1"
         "docs/migrations/**"
         "docs/platform/open-core-boundary.md"
+        "feliz-census.json"
         "fuaran-ui-floors.json"
         "perf-budgets.json"
         "proofs.json"

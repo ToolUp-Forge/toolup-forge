@@ -185,10 +185,10 @@ module Flags =
         | _ -> "Run"
 
     /// The options the SDK's own targets read: `AddHeaders` / `Codemod`
-    /// take `--check`, `Codemod` takes `--phase <n>`, `execute` takes
-    /// `--module <name>`.
+    /// take `--check`, `Codemod` takes `--phase <n>`, `FelizRatchet` takes
+    /// `--write`, `execute` takes `--module <name>`.
     let sdk: FlagSpec = {
-        Switches = [ "--check" ]
+        Switches = [ "--check"; "--write" ]
         Valued = [ "--module"; "--phase" ]
     }
 
@@ -3030,6 +3030,24 @@ let registerTargets (config: BuildConfig) =
                             "Codemod: %d file(s) were rewritten but `dotnet fantomas` failed (%s). Run `dotnet tool restore` then `dotnet fantomas <the rewritten files>` to finish the format pass."
                             files.Length
                             e.Message)
+
+    // The Feliz ratchet (`FelizRatchet` in SDK.FelizRatchet.fs): holds the
+    // committed census at the working directory against the tree, and with
+    // `--write` rewrites it, refusing a rise in a source or baseline cell.
+    Target.create "FelizRatchet" (fun _ ->
+        let outcome =
+            if Flags.has "--write" (invocationFlags ()) then
+                FelizRatchet.write "."
+            else
+                FelizRatchet.check "."
+
+        match outcome with
+        | Ok summary -> Trace.tracefn "FelizRatchet: %s" summary
+        | Error lines ->
+            for l in lines do
+                Trace.traceError (sprintf "FelizRatchet: %s" l)
+
+            failwithf "FelizRatchet: %d finding(s) above." lines.Length)
 
     // Wire dependencies
     let (==>) a b = Fake.Core.TargetOperators.(==>) a b
