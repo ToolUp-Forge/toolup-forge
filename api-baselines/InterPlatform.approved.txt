@@ -155,7 +155,8 @@ ToolUp.InterPlatform.AggregatePeerSurface.derive(Microsoft.FSharp.Collections.FS
 ToolUp.InterPlatform.AggregatePeerSurface.mixedPrefix : System.String (literal)
 ToolUp.InterPlatform.AggregatePeerSurface.routes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateMember], ToolUp.InterPlatform.AggregateExposure) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateRoute], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.AggregateDerivationError]]
 ToolUp.InterPlatform.AggregateRoute (class)
-ToolUp.InterPlatform.AggregateRoute..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.AggregateRoute..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], ToolUp.InterPlatform.TargetPeer, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAnswerBounds])
+ToolUp.InterPlatform.AggregateRoute.Bounds : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAnswerBounds] { get }
 ToolUp.InterPlatform.AggregateRoute.ContractId : System.String { get }
 ToolUp.InterPlatform.AggregateRoute.Owner : ToolUp.InterPlatform.TargetPeer { get }
 ToolUp.InterPlatform.AggregateRoute.Routines : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -350,6 +351,7 @@ ToolUp.InterPlatform.DelegatedAssertion.Signature : System.String { get }
 ToolUp.InterPlatform.DelegatedAssertion.Subject : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer (class)
 ToolUp.InterPlatform.DelegatedQueryAnswer.IsAnswered : System.Boolean { get }
+ToolUp.InterPlatform.DelegatedQueryAnswer.IsContinued : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer.IsDescribed : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer.IsPending : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer.IsRefused : System.Boolean { get }
@@ -358,6 +360,8 @@ ToolUp.InterPlatform.DelegatedQueryAnswer.Pending : ToolUp.InterPlatform.Delegat
 ToolUp.InterPlatform.DelegatedQueryAnswer.Tag : System.Int32 { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer+Answered (class)
 ToolUp.InterPlatform.DelegatedQueryAnswer+Answered.Item : ToolUp.InterPlatform.DelegatedQueryResult { get }
+ToolUp.InterPlatform.DelegatedQueryAnswer+Continued (class)
+ToolUp.InterPlatform.DelegatedQueryAnswer+Continued.Item : ToolUp.InterPlatform.DelegatedQueryPage { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer+Described (class)
 ToolUp.InterPlatform.DelegatedQueryAnswer+Described.Item : ToolUp.InterPlatform.DelegatedQueryDescription { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer+Refused (class)
@@ -366,6 +370,7 @@ ToolUp.InterPlatform.DelegatedQueryAnswer+Scheduled (class)
 ToolUp.InterPlatform.DelegatedQueryAnswer+Scheduled.handle : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryAnswer+Tags (class)
 ToolUp.InterPlatform.DelegatedQueryAnswer+Tags.Answered : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryAnswer+Tags.Continued : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryAnswer+Tags.Described : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryAnswer+Tags.Pending : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryAnswer+Tags.Refused : System.Int32 (literal)
@@ -386,6 +391,24 @@ ToolUp.InterPlatform.DelegatedQueryBinding..ctor(System.String, System.String, T
 ToolUp.InterPlatform.DelegatedQueryBinding.PeerId : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryBinding.ScopeId : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryBinding.Visibility : ToolUp.InterPlatform.PeerVisibilityBinding { get }
+ToolUp.InterPlatform.DelegatedQueryBounds (class)
+ToolUp.InterPlatform.DelegatedQueryBounds..ctor(System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.DelegatedQueryRowCeiling], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.DelegatedQueryContinuation], ToolUp.InterPlatform.PeerAnswerBoundsBasis, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.InterPlatform.DelegatedQueryBounds.Basis : ToolUp.InterPlatform.PeerAnswerBoundsBasis { get }
+ToolUp.InterPlatform.DelegatedQueryBounds.Continuation : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.DelegatedQueryContinuation] { get }
+ToolUp.InterPlatform.DelegatedQueryBounds.MaxBytes : System.Int32 { get }
+ToolUp.InterPlatform.DelegatedQueryBounds.Now : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.InterPlatform.DelegatedQueryBounds.Rows : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.DelegatedQueryRowCeiling] { get }
+ToolUp.InterPlatform.DelegatedQueryBoundsModule (class)
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.DefaultMaxBytes : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.MinimumKeyBytes : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.ceiling(ToolUp.InterPlatform.DelegatedQueryBounds) : ToolUp.InterPlatform.PeerAnswerBounds
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.conservative : ToolUp.InterPlatform.DelegatedQueryBounds { get }
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.declare(System.Int32) : ToolUp.InterPlatform.DelegatedQueryBounds
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.problems(ToolUp.InterPlatform.DelegatedQueryBounds) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.published(ToolUp.InterPlatform.PeerSurface) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAnswerBounds]
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.withClock(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.InterPlatform.DelegatedQueryBounds) : ToolUp.InterPlatform.DelegatedQueryBounds
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.withContinuation(ToolUp.InterPlatform.DelegatedQueryContinuation, ToolUp.InterPlatform.DelegatedQueryBounds) : ToolUp.InterPlatform.DelegatedQueryBounds
+ToolUp.InterPlatform.DelegatedQueryBoundsModule.withRows(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryResult, System.Int32], ToolUp.InterPlatform.DelegatedQueryBounds) : ToolUp.InterPlatform.DelegatedQueryBounds
 ToolUp.InterPlatform.DelegatedQueryCaller (class)
 ToolUp.InterPlatform.DelegatedQueryCaller..ctor(System.String, System.String, ToolUp.InterPlatform.PeerDataVisibilityLevel)
 ToolUp.InterPlatform.DelegatedQueryCaller.Authority : ToolUp.InterPlatform.PeerDataVisibilityLevel { get }
@@ -400,6 +423,16 @@ ToolUp.InterPlatform.DelegatedQueryClass.Tag : System.Int32 { get }
 ToolUp.InterPlatform.DelegatedQueryClass+Tags (class)
 ToolUp.InterPlatform.DelegatedQueryClass+Tags.Aggregate : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryClass+Tags.RowLevel : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryContinuation (class)
+ToolUp.InterPlatform.DelegatedQueryContinuation..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryResult, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, ToolUp.InterPlatform.DelegatedQueryResult]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Byte[]]], System.TimeSpan)
+ToolUp.InterPlatform.DelegatedQueryContinuation.Key : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Byte[]]] { get }
+ToolUp.InterPlatform.DelegatedQueryContinuation.Lifetime : System.TimeSpan { get }
+ToolUp.InterPlatform.DelegatedQueryContinuation.Window : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryResult, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, ToolUp.InterPlatform.DelegatedQueryResult]]] { get }
+ToolUp.InterPlatform.DelegatedQueryContinuedSubmission (class)
+ToolUp.InterPlatform.DelegatedQueryContinuedSubmission..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String)
+ToolUp.InterPlatform.DelegatedQueryContinuedSubmission.Continuation : System.String { get }
+ToolUp.InterPlatform.DelegatedQueryContinuedSubmission.Parameters : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.InterPlatform.DelegatedQueryContinuedSubmission.Query : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryDeps (class)
 ToolUp.InterPlatform.DelegatedQueryDeps..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.DelegatedQueryBinding]]], ToolUp.InterPlatform.DelegatedQueryHandler, ToolUp.InterPlatform.DelegatedQueryLeg, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryCaller, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryResult, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryAuditPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]])
 ToolUp.InterPlatform.DelegatedQueryDeps.Audit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryAuditPayload, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
@@ -435,6 +468,10 @@ ToolUp.InterPlatform.DelegatedQueryLeg.Tag : System.Int32 { get }
 ToolUp.InterPlatform.DelegatedQueryLeg+Tags (class)
 ToolUp.InterPlatform.DelegatedQueryLeg+Tags.Immediate : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryLeg+Tags.Queued : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryPage (class)
+ToolUp.InterPlatform.DelegatedQueryPage..ctor(ToolUp.InterPlatform.DelegatedQueryResult, System.String)
+ToolUp.InterPlatform.DelegatedQueryPage.Continuation : System.String { get }
+ToolUp.InterPlatform.DelegatedQueryPage.Result : ToolUp.InterPlatform.DelegatedQueryResult { get }
 ToolUp.InterPlatform.DelegatedQueryParked (class)
 ToolUp.InterPlatform.DelegatedQueryParked..ctor(ToolUp.InterPlatform.DelegatedQueryAnswer, System.String, System.String)
 ToolUp.InterPlatform.DelegatedQueryParked.Outcome : ToolUp.InterPlatform.DelegatedQueryAnswer { get }
@@ -443,10 +480,15 @@ ToolUp.InterPlatform.DelegatedQueryParked.QueryHash : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryPeerContract (class)
 ToolUp.InterPlatform.DelegatedQueryPeerContract.admit(System.String, System.String, ToolUp.InterPlatform.DelegatedQueryRequest) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.DelegatedQueryRequest, ToolUp.InterPlatform.DelegatedQueryRefusal]
 ToolUp.InterPlatform.DelegatedQueryPeerContract.arguments(ToolUp.InterPlatform.DelegatedQueryRequest) : System.String
+ToolUp.InterPlatform.DelegatedQueryPeerContract.bound(ToolUp.InterPlatform.DelegatedQueryBounds, ToolUp.InterPlatform.DelegatedQueryCaller, ToolUp.InterPlatform.DelegatedQuerySubmission, System.Int32, ToolUp.InterPlatform.DelegatedQueryAnswer) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.InterPlatform.DelegatedQueryAnswer]
 ToolUp.InterPlatform.DelegatedQueryPeerContract.builder(ToolUp.InterPlatform.DelegatedQueryGate, ToolUp.InterPlatform.DelegatedQueryDeps) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.DelegatedQueryTemplateRefusal]]
+ToolUp.InterPlatform.DelegatedQueryPeerContract.builderWithin(ToolUp.InterPlatform.DelegatedQueryBounds, ToolUp.InterPlatform.DelegatedQueryGate, ToolUp.InterPlatform.DelegatedQueryDeps) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion], ToolUp.InterPlatform.PeerContractHost], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.DelegatedQueryTemplateRefusal]]
 ToolUp.InterPlatform.DelegatedQueryPeerContract.check(ToolUp.InterPlatform.CleanRoomTemplate) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.DelegatedQueryTemplateRefusal]
+ToolUp.InterPlatform.DelegatedQueryPeerContract.continuationOffset(ToolUp.InterPlatform.DelegatedQueryBounds, ToolUp.InterPlatform.DelegatedQueryCaller, ToolUp.InterPlatform.DelegatedQuerySubmission, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.InterPlatform.DelegatedQueryRefusal]]
+ToolUp.InterPlatform.DelegatedQueryPeerContract.continuationRequest(ToolUp.InterPlatform.DelegatedQuerySubmission, System.String) : ToolUp.InterPlatform.DelegatedQueryRequest
 ToolUp.InterPlatform.DelegatedQueryPeerContract.describeRequest() : ToolUp.InterPlatform.DelegatedQueryRequest
 ToolUp.InterPlatform.DelegatedQueryPeerContract.governed(ToolUp.InterPlatform.DelegatedQueryGate, ToolUp.InterPlatform.DelegatedQueryDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.InterPlatform.GatedContractRegistration, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Jobs.IJobHandler]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.DelegatedQueryTemplateRefusal]]
+ToolUp.InterPlatform.DelegatedQueryPeerContract.governedWithin(ToolUp.InterPlatform.DelegatedQueryBounds, ToolUp.InterPlatform.DelegatedQueryGate, ToolUp.InterPlatform.DelegatedQueryDeps, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerJobFusion]) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.InterPlatform.GatedContractRegistration, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Jobs.IJobHandler]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.DelegatedQueryTemplateRefusal]]
 ToolUp.InterPlatform.DelegatedQueryPeerContract.noAudit(ToolUp.InterPlatform.DelegatedQueryAuditPayload) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.InterPlatform.DelegatedQueryPeerContract.read(System.String, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.DelegatedQueryRequest, ToolUp.InterPlatform.DelegatedQueryRefusal]
 ToolUp.InterPlatform.DelegatedQueryPeerContract.readAnswer(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.InterPlatform.DelegatedQueryAnswer, System.String]
@@ -471,9 +513,18 @@ ToolUp.InterPlatform.DelegatedQueryProfile.requiredAuthority(ToolUp.InterPlatfor
 ToolUp.InterPlatform.DelegatedQueryProfile.template(System.String, ToolUp.InterPlatform.PrivacyGate) : ToolUp.InterPlatform.CleanRoomTemplate
 ToolUp.InterPlatform.DelegatedQueryProfile.withRowRelease(ToolUp.InterPlatform.CleanRoomTemplate) : ToolUp.InterPlatform.CleanRoomTemplate
 ToolUp.InterPlatform.DelegatedQueryRefusal (class)
+ToolUp.InterPlatform.DelegatedQueryRefusal.ContinuationExpired : ToolUp.InterPlatform.DelegatedQueryRefusal { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.ContinuationForeign : ToolUp.InterPlatform.DelegatedQueryRefusal { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.ContinuationInvalid : ToolUp.InterPlatform.DelegatedQueryRefusal { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.ContinuationMismatched : ToolUp.InterPlatform.DelegatedQueryRefusal { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.IsAnswerBoundExceeded : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsAuthorityLevelExceeded : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsAuthorityNarrowingRefused : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsClassMisdeclared : System.Boolean { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.IsContinuationExpired : System.Boolean { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.IsContinuationForeign : System.Boolean { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.IsContinuationInvalid : System.Boolean { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal.IsContinuationMismatched : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsHandlerRefused : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsPeerUnbound : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsProfileVersionUnsupported : System.Boolean { get }
@@ -482,6 +533,10 @@ ToolUp.InterPlatform.DelegatedQueryRefusal.IsScopeWideningRefused : System.Boole
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsSubstrateDisabled : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.IsUnknownOperation : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal.Tag : System.Int32 { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal+AnswerBoundExceeded (class)
+ToolUp.InterPlatform.DelegatedQueryRefusal+AnswerBoundExceeded.bound : System.String { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal+AnswerBoundExceeded.ceiling : System.Int32 { get }
+ToolUp.InterPlatform.DelegatedQueryRefusal+AnswerBoundExceeded.size : System.Int32 { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal+AuthorityLevelExceeded (class)
 ToolUp.InterPlatform.DelegatedQueryRefusal+AuthorityLevelExceeded.answerClass : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal+AuthorityLevelExceeded.declared : System.String { get }
@@ -507,9 +562,14 @@ ToolUp.InterPlatform.DelegatedQueryRefusal+ScopeWideningRefused.asserted : Syste
 ToolUp.InterPlatform.DelegatedQueryRefusal+SubstrateDisabled (class)
 ToolUp.InterPlatform.DelegatedQueryRefusal+SubstrateDisabled.substrate : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryRefusal+Tags (class)
+ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.AnswerBoundExceeded : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.AuthorityLevelExceeded : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.AuthorityNarrowingRefused : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.ClassMisdeclared : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.ContinuationExpired : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.ContinuationForeign : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.ContinuationInvalid : System.Int32 (literal)
+ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.ContinuationMismatched : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.HandlerRefused : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.PeerUnbound : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryRefusal+Tags.ProfileVersionUnsupported : System.Int32 (literal)
@@ -532,17 +592,25 @@ ToolUp.InterPlatform.DelegatedQueryResult..ctor(ToolUp.InterPlatform.DelegatedQu
 ToolUp.InterPlatform.DelegatedQueryResult.Answer : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryResult.Class : ToolUp.InterPlatform.DelegatedQueryClass { get }
 ToolUp.InterPlatform.DelegatedQueryResult.Cohort : System.Int32 { get }
+ToolUp.InterPlatform.DelegatedQueryRowCeiling (class)
+ToolUp.InterPlatform.DelegatedQueryRowCeiling..ctor(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryResult, System.Int32])
+ToolUp.InterPlatform.DelegatedQueryRowCeiling.Count : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.InterPlatform.DelegatedQueryResult, System.Int32] { get }
+ToolUp.InterPlatform.DelegatedQueryRowCeiling.MaxRows : System.Int32 { get }
 ToolUp.InterPlatform.DelegatedQuerySubmission (class)
 ToolUp.InterPlatform.DelegatedQuerySubmission..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.InterPlatform.DelegatedQuerySubmission.Parameters : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.InterPlatform.DelegatedQuerySubmission.Query : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal (class)
+ToolUp.InterPlatform.DelegatedQueryTemplateRefusal.IsBoundsUnusable : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal.IsNoiseDeclared : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal.IsUnreadableDeclaration : System.Boolean { get }
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal.Tag : System.Int32 { get }
+ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+BoundsUnusable (class)
+ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+BoundsUnusable.reason : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+NoiseDeclared (class)
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+NoiseDeclared.templateId : System.String { get }
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+Tags (class)
+ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+Tags.BoundsUnusable : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+Tags.NoiseDeclared : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+Tags.UnreadableDeclaration : System.Int32 (literal)
 ToolUp.InterPlatform.DelegatedQueryTemplateRefusal+UnreadableDeclaration (class)
@@ -1473,6 +1541,23 @@ ToolUp.InterPlatform.ParticipantStatus+Tags (class)
 ToolUp.InterPlatform.ParticipantStatus+Tags.Awaiting : System.Int32 (literal)
 ToolUp.InterPlatform.ParticipantStatus+Tags.Dropped : System.Int32 (literal)
 ToolUp.InterPlatform.ParticipantStatus+Tags.Responded : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAnswerBounds (class)
+ToolUp.InterPlatform.PeerAnswerBounds..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32, System.Boolean, ToolUp.InterPlatform.PeerAnswerBoundsBasis)
+ToolUp.InterPlatform.PeerAnswerBounds.Basis : ToolUp.InterPlatform.PeerAnswerBoundsBasis { get }
+ToolUp.InterPlatform.PeerAnswerBounds.Continuation : System.Boolean { get }
+ToolUp.InterPlatform.PeerAnswerBounds.MaxBytes : System.Int32 { get }
+ToolUp.InterPlatform.PeerAnswerBounds.MaxRows : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.InterPlatform.PeerAnswerBoundsBasis (class)
+ToolUp.InterPlatform.PeerAnswerBoundsBasis.Declared : ToolUp.InterPlatform.PeerAnswerBoundsBasis { get }
+ToolUp.InterPlatform.PeerAnswerBoundsBasis.Default : ToolUp.InterPlatform.PeerAnswerBoundsBasis { get }
+ToolUp.InterPlatform.PeerAnswerBoundsBasis.IsDeclared : System.Boolean { get }
+ToolUp.InterPlatform.PeerAnswerBoundsBasis.IsDefault : System.Boolean { get }
+ToolUp.InterPlatform.PeerAnswerBoundsBasis.Tag : System.Int32 { get }
+ToolUp.InterPlatform.PeerAnswerBoundsBasis+Tags (class)
+ToolUp.InterPlatform.PeerAnswerBoundsBasis+Tags.Declared : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAnswerBoundsBasis+Tags.Default : System.Int32 (literal)
+ToolUp.InterPlatform.PeerAnswerBoundsModule (class)
+ToolUp.InterPlatform.PeerAnswerBoundsModule.exceeded(ToolUp.InterPlatform.PeerAnswerBounds, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`3[System.String, System.Int32, System.Int32]]
 ToolUp.InterPlatform.PeerAudit (class)
 ToolUp.InterPlatform.PeerAudit.contractId : System.String (literal)
 ToolUp.InterPlatform.PeerAudit.defaultLimit : System.Int32 (literal)
@@ -1745,7 +1830,8 @@ ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+TemplateApprovalEnforce
 ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+TemplateApprovalEnforced.gatedContracts : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.PeerCompose+TemplateApprovalPosture+TemplateApprovalEnforced.receiverId : System.String { get }
 ToolUp.InterPlatform.PeerContractHost (class)
-ToolUp.InterPlatform.PeerContractHost..ctor(ToolUp.InterPlatform.PeerContractRegistration, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Jobs.IJobHandler]])
+ToolUp.InterPlatform.PeerContractHost..ctor(ToolUp.InterPlatform.PeerContractRegistration, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Jobs.IJobHandler]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAnswerBounds])
+ToolUp.InterPlatform.PeerContractHost.AnswerBounds : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAnswerBounds] { get }
 ToolUp.InterPlatform.PeerContractHost.JobHandlers : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Jobs.IJobHandler]] { get }
 ToolUp.InterPlatform.PeerContractHost.Registration : ToolUp.InterPlatform.PeerContractRegistration { get }
 ToolUp.InterPlatform.PeerContractRegistration (class)
@@ -2704,7 +2790,8 @@ ToolUp.InterPlatform.RoundStep.Payload : Microsoft.FSharp.Core.FSharpFunc`2[Tool
 ToolUp.InterPlatform.SeededNoiseEntropy (class)
 ToolUp.InterPlatform.SeededNoiseEntropy..ctor(System.String)
 ToolUp.InterPlatform.ServedContract (class)
-ToolUp.InterPlatform.ServedContract..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.InterPlatform.ServedContract..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAnswerBounds])
+ToolUp.InterPlatform.ServedContract.Bounds : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.InterPlatform.PeerAnswerBounds] { get }
 ToolUp.InterPlatform.ServedContract.ContractId : System.String { get }
 ToolUp.InterPlatform.ServedContract.Routines : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.InterPlatform.ServedContract.Versions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.InterPlatform.ContractVersion] { get }
