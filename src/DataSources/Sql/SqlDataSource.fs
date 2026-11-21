@@ -561,6 +561,34 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
 
         command
 
+    /// Run one of the connector's own catalogue statements on an open
+    /// connection, projecting each row with `project`. A translation refusal
+    /// is a defect in the connector's statement, never the caller's.
+    let readRows
+        (opened: Opened)
+        (context: string)
+        (statement: BoundStatement)
+        (project: DbDataReader -> 'T)
+        : Async<Result<'T list, IngestionError>> =
+        async {
+            match SqlBinding.translate opened.Settings.Backend statement with
+            | Error refusal -> return Error(UnexpectedFailure $"%s{context}: %s{BoundStatementError.describe refusal}")
+            | Ok statement ->
+                let! ct = Async.CancellationToken
+                use command = newBoundCommand opened None statement
+                use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
+
+                let rows = ResizeArray<'T>()
+                let mutable go = true
+
+                while go do
+                    let! hasRow = reader.ReadAsync ct |> Async.AwaitTask
+
+                    if hasRow then rows.Add(project reader) else go <- false
+
+                return Ok(List.ofSeq rows)
+        }
+
     /// Run a catalogue query, projecting each row with `project`.
     let readCatalogue
         (ctx: DataSourceCallContext)
@@ -574,31 +602,28 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
             | Ok opened ->
                 use opened = opened
 
-                // The catalogue statements are the connector's own, so a
-                // translation refusal is a defect in them, never the caller's.
-                let translated =
-                    buildStatement opened.Settings
-                    |> Result.bind (fun statement ->
-                        SqlBinding.translate opened.Settings.Backend statement
-                        |> Result.mapError (fun refusal ->
-                            UnexpectedFailure $"%s{context}: %s{BoundStatementError.describe refusal}"))
-
-                match translated with
+                match buildStatement opened.Settings with
                 | Error err -> return Error err
-                | Ok statement ->
-                    let! ct = Async.CancellationToken
-                    use command = newBoundCommand opened None statement
-                    use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
+                | Ok statement -> return! readRows opened context statement project
+        })
 
-                    let rows = ResizeArray<'T>()
-                    let mutable go = true
+    /// The account `probe` names and every privilege it reports the account
+    /// holds, both read over one connection opened as the source opens it.
+    let probePrivileges (ctx: DataSourceCallContext) (probe: PrivilegeProbe) =
+        let context = $"%s{kind} least-privilege probe"
+        let text (reader: DbDataReader) = reader.GetValue 0 |> Csv.renderValue
 
-                    while go do
-                        let! hasRow = reader.ReadAsync ct |> Async.AwaitTask
+        Errors.guard context (fun () -> async {
+            match! prepare ctx with
+            | Error err -> return Error err
+            | Ok opened ->
+                use opened = opened
 
-                        if hasRow then rows.Add(project reader) else go <- false
-
-                    return Ok(List.ofSeq rows)
+                match! readRows opened context probe.Account text with
+                | Error err -> return Error err
+                | Ok account ->
+                    let! held = readRows opened context probe.Privileges text
+                    return held |> Result.map (fun held -> String.concat "" account, held)
         })
 
     /// The catalogue's description of a bare table name.
@@ -729,6 +754,9 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
             member _.QueryBound(ctx, statement) = queryBound ctx statement
         }
 
+    /// The account and the privileges `probe` reads, for the least-privilege probe.
+    member _.ProbePrivileges(ctx: DataSourceCallContext, probe: PrivilegeProbe) = probePrivileges ctx probe
+
     // `Query` emits RFC 4180 CSV; declared, not implied.
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
@@ -817,6 +845,15 @@ let createWithoutSecrets () : IDataSource =
 let createWithKind (kind: string) (secretStore: ISecretStore option) : IDataSource =
     SqlDataSourceImpl(kind, secretStore) :> IDataSource
 
+/// An ingestion error as one line of a preflight report.
+let private describeError (err: IngestionError) =
+    match err with
+    | CredentialMissing key -> $"credential '%s{key}' is missing"
+    | SourceUnreachable message
+    | SchemaMismatch message
+    | IngestionError.StorageFailure message
+    | UnexpectedFailure message -> message
+
 /// The posture of each configured SQL source, read at start-up: what it
 /// may be asked (`statement_policy`) and whether it opens read-only
 /// (`read_only`). Pure: it reads the configurations it is given and
@@ -827,14 +864,6 @@ module SourcePosturePreflight =
     /// The validator's name in the preflight log and summaries.
     [<Literal>]
     let ValidatorName = "sql-source-posture"
-
-    let private message (err: IngestionError) =
-        match err with
-        | CredentialMissing key -> $"credential '%s{key}' is missing"
-        | SourceUnreachable message
-        | SchemaMismatch message
-        | IngestionError.StorageFailure message
-        | UnexpectedFailure message -> message
 
     /// Whether the preflight warns about `source`: it admits raw statement
     /// text and may write, or its posture keys do not read.
@@ -851,7 +880,7 @@ module SourcePosturePreflight =
             | Ok posture when SourcePosture.admitsRawAndMayWrite posture ->
                 $"source '%s{source.Id}': %s{SourcePosture.describe posture} (admits raw statement text and may write)"
             | Ok posture -> $"source '%s{source.Id}': %s{SourcePosture.describe posture}"
-            | Error err -> $"source '%s{source.Id}': posture unreadable: %s{message err}")
+            | Error err -> $"source '%s{source.Id}': posture unreadable: %s{describeError err}")
 
     /// `Ok` when no source is flagged, and a `Warning` naming each flagged
     /// one otherwise. Never `Error`: a posture is the deployment's to choose.
@@ -887,3 +916,217 @@ type SourcePosturePreflight(sources: DataSourceConfig list, report: string -> un
         }
 
     interface ConfigValidation.IStructuralClassValidator
+
+/// What the least-privilege probe learned about one source's account.
+[<RequireQualifiedAccess>]
+type PrivilegeReading =
+    /// The catalogue answered: the account as the database names it, and
+    /// each privilege it holds that a read-only source does not need.
+    | Probed of account: string * surplus: string list
+    /// The catalogue could not answer, and why. Never read as clean.
+    | NotProbed of reason: string
+
+/// Whether the account each read-only SQL source connects with can do more
+/// than read, asked of the backend's own catalogue at start-up. It sends
+/// only the statements `SqlDialect.privilegeProbe` names, over a connection
+/// opened the way the source opens it, and exercises no privilege.
+[<RequireQualifiedAccess>]
+module LeastPrivilegeProbe =
+
+    /// The validator's name in the preflight log and summaries.
+    [<Literal>]
+    let ValidatorName = "sql-least-privilege"
+
+    /// How long one source's probe may take before it is reported not
+    /// probed. It is below the preflight aggregator's ten-second ceiling,
+    /// which fails a validator that overruns it, so a slow database warns
+    /// and never refuses a start.
+    let deadline = TimeSpan.FromSeconds 8.0
+
+    /// Whether the probe reads `source`: only a source declared read-only,
+    /// whose account should hold nothing more than reading needs.
+    let probes (source: DataSourceConfig) : bool =
+        match SourcePosture.read source.ConnectionScope with
+        | Ok posture -> posture.ReadOnly
+        | Error _ -> false
+
+    /// The values a report line must never carry: the credential, the
+    /// declared connection string and any password inside it, longest first
+    /// so a password inside the connection string is caught within it too.
+    let private secretsOf (source: DataSourceConfig) (credential: string option) : string list =
+        let declared = ConnectionScope.optional source.ConnectionScope "connection_string"
+
+        let embedded =
+            match declared with
+            | None -> []
+            | Some connectionString ->
+                try
+                    let builder = DbConnectionStringBuilder()
+                    builder.ConnectionString <- connectionString
+
+                    [ "Password"; "pwd" ]
+                    |> List.choose (fun key ->
+                        match builder.TryGetValue key with
+                        | true, value when not (isNull value) -> Some(string value)
+                        | _ -> None)
+                with :? ArgumentException -> []
+
+        Option.toList credential @ Option.toList declared @ embedded
+        |> List.filter (String.IsNullOrEmpty >> not)
+        |> List.sortByDescending _.Length
+
+    let private redact (secrets: string list) (text: string) : string =
+        secrets
+        |> List.fold (fun (redacted: string) secret -> redacted.Replace(secret, "<redacted>")) text
+
+    /// Probe one source's account. A backend whose catalogue cannot answer,
+    /// a connection that fails and a catalogue that refuses are each
+    /// `NotProbed` with the reason, never `Probed` with nothing surplus.
+    let probe (secretStore: ISecretStore option) (ctx: DataSourceCallContext) : Async<PrivilegeReading> = async {
+        match readSettings ctx.Config.ConnectionScope with
+        | Error err -> return PrivilegeReading.NotProbed(redact (secretsOf ctx.Config None) (describeError err))
+        | Ok settings ->
+            match SqlDialect.privilegeProbe settings.Backend with
+            | Error reason -> return PrivilegeReading.NotProbed reason
+            | Ok statements ->
+                match! Async.Catch(Credentials.resolveOptional secretStore ctx) with
+                | Choice2Of2 ex ->
+                    return
+                        PrivilegeReading.NotProbed(
+                            redact
+                                (secretsOf ctx.Config ctx.Credential)
+                                $"the credential could not be resolved: %s{ex.Message}"
+                        )
+                | Choice1Of2 credential ->
+                    let secrets = secretsOf ctx.Config credential
+                    let source = SqlDataSourceImpl(ctx.Config.Kind, secretStore)
+                    let! read = Async.Catch(source.ProbePrivileges({ ctx with Credential = credential }, statements))
+
+                    return
+                        match read with
+                        | Choice1Of2(Ok(account, held)) ->
+                            PrivilegeReading.Probed(
+                                redact secrets account,
+                                SqlDialect.surplusPrivileges settings.Backend held
+                            )
+                        | Choice1Of2(Error err) -> PrivilegeReading.NotProbed(redact secrets (describeError err))
+                        | Choice2Of2 ex ->
+                            PrivilegeReading.NotProbed(redact secrets $"the probe failed: %s{ex.Message}")
+    }
+
+    /// `work`, or `NotProbed` naming the limit when it has not answered
+    /// within it; the work is cancelled then.
+    let private within (limit: TimeSpan) (work: Async<PrivilegeReading>) : Async<PrivilegeReading> = async {
+        let! ct = Async.CancellationToken
+        use cts = Threading.CancellationTokenSource.CreateLinkedTokenSource ct
+        cts.CancelAfter limit
+        let running = Async.StartAsTask(work, cancellationToken = cts.Token)
+
+        let! _ =
+            Threading.Tasks.Task.WhenAny(running, Threading.Tasks.Task.Delay(Threading.Timeout.Infinite, cts.Token))
+            |> Async.AwaitTask
+
+        return
+            if running.IsCompletedSuccessfully then
+                running.Result
+            else
+                PrivilegeReading.NotProbed $"the database did not answer within %g{limit.TotalSeconds} s"
+    }
+
+    let private listed (items: string list) = String.concat ", " items
+
+    /// The report line for one probed source. It names the source, the
+    /// account as the database reports it and each surplus privilege.
+    let line (sourceId: DataSourceId) (reading: PrivilegeReading) : string =
+        match reading with
+        | PrivilegeReading.Probed(account, []) ->
+            $"source '%s{sourceId}': account '%s{account}' holds no privilege beyond reading"
+        | PrivilegeReading.Probed(account, surplus) ->
+            $"source '%s{sourceId}': account '%s{account}' holds what a read-only source does not need: %s{listed surplus}"
+        | PrivilegeReading.NotProbed reason -> $"source '%s{sourceId}': not probed: %s{reason}"
+
+    /// The report line for a source the probe does not read.
+    let skipped (source: DataSourceConfig) : string =
+        match SourcePosture.read source.ConnectionScope with
+        | Ok _ ->
+            $"source '%s{source.Id}': skipped: it does not declare %s{SourcePosture.ReadOnlyKey}=true, so its account is not held to reading"
+        | Error err -> $"source '%s{source.Id}': skipped: its posture does not read: %s{describeError err}"
+
+    /// `Ok` when every probed source's account holds nothing surplus, and a
+    /// `Warning` naming each that does and each that could not be probed.
+    /// Never `Error`: an account is the deployment's to provision.
+    let result (readings: (DataSourceId * PrivilegeReading) list) : ConfigValidation.ValidationResult =
+        let surplus =
+            readings
+            |> List.choose (fun (id, reading) ->
+                match reading with
+                | PrivilegeReading.Probed(_, (_ :: _ as held)) -> Some $"'%s{id}' (%s{listed held})"
+                | PrivilegeReading.Probed(_, [])
+                | PrivilegeReading.NotProbed _ -> None)
+
+        let unprobed =
+            readings
+            |> List.choose (fun (id, reading) ->
+                match reading with
+                | PrivilegeReading.NotProbed _ -> Some $"'%s{id}'"
+                | PrivilegeReading.Probed _ -> None)
+
+        match surplus, unprobed with
+        | [], [] -> ConfigValidation.ValidationResult.Ok
+        | _ ->
+            let parts = [
+                if not surplus.IsEmpty then
+                    $"%d{surplus.Length} read-only SQL source(s) connect with an account that can write or alter schema: %s{listed surplus}"
+                if not unprobed.IsEmpty then
+                    $"%d{unprobed.Length} read-only SQL source(s) could not be probed, so their accounts are unchecked: %s{listed unprobed}"
+            ]
+
+            ConfigValidation.ValidationResult.Warning(
+                String.concat "; " parts
+                + ". Connect each with an account granted only what it reads; the Sql companion's README gives the statements per backend"
+            )
+
+    /// Probe every read-only source in `sources` at once, each within
+    /// `limit`, hand `report` one line per source, and return `result`. A
+    /// deployment with no sources reports nothing and passes.
+    let validate
+        (limit: TimeSpan)
+        (secretStore: ISecretStore option)
+        (report: string -> unit)
+        (sources: DataSourceCallContext list)
+        : Async<ConfigValidation.ValidationResult> =
+        async {
+            match sources with
+            | [] -> return ConfigValidation.ValidationResult.Ok
+            | _ ->
+                let! outcomes =
+                    sources
+                    |> List.map (fun ctx -> async {
+                        if probes ctx.Config then
+                            let! reading = within limit (probe secretStore ctx)
+                            return line ctx.Config.Id reading, Some(ctx.Config.Id, reading)
+                        else
+                            return skipped ctx.Config, None
+                    })
+                    |> Async.Parallel
+
+                let lines = outcomes |> Array.map fst |> List.ofArray
+                report (String.concat "\n  " ($"SQL least-privilege probe, %d{sources.Length} source(s):" :: lines))
+                return result (outcomes |> Array.choose snd |> List.ofArray)
+        }
+
+/// The least-privilege preflight probe over a deployment's SQL sources, each
+/// with the scope its credential resolves under. A source declared
+/// `read_only=true` is probed; any other is reported skipped. It warns, by
+/// name, for each account that can write or alter schema and each source it
+/// could not probe, and never refuses a start. External-probe class: it opens
+/// a connection to each read-only source, so `SkipPreflight` bypasses it.
+type LeastPrivilegeProbe(sources: DataSourceCallContext list, secretStore: ISecretStore option, report: string -> unit)
+    =
+
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = LeastPrivilegeProbe.ValidatorName
+        member _.Timeout = LeastPrivilegeProbe.deadline + TimeSpan.FromSeconds 2.0
+
+        member _.Validate() =
+            LeastPrivilegeProbe.validate LeastPrivilegeProbe.deadline secretStore report sources

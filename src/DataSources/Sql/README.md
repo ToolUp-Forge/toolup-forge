@@ -169,6 +169,111 @@ services.AddSingleton<ConfigValidation.IConfigValidator>(
     SqlDataSource.SourcePosturePreflight(sqlSources, logger.Info))
 ```
 
+### The account itself: the least-privilege probe
+
+`read_only=true` asks the database to hold a connection to reading. It does not change what the account
+can do, and the account a reporting source connects with was often created for something else.
+`SqlDataSource.LeastPrivilegeProbe(sources, secretStore, report)` is the preflight validator that asks.
+For each source declared `read_only=true` it opens a connection the way the source does and asks the
+backend's own catalogue what the connected account may do. It hands `report` one line per source,
+naming the source, the account as the database reports it and each privilege the account holds that
+reading does not need. It warns, never refuses a start.
+
+```fsharp skip=fragment
+// One DataSourceCallContext per source, with the scope its credential resolves under.
+services.AddSingleton<ConfigValidation.IConfigValidator>(
+    SqlDataSource.LeastPrivilegeProbe(sqlSourceContexts, Some secretStore, logger.Info))
+```
+
+- **It exercises nothing.** It sends the two statements `SqlDialect.privilegeProbe backend` names, the
+  account and its privileges, both catalogue reads. A probe that tested a privilege by using it would
+  be the misuse it exists to find.
+- **A source that is not `read_only=true` is skipped**, with a line saying so: its account may hold what
+  it needs. A deployment with no sources reports nothing.
+- **A source it cannot probe is reported "not probed", with the reason, and warned about.** That covers
+  SQLite (no accounts), a failed connection, a catalogue the account may not read, and a database that
+  does not answer within `LeastPrivilegeProbe.deadline` (8 s, under the preflight aggregator's 10 s
+  ceiling). It is never read as clean.
+- **No line carries a credential or a connection string.** The resolved credential, the declared
+  connection string and any password inside it are removed from every reason.
+- **It is an external probe**, because it opens connections: `ServerConfig.SkipPreflight` bypasses it.
+
+What counts as surplus is `SqlDialect.isSurplusPrivilege`: a privilege whose name carries `INSERT`,
+`UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `TRIGGER` or `GRANT`, and each backend's
+administrative ones. Oracle's `CREATE SESSION` is what connecting needs and is not reported. `EXECUTE`
+is not reported: a procedure's effect is its own, and no catalogue says what it writes.
+
+| Backend | What the catalogue is asked | Administrative, reported too |
+|---|---|---|
+| PostgreSQL | `current_user`; the role's `pg_roles` attributes, `CREATE` on the database and on each user schema (`has_*_privilege`), `INSERT` / `UPDATE` / `DELETE` / `TRUNCATE` / `TRIGGER` on any user relation, and ownership of one (`OWNER`) | `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `BYPASSRLS`, `OWNER` |
+| MySQL / MariaDB | `CURRENT_USER()`; `information_schema` user, schema, table and column privileges granted to that account, each marked `WITH GRANT OPTION` where it is | `SUPER`, `FILE`, `SHUTDOWN`, `EVENT`, any `*_ADMIN` |
+| SQL Server | `SUSER_SNAME()`; `fn_my_permissions` at database scope and on each user table and view, which counts role membership | `CONTROL`, `TAKE OWNERSHIP`, `IMPERSONATE`, `ADMINISTER DATABASE BULK OPERATIONS` |
+| Oracle | `USER`; `SESSION_PRIVS`, `SESSION_ROLES`, object grants to the user or an enabled role (`ALL_TAB_PRIVS`), and ownership of a table (`OWNER`) | `DBA`, `SYSDBA`, `SYSOPER`, `BECOME USER`, `OWNER` |
+| ClickHouse | `currentUser()`; `system.grants` for the user and its enabled roles, partial revokes excluded | `ALL`, `ACCESS MANAGEMENT`, `OPTIMIZE`, any `SYSTEM …` |
+| SQLite | not probed: who may write is the file's permissions | — |
+
+MySQL reads the grants made to the account itself; a privilege that reaches it only through a MySQL 8
+role is not seen. ClickHouse reports the source "not probed" if the account may not read
+`system.grants`.
+
+### Creating a read-only account
+
+The statements below give an account what a reporting source reads and nothing more; the probe then
+reports nothing for it. Replace the names, and grant per table where a source reads only some.
+
+**PostgreSQL**
+
+```sql
+CREATE ROLE reporter LOGIN PASSWORD '…';
+GRANT CONNECT ON DATABASE analytics TO reporter;
+GRANT USAGE ON SCHEMA public TO reporter;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO reporter;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO reporter;
+-- Before PostgreSQL 15 every role may create in `public`; the probe reports it as CREATE ON SCHEMA.
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+```
+
+`ALTER DEFAULT PRIVILEGES` covers tables later created by the role that runs it.
+
+**MySQL / MariaDB**
+
+```sql
+CREATE USER 'reporter'@'%' IDENTIFIED BY '…';
+GRANT SELECT, SHOW VIEW ON analytics.* TO 'reporter'@'%';
+```
+
+**SQL Server / Azure SQL**
+
+```sql
+CREATE LOGIN reporter WITH PASSWORD = '…';
+USE analytics;
+CREATE USER reporter FOR LOGIN reporter;
+-- Azure SQL Database, a contained user instead: CREATE USER reporter WITH PASSWORD = '…';
+ALTER ROLE db_datareader ADD MEMBER reporter;
+```
+
+**Oracle**
+
+```sql
+CREATE USER reporter IDENTIFIED BY "…";
+GRANT CREATE SESSION TO reporter;
+-- One per table the source reads; READ (12c and later) also refuses SELECT … FOR UPDATE.
+GRANT READ ON analytics.orders TO reporter;
+```
+
+**ClickHouse**
+
+```sql
+CREATE USER reporter IDENTIFIED WITH sha256_password BY '…';
+GRANT SELECT ON analytics.* TO reporter;
+```
+
+Do not give the user a `readonly = 1` settings profile: `read_only=true` opens the connection with
+`readonly=2`, which a `readonly = 1` user may not set, so the connection would be refused.
+
+**SQLite** has no accounts. Run the process as an operating-system account that can only read the
+database file; `read_only=true` opens it `Mode=ReadOnly`.
+
 ## Queries and output
 
 `Query` executes `sql` verbatim against the backend, **except** that a bare identifier is expanded to
@@ -222,7 +327,8 @@ The ANSI table classifies the obvious families. Per-backend overrides exist only
   which goes through the Redshift Data API instead.
 - **Ingestion is read-only by design.** The connector itself issues no DDL or DML. Give its database
   role `SELECT` and catalogue-read rights and nothing more; `read_only=true` makes the same intent the
-  connection's, and preflight says which sources have not declared it.
+  connection's, preflight says which sources have not declared it, and the least-privilege probe says
+  which read-only sources connect with an account that can do more.
 - **Cancellation rides the ambient `Async` cancellation token.** `DataSourceCallContext` carries no
   token field, so the connector reads `Async.CancellationToken` and threads it into every ADO
   `*Async` call — a cancelled ingestion aborts the in-flight statement rather than waiting it out.
@@ -267,7 +373,10 @@ pack (`IDataSourceContract.bindingLaws`) run there too, against an in-memory SQL
 
 The five server backends run the same laws as armed legs, one variable each, holding the connection
 string of a **scratch** database: the laws seed one table (`kept`) and drop it again. With the
-variable unset the leg reports `Pending`, naming it.
+variable unset the leg reports `Pending`, naming it. The same variables arm the least-privilege probe's
+server legs, which require the scratch account (one that can create a table) to be reported with what it
+can do; the probe statements, and the classification of what a read-only account's catalogue answers,
+are checked offline in the always-on arm.
 
 | Variable | Backend |
 |---|---|
