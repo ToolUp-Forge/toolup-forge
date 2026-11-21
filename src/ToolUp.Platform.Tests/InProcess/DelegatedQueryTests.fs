@@ -251,10 +251,10 @@ let private custodianWith
     let peer = DefaultPlatformPeer("custodian") :> IPlatformPeer
 
     match DelegatedQueryPeerContract.governed gate deps (Some fusion) with
-    | Ok host ->
-        peer.RegisterContract host.Gated.Registration
+    | Ok(gated, jobHandlers) ->
+        peer.RegisterContract gated.Registration
 
-        for name, handler in host.JobHandlers do
+        for name, handler in jobHandlers do
             (scheduler :> IJobScheduler).RegisterHandler(name, handler)
     | Error refusals ->
         failtestf

@@ -403,14 +403,6 @@ module DelegatedQueryTemplateRefusal =
         | DelegatedQueryTemplateRefusal.UnreadableDeclaration(id, operation, declaration) ->
             $"clean-room template '{id}' declares '{declaration}' for '{operation}'; the delegated-query profile reads only '{DelegatedQueryProfile.RowRelease}' on '{DelegatedQueryProfile.SubmitOperation}' and '{DelegatedQueryProfile.ResolveOperation}'"
 
-/// The gated contract and the job handlers its queued leg runs.
-type DelegatedQueryHost = {
-    /// The contract behind its clean-room gate.
-    Gated: GatedContractRegistration
-    /// The handler the queued leg runs, by the name it is scheduled under.
-    JobHandlers: (string * IJobHandler) list
-}
-
 /// A queued result as it is parked: the answer the job released, and the
 /// hashes the record at `Resolve` carries.
 type DelegatedQueryParked = {
@@ -892,9 +884,10 @@ module DelegatedQueryPeerContract =
 
         noise @ declarations
 
-    /// The delegated-query contract behind its clean-room gate, plus the
-    /// job handler its queued leg runs. The only construction route: there
-    /// is no ungated registration to reach for.
+    /// The delegated-query contract behind its clean-room gate, paired with
+    /// the job handler its queued leg runs, by the name it is scheduled
+    /// under. The only construction route: there is no ungated registration
+    /// to reach for.
     ///
     /// `fusion` is `None` on a deployment with no job substrate; a queued
     /// leg then refuses with `SubstrateDisabled`.
@@ -902,31 +895,29 @@ module DelegatedQueryPeerContract =
         (gate: DelegatedQueryGate)
         (deps: DelegatedQueryDeps)
         (fusion: PeerJobFusion option)
-        : Result<DelegatedQueryHost, DelegatedQueryTemplateRefusal list> =
+        : Result<GatedContractRegistration * (string * IJobHandler) list, DelegatedQueryTemplateRefusal list> =
         match check gate.Template with
         | [] ->
             let rowsReleased =
                 DelegatedQueryProfile.releasesRows gate.Template DelegatedQueryProfile.SubmitOperation
 
-            Ok {
-                Gated =
-                    CleanRoomGate.wrapReading
-                        (gateReading gate.Template)
-                        gate.Broker
-                        gate.Template
-                        gate.Approval
-                        gate.Budget
-                        None
-                        gate.Audit
-                        (registration deps rowsReleased fusion)
-                JobHandlers =
-                    match deps.Leg, fusion with
-                    | DelegatedQueryLeg.Queued, Some f -> [
-                        PeerJob.handlerName DelegatedQueryProfile.ContractId DelegatedQueryProfile.SubmitOperation,
-                        SubmitJobHandler(deps, f) :> IJobHandler
-                      ]
-                    | _ -> []
-            }
+            Ok(
+                CleanRoomGate.wrapReading
+                    (gateReading gate.Template)
+                    gate.Broker
+                    gate.Template
+                    gate.Approval
+                    gate.Budget
+                    None
+                    gate.Audit
+                    (registration deps rowsReleased fusion),
+                match deps.Leg, fusion with
+                | DelegatedQueryLeg.Queued, Some f -> [
+                    PeerJob.handlerName DelegatedQueryProfile.ContractId DelegatedQueryProfile.SubmitOperation,
+                    SubmitJobHandler(deps, f) :> IJobHandler
+                  ]
+                | _ -> []
+            )
         | refusals -> Error refusals
 
     /// The builder `PeerOptions.withContract` takes, with the template
@@ -939,9 +930,9 @@ module DelegatedQueryPeerContract =
         | [] ->
             Ok(fun fusion ->
                 match governed gate deps fusion with
-                | Ok host -> {
-                    Registration = host.Gated.Registration
-                    JobHandlers = host.JobHandlers
+                | Ok(gated, jobHandlers) -> {
+                    Registration = gated.Registration
+                    JobHandlers = jobHandlers
                   }
                 | Error refusals ->
                     failwith (
