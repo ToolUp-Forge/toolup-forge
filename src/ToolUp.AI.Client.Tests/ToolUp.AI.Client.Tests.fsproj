@@ -302,6 +302,9 @@
              `node:test`. Must follow WireCorpus.fs and ElmishProofDifferential.fs
              (the corpus and the seeded LCG it reuses). -->
         <Compile Include="..\..\samples\MinimalClient\Client.fs" />
+        <!-- The 200-row table as Feliz and as a tree, with no Node import, so
+             client-bench-browser.mjs can bundle it for a page. -->
+        <Compile Include="ClientBenchTables.fs" />
         <Compile Include="ClientBench.fs" />
         <!-- Phase 542 - the UI-awareness companion's list_active_actions executor. -->
         <Compile Include="ListActiveActionsTests.fs" />

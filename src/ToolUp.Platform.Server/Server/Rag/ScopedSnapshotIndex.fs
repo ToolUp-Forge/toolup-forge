@@ -33,7 +33,8 @@ open ToolUp.Platform.Infra.IRagTelemetry
 //     composition that wants a corrupt snapshot to fail the boot.
 //   * When is a scope written back? A mutation marks it dirty; a background
 //     loop flushes the dirty set on a timer, or sooner past a chunk count;
-//     `Dispose` flushes once more.
+//     `Dispose` waits for a pass already writing to finish, then flushes once
+//     more, so no write lands after it returns.
 //
 // `ScopedSnapshotIndex` answers them once. A store is a persisted shape
 // (`'Snapshot`), a live shape (`'Live`), the two conversions between them,
@@ -529,6 +530,10 @@ type ScopedSnapshotIndex<'Snapshot, 'Live>
         | Choice2Of2 ex -> return rethrow ex
     }
 
+    // Only the wait between passes observes the stop. A pass that has begun
+    // runs to its end, and `Dispose` waits for it: a write abandoned at a
+    // bind would still be in the store's hands, and could land after the
+    // caller had moved on (deleted the directory under it, say).
     let flushLoop = async {
         while not cts.IsCancellationRequested do
             try
@@ -541,7 +546,11 @@ type ScopedSnapshotIndex<'Snapshot, 'Live>
             | ex -> logger.Error($"[{storeName}] Flush loop error", Some ex)
     }
 
-    do Async.Start(flushLoop, cts.Token)
+    let flushing =
+        Async.StartAsTask(flushLoop, cancellationToken = CancellationToken.None)
+
+    /// How long `Dispose` waits for a pass already writing.
+    let passBound = TimeSpan.FromSeconds 30.0
 
     /// The snapshot layout this index persists under.
     member _.Layout = layout
@@ -616,12 +625,25 @@ type ScopedSnapshotIndex<'Snapshot, 'Live>
     /// Persist every dirty scope now.
     member _.Flush() : Async<unit> = flushAll ()
 
-    /// Stop the flush loop and flush once more, so no acknowledged write is
-    /// lost across shutdown. Idempotent.
+    /// Stop the flush loop, wait for a pass already writing, and flush once
+    /// more, so no acknowledged write is lost across shutdown and none lands
+    /// after this returns. Idempotent.
     interface IDisposable with
         member _.Dispose() =
             if Interlocked.Exchange(&disposed, 1) = 0 then
                 cts.Cancel()
+
+                // The loop ends at its next wait; a cancelled wait ends the
+                // task as cancelled, which is an end like any other.
+                let ended =
+                    try
+                        flushing.Wait passBound
+                    with :? AggregateException ->
+                        true
+
+                if not ended then
+                    logger.Warn
+                        $"[{storeName}] A flush pass was still writing {passBound} after Dispose began; disposing without it."
 
                 try
                     flushAll () |> Async.RunSynchronously

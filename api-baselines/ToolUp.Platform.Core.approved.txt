@@ -2421,6 +2421,7 @@ ToolUp.Platform.BoundStatementModule.bind(System.String, ToolUp.Platform.BoundVa
 ToolUp.Platform.BoundStatementModule.check(Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.DatasetDType], ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.BindingRefusal]
 ToolUp.Platform.BoundStatementModule.isValidName(System.String) : System.Boolean
 ToolUp.Platform.BoundStatementModule.marker(System.String) : System.String
+ToolUp.Platform.BoundStatementModule.namesMarker(System.String, ToolUp.Platform.BoundStatement) : System.Boolean
 ToolUp.Platform.BoundStatementModule.ofText(System.String) : ToolUp.Platform.BoundStatement
 ToolUp.Platform.BoundValue (class)
 ToolUp.Platform.BoundValue.IsBool : System.Boolean { get }
@@ -2460,6 +2461,15 @@ ToolUp.Platform.BoundValue+Timestamp.Item : System.DateTimeOffset { get }
 ToolUp.Platform.BoundValueModule (class)
 ToolUp.Platform.BoundValueModule.kind(ToolUp.Platform.BoundValue) : ToolUp.Platform.DatasetDType
 ToolUp.Platform.BoundValueModule.kinds : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetDType] { get }
+ToolUp.Platform.BoundVirtualBinding (class)
+ToolUp.Platform.BoundVirtualBinding..ctor(System.String, ToolUp.Platform.BoundStatement, ToolUp.Platform.BoundValue, ToolUp.Platform.SnapshotFidelity)
+ToolUp.Platform.BoundVirtualBinding.Fidelity : ToolUp.Platform.SnapshotFidelity { get }
+ToolUp.Platform.BoundVirtualBinding.SourceRef : System.String { get }
+ToolUp.Platform.BoundVirtualBinding.Statement : ToolUp.Platform.BoundStatement { get }
+ToolUp.Platform.BoundVirtualBinding.Watermark : ToolUp.Platform.BoundValue { get }
+ToolUp.Platform.BoundVirtualBindingModule (class)
+ToolUp.Platform.BoundVirtualBindingModule.WatermarkParameter : System.String (literal)
+ToolUp.Platform.BoundVirtualBindingModule.statement(ToolUp.Platform.BoundVirtualBinding) : ToolUp.Platform.BoundStatement
 ToolUp.Platform.Branding (class)
 ToolUp.Platform.Branding..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.Platform.Branding.AppName : System.String { get }
@@ -13850,6 +13860,20 @@ ToolUp.Platform.StateVectorModule (class)
 ToolUp.Platform.StateVectorModule.empty : ToolUp.Platform.StateVector { get }
 ToolUp.Platform.StateVectorModule.isEmpty(ToolUp.Platform.StateVector) : System.Boolean
 ToolUp.Platform.StateVectorModule.ofBytes(System.Byte[]) : ToolUp.Platform.StateVector
+ToolUp.Platform.StatementPolicy (class)
+ToolUp.Platform.StatementPolicy.BoundOnly : ToolUp.Platform.StatementPolicy { get }
+ToolUp.Platform.StatementPolicy.IsBoundOnly : System.Boolean { get }
+ToolUp.Platform.StatementPolicy.IsRawAllowed : System.Boolean { get }
+ToolUp.Platform.StatementPolicy.RawAllowed : ToolUp.Platform.StatementPolicy { get }
+ToolUp.Platform.StatementPolicy.Tag : System.Int32 { get }
+ToolUp.Platform.StatementPolicy+Tags (class)
+ToolUp.Platform.StatementPolicy+Tags.BoundOnly : System.Int32 (literal)
+ToolUp.Platform.StatementPolicy+Tags.RawAllowed : System.Int32 (literal)
+ToolUp.Platform.StatementPolicyModule (class)
+ToolUp.Platform.StatementPolicyModule.Key : System.String (literal)
+ToolUp.Platform.StatementPolicyModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.StatementPolicy] { get }
+ToolUp.Platform.StatementPolicyModule.read(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StatementPolicy, System.String]
+ToolUp.Platform.StatementPolicyModule.token(ToolUp.Platform.StatementPolicy) : System.String
 ToolUp.Platform.StaticPathBehaviour (class)
 ToolUp.Platform.StaticPathBehaviour.IsRequireExist : System.Boolean { get }
 ToolUp.Platform.StaticPathBehaviour.IsSkipSilent : System.Boolean { get }

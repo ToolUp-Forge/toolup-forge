@@ -70,7 +70,7 @@ ToolUp.ContentAuthoring 32/72
 ToolUp.ContentScanners.ClamAv 15/25
 ToolUp.DataSources.Athena 14/16
 ToolUp.DataSources.BigQuery 13/15
-ToolUp.DataSources.Common 266/496
+ToolUp.DataSources.Common 277/509
 ToolUp.DataSources.Csv 10/12
 ToolUp.DataSources.Excel 18/26
 ToolUp.DataSources.GitHub 10/17
@@ -79,8 +79,8 @@ ToolUp.DataSources.GoogleAnalytics.Client 6/11
 ToolUp.DataSources.Parquet 21/25
 ToolUp.DataSources.Redshift 17/19
 ToolUp.DataSources.Snowflake 28/36
-ToolUp.DataSources.Sql 31/71
-ToolUp.DataSources.Synapse 27/37
+ToolUp.DataSources.Sql 57/109
+ToolUp.DataSources.Synapse 31/41
 ToolUp.Elmish.Kernel 34/37
 ToolUp.EmbeddingCaches.Redis 33/63
 ToolUp.EmbeddingProviders.Local 19/23
@@ -140,11 +140,11 @@ ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 595/1073
 ToolUp.Platform.Client 2243/5649
-ToolUp.Platform.Core 8292/17223
+ToolUp.Platform.Core 8309/17247
 ToolUp.Platform.Server 3113/5586
 ToolUp.Platform.Server.Audit 376/696
 ToolUp.Platform.Server.Config 396/662
-ToolUp.Platform.Server.Infra 2271/3878
+ToolUp.Platform.Server.Infra 2285/3910
 ToolUp.Platform.Server.Jobs 933/1744
 ToolUp.Platform.Server.Remoting 360/1027
 ToolUp.Platform.Server.Scope 460/830

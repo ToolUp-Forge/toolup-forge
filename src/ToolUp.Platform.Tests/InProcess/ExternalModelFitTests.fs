@@ -145,9 +145,14 @@ type private ScriptedDispatcher(outcomes: ExternalOutcome list, ?submitResult: R
     let cancelled = ConcurrentQueue<Guid>()
     let remaining = ConcurrentQueue<ExternalOutcome>(outcomes)
     let mutable last = ExternalOutcome.Pending
+    let mutable polls = 0
 
     member _.Submitted = submitted |> Seq.toList
     member _.Cancelled = cancelled |> Seq.toList
+
+    /// How many times the provider has polled: a first poll means its wait
+    /// on the handle has begun.
+    member _.Polls = Threading.Volatile.Read(&polls)
 
     interface IExternalComputeDispatcher with
         member _.Capabilities = BackendCapabilities.none
@@ -170,6 +175,8 @@ type private ScriptedDispatcher(outcomes: ExternalOutcome list, ?submitResult: R
         }
 
         member _.Poll _handle = async {
+            Threading.Interlocked.Increment(&polls) |> ignore
+
             match remaining.TryDequeue() with
             | true, outcome ->
                 last <- outcome
@@ -1249,14 +1256,21 @@ let private failureMapTests =
                 source.Token
             )
 
-            // Let the submit land and the wait begin.
-            do! Async.Sleep 250
+            // Wait for the provider's wait on the handle to begin (its first
+            // poll), so the cancel finds the fit in flight.
+            let! waiting =
+                Clock.waitUntil Clock.system (TimeSpan.FromMilliseconds 25.0) Recording.defaultBackstop (fun () ->
+                    dispatcher.Polls > 0)
+
+            Expect.isTrue waiting "the provider began waiting on the submitted fit"
             Expect.equal (List.length dispatcher.Submitted) 1 "the fit is in flight"
             source.Cancel()
 
             // The cancellation handler runs on the cancelled continuation,
-            // and the teardown it lodges is itself an async.
-            do! Async.Sleep 400
+            // and the teardown it lodges is itself an async: wait for it.
+            let! _ =
+                Clock.waitUntil Clock.system (TimeSpan.FromMilliseconds 25.0) Recording.defaultBackstop (fun () ->
+                    not dispatcher.Cancelled.IsEmpty)
 
             Expect.equal
                 (List.length dispatcher.Cancelled)

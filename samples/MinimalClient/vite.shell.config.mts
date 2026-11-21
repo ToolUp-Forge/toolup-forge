@@ -35,6 +35,15 @@ import base from "./vite.config.mts";
 // moves nothing into the first load that was not there already, and a
 // consumer's own build needs no such setting to load the renderer on demand.
 const fuaranUIRenderer = /fable_modules[\\/]Fuaran\.UI\.(Renderer|Renderer\.Core|Charts)\.[0-9][^\\/]*[\\/]/;
+//
+// The Fuaran-UI node vocabulary (the `Fuaran.UI` package, which carries the
+// compute types in its closure) is the fourth: a tree surface builds its tree
+// in a file reached only through `TreeSurface.deferred`, so the vocabulary
+// loads with the renderer when the first such surface mounts. A tree BUILT on
+// a boot path puts the vocabulary in the first load, and this group names that
+// chunk FuaranUIVocabularyAtBoot, which the gate refuses by name. Like the
+// renderer's group it moves nothing that was not in the first load already.
+const fuaranUIVocabulary = /fable_modules[\\/]Fuaran\.UI\.[0-9][^\\/]*[\\/]/;
 
 export default defineConfig((env) =>
     mergeConfig(typeof base === "function" ? base(env) : base, {
@@ -50,7 +59,10 @@ export default defineConfig((env) =>
                 preserveEntrySignatures: "strict",
                 output: {
                     codeSplitting: {
-                        groups: [{ name: "FuaranUIRendererAtBoot", test: fuaranUIRenderer, tags: ["$initial"] }],
+                        groups: [
+                            { name: "FuaranUIRendererAtBoot", test: fuaranUIRenderer, tags: ["$initial"] },
+                            { name: "FuaranUIVocabularyAtBoot", test: fuaranUIVocabulary, tags: ["$initial"] },
+                        ],
                     },
                 },
             },

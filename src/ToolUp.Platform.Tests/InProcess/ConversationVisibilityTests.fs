@@ -1087,9 +1087,13 @@ type private RecordingFactory(provider: IAIProvider) =
         member _.BuildPlatform(_, _, _) = None
 
 /// Storage that records the name of every blob downloaded through it, so
-/// a case can say what a refused turn READ, not only what it wrote.
-type private ReadRecordingStorage(inner: IBlobStorage) =
+/// a case can say what a refused turn READ, not only what it wrote. Every
+/// write returns `writeLag` after it has landed: a turn's writes are visible
+/// for that long before the turn moves on, as they are on a loaded machine.
+type private ReadRecordingStorage(inner: IBlobStorage, writeLag: TimeSpan) =
     let reads = ResizeArray<string>()
+
+    new(inner: IBlobStorage) = ReadRecordingStorage(inner, TimeSpan.Zero)
 
     member _.Reads = lock reads (fun () -> List.ofSeq reads)
 
@@ -1099,8 +1103,11 @@ type private ReadRecordingStorage(inner: IBlobStorage) =
         member _.ComposeFrom(_, _, _) =
             ToolUp.Platform.BlobStorage.composeNotSupported "test double"
 
-        member _.Upload(container, blobName, content) =
-            inner.Upload(container, blobName, content)
+        member _.Upload(container, blobName, content) = async {
+            let! written = inner.Upload(container, blobName, content)
+            do! Async.Sleep writeLag
+            return written
+        }
 
         member _.Download(container, blobName) = async {
             lock reads (fun () -> reads.Add blobName)
@@ -1276,18 +1283,38 @@ let private expectStopped
         [ $"ai-conversations/{id}.json" ]
         $"{surface}: only the gate's own read of the conversation happens"
 
+/// How long each write of a submitted turn stays visible before the turn
+/// moves on.
+let private turnWriteLag = TimeSpan.FromMilliseconds 250.0
+
 /// Submit as `userId` through `SubmitMessage`; what the provider was sent,
 /// the blobs before and after, and the terminal status.
 let private submitAs (world: World) (userId: string) (id: Guid) = async {
     let! before = snapshot world "alpha" id
     let provider = RecordingProvider()
-    let storage = ReadRecordingStorage world.Storage
+    let storage = ReadRecordingStorage(world.Storage, turnWriteLag)
     let assistant, _ = surfacesWith world "alpha" userId provider storage
 
     let! task = assistant.SubmitMessage(requestTo id)
+
+    // A turn writes the conversation back and only then reports its
+    // terminal status, so a status read as soon as the blobs change can
+    // still say `InProgress`. `GetTaskStatus` records the turn's own
+    // terminal event, the signal a polling client waits on too.
+    let! status = async {
+        match! ConversationListingTests.awaitTerminal assistant task.TaskId with
+        | Some ended -> return Some ended.Status
+        | None ->
+            let! last = assistant.GetTaskStatus task.TaskId
+
+            return
+                failtestf
+                    "the turn reported no terminal status; the last status read was %A"
+                    (last |> Option.map _.Status)
+    }
+
     let! after = settle world "alpha" id before provider
-    let! status = assistant.GetTaskStatus task.TaskId
-    return provider, storage, before, after, status |> Option.map _.Status
+    return provider, storage, before, after, status
 }
 
 let private refusedTurnTests =

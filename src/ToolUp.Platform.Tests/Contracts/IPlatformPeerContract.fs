@@ -412,6 +412,28 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
                 Expect.equal c.HopsRemaining 5 "HopsRemaining reaches the handler unchanged"
         }
 
+        // ─── Guard: a peer call names no scope ────────────────────
+
+        // `PeerCallContext` is what the wire body carries and what the host
+        // rebuilds from the validated principal before `Handle` runs. A scope
+        // member here would be a scope the CALLER asserts, so a handler that
+        // writes facts would be one field away from routing them into a
+        // shard the receiver never resolved. With none, a handler's scope can
+        // only come from the receiver's own resolution.
+        test "the context a dispatch closure receives carries no scope, so a wire-asserted one has nowhere to ride" {
+            let scopeMembers =
+                Microsoft.FSharp.Reflection.FSharpType.GetRecordFields typeof<PeerCallContext>
+                |> Array.filter (fun field ->
+                    field.Name.Contains("Scope", StringComparison.OrdinalIgnoreCase)
+                    || field.PropertyType = typeof<ResolvedScope>
+                    || field.PropertyType = typeof<StorageScope>)
+                |> Array.map _.Name
+
+            Expect.isEmpty
+                scopeMembers
+                "a scope on the peer call context would be asserted by the caller; the receiver resolves its own"
+        }
+
         // ─── Guard: version mismatch ──────────────────────────────
 
         testCaseAsync "Handle rejects a call whose version is not in the contract's supported set"

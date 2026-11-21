@@ -685,6 +685,102 @@ let private treeChunkTests =
                 Expect.isFalse boundaryAfterReload "and the module error is gone"
     ]
 
+[<Emit("Promise.resolve($0)")>]
+let private resolved (value: obj) : JS.Promise<obj> = jsNative
+
+/// A deferred tree surface's body, the shape a surface's on-demand file
+/// exports: it builds its tree and draws it with the renderer directly.
+let private surfaceBody (props: {| Title: string |}) : ReactElement =
+    TreeLowering.column "surface" [ TreeLowering.heading "surface-heading" 2 props.Title ]
+    |> TreeLowering.treeProps HostBindingSources.empty ignore<unit>
+    |> TreeLoweringRuntime.Tree
+
+/// A surface mounted through `TreeSurface.deferred`: the placeholder until its
+/// code arrives, then the body it resolves to, drawn with the props it was
+/// given; a load that fails goes to the module boundary and Reload loads again.
+let private deferredSurfaceTests =
+    let headings (document: obj) =
+        unbox<int> (document?querySelectorAll "h2")?length
+
+    testList "a deferred tree surface" [
+
+        testCase "the prerender pass emits the loading state and not the surface" (fun () ->
+            let html =
+                renderToString (
+                    TreeSurface.deferred "test.prerender" (fun () -> resolved (box surfaceBody)) {|
+                        Title = "Deferred surface"
+                    |}
+                )
+
+            Expect.isTrue (html.Contains "aria-busy=\"true\"") $"the placeholder is in the markup: {html}"
+            Expect.isFalse (html.Contains "Deferred surface") "no surface can render before its code has loaded")
+
+        testCaseDeferred "a failed load shows the module error, and Reload loads the surface again" 15000
+        <| fun () ->
+            let document = installDom "surface-f"
+            let mutable loads = 0
+
+            let load () =
+                loads <- loads + 1
+
+                if loads = 1 then
+                    rejected "the surface's code did not arrive"
+                else
+                    resolved (box surfaceBody)
+
+            let messages = MessageCatalog.english.ModuleBoundary
+
+            let view (resets: int) dispatch =
+                Components.ModuleBoundary.wrapWith
+                    messages
+                    "surface-module"
+                    (string resets)
+                    (Some ignore)
+                    (fun () -> dispatch Bump)
+                    InputsPaneWidth.Narrow
+                    (fun () ->
+                        PageContent.Custom(TreeSurface.deferred "test.failing" load {| Title = "Deferred surface" |}))
+
+            let store = ModelStore.create<int, CounterMsg> ()
+
+            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) view
+            |> Program.withReactStore store "surface-f"
+            |> Program.run
+
+            let reloadButton () =
+                arrayFrom (document?querySelectorAll "button")
+                |> Array.tryFind (fun b -> string b?textContent = messages.Reload)
+
+            let mutable failedLoads = 0
+            let mutable errorShown = false
+            let mutable drawnAfterReload = 0
+            let mutable totalLoads = 0
+            let mutable title = ""
+
+            JS.setTimeout
+                (fun () ->
+                    failedLoads <- loads
+                    errorShown <- (reloadButton ()).IsSome
+                    reloadButton () |> Option.iter (fun b -> b?click ())
+
+                    JS.setTimeout
+                        (fun () ->
+                            totalLoads <- loads
+                            drawnAfterReload <- headings document
+                            title <- string document?body?textContent)
+                        8000
+                    |> ignore)
+                3000
+            |> ignore
+
+            fun () ->
+                Expect.equal failedLoads 1 "the surface's code was asked for once"
+                Expect.isTrue errorShown "the module error with its Reload button is shown"
+                Expect.equal totalLoads 2 "Reload asked for the code again"
+                Expect.equal drawnAfterReload 1 "and the surface's tree is drawn"
+                Expect.isTrue (title.Contains "Deferred surface") "with the props it was mounted with"
+    ]
+
 let tests =
     testList "Phase 852 - the sliced model store" [
         storeBindingTests
@@ -693,4 +789,5 @@ let tests =
         sidebarBoundaryTests
         gridChunkTests
         treeChunkTests
+        deferredSurfaceTests
     ]

@@ -1294,4 +1294,60 @@ let tests =
 
             Expect.isTrue (PeerTrustAnchor.admits Attribution mixed) "a named known level is still admitted"
             Expect.isFalse (PeerTrustAnchor.admits IsolatedSigner mixed) "one the policy omits is not"
+
+        // ── the scope is the caller's mint, never the document's ────────
+
+        test "the door takes a resolved scope and has no string form a caller could choose a shard through" {
+            let imports =
+                typeof<IFactImportDoor>.GetMethods()
+                |> Array.filter (fun m -> m.Name = "Import")
+
+            Expect.equal imports.Length 1 "one Import, so no overload takes a scope the platform did not resolve"
+
+            let parameters = imports[0].GetParameters()
+
+            Expect.equal
+                parameters[0].ParameterType
+                typeof<ResolvedScope>
+                "its scope is a ResolvedScope, which only the platform can mint"
+
+            Expect.equal
+                (parameters |> Array.filter (fun p -> p.Name = "scope") |> Array.length)
+                1
+                "and it is the only parameter that names a scope"
+        }
+
+        testCaseAsync "an import lands in, and is audited under, the scope the door was handed, never the issuer's"
+        <| async {
+            let! a = deployment "deployment-a-v1"
+            let! b = deployment "deployment-b-v1"
+            let audit = TestAuditLog()
+
+            let! original = seed a scopeA "revenue" 1250m Surfaceable
+            let! _, json = certificateJsonFor a (TestScope.resolved scopeA) original.FactId
+
+            let door = doorFor b [ PeerTrustAnchor.create "deployment-a" a.PublicKey ] audit
+
+            match! door.Import(TestScope.resolved scopeB, "deployment-a", ImportedFactOffer.ofFact original, json) with
+            | Error refusal -> failtestf "a sound import must succeed: %s" (FactImportRefusal.describe refusal)
+            | Ok imported ->
+                // The importing deployment is asked about a shard of the
+                // issuer's name as well, so a fact routed by the document
+                // rather than by the door would land somewhere observable.
+                let everything = {
+                    FactQuery.all with
+                        IncludeSuperseded = true
+                }
+
+                let! landed = b.Store.Query(TestScope.resolved scopeB, everything) |> TestScope.ok
+                let! issuersShard = b.Store.Query(TestScope.resolved scopeA, everything) |> TestScope.ok
+
+                Expect.equal (landed |> List.map _.FactId) [ imported.FactId ] "the fact landed in the handed scope"
+                Expect.isEmpty issuersShard "and nothing landed in the shard the certificate was issued from"
+
+                Expect.equal
+                    (audit.Records |> List.map _.Scope |> List.distinct)
+                    [ AuditScope.shard scopeB ]
+                    "every row of the import is audited under the handed scope"
+        }
     ]

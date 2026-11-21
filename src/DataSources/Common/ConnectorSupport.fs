@@ -161,6 +161,69 @@ module ConnectionScope =
                 let accepted = String.Join(", ", allowed)
                 Error(SchemaMismatch $"ConnectionScope key '%s{key}' must be one of [%s{accepted}]; got '%s{raw}'")
 
+/// What a source may be asked, as its `ConnectionScope` declares it:
+/// its statement policy, and whether its connection is opened read-only.
+type SourcePosture = {
+    StatementPolicy: StatementPolicy
+    /// The connection is opened read-only, by the means its backend
+    /// offers. A connector that can honour it in no way refuses the key
+    /// by name at connect rather than ignoring it.
+    ReadOnly: bool
+}
+
+/// Reading and describing a source's posture. Neither key set
+/// is today's behaviour: raw text admitted, no read-only intent.
+[<RequireQualifiedAccess>]
+module SourcePosture =
+
+    /// The connection-scope key naming the statement policy.
+    [<Literal>]
+    let StatementPolicyKey = StatementPolicy.Key
+
+    /// The connection-scope key declaring read-only intent.
+    [<Literal>]
+    let ReadOnlyKey = "read_only"
+
+    /// The posture of a source that declares neither key.
+    let unset = {
+        StatementPolicy = StatementPolicy.RawAllowed
+        ReadOnly = false
+    }
+
+    /// Read the posture out of a `ConnectionScope`. A value outside the
+    /// accepted set is refused by name, never read as the default.
+    let read (scope: Map<string, string>) : Result<SourcePosture, IngestionError> =
+        StatementPolicy.read scope
+        |> Result.mapError SchemaMismatch
+        |> Result.bind (fun policy ->
+            ConnectionScope.optionalBool scope ReadOnlyKey
+            |> Result.map (fun readOnly -> {
+                StatementPolicy = policy
+                ReadOnly = readOnly |> Option.defaultValue false
+            }))
+
+    /// Whether the source admits raw statement text AND may write: the
+    /// posture preflight warns about.
+    let admitsRawAndMayWrite (posture: SourcePosture) : bool =
+        posture.StatementPolicy = StatementPolicy.RawAllowed && not posture.ReadOnly
+
+    /// The posture on one line, in the keys' own spelling.
+    let describe (posture: SourcePosture) : string =
+        let readOnly = if posture.ReadOnly then "true" else "false"
+        $"%s{StatementPolicyKey}=%s{StatementPolicy.token posture.StatementPolicy}, %s{ReadOnlyKey}=%s{readOnly}"
+
+    /// The refusal of statement text by a `bound-only` source, before
+    /// anything is sent to it.
+    let rawTextRefused (context: string) (sourceId: DataSourceId) : IngestionError =
+        SchemaMismatch
+            $"%s{context}: source '%s{sourceId}' declares %s{StatementPolicyKey}=bound-only, so it admits a bare table name or a bound statement (IBindsStatements.QueryBound), never statement text. Nothing was sent to the source"
+
+    /// A write the database refused on a source declared read-only. The
+    /// source was reached, so this is never `SourceUnreachable`.
+    let writeRefused (context: string) (sourceId: DataSourceId) (detail: string) : IngestionError =
+        SchemaMismatch
+            $"%s{context}: the database refused a write on source '%s{sourceId}', which declares %s{ReadOnlyKey}=true: %s{detail}"
+
 /// The credential thunk every connector shares.
 ///
 /// The shipped `DataIngestor` pre-resolves the credential and hands it

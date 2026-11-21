@@ -36,6 +36,15 @@ fixture's background jobs still write after the case's assertions are done (a di
 them is recreated by the next write). `forRun` creates the same `toolup-<family>-<guid>` directory and the
 test process deletes it when it exits. Prefer `create` with `use` wherever the case owns the lifetime.
 
+**Stop what writes into a directory before deleting it.** A directory deleted while something still writes
+into it comes back: the store under test creates its folders on every write, so a write that lands after
+the delete leaves a directory the census then reports. The delete's retries do not cover it, and they are
+not lengthened to: the fixture releases the writer first. A scheduler fixture stops the scheduler, which
+waits for its dispatches in flight, before it deletes the directory (`JobSchedulerTests`' catch-up fixture
+is one disposable that does both, in that order). A store with a background flush (`HnswVectorStore` and
+every store over `ScopedSnapshotIndex`) is disposed before its directory, and its `Dispose` returns only
+once a flush already writing has finished.
+
 **Nothing in a test pack calls `Path.GetTempPath()` itself.** The exceptions are named where they stand:
 a test that asserts something about the temp root, and a path that must NOT exist and is never created.
 
@@ -44,10 +53,14 @@ a test that asserts something about the temp root, and a path that must NOT exis
 `VerifyAll` runs every pack and leg under a temp root of its own (it points `TEMP`, `TMP` and `TMPDIR` at
 `%TEMP%/toolup-gate-<guid>` before anything runs, and deletes that root when the driver exits), so a run
 leaves nothing in the machine's temp directory and a sibling session's directories are never mistaken for
-this run's. After the packs, the `GateReconcile` leg censuses the run's root: every `TempDir`-shaped
-directory left there is printed by family and removed, and a family outside `tempLeakAllowance` in
-`Build.fs` fails the leg, naming it. The allowance is empty and only shrinks: under the full lane a listed
-family that left nothing behind fails the leg too.
+this run's. After the packs, the `TempHygiene` check censuses the run's root. It rides the `GateReconcile` leg, and
+its verdict leads with its own name: every `TempDir`-shaped directory left there is printed by family, with
+its path and the first files it holds (their paths name the store that wrote them, their write times say
+when), and removed; a family outside `tempLeakAllowance` in `Build.fs` fails the leg with a line that
+starts `TempHygiene:` and names the family and the directory. The allowance is empty and only shrinks:
+under the full lane a listed family that left nothing behind fails the leg too. By the time the check runs
+every pack's process has exited, so no handle is still held; a directory that cannot be removed even then
+is reported with the file the system refused.
 
 The Build pack's `TestDoubleCensusTests` holds the sources to the same rule: no file under
 `src/ToolUp.Platform.Tests` calls `Path.GetTempPath()` outside its named exceptions.

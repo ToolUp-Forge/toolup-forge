@@ -11,18 +11,14 @@
 /// `HostBindingSources` the module's `IHostStateProjection` projects, so the
 /// tree reaches the host through the seams every hosted runtime uses.
 ///
-/// This file holds the authoring helpers, which use only `Fuaran.UI`'s node
-/// vocabulary. The renderer is in `TreeLoweringRuntime`, reached only through
-/// the dynamic import in `lower`: a production build puts it in a chunk the
-/// browser fetches when the first tree surface mounts, so a shell whose first
-/// screen draws no tree never downloads it.
-///
-/// While the chunk loads, `lower` shows a placeholder (`role="status"`,
-/// `aria-busy`), the shape a grid or a chart shows while theirs loads. A chunk
-/// that fails rejects into the nearest error boundary, which in the SDK shell is
-/// `ModuleBoundary` and its "Reload module" button. `React.lazy` keeps a
-/// rejection for good, so the rejected lazy is dropped here: the remount the
-/// button causes builds a new one and the browser fetches the chunk again.
+/// This file holds the authoring helpers, which use `Fuaran.UI`'s node
+/// vocabulary, so it is itself NOT free to import at boot: the vocabulary and
+/// its closure weigh about 370 KB. The renderer is in `TreeLoweringRuntime`,
+/// reached from `lower` only through a dynamic import, so `lower` from a file
+/// the shell imports at boot keeps the renderer off the first load and pays
+/// for the vocabulary. A surface that should cost the first load nothing builds
+/// its tree in a file of its own and mounts that through `TreeSurface.deferred`
+/// (see there); the loading and failed-load states are `TreeSurface`'s.
 module internal TreeLowering
 
 open Fable.Core
@@ -54,11 +50,6 @@ let island (id: string) (render: unit -> ReactElement) : Node<'Msg> =
     islands[id] <- render
     Fuaran.custom id IslandModule id Map.empty None []
 
-let private reactLazy: (unit -> JS.Promise<obj>) -> obj = import "lazy" "react"
-
-[<Emit("$0.then(c => ({ default: c }), e => { $1(); throw e; })")>]
-let private asLazyModule (load: JS.Promise<'c>) (onFailed: unit -> unit) : JS.Promise<obj> = jsNative
-
 /// The real fetch of the renderer chunk: the dynamic import.
 let internal importRuntime () : JS.Promise<obj> =
     unbox (importValueDynamic TreeLoweringRuntime.Tree)
@@ -67,8 +58,8 @@ let internal importRuntime () : JS.Promise<obj> =
 // `useLoader` writes it, and outside tests nothing calls that.
 let mutable private loadRuntime: unit -> JS.Promise<obj> = importRuntime
 
-// Sanctioned module-level mutable: the one lazy component, replaced on failure.
-let mutable private loadedTree: obj option = None
+[<Literal>]
+let private RuntimeKey = "TreeLoweringRuntime.Tree"
 
 /// Fetch the renderer chunk through `load` from the next tree render on, or
 /// through the real dynamic import again when `load` is `None`. A test uses it
@@ -76,33 +67,18 @@ let mutable private loadedTree: obj option = None
 /// on demand; the cached component is dropped so the next render asks again.
 let internal useLoader (load: (unit -> JS.Promise<obj>) option) : unit =
     loadRuntime <- defaultArg load importRuntime
-    loadedTree <- None
+    TreeSurface.forget RuntimeKey
 
-let private lazyTree () : obj =
-    match loadedTree with
-    | Some tree -> tree
-    | None ->
-        let tree =
-            reactLazy (fun () -> asLazyModule (loadRuntime ()) (fun () -> loadedTree <- None))
-
-        loadedTree <- Some tree
-        tree
-
-/// What a tree surface shows while the renderer chunk loads.
-let private placeholder =
-    Html.div [
-        prop.role "status"
-        prop.ariaBusy true
-        prop.className "animate-pulse rounded bg-gray-100"
-        prop.style [ style.minHeight 160 ]
-    ]
-
-/// Lower `node` to the `ReactElement` the module contract asks for. The tree's
-/// structure and theme come from the host's stylesheet (`fuaran-reference.css`
-/// and the shell's `fuaran-bridge.css`, imported once by the CSS entry), so a
-/// lowered tree emits no style element of its own.
-let lower (host: HostBindingSources) (dispatch: 'Msg -> unit) (node: Node<'Msg>) : ReactElement =
-    let props: TreeLoweringRuntime.TreeProps = {|
+/// What the renderer's `Tree` component takes for `node`, dispatching into
+/// `dispatch` and resolving against `host`. A deferred surface's tree file
+/// draws `TreeLoweringRuntime.Tree (treeProps host dispatch node)` directly:
+/// that file is itself loaded on demand, so the renderer arrives with it.
+let internal treeProps
+    (host: HostBindingSources)
+    (dispatch: 'Msg -> unit)
+    (node: Node<'Msg>)
+    : TreeLoweringRuntime.TreeProps =
+    {|
         Host = host
         Dispatch = unbox (box dispatch)
         Node = unbox (box node)
@@ -110,7 +86,13 @@ let lower (host: HostBindingSources) (dispatch: 'Msg -> unit) (node: Node<'Msg>)
         RenderIsland = renderIsland
     |}
 
-    React.Suspense([ ReactLegacy.createElement (unbox<ReactElement> (lazyTree ()), props) ], placeholder)
+/// Lower `node` to the `ReactElement` the module contract asks for, the
+/// renderer loading on demand behind `TreeSurface.deferred`. The tree's
+/// structure and theme come from the host's stylesheet (`fuaran-reference.css`
+/// and the shell's `fuaran-bridge.css`, imported once by the CSS entry), so a
+/// lowered tree emits no style element of its own.
+let lower (host: HostBindingSources) (dispatch: 'Msg -> unit) (node: Node<'Msg>) : ReactElement =
+    TreeSurface.deferred RuntimeKey (fun () -> loadRuntime ()) (treeProps host dispatch node)
 
 /// Lower through the module's capability bag, so a tree dispatches exactly
 /// where the rest of the hosted seam does.
