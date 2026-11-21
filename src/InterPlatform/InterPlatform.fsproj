@@ -291,6 +291,7 @@
          ModelExecutionPeerContract.fs, whose fit-diagnostic vocabulary it
          draws. -->
     <Compile Include="Server\FitDiagnosticCharts.fs" />
+    <Compile Include="Server\DelegatedQueryPeerContract.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

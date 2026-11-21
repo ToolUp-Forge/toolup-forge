@@ -267,6 +267,11 @@ type WireProfile =
     /// Phase 638 — the deployment that authors the specs and submits
     /// them.
     | Modeller
+    /// The deployment that holds a data source's credential and answers
+    /// delegated queries over it.
+    | Custodian
+    /// The deployment that sends delegated queries and holds no credential.
+    | Requester
 
 [<RequireQualifiedAccess>]
 module WireProfile =
@@ -278,6 +283,8 @@ module WireProfile =
         | ModuleHost -> "module-host"
         | DataHost -> "participant-data-host"
         | Modeller -> "participant-modeller"
+        | Custodian -> "participant-custodian"
+        | Requester -> "participant-requester"
 
     /// The families a profile's implementer must certify against — the
     /// per-profile partition of the corpus. Cumulative: a gateway is a
@@ -297,6 +304,8 @@ module WireProfile =
         | ModuleHost -> families Gateway @ [ "host-envelope" ]
         | DataHost
         | Modeller -> families Participant @ [ "model-execution" ]
+        | Custodian
+        | Requester -> families Participant @ [ "delegated-query" ]
 
 /// What certifying against a vector means.
 type WireVectorKind =
@@ -1810,6 +1819,75 @@ let private fullOnlyRequest () =
 
 // ─── The corpus ──────────────────────────────────────────────────────
 
+// ─── Reference values — delegated query (custodian / requester) ──────
+
+/// The scope the custodian's binding resolves the reference requester's
+/// calls under. Read by the harness for the scope-widening vector.
+let delegatedQueryBoundScope = "custodian-north"
+
+/// The reference requester's validated peer id.
+let delegatedQueryPeerId = "requester-acme"
+
+/// A query and its parameters in the requester's own representation, which
+/// the profile carries and never reads. The parameters are declared out of
+/// ordinal order; the map is published sorted.
+let private referenceDelegatedSubmission: DelegatedQuerySubmission = {
+    Query = """{"measure":"count","over":"orders","where":{"region":{"param":"region"}}}"""
+    Parameters = Map.ofList [ "since", "\"2026-01-01\""; "region", "\"north\"" ]
+}
+
+let private referenceDelegatedHandle = "5f0c2a8e-3b1d-4e6f-9a72-1c4d8e0b6a35"
+
+let private referenceRowResult: DelegatedQueryResult = {
+    Class = DelegatedQueryClass.RowLevel
+    Cohort = 1
+    Answer = """[{"amount":"120.00","region":"north"}]"""
+}
+
+let private referenceDelegatedAnswers: DelegatedQueryAnswer list = [
+    DelegatedQueryAnswer.Described {
+        Schema = """{"orders":["amount","placed","region"]}"""
+        Classes = [ DelegatedQueryClass.Aggregate ]
+        Leg = DelegatedQueryLeg.Queued
+    }
+    DelegatedQueryAnswer.Scheduled referenceDelegatedHandle
+    DelegatedQueryAnswer.Pending
+    DelegatedQueryAnswer.Answered {
+        Class = DelegatedQueryClass.Aggregate
+        Cohort = 42
+        Answer = """{"count":42}"""
+    }
+    DelegatedQueryAnswer.Answered referenceRowResult
+]
+
+let private referenceDelegatedRefusals: DelegatedQueryAnswer list =
+    [
+        DelegatedQueryRefusal.ProfileVersionUnsupported(2, 1)
+        DelegatedQueryRefusal.RequestUnreadable "unexpected end of JSON input"
+        DelegatedQueryRefusal.UnknownOperation "ReadPage"
+        DelegatedQueryRefusal.ScopeWideningRefused "custodian-south"
+        DelegatedQueryRefusal.PeerUnbound delegatedQueryPeerId
+        DelegatedQueryRefusal.AuthorityLevelExceeded("RowLevel", "Full", "AggregatesOnly")
+        DelegatedQueryRefusal.AuthorityNarrowingRefused("RowLevel", "Full", "AggregatesOnly", "team:north-analysts")
+        DelegatedQueryRefusal.ClassMisdeclared "Aggregate"
+        DelegatedQueryRefusal.HandlerRefused "the handler does not read that query"
+        DelegatedQueryRefusal.SubstrateDisabled "job scheduler"
+    ]
+    |> List.map DelegatedQueryAnswer.Refused
+
+/// The grant a delegated-query answer vector is judged against: the
+/// narrowing vector beneath a `Full` ceiling, every other at the default.
+let delegatedQueryAuthorityFor (vectorId: string) : PeerVisibilityResolution =
+    match vectorId with
+    | "delegated-query/reject-rows-narrowed" ->
+        PeerVisibility.resolve
+            (PeerVisibilityBinding.ofCeiling PeerDataVisibilityLevel.Full
+             |> PeerVisibilityBinding.withNarrowing
+                 (TeamNarrowing "north-analysts")
+                 PeerDataVisibilityLevel.AggregatesOnly)
+            delegatedQueryPeerId
+    | _ -> PeerVisibility.unresolved delegatedQueryPeerId
+
 let private vector id family profile kind description file document : WireVector = {
     Id = id
     Family = family
@@ -2361,6 +2439,130 @@ let vectors () : WireVector list =
                 (JsonRpc.serialize (ModelExecutionPeerContract.viewRequest undeclaredSeriesRequest)) with
                 Reject = Some "model-execution-view-series-undeclared"
         }
+
+        // ── delegated query ───────────────────────────────────────────
+        vector
+            "delegated-query/describe-request"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "A Describe request in the profile's envelope. Its body is the empty object: the schema a requester may build against is decided by the custodian's binding for the validated caller, so there is nothing for the request to name."
+            "delegated-query/describe-request.json"
+            (JsonRpc.serialize (DelegatedQueryPeerContract.describeRequest ()))
+
+        vector
+            "delegated-query/submission"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "A Submit request: the requester's query and its bound parameters, each embedded and opaque to the profile. The parameters are a map, published with their keys in ordinal order whatever order the requester declared them in."
+            "delegated-query/submission.json"
+            (JsonRpc.serialize (DelegatedQueryPeerContract.submissionRequest referenceDelegatedSubmission))
+
+        vector
+            "delegated-query/resolve-request"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "A Resolve request for a handle a queued Submit answered. The handle is the requester's to quote and the custodian's to interpret."
+            "delegated-query/resolve-request.json"
+            (JsonRpc.serialize (DelegatedQueryPeerContract.resolveRequest referenceDelegatedHandle))
+
+        vector
+            "delegated-query/answers"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "Every non-refusal answer frame: a description naming the classes this peer may receive and the leg, a handle, a pending status, and two answered results, one aggregate and one row-level. An answered result is a nested object, because the custodian's gate reads its class and cohort; the answer inside it stays embedded."
+            "delegated-query/answers.json"
+            (JsonRpc.serialize referenceDelegatedAnswers)
+
+        vector
+            "delegated-query/refusals"
+            "delegated-query"
+            Custodian
+            RoundTrip
+            "One refusal per class. The authority refusals name the answer's declared class, the level it requires and the level the peer holds; none names anything about the answer itself."
+            "delegated-query/refusals.json"
+            (JsonRpc.serialize referenceDelegatedRefusals)
+
+        {
+            vector
+                "delegated-query/reject-malformed"
+                "delegated-query"
+                Custodian
+                Reject
+                "A truncated envelope. Refused rather than partially read: a member the reader has no value for would satisfy a check by omission."
+                "delegated-query/reject-malformed.json"
+                """{"ProfileVersion":1,"Operation":""" with
+                Reject = Some "delegated-query-request-unreadable"
+        }
+
+        {
+            vector
+                "delegated-query/reject-profile-version"
+                "delegated-query"
+                Custodian
+                Reject
+                "A Submit declaring a profile version beyond the reader's. Refused naming both versions, never read as the version the reader knows."
+                "delegated-query/reject-profile-version.json"
+                (JsonRpc.serialize {
+                    DelegatedQueryPeerContract.submissionRequest referenceDelegatedSubmission with
+                        ProfileVersion = 2
+                }) with
+                Reject = Some "delegated-query-profile-version-unsupported"
+        }
+
+        {
+            vector
+                "delegated-query/reject-unknown-operation"
+                "delegated-query"
+                Custodian
+                Reject
+                "A request naming an invocation the profile does not have. The profile has three, and a row read is not one of them at any level: a custodian that answers rows does so through Submit, under its grant and its gate."
+                "delegated-query/reject-unknown-operation.json"
+                (JsonRpc.serialize (DelegatedQueryPeerContract.request "ReadPage" "{}")) with
+                Reject = Some "delegated-query-unknown-operation"
+        }
+
+        {
+            vector
+                "delegated-query/reject-scope-widening"
+                "delegated-query"
+                Custodian
+                Reject
+                "A well-formed Submit asserting a scope other than the one the custodian's binding resolves the caller under. An implementation that routed on the assertion would answer it; refusing it is what makes the assertion a self-check rather than an impersonation vector."
+                "delegated-query/reject-scope-widening.json"
+                (JsonRpc.serialize {
+                    DelegatedQueryPeerContract.submissionRequest referenceDelegatedSubmission with
+                        AssertedScope = Some "custodian-south"
+                }) with
+                Reject = Some "delegated-query-scope-widening"
+        }
+
+        {
+            vector
+                "delegated-query/reject-rows-at-aggregates"
+                "delegated-query"
+                Custodian
+                Reject
+                "A handler's row-level result, judged by the custodian's release step for a peer granted AggregatesOnly. Refused before any byte of it is written: the class needs Full."
+                "delegated-query/reject-rows-at-aggregates.json"
+                (JsonRpc.serialize referenceRowResult) with
+                Reject = Some "delegated-query-authority-level-exceeded"
+        }
+
+        {
+            vector
+                "delegated-query/reject-rows-narrowed"
+                "delegated-query"
+                Custodian
+                Reject
+                "The same bytes, judged for a peer whose ceiling is Full beneath a team narrowing to AggregatesOnly. The ceiling admits the class and the narrowing does not, so the refusal is a narrowing, naming the layer."
+                "delegated-query/reject-rows-narrowed.json"
+                (JsonRpc.serialize referenceRowResult) with
+                Reject = Some "delegated-query-authority-narrowed"
+        }
     ]
 
 // ─── Manifest ────────────────────────────────────────────────────────
@@ -2406,7 +2608,7 @@ let renderManifest (vectors: WireVector list) : string =
     line "  ],"
     line "  \"profiles\": {"
 
-    let profiles = [ Participant; Gateway; ModuleHost; DataHost; Modeller ]
+    let profiles = [ Participant; Gateway; ModuleHost; DataHost; Modeller; Custodian; Requester ]
 
     profiles
     |> List.iteri (fun i profile ->
