@@ -85,6 +85,10 @@ rather than building a new `Map` in the projection on every render, or the conte
 memo, is rebuilt each time. A write to a renderer store (a `SetState`, a filter or a selection)
 advances the store generation and rebuilds everything once, as it must.
 
+What it buys, on the 200-row table `ClientBench`'s browser leg measures: a dispatch drops from about 15.6 ms with
+every row rebuilt to about 1.7 ms with the rows kept, at about the Feliz table's cost (the figures and the method are
+in [the budgets page](budgets.md#a-tree-surface-is-judged-on-a-browser-dispatch-not-on-viewperdispatchus)).
+
 ## Row identity is the dispatch key
 
 A kept node captures the message it sends. A row built with `Bump i` keeps its index: after a reorder

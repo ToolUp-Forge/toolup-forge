@@ -344,6 +344,22 @@ The frame is the ceiling that matters for a tree: 16.7 ms on a desktop, and on t
 100 ms. A rebuilt 200-row tree fits the first and is about twice the second; the study's subtree memoisation (its
 lever 1) is what would take a rebuilt table under both.
 
+**The kept table.** The leg's third arm, `tree-kept`, is the same 200 rows authored as [the authoring
+guide](authoring-trees.md) says: each row built through a `Keep` keyed on its row record, its ids from the row's
+identity, drawn through the lowering, which keeps its render context and turns the subtree memo on. A dispatch replaces
+one row record and the tick, so the renderer builds the heading and that row and serves the other 199 rows' elements from
+the memo. Measured 2026-11-21 on the same machine (Edge 157), one run of 30 samples, median milliseconds per dispatch:
+
+| Profile | Feliz table | Tree, rebuilt | Tree, rows kept | Feliz again (control) |
+|---|---:|---:|---:|---:|
+| desktop | 2.14 | 15.65 | 1.66 | 2.07 |
+| low phone: 6x CPU | 25.79 | 106.22 | 15.47 | 12.20 |
+
+Both tree arms mount 2,004 elements and change two DOM records per dispatch, so the kept arm does the same work in the
+document; what it stops doing is building and reconciling the 199 rows that did not change. A kept tree is inside the
+frame on both profiles, at about the Feliz table's cost. (The low-phone Feliz arm's first reading is noisier than its
+control; the kept arm's p90 is 20.2 ms against the rebuilt tree's 191.9.)
+
 ### The Fuaran-UI stylesheet
 
 A tree is styled by the renderer's `fuaran-reference.css` and the shell's `fuaran-bridge.css`, which the client CSS
