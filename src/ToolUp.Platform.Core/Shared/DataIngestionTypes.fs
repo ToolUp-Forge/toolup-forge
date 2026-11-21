@@ -370,18 +370,14 @@ module BoundStatement =
         let text = statement.Text
         let wanted = marker name
 
-        let rec from (start: int) =
-            match text.IndexOf(wanted, start, StringComparison.Ordinal) with
-            | -1 -> false
-            | at ->
-                let next = at + wanted.Length
+        let namesAt (at: int) =
+            let next = at + wanted.Length
 
-                if next < text.Length && (isLetter text[next] || isDigit text[next]) then
-                    from (at + 1)
-                else
-                    true
+            text.Substring(at, wanted.Length) = wanted
+            && not (next < text.Length && (isLetter text[next] || isDigit text[next]))
 
-        isValidName name && from 0
+        isValidName name
+        && Seq.exists namesAt (seq { 0 .. text.Length - wanted.Length })
 
     /// The refusals a statement earns before any connector reads it: a name
     /// that is not a parameter name, a name given twice, a value of a kind
