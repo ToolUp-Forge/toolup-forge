@@ -637,6 +637,7 @@ let private registeredTests =
         FederatedModelExecutionTests.tests
         FitDiagnosticChartsTests.tests
         ExternalModelFitTests.tests
+        DelegatedQueryTests.tests
         ScopeEnumerationSweepTests.tests
         CountersignatureRegistryTests.subjectTests
         CountersignatureRegistryTests.completenessTests
