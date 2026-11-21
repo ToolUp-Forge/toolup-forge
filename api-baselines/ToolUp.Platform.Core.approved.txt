@@ -4467,6 +4467,13 @@ ToolUp.Platform.DataProvenanceLabel+Tags.CleanRoomDerived : System.Int32 (litera
 ToolUp.Platform.DataProvenanceLabelModule (class)
 ToolUp.Platform.DataProvenanceLabelModule.key(ToolUp.Platform.DataProvenanceLabel) : System.String
 ToolUp.Platform.DataProvenanceLabelModule.union(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataProvenanceLabel]
+ToolUp.Platform.DataSourceAuditEvent (class)
+ToolUp.Platform.DataSourceAuditEvent.Item : ToolUp.Platform.DataSourceQueriedPayload { get }
+ToolUp.Platform.DataSourceAuditEvent.Tag : System.Int32 { get }
+ToolUp.Platform.DataSourceAuditEventModule (class)
+ToolUp.Platform.DataSourceAuditEventModule.DataSourceQueriedKind : System.String (literal)
+ToolUp.Platform.DataSourceAuditEventModule.kinds : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AuditEventKindInfo] { get }
+ToolUp.Platform.DataSourceAuditEventModule.parameters(ToolUp.Platform.BoundStatement) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceQueryParameter]
 ToolUp.Platform.DataSourceConfig (class)
 ToolUp.Platform.DataSourceConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.DataSourceConfig.ConnectionScope : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
@@ -4483,6 +4490,45 @@ ToolUp.Platform.DataSourceConfigWire.forReader(System.Boolean, ToolUp.Platform.D
 ToolUp.Platform.DataSourceConfigWire.forSave(System.String, ToolUp.Platform.DataSourceConfig) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataSourceConfig, System.String]
 ToolUp.Platform.DataSourceConfigWire.isSecretKey(System.String) : System.Boolean
 ToolUp.Platform.DataSourceConfigWire.secretKeys : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]] { get }
+ToolUp.Platform.DataSourceQueriedPayload (class)
+ToolUp.Platform.DataSourceQueriedPayload..ctor(System.String, System.String, ToolUp.Platform.DataSourceStatementForm, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceQueryParameter], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataSourceQueryOutcome)
+ToolUp.Platform.DataSourceQueriedPayload.ByteCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.DataSourceQueriedPayload.ConnectorKind : System.String { get }
+ToolUp.Platform.DataSourceQueriedPayload.ContentHash : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DataSourceQueriedPayload.Form : ToolUp.Platform.DataSourceStatementForm { get }
+ToolUp.Platform.DataSourceQueriedPayload.Outcome : ToolUp.Platform.DataSourceQueryOutcome { get }
+ToolUp.Platform.DataSourceQueriedPayload.Parameters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceQueryParameter] { get }
+ToolUp.Platform.DataSourceQueriedPayload.RowCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
+ToolUp.Platform.DataSourceQueriedPayload.SourceId : System.String { get }
+ToolUp.Platform.DataSourceQueriedPayload.StatementHash : System.String { get }
+ToolUp.Platform.DataSourceQueriedPayload.StatementText : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DataSourceQueryOutcome (class)
+ToolUp.Platform.DataSourceQueryOutcome.IsFailed : System.Boolean { get }
+ToolUp.Platform.DataSourceQueryOutcome.IsRefused : System.Boolean { get }
+ToolUp.Platform.DataSourceQueryOutcome.IsSucceeded : System.Boolean { get }
+ToolUp.Platform.DataSourceQueryOutcome.Succeeded : ToolUp.Platform.DataSourceQueryOutcome { get }
+ToolUp.Platform.DataSourceQueryOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.DataSourceQueryOutcome+Failed (class)
+ToolUp.Platform.DataSourceQueryOutcome+Failed.failure : System.String { get }
+ToolUp.Platform.DataSourceQueryOutcome+Refused (class)
+ToolUp.Platform.DataSourceQueryOutcome+Refused.refusal : System.String { get }
+ToolUp.Platform.DataSourceQueryOutcome+Tags (class)
+ToolUp.Platform.DataSourceQueryOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.DataSourceQueryOutcome+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.DataSourceQueryOutcome+Tags.Succeeded : System.Int32 (literal)
+ToolUp.Platform.DataSourceQueryParameter (class)
+ToolUp.Platform.DataSourceQueryParameter..ctor(System.String, System.String)
+ToolUp.Platform.DataSourceQueryParameter.Kind : System.String { get }
+ToolUp.Platform.DataSourceQueryParameter.Name : System.String { get }
+ToolUp.Platform.DataSourceStatementForm (class)
+ToolUp.Platform.DataSourceStatementForm.Bound : ToolUp.Platform.DataSourceStatementForm { get }
+ToolUp.Platform.DataSourceStatementForm.IsBound : System.Boolean { get }
+ToolUp.Platform.DataSourceStatementForm.IsText : System.Boolean { get }
+ToolUp.Platform.DataSourceStatementForm.Tag : System.Int32 { get }
+ToolUp.Platform.DataSourceStatementForm.Text : ToolUp.Platform.DataSourceStatementForm { get }
+ToolUp.Platform.DataSourceStatementForm+Tags (class)
+ToolUp.Platform.DataSourceStatementForm+Tags.Bound : System.Int32 (literal)
+ToolUp.Platform.DataSourceStatementForm+Tags.Text : System.Int32 (literal)
 ToolUp.Platform.DataStoreResetPayload (class)
 ToolUp.Platform.DataStoreResetPayload..ctor(ToolUp.Platform.UserId, System.Int32)
 ToolUp.Platform.DataStoreResetPayload.FileCount : System.Int32 { get }
@@ -13874,6 +13920,9 @@ ToolUp.Platform.StatementPolicyModule.Key : System.String (literal)
 ToolUp.Platform.StatementPolicyModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.StatementPolicy] { get }
 ToolUp.Platform.StatementPolicyModule.read(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StatementPolicy, System.String]
 ToolUp.Platform.StatementPolicyModule.token(ToolUp.Platform.StatementPolicy) : System.String
+ToolUp.Platform.StatementTextAudit (class)
+ToolUp.Platform.StatementTextAudit.Key : System.String (literal)
+ToolUp.Platform.StatementTextAudit.read(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, System.String]
 ToolUp.Platform.StaticPathBehaviour (class)
 ToolUp.Platform.StaticPathBehaviour.IsRequireExist : System.Boolean { get }
 ToolUp.Platform.StaticPathBehaviour.IsSkipSilent : System.Boolean { get }

@@ -204,6 +204,59 @@ let private callerLabel () =
     | Ok label -> label
     | Error e -> failtest $"the test label was refused: {e}"
 
+/// An ingestor over the in-memory connector recording its query rows in
+/// `audit`, its source configured with `connectionScope`. Answers the rig and
+/// the statements the connector was handed.
+let private auditedRig (connectionScope: Map<string, string>) (audit: IAuditLog) =
+    let blobs = InMemoryBlobStorage() :> IBlobStorage
+    let store = DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore
+    let configs = DataSourceConfigStore.create blobs
+    let source = InMemoryDataSource.create ()
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let handed = ResizeArray<string>()
+
+    configs.Save(
+        scopeId,
+        {
+            Id = sourceId
+            Name = "Sales"
+            Kind = "InMemory"
+            ConnectionScope = connectionScope
+            CredentialKey = "unused"
+            Tables = None
+            Tags = Map.empty
+        }
+    )
+    |> Async.RunSynchronously
+
+    let ingestor =
+        DataIngestor.createAudited
+            configs
+            noSecrets
+            store
+            events
+            [ recording handed (source :> IDataSource) ]
+            blobs
+            nullLogger
+            []
+            audit
+
+    {
+        Ingestor = ingestor
+        Store = store
+        Blobs = blobs
+        Source = source
+        Events = events
+    },
+    handed
+
+/// Every `DataSourceQueried` row a log holds, with its actor and scope.
+let private queriedRows (audit: ToolUp.Platform.Testing.TestAuditLog) =
+    audit.Records
+    |> List.choose (fun r ->
+        DataSourceQueryAudit.tryRead r.Event
+        |> Option.map (fun p -> p, r.Actor, r.Scope))
+
 let tests =
     testList "DataIngestor — payload carries its schema (Phase 832)" [
 
@@ -666,6 +719,125 @@ let tests =
                 with
                 | PermanentFailure message -> Expect.stringContains message "caller label" "names the option"
                 | other -> failtest $"an over-long unlabelled pull must be a PermanentFailure; got {other}"
+            }
+        ]
+        // --- the data-source query audit event --------------------------
+        testList "the data-source query audit event" [
+            test "an ingestion records one row: the source, the statement's hash, the answer's size and hash" {
+                let audit = ToolUp.Platform.Testing.TestAuditLog()
+                let r, _ = auditedRig Map.empty audit
+                let csv = "id,amount,region\n1,10.5,EU\n"
+                seed r csv baseSchema
+                ingest r |> ignore
+                let answer = Encoding.UTF8.GetBytes csv
+
+                match queriedRows audit with
+                | [ row, actor, scope ] ->
+                    Expect.equal actor (AuditSubject.system "DataIngestor") "attributed to the ingestor"
+                    Expect.equal scope (AuditScope.shard scopeId) "under the ingestion's scope"
+                    Expect.equal row.SourceId sourceId "names the source"
+                    Expect.equal row.ConnectorKind "InMemory" "names the connector"
+                    Expect.equal row.Form DataSourceStatementForm.Text "the text form"
+                    Expect.equal row.StatementHash (Sha256.hexOfUtf8 table) "the hash of the statement"
+                    Expect.isEmpty row.Parameters "no parameter"
+                    Expect.isNone row.StatementText "no text by default"
+                    Expect.isNone row.RowCount "the ingestor does not parse the payload"
+                    Expect.equal row.ByteCount (Some(int64 answer.Length)) "the answer's size"
+                    Expect.equal row.ContentHash (Some(Sha256.hex answer)) "the answer's hash"
+                    Expect.equal row.Outcome DataSourceQueryOutcome.Succeeded "succeeded"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            test "a failed query is recorded by its error's class" {
+                let audit = ToolUp.Platform.Testing.TestAuditLog()
+                let r, _ = auditedRig Map.empty audit
+
+                match
+                    r.Ingestor.RunIngestion(scopeId, sourceId, "no_such_table")
+                    |> Async.RunSynchronously
+                with
+                | Ok run -> Expect.equal run.Status IngestionStatus.Failed "the run fails"
+                | Error e -> failtestf "expected a failed run; got %A" e
+
+                match queriedRows audit with
+                | [ row, _, _ ] ->
+                    match row.Outcome with
+                    | DataSourceQueryOutcome.Failed failure ->
+                        Expect.isFalse (failure.Contains "no_such_table") "the class, never the message"
+                    | other -> failtestf "expected Failed; got %A" other
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            test "recording statement text under a raw-allowed source is refused before anything is sent" {
+                let audit = ToolUp.Platform.Testing.TestAuditLog()
+                let r, handed = auditedRig (Map [ StatementTextAudit.Key, "true" ]) audit
+                seed r "id,amount,region\n1,10.5,EU\n" baseSchema
+
+                match r.Ingestor.RunIngestion(scopeId, sourceId, table) |> Async.RunSynchronously with
+                | Error(IngestionError.SchemaMismatch reason) ->
+                    Expect.stringContains reason StatementTextAudit.Key "names the opt-in"
+                | other -> failtestf "expected the refusal; got %A" other
+
+                Expect.isEmpty handed "nothing reached the connector"
+
+                match queriedRows audit with
+                | [ row, _, _ ] ->
+                    Expect.equal
+                        row.Outcome
+                        (DataSourceQueryOutcome.Refused DataSourceQueryAudit.StatementTextAuditRefused)
+                        "refused"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            test "a bound-only source that opts in records the statement's text" {
+                let audit = ToolUp.Platform.Testing.TestAuditLog()
+
+                let r, _ =
+                    auditedRig (Map [ StatementPolicy.Key, "bound-only"; StatementTextAudit.Key, "true" ]) audit
+
+                seed r "id,amount,region\n1,10.5,EU\n" baseSchema
+                ingest r |> ignore
+
+                match queriedRows audit with
+                | [ row, _, _ ] -> Expect.equal row.StatementText (Some table) "the text"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            test "a log that refuses the row fails the run before the answer is persisted" {
+                let refusing =
+                    { new IAuditLog with
+                        member _.Record(_, _, _) = async {
+                            return Error(AuditWriteError.StoreUnavailable "store down (test double)")
+                        }
+
+                        member _.GetAuditTrail(_, _, _) = async { return [] }
+                    }
+
+                let r, _ = auditedRig Map.empty refusing
+                seed r "id,amount,region\n1,10.5,EU\n" baseSchema
+
+                match r.Ingestor.RunIngestion(scopeId, sourceId, table) |> Async.RunSynchronously with
+                | Ok run ->
+                    Expect.equal run.Status IngestionStatus.Failed "the run fails"
+                    Expect.isNone run.ResultObjectId "nothing persisted"
+                | Error e -> failtestf "expected a failed run; got %A" e
+            }
+
+            test "no value rendered into a statement reaches the payload" {
+                let audit = ToolUp.Platform.Testing.TestAuditLog()
+                let r, _ = auditedRig Map.empty audit
+                let statement = "SELECT * FROM orders WHERE customer = 'cust-oracle-8812'"
+
+                r.Ingestor.RunIngestion(scopeId, sourceId, statement)
+                |> Async.RunSynchronously
+                |> ignore
+
+                for record in audit.Records do
+                    match record.Event with
+                    | Opaque o -> Expect.isFalse (o.Payload.Contains "cust-oracle-8812") $"the payload: {o.Payload}"
+                    | other -> Expect.isFalse ((sprintf "%A" other).Contains "cust-oracle-8812") "a platform row"
+
+                Expect.equal (queriedRows audit).Length 1 "one row"
             }
         ]
     ]

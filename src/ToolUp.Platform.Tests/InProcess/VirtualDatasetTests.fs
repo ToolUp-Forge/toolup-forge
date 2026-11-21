@@ -190,6 +190,54 @@ let private freshDataObjects (dir: TempDir) =
 let private reader (frames: Map<string, DatasetSchema * DatasetRow list>) =
     VirtualDatasetReader(InMemorySource frames, codec, schema, config)
 
+/// The subject an audited reader reads for.
+let private queryReader = AuditSubject.UserAudit(UserId "analyst-7")
+
+/// Every `DataSourceQueried` row a log holds, with its actor and scope.
+let private queriedRows (audit: TestAuditLog) =
+    audit.Records
+    |> List.choose (fun r ->
+        DataSourceQueryAudit.tryRead r.Event
+        |> Option.map (fun p -> p, r.Actor, r.Scope))
+
+/// An event's payload as stored: a registrant kind's bytes, or a platform
+/// case's serialisation and its printed form.
+let private payloadText (event: AuditEvent) : string =
+    match event with
+    | Opaque o -> o.Payload
+    | platform ->
+        Text.Json.JsonSerializer.Serialize(platform, ToolUp.Remoting.Json.SystemTextJson.PlatformJson.options)
+        + sprintf "%A" platform
+
+/// A statement binding a value of every kind, each value distinctive enough
+/// to be found in a payload by its text.
+let private everyKind: BoundStatement =
+    BoundStatement.ofText
+        "SELECT * FROM units WHERE region = @region AND n < @cap AND r > @rate AND flag = @flag AND seen > @seen AND code = @code AND amount = @amount AND as_of <= @watermark"
+    |> BoundStatement.bind "region" (BoundValue.Text "EMEA-secret")
+    |> BoundStatement.bind "cap" (BoundValue.Int 918273645L)
+    |> BoundStatement.bind "rate" (BoundValue.Float 2.718281828)
+    |> BoundStatement.bind "flag" (BoundValue.Bool true)
+    |> BoundStatement.bind "seen" (BoundValue.Timestamp(DateTimeOffset(2029, 3, 14, 15, 9, 26, TimeSpan.Zero)))
+    |> BoundStatement.bind "code" (BoundValue.Categorical "cat-zeta-42")
+    |> BoundStatement.bind "amount" (BoundValue.Decimal "31415.9265")
+
+/// The text forms the shared values of `everyKind` could take in a payload.
+let private sharedRenderings = [
+    "EMEA-secret"
+    "918273645"
+    "2.718281828"
+    "2029-03-14"
+    "15:09:26"
+    "cat-zeta-42"
+    "31415.9265"
+]
+
+let private sweepInstant = DateTimeOffset(2031, 7, 19, 13, 47, 29, TimeSpan.Zero)
+
+/// The text forms the sweep's watermark values could take in a payload.
+let private watermarkRenderings = [ "2031-07-19"; "13:47:29"; "wm-quartz-5521" ]
+
 let tests =
     testList "VirtualDataset" [
         testCaseAsync "binds + pages typed rows straight from the source with no durable copy"
@@ -538,4 +586,388 @@ let tests =
                 Expect.stringContains reason StatementPolicy.Key "names the key"
             | other -> failtestf "expected PolicyUnreadable; got %A" other
         }
+        // --- the data-source query audit event --------------------------
+        //
+        // Every statement the reader runs against its source, or refuses to
+        // run, is one `DataSourceQueried` row in the reader's log, attributed
+        // to its subject. The statement is identified by a hash over its text
+        // alone, and no parameter value reaches any payload.
+        testList "the data-source query audit event" [
+            testCaseAsync "a string read records one row per query: the source, the text's hash, and how much came back"
+            <| async {
+                let audit = TestAuditLog()
+                let src = RecordingSource(Map [ binding.QuerySpec, (schema, sixRows) ], None)
+                let r = VirtualDatasetReader(src, codec, schema, config, audit, queryReader)
+
+                okv (Async.RunSynchronously(r.Bind("s", binding)))
+
+                okv (Async.RunSynchronously(r.ReadPage("s", binding, DatasetPageQuery.firstPage 10)))
+                |> ignore
+
+                let rows = queriedRows audit
+                Expect.equal rows.Length 2 "one row for the bind's read and one for the page's"
+
+                let row, actor, scope = rows.Head
+                Expect.equal actor queryReader "attributed to the reader's subject"
+                Expect.equal scope (AuditScope.shard "s") "under the scope the read ran in"
+                Expect.equal row.SourceId "insitu" "names the source"
+                Expect.equal row.ConnectorKind "Recording" "names the connector"
+                Expect.equal row.Form DataSourceStatementForm.Text "the text form"
+                Expect.equal row.StatementHash (Sha256.hexOfUtf8 binding.QuerySpec) "the hash of the text"
+                Expect.isEmpty row.Parameters "a string statement names no parameter"
+                Expect.isNone row.StatementText "the text is not recorded by default"
+                Expect.equal row.RowCount (Some 6L) "the rows decoded"
+                let answer = codec.Encode(schema, sixRows)
+                Expect.equal row.ByteCount (Some(int64 answer.Length)) "the answer's size"
+                Expect.equal row.ContentHash (Some(Sha256.hex answer)) "the answer's hash"
+                Expect.equal row.Outcome DataSourceQueryOutcome.Succeeded "succeeded"
+            }
+
+            testCaseAsync
+                "two runs of one bound statement at different values share a hash and name the same parameters"
+            <| async {
+                let audit = TestAuditLog()
+                let src = RecordingSource(Map [ shared.Text, (schema, sixRows) ], Some allKinds)
+                let r = VirtualDatasetReader(src, codec, schema, config, audit, queryReader)
+                let later = boundAt (BoundValue.Timestamp(asOf.AddDays 7.0))
+
+                let! _ = r.ReadPage("s", bound, DatasetPageQuery.firstPage 10)
+                let! _ = r.ReadPage("s", later, DatasetPageQuery.firstPage 10)
+
+                match queriedRows audit |> List.map (fun (row, _, _) -> row) with
+                | [ first; second ] ->
+                    Expect.equal first.Form DataSourceStatementForm.Bound "the bound form"
+                    Expect.equal first.StatementHash second.StatementHash "one question asked twice"
+                    Expect.equal first.StatementHash (Sha256.hexOfUtf8 shared.Text) "the hash is over the text alone"
+
+                    Expect.equal
+                        first.Parameters
+                        [
+                            {
+                                Name = "region"
+                                Kind = DatasetDType.name DatasetDType.Text
+                            }
+                            {
+                                Name = BoundVirtualBinding.WatermarkParameter
+                                Kind = DatasetDType.name DatasetDType.Timestamp
+                            }
+                        ]
+                        "each parameter by name and kind, the watermark among them"
+
+                    Expect.equal second.Parameters first.Parameters "the same names and kinds"
+                | other -> failtestf "expected two rows; got %A" other
+            }
+
+            testCaseAsync "a failed query is recorded by its error's class, never its message"
+            <| async {
+                let audit = TestAuditLog()
+                let src = RecordingSource(Map.empty, None)
+                let r = VirtualDatasetReader(src, codec, schema, config, audit, queryReader)
+
+                match! r.ReadPage("s", binding, DatasetPageQuery.firstPage 10) with
+                | Error(DatasetError.StorageFailure _) -> ()
+                | other -> failtestf "expected the source failure; got %A" other
+
+                match queriedRows audit with
+                | [ row, _, _ ] ->
+                    Expect.equal row.Outcome (DataSourceQueryOutcome.Failed "SourceUnreachable") "the class"
+                    Expect.isNone row.ByteCount "no answer came back"
+                    Expect.isNone row.RowCount "no rows"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            testCaseAsync "source drift is a failed query that still records what came back"
+            <| async {
+                let audit = TestAuditLog()
+                let drifted = { Columns = [ schema.Columns.Head ] }
+
+                let src =
+                    RecordingSource(
+                        Map [
+                            binding.QuerySpec,
+                            (drifted,
+                             [
+                                 {
+                                     Cells = [ DatasetValue.Categorical "u0" ]
+                                 }
+                             ])
+                        ],
+                        None
+                    )
+
+                let r = VirtualDatasetReader(src, codec, schema, config, audit, queryReader)
+                let! _ = r.ReadPage("s", binding, DatasetPageQuery.firstPage 10)
+
+                match queriedRows audit with
+                | [ row, _, _ ] ->
+                    Expect.equal row.Outcome (DataSourceQueryOutcome.Failed "SchemaDrift") "drift"
+                    Expect.isSome row.ByteCount "the answer's size"
+                    Expect.isNone row.RowCount "no rows accepted"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            testCaseAsync "a statement refused before it is sent is recorded as refused, and nothing reaches the source"
+            <| async {
+                let audit = TestAuditLog()
+
+                let src =
+                    RecordingSource(Map [ binding.QuerySpec, (schema, sixRows) ], Some allKinds)
+
+                let r = VirtualDatasetReader(src, codec, schema, boundOnly, audit, queryReader)
+
+                let! _ = r.ReadPage("s", binding, DatasetPageQuery.firstPage 10)
+                Expect.isEmpty src.Calls "nothing was sent"
+
+                match queriedRows audit with
+                | [ row, _, _ ] ->
+                    Expect.equal row.Outcome (DataSourceQueryOutcome.Refused "StatementTextRefused") "refused by policy"
+                    Expect.equal row.StatementHash (Sha256.hexOfUtf8 binding.QuerySpec) "the refused text's hash"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            testCaseAsync "recording statement text is refused for a source whose policy admits raw text"
+            <| async {
+                let audit = TestAuditLog()
+
+                let optedIn = {
+                    config with
+                        ConnectionScope = Map [ StatementTextAudit.Key, "true" ]
+                }
+
+                let src =
+                    RecordingSource(Map [ binding.QuerySpec, (schema, sixRows) ], Some allKinds)
+
+                let r = VirtualDatasetReader(src, codec, schema, optedIn, audit, queryReader)
+
+                match refusalOf (r.Define binding) with
+                | VirtualBindingRefusal.StatementTextAuditRefused reason ->
+                    Expect.stringContains reason StatementTextAudit.Key "names the opt-in"
+                    Expect.stringContains reason StatementPolicy.Key "names the policy"
+                | other -> failtestf "expected StatementTextAuditRefused; got %A" other
+
+                Expect.isError (r.Define bound) "the bound form is refused under the same source"
+
+                match! r.ReadPage("s", binding, DatasetPageQuery.firstPage 10) with
+                | Error(DatasetError.SchemaMismatch _) -> ()
+                | other -> failtestf "expected the refusal at page time; got %A" other
+
+                Expect.isEmpty src.Calls "nothing was sent"
+
+                match queriedRows audit with
+                | [ row, _, _ ] ->
+                    Expect.equal
+                        row.Outcome
+                        (DataSourceQueryOutcome.Refused DataSourceQueryAudit.StatementTextAuditRefused)
+                        "refused"
+
+                    Expect.isNone row.StatementText "a refused opt-in records no text"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            testCaseAsync "a bound-only source that opts in records its bound statement's text, and no value"
+            <| async {
+                let audit = TestAuditLog()
+
+                let optedIn = {
+                    boundOnly with
+                        ConnectionScope = boundOnly.ConnectionScope |> Map.add StatementTextAudit.Key "TRUE"
+                }
+
+                let src = RecordingSource(Map [ shared.Text, (schema, sixRows) ], Some allKinds)
+                let r = VirtualDatasetReader(src, codec, schema, optedIn, audit, queryReader)
+
+                okv (Async.RunSynchronously(r.ReadPage("s", bound, DatasetPageQuery.firstPage 10)))
+                |> ignore
+
+                match queriedRows audit with
+                | [ row, _, _ ] -> Expect.equal row.StatementText (Some shared.Text) "the text, with its markers"
+                | other -> failtestf "expected one row; got %A" other
+            }
+
+            test "an unreadable or misspelt opt-in is refused by name, and off is the default" {
+                Expect.equal (StatementTextAudit.read Map.empty) (Ok false) "absent is off"
+                Expect.equal (StatementTextAudit.read (Map [ StatementTextAudit.Key, " " ])) (Ok false) "blank is off"
+                Expect.equal (StatementTextAudit.read (Map [ StatementTextAudit.Key, "false" ])) (Ok false) "off"
+
+                match StatementTextAudit.read (Map [ StatementTextAudit.Key, "yes" ]) with
+                | Error reason -> Expect.stringContains reason "yes" "names the value"
+                | Ok v -> failtestf "expected a refusal; got %b" v
+
+                Expect.isError
+                    (StatementTextAudit.read (Map [ StatementTextAudit.Key, "true"; StatementPolicy.Key, "bound" ]))
+                    "an unreadable policy refuses the opt-in"
+            }
+
+            testCaseAsync
+                "a reader built without a log still records a materialised read in the log it is handed: the hash and the names, no value"
+            <| async {
+                let _, r = recording (Some allKinds)
+                use dir = TempDir.create "virtual-query-audit"
+                let audit = TestAuditLog()
+
+                let! spill =
+                    r.MaterialiseForHandoff(
+                        "s",
+                        bound,
+                        freshDataObjects dir,
+                        "spill-q",
+                        TimeSpan.FromHours 1.0,
+                        [],
+                        audit,
+                        "worker"
+                    )
+
+                Expect.equal (okv spill).RowCount 6L "the spill carries every row"
+
+                match queriedRows audit with
+                | [ row, actor, _ ] ->
+                    Expect.equal row.StatementHash (Sha256.hexOfUtf8 shared.Text) "the statement's hash"
+
+                    Expect.equal
+                        (row.Parameters |> List.map _.Name)
+                        [ "region"; BoundVirtualBinding.WatermarkParameter ]
+                        "the parameter names"
+
+                    Expect.equal actor (AuditSubject.system "VirtualDataset") "the reader's default subject"
+                | other -> failtestf "expected one query row; got %A" other
+
+                let payloads = audit.Events |> List.map payloadText
+                Expect.isFalse (payloads |> List.exists _.Contains("EMEA-secret")) "no shared parameter value"
+            }
+
+            testCaseAsync "a log that refuses the row withholds the rows the read returned"
+            <| async {
+                let refusing =
+                    { new IAuditLog with
+                        member _.Record(_, _, _) = async {
+                            return Error(AuditWriteError.StoreUnavailable "store down (test double)")
+                        }
+
+                        member _.GetAuditTrail(_, _, _) = async { return [] }
+                    }
+
+                let src = RecordingSource(Map [ binding.QuerySpec, (schema, sixRows) ], None)
+                let r = VirtualDatasetReader(src, codec, schema, config, refusing, queryReader)
+
+                match! r.ReadPage("s", binding, DatasetPageQuery.firstPage 10) with
+                | Error(DatasetError.StorageFailure reason) -> Expect.stringContains reason "store down" "says why"
+                | other -> failtestf "expected the rows withheld; got %A" other
+            }
+
+            test "with audit off no payload is built" {
+                let built = ref false
+
+                let answer =
+                    DataSourceQueryAudit.record (NoOpAuditLog()) "s" queryReader (fun () ->
+                        built.Value <- true
+                        failwith "no payload is built under NoOpAuditLog")
+                    |> Async.RunSynchronously
+
+                Expect.equal answer (Ok()) "the seam's answer"
+                Expect.isFalse built.Value "nothing hashed, nothing serialised"
+            }
+
+            test "the family round-trips its payload through the stored bytes" {
+                let payload =
+                    DataSourceQueryAudit.payload
+                        boundOnly
+                        "Recording"
+                        true
+                        (DataSourceQueryAudit.ofBound (BoundVirtualBinding.statement bound))
+                        (Some [| 1uy; 2uy |])
+                        (Some 6L)
+                        (DataSourceQueryOutcome.Failed "SchemaDrift")
+
+                match DataSourceQueryAudit.event payload with
+                | Opaque o ->
+                    Expect.equal o.Kind DataSourceAuditEvent.DataSourceQueriedKind "the kind"
+                    Expect.equal (DataSourceQueryAudit.tryRead (Opaque o)) (Some payload) "reads back"
+                | other -> failtestf "expected an opaque registrant event; got %A" other
+            }
+
+            // The pack's sweep: every payload every scenario below emits is
+            // read back as stored, and none carries a parameter value.
+            testCaseAsync "no parameter value reaches any payload the reader emits"
+            <| async {
+                let audit = TestAuditLog()
+                use dir = TempDir.create "virtual-query-sweep"
+                let dataObjects = freshDataObjects dir
+                let src = RecordingSource(Map [ everyKind.Text, (schema, sixRows) ], Some allKinds)
+
+                let readerOver cfg =
+                    VirtualDatasetReader(src, codec, schema, cfg, audit, queryReader)
+
+                let at w = { boundAt w with Statement = everyKind }
+
+                let optedIn = {
+                    boundOnly with
+                        ConnectionScope = boundOnly.ConnectionScope |> Map.add StatementTextAudit.Key "true"
+                }
+
+                let watermarks = [ BoundValue.Timestamp sweepInstant; BoundValue.Text "wm-quartz-5521" ]
+
+                for cfg in [ config; optedIn ] do
+                    let r = readerOver cfg
+
+                    for w in watermarks do
+                        let! _ = r.Bind("s", at w)
+                        let! _ = r.ReadPage("s", at w, DatasetPageQuery.firstPage 10)
+
+                        let! _ =
+                            r.MaterialiseForHandoff(
+                                "s",
+                                at w,
+                                dataObjects,
+                                "spill-sweep",
+                                TimeSpan.FromHours 1.0,
+                                [],
+                                audit,
+                                "worker"
+                            )
+
+                        ()
+
+                    // a refusal and a failure carry no value either
+                    let! _ = r.ReadPage("s", at (BoundValue.Null DatasetDType.Text), DatasetPageQuery.firstPage 1)
+
+                    let! _ =
+                        r.ReadPage(
+                            "s",
+                            {
+                                at watermarks.Head with
+                                    Statement = {
+                                        everyKind with
+                                            Text = "SELECT @region_missing"
+                                    }
+                            },
+                            DatasetPageQuery.firstPage 1
+                        )
+
+                    ()
+
+                let queried = queriedRows audit
+                Expect.isGreaterThanOrEqual queried.Length 16 "every scenario emitted its rows"
+
+                let payloads = audit.Events |> List.map payloadText
+
+                let queriedPayloads =
+                    audit.Events
+                    |> List.filter (fun e -> (DataSourceQueryAudit.tryRead e).IsSome)
+                    |> List.map payloadText
+
+                for value in sharedRenderings do
+                    for payload in payloads do
+                        Expect.isFalse
+                            (payload.Contains value)
+                            $"a shared parameter value ('{value}') reached a payload: {payload}"
+
+                // The spill row records the watermark as the vintage identity, by
+                // design; the query row records no watermark value.
+                for value in watermarkRenderings do
+                    for payload in queriedPayloads do
+                        Expect.isFalse
+                            (payload.Contains value)
+                            $"a watermark value ('{value}') reached a query payload: {payload}"
+            }
+        ]
     ]
