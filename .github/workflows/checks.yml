@@ -541,8 +541,10 @@ jobs:
           # Pinned. Bump this together with `Pin.commit` /
           # `Pin.manifestDigest` in
           # src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs,
-          # in one reviewed commit, after reading the corpus diff.
-          ref: 7ba0cd2368fe01206b07abb61ae1cfaba9b6bcbb
+          # in one reviewed commit, after reading the corpus diff. The
+          # harness's `pin` list fails when this ref and `Pin.commit`
+          # disagree, so the two cannot drift apart.
+          ref: 3da2b3eae2ff4ea7d3b0fc873ffd624222b0dc8e
           path: .model-execution-corpus
           persist-credentials: false
 
