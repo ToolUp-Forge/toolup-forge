@@ -472,7 +472,8 @@ type VirtualBinding = {
     /// `IDataSource.Kind` of the connector the version reads through.
     SourceRef: string
     /// Connector-interpreted query (the `IDataSource.Query` `sql`). Forge
-    /// never parses it.
+    /// never parses it. A query that depends on the watermark is a
+    /// `BoundVirtualBinding`, whose text stays the same across versions.
     QuerySpec: string
     /// The vintage identity — a snapshot id / high-water timestamp / query
     /// hash. Re-binding at a new watermark is a new version.
