@@ -161,6 +161,88 @@ module ConnectionScope =
                 let accepted = String.Join(", ", allowed)
                 Error(SchemaMismatch $"ConnectionScope key '%s{key}' must be one of [%s{accepted}]; got '%s{raw}'")
 
+/// Whether a source admits statement text at all, or only the bound
+/// form. Declared per source by the `statement_policy` key.
+[<RequireQualifiedAccess>]
+type StatementPolicy =
+    /// Any text handed to `Query` runs as a statement. The default, and
+    /// the behaviour of every source configured before the key existed.
+    | RawAllowed
+    /// `Query` admits a bare table name only; any other statement goes
+    /// through `IBindsStatements.QueryBound`, its values bound.
+    | BoundOnly
+
+/// What a source may be asked, as its `ConnectionScope` declares it:
+/// its statement policy, and whether its connection is opened read-only.
+type SourcePosture = {
+    StatementPolicy: StatementPolicy
+    /// The connection is opened read-only, by the means its backend
+    /// offers. A connector that can honour it in no way refuses the key
+    /// by name at connect rather than ignoring it.
+    ReadOnly: bool
+}
+
+/// Reading and describing a source's posture. Neither key set
+/// is today's behaviour: raw text admitted, no read-only intent.
+[<RequireQualifiedAccess>]
+module SourcePosture =
+
+    /// The connection-scope key naming the statement policy.
+    [<Literal>]
+    let StatementPolicyKey = "statement_policy"
+
+    /// The connection-scope key declaring read-only intent.
+    [<Literal>]
+    let ReadOnlyKey = "read_only"
+
+    /// The posture of a source that declares neither key.
+    let unset = {
+        StatementPolicy = StatementPolicy.RawAllowed
+        ReadOnly = false
+    }
+
+    /// The policy as the `statement_policy` key spells it.
+    let policyToken (policy: StatementPolicy) : string =
+        match policy with
+        | StatementPolicy.RawAllowed -> "raw-allowed"
+        | StatementPolicy.BoundOnly -> "bound-only"
+
+    /// Read the posture out of a `ConnectionScope`. A value outside the
+    /// accepted set is refused by name, never read as the default.
+    let read (scope: Map<string, string>) : Result<SourcePosture, IngestionError> =
+        ConnectionScope.optionalEnum scope StatementPolicyKey [ "raw-allowed"; "bound-only" ]
+        |> Result.bind (fun policy ->
+            ConnectionScope.optionalBool scope ReadOnlyKey
+            |> Result.map (fun readOnly -> {
+                StatementPolicy =
+                    match policy with
+                    | Some "bound-only" -> StatementPolicy.BoundOnly
+                    | _ -> StatementPolicy.RawAllowed
+                ReadOnly = readOnly |> Option.defaultValue false
+            }))
+
+    /// Whether the source admits raw statement text AND may write: the
+    /// posture preflight warns about.
+    let admitsRawAndMayWrite (posture: SourcePosture) : bool =
+        posture.StatementPolicy = StatementPolicy.RawAllowed && not posture.ReadOnly
+
+    /// The posture on one line, in the keys' own spelling.
+    let describe (posture: SourcePosture) : string =
+        let readOnly = if posture.ReadOnly then "true" else "false"
+        $"%s{StatementPolicyKey}=%s{policyToken posture.StatementPolicy}, %s{ReadOnlyKey}=%s{readOnly}"
+
+    /// The refusal of statement text by a `bound-only` source, before
+    /// anything is sent to it.
+    let rawTextRefused (context: string) (sourceId: DataSourceId) : IngestionError =
+        SchemaMismatch
+            $"%s{context}: source '%s{sourceId}' declares %s{StatementPolicyKey}=bound-only, so it admits a bare table name or a bound statement (IBindsStatements.QueryBound), never statement text. Nothing was sent to the source"
+
+    /// A write the database refused on a source declared read-only. The
+    /// source was reached, so this is never `SourceUnreachable`.
+    let writeRefused (context: string) (sourceId: DataSourceId) (detail: string) : IngestionError =
+        SchemaMismatch
+            $"%s{context}: the database refused a write on source '%s{sourceId}', which declares %s{ReadOnlyKey}=true: %s{detail}"
+
 /// The credential thunk every connector shares.
 ///
 /// The shipped `DataIngestor` pre-resolves the credential and hands it

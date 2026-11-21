@@ -13,6 +13,7 @@ let private registeredTests =
         ConnectorSupportTests.tests
         SqlDataSourceTests.tests
         SqlBindingTests.tests
+        SqlPostureTests.tests
         BigQueryDataSourceTests.tests
         AthenaDataSourceTests.tests
         RedshiftDataSourceTests.tests
