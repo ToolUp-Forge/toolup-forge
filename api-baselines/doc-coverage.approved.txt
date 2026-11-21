@@ -80,7 +80,7 @@ ToolUp.DataSources.Parquet 21/25
 ToolUp.DataSources.Redshift 17/19
 ToolUp.DataSources.Snowflake 28/36
 ToolUp.DataSources.Sql 38/79
-ToolUp.DataSources.Synapse 27/37
+ToolUp.DataSources.Synapse 31/41
 ToolUp.Elmish.Kernel 34/37
 ToolUp.EmbeddingCaches.Redis 33/63
 ToolUp.EmbeddingProviders.Local 19/23
