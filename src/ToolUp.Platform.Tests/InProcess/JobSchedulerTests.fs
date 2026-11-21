@@ -166,11 +166,13 @@ let private settle (window: TimeSpan) =
 /// into: a dispatch outlives the case that started it (the case waits for
 /// the handler or the run row, and the dispatch then folds the outcome into
 /// the definition), and a write landing after the delete creates the
-/// directory again.
+/// directory again. The stop cancels the dispatches first, so they end at
+/// their next bind; the window (`Recording.defaultBackstop`) is a hang guard,
+/// as a host's shutdown window is, never a schedule.
 let private stopScheduler (scheduler: JobScheduler.InProcessJobScheduler) =
-    scheduler.StopAsync Threading.CancellationToken.None
-    |> Async.AwaitTask
-    |> Async.RunSynchronously
+    use window = new Threading.CancellationTokenSource(Recording.defaultBackstop)
+
+    scheduler.StopAsync window.Token |> Async.AwaitTask |> Async.RunSynchronously
 
 /// The catch-up fixture: a scheduler over a store rooted in a directory the
 /// fixture owns. Disposing it stops the scheduler (`stopScheduler`), then
