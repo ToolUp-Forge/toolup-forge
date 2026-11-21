@@ -161,17 +161,6 @@ module ConnectionScope =
                 let accepted = String.Join(", ", allowed)
                 Error(SchemaMismatch $"ConnectionScope key '%s{key}' must be one of [%s{accepted}]; got '%s{raw}'")
 
-/// Whether a source admits statement text at all, or only the bound
-/// form. Declared per source by the `statement_policy` key.
-[<RequireQualifiedAccess>]
-type StatementPolicy =
-    /// Any text handed to `Query` runs as a statement. The default, and
-    /// the behaviour of every source configured before the key existed.
-    | RawAllowed
-    /// `Query` admits a bare table name only; any other statement goes
-    /// through `IBindsStatements.QueryBound`, its values bound.
-    | BoundOnly
-
 /// What a source may be asked, as its `ConnectionScope` declares it:
 /// its statement policy, and whether its connection is opened read-only.
 type SourcePosture = {
@@ -189,7 +178,7 @@ module SourcePosture =
 
     /// The connection-scope key naming the statement policy.
     [<Literal>]
-    let StatementPolicyKey = "statement_policy"
+    let StatementPolicyKey = StatementPolicy.Key
 
     /// The connection-scope key declaring read-only intent.
     [<Literal>]
@@ -201,23 +190,15 @@ module SourcePosture =
         ReadOnly = false
     }
 
-    /// The policy as the `statement_policy` key spells it.
-    let policyToken (policy: StatementPolicy) : string =
-        match policy with
-        | StatementPolicy.RawAllowed -> "raw-allowed"
-        | StatementPolicy.BoundOnly -> "bound-only"
-
     /// Read the posture out of a `ConnectionScope`. A value outside the
     /// accepted set is refused by name, never read as the default.
     let read (scope: Map<string, string>) : Result<SourcePosture, IngestionError> =
-        ConnectionScope.optionalEnum scope StatementPolicyKey [ "raw-allowed"; "bound-only" ]
+        StatementPolicy.read scope
+        |> Result.mapError SchemaMismatch
         |> Result.bind (fun policy ->
             ConnectionScope.optionalBool scope ReadOnlyKey
             |> Result.map (fun readOnly -> {
-                StatementPolicy =
-                    match policy with
-                    | Some "bound-only" -> StatementPolicy.BoundOnly
-                    | _ -> StatementPolicy.RawAllowed
+                StatementPolicy = policy
                 ReadOnly = readOnly |> Option.defaultValue false
             }))
 
@@ -229,7 +210,7 @@ module SourcePosture =
     /// The posture on one line, in the keys' own spelling.
     let describe (posture: SourcePosture) : string =
         let readOnly = if posture.ReadOnly then "true" else "false"
-        $"%s{StatementPolicyKey}=%s{policyToken posture.StatementPolicy}, %s{ReadOnlyKey}=%s{readOnly}"
+        $"%s{StatementPolicyKey}=%s{StatementPolicy.token posture.StatementPolicy}, %s{ReadOnlyKey}=%s{readOnly}"
 
     /// The refusal of statement text by a `bound-only` source, before
     /// anything is sent to it.

@@ -429,15 +429,14 @@ ToolUp.DataSources.Common.RetryAfterHandling+Tags (class)
 ToolUp.DataSources.Common.RetryAfterHandling+Tags.HoldUpTo : System.Int32 (literal)
 ToolUp.DataSources.Common.RetryAfterHandling+Tags.Ignore : System.Int32 (literal)
 ToolUp.DataSources.Common.SourcePosture (class)
-ToolUp.DataSources.Common.SourcePosture..ctor(ToolUp.DataSources.Common.StatementPolicy, System.Boolean)
+ToolUp.DataSources.Common.SourcePosture..ctor(ToolUp.Platform.StatementPolicy, System.Boolean)
 ToolUp.DataSources.Common.SourcePosture.ReadOnly : System.Boolean { get }
-ToolUp.DataSources.Common.SourcePosture.StatementPolicy : ToolUp.DataSources.Common.StatementPolicy { get }
+ToolUp.DataSources.Common.SourcePosture.StatementPolicy : ToolUp.Platform.StatementPolicy { get }
 ToolUp.DataSources.Common.SourcePostureModule (class)
 ToolUp.DataSources.Common.SourcePostureModule.ReadOnlyKey : System.String (literal)
 ToolUp.DataSources.Common.SourcePostureModule.StatementPolicyKey : System.String (literal)
 ToolUp.DataSources.Common.SourcePostureModule.admitsRawAndMayWrite(ToolUp.DataSources.Common.SourcePosture) : System.Boolean
 ToolUp.DataSources.Common.SourcePostureModule.describe(ToolUp.DataSources.Common.SourcePosture) : System.String
-ToolUp.DataSources.Common.SourcePostureModule.policyToken(ToolUp.DataSources.Common.StatementPolicy) : System.String
 ToolUp.DataSources.Common.SourcePostureModule.rawTextRefused(System.String, System.String) : ToolUp.Platform.IngestionError
 ToolUp.DataSources.Common.SourcePostureModule.read(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.SourcePosture, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Common.SourcePostureModule.unset : ToolUp.DataSources.Common.SourcePosture { get }
@@ -446,15 +445,6 @@ ToolUp.DataSources.Common.SqlIdentifier (class)
 ToolUp.DataSources.Common.SqlIdentifier.isSafe(System.String) : System.Boolean
 ToolUp.DataSources.Common.SqlIdentifier.quoteLiteral(System.String) : System.String
 ToolUp.DataSources.Common.SqlIdentifier.require(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
-ToolUp.DataSources.Common.StatementPolicy (class)
-ToolUp.DataSources.Common.StatementPolicy.BoundOnly : ToolUp.DataSources.Common.StatementPolicy { get }
-ToolUp.DataSources.Common.StatementPolicy.IsBoundOnly : System.Boolean { get }
-ToolUp.DataSources.Common.StatementPolicy.IsRawAllowed : System.Boolean { get }
-ToolUp.DataSources.Common.StatementPolicy.RawAllowed : ToolUp.DataSources.Common.StatementPolicy { get }
-ToolUp.DataSources.Common.StatementPolicy.Tag : System.Int32 { get }
-ToolUp.DataSources.Common.StatementPolicy+Tags (class)
-ToolUp.DataSources.Common.StatementPolicy+Tags.BoundOnly : System.Int32 (literal)
-ToolUp.DataSources.Common.StatementPolicy+Tags.RawAllowed : System.Int32 (literal)
 ToolUp.DataSources.Common.SyncCursor (class)
 ToolUp.DataSources.Common.SyncCursor..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32)
 ToolUp.DataSources.Common.SyncCursor.CompletedPasses : System.Int32 { get }
