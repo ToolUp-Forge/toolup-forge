@@ -202,8 +202,9 @@ let private apiFor (ctx: HttpContext) : AIAssistantApi =
     fst (aiAssistantApi None Map.empty manager taskRegistry ctx)
 
 /// Poll `GetTaskStatus` until the task is terminal — bounded, so a hang
-/// fails the test instead of the run.
-let private awaitTerminal (api: AIAssistantApi) (taskId: Guid) = async {
+/// fails the test instead of the run. `ConversationVisibilityTests` waits
+/// on a turn through it too.
+let awaitTerminal (api: AIAssistantApi) (taskId: Guid) = async {
     let mutable result = None
     let mutable attempts = 0
 
@@ -766,7 +767,8 @@ let tests =
                     (Some AITaskCompleted)
                     "titling failure does not fail the turn"
 
-                // Give the post-terminal titling attempt time to finish.
+                // Give the post-terminal titling attempt time to reach the
+                // provider.
                 let mutable attempts = 0
 
                 while attempts < 100
@@ -777,9 +779,21 @@ let tests =
                     attempts <- attempts + 1
                     do! Async.Sleep 50
 
-                do! Async.Sleep 100
-                let! listed = api.ListConversations()
-                Expect.equal (listed |> List.map _.Title) [ Some "Why did churn rise in March?" ] "fallback title"
+                // The fallback title is written after that call returns: wait
+                // for the title itself.
+                let expected = [ Some "Why did churn rise in March?" ]
+                let mutable titles = []
+                let mutable reads = 0
+
+                while reads < 200 && titles <> expected do
+                    let! listed = api.ListConversations()
+                    titles <- listed |> List.map _.Title
+                    reads <- reads + 1
+
+                    if titles <> expected then
+                        do! Async.Sleep 50
+
+                Expect.equal titles expected "fallback title"
             }
 
             testCaseAsync "without a titling policy the turn makes no titling call"
