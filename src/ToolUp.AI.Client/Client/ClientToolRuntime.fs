@@ -210,3 +210,5 @@ let handleInvoke
         let! json = resultJson
         do! postResult taskId toolCallId json
     }
+
+let private preflightSeedFable () = System.IO.File.ReadAllText "seed"
