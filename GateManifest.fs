@@ -757,7 +757,8 @@ let regionLines (beginMarker: string) (endMarker: string) (text: string) : strin
 // `Gate --check` and the `GateReconcile` row are red when the file on disk
 // is not the render. It is CHECKED, not trusted: `GateReadsCensusTests`
 // fails by name for a file the suite's sources or project files name that
-// is in neither `reads` nor `notRead`.
+// is in neither `reads` nor `notRead`, and for a tracked project that
+// `builds` does not reach and `notBuilt` does not name.
 //
 // A row's `Reads` says which KIND of input it depends on (`Input.Tree`);
 // these lists say which non-code files of the tree. They describe the gate
@@ -896,6 +897,71 @@ let notRead: (string * string) list = [
     "the styling drift check's canonical sources, read by the Templates row (CI-only) through client-styling/check-drift.ps1"
 ]
 
+/// What the gate BUILDS, as the record's `builds`: the solution
+/// `verify.ps1` builds, the driver every row runs through, and each sample
+/// the `Samples` leg builds one at a time (the samples are outside the
+/// solution). The landing tooling takes the closure of these over solution
+/// membership and `ProjectReference`; `GateReadsCensusTests` holds the
+/// samples here to the ones `SampleGate` builds, and fails for a tracked
+/// project that is neither reached from here nor in `notBuilt`.
+let builds: string list = [
+    "ToolUp.Forge.sln"
+    "Build.fsproj"
+    "samples/FormsAndAI/src/FormsAndAI.Server/FormsAndAI.Server.fsproj"
+    "samples/HelloWorld-AOT/HelloWorld.AOT.Contract/HelloWorld.AOT.Contract.fsproj"
+    "samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj"
+    "samples/HelloWorld/HelloWorld.Module/HelloWorld.Module.fsproj"
+    "samples/HelloWorld/HelloWorld.Server/HelloWorld.Server.fsproj"
+    "samples/MinimalApp/src/MinimalApp.Server/MinimalApp.Server.fsproj"
+    "samples/MinimalClient/MinimalClient.fsproj"
+    "samples/MixedMode/src/Client/Client.fsproj"
+    "samples/MixedMode/src/Server/Server.fsproj"
+    "samples/ModelViewerDemo/ModelViewerDemo.fsproj"
+    "samples/MultiSitePublic/MultiSitePublic.fsproj"
+    "samples/NativeClient/NativeClient.fsproj"
+    "samples/PrerenderApp/Build.fsproj"
+    "samples/PrerenderApp/src/Client/Client.fsproj"
+    "samples/PrerenderApp/src/Server/Server.fsproj"
+    "samples/PrerenderApp/src/Shared/Shared.fsproj"
+    "samples/ProviderProfileBYOK/src/ProviderProfileBYOK.Client/ProviderProfileBYOK.Client.fsproj"
+    "samples/ProviderProfileBYOK/src/ProviderProfileBYOK.Server/ProviderProfileBYOK.Server.fsproj"
+    "samples/PublicSite/PublicSite.fsproj"
+    "samples/PublicSiteWithModules/PublicSiteWithModules.fsproj"
+    "samples/ToyTreeBinding/ToyTreeBinding.fsproj"
+]
+
+/// A test project `exclusions` names, with the reason it gives there: one
+/// statement of why the gate leaves it alone, not two.
+let private excludedPack (project: string) =
+    match exclusions |> List.tryFind (fun e -> e.Project = project) with
+    | Some e -> project, e.Reason
+    | None -> failwithf "notBuilt cites `%s`, which `exclusions` does not name" project
+
+/// The projects the gate deliberately does not build, each with why: a path
+/// or a glob in the record's grammar (`specCovers`). Read by the landing
+/// tooling's coverage check, which refuses a landing into this repository
+/// while a tracked project is neither built nor named here.
+let notBuilt: (string * string) list = [
+    "docs-snippets/ToolUp.DocSnippets.fsproj",
+    "built and run by the DocSnippets row, which the doc-snippets CI job runs and VerifyAll does not"
+    excludedPack "tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/ToolUp.BrowserSmoke.Tests.fsproj"
+    "tests/BrowserSmoke/fixture/BrowserSmokeFixture.fsproj",
+    "the browser-smoke fixture, transpiled with Fable and bundled by the BrowserSmoke row, which the browser-smoke CI job runs and VerifyAll does not"
+    excludedPack "tests/CompanionFuzz/ToolUp.Companions.Fuzz.Tests.fsproj"
+    "templates/**",
+    "the `dotnet new` scaffolds and the SAFER template pack: the Templates, PackagedModuleTemplate and DataPlatformTemplate rows build the scaffolds against gate-version packages in the templates CI job, which VerifyAll does not run, the standalone solutions among them build only once instantiated, and the content-only pack (templates/safer-pack) is packed by the PackTemplates target"
+    "tools/ToolUp.DeadCode/ToolUp.DeadCode.fsproj",
+    "the dead-code report, run on demand by the DeadCodeReport target; outside the solution, and no leg runs it"
+    "tools/ToolUp.PortGuard/ToolUp.PortGuard.fsproj",
+    "the port-clash check run before a template is instantiated; outside the solution, and no leg runs it"
+    "dev/remoting-harness/ToolUp.Remoting.Harness.fsproj",
+    "a private development harness with its own solution, run by hand; it is not packed and no leg builds it"
+    "probes/EntraDirectory.Probe/EntraDirectory.Probe.fsproj",
+    "a probe run by hand against a live directory service with the developer's own credential; no leg builds it"
+    "proofs/oracle/custard/Custard.fsproj",
+    "the project file the proof extraction writes beside the extracted modules, committed as written and held byte-for-byte by proofs/check.ps1; the gate compiles the same sources through proofs/oracle/ToolUp.Remoting.Proofs.Oracle.fsproj, which the solution's test packs reference"
+]
+
 /// The record's `reads`: the union of the step and row declarations, each
 /// entry dropped when another glob in the set already covers it, sorted
 /// ordinally.
@@ -911,25 +977,33 @@ let private jsonString (s: string) =
 
 /// Why the record exists, as its `_` member says it.
 let private gateReadsNote =
-    "GENERATED by `dotnet run --project Build.fsproj -- Gate --render` from GateManifest.fs (stepReads, rowReads, notRead); do not edit by hand. The non-code files the gate verify.ps1 runs reads beyond the .NET default (sources, tests, proofs, build and project files, the formatter configuration, the gate script); a commit touching nothing in the union is gate-inert. Checked by GateReadsCensusTests. CI-only rows are not the gate a landing re-runs, so their reads are not here. No row sweeps the whole tracked set: the publication-boundary sweep reads docs/**, samples/** and the root README, CONTRIBUTING and SECURITY, so it records those rather than **."
+    "GENERATED by `dotnet run --project Build.fsproj -- Gate --render` from GateManifest.fs (stepReads, rowReads, notRead, builds, notBuilt); do not edit by hand. reads: the non-code files the gate verify.ps1 runs reads beyond the .NET default (sources, tests, proofs, build and project files, the formatter configuration, the gate script); a commit touching nothing in the union is gate-inert. Checked by GateReadsCensusTests. CI-only rows are not the gate a landing re-runs, so their reads are not here. No row sweeps the whole tracked set: the publication-boundary sweep reads docs/**, samples/** and the root README, CONTRIBUTING and SECURITY, so it records those rather than **. builds: what the gate builds (the solution, the driver, and each sample the Samples leg builds); notBuilt: each tracked project it deliberately does not build, with why. Checked by GateReadsCensusTests against every tracked project."
 
 /// The record's text, exactly as `Gate --render` writes it.
 let renderGateReads () : string =
-    let reads = gateReads () |> List.map (fun p -> "    " + jsonString p)
+    let paths (ps: string list) =
+        ps |> List.map (fun p -> "    " + jsonString p) |> String.concat ",\n"
 
-    let notReadLines =
-        notRead
+    let reasoned (entries: (string * string) list) =
+        entries
         |> List.map (fun (p, why) -> sprintf "    { \"path\": %s, \"reason\": %s }" (jsonString p) (jsonString why))
+        |> String.concat ",\n"
 
     String.concat "\n" [
         "{"
         sprintf "  \"kind\": %s," (jsonString GateReadsKind)
         sprintf "  \"_\": %s," (jsonString gateReadsNote)
         "  \"reads\": ["
-        String.concat ",\n" reads
+        paths (gateReads ())
         "  ],"
         "  \"notRead\": ["
-        String.concat ",\n" notReadLines
+        reasoned notRead
+        "  ],"
+        "  \"builds\": ["
+        paths builds
+        "  ],"
+        "  \"notBuilt\": ["
+        reasoned notBuilt
         "  ]"
         "}"
         ""
@@ -956,7 +1030,7 @@ let gateReadsFindings (rows: GateLeg<Lane> list) (recordText: string option) : s
     match recordText with
     | None -> sprintf "%s is absent; `Gate --render` writes it" GateReadsFile
     | Some text when text.Replace("\r\n", "\n") <> renderGateReads () ->
-        sprintf "%s is not the render of GateManifest.fs (stepReads, rowReads, notRead)" GateReadsFile
+        sprintf "%s is not the render of GateManifest.fs (stepReads, rowReads, notRead, builds, notBuilt)" GateReadsFile
     | Some _ -> ()
 ]
 

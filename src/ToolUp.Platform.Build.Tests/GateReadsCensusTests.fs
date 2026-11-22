@@ -167,23 +167,35 @@ let private sourceNames (rel: string, text: string) =
 
         Some(rel, lits, prefixes)
 
+/// `reference`, as the file at the repo-relative `holder` writes it,
+/// resolved to a repo-relative path: `None` when it names an MSBuild
+/// property this cannot resolve or climbs out of the repository.
+let private resolveFrom (holder: string) (reference: string) : string option =
+    let v =
+        reference.Trim().Replace("$(MSBuildThisFileDirectory)", "").Replace('\\', '/')
+
+    if v = "" || v.Contains "$(" then
+        None
+    else
+        let dir =
+            match holder.LastIndexOf '/' with
+            | -1 -> ""
+            | i -> holder.Substring(0, i)
+
+        let full = Path.GetFullPath(Path.Combine("/r", dir, v)).Replace('\\', '/')
+        let anchor = Path.GetFullPath("/r").Replace('\\', '/').TrimEnd('/') + "/"
+
+        if full.StartsWith(anchor, StringComparison.Ordinal) then
+            Some(full.Substring anchor.Length)
+        else
+            None
+
 /// The repo-relative paths a project file's items resolve to.
 let private projectItems (rel: string, text: string) : string list = [
-    let dir =
-        match rel.LastIndexOf '/' with
-        | -1 -> ""
-        | i -> rel.Substring(0, i)
-
     for m in item.Matches text do
         for part in m.Groups[1].Value.Split(';') do
-            let v = part.Trim().Replace("$(MSBuildThisFileDirectory)", "").Replace('\\', '/')
-
-            if v <> "" && not (v.Contains "$(") && not (v.Contains "*") then
-                let full = Path.GetFullPath(Path.Combine("/r", dir, v)).Replace('\\', '/')
-                let anchor = Path.GetFullPath("/r").Replace('\\', '/').TrimEnd('/') + "/"
-
-                if full.StartsWith(anchor, StringComparison.Ordinal) then
-                    yield full.Substring anchor.Length
+            if not (part.Contains "*") then
+                yield! Option.toList (resolveFrom rel part)
 ]
 
 /// Which of `candidates` the `sources` (F# text) and `projects` (MSBuild
@@ -226,6 +238,79 @@ let census
 let uncovered (named: (string * string list) list) (covered: string list) =
     named
     |> List.filter (fun (path, _) -> not (covered |> List.exists (fun s -> GateManifest.specCovers s path)))
+
+// ─── What the gate builds (PURE) ──────────────────────────────────────
+//
+// The record's `builds` and `notBuilt` are read by the landing tooling's
+// coverage check: it takes the closure of `builds` over solution
+// membership and `ProjectReference`, and refuses a landing while a tracked
+// project is outside it and named by no `notBuilt` entry, or while a
+// `notBuilt` entry names no tracked project. The same reading is mirrored
+// here so the gate is red before a landing is refused.
+
+let private isSolution (p: string) =
+    p.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)
+    || p.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)
+
+let private isProject (p: string) =
+    [ ".fsproj"; ".csproj"; ".vbproj" ]
+    |> List.exists (fun e -> p.EndsWith(e, StringComparison.OrdinalIgnoreCase))
+
+/// MSBuild resolves paths case-insensitively on the machines that gate
+/// here, so membership is compared on this key.
+let private key (p: string) = p.ToLowerInvariant()
+
+/// The projects (by `key`) the closure of `roots` reaches: a solution root
+/// its projects, a project root itself, and every reached project the
+/// projects it references, transitively. `read` gives a repo-relative
+/// file's text, `None` when it is absent.
+let buildClosure (read: string -> string option) (roots: string list) : Set<string> =
+    let start =
+        roots
+        |> List.collect (fun r ->
+            if isSolution r then
+                read r
+                |> Option.map (ToolUp.Platform.Build.Gate.solutionProjects >> List.choose (resolveFrom r))
+                |> Option.defaultValue []
+            else
+                Option.toList (resolveFrom "" r))
+
+    let rec walk (seen: Set<string>) (frontier: string list) =
+        match frontier with
+        | [] -> seen
+        | p :: rest when seen.Contains(key p) -> walk seen rest
+        | p :: rest ->
+            let refs =
+                read p
+                |> Option.map (ToolUp.Platform.Build.Census.references >> List.choose (resolveFrom p))
+                |> Option.defaultValue []
+
+            walk (seen.Add(key p)) (refs @ rest)
+
+    walk Set.empty start
+
+/// The `projects` the closure of `builds` does not reach and no `notBuilt`
+/// spec names, and the `notBuilt` specs that name no project in `projects`.
+let buildCoverage
+    (read: string -> string option)
+    (projects: string list)
+    (builds: string list)
+    (notBuilt: (string * string) list)
+    : string list * string list =
+    let reached = buildClosure read builds
+
+    let waived p =
+        notBuilt |> List.exists (fun (spec, _) -> GateManifest.specCovers spec p)
+
+    let unreached =
+        projects |> List.filter (fun p -> not (reached.Contains(key p) || waived p))
+
+    let stale =
+        notBuilt
+        |> List.filter (fun (spec, _) -> not (projects |> List.exists (GateManifest.specCovers spec)))
+        |> List.map fst
+
+    unreached, stale
 
 // ─── The real repository ──────────────────────────────────────────────
 
@@ -282,6 +367,17 @@ let projects () =
 
 let private named = lazy (census (sources ()) (projects ()) (candidates ()))
 
+let private tryRead (rel: string) =
+    let path = Path.Combine(repoRoot, rel)
+
+    if File.Exists path then
+        Some(File.ReadAllText path)
+    else
+        None
+
+/// Every tracked project file, the set the coverage check classifies.
+let private trackedProjects () = tracked.Value |> List.filter isProject
+
 let private render (rows: (string * string list) list) =
     rows
     |> List.map (fun (p, by) -> sprintf "  %s  (named by %s)" p (String.concat ", " (List.truncate 4 by)))
@@ -327,6 +423,108 @@ let tests =
 
             Expect.isEmpty dead (sprintf "reads entries that cover no tracked file: %A" dead)
         }
+
+        testList "what the gate builds" [
+            test "every tracked project is built by the gate or in notBuilt" {
+                let projects = trackedProjects ()
+                Expect.isGreaterThan projects.Length 100 "the coverage check sees at least a hundred tracked projects"
+
+                match buildCoverage tryRead projects GateManifest.builds GateManifest.notBuilt with
+                | [], _ -> ()
+                | unreached, _ ->
+                    failtestf
+                        "%d tracked project(s) the gate does not build are not in `notBuilt` of %s, so a landing into this repository is refused. Add each to what the gate builds (`builds` in GateManifest.fs) or to `notBuilt` with its reason, then run `dotnet run --project Build.fsproj -- Gate --render`:\n%s"
+                        unreached.Length
+                        GateManifest.GateReadsFile
+                        (unreached |> List.map (sprintf "  %s") |> String.concat "\n")
+            }
+
+            test "every notBuilt entry names a tracked project (a stale exclusion is a finding)" {
+                let _, stale =
+                    buildCoverage tryRead (trackedProjects ()) GateManifest.builds GateManifest.notBuilt
+
+                Expect.isEmpty stale (sprintf "notBuilt entries that name no tracked project: %A" stale)
+            }
+
+            test "no notBuilt entry names a project the gate builds" {
+                let reached = buildClosure tryRead GateManifest.builds
+
+                let built =
+                    trackedProjects ()
+                    |> List.filter (fun p -> reached.Contains(key p))
+                    |> List.filter (fun p ->
+                        GateManifest.notBuilt
+                        |> List.exists (fun (spec, _) -> GateManifest.specCovers spec p))
+
+                Expect.isEmpty built (sprintf "built projects a notBuilt entry says the gate does not build: %A" built)
+            }
+
+            test "every builds entry is a tracked solution or project, and every notBuilt entry gives a reason" {
+                let known = trackedProjects () @ (tracked.Value |> List.filter isSolution)
+
+                let bad =
+                    GateManifest.builds
+                    |> List.filter (fun b -> not (known |> List.exists (fun t -> key t = key b)))
+
+                Expect.isEmpty bad (sprintf "builds entries that are not a tracked solution or project: %A" bad)
+
+                Expect.isEmpty
+                    (GateManifest.notBuilt
+                     |> List.filter (fun (_, why) -> String.IsNullOrWhiteSpace why))
+                    "a notBuilt entry without a reason makes the whole record unreadable"
+            }
+
+            test "the samples in builds are exactly the samples the Samples leg builds" {
+                let leg =
+                    (SampleGate.plan
+                        (SampleGate.discover repoRoot (Path.Combine(repoRoot, "samples")))
+                        SampleGate.excluded)
+                        .ToBuild
+
+                let declared =
+                    GateManifest.builds
+                    |> List.filter (fun b -> b.StartsWith("samples/", StringComparison.Ordinal))
+
+                Expect.isNonEmpty leg "the Samples leg finds samples to build"
+                Expect.equal (List.sort declared) (List.sort leg) "builds names the samples the Samples leg builds"
+            }
+
+            testList "the coverage check goes red (fabricated trees)" [
+                let files =
+                    Map.ofList [
+                        "A.sln", "Project(\"{F2A71F9B}\") = \"A\", \"src\\A\\A.fsproj\", \"{1}\""
+                        "src/A/A.fsproj",
+                        "<Project><ItemGroup><ProjectReference Include=\"..\\B\\B.fsproj\" /></ItemGroup></Project>"
+                        "src/B/B.fsproj", "<Project />"
+                        "tools/C/C.fsproj", "<Project />"
+                    ]
+
+                let read p = Map.tryFind p files
+                let projects = [ "src/A/A.fsproj"; "src/B/B.fsproj"; "tools/C/C.fsproj" ]
+
+                test "a project in neither set is reported" {
+                    Expect.equal
+                        (buildCoverage read projects [ "A.sln" ] [] |> fst)
+                        [ "tools/C/C.fsproj" ]
+                        "C is neither built nor excluded"
+                }
+
+                test "a project reached through a ProjectReference is built, and a notBuilt entry settles the rest" {
+                    Expect.equal
+                        (buildCoverage read projects [ "A.sln" ] [ "tools/**", "a tool" ])
+                        ([], [])
+                        "B is reached from A; C is excluded"
+                }
+
+                test "a notBuilt entry naming no project is stale" {
+                    Expect.equal
+                        (buildCoverage read projects [ "A.sln" ] [ "tools/**", "a tool"; "probes/**", "gone" ]
+                         |> snd)
+                        [ "probes/**" ]
+                        "the probes entry excludes nothing"
+                }
+            ]
+        ]
 
         testList "the census goes red (fabricated sources)" [
             let cands = [ "perf-budgets.json"; "docs/a/b.md"; "LICENSE"; "spec/x.json" ]
