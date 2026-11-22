@@ -57,6 +57,24 @@ took 17 minutes 37 seconds, which no lane can save: every lane builds first.
 compiles on .NET and not under Fable. No leg was cut. If a later change pushes the warm lane past ten minutes, `Fable`
 is the leg to look at first, and dropping it would give up the reds in the table below that it alone catches.
 
+### After a change, on a loaded machine
+
+The three acceptance runs below were each made on a seeded change, one at a time, while another session's builds
+and Fable compiles ran on the same machine. Each is red at the row it should be and at no other.
+
+| Seed | Red row (its own message) | `verify.ps1` build | `Platform.PublicApi` | `Fable` | Wall clock |
+|---|---|---|---|---|---|
+| `Async.RunSynchronously` in a server source | `Analyzers`: TUA003, one site the inventory does not account for | 1685 | 485.7 | 796.3 | 3407 |
+| a public member with no baseline update | `Platform.PublicApi`: 1 public member ADDED vs the committed baseline | 1051 | 996.7 (failed) | 618.9 | 2935 |
+| `System.IO.File.ReadAllText` in a client-tier source | `Fable`: "is not supported by Fable" (the .NET build is green) | 998 | 374.6 | 227.8 (failed) | 1809 |
+
+None of these is under ten minutes, and the lane's own rows are not the main reason. A change to a source that many
+projects reference rebuilds them, and that build is `verify.ps1`'s, paid by every lane before any row runs. Of what
+the rows add, `Platform.PublicApi` is the variable part: in each slow run its process sat at almost no CPU for
+minutes before its cases ran, and each case took a fraction of a second once they did. That stall is not this lane's;
+the full lane's journal records it too. Until it is found, budget the lane at the warm figure plus the build a change
+causes plus up to a quarter of an hour for that row.
+
 ## The lane against the gate's recorded history
 
 The admission journal on the measuring machine (`<common git dir>/fuaran-gate/verify-runs.jsonl`) held 32 records
