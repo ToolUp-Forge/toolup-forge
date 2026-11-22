@@ -467,6 +467,7 @@
         <Compile Include="InProcess\PeerTestComposition.fs" />
         <Compile Include="InProcess\PlatformPeerTests.fs" />
         <Compile Include="InProcess\PeerFederationTests.fs" />
+        <Compile Include="Contracts\IReleaseWindowContract.fs" />
         <Compile Include="InProcess\CleanRoomBrokerTests.fs" />
         <Compile Include="InProcess\CleanRoomGateTests.fs" />
         <Compile Include="InProcess\TemplateApprovalTests.fs" />

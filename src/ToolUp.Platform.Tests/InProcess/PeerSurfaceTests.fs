@@ -357,6 +357,14 @@ let tests =
                 // Like the ledger and unlike the approval registry, it
                 // registers no contract, so nothing is owed to `Serves`.
                 "NoisedReleases"
+                // NOT projected. The release window is the holder's own
+                // record of what it released; the terms a counterparty acts
+                // on (whether answers are compared, and per counterparty or
+                // per vintage) are the template's, which both parties
+                // approve. Publishing the window's length would tell a
+                // counterparty how long to wait out the check. It
+                // registers no contract, so nothing is owed to `Serves`.
+                "ReleaseWindow"
                 // Phase 316 / 629 — NOT projected, on the `WireLimits`
                 // argument almost unchanged. Retention IS faintly
                 // observable: a caller polling a long-running result
