@@ -9,7 +9,11 @@ open ToolUp.Remoting.Analyzers
 /// NOT get a list into this run — `runTestsWithCLIArgs` executes exactly
 /// what is registered here.
 let private registeredTests =
-    testList "ToolUp.Remoting.Analyzers" [ AnalyzerAstTests.tests; ContainmentRuleTests.tests ]
+    testList "ToolUp.Remoting.Analyzers" [
+        AnalyzerAstTests.tests
+        ContainmentRuleTests.tests
+        KeptListIndexAnalyzerTests.tests
+    ]
 
 /// Phase 722 — the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing:
@@ -17,7 +21,7 @@ let private registeredTests =
 /// `[<Tests>]` auto-discovery, so an attributed binding absent from the
 /// list above would silently never run.
 let allTests =
-    TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 2 registeredTests
+    TestRegistrationGuard.withGuard (Assembly.GetExecutingAssembly()) 3 registeredTests
 
 // Sequenced by default — Expecto deadlocks when parallel tests write to
 // the console (the subject's own ConsoleLogger / compose warnings are

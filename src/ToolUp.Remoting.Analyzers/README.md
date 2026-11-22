@@ -25,8 +25,9 @@ installs it sees byte-for-byte-unchanged behaviour, and the runtime classifier i
 | `TUA001` | Warning | Container resolution (`GetService` / `GetRequiredService` / `GetServices` / keyed forms / `RequestServices`) outside service registration. |
 | `TUA002` | Warning | An `HttpClient` constructed without the platform egress handler (`PlatformHttpClient`). |
 | `TUA003` | Warning | `Async.RunSynchronously` outside an `[<EntryPoint>]`. |
+| `TUA004` | Warning | A message over a kept or tree-built list that carries the enumeration index (`Bump i`) instead of the row's identity (`Bump row.Id`). |
 
-The `TUA` rules ship as a second analyser, `ToolUpContainment`. The full rule reference —
+`TUA001`–`TUA003` ship as a second analyser, `ToolUpContainment`, and `TUA004` as a third, `ToolUpKeptLists`. The full rule reference —
 rationale, sanctioned alternative and since-version for every code — is generated from `Rules.fs` into
 [`docs/platform/analyzer-rules.md`](../../docs/platform/analyzer-rules.md); the `Analyzers` leg of
 `VerifyAll` fails when the two differ, and runs the `TUA` rules over this repository's own `src/`

@@ -96,6 +96,31 @@ or a removal it dispatches the wrong message, silently. Over a kept list the mes
 row's identity (`Bump row.Id`) and `update` finds the row by that id. Without `Keep` this was a bad
 habit; with it, it is a defect.
 
+## The index shape and the identity shape, side by side
+
+| Fails: the row's position | Holds: the row's identity |
+|---|---|
+| `Keep.create (fun (i, row: Row) -> …)` | `Keep.create (fun (row: Row) -> …)` |
+| `Nodes.Actions.danger (Nodes.Ids.keyed "member-remove" row.Id) "Remove" (Remove i)` | `Nodes.Actions.danger (Nodes.Ids.keyed "member-remove" row.Id) "Remove" (Remove row.Id)` |
+| `Keep.list memberRow (List.indexed model.Members)` | `Keep.list memberRow model.Members` |
+| `update`: `List.removeAt i model.Members` | `update`: `model.Members \|> List.filter (fun m -> m.Id <> id)` |
+
+What the left column costs is two things:
+
+- **It keeps nothing.** A key that carries the index, here the tuple `List.indexed` makes, is a new object on
+  every render, so the `Keep` misses on every row and every row is rebuilt on every dispatch. The view looks
+  kept and runs like one that is not. A `Keep` built from its input alone cannot hold a stale index: the index
+  can only reach a kept node through its key, and a key that carries it is never reused.
+- **It names whichever row is there when the message arrives.** `update` reads `Remove 2` against the model
+  current at the time, not the one the row was drawn from, so a removal, a reorder or a server push in between
+  sends it to the wrong row, or past the end. The identity shape names the same row whatever moved.
+
+The analyzer rule [`TUA004`](analyzer-rules.md#tua004--a-message-over-a-kept-or-tree-built-list-that-carries-the-enumeration-index)
+reports the left column: an index bound by `mapi` or `iteri`, by a tuple over `indexed`, by a `for i in a .. b`
+loop, or as an `int` in a `Keep.create` build, reaching a message inside a `Keep.create` build or a lambda or
+loop that builds a tree. A Feliz list is outside it, because nothing keeps a Feliz row. An index may still name
+a node through `Nodes.Ids.keyed` where a row has no identity of its own; it never goes in a message.
+
 ## What stays an island
 
 `TreeLowering.island id render` embeds a region that stays React, as a `Custom` node: a component

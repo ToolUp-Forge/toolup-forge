@@ -225,3 +225,23 @@ module Analyzer =
                      "https://github.com/ToolUp-Forge/toolup-forge/blob/main/docs/platform/analyzer-rules.md")>]
     let containmentEditorAnalyzer: Analyzer<EditorContext> =
         fun (ctx: EditorContext) -> runContainment ctx.ParseFileResults.ParseTree
+
+    // The kept-list rule (TUA004), its own analyser so a host that authors no trees can leave it off.
+
+    let private runKeptListIndex (parseTree: ParsedInput) : Async<Message list> = async {
+        return
+            KeptListIndexAnalyzer.analyze parseTree
+            |> List.map KeptListIndexAnalyzer.toMessage
+    }
+
+    [<CliAnalyzer("ToolUpKeptLists",
+                  "Flags a message over a kept or tree-built list that carries the enumeration index instead of the row's identity (TUA004).",
+                  "https://github.com/ToolUp-Forge/toolup-forge/blob/main/docs/platform/analyzer-rules.md")>]
+    let keptListCliAnalyzer: Analyzer<CliContext> =
+        fun (ctx: CliContext) -> runKeptListIndex ctx.ParseFileResults.ParseTree
+
+    [<EditorAnalyzer("ToolUpKeptLists",
+                     "Flags a message over a kept or tree-built list that carries the enumeration index instead of the row's identity (TUA004).",
+                     "https://github.com/ToolUp-Forge/toolup-forge/blob/main/docs/platform/analyzer-rules.md")>]
+    let keptListEditorAnalyzer: Analyzer<EditorContext> =
+        fun (ctx: EditorContext) -> runKeptListIndex ctx.ParseFileResults.ParseTree

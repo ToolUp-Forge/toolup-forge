@@ -4,8 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>ToolUp.Remoting.Analyzers</PackageId>
-    <Description>The ToolUp SDK's static analyser rule set (FSharp.Analyzers.SDK): Remoting API methods missing an authorisation classification (TUR0001) or, opt-in, an audit annotation (TUR0002); container resolution outside service registration (TUA001); an HttpClient built without the platform egress handler (TUA002); Async.RunSynchronously outside a program entry point (TUA003). Each rule is the compile-time half of a runtime check. Pure tooling; references nothing at runtime.</Description>
-    <PackageTags>fsharp;analyzer;fsharp-analyzers;remoting;authorization;audit;security;egress</PackageTags>
+    <Description>The ToolUp SDK's static analyser rule set (FSharp.Analyzers.SDK): Remoting API methods missing an authorisation classification (TUR0001) or, opt-in, an audit annotation (TUR0002); container resolution outside service registration (TUA001); an HttpClient built without the platform egress handler (TUA002); Async.RunSynchronously outside a program entry point (TUA003); a message over a kept or tree-built list that carries the enumeration index (TUA004). Each rule is the compile-time half of a runtime check. Pure tooling; references nothing at runtime.</Description>
+    <PackageTags>fsharp;analyzer;fsharp-analyzers;remoting;authorization;audit;security;egress;fuaran-ui</PackageTags>
     <!--
       Analyzer-package shape (FSharp.Analyzers.SDK convention): the analyzer
       DLL ships under `analyzers/dotnet/fs`, NOT `lib/`, so the analyzer host
@@ -34,6 +34,7 @@
          `Analyzers` leg invokes. -->
     <Compile Include="Rules.fs" />
     <Compile Include="ContainmentRules.fs" />
+    <Compile Include="KeptListIndexAnalyzer.fs" />
     <Compile Include="TreeScan.fs" />
     <Compile Include="Analyzer.fs" />
   </ItemGroup>

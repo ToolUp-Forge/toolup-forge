@@ -109,6 +109,19 @@ module Rules =
             RuntimeHalf = "None: a blocked request thread has no runtime refusal, which is why this rule exists."
             Since = "0.28.0"
         }
+        {
+            Id = "TUA004"
+            Title = "A message over a kept or tree-built list that carries the enumeration index"
+            Severity = "Warning"
+            OptIn = false
+            Rationale =
+                "A row's message is read by `update` against the model current when it arrives, not the one the row was built from, so a position names whichever row sits there by then. Over a `Keep` the index also costs the keep: a key carrying it (`Keep.list rows (List.indexed model.Rows)`) is a new object on every render, so every row is rebuilt on every dispatch and nothing is kept. The rule reads syntax: it reports an upper-case application (`Bump i`) naming an index bound by `mapi` / `iteri`, a tuple over `indexed`, a `for i in a .. b` loop, or an `int` component of a `Keep.create` build, inside a `Keep.create` build or a lambda or loop that builds a tree (`Nodes.*`, `Fuaran.*`, `Keep.*`)."
+            Sanctioned =
+                "Carry the row's identity in the message (`Bump row.Id`), have `update` find the row by that id, and key the `Keep` on the row itself (`Keep.list rowKeep model.Rows`). The index may still name a node (`Nodes.Ids.keyed`) only where the row has no identity of its own, and never a message."
+            RuntimeHalf =
+                "None: the wrong row is updated, or none, and nothing refuses it, which is why this rule exists."
+            Since = "0.43.0"
+        }
     ]
 
     let tryFind (id: string) =
