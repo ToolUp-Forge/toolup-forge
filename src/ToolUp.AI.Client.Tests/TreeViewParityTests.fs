@@ -179,15 +179,8 @@ module private TeamTree =
             ]
         ]
 
-    /// The Feliz panel's shape: its title a level-2 heading, then its body.
-    /// Not `Nodes.Panel.card`, whose heading the renderer draws as a
-    /// `<header>` that assistive technology does not announce as a heading:
-    /// the parity assertion found it on this fixture's first run.
-    let private panel (id: string) (title: string) (children: Node<TeamManagerUI.Msg> list) =
-        Nodes.Layout.column id (Nodes.heading (Nodes.Ids.child id "title") 2 title :: children)
-
     let private myTeams (model: TeamManagerUI.Model) : Node<TeamManagerUI.Msg> =
-        panel "my-teams" msgs.MyTeamsPanel [
+        Nodes.Panel.card "my-teams" msgs.MyTeamsPanel [
             if model.Teams.IsEmpty then
                 Nodes.text "my-teams-none" msgs.NoTeamsYet
             else
@@ -244,7 +237,7 @@ module private TeamTree =
                     (TeamManagerUI.SelectTeam teamId)
                 Nodes.text "pending-team" (teamName model teamId)
             ]
-            panel "pending-invites" msgs.PendingInvitesPanel [
+            Nodes.Panel.card "pending-invites" msgs.PendingInvitesPanel [
                 Nodes.Actions.primary "pending-invite" msgs.InviteByEmail (TeamManagerUI.OpenIssueByEmail teamId)
                 match Map.tryFind teamId model.PendingByEmail with
                 | None -> Nodes.text "pending-loading" msgs.PendingInvitesLoading
