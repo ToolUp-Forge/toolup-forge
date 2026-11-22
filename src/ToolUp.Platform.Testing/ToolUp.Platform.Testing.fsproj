@@ -24,6 +24,9 @@
              ModuleHarness so its `AssertAccessible` member can reference
              the `Accessibility` types. -->
         <Compile Include="Testing\AccessibilityAssertions.fs" />
+        <!-- Accessible parity between a view and the same view as a tree:
+             outline and tab order, over the Accessibility node model. -->
+        <Compile Include="Testing\TreeViewParity.fs" />
         <Compile Include="Testing\ModuleHarness.fs" />
         <!-- Testing\ViewMount.fs is DELIBERATELY absent from this list.
              It is the jsdom + react-dom implementation of the

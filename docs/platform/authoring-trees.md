@@ -115,3 +115,38 @@ in the part of the tree a view rebuilds.
 
 When in doubt it is a `Model` field: state the renderer holds is invisible to the module's tests and
 to the shell's inspection of the model.
+
+## The three assertions a view moving to a tree carries
+
+A view moved from Feliz to a tree proves three things, through `ModuleHarness` in
+`ToolUp.Platform.Testing`, at every state the view's tests reach through the module's real `update`:
+
+| Assertion | The call | What it proves |
+|---|---|---|
+| **Accessible** | `h.AssertAccessibleView(ViewMount.mount, ModuleHarness.lowered lower tree, Accessibility.Strict)` | The tree passes the same rules the Feliz view is held to. `lowered` turns the tree and its lowering into the `'Model -> dispatch -> view` shape a Feliz view has, so one call covers both idioms. |
+| **Behaves** | `h.Interact(ViewMount.mountAndInteract, treeView, drive).AssertModel(...)` | A click or a field edit on the mounted tree dispatches a message, the message runs through `update`, and the assertion is on the `Model`. An interaction that dispatches nothing fails `Interact` by name: the control is not wired to the dispatch the tree was lowered with. |
+| **At parity** | `h.AssertViewParity(ViewMount.mount, felizView, treeView)` | For one model, the Feliz view and the tree expose the same controls and headings, by role and accessible name, in the same tab order. The failure is a diff: what is missing from the tree, what only the tree has, and where the tab order first differs. |
+
+No assertion reads markup. A lowered tree's markup is the renderer's (it is many times the Feliz
+view's), and an assertion tied to it breaks on every renderer release while proving nothing about the
+module. Parity compares what a user of assistive technology meets (`TreeViewParity`): names are
+computed as a browser computes them, so two renders with different ids and wrappers compare equal when
+they announce the same thing.
+
+A parity difference is not always the tree's defect. Where the Feliz view is wrong (an input whose
+`<label>` is not associated with it) and the tree is right, the phase
+records the difference, says which side was wrong, and asserts that parity names it, rather than
+copying the defect into the tree. The reverse holds too: where a toolkit shape exposes less than the
+Feliz shape it replaces, parity says so, and the view uses a shape that does not. The team manager's invite dialog is the worked case, in
+`ToolUp.AI.Client.Tests/TreeViewParityTests.fs`, beside the kit's go-red proofs: a tree missing a
+label fails the floor, a dispatch that does not reach `update` fails `Interact`, and a reordered tab
+stop fails parity.
+
+The tests draw the tree through the renderer's component directly (`lowerTree` in that file), as a
+deferred surface's own file does: the module's `TreeLowering.lower` puts the same component behind a
+dynamic import, which a synchronous mount cannot wait for. So the module exposes its tree builder
+(`internal tree : ... -> Node<Msg>`) and its view is `TreeLowering.lower` over it.
+
+The cost is the fourth thing a move records, and it is measured, not asserted here: the browser
+dispatch figure of [the budgets page](budgets.md#a-tree-surface-is-judged-on-a-browser-dispatch-not-on-viewperdispatchus),
+before and after.
