@@ -213,6 +213,12 @@ type PeerOptions = {
     /// `INoiseMechanism` and takes no branch on the release path
     /// (GP 13).
     NoisedReleases: (string * NoisedReleasePolicy) list
+    /// The release window every contract gated by `withCleanRoomTemplate`
+    /// is compared through: the near-duplicate check, which refuses an
+    /// answer whose filter cohort is within the floor of one already
+    /// released under the template's scope. `None` unless a composition
+    /// calls `withReleaseWindow`, and `None` compares nothing (GP 11).
+    ReleaseWindow: ReleaseWindowMeter option
     /// Phase 316, composed by Phase 629 — the retention policy the
     /// composed `IPeerJobResultStore` enforces over parked long-running
     /// peer results.
@@ -370,6 +376,7 @@ module PeerOptions =
         FederationPins = FederationPinStore.empty
         PrivacyBudget = None
         NoisedReleases = []
+        ReleaseWindow = None
         JobRetention = PeerJobRetentionPolicy.default'
         RoundOrchestration = false
         TokenPolicy = PeerTokenPolicy.unscoped
@@ -735,6 +742,30 @@ module PeerOptions =
     let withPrivacyBudget (meter: PrivacyBudgetMeter) (options: PeerOptions) : PeerOptions = {
         options with
             PrivacyBudget = Some meter
+    }
+
+    /// Compare every answer a gated contract releases with the answers
+    /// its template released before, and refuse one whose filter cohort is
+    /// within the floor of an earlier one: two answers whose filters differ
+    /// by one member give that member away by subtraction, though each
+    /// clears the floor.
+    ///
+    ///     app
+    ///     |> PeerOptions.withCleanRoomTemplate "reach" reachTemplate
+    ///     |> PeerOptions.withReleaseWindow (
+    ///            ReleaseWindowMeter.create (BlobReleaseWindow blobs) ReleaseWindowPolicy.defaults)
+    ///
+    /// With it composed, a gated handler answers a `DeclaredCohort` naming
+    /// its filter cohort (`FilterCohort.ofMembers`), and an answer that
+    /// names none is withheld, unless its template opts out with
+    /// `NearDuplicateRule.NotCompared` and a reason both parties approve. A
+    /// refusal is recorded and charged to the composed budget whatever its
+    /// withhold policy. Applies to every gated contract; calling this twice
+    /// applies the LAST window. A composition that never calls it compares
+    /// nothing and is unchanged.
+    let withReleaseWindow (window: ReleaseWindowMeter) (options: PeerOptions) : PeerOptions = {
+        options with
+            ReleaseWindow = Some window
     }
 
     /// Phase 481 — release CALIBRATED-NOISE aggregates from a gated
@@ -1540,6 +1571,7 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
         let cleanRoomTemplates = cleanRoomTemplateMap options
         let templateApprovals = options.TemplateApprovals
         let privacyBudget = options.PrivacyBudget
+        let releaseWindow = options.ReleaseWindow
         let noisedReleases = noisedReleaseMap options
         let auditTransparency = options.AuditTransparency
         let contractProfiles = options.ContractProfiles
@@ -1808,12 +1840,13 @@ let private composePeer (options: PeerOptions) (app: ServerApp) : ServerApp =
                                 // or `None` for a composition that
                                 // declared no budget (the pre-190
                                 // gate exactly).
-                                (CleanRoomGate.wrapNoised
+                                (CleanRoomGate.wrapDifferenced
                                     broker
                                     template
                                     approvalCheck
                                     privacyBudget
                                     noise
+                                    releaseWindow
                                     sink
                                     registration)
                                     .Registration

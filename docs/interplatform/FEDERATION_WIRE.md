@@ -52,3 +52,11 @@ corpus is missing is indistinguishable from one that passed.
 writes into the specification home, which is a **different repository**. A shape change is therefore
 two commits in two repositories, pushed together: the emitter change here, and the regenerated
 corpus there. Leaving the second unpushed is invisible to every other implementation and to CI.
+
+## Checks this implementation makes that the wire does not carry
+
+The clean-room gate's two differencing checks, the complement check and the near-duplicate check
+(`src/InterPlatform/TECHNICAL_GUIDE.md`), are decided on the data holder's side, beside the cohort
+floor. A refusal reaches the caller as the same `PeerCleanRoomWithheld` every withhold uses, and the
+splits and filter cohort a handler declares to the gate are never released. Neither check adds a
+member, a refusal reason or a vector to the specification, so the corpus is unchanged by them.

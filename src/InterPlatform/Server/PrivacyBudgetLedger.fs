@@ -3,7 +3,11 @@
 
 namespace ToolUp.InterPlatform
 
+open System
+open System.Collections.Generic
+open System.Text
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Compose
 
 // ─── Phase 675 — the ledger moved; this is what stayed ───────────────
@@ -49,6 +53,9 @@ open ToolUp.Platform.Compose
 // where its return type lives. The grounding tier renders the same
 // refusal into `FactDisclosureVerdict` instead, which is exactly why the
 // ledger's own refusal type is neither.
+//
+// The release window below the projection is federation-tier too: it keys
+// on clean-room templates and filter cohorts, which only the gate reads.
 
 type BudgetEpoch = ToolUp.Platform.Compose.BudgetEpoch
 type BudgetScope = ToolUp.Platform.Compose.BudgetScope
@@ -103,3 +110,254 @@ module PeerPrivacyBudget =
                     templateId
                     reason
             )
+
+// ─── The release window: what a near-duplicate submission is compared with ──
+//
+// A budget bounds how many answers cross; it cannot see that two of them,
+// each clearing the floor, differ by one member, which the difference of
+// the two answers then discloses. The window is the record that can: per
+// template and partition (a counterparty, or a vintage), the filter cohorts
+// of the answers released recently, as each cohort's size, membership hash
+// and count sketch, never a member. The gate compares a submission with it
+// and records the submission in the same act, so two near-duplicate
+// submissions racing each other cannot both be admitted.
+//
+// It lives beside the budget because it is the same kind of record, kept on
+// the data holder's side and never sent, and because a refusal it causes is
+// charged to the budget.
+
+/// The partition a release window keeps its releases under.
+[<RequireQualifiedAccess>]
+type ReleaseWindowPartition =
+    /// The releases to one counterparty.
+    | Counterparty of peerId: string
+    /// The releases on one vintage, to every counterparty.
+    | Vintage of vintage: string
+
+/// Which releases a submission is compared with: one template's, in one
+/// partition.
+type ReleaseWindowKey = {
+    TemplateId: string
+    Partition: ReleaseWindowPartition
+}
+
+/// One released answer's filter cohort, as the window keeps it.
+type ReleasedFilter = {
+    Filter: FilterCohort
+    ReleasedAt: DateTimeOffset
+    CounterpartyPeerId: string
+    MethodName: string
+}
+
+/// The window's answer to a submission.
+[<RequireQualifiedAccess>]
+type WindowAdmission =
+    /// No release in the window is near the submission, which is now
+    /// recorded as released.
+    | Admitted
+    /// The submission is within the floor of the release whose membership
+    /// hash this is. Nothing was recorded.
+    | NearDuplicateOf of earlier: string
+    /// The window could not answer. Nothing was recorded, and the gate
+    /// withholds rather than release an answer it could not compare.
+    | WindowUnavailable of reason: string
+
+/// How far back a submission is compared, and how long a release is kept.
+type ReleaseWindowPolicy = {
+    /// A `PerCounterparty` submission is compared with the releases made
+    /// within this span. A `PerVintage` submission is compared with every
+    /// release the window keeps on the vintage.
+    Length: TimeSpan
+    /// A release older than this is dropped from the window.
+    Retention: TimeSpan
+}
+
+[<RequireQualifiedAccess>]
+module ReleaseWindowPolicy =
+
+    /// 365 days for both: a vintage's members do not change with the
+    /// calendar, so a short window would only let a patient counterparty
+    /// wait out the check.
+    let defaults: ReleaseWindowPolicy = {
+        Length = TimeSpan.FromDays 365.0
+        Retention = TimeSpan.FromDays 365.0
+    }
+
+    /// Set the span a `PerCounterparty` submission is compared over.
+    let withLength (length: TimeSpan) (policy: ReleaseWindowPolicy) = { policy with Length = length }
+
+    /// Set how long a release is kept.
+    let withRetention (retention: TimeSpan) (policy: ReleaseWindowPolicy) = { policy with Retention = retention }
+
+/// The record of released filter cohorts the near-duplicate check reads.
+type IReleaseWindow =
+    /// Compare `release` with the releases under `key` made at or after
+    /// `comparedFrom`, after dropping those made before `keptFrom`, and, when
+    /// none is within `floor` of it, record it. Atomic: two submissions
+    /// under one key cannot both be compared before either is recorded.
+    abstract Admit:
+        key: ReleaseWindowKey *
+        release: ReleasedFilter *
+        floor: int *
+        comparedFrom: DateTimeOffset *
+        keptFrom: DateTimeOffset ->
+            Async<WindowAdmission>
+
+    /// Whether the window survives a restart and is shared across
+    /// instances.
+    abstract IsDurable: bool
+
+/// One key's releases, and the admission every window implements.
+type internal ReleaseWindowState = { Releases: ReleasedFilter list }
+
+module internal ReleaseWindowState =
+
+    let empty: ReleaseWindowState = { Releases = [] }
+
+    /// Drop what retention has passed, compare `release` with what is left
+    /// inside the comparison span, and append it when nothing is near.
+    /// `Error` carries the near release's membership hash.
+    let admit
+        (release: ReleasedFilter)
+        (floor: int)
+        (comparedFrom: DateTimeOffset)
+        (keptFrom: DateTimeOffset)
+        (state: ReleaseWindowState)
+        : Result<ReleaseWindowState, string> =
+        let kept = state.Releases |> List.filter (fun r -> r.ReleasedAt >= keptFrom)
+
+        let near =
+            kept
+            |> List.tryFind (fun r ->
+                r.ReleasedAt >= comparedFrom
+                && FilterCohort.isNear floor r.Filter release.Filter)
+
+        match near with
+        | Some earlier -> Error earlier.Filter.MembershipHash
+        | None -> Ok { Releases = kept @ [ release ] }
+
+/// In-process window: right for one instance, lost on restart and wrong
+/// across replicas, which `IsDurable = false` says. Atomic under a monitor.
+type InMemoryReleaseWindow() =
+    let gate = obj ()
+    let states = Dictionary<ReleaseWindowKey, ReleaseWindowState>()
+
+    interface IReleaseWindow with
+        member _.IsDurable = false
+
+        member _.Admit(key, release, floor, comparedFrom, keptFrom) = async {
+            return
+                lock gate (fun () ->
+                    let state =
+                        match states.TryGetValue key with
+                        | true, s -> s
+                        | false, _ -> ReleaseWindowState.empty
+
+                    match ReleaseWindowState.admit release floor comparedFrom keptFrom state with
+                    | Ok next ->
+                        states[key] <- next
+                        WindowAdmission.Admitted
+                    | Error earlier -> WindowAdmission.NearDuplicateOf earlier)
+        }
+
+/// `IConditionalBlobStorage`-backed window (`IsDurable = true`): one JSON
+/// document per key under the reserved `_platform` container, every
+/// admission a compare-and-swap against its etag. Conditional writes are
+/// required at construction, on `BlobPrivacyBudgetLedger`'s argument: a
+/// download-modify-upload lets two near-duplicate submissions both read a
+/// window holding neither and both be released.
+type BlobReleaseWindow(blobs: IBlobStorage) =
+    let container = ScopeKey.PlatformContainer
+    let maxAttempts = 8
+
+    let cas =
+        match box blobs with
+        | :? IConditionalBlobStorage as c -> c
+        | _ ->
+            invalidArg
+                "blobs"
+                "BlobReleaseWindow requires an IBlobStorage that also implements IConditionalBlobStorage (conditional writes). The compare-and-swap is what stops two near-duplicate submissions both being compared with a window that holds neither. Use InMemoryReleaseWindow for a single-instance holder, or a backend with conditional-write support."
+
+    /// The key's document, named by a digest of the key, so no free-text
+    /// component reaches a path.
+    let blobNameFor (key: ReleaseWindowKey) =
+        let partition =
+            match key.Partition with
+            | ReleaseWindowPartition.Counterparty peerId -> [ "counterparty"; peerId ]
+            | ReleaseWindowPartition.Vintage vintage -> [ "vintage"; vintage ]
+
+        $"cleanroom/releases/{Sha256.hexOfUtf8 (CanonicalFrame.text (key.TemplateId :: partition))}.json"
+
+    let parse (bytes: byte[]) =
+        try
+            let parsed = JsonRpc.deserialize<ReleaseWindowState> (Encoding.UTF8.GetString bytes)
+
+            if isNull (box parsed) || isNull (box parsed.Releases) then
+                None
+            else
+                Some parsed
+        with _ ->
+            None
+
+    let rec transact attempts name release floor comparedFrom keptFrom = async {
+        if attempts <= 0 then
+            return
+                WindowAdmission.WindowUnavailable
+                    $"the release window could not settle a conditional write on '{name}' within {maxAttempts} attempts"
+        else
+            let! read = cas.DownloadWithETag(container, name)
+
+            let current, condition =
+                match read with
+                | Ok(bytes, etag) -> parse bytes, IfMatch etag
+                | Error _ -> Some ReleaseWindowState.empty, IfAbsent
+
+            match current with
+            | None ->
+                // Present but unreadable: refusing is the only safe reading,
+                // since overwriting it would forget what was released.
+                return
+                    WindowAdmission.WindowUnavailable
+                        $"the stored release window '{name}' could not be read; refusing rather than overwriting it"
+            | Some state ->
+                match ReleaseWindowState.admit release floor comparedFrom keptFrom state with
+                | Error earlier -> return WindowAdmission.NearDuplicateOf earlier
+                | Ok next ->
+                    let bytes = Encoding.UTF8.GetBytes(JsonRpc.serialize next)
+                    let! written = cas.UploadWithETag(container, name, bytes, condition)
+
+                    match written with
+                    | Ok _ -> return WindowAdmission.Admitted
+                    | Error(ETagMismatch _) -> return! transact (attempts - 1) name release floor comparedFrom keptFrom
+                    | Error(ConditionalWriteFailure message) ->
+                        return
+                            WindowAdmission.WindowUnavailable $"the release window could not write '{name}': {message}"
+    }
+
+    interface IReleaseWindow with
+        member _.IsDurable = true
+
+        member _.Admit(key, release, floor, comparedFrom, keptFrom) =
+            transact maxAttempts (blobNameFor key) release floor comparedFrom keptFrom
+
+/// The composed window posture: the window, its policy, and the clock the
+/// policy's spans are read against.
+type ReleaseWindowMeter = {
+    Window: IReleaseWindow
+    Policy: ReleaseWindowPolicy
+    /// Injected so a span is testable without waiting for one.
+    Now: unit -> DateTimeOffset
+}
+
+[<RequireQualifiedAccess>]
+module ReleaseWindowMeter =
+
+    /// Compare through `window` under `policy`, on the wall clock.
+    let create (window: IReleaseWindow) (policy: ReleaseWindowPolicy) : ReleaseWindowMeter = {
+        Window = window
+        Policy = policy
+        Now = fun () -> DateTimeOffset.UtcNow
+    }
+
+    /// Compare on an injected clock.
+    let withClock (now: unit -> DateTimeOffset) (meter: ReleaseWindowMeter) = { meter with Now = now }

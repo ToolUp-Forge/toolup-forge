@@ -159,6 +159,9 @@ type GatedContractRegistration =
 type internal GateReading =
     /// A gate-checkable answer, released through the broker and the floor.
     | Cohort of CohortResult
+    /// A gate-checkable answer with the splits and the filter cohort the
+    /// differencing checks read. Only its `Result` is released.
+    | Declared of DeclaredCohort
     /// An opaque aggregate answer declaring the smallest cohort any figure
     /// in it rests on. The floor binds on the declaration, as one cell.
     | DeclaredAggregate of cohort: int
@@ -223,6 +226,41 @@ module CleanRoomGate =
                 Some parsed
         with _ ->
             None
+
+    /// Parse a dispatch result that carries a `Result` member as a
+    /// `DeclaredCohort`, on the same null checks; `None` for any other
+    /// document, which `tryParseCohort` then reads.
+    let private tryParseDeclared (json: string) : DeclaredCohort option =
+        let declaresResult =
+            try
+                use document = System.Text.Json.JsonDocument.Parse json
+
+                document.RootElement.ValueKind = System.Text.Json.JsonValueKind.Object
+                && document.RootElement.EnumerateObject()
+                   |> Seq.exists (fun p -> String.Equals(p.Name, "Result", StringComparison.OrdinalIgnoreCase))
+            with _ ->
+                false
+
+        if not declaresResult then
+            None
+        else
+            try
+                let parsed = JsonRpc.deserialize<DeclaredCohort> json
+
+                if
+                    isNull (box parsed)
+                    || isNull (box parsed.Result)
+                    || isNull (box parsed.Result.Cells)
+                    || isNull (box parsed.Result.Shape)
+                then
+                    None
+                else
+                    Some {
+                        parsed with
+                            Splits = if isNull (box parsed.Splits) then [] else parsed.Splits
+                    }
+            with _ ->
+                None
 
     /// The wire refusal every withhold collapses to. One value, so no
     /// path can accidentally answer with a chattier one.
@@ -302,20 +340,47 @@ module CleanRoomGate =
     ///     the one behaviour that would make the whole arrangement
     ///     worse than not having it.
     ///
-    /// `read` is how the gate reads one answer. `wrapNoised` passes the
-    /// reader every contract shares — a `CohortResult` or nothing — and a
+    /// `read` is how the gate reads one answer. `wrapDifferenced` passes the
+    /// reader every cohort contract shares — a `CohortResult`, a
+    /// `DeclaredCohort`, or nothing — and a
     /// contract whose answers are opaque to forge passes its own, which
     /// says what an answer declares about itself (see `GateReading`).
-    let internal wrapReading
+    ///
+    /// `window` is the near-duplicate posture. `None` reads no window and
+    /// compares nothing, which is every composition before it existed.
+    /// With it composed, a cohort answer under a template that does not opt
+    /// out must declare its filter cohort; one within the floor of a cohort
+    /// released under the template's scope is refused, recorded and charged
+    /// whatever the budget's withhold policy, so probing spends budget. The
+    /// template's complement check needs no window: it reads the answer's
+    /// own splits.
+    let internal wrapGuarded
         (read: string -> string -> GateReading)
         (broker: ICleanRoomBroker)
         (template: CleanRoomTemplate)
         (approval: CleanRoomApprovalCheck option)
         (budget: PrivacyBudgetMeter option)
         (noise: (INoiseMechanism * NoisedReleasePolicy) option)
+        (window: ReleaseWindowMeter option)
         (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
         (registration: PeerContractRegistration)
         : GatedContractRegistration =
+
+        // The one count both differencing checks hold to.
+        let differencingFloor = PrivacyGate.differencingFloor template.Floor
+
+        let nearDuplicate =
+            match window, template.Release.NearDuplicate with
+            | Some meter, NearDuplicateRule.Compared scope -> Some(meter, scope)
+            | _ -> None
+
+        let differenced = template.Release.Complement.IsSome || nearDuplicate.IsSome
+
+        let joinReasons (first: string) (second: string) =
+            match first, second with
+            | "", reason
+            | reason, "" -> reason
+            | _ -> $"{first}; {second}"
 
         // The released bytes: the answer itself, or, under a template whose
         // release terms name withheld cells, the answer and their labels.
@@ -349,6 +414,208 @@ module CleanRoomGate =
                         Reason = reason
                         OccurredAt = DateTimeOffset.UtcNow
                     }
+
+                // The near-duplicate check, last before release: compare the
+                // answer's filter cohort with the window and record it there in
+                // one act. `Error` carries the reason and whether the refusal is
+                // charged whatever the budget's withhold policy says: a
+                // near-duplicate or too-small filter is a probe, and a probe
+                // that cost nothing could be repeated for nothing.
+                let admit (declared: DeclaredCohort) : Async<Result<unit, string * bool>> = async {
+                    match nearDuplicate with
+                    | None -> return Ok()
+                    | Some(meter, scope) ->
+                        match declared.Filter with
+                        | None ->
+                            return
+                                Error(
+                                    $"the answer declares no filter cohort, which the near-duplicate check of template '{template.TemplateId}' reads",
+                                    false
+                                )
+                        | Some filter ->
+                            match FilterCohort.problem filter with
+                            | Some problem -> return Error(problem, false)
+                            | None when filter.Size < differencingFloor ->
+                                return Error(DifferencingVerdict.describe DifferencingVerdict.FilterBelowFloor, true)
+                            | None ->
+                                let partition =
+                                    match scope, filter.Vintage with
+                                    | DifferencingScope.PerCounterparty, _ ->
+                                        Ok(ReleaseWindowPartition.Counterparty context.Peer.PeerId)
+                                    | DifferencingScope.PerVintage, Some vintage when
+                                        not (String.IsNullOrWhiteSpace vintage)
+                                        ->
+                                        Ok(ReleaseWindowPartition.Vintage vintage)
+                                    | DifferencingScope.PerVintage, _ ->
+                                        Error
+                                            $"the answer's filter cohort names no vintage, which template '{template.TemplateId}' compares per vintage"
+
+                                match partition with
+                                | Error reason -> return Error(reason, false)
+                                | Ok partition ->
+                                    let now = meter.Now()
+
+                                    let before (span: TimeSpan) =
+                                        if span >= now - DateTimeOffset.MinValue then
+                                            DateTimeOffset.MinValue
+                                        else
+                                            now - span
+
+                                    let comparedFrom =
+                                        match scope with
+                                        | DifferencingScope.PerCounterparty -> before meter.Policy.Length
+                                        | DifferencingScope.PerVintage -> DateTimeOffset.MinValue
+
+                                    let release: ReleasedFilter = {
+                                        Filter = filter
+                                        ReleasedAt = now
+                                        CounterpartyPeerId = context.Peer.PeerId
+                                        MethodName = methodName
+                                    }
+
+                                    let key = {
+                                        TemplateId = template.TemplateId
+                                        Partition = partition
+                                    }
+
+                                    let! admission = async {
+                                        try
+                                            return!
+                                                meter.Window.Admit(
+                                                    key,
+                                                    release,
+                                                    differencingFloor,
+                                                    comparedFrom,
+                                                    before meter.Policy.Retention
+                                                )
+                                        with ex when not (ex :? OperationCanceledException) ->
+                                            return
+                                                WindowAdmission.WindowUnavailable
+                                                    $"the release window failed: {ex.Message}"
+                                    }
+
+                                    match admission with
+                                    | WindowAdmission.Admitted -> return Ok()
+                                    | WindowAdmission.NearDuplicateOf earlier ->
+                                        return
+                                            Error(
+                                                DifferencingVerdict.describe (
+                                                    DifferencingVerdict.NearDuplicateFilter earlier
+                                                ),
+                                                true
+                                            )
+                                    | WindowAdmission.WindowUnavailable reason -> return Error(reason, false)
+                }
+
+                // A cohort answer through the broker, the complement check, the
+                // release post-condition, the near-duplicate check and the noise,
+                // in that order. Every count the floor and the complement check
+                // read is a true count: noise comes last.
+                let releaseCohort (declared: DeclaredCohort) = async {
+                    // The composed mechanism gets its say. The requested gate
+                    // is `None`: the peer wire format carries no
+                    // caller-supplied `PrivacyGate`, so the effective gate on
+                    // this path is the composed floor. A bespoke caller that
+                    // HAS a caller-requested gate still reaches
+                    // `ICleanRoomBroker.Enforce` directly.
+                    match broker.Enforce(template, methodName, None, declared.Result) with
+                    | Withheld reason ->
+                        do! record sink (decision false [] reason)
+                        return withheld template, false
+                    | NoisedRelease(_, suppressedCells, _) ->
+                        // A broker that noised the answer itself has left the
+                        // substrate nothing to bind the floor against: invariant
+                        // 3 reads TRUE counts, and these are not. Calibration
+                        // this substrate did not perform is calibration it
+                        // cannot check, so it is refused rather than taken on
+                        // trust.
+                        do!
+                            record
+                                sink
+                                (decision
+                                    false
+                                    suppressedCells
+                                    $"the resolved ICleanRoomBroker returned an already-noised answer for template '{template.TemplateId}', which the substrate cannot check its floor against; compose an INoiseMechanism with PeerOptions.withNoisedRelease instead")
+
+                        return withheld template, false
+                    | Released(brokered, brokerSuppressed) ->
+                        // The complement check, on the cells the floor cleared.
+                        let complemented =
+                            match template.Release.Complement with
+                            | None -> Ok(brokered, [])
+                            | Some rule -> ComplementRule.apply differencingFloor rule declared.Splits brokered
+
+                        match complemented with
+                        | Error reason ->
+                            do! record sink (decision false brokerSuppressed reason)
+                            return withheld template, false
+                        | Ok(released, verdicts) ->
+                            let suppressedCells =
+                                brokerSuppressed
+                                @ (verdicts
+                                   |> List.choose (function
+                                       | DifferencingVerdict.ComplementBelowFloor(_, cell) -> Some cell
+                                       | _ -> None))
+
+                            let complementReason =
+                                verdicts |> List.map DifferencingVerdict.describe |> String.concat "; "
+
+                            // Invariant 3 — release post-condition. The seam is
+                            // substitutable; the floor is not.
+                            if PrivacyGate.isStricterOrEqual template.Floor (PrivacyGate.observed released) then
+                                match! admit declared with
+                                | Error(reason, charged) ->
+                                    do! record sink (decision false suppressedCells reason)
+                                    return withheld template, charged
+                                | Ok() ->
+                                    // Invariant 4 — calibrated noise, applied to
+                                    // what the floor already cleared. `None` is the
+                                    // un-noised release, byte for byte.
+                                    let final =
+                                        match noise with
+                                        | None -> Released(released, suppressedCells)
+                                        | Some(mechanism, policy) ->
+                                            CohortNoise.applyTo mechanism policy (Released(released, suppressedCells))
+
+                                    match final with
+                                    | Released(answer, cells) ->
+                                        do! record sink (decision true cells complementReason)
+                                        return Ok(releasedJson answer cells), true
+                                    | NoisedRelease(answer, cells, applied) ->
+                                        // The calibration is recorded receiver-side
+                                        // beside the suppression trail, so an
+                                        // auditor reads what was spent and on what
+                                        // mechanism from the same row.
+                                        do!
+                                            record
+                                                sink
+                                                (decision
+                                                    true
+                                                    cells
+                                                    (joinReasons
+                                                        complementReason
+                                                        $"released with calibrated noise — {NoisedReleasePolicy.describe applied}"))
+
+                                        return Ok(releasedJson answer cells), true
+                                    | Withheld reason ->
+                                        // Unreachable: `applyTo` never withholds a
+                                        // `Released`. Kept total rather than
+                                        // assumed — a privacy gate's default
+                                        // branch must be silence.
+                                        do! record sink (decision false suppressedCells reason)
+                                        return withheld template, false
+                            else
+                                let reason =
+                                    if List.isEmpty verdicts then
+                                        $"the resolved ICleanRoomBroker released an answer that does not clear the composed floor of template '{template.TemplateId}'; the substrate withheld it"
+                                    else
+                                        joinReasons
+                                            complementReason
+                                            $"what the complement check left does not clear the floor of template '{template.TemplateId}'"
+
+                                do! record sink (decision false suppressedCells reason)
+                                return withheld template, false
+                }
 
                 // Phase 311's invariants 1–3, verbatim. Lifted into a
                 // local so Phase 480's approval check can sit in front
@@ -389,6 +656,20 @@ module CleanRoomGate =
                             | GateReading.Inert ->
                                 do! record sink (decision true [] "the answer carries no protected data")
                                 return Ok resultJson, false
+                            | GateReading.DeclaredRows
+                            | GateReading.DeclaredAggregate _ when differenced ->
+                                // An opaque answer has no splits and no filter
+                                // cohort, so a template holding answers to either
+                                // differencing check releases none.
+                                do!
+                                    record
+                                        sink
+                                        (decision
+                                            false
+                                            []
+                                            $"template '{template.TemplateId}' holds its answers to a differencing check, and an opaque answer declares neither splits nor a filter cohort")
+
+                                return withheld template, false
                             | GateReading.DeclaredRows
                             | GateReading.DeclaredAggregate _ when noise.IsSome ->
                                 // An opaque answer has no cells to draw noise
@@ -449,94 +730,8 @@ module CleanRoomGate =
                                 | Withheld reason ->
                                     do! record sink (decision false [] reason)
                                     return withheld template, false
-                            | GateReading.Cohort cohort ->
-                                // The composed mechanism gets its say. The
-                                // requested gate is `None`: the peer wire
-                                // format carries no caller-supplied
-                                // `PrivacyGate`, so the effective gate on
-                                // this path is the composed floor. A bespoke
-                                // caller that HAS a caller-requested gate
-                                // still reaches `ICleanRoomBroker.Enforce`
-                                // directly — that API is unchanged.
-                                match broker.Enforce(template, methodName, None, cohort) with
-                                | Withheld reason ->
-                                    do! record sink (decision false [] reason)
-                                    return withheld template, false
-                                | NoisedRelease(_, suppressedCells, _) ->
-                                    // Phase 481 — a broker that noised the
-                                    // answer itself has left the substrate
-                                    // nothing to bind the floor against:
-                                    // invariant 3 reads TRUE counts, and
-                                    // these are not. Calibration this
-                                    // substrate did not perform is
-                                    // calibration it cannot check, so it is
-                                    // refused rather than taken on trust.
-                                    do!
-                                        record
-                                            sink
-                                            (decision
-                                                false
-                                                suppressedCells
-                                                $"the resolved ICleanRoomBroker returned an already-noised answer for template '{template.TemplateId}', which the substrate cannot check its floor against; compose an INoiseMechanism with PeerOptions.withNoisedRelease instead")
-
-                                    return withheld template, false
-                                | Released(released, suppressedCells) ->
-                                    // Invariant 3 — release post-condition.
-                                    // The seam is substitutable; the floor is
-                                    // not.
-                                    if PrivacyGate.isStricterOrEqual template.Floor (PrivacyGate.observed released) then
-                                        // Invariant 4 — calibrated noise
-                                        // (Phase 481), applied to what the
-                                        // floor already cleared. `None` is
-                                        // the pre-481 release, byte for
-                                        // byte.
-                                        let final =
-                                            match noise with
-                                            | None -> Released(released, suppressedCells)
-                                            | Some(mechanism, policy) ->
-                                                CohortNoise.applyTo
-                                                    mechanism
-                                                    policy
-                                                    (Released(released, suppressedCells))
-
-                                        match final with
-                                        | Released(answer, cells) ->
-                                            do! record sink (decision true cells "")
-                                            return Ok(releasedJson answer cells), true
-                                        | NoisedRelease(answer, cells, applied) ->
-                                            // The calibration is recorded
-                                            // receiver-side beside the
-                                            // suppression trail, so an
-                                            // auditor reads what was spent
-                                            // and on what mechanism from
-                                            // the same row.
-                                            do!
-                                                record
-                                                    sink
-                                                    (decision
-                                                        true
-                                                        cells
-                                                        $"released with calibrated noise — {NoisedReleasePolicy.describe applied}")
-
-                                            return Ok(releasedJson answer cells), true
-                                        | Withheld reason ->
-                                            // Unreachable: `applyTo` never
-                                            // withholds a `Released`. Kept
-                                            // total rather than assumed —
-                                            // a privacy gate's default
-                                            // branch must be silence.
-                                            do! record sink (decision false suppressedCells reason)
-                                            return withheld template, false
-                                    else
-                                        do!
-                                            record
-                                                sink
-                                                (decision
-                                                    false
-                                                    suppressedCells
-                                                    $"the resolved ICleanRoomBroker released an answer that does not clear the composed floor of template '{template.TemplateId}'; the substrate withheld it")
-
-                                        return withheld template, false
+                            | GateReading.Cohort cohort -> return! releaseCohort (DeclaredCohort.ofResult cohort)
+                            | GateReading.Declared declared -> return! releaseCohort declared
                 }
 
                 // Invariant 0.5 — the cumulative ε budget (Phase 190).
@@ -615,6 +810,9 @@ module CleanRoomGate =
                                     | Ok _ when not disclosed -> SpendReturned "the answer carried no protected data"
                                     // Released: the ε stands.
                                     | Ok _ -> SpendCommitted
+                                    // Refused as a probe by a differencing
+                                    // check: charged whatever the policy.
+                                    | Error(PeerCleanRoomWithheld _) when disclosed -> SpendCommitted
                                     // Withheld by the gate. The refusal
                                     // itself discloses one bit, so
                                     // whether it is charged is declared
@@ -686,9 +884,49 @@ module CleanRoomGate =
                 Dispatch = gatedDispatch
         }
 
+    /// `wrapGuarded` with no release window: every gate composed before the
+    /// window existed.
+    let internal wrapReading
+        (read: string -> string -> GateReading)
+        (broker: ICleanRoomBroker)
+        (template: CleanRoomTemplate)
+        (approval: CleanRoomApprovalCheck option)
+        (budget: PrivacyBudgetMeter option)
+        (noise: (INoiseMechanism * NoisedReleasePolicy) option)
+        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (registration: PeerContractRegistration)
+        : GatedContractRegistration =
+        wrapGuarded read broker template approval budget noise None sink registration
+
     /// Install `template`'s gate over a contract whose answers are
-    /// `CohortResult`s: any other answer is withheld. Every argument is as
-    /// `wrapReading` documents it.
+    /// `CohortResult`s, or `DeclaredCohort`s carrying the splits and filter
+    /// cohort the differencing checks read: any other answer is withheld.
+    /// `window` is the composed near-duplicate posture, or `None`. Every
+    /// argument is as `wrapGuarded` documents it.
+    let wrapDifferenced
+        (broker: ICleanRoomBroker)
+        (template: CleanRoomTemplate)
+        (approval: CleanRoomApprovalCheck option)
+        (budget: PrivacyBudgetMeter option)
+        (noise: (INoiseMechanism * NoisedReleasePolicy) option)
+        (window: ReleaseWindowMeter option)
+        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (registration: PeerContractRegistration)
+        : GatedContractRegistration =
+        let read _ (json: string) =
+            match tryParseDeclared json with
+            | Some declared -> GateReading.Declared declared
+            | None ->
+                match tryParseCohort json with
+                | Some cohort -> GateReading.Cohort cohort
+                | None ->
+                    GateReading.Unreadable
+                        $"the answer is not a gate-checkable CohortResult, so template '{template.TemplateId}' could not be evaluated against it"
+
+        wrapGuarded read broker template approval budget noise window sink registration
+
+    /// `wrapDifferenced` with no release window. The pre-window shape,
+    /// preserved exactly.
     let wrapNoised
         (broker: ICleanRoomBroker)
         (template: CleanRoomTemplate)
@@ -698,14 +936,7 @@ module CleanRoomGate =
         (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
         (registration: PeerContractRegistration)
         : GatedContractRegistration =
-        let read _ (json: string) =
-            match tryParseCohort json with
-            | Some cohort -> GateReading.Cohort cohort
-            | None ->
-                GateReading.Unreadable
-                    $"the answer is not a gate-checkable CohortResult, so template '{template.TemplateId}' could not be evaluated against it"
-
-        wrapReading read broker template approval budget noise sink registration
+        wrapDifferenced broker template approval budget noise None sink registration
 
     /// Phase 190 — install `template`'s gate with cumulative ε
     /// accounting and no calibrated noise. The pre-481 shape, preserved

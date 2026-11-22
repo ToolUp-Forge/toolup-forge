@@ -698,3 +698,404 @@ let wireTests =
             Expect.stringContains message "withheld" "…and that it was a withhold"
         }
     ]
+
+// ─── 5. The differencing checks: the complement and the near duplicate ──
+//
+// Two answers that each clear the floor can still give a member away: by
+// a complement (a cell whose split holds three people who are not in it),
+// or by subtraction (two filters differing by one respondent). Each case
+// below is paired with the control that shows the check, and nothing else,
+// did the withholding.
+
+/// A survey holder's contract: one table per named filter, answered with
+/// the splits and filter cohort the differencing checks read.
+type SurveyContract = {
+    Table: string -> Async<DeclaredCohort>
+}
+
+let private surveyId = "example.survey"
+
+let private respondents (first: int) (last: int) = [ for i in first..last -> $"respondent-{i}" ]
+
+let private gridCell (row: string) (column: string) (count: int) =
+    match CellLabel.grid row column with
+    | Ok label -> cell label count
+    | Error reason -> failwith reason
+
+/// Yes/no by men/women. Among the 60 men, 52 said yes: the 8 who said no
+/// are the complement of the men's yes cell.
+let private table = {
+    Shape = Histogram
+    Cells = [
+        gridCell "yes" "men" 52
+        gridCell "no" "men" 8
+        gridCell "yes" "women" 30
+        gridCell "no" "women" 30
+    ]
+}
+
+let private columns = [
+    {
+        Key = "column"
+        Base = 60
+        Cells = [ "yes␟men"; "no␟men" ]
+    }
+    {
+        Key = "column"
+        Base = 60
+        Cells = [ "yes␟women"; "no␟women" ]
+    }
+]
+
+let private surveyTemplate: CleanRoomTemplate = {
+    TemplateId = "survey"
+    AllowedMethods = Set.ofList [ "Table" ]
+    Floor = floor
+    Release = ReleaseTerms.none
+}
+
+let private complementTemplate = {
+    surveyTemplate with
+        Release.Complement = Some(ComplementRule.Within "column")
+}
+
+/// Answer the filter a call names with `answers`.
+let private surveyRegistration (answers: Map<string, DeclaredCohort>) =
+    let impl: SurveyContract = {
+        Table = fun filter -> async { return answers[filter] }
+    }
+
+    (JsonRpcPeerHost.contract<SurveyContract> surveyId [ v1 ] None impl).Registration
+
+let private contextOf (peerId: string) = {
+    callContext with
+        Peer = {
+            PeerId = peerId
+            DisplayName = peerId
+        }
+}
+
+let private ask (registration: PeerContractRegistration) (peerId: string) (filter: string) =
+    registration.Dispatch (contextOf peerId) "Table" (JsonRpc.serialize [ filter ])
+    |> Async.RunSynchronously
+
+let private at = DateTimeOffset(2026, 11, 22, 9, 0, 0, TimeSpan.Zero)
+
+let private windowMeter () =
+    ReleaseWindowMeter.create (InMemoryReleaseWindow()) ReleaseWindowPolicy.defaults
+    |> ReleaseWindowMeter.withClock (fun () -> at)
+
+/// A budget whose withhold policy returns a withheld answer's ε, so a
+/// charged refusal shows as one the policy alone would not have charged.
+let private freeWithholds () =
+    let ledger = InMemoryPrivacyBudgetLedger(fun () -> at) :> IPrivacyBudgetLedger
+
+    let policy =
+        PrivacyBudgetPolicy.create 100m 1m
+        |> PrivacyBudgetPolicy.withWithholdCharge WithholdFree
+
+    ledger,
+    policy,
+    PrivacyBudgetMeter.create ledger policy
+    |> PrivacyBudgetMeter.withClock (fun () -> at)
+
+let private differenced
+    (template: CleanRoomTemplate)
+    (budget: PrivacyBudgetMeter option)
+    (window: ReleaseWindowMeter option)
+    (sink: DecisionSink)
+    (answers: Map<string, DeclaredCohort>)
+    =
+    (CleanRoomGate.wrapDifferenced defaultBroker template None budget None window sink.Sink (surveyRegistration answers))
+        .Registration
+
+/// A table over the respondents `first`..`last`.
+let private tableOver (first: int) (last: int) =
+    DeclaredCohort.ofResult table
+    |> DeclaredCohort.withFilter (FilterCohort.ofMembers (respondents first last))
+
+let private releasedLabels (json: string) =
+    (JsonRpc.deserialize<CohortResult> json).Cells |> List.map _.Label
+
+let differencingTests =
+    testList "Phase 1278 — the complement rule and the near-duplicate filter" [
+
+        test "a cell whose complement is below the floor is withheld while the cell itself clears it" {
+            let sink = DecisionSink()
+
+            let answers =
+                Map.ofList [
+                    "all",
+                    {
+                        DeclaredCohort.ofResult table with
+                            Splits = columns
+                    }
+                ]
+
+            match ask (differenced complementTemplate None None sink answers) "buyer" "all" with
+            | Ok json ->
+                let labels = releasedLabels json
+                Expect.isFalse (List.contains "yes␟men" labels) "52 clears the floor, but its complement is 8"
+                Expect.contains labels "no␟men" "8 clears the suppression threshold and its complement is 52"
+                Expect.contains labels "yes␟women" "the women's cells stand"
+                Expect.isFalse (json.Contains "column") "the splits never reach the wire"
+            | Error e -> failtestf "the answer clears the floor once the cell is withheld; got %A" e
+
+            let row = List.exactlyOne sink.Rows
+            Expect.isTrue row.Released "the answer was released"
+            Expect.contains row.SuppressedCells "yes␟men" "the withheld cell is on the audit row"
+            Expect.stringContains row.Reason "ComplementBelowFloor" "the verdict is recorded"
+            Expect.isFalse (row.Reason.Contains "52") "the verdict never names a count"
+        }
+
+        test "CONTROL — the same answer under a template declaring no complement check releases the cell" {
+            let sink = DecisionSink()
+
+            let answers =
+                Map.ofList [
+                    "all",
+                    {
+                        DeclaredCohort.ofResult table with
+                            Splits = columns
+                    }
+                ]
+
+            match ask (differenced surveyTemplate None None sink answers) "buyer" "all" with
+            | Ok json -> Expect.contains (releasedLabels json) "yes␟men" "the floor alone releases 52"
+            | Error e -> failtestf "the control must release; got %A" e
+        }
+
+        test "an answer declaring no split under the template's key is withheld" {
+            let sink = DecisionSink()
+            let answers = Map.ofList [ "all", DeclaredCohort.ofResult table ]
+
+            match ask (differenced complementTemplate None None sink answers) "buyer" "all" with
+            | Error(PeerCleanRoomWithheld _) -> ()
+            | other -> failtestf "a complement check with nothing to read must withhold; got %A" other
+
+            Expect.stringContains (List.exactlyOne sink.Rows).Reason "declares no split" "the reason is recorded"
+        }
+
+        test "a filter differing by one respondent from a released one is refused, logged and charged" {
+            let sink = DecisionSink()
+            let ledger, policy, meter = freeWithholds ()
+
+            let answers =
+                Map.ofList [ "everyone", tableOver 1 120; "all-but-one", tableOver 2 120 ]
+
+            let registration =
+                differenced surveyTemplate (Some meter) (Some(windowMeter ())) sink answers
+
+            match ask registration "buyer" "everyone" with
+            | Ok _ -> ()
+            | Error e -> failtestf "the first table must be released; got %A" e
+
+            match ask registration "buyer" "all-but-one" with
+            | Error(PeerCleanRoomWithheld id) -> Expect.equal id "survey" "the caller learns only that it was withheld"
+            | other -> failtestf "one respondent's difference must be refused; got %A" other
+
+            let refusal = sink.Rows |> List.last
+            Expect.isFalse refusal.Released "the refusal is a recorded decision"
+            Expect.stringContains refusal.Reason "NearDuplicateFilter" "…naming the check"
+
+            Expect.stringContains
+                refusal.Reason
+                (FilterCohort.ofMembers (respondents 1 120)).MembershipHash
+                "…and the earlier cohort, by its hash"
+
+            Expect.isFalse (refusal.Reason.Contains "respondent-") "no member is named"
+
+            let budget =
+                ledger.RemainingBudget(PrivacyBudgetPolicy.scopeFor "survey" "buyer" at policy, 100m)
+                |> Async.RunSynchronously
+
+            Expect.equal budget.QueryCount 2 "the release and the refusal are both charged"
+
+            Expect.equal
+                budget.EpsilonCommitted
+                2m
+                "the refusal is charged though this policy returns a withheld answer's epsilon"
+        }
+
+        test "CONTROL — under the same policy an ordinary withhold is not charged" {
+            let sink = DecisionSink()
+            let ledger, policy, meter = freeWithholds ()
+
+            let small = {
+                DeclaredCohort.ofResult (countOf 7) with
+                    Filter = Some(FilterCohort.ofMembers (respondents 1 120))
+            }
+
+            let registration =
+                differenced surveyTemplate (Some meter) (Some(windowMeter ())) sink (Map.ofList [ "small", small ])
+
+            match ask registration "buyer" "small" with
+            | Error(PeerCleanRoomWithheld _) -> ()
+            | other -> failtestf "a sub-k cohort is withheld by the floor; got %A" other
+
+            let budget =
+                ledger.RemainingBudget(PrivacyBudgetPolicy.scopeFor "survey" "buyer" at policy, 100m)
+                |> Async.RunSynchronously
+
+            Expect.equal budget.QueryCount 0 "the floor's withhold is returned under WithholdFree"
+        }
+
+        test "a filter differing by the floor or more is answered" {
+            let sink = DecisionSink()
+
+            let answers = Map.ofList [ "everyone", tableOver 1 120; "fewer", tableOver 11 120 ]
+
+            let registration =
+                differenced surveyTemplate None (Some(windowMeter ())) sink answers
+
+            for filter in [ "everyone"; "fewer" ] do
+                match ask registration "buyer" filter with
+                | Ok _ -> ()
+                | Error e -> failtestf "'%s' differs by ten, the floor, and must be answered; got %A" filter e
+        }
+
+        test "a filter cohort smaller than the floor is refused" {
+            let sink = DecisionSink()
+
+            let registration =
+                differenced surveyTemplate None (Some(windowMeter ())) sink (Map.ofList [ "few", tableOver 1 9 ])
+
+            match ask registration "buyer" "few" with
+            | Error(PeerCleanRoomWithheld _) -> ()
+            | other -> failtestf "nine respondents are below the floor; got %A" other
+
+            Expect.stringContains (List.exactlyOne sink.Rows).Reason "FilterBelowFloor" "the verdict is recorded"
+        }
+
+        test
+            "with a window composed, an answer declaring no filter cohort is withheld; a template that opts out is not compared" {
+            let answers = Map.ofList [ "bare", DeclaredCohort.ofResult table ]
+
+            match
+                ask (differenced surveyTemplate None (Some(windowMeter ())) (DecisionSink()) answers) "buyer" "bare"
+            with
+            | Error(PeerCleanRoomWithheld _) -> ()
+            | other -> failtestf "an answer the check cannot read must be withheld; got %A" other
+
+            let optedOut = {
+                surveyTemplate with
+                    Release.NearDuplicate = NearDuplicateRule.NotCompared "a published table, one filter"
+            }
+
+            let both =
+                Map.ofList [ "everyone", tableOver 1 120; "all-but-one", tableOver 2 120 ]
+
+            let registration =
+                differenced optedOut None (Some(windowMeter ())) (DecisionSink()) both
+
+            for filter in [ "everyone"; "all-but-one" ] do
+                match ask registration "buyer" filter with
+                | Ok _ -> ()
+                | Error e -> failtestf "an opted-out template is not compared; '%s' got %A" filter e
+        }
+
+        test "per counterparty, another counterparty's release is not compared" {
+            let answers =
+                Map.ofList [ "everyone", tableOver 1 120; "all-but-one", tableOver 2 120 ]
+
+            let registration =
+                differenced surveyTemplate None (Some(windowMeter ())) (DecisionSink()) answers
+
+            match ask registration "buyer" "everyone", ask registration "rival" "all-but-one" with
+            | Ok _, Ok _ -> ()
+            | first, second -> failtestf "the default scope is per counterparty; got %A and %A" first second
+
+            let perVintage = {
+                surveyTemplate with
+                    Release.NearDuplicate = NearDuplicateRule.Compared DifferencingScope.PerVintage
+            }
+
+            let onVintage first last =
+                tableOver first last
+                |> fun d -> {
+                    d with
+                        Filter = d.Filter |> Option.map (FilterCohort.withVintage "wave-3")
+                }
+
+            let vintaged =
+                Map.ofList [ "everyone", onVintage 1 120; "all-but-one", onVintage 2 120 ]
+
+            let shared =
+                differenced perVintage None (Some(windowMeter ())) (DecisionSink()) vintaged
+
+            match ask shared "buyer" "everyone", ask shared "rival" "all-but-one" with
+            | Ok _, Error(PeerCleanRoomWithheld _) -> ()
+            | first, second ->
+                failtestf "per vintage, the rival's near duplicate is refused; got %A and %A" first second
+        }
+
+        test "a composition without the option releases the bytes it released before" {
+            let sink = DecisionSink()
+            let answer = histogramOf [ cell "a" 20; cell "b" 3; cell "c" 30 ]
+
+            let registration =
+                (CleanRoomGate.wrap
+                    defaultBroker
+                    template
+                    sink.Sink
+                    (rawRegistration (implWith (HandlerProbe()) answer answer)))
+                    .Registration
+
+            match dispatch registration "Histogram" "[\"any\"]" with
+            | Ok json ->
+                Expect.equal
+                    json
+                    (JsonRpc.serialize {
+                        answer with
+                            Cells = [ cell "a" 20; cell "c" 30 ]
+                    })
+                    "the release is the surviving cells serialised exactly as before"
+            | Error e -> failtestf "the control must release; got %A" e
+
+            let row = List.exactlyOne sink.Rows
+            Expect.equal row.Reason "" "the decision row's reason is unchanged"
+            Expect.equal row.SuppressedCells [ "b" ] "…and so is its suppression trail"
+
+            let canonical (t: CleanRoomTemplate) =
+                Text.Encoding.UTF8.GetString(ToolUp.InterPlatform.TemplateCanonical.templateBytes t)
+
+            let naming = {
+                template with
+                    Release.NamesWithheld = true
+            }
+
+            Expect.isTrue
+                ((canonical naming).EndsWith("14:withheld:named\n", StringComparison.Ordinal))
+                "a template declaring no differencing term encodes nothing after its last pre-existing field"
+        }
+
+        test "a template with a differencing option changes its canonical hash, so approval is re-sought" {
+            let version = ToolUp.InterPlatform.TemplateCanonical.version
+
+            let variants = [
+                surveyTemplate
+                complementTemplate
+                {
+                    surveyTemplate with
+                        Release.Complement = Some(ComplementRule.Within "row")
+                }
+                {
+                    surveyTemplate with
+                        Release.NearDuplicate = NearDuplicateRule.Compared DifferencingScope.PerVintage
+                }
+                {
+                    surveyTemplate with
+                        Release.NearDuplicate = NearDuplicateRule.NotCompared "one reason"
+                }
+                {
+                    surveyTemplate with
+                        Release.NearDuplicate = NearDuplicateRule.NotCompared "another reason"
+                }
+            ]
+
+            Expect.equal
+                (variants |> List.map version |> List.distinct |> List.length)
+                (List.length variants)
+                "every differencing term, and an opt-out's reason, is covered by the hash an approval binds to"
+        }
+    ]
