@@ -64,7 +64,8 @@ let run (pack: Pack) (argv: string array) : int =
             |> Some
         | TestLane.Lane.Pure
         | TestLane.Lane.Fast
-        | TestLane.Lane.Full -> None
+        | TestLane.Lane.Full
+        | TestLane.Lane.Preflight -> None
 
     match affectedKeep with
     | Some(Error why) ->
