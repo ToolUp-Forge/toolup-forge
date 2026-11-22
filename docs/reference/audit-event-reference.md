@@ -195,7 +195,7 @@ Payload record definitions live in the `src/ToolUp.Platform.Core/Shared/Audit/*A
 
 ## Companion kinds
 
-Kinds a companion declares through its own `AuditEventFamily` and registers from its compose step (35). Core carries them as `AuditEvent.Opaque`; the companion's assembly holds their event type and payload records.
+Kinds a companion declares through its own `AuditEventFamily` and registers from its compose step (36). Core carries them as `AuditEvent.Opaque`; the companion's assembly holds their event type and payload records.
 
 | Event type (wire) | Registrant |
 |---|---|
@@ -211,6 +211,7 @@ Kinds a companion declares through its own `AuditEventFamily` and registers from
 | `ConversationReplayed` | `ToolUp.AI` |
 | `ConversationsPurged` | `ToolUp.AI` |
 | `CrossModuleRead` | `ToolUp.AI` |
+| `DataSourceQueried` | `ToolUp.Platform` |
 | `FactImportAccepted` | `ToolUp.Facts` |
 | `FactImportRefused` | `ToolUp.Facts` |
 | `FederationParticipantDropped` | `ToolUp.InterPlatform` |

@@ -700,6 +700,10 @@
         <Compile Include="Shared\PlatformTenantApi.fs" />
         <Compile Include="Shared\DataIngestionTypes.fs" />
         <Compile Include="Shared\DataIngestionApi.fs" />
+        <!-- The data-source query audit event: the payload of a kind the platform
+             declares in the open audit registry. After DataIngestionTypes.fs (the
+             statement-text opt-in reads StatementPolicy). Fable-safe. -->
+        <Compile Include="Shared\Audit\DataSourceAuditPayloads.fs" />
         <!-- IDataMigrationApi ToolUp.Remoting contract. After
              MigrationTypes.fs (returns MigrationStatus) and after
              AuthAttributes.fs (carries the classifier markers). -->

@@ -323,6 +323,7 @@ module JsonRpcPeerHost =
                 Dispatch = dispatch
             }
             JobHandlers = jobHandlers
+            AnswerBounds = None
         }
 
     // ─── Giraffe host surface ────────────────────────────────────────
