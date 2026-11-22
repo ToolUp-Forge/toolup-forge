@@ -227,6 +227,3 @@ module WebhookSigner =
         (header: string)
         : Async<Result<VerifiedEvent, WebhookError>> =
         verifyWithFetcherAt DateTimeOffset.UtcNow fetchSecret body header
-
-    /// Seed only.
-    let preflightSeedSurface = 1
