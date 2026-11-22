@@ -146,6 +146,7 @@
              `<Compile>` list: this `<Compile Include>` is the opt-in a
              consumer makes, and a consumer that skips it needs no `jsdom`
              / `react-dom` devDependency at all (GP 13). -->
+        <Compile Include="..\ToolUp.Platform.Testing\Testing\TreeViewParity.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\ModuleHarness.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\ViewMount.fs" />
         <!-- Phase 613 — the shell rail's nine STATES plus the jsdom render
@@ -167,6 +168,11 @@
              through ModuleHarness's real init/update and its own `view` —
              the half Phase 610 left open (it covered the shell rail only,
              and `AssertAccessible` still needed a hand-supplied render). -->
+        <!-- The migration kit's three assertions over a view moving to a tree:
+             accessibility through the lowering, behaviour through update,
+             parity with the view it replaces; and the kit's go-red proofs.
+             Before ModuleViewA11yTests, which uses its tree lowering. -->
+        <Compile Include="TreeViewParityTests.fs" />
         <Compile Include="ModuleViewA11yTests.fs" />
         <!-- Phase 901 — the data-manager template publishes processed
              data. The template's three module files are compiled in

@@ -141,6 +141,7 @@ let allTests =
         // stylesheet of the renderer this project restored.
         TreeStylesheetTests.tests
         NodeToolkitTests.tests
+        TreeViewParityTests.tests
         // Phase 537 - the UI-awareness companion's inspect_active_module executor:
         // the live report for the request's active module and both status branches.
         UiAwarenessInspectTests.tests

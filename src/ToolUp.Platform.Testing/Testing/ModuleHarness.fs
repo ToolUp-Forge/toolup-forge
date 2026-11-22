@@ -181,6 +181,81 @@ type ModuleHarness<'Model, 'Msg>(model: 'Model, cmd: Cmd<'Msg>, update: 'Msg -> 
         this.RenderViewHtml(mount, view) |> Accessibility.assertHtml profile |> ignore
         this
 
+    // ─── A view moving to a tree: behaviour and parity ────────────────
+    //
+    // A view authored as a tree reaches every member above through
+    // `ModuleHarness.lowered`, which turns the tree into the same
+    // `'Model -> dispatch -> 'View` shape a hand-written view has, so one
+    // `AssertAccessibleView` call covers both idioms. The two members
+    // below are what a move to a tree must prove beyond accessibility.
+    //
+    // `Interact` is the behaviour half: it mounts the view over the
+    // current model with a dispatch that records, drives the mounted
+    // markup the way a user would (a click, a field edit), and runs every
+    // recorded message through `update`. The assertion that follows is on
+    // the MODEL (`AssertModel`), never on markup: a tree's markup is the
+    // renderer's, and an assertion tied to it breaks on every renderer
+    // release while proving nothing about the module. An interaction that
+    // dispatches nothing fails here, by name: it is the control that is
+    // not wired to the dispatch the view was lowered with, which no
+    // model assertion could tell apart from an `update` that ignored it.
+    //
+    // `AssertViewParity` is the parity half: for the current model, the
+    // view being replaced and its tree expose the same controls and
+    // headings, by role and accessible name, and the same tab order (see
+    // `TreeViewParity`).
+
+    /// Mount `view` over the current model, run `drive` against the
+    /// mounted host, and return the messages the view dispatched, in order.
+    /// `mount` is the mount seam's interacting form (`ViewMount.mountAndInteract`).
+    member _.Dispatched
+        (mount: ('Host -> unit) -> 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View, drive: 'Host -> unit)
+        : 'Msg list =
+        let seen = System.Collections.Generic.List<'Msg>()
+        mount drive (view model seen.Add) |> ignore
+        List.ofSeq seen
+
+    /// Drive the mounted view as a user would and run what it dispatched
+    /// through `update`; returns the harness over the resulting model.
+    /// Fails when the interaction dispatched nothing.
+    member this.Interact
+        (mount: ('Host -> unit) -> 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View, drive: 'Host -> unit)
+        : ModuleHarness<'Model, 'Msg> =
+        match this.Dispatched(mount, view, drive) with
+        | [] ->
+            failwith (
+                "ModuleHarness.Interact: the interaction dispatched no message, so nothing reached `update`. "
+                + "The control it drove is not wired to the dispatch the view was lowered with, or the "
+                + "interaction did not find the control it meant."
+            )
+        | msgs -> this.DispatchAll msgs
+
+    /// The differences between `view` and `tree` over the current model,
+    /// rendered through `mount`; empty means parity.
+    member _.CheckViewParity
+        (mount: 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View, tree: 'Model -> ('Msg -> unit) -> 'View)
+        : TreeViewParity.Difference list =
+        let render (v: 'Model -> ('Msg -> unit) -> 'View) =
+            v model ignore |> mount |> TreeViewParity.ofHtml
+
+        TreeViewParity.compare (render view) (render tree)
+
+    /// Assert that `tree` exposes what `view` exposes over the current
+    /// model: the same controls and headings by role and accessible name,
+    /// in the same tab order. Throws the diff otherwise.
+    member this.AssertViewParity
+        (mount: 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View, tree: 'Model -> ('Msg -> unit) -> 'View)
+        =
+        match this.CheckViewParity(mount, view, tree) with
+        | [] -> this
+        | differences -> failwith ("ModuleHarness.AssertViewParity: " + TreeViewParity.report differences)
+
+/// A view authored as a tree, in the shape every member above takes:
+/// `tree` builds the node from the model, `lower` turns it into the view
+/// type with the dispatch it is handed.
+let lowered (lower: ('Msg -> unit) -> 'Node -> 'View) (tree: 'Model -> 'Node) : 'Model -> ('Msg -> unit) -> 'View =
+    fun model dispatch -> lower dispatch (tree model)
+
 /// Build a harness from a `unit`-shaped `init`.
 let fromUnitInit
     (init: unit -> 'Model * Cmd<'Msg>)
