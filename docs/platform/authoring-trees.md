@@ -91,9 +91,10 @@ in [the budgets page](budgets.md#a-tree-surface-is-judged-on-a-browser-dispatch-
 
 ## Row identity is the dispatch key
 
-A kept node captures the message it sends. A row built with `Bump i` keeps its index: after a reorder
-or a removal it dispatches the wrong message, silently. Over a kept list the message carries the
-row's identity (`Bump row.Id`) and `update` finds the row by that id. Without `Keep` this was a bad
+A kept node captures the message it sends. Over a kept list the message carries the row's identity
+(`Bump row.Id`) and `update` finds the row by that id. A row built with `Bump i` costs two things,
+[set out below](#the-index-shape-and-the-identity-shape-side-by-side): a `Keep` keyed on the index
+keeps nothing, and `update` reads the index against the model as it is when the message arrives. Without `Keep` this was a bad
 habit; with it, it is a defect.
 
 ## The index shape and the identity shape, side by side
