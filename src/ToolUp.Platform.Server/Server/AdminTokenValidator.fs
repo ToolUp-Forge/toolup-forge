@@ -67,3 +67,6 @@ type AdminTokenValidator(encryptionKeyResolver: IBlobEncryptionKeyResolver optio
             else
                 return Ok
         }
+
+let private preflightSeedBlocking () =
+    async { return 1 } |> Async.RunSynchronously
