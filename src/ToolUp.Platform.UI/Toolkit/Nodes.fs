@@ -99,13 +99,15 @@ module Nodes =
     [<RequireQualifiedAccess>]
     module Panel =
 
-        /// A headed card, the panel shape of a settings surface.
-        let card (id: string) (heading: string) (children: Node<'Msg> list) : Node<'Msg> =
+        /// A headed card, the panel shape of a settings surface: its heading at
+        /// level 2 (`<id>-title`), then the children. The heading is a heading
+        /// node, not the box's `Heading` slot, which renders a `<header>` and
+        /// so leaves the panel out of the accessibility outline.
+        let card (id: string) (title: string) (children: Node<'Msg> list) : Node<'Msg> =
             Fuaran.box id {
                 Defaults.box with
                     Role = BoxRole.Card
-                    Heading = Some(literal heading)
-                    Children = children
+                    Children = heading (Ids.child id "title") 2 title :: children
             }
 
         /// A titled group inside a panel: its title at heading level 3, then

@@ -184,6 +184,74 @@ let private elementFor (id: string) (root: obj) : obj =
     | Some e -> e
     | None -> failwithf "no element carries data-fuaran-node-id=%s" id
 
+[<Emit("(typeof $0.type === 'string' ? $0.type : '')")>]
+let private tagOf (element: obj) : string = jsNative
+
+/// The concatenated string children under `element`.
+[<Emit("""(() => {
+  let s = "";
+  const walk = (e) => {
+    if (e == null || typeof e === "boolean") return;
+    if (typeof e === "string" || typeof e === "number") { s += e; return; }
+    if (Array.isArray(e)) { e.forEach(walk); return; }
+    if (e.props) walk(e.props.children);
+  };
+  walk($0);
+  return s;
+})()""")>]
+let private textOf (element: obj) : string = jsNative
+
+/// The heading level an element exposes to the accessibility tree: `h1`..`h6`,
+/// or `role="heading"` with its `aria-level`; `None` for anything else.
+let private headingLevel (element: obj) : int option =
+    match tagOf element with
+    | "h1" -> Some 1
+    | "h2" -> Some 2
+    | "h3" -> Some 3
+    | "h4" -> Some 4
+    | "h5" -> Some 5
+    | "h6" -> Some 6
+    | _ ->
+        let level = propOf element "aria-level"
+
+        if (propOf element "role") = box "heading" && not (isNull level) then
+            Some(int (string level))
+        else
+            None
+
+let private renderTree (node: Node<obj>) : obj =
+    let props =
+        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) ignore<obj> node
+
+    let kept = TreeLoweringRuntime.keepContext None props ignore
+    Render.render kept.Context node
+
+let private panelTests =
+    testList "the panel shapes" [
+
+        testCase "a card's heading is a level-2 heading carrying its text" (fun () ->
+            let card: Node<obj> =
+                Nodes.Panel.card "billing" "Billing" [ Nodes.text "billing-note" "Paid." ]
+
+            let headings =
+                elementsOf (renderTree card)
+                |> Array.choose (fun e -> headingLevel e |> Option.map (fun level -> level, textOf e))
+                |> List.ofArray
+
+            Expect.equal headings [ 2, "Billing" ] "the card's one heading, at level 2")
+
+        testCase "control: a section's title is found at level 3" (fun () ->
+            let section: Node<obj> =
+                Nodes.Panel.section "limits" "Limits" [ Nodes.text "limits-note" "None." ]
+
+            let headings =
+                elementsOf (renderTree section)
+                |> Array.choose (fun e -> headingLevel e |> Option.map (fun level -> level, textOf e))
+                |> List.ofArray
+
+            Expect.equal headings [ 3, "Limits" ] "the probe sees a known heading")
+    ]
+
 let private contextTests =
     let keptRow: Node<obj> = Nodes.text "kept-row" "Kept"
 
@@ -268,4 +336,4 @@ let private contextTests =
     ]
 
 let tests =
-    testList "Node toolkit, Keep and the kept render context" [ toolkitTests; keepTests; contextTests ]
+    testList "Node toolkit, Keep and the kept render context" [ toolkitTests; keepTests; panelTests; contextTests ]
