@@ -514,6 +514,7 @@ let private registeredTests =
         CleanRoomGateTests.substitutionTests
         CleanRoomGateTests.compositionTests
         CleanRoomGateTests.wireTests
+        CleanRoomGateTests.differencingTests
         TemplateApprovalTests.mutationTests
         TemplateApprovalTests.signatureTests
         TemplateApprovalTests.lifecycleTests

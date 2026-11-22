@@ -124,6 +124,37 @@ type GateDecision =
     /// broker-noised answer carries none for it to check.
     | NoisedRelease of result: CohortResult * suppressedCells: string list * noise: NoisedReleasePolicy
 
+/// The complement check a template declares: for every released cell of a
+/// split carrying `splitKey`, the split's base less the cell must also clear
+/// the floor, or the cell is withheld. A cell whose complement is three
+/// people gives those three away, though the cell itself clears the floor.
+[<RequireQualifiedAccess>]
+type ComplementRule =
+    /// Check each released cell's complement within the answer's declared
+    /// splits that carry this key.
+    | Within of splitKey: string
+
+/// Which earlier releases a submission's filter cohort is compared with.
+[<RequireQualifiedAccess>]
+type DifferencingScope =
+    /// The releases this template made to the same counterparty, within the
+    /// composed window's length.
+    | PerCounterparty
+    /// Every release this template made on the same vintage, to any
+    /// counterparty, so two counterparties cannot difference each other's
+    /// releases.
+    | PerVintage
+
+/// Whether a template's answers are held to the near-duplicate check when
+/// the composition composes a release window.
+[<RequireQualifiedAccess>]
+type NearDuplicateRule =
+    /// Compared with the earlier releases `scope` names: the default.
+    | Compared of scope: DifferencingScope
+    /// Not compared. The reason is part of the template, so the approval
+    /// both parties sign records why.
+    | NotCompared of reason: string
+
 /// The terms a template releases its answers on, beyond the
 /// floor: how each declared method's answer is binned and parameterised,
 /// and whether the released cells carry calibrated noise.
@@ -158,17 +189,28 @@ type ReleaseTerms = {
     /// answers are drawn on the caller's side names them, and its approval
     /// records that both parties agreed it would.
     NamesWithheld: bool
+    /// The complement check, or `None`, the default, for no complement check.
+    /// A template that declares one withholds every answer that does not
+    /// declare a split under its key.
+    Complement: ComplementRule option
+    /// How a composed release window compares this template's answers.
+    /// `Compared PerCounterparty`, the default, has no effect until a
+    /// composition composes a window.
+    NearDuplicate: NearDuplicateRule
 }
 
 /// Constructors for `ReleaseTerms`.
 [<RequireQualifiedAccess>]
 module ReleaseTerms =
-    /// No declarations and no noise: the terms of a template that declares
-    /// neither, whose canonical encoding (and so its approvals) it leaves unchanged.
+    /// No declarations, no noise and no complement check: the terms of a
+    /// template that declares none, whose canonical encoding (and so its
+    /// approvals) it leaves unchanged.
     let none: ReleaseTerms = {
         Declarations = Map.empty
         Noise = None
         NamesWithheld = false
+        Complement = None
+        NearDuplicate = NearDuplicateRule.Compared DifferencingScope.PerCounterparty
     }
 
 /// A released answer that names the cells the floor withheld, for a
@@ -182,6 +224,52 @@ type ReleasedCohort = {
     Cells: PrivacyCell list
     /// The labels of the cells the floor withheld.
     Withheld: string list
+}
+
+/// One split of a cohort answer, for the complement check: the base the
+/// split's cells break down, and which cells they are. A two-dimensional
+/// answer declares one split per column (or per row) under one key.
+type CohortSplit = {
+    /// The key a template's `ComplementRule.Within` names.
+    Key: string
+    /// The number of members the split's cells are a breakdown of, counted
+    /// as the cells are. A cell's complement is this less the cell.
+    Base: int
+    /// The labels of the split's cells.
+    Cells: string list
+}
+
+/// The members a cohort answer was computed over, as the near-duplicate
+/// check reads them: how many, a hash of which, and a count sketch, never
+/// a member. Built by the data holder with `FilterCohort.ofMembers`, read
+/// by the gate on the holder's side, and never released.
+type FilterCohort = {
+    /// The number of distinct members.
+    Size: int
+    /// `sha256:` over the members' sorted digests. Two cohorts with one
+    /// hash are the same cohort.
+    MembershipHash: string
+    /// `FilterCohort.Buckets` counts: how many members' digests fall in each
+    /// bucket. The sum of the per-bucket differences between two sketches
+    /// never exceeds the number of members in one cohort and not the other.
+    Sketch: int list
+    /// The data the cohort was drawn from, which a `PerVintage` window keys
+    /// on. `None` where the template compares per counterparty.
+    Vintage: string option
+}
+
+/// A cohort answer with the structure the gate's differencing checks read:
+/// its splits and its filter cohort. The gate releases `Result` alone, so
+/// neither crosses the wire. A handler answering under a template that
+/// declares neither check answers a bare `CohortResult` as before.
+type DeclaredCohort = {
+    /// The answer.
+    Result: CohortResult
+    /// The splits the complement check reads. Empty for none.
+    Splits: CohortSplit list
+    /// The members the answer was computed over, which the near-duplicate
+    /// check reads.
+    Filter: FilterCohort option
 }
 
 /// A declarative clean-room contract: the query surface a counterparty
@@ -289,6 +377,208 @@ module PrivacyGate =
             | cells -> cells |> List.map _.Count |> List.min
         PermittedShapes = Set.singleton result.Shape
     }
+
+    /// The count the differencing checks hold to: the larger of the cohort
+    /// floor and the suppression threshold. A complement is a cell in all
+    /// but name, and two cohorts closer than this are one cohort and a
+    /// group too small to release.
+    let differencingFloor (gate: PrivacyGate) : int =
+        max gate.MinCohortSize gate.SuppressionThreshold
+
+/// Building and comparing filter cohorts.
+[<RequireQualifiedAccess>]
+module FilterCohort =
+
+    /// The number of buckets a sketch counts into.
+    [<Literal>]
+    let Buckets = 256
+
+    /// The domain separator each member's digest is taken under.
+    [<Literal>]
+    let private MemberDomain = "toolup.filter-cohort.v1\n"
+
+    /// The filter cohort of `members`, each a stable identifier of one
+    /// member (a respondent id, a record key). Duplicates count once. The
+    /// identifiers are digested and dropped: neither the hash nor the sketch
+    /// holds one, though a party holding the identifiers could test a guess
+    /// against the sketch, which is why the cohort never leaves the holder.
+    let ofMembers (members: string seq) : FilterCohort =
+        let digests =
+            members
+            |> Seq.map (fun m ->
+                if isNull m then
+                    invalidArg "members" "a filter cohort member identifier is null"
+
+                ToolUp.Platform.Sha256.hexOfUtf8 (MemberDomain + m))
+            |> Seq.distinct
+            |> Seq.sortWith (fun a b -> System.String.CompareOrdinal(a, b))
+            |> Seq.toArray
+
+        // The digest's first byte picks the bucket: 256 values, 256 buckets.
+        let sketch = Array.zeroCreate<int> Buckets
+
+        for d in digests do
+            let bucket = System.Convert.ToInt32(d.Substring(0, 2), 16)
+            sketch[bucket] <- sketch[bucket] + 1
+
+        {
+            Size = digests.Length
+            MembershipHash = "sha256:" + ToolUp.Platform.Sha256.hexOfUtf8 (String.concat "\n" digests)
+            Sketch = List.ofArray sketch
+            Vintage = None
+        }
+
+    /// Name the data `cohort` was drawn from, for a `PerVintage` window.
+    let withVintage (vintage: string) (cohort: FilterCohort) : FilterCohort = { cohort with Vintage = Some vintage }
+
+    /// `None` when `cohort` reads as one `ofMembers` could have built, else
+    /// the reason it does not. The gate withholds an answer whose filter
+    /// cohort does not read, since it could not compare it.
+    let problem (cohort: FilterCohort) : string option =
+        if isNull (box cohort.Sketch) || isNull cohort.MembershipHash then
+            Some "the filter cohort is missing its sketch or its membership hash"
+        elif List.length cohort.Sketch <> Buckets then
+            Some $"the filter cohort's sketch has {List.length cohort.Sketch} buckets, not {Buckets}"
+        elif cohort.Sketch |> List.exists (fun c -> c < 0) then
+            Some "the filter cohort's sketch holds a negative count"
+        elif List.sum cohort.Sketch <> cohort.Size then
+            Some "the filter cohort's sketch does not sum to its size"
+        elif not (cohort.MembershipHash.StartsWith("sha256:", System.StringComparison.Ordinal)) then
+            Some "the filter cohort's membership hash is not a sha256: digest"
+        else
+            None
+
+    /// A lower bound on the number of members in one cohort and not the
+    /// other: the sum of the per-bucket differences of the two sketches.
+    /// Exact when one cohort contains the other.
+    let distance (a: FilterCohort) (b: FilterCohort) : int =
+        List.fold2 (fun total x y -> total + abs (x - y)) 0 a.Sketch b.Sketch
+
+    /// Whether `candidate` is within `floor` members of `released`: a
+    /// different cohort whose difference from it may hold fewer than `floor`
+    /// members. Since `distance` never exceeds the true difference, a pair
+    /// that differs by fewer than `floor` members is always caught; a pair
+    /// that differs by more is caught only when its additions and removals
+    /// cancel bucket by bucket.
+    let isNear (floor: int) (released: FilterCohort) (candidate: FilterCohort) : bool =
+        released.MembershipHash <> candidate.MembershipHash
+        && distance released candidate < floor
+
+/// Building a `DeclaredCohort`.
+[<RequireQualifiedAccess>]
+module DeclaredCohort =
+
+    /// `result` with no splits and no filter cohort: judged as a bare
+    /// `CohortResult` is.
+    let ofResult (result: CohortResult) : DeclaredCohort = {
+        Result = result
+        Splits = []
+        Filter = None
+    }
+
+    /// Add `split` to the splits the complement check reads.
+    let withSplit (split: CohortSplit) (declared: DeclaredCohort) : DeclaredCohort = {
+        declared with
+            Splits = declared.Splits @ [ split ]
+    }
+
+    /// Set the filter cohort the near-duplicate check reads.
+    let withFilter (filter: FilterCohort) (declared: DeclaredCohort) : DeclaredCohort = {
+        declared with
+            Filter = Some filter
+    }
+
+/// Why a differencing check withheld a cell or refused a submission. Each
+/// is recorded receiver-side in the decision row's reason, and none is sent
+/// on the wire: a caller learns only that the answer was withheld.
+[<RequireQualifiedAccess>]
+type DifferencingVerdict =
+    /// A released cell's complement within its split is below the floor;
+    /// the cell is withheld. Names the split and the cell, never the count.
+    | ComplementBelowFloor of split: string * cell: string
+    /// The submission's filter cohort is within the floor of a released
+    /// one, named by its membership hash; the answer is refused.
+    | NearDuplicateFilter of earlier: string
+    /// The submission's filter cohort is smaller than the floor; the answer
+    /// is refused.
+    | FilterBelowFloor
+
+[<RequireQualifiedAccess>]
+module DifferencingVerdict =
+
+    /// The audit-facing reason for `verdict`.
+    let describe (verdict: DifferencingVerdict) : string =
+        match verdict with
+        | DifferencingVerdict.ComplementBelowFloor(split, cell) ->
+            $"ComplementBelowFloor: the complement of cell '{cell}' within split '{split}' is below the floor, so the cell is withheld"
+        | DifferencingVerdict.NearDuplicateFilter earlier ->
+            $"NearDuplicateFilter: the filter cohort is within the floor of the cohort {earlier} already released, so the answer is refused"
+        | DifferencingVerdict.FilterBelowFloor ->
+            "FilterBelowFloor: the filter cohort is smaller than the floor, so the answer is refused"
+
+[<RequireQualifiedAccess>]
+module ComplementRule =
+
+    /// The key the rule checks within.
+    let key (rule: ComplementRule) : string =
+        match rule with
+        | ComplementRule.Within splitKey -> splitKey
+
+    /// Apply `rule` to `released`, the cells the floor already cleared, on
+    /// their true counts. `Ok` carries the cells that stand and a verdict per
+    /// cell withheld; `Error` says why the declaration could not be read,
+    /// and the caller withholds the whole answer: no split under the key,
+    /// a negative base, or a released cell counting more than its split's
+    /// base. A released cell in no split under the key is judged by the
+    /// floor alone, as before.
+    let apply
+        (floor: int)
+        (rule: ComplementRule)
+        (splits: CohortSplit list)
+        (released: CohortResult)
+        : Result<CohortResult * DifferencingVerdict list, string> =
+        let splitKey = key rule
+        let within = splits |> List.filter (fun s -> s.Key = splitKey)
+
+        let countOf = released.Cells |> List.map (fun c -> c.Label, c.Count) |> Map.ofList
+
+        let tooLarge =
+            within
+            |> List.exists (fun s ->
+                s.Cells
+                |> List.exists (fun label ->
+                    match Map.tryFind label countOf with
+                    | Some count -> count > s.Base
+                    | None -> false))
+
+        if List.isEmpty within then
+            Error $"the answer declares no split '{splitKey}', which the template's complement check reads"
+        elif within |> List.exists (fun s -> s.Base < 0 || isNull (box s.Cells)) then
+            Error $"a split '{splitKey}' declares a negative base or no cells"
+        elif tooLarge then
+            Error $"a released cell counts more than the base of its split '{splitKey}'"
+        else
+            let withheld =
+                within
+                |> List.collect (fun s ->
+                    s.Cells
+                    |> List.choose (fun label ->
+                        match Map.tryFind label countOf with
+                        | Some count when s.Base - count < floor -> Some label
+                        | _ -> None))
+                |> List.distinct
+
+            let verdicts =
+                withheld
+                |> List.map (fun label -> DifferencingVerdict.ComplementBelowFloor(splitKey, label))
+
+            Ok(
+                {
+                    released with
+                        Cells = released.Cells |> List.filter (fun c -> not (List.contains c.Label withheld))
+                },
+                verdicts
+            )
 
 /// The enforcement seam wrapping a clean-room query. The default
 /// implementation is `DefaultCleanRoomBroker`; a deployment substitutes

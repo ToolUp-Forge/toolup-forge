@@ -1393,6 +1393,13 @@ module ModelExecutionProfile =
                     // A fit diagnostic is drawn on the modeller's side, where
                     // a withheld bin must be named, never drawn as empty.
                     Release.NamesWithheld = true
+                    // A fit's row set is compared with every release on its
+                    // vintage, whoever asked, so two modellers cannot
+                    // difference each other's diagnostics. An opt-out stands.
+                    Release.NearDuplicate =
+                        match template.Release.NearDuplicate with
+                        | NearDuplicateRule.NotCompared _ as optedOut -> optedOut
+                        | NearDuplicateRule.Compared _ -> NearDuplicateRule.Compared DifferencingScope.PerVintage
             }
         else
             template
@@ -1684,6 +1691,30 @@ type ModelExecutionDiagnosticsDeps = {
     FitObservations: ModelExecutionPeerBinding -> string -> Async<ModelExecutionFitObservation list option>
 }
 
+/// What a governed diagnostic's rows are: a stored fit outcome's, or a
+/// whole vintage's.
+[<RequireQualifiedAccess>]
+type ModelExecutionRowSetOf =
+    /// The rows a stored fit outcome was fitted over, named by its composite
+    /// key.
+    | Outcome of outcomeId: string
+    /// Every row of a vintage, which a vintage projection reads.
+    | Vintage of vintage: ModelExecutionPeerVintage
+
+/// The near-duplicate check over governed diagnostics: the release window
+/// and the row set each diagnostic is computed over. Two fits whose row sets
+/// differ by one record give two diagnostics whose difference is that record.
+type ModelExecutionDifferencing = {
+    /// The window every diagnostic's row set is compared through, per
+    /// vintage, across every counterparty.
+    Window: ReleaseWindowMeter
+    /// The row set a diagnostic is computed over, in the binding's scope,
+    /// built with `FilterCohort.ofMembers` over the records' keys and named
+    /// for its vintage with `FilterCohort.withVintage`; `None` when the host
+    /// cannot say, and the diagnostic is then withheld.
+    RowSet: ModelExecutionPeerBinding -> ModelExecutionRowSetOf -> Async<FilterCohort option>
+}
+
 /// What the governed-diagnostics contract is gated by: the clean-room
 /// broker and template, the bilateral approval check, the privacy-budget
 /// meter every release is charged to, and the noise mechanism a template
@@ -1710,6 +1741,9 @@ type ModelExecutionDiagnosticsGate = {
     Noise: INoiseMechanism option
     /// The decision sink (`CleanRoomGate.noAudit` to record nothing).
     Audit: PeerCleanRoomDecisionPayload -> Async<unit>
+    /// The near-duplicate check over fit outcomes, or `None` to compare
+    /// nothing.
+    Differencing: ModelExecutionDifferencing option
 }
 
 /// Why a governed-diagnostics composition was refused.
@@ -2793,8 +2827,15 @@ module ModelExecutionPeerContract =
     /// the right shape to hand it.
     let private diagnosticsRegistration
         (template: CleanRoomTemplate)
+        (rowSet: (ModelExecutionPeerBinding -> ModelExecutionRowSetOf -> Async<FilterCohort option>) option)
         (deps: ModelExecutionDiagnosticsDeps)
         : PeerContractRegistration =
+        let rowsOf binding subject = async {
+            match rowSet with
+            | None -> return None
+            | Some readRows -> return! readRows binding subject
+        }
+
         let dispatch: PeerDispatch =
             fun context methodName argsJson -> async {
                 match! deps.ResolveBinding context.Peer.PeerId with
@@ -2853,12 +2894,22 @@ module ModelExecutionPeerContract =
                                             | None ->
                                                 return Error $"no fit outcome '{fit.OutcomeId}' in this peer's scope"
                                             | Some observations ->
-                                                return
+                                                match
                                                     FitDiagnostics.project
                                                         methodName
                                                         declaration
                                                         template.Floor
                                                         observations
+                                                with
+                                                | Error reason -> return Error reason
+                                                | Ok cohort ->
+                                                    // The outcome's row set is its filter
+                                                    // cohort, read by the gate and never
+                                                    // released.
+                                                    let! rows =
+                                                        rowsOf binding (ModelExecutionRowSetOf.Outcome fit.OutcomeId)
+
+                                                    return Ok(cohort, rows)
                                         | _ -> return Error $"the template declares no binning for '{methodName}'"
                                     }
                                 else
@@ -2867,7 +2918,8 @@ module ModelExecutionPeerContract =
                                             JsonRpc.deserialize<ModelExecutionPeerDiagnosticRequest> request.Body
 
                                         let! result = deps.Project binding methodName projection
-                                        return Ok result
+                                        let! rows = rowsOf binding (ModelExecutionRowSetOf.Vintage projection.Vintage)
+                                        return Ok(result, rows)
                                     }
 
                             match result with
@@ -2875,13 +2927,21 @@ module ModelExecutionPeerContract =
                             // Every answer here is one-dimensional, so a label
                             // carrying the grid separator would read back as a
                             // grid cell it is not: refused, never released.
-                            | Ok cohort when not (cohort.Cells |> List.forall (fun c -> CellLabel.isPlain c.Label)) ->
+                            | Ok(cohort, _) when not (cohort.Cells |> List.forall (fun c -> CellLabel.isPlain c.Label)) ->
                                 return
                                     Error(
                                         PeerHandler
                                             $"'{methodName}' answered a cell label containing the grid separator U+241F"
                                     )
-                            | Ok cohort -> return Ok(JsonRpc.serialize cohort)
+                            | Ok(cohort, None) when rowSet.IsNone -> return Ok(JsonRpc.serialize cohort)
+                            | Ok(cohort, rows) ->
+                                return
+                                    Ok(
+                                        JsonRpc.serialize {
+                                            DeclaredCohort.ofResult cohort with
+                                                Filter = rows
+                                        }
+                                    )
             }
 
         {
@@ -2938,12 +2998,13 @@ module ModelExecutionPeerContract =
                 |> Option.bind (fun policy -> gate.Noise |> Option.map (fun mechanism -> mechanism, policy))
 
             Ok(
-                CleanRoomGate.wrapNoised
+                CleanRoomGate.wrapDifferenced
                     gate.Broker
                     gate.Template
                     gate.Approval
                     (Some meter)
                     noise
+                    (gate.Differencing |> Option.map _.Window)
                     gate.Audit
-                    (diagnosticsRegistration gate.Template deps)
+                    (diagnosticsRegistration gate.Template (gate.Differencing |> Option.map _.RowSet) deps)
             )

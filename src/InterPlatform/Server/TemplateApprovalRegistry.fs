@@ -372,6 +372,23 @@ module TemplateCanonical =
                  else
                      "withheld:unnamed")
 
+            // The differencing terms follow, each only when it is not the
+            // default, so a template that declared the terms above before
+            // these existed encodes exactly as it did. Each starts with a tag
+            // no other field here takes.
+            match template.Release.Complement with
+            | None -> ()
+            | Some(ComplementRule.Within splitKey) ->
+                field sb "complement:within"
+                field sb splitKey
+
+            match template.Release.NearDuplicate with
+            | NearDuplicateRule.Compared DifferencingScope.PerCounterparty -> ()
+            | NearDuplicateRule.Compared DifferencingScope.PerVintage -> field sb "near-duplicate:per-vintage"
+            | NearDuplicateRule.NotCompared reason ->
+                field sb "near-duplicate:not-compared"
+                field sb reason
+
         Encoding.UTF8.GetBytes(sb.ToString())
 
     /// Lowercase hex SHA-256, the estate's existing digest presentation

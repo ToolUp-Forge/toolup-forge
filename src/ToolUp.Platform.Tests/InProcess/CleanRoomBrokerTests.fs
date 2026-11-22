@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.CleanRoomBrokerTests
 open Expecto
 open ToolUp.InterPlatform
 open ToolUp.Platform.Infra.Metrics
+open ToolUp.Platform.Tests.Contracts
 
 // ─── Phase 18b — clean-room privacy-gate broker ──────────────────────
 //
@@ -11,7 +12,9 @@ open ToolUp.Platform.Infra.Metrics
 // tighten the floor, never loosen it), per-cell suppression of
 // sub-threshold buckets, and whole-result withholding when the released
 // cohort falls below the k-anonymity floor. Pure enforcement over a
-// materialised `CohortResult`, so the pack is plain `testCase`.
+// materialised `CohortResult`, so the pack is plain `testCase`. The
+// differencing checks' pure parts (the filter cohort, the complement rule)
+// and the release window close the list.
 
 let private floor: PrivacyGate = {
     MinCohortSize = 10
@@ -158,4 +161,142 @@ let tests =
 
             Expect.isTrue (PrivacyGate.isStricterOrEqual floor tighter) "tighter gate is ≥ floor"
             Expect.isFalse (PrivacyGate.isStricterOrEqual floor looser) "looser gate is not ≥ floor"
+
+        testCase "the differencing floor is the larger of the cohort floor and the suppression threshold"
+        <| fun () ->
+            Expect.equal (PrivacyGate.differencingFloor floor) 10 "k = 10 over a threshold of 5"
+
+            Expect.equal
+                (PrivacyGate.differencingFloor { floor with SuppressionThreshold = 30 })
+                30
+                "a threshold above k is the floor"
+
+        testCase "a filter cohort counts distinct members and holds none of them"
+        <| fun () ->
+            let cohort = FilterCohort.ofMembers [ "r1"; "r2"; "r2"; "r3" ]
+
+            Expect.equal cohort.Size 3 "a duplicate counts once"
+            Expect.equal (List.sum cohort.Sketch) 3 "the sketch counts every member once"
+            Expect.equal (List.length cohort.Sketch) FilterCohort.Buckets "the sketch has one count per bucket"
+            Expect.isNone (FilterCohort.problem cohort) "a built cohort reads"
+
+            Expect.equal
+                (FilterCohort.ofMembers [ "r3"; "r1"; "r2" ]).MembershipHash
+                cohort.MembershipHash
+                "the hash names the members, not their order"
+
+            let stored = JsonRpc.serialize cohort
+
+            for m in [ "\"r1\""; "\"r2\""; "\"r3\"" ] do
+                Expect.isFalse (stored.Contains m) $"the stored cohort holds no member identifier ({m})"
+
+        testCase "the distance is exact for nested cohorts and never exceeds the true difference"
+        <| fun () ->
+            let members n = [ for i in 1..n -> $"respondent-{i}" ]
+            let all = FilterCohort.ofMembers (members 100)
+
+            for removed in [ 1; 9; 10; 40 ] do
+                Expect.equal
+                    (FilterCohort.distance all (FilterCohort.ofMembers (members (100 - removed))))
+                    removed
+                    $"a cohort {removed} smaller and inside the other is exactly {removed} away"
+
+            let disjoint = FilterCohort.ofMembers [ for i in 1..100 -> $"other-{i}" ]
+            let distance = FilterCohort.distance all disjoint
+            Expect.isLessThanOrEqual distance 200 "two disjoint cohorts of 100 differ by 200 members at most"
+            Expect.isGreaterThanOrEqual distance 10 "…and two unrelated cohorts are far apart on the sketch"
+
+            let swapped =
+                FilterCohort.ofMembers ((members 100 |> List.tail) @ [ "someone-else" ])
+
+            Expect.isTrue (FilterCohort.isNear 10 all swapped) "a one-for-one swap is near: two members differ"
+
+            Expect.isFalse
+                (FilterCohort.isNear 10 all (FilterCohort.ofMembers (members 100)))
+                "the same cohort is not a near duplicate of itself"
+
+            Expect.isFalse
+                (FilterCohort.isNear 10 all (FilterCohort.ofMembers (members 90)))
+                "a cohort the floor away is not near"
+
+        testCase "a filter cohort that does not read is named"
+        <| fun () ->
+            let cohort = FilterCohort.ofMembers [ "r1"; "r2" ]
+
+            Expect.isSome (FilterCohort.problem { cohort with Size = 3 }) "a sketch that does not sum to the size"
+            Expect.isSome (FilterCohort.problem { cohort with Sketch = [ 2 ] }) "a sketch of the wrong length"
+            Expect.isSome (FilterCohort.problem { cohort with MembershipHash = "md5:x" }) "a hash that is not sha256"
+
+        testCase "the complement check withholds a cell whose complement is below the floor, naming the cell only"
+        <| fun () ->
+            let answer = {
+                Shape = Histogram
+                Cells = [ cell "yes" 52; cell "no" 18 ]
+            }
+
+            let split = {
+                Key = "q1"
+                Base = 60
+                Cells = [ "yes"; "no" ]
+            }
+
+            match ComplementRule.apply 10 (ComplementRule.Within "q1") [ split ] answer with
+            | Error reason -> failtestf "a readable declaration was refused: %s" reason
+            | Ok(released, verdicts) ->
+                Expect.equal
+                    (released.Cells |> List.map _.Label)
+                    [ "no" ]
+                    "yes (complement 8) is withheld; no (complement 42) stands"
+
+                Expect.equal
+                    verdicts
+                    [ DifferencingVerdict.ComplementBelowFloor("q1", "yes") ]
+                    "the verdict names the split and the cell"
+
+                let reason = DifferencingVerdict.describe (List.head verdicts)
+                Expect.isFalse (reason.Contains "8") "the verdict never names the count"
+
+        testCase "the complement check refuses a declaration it cannot read"
+        <| fun () ->
+            let answer = {
+                Shape = Histogram
+                Cells = [ cell "yes" 52 ]
+            }
+
+            let within = ComplementRule.Within "q1"
+
+            Expect.isError (ComplementRule.apply 10 within [] answer) "no split under the key"
+
+            Expect.isError
+                (ComplementRule.apply
+                    10
+                    within
+                    [
+                        {
+                            Key = "q1"
+                            Base = 40
+                            Cells = [ "yes" ]
+                        }
+                    ]
+                    answer)
+                "a cell counting more than its split's base"
+
+            Expect.isOk
+                (ComplementRule.apply
+                    10
+                    within
+                    [
+                        {
+                            Key = "q1"
+                            Base = 80
+                            Cells = [ "absent" ]
+                        }
+                    ]
+                    answer)
+                "a split naming a cell the answer does not carry withholds nothing"
+
+        IReleaseWindowContract.tests "InMemoryReleaseWindow" (fun () -> InMemoryReleaseWindow() :> IReleaseWindow)
+
+        IReleaseWindowContract.tests "BlobReleaseWindow" (fun () ->
+            BlobReleaseWindow(InMemoryBlobStorage.InMemoryBlobStorage()) :> IReleaseWindow)
     ]

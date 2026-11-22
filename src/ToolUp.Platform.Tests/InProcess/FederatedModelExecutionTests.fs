@@ -428,6 +428,7 @@ let private registerDiagnostics
     (observations: string -> ModelExecutionFitObservation list option)
     (budget: PrivacyBudgetMeter)
     (noise: INoiseMechanism option)
+    (differencing: ModelExecutionDifferencing option)
     (bindings: Map<string, string>)
     =
     let resolveBinding (peerId: string) = async {
@@ -464,6 +465,7 @@ let private registerDiagnostics
         Budget = budget
         Noise = noise
         Audit = sink
+        Differencing = differencing
     }
 
     match ModelExecutionPeerContract.governedDiagnostics gate deps with
@@ -492,6 +494,7 @@ let private withDiagnostics
         project
         (fun _ -> None)
         (snd (meterOf 1000m))
+        None
         None
         bindings
 
@@ -950,6 +953,7 @@ let private withFitDiagnostics
                 None)
         budget
         noise
+        None
         boundOnly
 
 let private fitScope (templateId: string) : BudgetScope = {
@@ -1099,6 +1103,7 @@ let private fitDiagnosticTests =
                 Budget = snd (meterOf 1000m)
                 Noise = None
                 Audit = CleanRoomGate.noAudit
+                Differencing = None
             }
 
             let unbinned =
@@ -1329,6 +1334,104 @@ let private fitDiagnosticTests =
             Expect.isError
                 (FitDiagnosticDeclaration.parse "bins=edges:-3,-2,-1,0,1,2,3;precision=0.010")
                 "a second spelling of the same declaration is refused, since it would hash as a second template"
+        }
+
+        testCaseAsync
+            "two fits differing by one record: the second diagnostic is refused, logged and charged, whoever asks"
+        <| async {
+            let rivalPeerId = "modeller-rival"
+            let records n = [ for i in 1..n -> $"weekly-panel-7/row-{i}" ]
+
+            // Two stored outcomes on one vintage: the second fitted over one
+            // record fewer, as a row filter in the spec payload would give.
+            let rowSets =
+                Map.ofList [
+                    "sha256:fit-all", records 60
+                    "sha256:fit-all-but-one", records 59
+                    "sha256:fit-the-floor-away", records 50
+                ]
+
+            let differencing: ModelExecutionDifferencing = {
+                Window = ReleaseWindowMeter.create (InMemoryReleaseWindow()) ReleaseWindowPolicy.defaults
+                RowSet =
+                    fun _ subject -> async {
+                        let rows =
+                            match subject with
+                            | ModelExecutionRowSetOf.Outcome outcomeId -> Map.tryFind outcomeId rowSets
+                            | ModelExecutionRowSetOf.Vintage _ -> Some(records 60)
+
+                        return
+                            rows
+                            |> Option.map (FilterCohort.ofMembers >> FilterCohort.withVintage "weekly-panel@7")
+                    }
+            }
+
+            let ledger, meter = meterOf 1000m
+
+            let instance =
+                registerDiagnostics
+                    (dataHost (Map.ofList [ modellerPeerId, hostScope; rivalPeerId, hostScope ]))
+                    fitTemplate
+                    (fun _ _ _ -> async { return aggregateProjection 182 })
+                    (fun outcomeId ->
+                        if Map.containsKey outcomeId rowSets then
+                            Some fitObservations
+                        else
+                            None)
+                    meter
+                    None
+                    (Some differencing)
+                    (Map.ofList [ modellerPeerId, hostScope; rivalPeerId, hostScope ])
+
+            Expect.equal
+                fitTemplate.Release.NearDuplicate
+                (NearDuplicateRule.Compared DifferencingScope.PerVintage)
+                "the profile's fit-diagnostic template compares per vintage"
+
+            let request outcomeId =
+                ModelExecutionPeerContract.fitDiagnosticRequest FitDiagnostics.ResidualHistogram outcomeId
+
+            let! first = callDiagnostic instance modellerPeerId (request "sha256:fit-all")
+
+            match first with
+            | Ok json ->
+                Expect.isFalse (json.Contains "row-") "the row set never reaches the wire"
+                Expect.isFalse (json.Contains "MembershipHash") "…nor its fingerprint"
+            | Error e -> failtestf "the first fit's diagnostic must be released; got %A" e
+
+            for peerId in [ modellerPeerId; rivalPeerId ] do
+                let! second = callDiagnostic instance peerId (request "sha256:fit-all-but-one")
+
+                match second with
+                | Error(PeerCleanRoomWithheld _) -> ()
+                | other -> failtestf "'%s' asked over a row set one record from a released one; got %A" peerId other
+
+            let refusals =
+                lock instance.Decisions (fun () -> List.ofSeq instance.Decisions)
+                |> List.filter (fun d -> not d.Released)
+
+            Expect.hasLength refusals 2 "both refusals are recorded"
+
+            for refusal in refusals do
+                Expect.stringContains refusal.Reason "NearDuplicateFilter" "…as near duplicates"
+
+            let! rivalBudget =
+                ledger.RemainingBudget(
+                    {
+                        TemplateId = "fit-diagnostics"
+                        CounterpartyPeerId = rivalPeerId
+                        Epoch = "perpetual"
+                    },
+                    1000m
+                )
+
+            Expect.equal rivalBudget.QueryCount 1 "the rival's refusal is charged to the rival"
+
+            let! farther = callDiagnostic instance rivalPeerId (request "sha256:fit-the-floor-away")
+
+            match farther with
+            | Ok _ -> ()
+            | Error e -> failtestf "a row set ten records from the released one clears the floor; got %A" e
         }
     ]
 
