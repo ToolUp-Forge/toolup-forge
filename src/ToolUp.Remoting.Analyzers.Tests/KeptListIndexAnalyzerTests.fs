@@ -82,7 +82,6 @@ let d (rows: _ list) = [ for i in 0 .. rows.Length - 1 -> Fuaran.button "d" (Bum
 /// node, and the rule stays out of it.
 let private felizByIndex =
     """module Demo
-open Feliz
 let view rows dispatch =
     Html.ul [ for i, row in List.indexed rows -> Html.li [ prop.onClick (fun _ -> dispatch (Bump i)) ] ]
 let other rows dispatch = rows |> List.mapi (fun i row -> Html.button [ prop.onClick (fun _ -> dispatch (Bump i)) ])
