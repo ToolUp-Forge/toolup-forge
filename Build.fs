@@ -58,6 +58,12 @@ let config = {
 // every such row). Each row's `Lanes` carries the result, and the lane
 // this process runs selects the rows at registration (end of `main`).
 //
+// `preflight` (Phase 1394) is a third shape: `verify.ps1`'s own format,
+// header and build steps, then only the rows the manifest opts in with
+// `preflight` — the cheap, deterministic checks, and no behavioural pack.
+// It is the lane run before a push and before a landing claims the full
+// lane, and it is never citable.
+//
 // Unset ⇒ `full` ⇒ every `Local` row: the pre-phase gate, unchanged.
 
 /// The `affected` lane's lists file and the selection manifest it names,
@@ -68,7 +74,8 @@ let private affectedPlan: Result<TestLane.AffectedPlan, string> option =
     | TestLane.Lane.Affected -> Some(TestLane.readAffectedPlan ())
     | TestLane.Lane.Pure
     | TestLane.Lane.Fast
-    | TestLane.Lane.Full -> None
+    | TestLane.Lane.Full
+    | TestLane.Lane.Preflight -> None
 
 /// The selection manifest the lists file names, when it names a readable one.
 let private affectedManifest =
@@ -96,7 +103,7 @@ let private affectedClientTierMoved =
 /// How many pack rows this lane runs, for the announcement. `fast` runs
 /// every pack (the slow set it drops is inside the Platform pack and is
 /// that pack's own declaration), `affected` too; `pure` runs the rows
-/// that read nothing.
+/// that read nothing; `preflight` runs the one check pack it opts in.
 let private selectedPackCount =
     manifestData
     |> List.filter (fun r ->
@@ -662,7 +669,8 @@ let main args =
             | TestLane.Lane.Full -> true
             | TestLane.Lane.Affected -> affectedClientTierMoved
             | TestLane.Lane.Pure
-            | TestLane.Lane.Fast -> false
+            | TestLane.Lane.Fast
+            | TestLane.Lane.Preflight -> false
 
         // Fable resolves its own tool from the nearest `.config/
         // dotnet-tools.json` above the directory it runs in, and it must

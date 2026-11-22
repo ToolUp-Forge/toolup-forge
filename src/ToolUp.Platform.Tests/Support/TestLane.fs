@@ -63,6 +63,13 @@ type Lane =
     | Affected
     /// The whole suite. The default, and the only lane a ship may cite.
     | Full
+    /// The gate's cheap, deterministic checks and no behavioural test
+    /// pack: `verify.ps1`'s format, header and build steps, then the rows
+    /// the manifest opts in (the analyzers, the public-API baseline check,
+    /// the Fable compile and the tree-only source checks). Minutes. Run
+    /// before a push and before a landing claims the full lane; never
+    /// citable as the gate.
+    | Preflight
 
 /// The variable this module reads. Named once so a caller reporting it
 /// (a warning, a `--help` line, a recorded gate command) cannot misspell
@@ -77,10 +84,13 @@ let name (lane: Lane) =
     | Lane.Fast -> "fast"
     | Lane.Affected -> "affected"
     | Lane.Full -> "full"
+    | Lane.Preflight -> "preflight"
 
 /// Every accepted spelling, for an error message that tells the reader
 /// what to type instead of only that they were wrong.
-let accepted = [ Lane.Pure; Lane.Fast; Lane.Affected; Lane.Full ] |> List.map name
+let accepted =
+    [ Lane.Pure; Lane.Fast; Lane.Affected; Lane.Full; Lane.Preflight ]
+    |> List.map name
 
 /// Parse one variable value. Unset / empty is `Full` — the default lane
 /// is the pre-phase behaviour, so a machine that has never heard of this
@@ -99,6 +109,7 @@ let parse (raw: string) : Result<Lane, string> =
     | "fast" -> Ok Lane.Fast
     | "affected" -> Ok Lane.Affected
     | "full" -> Ok Lane.Full
+    | "preflight" -> Ok Lane.Preflight
     | other -> Error other
 
 /// The lane this process runs, read once. Module-level, so the variable

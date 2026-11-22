@@ -221,7 +221,7 @@ The per-pack `PASS` / `FAIL` summary block is unchanged, and deliberately so: CI
 
 ## The gate manifest: a new gate is a row
 
-`GateManifest.rows` (repo root, `GateManifest.fs`, source-linked into the Build test pack) is the one statement of what the forge gate runs. A row is a `GateLeg`: its `Name` (the token in the `VerifyAll summary:` block), its `Kind` (an `ExpectoPack` project, a `Body` returning a `Verdict`, or a `Script` path), its `Lanes` (`TestLane.Lane` — a pack whose own test sources read nothing is in `pure`; every pack is in the other three), its `Where` (`Local` under `VerifyAll`, `Ci <job>` for a `checks.yml` / `proofs.yml` job, `Release` for `publish-nuget.yml`), its `Reads` (`Tree`, `Git`, `Node`, `Browser`, `Docker`, `Network`, `Env <name>`), its measured `Budget` and its `Floor`.
+`GateManifest.rows` (repo root, `GateManifest.fs`, source-linked into the Build test pack) is the one statement of what the forge gate runs. A row is a `GateLeg`: its `Name` (the token in the `VerifyAll summary:` block), its `Kind` (an `ExpectoPack` project, a `Body` returning a `Verdict`, or a `Script` path), its `Lanes` (`TestLane.Lane` — a pack whose own test sources read nothing is in `pure`; every pack is in `fast`, `affected` and `full`; a row joins `preflight` only by opting in), its `Where` (`Local` under `VerifyAll`, `Ci <job>` for a `checks.yml` / `proofs.yml` job, `Release` for `publish-nuget.yml`), its `Reads` (`Tree`, `Git`, `Node`, `Browser`, `Docker`, `Network`, `Env <name>`), its measured `Budget` and its `Floor`.
 
 Everything that used to restate the list is a render of the rows, and each render is held by a test or a `--check`:
 
@@ -260,6 +260,42 @@ production line that discards the result of a blob write or delete (the rule:
 lands green and fails CI on `main`. Run `DocSnippets` when a change moves a public signature a documentation
 block may call or edits a fenced block. Run a `templates` or `browser-smoke` row when a change touches the client
 tier, the templates or the package closure they restore.
+
+## The `preflight` lane: the gate's cheap reds, in minutes
+
+`TOOLUP_TEST_LANE=preflight` runs the checks that make a full lane red in seconds to minutes, and no behavioural
+test pack. It is for two moments: before a push, and before a landing claims the full lane. A full lane is the
+better part of an hour and holds the machine's gate for all of it, so a red the pre-flight would have named in
+minutes costs that hour and every run queued behind it.
+
+```powershell
+$env:TOOLUP_TEST_LANE='preflight'; pwsh ./verify.ps1
+Remove-Item Env:TOOLUP_TEST_LANE
+```
+
+What it runs, in order:
+
+1. `verify.ps1`'s own steps, which every lane runs: the tool restore, `fantomas --check`, the SPDX header check and
+   the solution build.
+2. The rows of `GateManifest.rows` that carry `preflight`: `Platform.PublicApi` (the public-API baseline check, a
+   one-list pack over every packable project's built surface), `GateReconcile` (with the temp hygiene check),
+   `Fable` (the client tier's Fable compile and its `node:test` run), `Analyzers`, `ScopeLiterals`,
+   `ServiceConfigFold`, `NavRoleFinding` and `FuaranCoResolution`.
+
+A row joins the lane by `preflight` in the manifest, and only when it is minutes or less on its own, reads nothing
+beyond the tree, git and the Node toolchain, and is a check rather than a behavioural suite. `Samples` stays out
+(about ten minutes on its own), and so does `FuaranCoBuild` (it restores from the network). Every row in the lane is a
+row the full lane and CI's `verify-all` job already run, so the lane cannot drift from them: it selects rows, it
+does not restate them. The one pack it runs, `Platform.PublicApi`, runs whole.
+
+**It is never citable as the gate.** A green pre-flight says the cheap checks pass; it says nothing about the
+behavioural packs, which are where most of the full lane's time goes. A ship cites `full`, run through the queue on
+the folded tree, as before. The pre-flight is advisory in the way `fast` is: it saves a lane, it does not replace
+one.
+
+Like every lane, it runs under `VerifyGate`'s mutex, so on a machine where a full lane is running it waits for that
+lane. The measurements the lane was sized from, and the share of past reds it would have caught:
+[`docs/migrations/1394-preflight-lane.md`](../migrations/1394-preflight-lane.md).
 
 ## What the gate costs: `gate-timings.json`
 
@@ -786,7 +822,7 @@ over this implementation rather than derived from it, and resolved at test time.
 model-execution wire face is the first surface certified this way
 (`src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs`), against the
 **model-execution wire specification** — `MODEL_EXECUTION_WIRE.md` and its conformance corpus,
-published at <https://github.com/Fuaran-Core/fuaran-model-execution-spec> (Apache-2.0). <!-- OSS-BOUNDARY-EXEMPT: a citation of a public, Apache-2.0 specification by name and URL. --> This repo
+published at <https://github.com/Fuaran-Data/fuaran-model-execution-spec> (Apache-2.0). <!-- OSS-BOUNDARY-EXEMPT: a citation of a public, Apache-2.0 specification by name and URL. --> This repo
 conforms to that specification; it does not define the format, and where any in-repo description
 of the wire disagrees with the specification, the specification wins.
 

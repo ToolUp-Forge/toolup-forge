@@ -254,6 +254,9 @@ let droppedIn
     : Test list =
     match lane with
     | TestLane.Lane.Full -> []
+    // `preflight` selects PACKS at the driver (the public-API baseline
+    // check alone), and a pack it selects runs whole.
+    | TestLane.Lane.Preflight -> []
     | TestLane.Lane.Fast -> declaration.Slow
     | TestLane.Lane.Affected ->
         match keep with
