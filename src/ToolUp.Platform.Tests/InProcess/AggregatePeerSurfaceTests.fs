@@ -170,6 +170,7 @@ let private gammaMember () : AggregateMember = {
                     ContractId = reportsId
                     Versions = [ v1 ]
                     Routines = []
+                    Bounds = None
                 }
             ]
             Endpoints = PeerSurface.endpoints

@@ -202,7 +202,14 @@ let private companionRegistrants: Registrant list = [
     registrant ToolUp.ArtefactSigning.ArtefactAuditEvents.ArtefactAuditEvent.family
     registrant ToolUp.AI.AIAuditEvents.AIAuditEvent.family
     registrant ToolUp.InterPlatform.PeerAuditEvents.PeerAuditEvent.family
+    registrant ToolUp.Platform.Infra.DataSourceQueryAudit.family
 ]
+
+/// The kinds declared after the registry replaced the closed union. Each has
+/// its own fixture beside the frozen 206, written from its codec when the
+/// kind was added and held byte-for-byte from then on, exactly as they are.
+let private kindsSinceTheRegistry =
+    set [ DataSourceAuditEvent.DataSourceQueriedKind ]
 
 /// Phase 625 — the wire discriminators that deliberately differ from
 /// their F# case identifier, pinned so a future "tidy the strings to
@@ -490,7 +497,15 @@ let tests =
                 let registered = AuditEventRegistry.kinds registry |> List.map _.Kind |> Set.ofList
 
                 let captured = corpus () |> List.map fst |> Set.ofList
-                Expect.equal captured.Count 206 "the corpus holds the 206 kinds captured before the registry"
+
+                Expect.equal
+                    (Set.difference captured kindsSinceTheRegistry).Count
+                    206
+                    "the corpus holds the 206 kinds captured before the registry"
+
+                Expect.isTrue
+                    (Set.isSubset kindsSinceTheRegistry captured)
+                    "every kind declared since the registry has its fixture"
 
                 Expect.equal
                     registered

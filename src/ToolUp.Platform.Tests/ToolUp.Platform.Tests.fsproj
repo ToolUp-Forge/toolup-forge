@@ -528,6 +528,8 @@
         <Compile Include="InProcess\FederatedModelExecutionTests.fs" />
         <Compile Include="InProcess\FitDiagnosticChartsTests.fs" />
         <Compile Include="InProcess\ExternalModelFitTests.fs" />
+        <Compile Include="InProcess\DelegatedQueryTests.fs" />
+        <Compile Include="InProcess\DelegatedQueryBoundsTests.fs" />
         <Compile Include="InProcess\ScopeEnumerationSweepTests.fs" />
         <Compile Include="InProcess\CountersignatureRegistryTests.fs" />
         <Compile Include="InProcess\BaselineMergeDriverTests.fs" />

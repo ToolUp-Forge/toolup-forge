@@ -28,9 +28,8 @@ open ToolUp.Platform.Audit
 //     substrate's `JobResult` is `Success | …Failure`, with no payload,
 //     so a finished peer call parks its *typed* (serialised) result
 //     here, keyed by `JobId` and stamped with the scheduling caller's
-//     `PeerId`, for the polling *owner* to retrieve (Phase 308), under
-//     a `PeerJobRetentionPolicy` that bounds how long it stays there
-//     (Phase 316).
+//     `PeerId`, for the polling *owner* to retrieve, under
+//     a `PeerJobRetentionPolicy` that bounds how long it stays there.
 //   • `PeerJobHandler` — the `IJobHandler` the scheduler dispatches: it
 //     unmarshals the call arguments from the job payload, applies the
 //     contract implementation, resolves the returned `PeerJobHandle<'T>`
@@ -50,8 +49,8 @@ open ToolUp.Platform.Audit
 type PeerJobPayload = {
     OwnerPeerId: string
     ArgsJson: string
-    /// Phase 310 — the cascade-wide correlation id the receiver *derived*
-    /// for the scheduling request (Phase 331), carried across the job
+    /// The cascade-wide correlation id the receiver *derived*
+    /// for the scheduling request, carried across the job
     /// boundary for the same reason the owner is: `JobContext` has no
     /// request, no principal and no ambient context, so anything the
     /// execution side must attribute has to arrive as data (GP 12 rule 4).
@@ -74,7 +73,7 @@ type PeerJobRecord = {
     Status: PeerJobStatus<string>
 }
 
-/// How long a parked peer job result is retained (Phase 316). Expressed
+/// How long a parked peer job result is retained. Expressed
 /// as a value so a distributed `IPeerJobResultStore` honours the same
 /// contract rather than re-deriving its own — policy as data, never a
 /// callback (GP 12 rule 3).
@@ -175,7 +174,7 @@ type IPeerJobResultStore =
     /// caller had already abandoned the call.
     abstract TryGetResult: scopeId: string * jobId: PeerJobId -> Async<PeerJobRecord option>
 
-    /// The retention policy this store applies (Phase 316). Data, not
+    /// The retention policy this store applies. Data, not
     /// behaviour: a distributed implementation reports the policy it
     /// honours, and an admin / diagnostic surface can show a deployment
     /// what its federated results' lifetime actually is without knowing
@@ -244,14 +243,14 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
         | None, Some read -> Some read
         | None, None -> None
 
-    /// Phase 863 — the write's own result, for the one caller that may
+    /// The write's own result, for the one caller that may
     /// lose it (the delete-on-read stamp in `TryGetResult`).
     let tryWriteDocument (scopeId: string) (jobId: PeerJobId) (doc: PeerJobDocument) = async {
         let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize doc)
         return! blobs.Upload(container, blobNameFor scopeId jobId, payload)
     }
 
-    /// Phase 863 — the result document IS the job's outcome, so a refused
+    /// The result document IS the job's outcome, so a refused
     /// write raises: a poller must never read `Pending` forever over a
     /// result the store claimed to have saved.
     let writeDocument (scopeId: string) (jobId: PeerJobId) (doc: PeerJobDocument) = async {
@@ -318,7 +317,7 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
                     // window forward, or a polling loop would keep the
                     // result alive indefinitely.
                     if policy.DeleteOnRead && Option.isNone doc.ReadExpiresAt then
-                        // Best-effort by design (Phase 863): the result is
+                        // Best-effort by design: the result is
                         // served either way, and an unstamped document has its
                         // grace clock started by the next read instead.
                         let! _ =
@@ -344,7 +343,7 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
 type PeerJobFusion = {
     Scheduler: IJobScheduler
     ResultStore: IPeerJobResultStore
-    /// Phase 310 — the audit log the execution side records a long-running
+    /// The audit log the execution side records a long-running
     /// call's terminal outcome on. `None` in a partial host with no
     /// `IAuditLog` registered, which records nothing — matching the
     /// immediate path, where `auditPeerCall` resolves the log per-request
@@ -409,7 +408,7 @@ type private PeerJobInvoker =
 /// recorded as a `Failed` status, not a job retry — re-running a
 /// deterministic peer computation would double-execute it.
 ///
-/// **Phase 310 — the terminal audit row.** The receiver's audit trail used
+/// **The terminal audit row.** The receiver's audit trail used
 /// to stop at dispatch for a long-running call: the host emits
 /// `PeerCallCompleted` when `peer.Handle` returns the assigned `JobId`, so
 /// every such call was logged `ok` whatever the background computation went
@@ -551,6 +550,47 @@ type PeerJobHandler
             return Success
         }
 
+/// Where a contract's answer bound came from.
+[<RequireQualifiedAccess>]
+type PeerAnswerBoundsBasis =
+    /// The deployment declared it.
+    | Declared
+    /// The contract's conservative default, applied because the deployment
+    /// declared none.
+    | Default
+
+/// The ceiling a contract declares on one answer, published in the peer
+/// surface so a counterparty knows it before it calls. The substrate
+/// applies it around the contract's handler; an answer above it is
+/// continued where `Continuation` says so, and refused by name otherwise.
+type PeerAnswerBounds = {
+    /// The most rows one answer carries, or `None` where the contract
+    /// declares no row ceiling. Forge does not read an answer, so a row
+    /// ceiling exists only where the deployment composes a row count.
+    MaxRows: int option
+    /// The most bytes of the answer document one answer carries, counted
+    /// over its UTF-8 encoding.
+    MaxBytes: int
+    /// Whether an answer above the ceiling is continued page by page
+    /// rather than refused.
+    Continuation: bool
+    /// Whether the deployment declared the bound or took the default.
+    Basis: PeerAnswerBoundsBasis
+}
+
+/// Reading an answer against a declared bound.
+[<RequireQualifiedAccess>]
+module PeerAnswerBounds =
+
+    /// The bound a measured answer exceeds first, as `(bound, ceiling,
+    /// size)` with `bound` either `"rows"` or `"bytes"`; `None` when it fits.
+    /// `rows` is `None` where the answer's rows were not counted.
+    let exceeded (bounds: PeerAnswerBounds) (rows: int option) (bytes: int) : (string * int * int) option =
+        match bounds.MaxRows, rows with
+        | Some ceiling, Some count when count > ceiling -> Some("rows", ceiling, count)
+        | _ when bytes > bounds.MaxBytes -> Some("bytes", bounds.MaxBytes, bytes)
+        | _ -> None
+
 /// What `JsonRpcPeerHost.contract` produces: the receiver-facing
 /// `PeerContractRegistration` (transport- and job-agnostic) plus the
 /// `(handlerName, IJobHandler)` pairs the compose hook registers with
@@ -559,9 +599,13 @@ type PeerJobHandler
 type PeerContractHost = {
     Registration: PeerContractRegistration
     JobHandlers: (string * IJobHandler) list
+    /// The bound the contract applies to its answers, which the peer
+    /// surface publishes. `None` for a contract that declares none, whose
+    /// answers are bounded only by the transport, as before bounds existed.
+    AnswerBounds: PeerAnswerBounds option
 }
 
-// ─── Phase 630 — the gateway's group job-handle map ──────────────────
+// ─── the gateway's group job-handle map ──────────────────
 //
 // Phase 595's `PeerGateway` presents a group of deployments as one peer,
 // but only for **immediate** methods: a member's long-running result
@@ -590,7 +634,7 @@ type PeerContractHost = {
 //   * **Lifetime-bounded.** A binding retained longer than the member
 //     record it points at is a routing tuple nothing stands behind. The
 //     bound is expressed in the *same* `PeerJobRetentionPolicy`
-//     vocabulary the member's own store honours (Phase 316) and defaults
+//     vocabulary the member's own store honours and defaults
 //     to the same value, so a binding written under the default can never
 //     outlive a member record written under the default.
 //
@@ -633,9 +677,9 @@ type PeerGroupJobBinding = {
     /// invoke leg. Never disclosed to the caller.
     MemberJobId: PeerJobId
     /// The cascade-wide correlation id the gateway *derived* for the
-    /// dispatching request (Phase 331), carried so the group-edge
+    /// dispatching request, carried so the group-edge
     /// `PeerJobCompleted` row joins the schedule-time `PeerCallCompleted`
-    /// row the gateway already wrote for the same call (Phase 310).
+    /// row the gateway already wrote for the same call.
     RootRequestId: string
 }
 
@@ -738,7 +782,7 @@ type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy,
     let blobNameFor (scopeId: string) (groupJobId: PeerJobId) =
         $"peers/groups/jobs/{scopeId}/{groupJobId}.json"
 
-    /// Phase 863 — the write's own result. `Bind` raises on a refusal (the
+    /// The write's own result. `Bind` raises on a refusal (the
     /// binding is what a poll resolves, so an unstored one strands the
     /// handle); `MarkTerminalObserved` may lose it (see there).
     let tryWriteDocument (scopeId: string) (groupJobId: PeerJobId) (doc: PeerGroupJobDocument) = async {

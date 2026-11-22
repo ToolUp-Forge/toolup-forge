@@ -7,6 +7,8 @@ open ToolUp.Platform
 
 open System
 open System.Globalization
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 
 // --- VirtualDatasetReader -----------------------------------------------
 //
@@ -28,6 +30,131 @@ open System.Globalization
 // version is **ephemeral materialisation** with declared retention (spill ->
 // hand off -> delete, every step audited), never a silent durable copy.
 
+// --- The data-source query audit event ---------------------------------
+//
+// The platform's two call sites that run a statement against a data source,
+// this reader and the data ingestor, each record one `DataSourceQueried` row
+// per statement, failures and refusals included. A connector is never asked
+// to emit it, so a third-party connector is covered without changing. The
+// family's codec lives here, beside the first of the two sites, because the
+// payload serialisation every audit kind shares (`PlatformJson.options`) is
+// server-side; the payload and its kinds are Core's.
+
+/// The data-source query audit family and the call sites' shared emission.
+[<RequireQualifiedAccess>]
+module DataSourceQueryAudit =
+
+    let private write (payload: DataSourceQueriedPayload) : string =
+        JsonSerializer.Serialize(payload, PlatformJson.options)
+
+    let private read (json: string) : DataSourceQueriedPayload =
+        JsonSerializer.Deserialize<DataSourceQueriedPayload>(json, PlatformJson.options)
+
+    /// The family the platform registers in the composed audit-event
+    /// registry beside its own kinds.
+    let family: AuditEventFamily<DataSourceAuditEvent> = {
+        Registrant = AuditEventRegistry.PlatformRegistrant
+        Kinds = DataSourceAuditEvent.kinds
+        Encode =
+            function
+            | DataSourceQueried p -> DataSourceAuditEvent.DataSourceQueriedKind, write p
+        Decode =
+            fun kind payload ->
+                match kind with
+                | DataSourceAuditEvent.DataSourceQueriedKind -> DataSourceQueried(read payload)
+                | other -> failwithf "not a data-source audit kind: %s" other
+    }
+
+    /// The `AuditEvent` a query payload is recorded as.
+    let event (payload: DataSourceQueriedPayload) : AuditEvent =
+        AuditEventFamily.event family (DataSourceQueried payload)
+
+    /// The query payload an `AuditEvent` carries, if it carries one.
+    let tryRead (audit: AuditEvent) : DataSourceQueriedPayload option =
+        AuditEventFamily.tryRead family audit
+        |> Option.map (function
+            | DataSourceQueried p -> p)
+
+    /// Lowercase-hex SHA-256 over the UTF-8 bytes of a statement's text.
+    let statementHash (text: string) : string = Sha256.hexOfUtf8 text
+
+    /// What a call site knows of the statement before it runs it.
+    type Statement = {
+        Form: DataSourceStatementForm
+        Text: string
+        Parameters: DataSourceQueryParameter list
+    }
+
+    /// A string statement, as the connector's `Query` receives it.
+    let ofText (text: string) : Statement = {
+        Form = DataSourceStatementForm.Text
+        Text = text
+        Parameters = []
+    }
+
+    /// A bound statement: identified by its text alone, its parameters named
+    /// with their kinds.
+    let ofBound (statement: BoundStatement) : Statement = {
+        Form = DataSourceStatementForm.Bound
+        Text = statement.Text
+        Parameters = DataSourceAuditEvent.parameters statement
+    }
+
+    /// The payload of one query against the source `config` names, through
+    /// the connector of kind `connectorKind`. `recordText` is the source's
+    /// `StatementTextAudit` opt-in; `answer` is the source's bytes when it
+    /// answered; `rows` is how many rows the platform decoded from them.
+    let payload
+        (config: DataSourceConfig)
+        (connectorKind: string)
+        (recordText: bool)
+        (statement: Statement)
+        (answer: byte[] option)
+        (rows: int64 option)
+        (outcome: DataSourceQueryOutcome)
+        : DataSourceQueriedPayload =
+        {
+            SourceId = config.Id
+            ConnectorKind = connectorKind
+            Form = statement.Form
+            StatementHash = statementHash statement.Text
+            Parameters = statement.Parameters
+            StatementText = if recordText then Some statement.Text else None
+            RowCount = rows
+            ByteCount = answer |> Option.map (fun bytes -> int64 bytes.Length)
+            ContentHash = answer |> Option.map Sha256.hex
+            Outcome = outcome
+        }
+
+    /// The refusal class of a source whose statement-text audit opt-in is
+    /// refused, at either call site.
+    [<Literal>]
+    let StatementTextAuditRefused = "StatementTextAuditRefused"
+
+    /// The class an ingestion error records: its case name, never its
+    /// message, which can echo the statement.
+    let failureOf (error: IngestionError) : string =
+        match error with
+        | CredentialMissing _ -> "CredentialMissing"
+        | SourceUnreachable _ -> "SourceUnreachable"
+        | IngestionError.SchemaMismatch _ -> "SchemaMismatch"
+        | IngestionError.StorageFailure _ -> "StorageFailure"
+        | UnexpectedFailure _ -> "UnexpectedFailure"
+
+    /// Record one query row under `scopeId`, attributed to `actor`. The
+    /// payload is built only when a log is composed: under `NoOpAuditLog` no
+    /// hash is taken and nothing is serialised, so a deployment with audit
+    /// off pays nothing (GP 13). Answers the seam's decision.
+    let record
+        (log: IAuditLog)
+        (scopeId: string)
+        (actor: AuditSubject)
+        (build: unit -> DataSourceQueriedPayload)
+        : Async<Result<unit, AuditWriteError>> =
+        match log with
+        | :? NoOpAuditLog -> async { return Ok() }
+        | _ -> log.Record(AuditScope.shard scopeId, actor, event (build ()))
+
 /// Why a virtual binding cannot be defined over its source. Every case is
 /// decided before anything is sent to the source.
 [<RequireQualifiedAccess>]
@@ -48,6 +175,9 @@ type VirtualBindingRefusal =
     | StatementTextRefused of sourceId: string
     /// The source's statement policy cannot be read.
     | PolicyUnreadable of reason: string
+    /// The source's `StatementTextAudit` opt-in is refused: it is set under a
+    /// statement policy that admits raw text, or it cannot be read.
+    | StatementTextAuditRefused of reason: string
 
 /// Rendering a `VirtualBindingRefusal`.
 [<RequireQualifiedAccess>]
@@ -65,12 +195,20 @@ module VirtualBindingRefusal =
         | VirtualBindingRefusal.StatementTextRefused sourceId ->
             $"source '{sourceId}' declares {StatementPolicy.Key}={StatementPolicy.token StatementPolicy.BoundOnly}, so a virtual binding over it carries a bound statement, never statement text. Nothing was sent to the source"
         | VirtualBindingRefusal.PolicyUnreadable reason -> $"the source's statement policy cannot be read: {reason}"
+        | VirtualBindingRefusal.StatementTextAuditRefused reason ->
+            $"the source's statement-text audit opt-in is refused: {reason}"
 
 /// Reads a virtual dataset version through an `IDataSource`. Constructed with
 /// the connector, the codec that decodes the connector's row bytes, the
 /// version's **declared** schema (the conformance contract), and the
 /// persisted `DataSourceConfig` used to build the per-call context and read
 /// the source's statement policy.
+///
+/// Every statement the reader runs against the source, or refuses to run, is
+/// recorded as one `DataSourceQueried` audit row attributed to `subject`: in
+/// `audit` for `Bind` and `ReadPage`, and in the log a `MaterialiseForHandoff`
+/// call is handed. The four-argument constructor composes `NoOpAuditLog`, so a
+/// reader built without a log records nothing and pays nothing.
 ///
 /// The connector returns opaque bytes; this reader decodes them through the
 /// composed `IDatasetCodec` (the in-situ connector emits rows in the
@@ -81,7 +219,14 @@ module VirtualBindingRefusal =
 /// as a residual in memory, so correctness never depends on connector
 /// pushdown.
 type VirtualDatasetReader
-    (source: IDataSource, codec: IDatasetCodec, declaredSchema: DatasetSchema, config: DataSourceConfig) =
+    (
+        source: IDataSource,
+        codec: IDatasetCodec,
+        declaredSchema: DatasetSchema,
+        config: DataSourceConfig,
+        audit: IAuditLog,
+        subject: AuditSubject
+    ) =
 
     [<Literal>]
     static let MaxPageLimit = 10000
@@ -115,13 +260,23 @@ type VirtualDatasetReader
         | BoundValue.Timestamp value -> value.ToString("o", CultureInfo.InvariantCulture)
         | BoundValue.Null _ -> ""
 
-    let defineText (_: VirtualBinding) : Result<unit, VirtualBindingRefusal> =
+    /// The source's statement-text audit opt-in, refused where it is set
+    /// under a policy that admits raw text.
+    let recordsText () : Result<bool, VirtualBindingRefusal> =
+        StatementTextAudit.read config.ConnectionScope
+        |> Result.mapError VirtualBindingRefusal.StatementTextAuditRefused
+
+    /// A string binding admitted by its source, answering the source's
+    /// statement-text audit opt-in.
+    let admitText (_: VirtualBinding) : Result<bool, VirtualBindingRefusal> =
         match StatementPolicy.read config.ConnectionScope with
         | Error reason -> Error(VirtualBindingRefusal.PolicyUnreadable reason)
         | Ok StatementPolicy.BoundOnly -> Error(VirtualBindingRefusal.StatementTextRefused config.Id)
-        | Ok StatementPolicy.RawAllowed -> Ok()
+        | Ok StatementPolicy.RawAllowed -> recordsText ()
 
-    let defineBound (binding: BoundVirtualBinding) : Result<unit, VirtualBindingRefusal> =
+    /// A bound binding admitted by its source, answering the source's
+    /// statement-text audit opt-in.
+    let admitBound (binding: BoundVirtualBinding) : Result<bool, VirtualBindingRefusal> =
         match ConnectorCapabilities.binds source with
         | Error declared -> Error(VirtualBindingRefusal.NotDeclared declared)
         | Ok binds ->
@@ -136,6 +291,46 @@ type VirtualDatasetReader
                 | _ ->
                     BoundStatement.check binds.BindableKinds (BoundVirtualBinding.statement binding)
                     |> Result.mapError VirtualBindingRefusal.Refused
+                    |> Result.bind recordsText
+
+    let defineText (binding: VirtualBinding) : Result<unit, VirtualBindingRefusal> =
+        admitText binding |> Result.map ignore
+
+    let defineBound (binding: BoundVirtualBinding) : Result<unit, VirtualBindingRefusal> =
+        admitBound binding |> Result.map ignore
+
+    /// The class a refusal records in the query audit row: its case name, or
+    /// a binding refusal's own case name.
+    let refusalClass (refusal: VirtualBindingRefusal) : string =
+        match refusal with
+        | VirtualBindingRefusal.NotDeclared _ -> "NotDeclared"
+        | VirtualBindingRefusal.Refused refusal ->
+            match refusal with
+            | BindingRefusal.InvalidName _ -> "InvalidName"
+            | BindingRefusal.DuplicateName _ -> "DuplicateName"
+            | BindingRefusal.UnusedParameter _ -> "UnusedParameter"
+            | BindingRefusal.MissingParameter _ -> "MissingParameter"
+            | BindingRefusal.UnbindableKind _ -> "UnbindableKind"
+            | BindingRefusal.NonCanonicalDecimal _ -> "NonCanonicalDecimal"
+        | VirtualBindingRefusal.ReservedParameter -> "ReservedParameter"
+        | VirtualBindingRefusal.NullWatermark -> "NullWatermark"
+        | VirtualBindingRefusal.StatementTextRefused _ -> "StatementTextRefused"
+        | VirtualBindingRefusal.PolicyUnreadable _ -> "PolicyUnreadable"
+        | VirtualBindingRefusal.StatementTextAuditRefused _ -> DataSourceQueryAudit.StatementTextAuditRefused
+
+    /// Record one query row in `log`; the payload is built only when a log
+    /// is composed.
+    let recordQuery
+        (log: IAuditLog)
+        (scopeId: string)
+        (statement: unit -> DataSourceQueryAudit.Statement)
+        (recordText: bool)
+        (answer: byte[] option)
+        (rows: int64 option)
+        (outcome: DataSourceQueryOutcome)
+        =
+        DataSourceQueryAudit.record log scopeId subject (fun () ->
+            DataSourceQueryAudit.payload config source.Kind recordText (statement ()) answer rows outcome)
 
     let refused (refusal: VirtualBindingRefusal) =
         DatasetError.SchemaMismatch(VirtualBindingRefusal.describe refusal)
@@ -231,40 +426,102 @@ type VirtualDatasetReader
             | Error drift -> Error(DatasetError.SchemaMismatch drift)
             | Ok() -> Ok rows
 
-    /// Read a string binding through: refuse it first if its source admits
-    /// no statement text, then query the source at the binding's watermark.
-    let readText (scopeId: string) (binding: VirtualBinding) : Async<Result<DatasetRow list, DatasetError>> = async {
-        match defineText binding with
-        | Error refusal -> return Error(refused refusal)
-        | Ok() ->
-            match! source.Query(callContext scopeId, binding.QuerySpec) with
-            | Error e -> return Error(sourceFailed e)
-            | Ok bytes -> return decoded bytes
+    /// Refuse a statement before it is sent, recording the refusal.
+    let refuse log scopeId statement (refusal: VirtualBindingRefusal) = async {
+        do!
+            recordQuery log scopeId statement false None None (DataSourceQueryOutcome.Refused(refusalClass refusal))
+            |> AuditRow.bestEffort
+
+        return Error(refused refusal)
     }
 
-    /// Read a bound binding through the connector's binding capability, the
-    /// watermark bound as the reserved parameter.
-    let readBound (scopeId: string) (binding: BoundVirtualBinding) : Async<Result<DatasetRow list, DatasetError>> = async {
-        match defineBound binding with
-        | Error refusal -> return Error(refused refusal)
-        | Ok() ->
-            match! BoundQuery.run source (callContext scopeId) (BoundVirtualBinding.statement binding) with
-            | Error(BoundStatementError.Failed e) -> return Error(sourceFailed e)
-            | Error(BoundStatementError.NotDeclared declared) ->
-                return Error(refused (VirtualBindingRefusal.NotDeclared declared))
-            | Error(BoundStatementError.Refused refusal) ->
-                return Error(refused (VirtualBindingRefusal.Refused refusal))
-            | Ok bytes -> return decoded bytes
+    /// A query the source failed, recorded by the error's class.
+    let failed log scopeId statement recordText (failure: IngestionError) = async {
+        do!
+            recordQuery
+                log
+                scopeId
+                statement
+                recordText
+                None
+                None
+                (DataSourceQueryOutcome.Failed(DataSourceQueryAudit.failureOf failure))
+            |> AuditRow.bestEffort
+
+        return Error(sourceFailed failure)
     }
+
+    /// The source's answer, decoded and recorded. Rows the log refuses to
+    /// record are withheld.
+    let answered log scopeId statement recordText (bytes: byte[]) = async {
+        let result = decoded bytes
+
+        let rows, outcome =
+            match result with
+            | Ok rows -> Some(int64 (List.length rows)), DataSourceQueryOutcome.Succeeded
+            | Error(DatasetError.SchemaMismatch _) -> None, DataSourceQueryOutcome.Failed "SchemaDrift"
+            | Error _ -> None, DataSourceQueryOutcome.Failed "Undecodable"
+
+        match! recordQuery log scopeId statement recordText (Some bytes) rows outcome with
+        | Error e when Result.isOk result -> return Error(DatasetError.StorageFailure(AuditWriteError.describe e))
+        | _ -> return result
+    }
+
+    /// Read a string binding through: refuse it first if its source admits
+    /// no statement text, then query the source at the binding's watermark.
+    /// One query row is recorded in `log`.
+    let readText
+        (log: IAuditLog)
+        (scopeId: string)
+        (binding: VirtualBinding)
+        : Async<Result<DatasetRow list, DatasetError>> =
+        async {
+            let statement () =
+                DataSourceQueryAudit.ofText binding.QuerySpec
+
+            match admitText binding with
+            | Error refusal -> return! refuse log scopeId statement refusal
+            | Ok recordText ->
+                match! source.Query(callContext scopeId, binding.QuerySpec) with
+                | Error e -> return! failed log scopeId statement recordText e
+                | Ok bytes -> return! answered log scopeId statement recordText bytes
+        }
+
+    /// Read a bound binding through the connector's binding capability, the
+    /// watermark bound as the reserved parameter. One query row is recorded
+    /// in `log`, identified by the statement's text alone.
+    let readBound
+        (log: IAuditLog)
+        (scopeId: string)
+        (binding: BoundVirtualBinding)
+        : Async<Result<DatasetRow list, DatasetError>> =
+        async {
+            let bound = BoundVirtualBinding.statement binding
+            let statement () = DataSourceQueryAudit.ofBound bound
+
+            match admitBound binding with
+            | Error refusal -> return! refuse log scopeId statement refusal
+            | Ok recordText ->
+                match! BoundQuery.run source (callContext scopeId) bound with
+                | Error(BoundStatementError.Failed e) -> return! failed log scopeId statement recordText e
+                | Error(BoundStatementError.NotDeclared declared) ->
+                    return! refuse log scopeId statement (VirtualBindingRefusal.NotDeclared declared)
+                | Error(BoundStatementError.Refused refusal) ->
+                    return! refuse log scopeId statement (VirtualBindingRefusal.Refused refusal)
+                | Ok bytes -> return! answered log scopeId statement recordText bytes
+        }
 
     let bind
         (scopeId: string)
         (define: unit -> Result<unit, VirtualBindingRefusal>)
+        (statement: unit -> DataSourceQueryAudit.Statement)
         (read: unit -> Async<Result<DatasetRow list, DatasetError>>)
         : Async<Result<unit, DatasetError>> =
         async {
             match define () with
-            | Error refusal -> return Error(refused refusal)
+            | Error refusal ->
+                let! refusal = refuse audit scopeId statement refusal
+                return refusal |> Result.map ignore
             | Ok() ->
                 match! source.Connect(callContext scopeId) with
                 | Error e -> return Error(DatasetError.StorageFailure(sprintf "virtual source unreachable: %A" e))
@@ -369,6 +626,19 @@ type VirtualDatasetReader
                         }
         }
 
+    /// A reader that records no query audit rows of its own: its log is
+    /// `NoOpAuditLog`. `MaterialiseForHandoff` still records its query in the
+    /// log it is handed.
+    new(source: IDataSource, codec: IDatasetCodec, declaredSchema: DatasetSchema, config: DataSourceConfig) =
+        VirtualDatasetReader(
+            source,
+            codec,
+            declaredSchema,
+            config,
+            NoOpAuditLog(),
+            AuditSubject.system "VirtualDataset"
+        )
+
     /// The declared schema of the virtual version (the conformance contract).
     member _.Schema: DatasetSchema = declaredSchema
 
@@ -390,11 +660,16 @@ type VirtualDatasetReader
     /// schema. `Ok ()` when a virtual version can be safely served from this
     /// binding.
     member _.Bind(scopeId: string, binding: VirtualBinding) : Async<Result<unit, DatasetError>> =
-        bind scopeId (fun () -> defineText binding) (fun () -> readText scopeId binding)
+        bind scopeId (fun () -> defineText binding) (fun () -> DataSourceQueryAudit.ofText binding.QuerySpec) (fun () ->
+            readText audit scopeId binding)
 
     /// `Bind` for a bound binding.
     member _.Bind(scopeId: string, binding: BoundVirtualBinding) : Async<Result<unit, DatasetError>> =
-        bind scopeId (fun () -> defineBound binding) (fun () -> readBound scopeId binding)
+        bind
+            scopeId
+            (fun () -> defineBound binding)
+            (fun () -> DataSourceQueryAudit.ofBound (BoundVirtualBinding.statement binding))
+            (fun () -> readBound audit scopeId binding)
 
     /// Page typed rows straight from the source with no durable copy. Filters
     /// apply first (AND-combined) then `Offset` / `Limit` page over the
@@ -403,13 +678,13 @@ type VirtualDatasetReader
     member _.ReadPage
         (scopeId: string, binding: VirtualBinding, query: DatasetPageQuery)
         : Async<Result<DatasetPage, DatasetError>> =
-        readPage query (fun () -> readText scopeId binding)
+        readPage query (fun () -> readText audit scopeId binding)
 
     /// `ReadPage` for a bound binding.
     member _.ReadPage
         (scopeId: string, binding: BoundVirtualBinding, query: DatasetPageQuery)
         : Async<Result<DatasetPage, DatasetError>> =
-        readPage query (fun () -> readBound scopeId binding)
+        readPage query (fun () -> readBound audit scopeId binding)
 
     /// Ephemeral materialisation for compute handoff -- the **declared,
     /// observable exception to zero-copy**. Reads the virtual version
@@ -432,7 +707,7 @@ type VirtualDatasetReader
         materialise
             scopeId
             binding.Watermark
-            (readText scopeId binding)
+            (readText audit scopeId binding)
             dataObjects
             spillDatasetId
             ttl
@@ -457,7 +732,7 @@ type VirtualDatasetReader
         materialise
             scopeId
             (watermarkText binding.Watermark)
-            (readBound scopeId binding)
+            (readBound audit scopeId binding)
             dataObjects
             spillDatasetId
             ttl

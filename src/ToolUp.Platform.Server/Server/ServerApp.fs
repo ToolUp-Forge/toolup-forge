@@ -4132,6 +4132,7 @@ module ServerApp =
                 match
                     AuditEventRegistry.build (
                         ToolUp.Platform.Audit.AuditLog.platformAuditRegistration
+                        :: AuditEventFamily.registration ToolUp.Platform.Infra.DataSourceQueryAudit.family
                         :: app.AuditEventRegistrations
                     )
                 with

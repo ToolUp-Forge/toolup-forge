@@ -2769,6 +2769,7 @@ module ModelExecutionPeerContract =
     /// disagree about which handler runs a call.
     let host (deps: ModelExecutionPeerDeps) (fusion: PeerJobFusion option) : PeerContractHost = {
         Registration = registration deps fusion
+        AnswerBounds = None
         JobHandlers =
             match fusion with
             | None -> []

@@ -627,8 +627,11 @@ let registerDataIngestion
             // Phase 1042 — with a delivery-completed hook registered, every
             // settled run is recorded into the delivery in progress; with
             // none, this is the ingestor unchanged.
+            // Every statement the ingestor sends to a source is recorded as
+            // a `DataSourceQueried` row in the deployment's audit log; with
+            // audit off, or no log registered, it records nothing.
             let ingestor =
-                DataIngestor.createWithReaders
+                DataIngestor.createAudited
                     configStoreInstance
                     secretStore
                     dataObjectStore
@@ -637,6 +640,9 @@ let registerDataIngestion
                     resolvedBlobStorage
                     resolvedLogger
                     payloadReaders
+                    (match sp.GetService(typeof<IAuditLog>) with
+                     | :? IAuditLog as audit -> audit
+                     | _ -> NoOpAuditLog() :> IAuditLog)
                 |> DeliveryCompleted.recording
                     (sp.GetServices<DeliveryCompleted.DeliveryCompletedHook>() |> List.ofSeq)
                     sp

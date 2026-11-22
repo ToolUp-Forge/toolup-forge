@@ -147,6 +147,31 @@ type GatedContractRegistration =
         match this with
         | Gated registration -> registration
 
+/// What the gate reads in one answer: a cohort the floor binds on, an
+/// opaque answer that declares what it is, a frame that carries no
+/// protected data, or something it cannot read and so withholds.
+///
+/// Internal on purpose. The declared readings take a contract's word for
+/// what an opaque answer is, so the only readers are the ones this
+/// assembly writes for its own wire shapes; a composition cannot hand the
+/// gate a reader that calls everything inert.
+[<RequireQualifiedAccess>]
+type internal GateReading =
+    /// A gate-checkable answer, released through the broker and the floor.
+    | Cohort of CohortResult
+    /// An opaque aggregate answer declaring the smallest cohort any figure
+    /// in it rests on. The floor binds on the declaration, as one cell.
+    | DeclaredAggregate of cohort: int
+    /// An opaque row-level answer that the template's own release terms,
+    /// which both parties approve, release. No cohort floor binds a row.
+    | DeclaredRows
+    /// An answer carrying no protected data: a refusal, a job handle, a
+    /// pending status or a description. Released; any reserved ε returns.
+    | Inert
+    /// Not readable as any of the above. Withheld, with this reason
+    /// recorded receiver-side.
+    | Unreadable of reason: string
+
 /// Wraps a peer contract's dispatch in its composed clean-room gate.
 [<RequireQualifiedAccess>]
 module CleanRoomGate =
@@ -276,7 +301,13 @@ module CleanRoomGate =
     ///     falling back to the raw answer when the budget runs out is
     ///     the one behaviour that would make the whole arrangement
     ///     worse than not having it.
-    let wrapNoised
+    ///
+    /// `read` is how the gate reads one answer. `wrapNoised` passes the
+    /// reader every contract shares — a `CohortResult` or nothing — and a
+    /// contract whose answers are opaque to forge passes its own, which
+    /// says what an answer declares about itself (see `GateReading`).
+    let internal wrapReading
+        (read: string -> string -> GateReading)
         (broker: ICleanRoomBroker)
         (template: CleanRoomTemplate)
         (approval: CleanRoomApprovalCheck option)
@@ -339,7 +370,7 @@ module CleanRoomGate =
                                     []
                                     $"method '{methodName}' is not on clean-room template '{template.TemplateId}'")
 
-                        return withheld template
+                        return withheld template, false
                     else
                         let! inner = registration.Dispatch context methodName argsJson
 
@@ -348,21 +379,77 @@ module CleanRoomGate =
                         // Nothing was produced, so there is nothing to gate
                         // and nothing to record — the host's own
                         // `PeerCallCompleted` row carries the outcome.
-                        | Error e -> return Error e
+                        | Error e -> return Error e, false
                         | Ok resultJson ->
                             // Invariant 2 — checkability.
-                            match tryParseCohort resultJson with
-                            | None ->
+                            match read methodName resultJson with
+                            | GateReading.Unreadable reason ->
+                                do! record sink (decision false [] reason)
+                                return withheld template, false
+                            | GateReading.Inert ->
+                                do! record sink (decision true [] "the answer carries no protected data")
+                                return Ok resultJson, false
+                            | GateReading.DeclaredRows
+                            | GateReading.DeclaredAggregate _ when noise.IsSome ->
+                                // An opaque answer has no cells to draw noise
+                                // into, so a noised composition releases none.
                                 do!
                                     record
                                         sink
                                         (decision
                                             false
                                             []
-                                            $"the answer is not a gate-checkable CohortResult, so template '{template.TemplateId}' could not be evaluated against it")
+                                            $"template '{template.TemplateId}' releases with calibrated noise, which an opaque answer cannot carry")
 
-                                return withheld template
-                            | Some cohort ->
+                                return withheld template, false
+                            | GateReading.DeclaredRows ->
+                                do!
+                                    record
+                                        sink
+                                        (decision
+                                            true
+                                            []
+                                            $"a row-level answer, released under the terms template '{template.TemplateId}' declares for '{methodName}'")
+
+                                return Ok resultJson, true
+                            | GateReading.DeclaredAggregate cohort ->
+                                // The floor binds on the declared cohort, through
+                                // the composed broker and invariant 3, as one cell.
+                                // A suppressed cell is the whole answer, so a
+                                // suppression withholds it; the bytes released are
+                                // the answer's own, never re-encoded.
+                                let declared = {
+                                    Shape = Aggregate
+                                    Cells = [
+                                        {
+                                            Label = methodName
+                                            Count = cohort
+                                            Value = None
+                                        }
+                                    ]
+                                }
+
+                                match broker.Enforce(template, methodName, None, declared) with
+                                | Released(released, []) when
+                                    PrivacyGate.isStricterOrEqual template.Floor (PrivacyGate.observed released)
+                                    ->
+                                    do! record sink (decision true [] "")
+                                    return Ok resultJson, true
+                                | Released(_, suppressedCells)
+                                | NoisedRelease(_, suppressedCells, _) ->
+                                    do!
+                                        record
+                                            sink
+                                            (decision
+                                                false
+                                                suppressedCells
+                                                $"the declared cohort of an opaque answer does not clear the floor of template '{template.TemplateId}'")
+
+                                    return withheld template, false
+                                | Withheld reason ->
+                                    do! record sink (decision false [] reason)
+                                    return withheld template, false
+                            | GateReading.Cohort cohort ->
                                 // The composed mechanism gets its say. The
                                 // requested gate is `None`: the peer wire
                                 // format carries no caller-supplied
@@ -374,7 +461,7 @@ module CleanRoomGate =
                                 match broker.Enforce(template, methodName, None, cohort) with
                                 | Withheld reason ->
                                     do! record sink (decision false [] reason)
-                                    return withheld template
+                                    return withheld template, false
                                 | NoisedRelease(_, suppressedCells, _) ->
                                     // Phase 481 — a broker that noised the
                                     // answer itself has left the substrate
@@ -392,7 +479,7 @@ module CleanRoomGate =
                                                 suppressedCells
                                                 $"the resolved ICleanRoomBroker returned an already-noised answer for template '{template.TemplateId}', which the substrate cannot check its floor against; compose an INoiseMechanism with PeerOptions.withNoisedRelease instead")
 
-                                    return withheld template
+                                    return withheld template, false
                                 | Released(released, suppressedCells) ->
                                     // Invariant 3 — release post-condition.
                                     // The seam is substitutable; the floor is
@@ -415,7 +502,7 @@ module CleanRoomGate =
                                         match final with
                                         | Released(answer, cells) ->
                                             do! record sink (decision true cells "")
-                                            return Ok(releasedJson answer cells)
+                                            return Ok(releasedJson answer cells), true
                                         | NoisedRelease(answer, cells, applied) ->
                                             // The calibration is recorded
                                             // receiver-side beside the
@@ -431,7 +518,7 @@ module CleanRoomGate =
                                                         cells
                                                         $"released with calibrated noise — {NoisedReleasePolicy.describe applied}")
 
-                                            return Ok(releasedJson answer cells)
+                                            return Ok(releasedJson answer cells), true
                                         | Withheld reason ->
                                             // Unreachable: `applyTo` never
                                             // withholds a `Released`. Kept
@@ -439,7 +526,7 @@ module CleanRoomGate =
                                             // a privacy gate's default
                                             // branch must be silence.
                                             do! record sink (decision false suppressedCells reason)
-                                            return withheld template
+                                            return withheld template, false
                                     else
                                         do!
                                             record
@@ -449,7 +536,7 @@ module CleanRoomGate =
                                                     suppressedCells
                                                     $"the resolved ICleanRoomBroker released an answer that does not clear the composed floor of template '{template.TemplateId}'; the substrate withheld it")
 
-                                        return withheld template
+                                        return withheld template, false
                 }
 
                 // Invariant 0.5 — the cumulative ε budget (Phase 190).
@@ -467,7 +554,9 @@ module CleanRoomGate =
                 // charged like any other refusal.
                 let metered () = async {
                     match budget with
-                    | None -> return! enforce ()
+                    | None ->
+                        let! outcome, _ = enforce ()
+                        return outcome
                     | Some meter ->
                         let scheduled =
                             PrivacyBudgetMeter.spendFor template.TemplateId context.Peer.PeerId methodName meter
@@ -517,9 +606,13 @@ module CleanRoomGate =
                                 // that shipped.
                                 ExceptionDispatchInfo.Capture(ex).Throw()
                                 return withheld template // unreachable; the throw above does not return
-                            | Choice1Of2 outcome ->
+                            | Choice1Of2(outcome, disclosed) ->
                                 let settlement =
                                     match outcome with
+                                    // An answer that carried no protected data
+                                    // (a refusal, a handle, a description)
+                                    // disclosed nothing, so nothing is owed.
+                                    | Ok _ when not disclosed -> SpendReturned "the answer carried no protected data"
                                     // Released: the ε stands.
                                     | Ok _ -> SpendCommitted
                                     // Withheld by the gate. The refusal
@@ -592,6 +685,27 @@ module CleanRoomGate =
             registration with
                 Dispatch = gatedDispatch
         }
+
+    /// Install `template`'s gate over a contract whose answers are
+    /// `CohortResult`s: any other answer is withheld. Every argument is as
+    /// `wrapReading` documents it.
+    let wrapNoised
+        (broker: ICleanRoomBroker)
+        (template: CleanRoomTemplate)
+        (approval: CleanRoomApprovalCheck option)
+        (budget: PrivacyBudgetMeter option)
+        (noise: (INoiseMechanism * NoisedReleasePolicy) option)
+        (sink: PeerCleanRoomDecisionPayload -> Async<unit>)
+        (registration: PeerContractRegistration)
+        : GatedContractRegistration =
+        let read _ (json: string) =
+            match tryParseCohort json with
+            | Some cohort -> GateReading.Cohort cohort
+            | None ->
+                GateReading.Unreadable
+                    $"the answer is not a gate-checkable CohortResult, so template '{template.TemplateId}' could not be evaluated against it"
+
+        wrapReading read broker template approval budget noise sink registration
 
     /// Phase 190 — install `template`'s gate with cumulative ε
     /// accounting and no calibrated noise. The pre-481 shape, preserved

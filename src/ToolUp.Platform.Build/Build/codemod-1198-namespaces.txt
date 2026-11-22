@@ -525,6 +525,7 @@ case ToolUp.Platform StaleWrite ToolUp.Platform.Compose
 case ToolUp.Platform Standard ToolUp.Platform.Compose
 case ToolUp.Platform StartEmpty ToolUp.Platform.Infra
 case ToolUp.Platform StateMismatch ToolUp.Platform.Infra
+case ToolUp.Platform StatementTextAuditRefused ToolUp.Platform.Infra
 case ToolUp.Platform StatementTextRefused ToolUp.Platform.Infra
 case ToolUp.Platform Stepped ToolUp.Platform.Infra
 case ToolUp.Platform Storage ToolUp.Platform.Compose
@@ -993,6 +994,7 @@ type ToolUp.Platform DataSourceCallContext ToolUp.Platform.Infra
 type ToolUp.Platform DataSourceConfigStore ToolUp.Platform.Infra
 type ToolUp.Platform DataSourceDelivery ToolUp.Platform.Infra
 type ToolUp.Platform DataSourceFromSettings ToolUp.Platform.Compose
+type ToolUp.Platform DataSourceQueryAudit ToolUp.Platform.Infra
 type ToolUp.Platform DataSourceSettingsReading ToolUp.Platform.Compose
 type ToolUp.Platform DataSourceSettingsRefusedException ToolUp.Platform.Compose
 type ToolUp.Platform DataSubjectRequestApiHandler ToolUp.Platform.Audit

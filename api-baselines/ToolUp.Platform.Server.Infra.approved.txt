@@ -691,10 +691,12 @@ ToolUp.Platform.Infra.DataIngestor (class)
 ToolUp.Platform.Infra.DataIngestor.DataIngestionSourceModule : System.String (literal)
 ToolUp.Platform.Infra.DataIngestor.MaxResultNameLength : System.Int32 (literal)
 ToolUp.Platform.Infra.DataIngestor.create(ToolUp.Platform.Infra.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : ToolUp.Platform.Infra.IDataIngestor
+ToolUp.Platform.Infra.DataIngestor.createAudited(ToolUp.Platform.Infra.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IPayloadReader], ToolUp.Platform.IAuditLog) : ToolUp.Platform.Infra.IDataIngestor
 ToolUp.Platform.Infra.DataIngestor.createWithReaders(ToolUp.Platform.Infra.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IPayloadReader]) : ToolUp.Platform.Infra.IDataIngestor
 ToolUp.Platform.Infra.DataIngestor+DataIngestor (class)
 ToolUp.Platform.Infra.DataIngestor+DataIngestor..ctor(ToolUp.Platform.Infra.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger)
 ToolUp.Platform.Infra.DataIngestor+DataIngestor..ctor(ToolUp.Platform.Infra.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IPayloadReader])
+ToolUp.Platform.Infra.DataIngestor+DataIngestor..ctor(ToolUp.Platform.Infra.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.Infra.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.IPayloadReader], ToolUp.Platform.IAuditLog)
 ToolUp.Platform.Infra.DataObjectStore (class)
 ToolUp.Platform.Infra.DataObjectStore.containerFor(System.String) : System.String
 ToolUp.Platform.Infra.DataObjectStore.listOrphanedContent(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Infra.DataObjectStore+OrphanedContentBlob]]
@@ -754,6 +756,22 @@ ToolUp.Platform.Infra.DataSourceDelivery+Watched.principal : System.String { get
 ToolUp.Platform.Infra.DataSourceDeliveryModule (class)
 ToolUp.Platform.Infra.DataSourceDeliveryModule.principal(ToolUp.Platform.Infra.DataSourceDelivery) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.Infra.DataSourceDeliveryModule.token(ToolUp.Platform.Infra.DataSourceDelivery) : System.String
+ToolUp.Platform.Infra.DataSourceQueryAudit (class)
+ToolUp.Platform.Infra.DataSourceQueryAudit.StatementTextAuditRefused : System.String (literal)
+ToolUp.Platform.Infra.DataSourceQueryAudit.event(ToolUp.Platform.DataSourceQueriedPayload) : ToolUp.Platform.AuditEvent
+ToolUp.Platform.Infra.DataSourceQueryAudit.failureOf(ToolUp.Platform.IngestionError) : System.String
+ToolUp.Platform.Infra.DataSourceQueryAudit.family : ToolUp.Platform.AuditEventFamily`1[ToolUp.Platform.DataSourceAuditEvent] { get }
+ToolUp.Platform.Infra.DataSourceQueryAudit.ofBound(ToolUp.Platform.BoundStatement) : ToolUp.Platform.Infra.DataSourceQueryAudit+Statement
+ToolUp.Platform.Infra.DataSourceQueryAudit.ofText(System.String) : ToolUp.Platform.Infra.DataSourceQueryAudit+Statement
+ToolUp.Platform.Infra.DataSourceQueryAudit.payload(ToolUp.Platform.DataSourceConfig, System.String, System.Boolean, ToolUp.Platform.Infra.DataSourceQueryAudit+Statement, Microsoft.FSharp.Core.FSharpOption`1[System.Byte[]], Microsoft.FSharp.Core.FSharpOption`1[System.Int64], ToolUp.Platform.DataSourceQueryOutcome) : ToolUp.Platform.DataSourceQueriedPayload
+ToolUp.Platform.Infra.DataSourceQueryAudit.record(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.AuditSubject, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DataSourceQueriedPayload]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.AuditWriteError]]
+ToolUp.Platform.Infra.DataSourceQueryAudit.statementHash(System.String) : System.String
+ToolUp.Platform.Infra.DataSourceQueryAudit.tryRead(ToolUp.Platform.AuditEvent) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceQueriedPayload]
+ToolUp.Platform.Infra.DataSourceQueryAudit+Statement (class)
+ToolUp.Platform.Infra.DataSourceQueryAudit+Statement..ctor(ToolUp.Platform.DataSourceStatementForm, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceQueryParameter])
+ToolUp.Platform.Infra.DataSourceQueryAudit+Statement.Form : ToolUp.Platform.DataSourceStatementForm { get }
+ToolUp.Platform.Infra.DataSourceQueryAudit+Statement.Parameters : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceQueryParameter] { get }
+ToolUp.Platform.Infra.DataSourceQueryAudit+Statement.Text : System.String { get }
 ToolUp.Platform.Infra.DataVocabulary (class)
 ToolUp.Platform.Infra.DataVocabulary.hash(ToolUp.Platform.DataVocabularyPack) : System.String
 ToolUp.Platform.Infra.DataVocabulary.load(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DataVocabularyPack, System.String]
@@ -3782,6 +3800,7 @@ ToolUp.Platform.Infra.VirtualBindingRefusal.IsNullWatermark : System.Boolean { g
 ToolUp.Platform.Infra.VirtualBindingRefusal.IsPolicyUnreadable : System.Boolean { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal.IsRefused : System.Boolean { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal.IsReservedParameter : System.Boolean { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal.IsStatementTextAuditRefused : System.Boolean { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal.IsStatementTextRefused : System.Boolean { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal.NullWatermark : ToolUp.Platform.Infra.VirtualBindingRefusal { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal.ReservedParameter : ToolUp.Platform.Infra.VirtualBindingRefusal { get }
@@ -3792,6 +3811,8 @@ ToolUp.Platform.Infra.VirtualBindingRefusal+PolicyUnreadable (class)
 ToolUp.Platform.Infra.VirtualBindingRefusal+PolicyUnreadable.reason : System.String { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal+Refused (class)
 ToolUp.Platform.Infra.VirtualBindingRefusal+Refused.Item : ToolUp.Platform.BindingRefusal { get }
+ToolUp.Platform.Infra.VirtualBindingRefusal+StatementTextAuditRefused (class)
+ToolUp.Platform.Infra.VirtualBindingRefusal+StatementTextAuditRefused.reason : System.String { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal+StatementTextRefused (class)
 ToolUp.Platform.Infra.VirtualBindingRefusal+StatementTextRefused.sourceId : System.String { get }
 ToolUp.Platform.Infra.VirtualBindingRefusal+Tags (class)
@@ -3800,11 +3821,13 @@ ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.NullWatermark : System.Int32 (l
 ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.PolicyUnreadable : System.Int32 (literal)
 ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.Refused : System.Int32 (literal)
 ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.ReservedParameter : System.Int32 (literal)
+ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.StatementTextAuditRefused : System.Int32 (literal)
 ToolUp.Platform.Infra.VirtualBindingRefusal+Tags.StatementTextRefused : System.Int32 (literal)
 ToolUp.Platform.Infra.VirtualBindingRefusalModule (class)
 ToolUp.Platform.Infra.VirtualBindingRefusalModule.describe(ToolUp.Platform.Infra.VirtualBindingRefusal) : System.String
 ToolUp.Platform.Infra.VirtualDatasetReader (class)
 ToolUp.Platform.Infra.VirtualDatasetReader..ctor(ToolUp.Platform.Infra.IDataSource, ToolUp.Platform.Infra.IDatasetCodec, ToolUp.Platform.DatasetSchema, ToolUp.Platform.DataSourceConfig)
+ToolUp.Platform.Infra.VirtualDatasetReader..ctor(ToolUp.Platform.Infra.IDataSource, ToolUp.Platform.Infra.IDatasetCodec, ToolUp.Platform.DatasetSchema, ToolUp.Platform.DataSourceConfig, ToolUp.Platform.IAuditLog, ToolUp.Platform.AuditSubject)
 ToolUp.Platform.Infra.VirtualDatasetReader.Bind(System.String, ToolUp.Platform.BoundVirtualBinding) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.Infra.VirtualDatasetReader.Bind(System.String, ToolUp.Platform.VirtualBinding) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.Infra.VirtualDatasetReader.Define(ToolUp.Platform.BoundVirtualBinding) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Infra.VirtualBindingRefusal]
