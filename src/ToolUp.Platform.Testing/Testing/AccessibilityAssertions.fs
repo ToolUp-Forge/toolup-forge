@@ -391,8 +391,10 @@ module Accessibility =
     /// Collapse runs of whitespace to single spaces and trim — the
     /// normalisation an assistive technology applies before announcing a
     /// computed name. Hand-rolled over the whitespace set rather than a
-    /// regex, per this file's BCL-only / Fable-safe posture.
-    let private normaliseName (value: string) =
+    /// regex, per this file's BCL-only / Fable-safe posture. Public so a
+    /// reader that computes names its own way (`TreeViewParity`) normalises
+    /// them exactly as this one does.
+    let normaliseName (value: string) =
         let sb = System.Text.StringBuilder()
         let mutable pendingSpace = false
 
@@ -527,14 +529,18 @@ module Accessibility =
     /// `A11yError` — an `input` (other than `hidden` / the button-like
     /// types) / `select` / `textarea` with no label: no `aria-label`,
     /// no `aria-labelledby`, no `title`, no wrapping `<label>`, and no
-    /// `<label for="…">` anywhere in the tree pointing at its `id`.
+    /// `<label for="…">` anywhere in the tree pointing at its `id`. A
+    /// `<label>` counts only when it has text: an empty one is present in
+    /// the markup and names nothing.
     let everyControlHasLabel (root: A11yNode) : A11yFinding list =
         let all = elements root
 
+        let labels =
+            all |> List.filter (fun e -> e.Tag = "label" && hasVisibleText e.Children)
+
         // Ids claimed by a `<label for="…">` anywhere in the tree.
         let labelledIds =
-            all
-            |> List.filter (fun e -> e.Tag = "label")
+            labels
             |> List.choose (fun e -> attr "for" e.Attrs)
             |> List.filter (fun v -> v <> "")
             |> Set.ofList
@@ -542,10 +548,7 @@ module Accessibility =
         // Paths whose ancestor chain includes a `<label>` — the
         // "wrapping label" form. Path prefixes are a faithful proxy for
         // ancestry because `elements` builds them by descent.
-        let labelPrefixes =
-            all
-            |> List.filter (fun e -> e.Tag = "label")
-            |> List.map (fun e -> e.Path + " > ")
+        let labelPrefixes = labels |> List.map (fun e -> e.Path + " > ")
 
         [
             for e in all do
