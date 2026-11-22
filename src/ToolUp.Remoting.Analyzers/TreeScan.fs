@@ -270,6 +270,7 @@ module TreeScan =
             Error first
         else
             ContainmentRules.analyze result.ParseTree
+            @ KeptListIndexAnalyzer.analyze result.ParseTree
             |> List.map (fun f -> f.Code, f.Range.StartLine)
             |> Ok
 

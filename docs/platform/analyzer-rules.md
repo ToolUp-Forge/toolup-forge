@@ -14,6 +14,7 @@ The `ToolUp.Remoting.Analyzers` package is the SDK's static analyser rule set: [
 | `TUA001` | Container resolution outside service registration | Warning | 0.28.0 |
 | `TUA002` | `HttpClient` constructed without the platform egress handler | Warning | 0.28.0 |
 | `TUA003` | `Async.RunSynchronously` outside a program entry point | Warning | 0.28.0 |
+| `TUA004` | A message over a kept or tree-built list that carries the enumeration index | Warning | 0.43.0 |
 
 ### TUR0001 — Remoting API method without an authorisation classification
 
@@ -62,6 +63,14 @@ The `ToolUp.Remoting.Analyzers` package is the SDK's static analyser rule set: [
 - **Rationale:** Blocking a thread-pool thread on an asynchronous computation starves the pool under load and turns a slow dependency into a stalled server; on a request path it is never correct.
 - **Sanctioned alternative:** Stay asynchronous: compose with `let!` / `do!` in an `async` or `task` expression and return the computation. Blocking is sanctioned only inside an `[<EntryPoint>]` function.
 - **Runtime half:** None: a blocked request thread has no runtime refusal, which is why this rule exists.
+
+### TUA004 — A message over a kept or tree-built list that carries the enumeration index
+
+- **Severity:** Warning
+- **Since:** 0.43.0
+- **Rationale:** A row's message is read by `update` against the model current when it arrives, not the one the row was built from, so a position names whichever row sits there by then. Over a `Keep` the index also costs the keep: a key carrying it (`Keep.list rows (List.indexed model.Rows)`) is a new object on every render, so every row is rebuilt on every dispatch and nothing is kept. The rule reads syntax: it reports an upper-case application (`Bump i`) naming an index bound by `mapi` / `iteri`, a tuple over `indexed`, a `for i in a .. b` loop, or an `int` component of a `Keep.create` build, inside a `Keep.create` build or a lambda or loop that builds a tree (`Nodes.*`, `Fuaran.*`, `Keep.*`).
+- **Sanctioned alternative:** Carry the row's identity in the message (`Bump row.Id`), have `update` find the row by that id, and key the `Keep` on the row itself (`Keep.list rowKeep model.Rows`). The index may still name a node (`Nodes.Ids.keyed`) only where the row has no identity of its own, and never a message.
+- **Runtime half:** None: the wrong row is updated, or none, and nothing refuses it, which is why this rule exists.
 
 ## Wiring the analysers into a consumer project
 
