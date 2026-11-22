@@ -449,7 +449,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: ${{ vars.FEDERATION_SPEC_REPO }}
-          ref: 480c03b2ca74e8493bfbb1e005fb30293f4c7078
+          ref: 985c5d60673928df89c34bb8cea1ff4e647ab7cb
           token: ${{ steps.spec-token.outputs.token }}
           path: fuaran-federation-spec
           persist-credentials: false
