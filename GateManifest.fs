@@ -154,6 +154,15 @@ let private preflight (row: GateLeg<Lane>) = {
         Lanes = Set.add Lane.Preflight row.Lanes
 }
 
+/// The row also runs in the `prose` lane (`docs/platform/testing-conventions.md`,
+/// "The `prose` lane"): it opens forge's prose. A Platform-family pack runs
+/// there only its lists in `TestLane.Lists.proseNames`; any other row runs
+/// whole. `proseFindings` holds the lane to the paths it covers.
+let private prose (row: GateLeg<Lane>) = {
+    row with
+        Lanes = Set.add Lane.Prose row.Lanes
+}
+
 let private also (site: Site) (row: GateLeg<Lane>) = {
     row with
         Where = Set.add site row.Where
@@ -285,6 +294,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
         ([ Input.Tree; Input.Git; Input.Docker ] @ platformEnv)
     |> seed (minutes 15.)
+    |> prose
     // The Platform pack partitioned by server part: each part's pack holds the
     // lists whose test files reach that part and no later one, and references
     // only the part's closure (docs/migrations/1194-platform-pack-partition.md).
@@ -305,6 +315,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "TOOLUP_TEST_AGE_CONNSTRING"
          ])
     |> seed (minutes 2.)
+    |> prose
     pack "Platform.Infra" "src/ToolUp.Platform.Tests.Infra/ToolUp.Platform.Tests.Infra.fsproj" [ Input.Tree ]
     |> seed (seconds 20.)
     pack
@@ -351,6 +362,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "Build"
         "src/ToolUp.Platform.Build.Tests/ToolUp.Platform.Build.Tests.fsproj"
         ([ Input.Tree; Input.Git ] @ env [ "TOOLUP_APPROVE"; "TOOLUP_APPROVE_API" ])
+    |> prose
     pack "RemotingAnalyzers" "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj" [ Input.Tree ]
     pack
         "Cli"
@@ -410,7 +422,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         "ReportingHtmlPdf"
         "src/Reporting/HtmlPdf.Tests/ToolUp.Reporting.HtmlPdf.Tests.fsproj"
         ([ Input.Tree; Input.Browser ] @ env [ "PLAYWRIGHT_BROWSERS_PATH" ])
-    // Phase 1197 — a companion family's tests beside the family, building
+    // A companion family's tests beside the family, building
     // against its closure and hosting the contract packs it conforms to.
     pack "Webhooks" "src/Webhooks/ToolUp.Webhooks.Tests/ToolUp.Webhooks.Tests.fsproj" []
     pack "JobSchedulers" "src/JobSchedulers/ToolUp.JobSchedulers.Tests/ToolUp.JobSchedulers.Tests.fsproj" [ Input.Tree ]
@@ -487,6 +499,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     |> preflight
     leg "FuaranCoResolution" b.FuaranCoResolution readingLanes [ Input.Tree ]
     |> preflight
+    |> prose
     // Restores the published Fuaran.UI from nuget.org and Fable-compiles
     // the fact tier beside it: the full lane only.
     leg "FuaranCoBuild" b.FuaranCoBuild (set [ Lane.Full ]) [ Input.Tree; Input.Node; Input.Network ]
@@ -829,7 +842,9 @@ let stepReads: (string * string list) list = [
 /// `VerifyAll` runs in the full lane, and that row reads the tree.
 let rowReads: (string * string list) list = [
     // The fitness sweeps enumerate the checkout through
-    // `git ls-files --exclude-standard`, which reads every ignore file.
+    // `git ls-files --exclude-standard`, which reads every ignore file, and
+    // open only F# sources and project files. The documents are the ones the
+    // `prose` lane's lists of this pack open (`proseListReads`).
     "Platform",
     [
         ".gitignore"
@@ -838,7 +853,15 @@ let rowReads: (string * string list) list = [
         "api-baselines/**"
         "composition-baselines/**"
         "dev-scripts/merge-baselines.ps1"
-        "docs/**"
+        "docs/interplatform/cross-runtime/**"
+        "docs/operations/env-vars.md"
+        "docs/platform/events.md"
+        "docs/platform/remoting-decoder-algebra.md"
+        "docs/platform/trust-boundaries.md"
+        "docs/rag/api-reference.md"
+        "docs/reference/audit-event-reference.md"
+        "docs/reference/config-reference.md"
+        "docs/reference/toolup.config.schema.json"
         "projections.json"
         "samples/**"
         "spec/**"
@@ -857,7 +880,7 @@ let rowReads: (string * string list) list = [
         "samples/**"
         "spec/**"
     ]
-    "Platform.PublicApi", [ "api-baselines/**"; "docs/platform/deprecation-policy.md" ]
+    "Platform.PublicApi", [ "api-baselines/**" ]
     "Build",
     [
         ".github/workflows/checks.yml"
@@ -869,7 +892,6 @@ let rowReads: (string * string list) list = [
         "dev-scripts/cwv-budget-gate.ps1"
         "dev-scripts/perf-budget-gate.ps1"
         "docs/migrations/**"
-        "docs/platform/open-core-boundary.md"
         "feliz-census.json"
         "fuaran-ui-floors.json"
         "perf-budgets.json"
@@ -879,6 +901,8 @@ let rowReads: (string * string list) list = [
         "v1-readiness.json"
         "version-groups.json"
     ]
+    // The declared Fuaran leads it holds the floors against.
+    "FuaranCoResolution", [ "docs/platform/open-core-boundary.md" ]
     "Samples", [ "samples/**" ]
 ]
 
@@ -901,6 +925,8 @@ let notRead: (string * string) list = [
     "named by the template gates (CI-only rows) and by fixture literals in AffectedLaneTests and PublishedSmokeTests; no leg VerifyAll runs opens a template's own"
     "templates/*/.config/dotnet-tools.json",
     "named by the template gates (CI-only rows); the gate restores the root tool manifest only"
+    "templates/*/run.ps1",
+    "file-name literal: dotnetDefault here names the root run.ps1, a default input; a template's own is its scaffold's entry point, which no leg VerifyAll runs opens"
     "templates/*/compose.yml", "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
     "templates/**/vite.config.mts",
     "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
@@ -992,12 +1018,201 @@ let gateReads () : string list =
     |> List.filter (fun p -> not (all |> List.exists (fun s -> s <> p && s.Contains "*" && specCovers s p)))
     |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
 
+/// The paths the landing tooling treats as gate inputs for any repository
+/// that carries the record, before the record's own `reads`: sources,
+/// tests, proofs, every build and project file, the tool manifest under
+/// `.config/`, the formatter's configuration and the gate script. The census
+/// asks only about files outside it, and the `prose` lane never covers a
+/// path inside it. A spec missing here makes the census stricter and the
+/// `prose` lane looser, so the copy errs wide.
+let dotnetDefault = [
+    "src/**"
+    "tests/**"
+    "proofs/**"
+    ".config/**"
+    "*.slnx"
+    "**/*.slnx"
+    "*.sln"
+    "**/*.sln"
+    "*.fsproj"
+    "**/*.fsproj"
+    "*.csproj"
+    "**/*.csproj"
+    "*.props"
+    "**/*.props"
+    "*.targets"
+    "**/*.targets"
+    "*.fs"
+    "**/*.fs"
+    "*.fsi"
+    "**/*.fsi"
+    "*.fsx"
+    "**/*.fsx"
+    "*.cs"
+    "**/*.cs"
+    "**/packages.lock.json"
+    "global.json"
+    "nuget.config"
+    "NuGet.config"
+    "NuGet.Config"
+    ".editorconfig"
+    "**/.editorconfig"
+    ".fantomasignore"
+    ".gitattributes"
+    "verify.ps1"
+    "run.ps1"
+    GateReadsFile
+]
+
+// ─── The `prose` lane: what it runs and what it covers ───────────────
+//
+// A commit that changes only forge's prose is held to the rows that open
+// prose: `verify.ps1`'s steps (the build packs the root README), the
+// Platform family's lists that read a document, the Build pack and the
+// `FuaranCoResolution` leg. `proseCovers` is what the lane covers, and
+// `proseFindings` refuses a cover that a row outside the lane also reads,
+// so the lane's verdict over a covered path is the full lane's.
+
+/// The paths of `reads` the `prose` lane covers: a commit touching only
+/// these (and no `.NET` default input) is judged by the prose rows alone.
+/// `samples/**` is not one: the `Samples` leg builds every sample from it.
+let proseCovers = [
+    "CHANGELOG.md"
+    "CLAUDE.md"
+    "CONTRIBUTING.md"
+    "DRAFT-NOTES.md"
+    "README.md"
+    "SECURITY.md"
+    "docs/**"
+]
+
+/// What each list of `TestLane.Lists.proseNames` opens, from its row's
+/// `rowReads`. A Platform-family pack runs only these lists in the lane, so
+/// its other reads are outside the lane.
+let proseListReads: (string * string list) list = [
+    "Platform/ToolUp.Platform.Tests.InProcess.AuditEventRegistryTests.tests",
+    [ "docs/platform/events.md"; "docs/reference/audit-event-reference.md" ]
+    "Platform/ToolUp.Platform.Tests.InProcess.BaselineMergeDriverTests.tests", [ "DRAFT-NOTES.md" ]
+    "Platform/ToolUp.Platform.Tests.InProcess.ConfigReferenceTests.tests",
+    [
+        "docs/operations/env-vars.md"
+        "docs/reference/config-reference.md"
+        "docs/reference/toolup.config.schema.json"
+    ]
+    "Platform/ToolUp.Platform.Tests.InProcess.CrossRuntimeFederationConformanceTests.tests",
+    [ "docs/interplatform/cross-runtime/**" ]
+    "Platform/ToolUp.Platform.Tests.InProcess.SparseIndexCompositionTests.tests", [ "docs/rag/api-reference.md" ]
+    "Platform/ToolUp.Platform.Tests.InProcess.TrustBoundaryTests.tests",
+    [
+        "docs/platform/remoting-decoder-algebra.md"
+        "docs/platform/trust-boundaries.md"
+    ]
+    "Platform.Remoting/ToolUp.Platform.Tests.InProcess.OpenCoreVocabularyNeutralityTests.tests",
+    [ "CONTRIBUTING.md"; "README.md"; "SECURITY.md"; "docs/**"; "samples/**" ]
+]
+
+let private rowOfList (unit': string) = unit'.Substring(0, unit'.IndexOf '/')
+
+/// The `prose` lane's units in the record's vocabulary: `<row>/<list>` for a
+/// list of a Platform-family pack, the bare row name for a row it runs whole.
+let proseUnits (rows: GateLeg<Lane> list) : string list =
+    let filtered = TestLane.Lists.proseNames |> List.map rowOfList |> set
+
+    TestLane.Lists.proseNames
+    @ (localRows rows
+       |> List.filter (fun r -> Set.contains Lane.Prose r.Lanes && not (filtered.Contains r.Name))
+       |> List.map _.Name)
+
+/// The reads of `row` the `prose` lane does not run: none for a row it runs
+/// whole, the reads no kept list opens for a Platform-family pack, and every
+/// read of a row outside the lane.
+let private outsideProse (row: GateLeg<Lane>) (reads: string list) : string list =
+    let lists = proseListReads |> List.filter (fun (u, _) -> rowOfList u = row.Name)
+
+    if not (Set.contains Lane.Prose row.Lanes) then
+        reads
+    elif lists.IsEmpty then
+        []
+    else
+        let kept = lists |> List.collect snd
+        reads |> List.filter (fun r -> not (List.contains r kept))
+
+let private overlaps (a: string) (b: string) = specCovers a b || specCovers b a
+
+/// Why the `prose` lane is not sound: a cover that is not in `reads`, a
+/// cover a read outside the lane overlaps, a list named on one side of the
+/// lane's two declarations and not the other, a list's read its row does
+/// not declare, and a lane row of the Platform family that keeps no list.
+/// Empty when the lane's verdict over every covered path is the full lane's.
+let proseFindings (rows: GateLeg<Lane> list) : string list = [
+    let local = localRows rows
+    let reads = gateReads ()
+
+    let rowReadsOf name =
+        rowReads
+        |> List.tryFind (fst >> (=) name)
+        |> Option.map snd
+        |> Option.defaultValue []
+
+    for c in proseCovers do
+        if not (reads |> List.exists (fun r -> specCovers r c)) then
+            sprintf "proseCovers names `%s`, which reads does not cover; the lane covers only what the gate reads" c
+
+        for row in local do
+            for r in outsideProse row (rowReadsOf row.Name) do
+                if overlaps c r then
+                    sprintf
+                        "proseCovers names `%s`, but row `%s` reads `%s` and the prose lane does not run that read"
+                        c
+                        row.Name
+                        r
+
+    let named = TestLane.Lists.proseNames |> set
+    let declared = proseListReads |> List.map fst |> set
+
+    for n in Set.difference named declared do
+        sprintf "TestLane.Lists.proseNames keeps `%s`, which proseListReads does not declare" n
+
+    for n in Set.difference declared named do
+        sprintf "proseListReads declares `%s`, which TestLane.Lists.proseNames does not keep" n
+
+    for u, opened in proseListReads do
+        let row = rowOfList u
+
+        match local |> List.tryFind (fun r -> r.Name = row) with
+        | None -> sprintf "proseListReads names `%s`, whose row `%s` VerifyAll does not run" u row
+        | Some r when not (Set.contains Lane.Prose r.Lanes) ->
+            sprintf "proseListReads names `%s`, whose row `%s` is not in the prose lane" u row
+        | Some _ ->
+            for o in opened do
+                if not (List.contains o (rowReadsOf row)) then
+                    sprintf "proseListReads says `%s` opens `%s`, which rowReads does not declare for `%s`" u o row
+]
+
+/// Why the `prose` lane may not stand for a change to `paths`
+/// (repository-relative): each path that is a `.NET` default input, or is
+/// under a `reads` entry the lane does not cover. A path under a cover is the
+/// lane's; a path under nothing the gate reads is gate-inert, and no lane is
+/// owed for it. Empty when the lane stands for every path.
+let proseRefusals (paths: string list) : string list = [
+    let outside =
+        gateReads () |> List.filter (fun r -> not (List.contains r proseCovers))
+
+    for p in paths do
+        match dotnetDefault |> List.tryFind (fun s -> specCovers s p) with
+        | Some s -> sprintf "%s is a .NET default input (%s): the full lane gates it" p s
+        | None ->
+            match outside |> List.tryFind (fun s -> specCovers s p) with
+            | Some s -> sprintf "%s is under `%s`, which rows outside the prose lane read" p s
+            | None -> ()
+]
+
 let private jsonString (s: string) =
     "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""
 
 /// Why the record exists, as its `_` member says it.
 let private gateReadsNote =
-    "GENERATED by `dotnet run --project Build.fsproj -- Gate --render` from GateManifest.fs (stepReads, rowReads, notRead, builds, notBuilt); do not edit by hand. reads: the non-code files the gate verify.ps1 runs reads beyond the .NET default (sources, tests, proofs, build and project files, the formatter configuration, the gate script); a commit touching nothing in the union is gate-inert. Checked by GateReadsCensusTests. CI-only rows are not the gate a landing re-runs, so their reads are not here. No row sweeps the whole tracked set: the publication-boundary sweep reads docs/**, samples/** and the root README, CONTRIBUTING and SECURITY, so it records those rather than **. builds: what the gate builds (the solution, the driver, and each sample the Samples leg builds); notBuilt: each tracked project it deliberately does not build, with why. Checked by GateReadsCensusTests against every tracked project. landingAnnouncements: false, because this repository's origin is public and takes no landing-announcement refs."
+    "GENERATED by `dotnet run --project Build.fsproj -- Gate --render` from GateManifest.fs (stepReads, rowReads, notRead, proseCovers, the prose lane's rows and lists, builds, notBuilt); do not edit by hand. reads: the non-code files the gate verify.ps1 runs reads beyond the .NET default (sources, tests, proofs, build and project files, the formatter configuration, the gate script); a commit touching nothing in the union is gate-inert. Checked by GateReadsCensusTests. CI-only rows are not the gate a landing re-runs, so their reads are not here. No row sweeps the whole tracked set: the publication-boundary sweep reads docs/**, samples/** and the root README, CONTRIBUTING and SECURITY, so it records those rather than **. builds: what the gate builds (the solution, the driver, and each sample the Samples leg builds); notBuilt: each tracked project it deliberately does not build, with why. Checked by GateReadsCensusTests against every tracked project. lanes: each lane narrower than the full one that can stand for a change, with the env that selects it, the reads entries it covers and the units it runs (<row>/<list> for a list of a Platform-family pack, a bare row name for a row run whole); a change is the lane's when no path is a .NET default input or under a reads entry the lane does not cover. Informational until the landing tooling admits a selected lane under a declared policy; the full lane is the gate. landingAnnouncements: false, because this repository's origin is public and takes no landing-announcement refs."
 
 /// Does this repository take landing announcements? A landing tool that
 /// announces an in-flight landing does so by publishing a ref on the
@@ -1027,6 +1242,22 @@ let renderGateReads () : string =
         "  \"notRead\": ["
         reasoned notRead
         "  ],"
+        "  \"lanes\": ["
+        "    {"
+        sprintf "      \"lane\": %s," (jsonString (TestLane.name Lane.Prose))
+        sprintf "      \"env\": %s," (jsonString (TestLane.VariableName + "=" + TestLane.name Lane.Prose))
+        "      \"covers\": ["
+        proseCovers
+        |> List.map (fun p -> "        " + jsonString p)
+        |> String.concat ",\n"
+        "      ],"
+        "      \"units\": ["
+        proseUnits (rows unbound)
+        |> List.map (fun u -> "        " + jsonString u)
+        |> String.concat ",\n"
+        "      ]"
+        "    }"
+        "  ],"
         "  \"builds\": ["
         paths builds
         "  ],"
@@ -1054,6 +1285,8 @@ let gateReadsFindings (rows: GateLeg<Lane> list) (recordText: string option) : s
         | true, Some row when not (List.contains Input.Tree row.Reads) ->
             sprintf "row `%s` declares file reads in rowReads but its `Reads` does not name the tree" name
         | _ -> ()
+
+    yield! proseFindings rows
 
     match recordText with
     | None -> sprintf "%s is absent; `Gate --render` writes it" GateReadsFile

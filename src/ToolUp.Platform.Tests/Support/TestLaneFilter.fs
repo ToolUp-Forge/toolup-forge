@@ -258,7 +258,8 @@ let droppedIn
     // check alone), and a pack it selects runs whole.
     | TestLane.Lane.Preflight -> []
     | TestLane.Lane.Fast -> declaration.Slow
-    | TestLane.Lane.Affected ->
+    | TestLane.Lane.Affected
+    | TestLane.Lane.Prose ->
         match keep with
         | Some k -> k.Skipped
         | None -> []

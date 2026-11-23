@@ -70,6 +70,13 @@ type Lane =
     /// before a push and before a landing claims the full lane; never
     /// citable as the gate.
     | Preflight
+    /// The rows that open forge's prose and nothing else: `verify.ps1`'s
+    /// steps, the Platform family's lists that read a document
+    /// (`Lists.prose`), the Build pack and the `FuaranCoResolution` leg.
+    /// Minutes. It refuses to run for a change outside the paths it covers
+    /// (`GateManifest.proseRefusals`), and it is not citable as the gate
+    /// until the plane admits a selected lane under a declared policy.
+    | Prose
 
 /// The variable this module reads. Named once so a caller reporting it
 /// (a warning, a `--help` line, a recorded gate command) cannot misspell
@@ -85,11 +92,12 @@ let name (lane: Lane) =
     | Lane.Affected -> "affected"
     | Lane.Full -> "full"
     | Lane.Preflight -> "preflight"
+    | Lane.Prose -> "prose"
 
 /// Every accepted spelling, for an error message that tells the reader
 /// what to type instead of only that they were wrong.
 let accepted =
-    [ Lane.Pure; Lane.Fast; Lane.Affected; Lane.Full; Lane.Preflight ]
+    [ Lane.Pure; Lane.Fast; Lane.Affected; Lane.Full; Lane.Preflight; Lane.Prose ]
     |> List.map name
 
 /// Parse one variable value. Unset / empty is `Full` — the default lane
@@ -110,6 +118,7 @@ let parse (raw: string) : Result<Lane, string> =
     | "affected" -> Ok Lane.Affected
     | "full" -> Ok Lane.Full
     | "preflight" -> Ok Lane.Preflight
+    | "prose" -> Ok Lane.Prose
     | other -> Error other
 
 /// The lane this process runs, read once. Module-level, so the variable
@@ -139,6 +148,12 @@ let announce (whatWasExcluded: string) =
 /// The variable naming the `affected` lane's lists file.
 [<Literal>]
 let ListsVariableName = "TOOLUP_TEST_LISTS"
+
+/// The variable naming the commit the `prose` lane measures the change
+/// from. Unset, it is `origin/main`: the change is everything since the
+/// merge base with it, committed or not.
+[<Literal>]
+let ProseBaseVariableName = "TOOLUP_PROSE_BASE"
 
 /// The lists file: one top-level list of the Platform family per line, by
 /// its label or by the binding a pack's `Program.fs` registers, qualified
@@ -266,6 +281,44 @@ module Lists =
                         ListsVariableName
                         path
                 )
+
+    /// The Platform family's lists that open forge's prose, each qualified by
+    /// the pack that holds it: the lists the `prose` lane keeps. Every other
+    /// list of those packs reads no prose (`GateReadsCensusTests` holds the
+    /// family's sources to that), and `GateManifest.proseUnits` records what
+    /// each of these opens.
+    let proseNames = [
+        "Platform/ToolUp.Platform.Tests.InProcess.AuditEventRegistryTests.tests"
+        "Platform/ToolUp.Platform.Tests.InProcess.BaselineMergeDriverTests.tests"
+        "Platform/ToolUp.Platform.Tests.InProcess.ConfigReferenceTests.tests"
+        "Platform/ToolUp.Platform.Tests.InProcess.CrossRuntimeFederationConformanceTests.tests"
+        "Platform/ToolUp.Platform.Tests.InProcess.SparseIndexCompositionTests.tests"
+        "Platform/ToolUp.Platform.Tests.InProcess.TrustBoundaryTests.tests"
+        "Platform.Remoting/ToolUp.Platform.Tests.InProcess.OpenCoreVocabularyNeutralityTests.tests"
+    ]
+
+    /// The lists a lane names for the Platform family, read the way the pack
+    /// reads them: the `affected` lane's file, the `prose` lane's declared
+    /// lists, and `None` in a lane that runs each pack's lists whole or by its
+    /// own declaration.
+    let forLane (lane: Lane) : Result<string * File, string> option =
+        match lane with
+        | Lane.Affected -> Some(read ())
+        | Lane.Prose ->
+            Some(
+                Ok(
+                    "the prose lane's declared lists",
+                    {
+                        Manifest = None
+                        Everything = false
+                        Names = proseNames
+                    }
+                )
+            )
+        | Lane.Pure
+        | Lane.Fast
+        | Lane.Full
+        | Lane.Preflight -> None
 
 /// What `Select` computes: the affected lane's unit set over a
 /// diff, by source, with the forcing paths that turn it into the full lane

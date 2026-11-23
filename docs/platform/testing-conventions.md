@@ -297,6 +297,46 @@ Like every lane, it runs under `VerifyGate`'s mutex, so on a machine where a ful
 lane. The measurements the lane was sized from, and the share of past reds it would have caught:
 [`docs/migrations/1394-preflight-lane.md`](../migrations/1394-preflight-lane.md).
 
+## The `prose` lane: a change to the documents, in minutes
+
+`TOOLUP_TEST_LANE=prose` runs what a commit that changes only forge's prose can turn red, and nothing else. The
+paths it covers are `GateManifest.proseCovers`: `docs/**` and the root `README.md`, `CHANGELOG.md`, `CLAUDE.md`,
+`CONTRIBUTING.md`, `SECURITY.md` and `DRAFT-NOTES.md`. `samples/**` is not one, because the `Samples` leg builds
+every sample from it.
+
+```powershell
+$env:TOOLUP_TEST_LANE='prose'; pwsh ./verify.ps1
+Remove-Item Env:TOOLUP_TEST_LANE
+```
+
+What it runs:
+
+1. `verify.ps1`'s own steps, which every lane runs. The build packs the root `README.md` beside every project.
+2. The rows that carry `prose` in the manifest. `Build` and the `FuaranCoResolution` leg run whole. `Platform` and
+   `Platform.Remoting` run only their lists in `TestLane.Lists.proseNames`, selected the way the `affected` lane
+   selects: the generated-reference checks (`AuditEventRegistryTests`, `ConfigReferenceTests`,
+   `TrustBoundaryTests`), the cross-runtime drivers under `docs/interplatform/cross-runtime/`, the RAG API reference
+   (`SparseIndexCompositionTests`), the draft-notes ledger (`BaselineMergeDriverTests`) and the publication-boundary
+   sweep (`OpenCoreVocabularyNeutralityTests`), which reads every file it reads in the full lane.
+
+**It refuses a change it does not cover.** Before any row runs, `VerifyAll` reads the change since the merge base
+with `TOOLUP_PROSE_BASE` (`origin/main` when unset), committed or not, and exits 2 naming each path that is a .NET
+default input (any `.fs`, project or build file, wherever it sits) or that sits under a `reads` entry the lane does
+not cover. A path under nothing the gate reads is gate-inert and does not refuse it. So a green `prose` run is a
+claim about a documents-only change, and never about code.
+
+**The lane is sound only while its declarations are true, and the gate checks them.** `GateManifest.proseFindings`
+(in `GateReconcile` and `Gate --check`) is red when a row outside the lane, or a list of a Platform pack the lane
+does not keep, reads a path the lane covers. `GateReadsCensusTests` runs the census at list level: a source of the
+Platform family that names a covered file must belong to a list the lane keeps, or be a reviewed non-reader with
+its reason. A test that opens a document through a path held in data is outside what the census sees, as it is for
+`reads`.
+
+**It is not citable as the gate yet.** It becomes the citable gate for a prose-only commit only when the landing
+tooling admits a selected lane under a declared policy. Until then a ship cites `full`. `gate-reads.json` already
+says what the lane covers and runs (`lanes`), in the field that policy will read. The measured cost, the table of
+what opens each prose path and the move: [`docs/migrations/1395-prose-lane.md`](../migrations/1395-prose-lane.md).
+
 ## What the gate costs: `gate-timings.json`
 
 How long the gate takes is a committed record, not a figure to quote: read `gate-timings.json` at the repository root.

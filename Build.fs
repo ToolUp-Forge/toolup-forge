@@ -64,6 +64,11 @@ let config = {
 // It is the lane run before a push and before a landing claims the full
 // lane, and it is never citable.
 //
+// `prose` runs `verify.ps1`'s steps and the rows that open
+// forge's prose (`GateManifest.proseCovers`), and refuses to run for a change
+// outside what it covers. Not citable until the landing tooling admits a
+// selected lane under a declared policy.
+//
 // Unset ⇒ `full` ⇒ every `Local` row: the pre-phase gate, unchanged.
 
 /// The `affected` lane's lists file and the selection manifest it names,
@@ -75,7 +80,8 @@ let private affectedPlan: Result<TestLane.AffectedPlan, string> option =
     | TestLane.Lane.Pure
     | TestLane.Lane.Fast
     | TestLane.Lane.Full
-    | TestLane.Lane.Preflight -> None
+    | TestLane.Lane.Preflight
+    | TestLane.Lane.Prose -> None
 
 /// The selection manifest the lists file names, when it names a readable one.
 let private affectedManifest =
@@ -177,6 +183,58 @@ let main args =
         | Some(Ok m) -> TestLane.Selection.summaryLines m |> List.iter (printfn "%s")
         | Some(Error why) -> printfn "  no readable selection manifest (%s); every leg runs" why
         | None -> printfn "  no selection manifest (the lists file was written by hand); every leg runs"
+
+    // The `prose` lane stands only for a change it covers: everything since the
+    // merge base with TOOLUP_PROSE_BASE (origin/main unset), committed, staged,
+    // unstaged or untracked. A path it does not cover refuses the run before a
+    // row runs, so its green is never read as the gate for code.
+    if flags.Target = "VerifyAll" && verifyLane = TestLane.Lane.Prose then
+        let root = __SOURCE_DIRECTORY__
+
+        let against =
+            match System.Environment.GetEnvironmentVariable TestLane.ProseBaseVariableName with
+            | null
+            | "" -> "origin/main"
+            | b -> b.Trim()
+
+        let changed =
+            try
+                let mergeBase = (Git.read root [ "merge-base"; against; "HEAD" ]).Trim()
+
+                Ok(
+                    (Git.read root [ "diff"; "--name-only"; "--no-renames"; mergeBase ]
+                     |> Lines.ofOutput)
+                    @ (Git.read root [ "ls-files"; "--others"; "--exclude-standard" ] |> Lines.ofOutput)
+                    |> List.distinct,
+                    mergeBase
+                )
+            with ex ->
+                Error ex.Message
+
+        match changed with
+        | Error why ->
+            eprintfn "VerifyAll: %s=prose cannot read the change from %s: %s" TestLane.VariableName against why
+            exit 2
+        | Ok(paths, mergeBase) ->
+            printfn
+                "%s=prose: %d changed path(s) since %s (the merge base with %s)"
+                TestLane.VariableName
+                paths.Length
+                (mergeBase.Substring(0, min 12 mergeBase.Length))
+                against
+
+            match GateManifest.proseRefusals paths with
+            | [] -> ()
+            | refused ->
+                for r in refused do
+                    eprintfn "  refused: %s" r
+
+                eprintfn
+                    "VerifyAll: the prose lane does not cover %d changed path(s); run the full lane (unset %s)."
+                    refused.Length
+                    TestLane.VariableName
+
+                exit 2
 
     registerTargets config
 
@@ -670,7 +728,8 @@ let main args =
             | TestLane.Lane.Affected -> affectedClientTierMoved
             | TestLane.Lane.Pure
             | TestLane.Lane.Fast
-            | TestLane.Lane.Preflight -> false
+            | TestLane.Lane.Preflight
+            | TestLane.Lane.Prose -> false
 
         // Fable resolves its own tool from the nearest `.config/
         // dotnet-tools.json` above the directory it runs in, and it must

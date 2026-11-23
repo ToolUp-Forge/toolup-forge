@@ -61,51 +61,6 @@ let repoRoot =
 /// This file's own name: its go-red fixtures quote paths on purpose.
 let private selfName = "GateReadsCensusTests.fs"
 
-/// The paths the landing tooling treats as gate inputs for any repository
-/// that carries the record, before the record's own `reads`: sources,
-/// tests, proofs, every build and project file, the tool manifest under
-/// `.config/`, the formatter's configuration and the gate script. Mirrored
-/// here so the census asks only about files the default does not cover; a
-/// spec missing from this copy makes the census stricter, never looser.
-let dotnetDefault = [
-    "src/**"
-    "tests/**"
-    "proofs/**"
-    ".config/**"
-    "*.slnx"
-    "**/*.slnx"
-    "*.sln"
-    "**/*.sln"
-    "*.fsproj"
-    "**/*.fsproj"
-    "*.csproj"
-    "**/*.csproj"
-    "*.props"
-    "**/*.props"
-    "*.targets"
-    "**/*.targets"
-    "*.fs"
-    "**/*.fs"
-    "*.fsi"
-    "**/*.fsi"
-    "*.fsx"
-    "**/*.fsx"
-    "*.cs"
-    "**/*.cs"
-    "**/packages.lock.json"
-    "global.json"
-    "nuget.config"
-    "NuGet.config"
-    "NuGet.Config"
-    ".editorconfig"
-    "**/.editorconfig"
-    ".fantomasignore"
-    ".gitattributes"
-    "verify.ps1"
-    "run.ps1"
-    GateManifest.GateReadsFile
-]
-
 /// Every project directory the solution names, as `<dir>/**`: the
 /// landing tooling counts each as a gate input too.
 let solutionProjectDirs (slnText: string) : string list =
@@ -339,7 +294,8 @@ let private read (rel: string) =
 /// Tracked files the census asks about: outside the .NET default and the
 /// solution's project directories.
 let candidates () =
-    let defaults = dotnetDefault @ solutionProjectDirs (read "ToolUp.Forge.sln")
+    let defaults =
+        GateManifest.dotnetDefault @ solutionProjectDirs (read "ToolUp.Forge.sln")
 
     tracked.Value
     |> List.filter (fun f -> not (defaults |> List.exists (fun s -> GateManifest.specCovers s f)))
@@ -377,6 +333,24 @@ let private tryRead (rel: string) =
 
 /// Every tracked project file, the set the coverage check classifies.
 let private trackedProjects () = tracked.Value |> List.filter isProject
+
+/// Platform-family sources the census finds naming covered prose that open
+/// none of it, each with why: reviewed, like `notRead`. A source here that
+/// later opens a document turns the `prose` lane unsound silently, so each
+/// reason says what the literal is.
+let private proseNonReaders: Map<string, string> =
+    Map.ofList [
+        "src/ToolUp.Platform.Tests/InProcess/CompositionUpgradePlanTests.fs",
+        "migration-doc pointers compared as strings in fixture plans; no document is opened"
+        "src/ToolUp.Platform.Tests/InProcess/NeutralityTokens.fs",
+        "names the boundary policy in a failure message; opens no document"
+        "src/ToolUp.Platform.Tests/InProcess/PublicApiApprovalTests.fs",
+        "names the deprecation policy in a failure message; opens no document"
+        "src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs",
+        "writes a README.md into a scratch corpus; opens no repository document"
+        "src/ToolUp.Platform.Tests/InProcess/CrossRuntimeConformanceHarness.fs",
+        "a helper: the cross-runtime driver directory it opens is run by CrossRuntimeFederationConformanceTests, a list the lane keeps"
+    ]
 
 let private render (rows: (string * string list) list) =
     rows
@@ -423,6 +397,163 @@ let tests =
 
             Expect.isEmpty dead (sprintf "reads entries that cover no tracked file: %A" dead)
         }
+
+        testList "the prose lane" [
+            let rows = GateManifest.rows GateManifest.unbound
+
+            test "every cover is read only by rows and lists the lane runs" {
+                Expect.isEmpty
+                    (GateManifest.proseFindings rows)
+                    "the prose lane's verdict over a covered path is the full lane's"
+            }
+
+            test "a cover a row outside the lane reads is a finding (go-red: the Build pack leaves the lane)" {
+                let without =
+                    rows
+                    |> List.map (fun r ->
+                        if r.Name = "Build" then
+                            {
+                                r with
+                                    Lanes = Set.remove TestLane.Lane.Prose r.Lanes
+                            }
+                        else
+                            r)
+
+                let findings = GateManifest.proseFindings without
+
+                Expect.exists
+                    findings
+                    (fun f -> f.Contains "`CLAUDE.md`" && f.Contains "`Build`")
+                    "CLAUDE.md is read by the Build pack alone, so the lane no longer covers it"
+            }
+
+            test "a change to prose is the lane's, and a gate-inert path does not refuse it" {
+                Expect.isEmpty
+                    (GateManifest.proseRefusals [
+                        "docs/platform/testing-conventions.md"
+                        "README.md"
+                        "CLAUDE.md"
+                        "DRAFT-NOTES.md"
+                        "LICENSE"
+                    ])
+                    "documents and an inert file"
+            }
+
+            test "a change to code is never the lane's: each path the lane cannot stand for is named" {
+                let refused =
+                    GateManifest.proseRefusals [
+                        "Build.fs"
+                        "src/ToolUp.Platform.Core/Shared/AuditTypes.fs"
+                        "docs/platform/message-catalog-skeleton.fs"
+                        "samples/HelloWorld/README.md"
+                        "docs/a/.gitignore"
+                        "perf-budgets.json"
+                        "docs/platform/events.md"
+                    ]
+
+                Expect.equal refused.Length 6 "every path but the document is refused"
+
+                for p in
+                    [
+                        "Build.fs"
+                        "AuditTypes.fs"
+                        "message-catalog-skeleton.fs"
+                        "samples/HelloWorld/README.md"
+                        "docs/a/.gitignore"
+                        "perf-budgets.json"
+                    ] do
+                    Expect.exists refused (fun r -> r.Contains p) (sprintf "%s is refused by name" p)
+            }
+
+            test "the record names the lane, its covers and its units" {
+                let record = File.ReadAllText(Path.Combine(repoRoot, GateManifest.GateReadsFile))
+
+                for u in GateManifest.proseUnits rows do
+                    Expect.stringContains record (sprintf "\"%s\"" u) (sprintf "the record names unit %s" u)
+
+                Expect.stringContains record "\"lane\": \"prose\"" "the record names the lane"
+            }
+
+            // The census at LIST granularity: a source of the Platform family that
+            // names a file the lane covers must be a source of a list the lane keeps
+            // (the affected lane's diffed source maps it), or a reviewed non-reader.
+            test "every Platform-family source naming covered prose belongs to a list the lane keeps" {
+                let covered =
+                    candidates ()
+                    |> List.filter (fun p ->
+                        GateManifest.proseCovers |> List.exists (fun s -> GateManifest.specCovers s p)
+                        && List.isEmpty (GateManifest.proseRefusals [ p ]))
+
+                let familySources =
+                    census (sources ()) (projects ()) covered
+                    |> List.collect snd
+                    |> List.distinct
+                    |> List.filter (fun s ->
+                        s.StartsWith(TestLane.Selection.PlatformTestRoot, StringComparison.Ordinal))
+
+                let stale =
+                    proseNonReaders
+                    |> Map.toList
+                    |> List.map fst
+                    |> List.filter (fun s -> not (List.contains s familySources))
+
+                Expect.isEmpty
+                    stale
+                    (sprintf
+                        "proseNonReaders entries the census no longer finds naming prose (a stale waiver): %A"
+                        stale)
+
+                let naming =
+                    familySources |> List.filter (fun s -> not (Map.containsKey s proseNonReaders))
+
+                Expect.isNonEmpty naming "the census finds the family's prose readers"
+
+                let packs =
+                    rows
+                    |> List.choose (fun r ->
+                        match r.Kind with
+                        | ToolUp.Platform.LegKind.ExpectoPack project -> Some(r.Name, project)
+                        | _ -> None)
+
+                let manifest =
+                    TestLane.Selection.select {
+                        Base = None
+                        Head = None
+                        Paths = naming
+                        Declared = []
+                        Packs = packs |> List.map fst
+                        Family = TestLane.Selection.familyOf packs
+                        Graph = None
+                        Read = fun p -> tryRead p
+                        ListsFile = ""
+                        Command = "census"
+                    }
+
+                let unpinned =
+                    manifest.Fired
+                    |> List.filter (fun f -> f.Rule = TestLane.Selection.UnpinnedRule)
+                    |> List.map _.Path
+
+                Expect.isEmpty
+                    unpinned
+                    (sprintf
+                        "a source naming prose that registers no list is a helper: declare it in proseNonReaders with whose list it serves: %A"
+                        unpinned)
+
+                let outside =
+                    manifest.Units
+                    |> List.filter (fun u -> u.Source = TestLane.Selection.Source.Diffed)
+                    |> List.map _.Unit
+                    |> List.filter (fun u -> not (List.contains u TestLane.Lists.proseNames))
+                    |> List.distinct
+
+                Expect.isEmpty
+                    outside
+                    (sprintf
+                        "lists that may open prose the lane does not keep: add each to TestLane.Lists.proseNames and proseListReads, or settle its source in proseNonReaders: %A"
+                        outside)
+            }
+        ]
 
         testList "what the gate builds" [
             test "every tracked project is built by the gate or in notBuilt" {

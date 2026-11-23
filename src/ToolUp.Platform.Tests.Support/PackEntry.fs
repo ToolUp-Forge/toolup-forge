@@ -50,22 +50,18 @@ let private describe (tree: Test) =
 
 /// Run `pack` under the lane this process reads, and return the exit code.
 let run (pack: Pack) (argv: string array) : int =
-    // The `affected` lane's lists, resolved against the registered list once,
-    // so the tree that runs and the account printed of it are one resolution.
+    // The lists the lane names (the `affected` lane's file, the `prose` lane's
+    // declared lists), resolved against the registered list once, so the tree
+    // that runs and the account printed of it are one resolution.
     let affectedKeep =
-        match TestLane.current with
-        | TestLane.Lane.Affected ->
-            TestLane.Lists.read ()
-            |> Result.bind (fun (_, lists) ->
+        TestLane.Lists.forLane TestLane.current
+        |> Option.map (
+            Result.bind (fun (_, lists) ->
                 TestLaneFilter.resolveKeep
                     (TestLaneFilter.bindingResolver pack.Assembly)
                     (TestLane.Lists.forPack pack.Row lists)
                     pack.Registered)
-            |> Some
-        | TestLane.Lane.Pure
-        | TestLane.Lane.Fast
-        | TestLane.Lane.Full
-        | TestLane.Lane.Preflight -> None
+        )
 
     match affectedKeep with
     | Some(Error why) ->
