@@ -13,11 +13,9 @@
 /// `dotnet run -- GateTimings` folds the recorded runs.
 ///
 /// **The lane is an environment variable, not a `verify.ps1` switch, and
-/// that is deliberate.** `verify.ps1` is a hard-denied path on the forge
-/// roadmap side (`RM-FOOTPRINT-FORBIDDEN` — the gate script sits beneath
-/// approval), so a `-Lane` parameter would move the recorded gate-script
-/// hash and could not be authored at all. The variable rides INSIDE the
-/// recorded `--gate-cmd` string instead
+/// that is deliberate.** The gate script's hash is recorded with every gate
+/// run, so a `-Lane` parameter would move that recorded hash. The variable
+/// rides INSIDE the recorded `--gate-cmd` string instead
 /// (`$env:TOOLUP_TEST_LANE='fast'; pwsh ./verify.ps1`), so the evidence
 /// stays self-describing and the gate file's hash never moves.
 ///

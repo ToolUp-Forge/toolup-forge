@@ -164,7 +164,7 @@ The substrate is deliberately narrow. The following are out of scope for the sub
 
 ## See also
 
-- [`consent.md`](consent.md) — the `IConsentProvider` substrate that gates `<AdSlot>` rendering.
+- [`migrations/59-iconsentprovider.md`](../migrations/59-iconsentprovider.md) — the `IConsentProvider` substrate that gates `<AdSlot>` rendering.
 - [`portability-rules.md`](portability-rules.md) — the six rules audited on `IAdAnalyticsSink`.
 - [`migrations/60-adpanel-adsense.md`](../migrations/60-adpanel-adsense.md) — consumer migration doc (drop-in usage + verification + rollback).
 - [`adsense-approval.md`](adsense-approval.md) — AdSense site-approval gotchas.
