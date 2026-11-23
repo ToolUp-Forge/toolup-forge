@@ -332,6 +332,10 @@ Platform family that names a covered file must belong to a list the lane keeps, 
 its reason. A test that opens a document through a path held in data is outside what the census sees, as it is for
 `reads`.
 
+**What it costs.** Measured once: about four and a half minutes on a built tree (`VerifyAll` two and a half), and
+about 25 minutes on the first run after a commit, because the SDK stamps the commit's hash into every assembly and
+the build step rebuilds the solution in every lane. The full lane's median is 57 minutes.
+
 **It is not citable as the gate yet.** It becomes the citable gate for a prose-only commit only when the landing
 tooling admits a selected lane under a declared policy. Until then a ship cites `full`. `gate-reads.json` already
 says what the lane covers and runs (`lanes`), in the field that policy will read. The measured cost, the table of
