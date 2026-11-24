@@ -501,16 +501,20 @@ let private runtimeHas (asm: string) (typeName: string) (m: Member) : bool optio
             ||| BindingFlags.DeclaredOnly
 
         let rec onChain (t: Type) =
-            not (isNull t)
-            && (match m with
-                | Method(name, _, count, arity) ->
-                    t.GetMethods flags
-                    |> Array.exists (fun mi ->
-                        mi.Name = name
-                        && mi.GetParameters().Length = count
-                        && mi.GetGenericArguments().Length = arity)
-                | Field(name, _) -> not (isNull (t.GetField(name, flags))))
-            || onChain t.BaseType
+            if isNull t then
+                false
+            else
+                let declared =
+                    match m with
+                    | Method(name, _, count, arity) ->
+                        t.GetMethods flags
+                        |> Array.exists (fun mi ->
+                            mi.Name = name
+                            && mi.GetParameters().Length = count
+                            && mi.GetGenericArguments().Length = arity)
+                    | Field(name, _) -> not (isNull (t.GetField(name, flags)))
+
+                declared || onChain t.BaseType
 
         Some(onChain t)
 
