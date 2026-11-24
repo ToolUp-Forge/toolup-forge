@@ -185,7 +185,8 @@ module PipelineProfile =
         Mode = RoundingMode.HalfEven
     }
 
-    /// One example of each verb, in the order the fragment lists them. A verb
+    /// One example of each verb forge offers, in the order the fragment lists
+    /// them (`notOfferedExamples` holds the rest of the algebra). A verb
     /// may have more than one when an example cannot show every field it has
     /// (a window's `n` belongs to `ntile` only); the fragment shows the first.
     let stepExamples: Transform list = [

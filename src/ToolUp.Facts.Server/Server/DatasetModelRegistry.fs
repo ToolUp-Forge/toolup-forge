@@ -14,7 +14,7 @@ open ToolUp.Platform.Compose
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
 
-// ─── The dataset model over a module's fact tables (Phase 1348) ──────
+// ─── The dataset model over a module's fact tables ───────────────────
 //
 // A module's dataset model (`ServerModule.declareDatasetModel`) is lowered
 // here to a `Fuaran.DB` model and checked:

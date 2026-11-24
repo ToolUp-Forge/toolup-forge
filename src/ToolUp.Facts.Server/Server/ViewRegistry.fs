@@ -15,7 +15,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Grounding
 
-// ─── Views over a module's dataset model (Phase 1348) ────────────────
+// ─── Views over a module's dataset model ─────────────────────────────
 //
 // A view (`ServerModule.declareViews`) is a named, versioned `Fuaran.Compute`
 // pipeline over a module's modelled tables. At registration every view's
