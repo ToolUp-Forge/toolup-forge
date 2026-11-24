@@ -2305,6 +2305,15 @@ let main args =
     //        (how a past release is shown red or green).
     let fuaranCoBuildVersion = "0.0.0-fuarancobuild"
 
+    /// Twelve hex digits of this checkout's path: a gate's scratch directory
+    /// outside the repository carries it, so two worktrees never share one.
+    let checkoutKey =
+        System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(__SOURCE_DIRECTORY__.ToLowerInvariant())
+        )
+        |> System.Convert.ToHexString
+        |> _.Substring(0, 12).ToLowerInvariant()
+
     let fuaranCoBuildRoots = [
         "src/ToolUp.Facts.Server/ToolUp.Facts.Server.fsproj"
         "src/ToolUp.Facts.Client/ToolUp.Facts.Client.fsproj"
@@ -2319,14 +2328,7 @@ let main args =
         let feedDir = Path.Combine(root, "obj", "fuaran-cobuild-feed")
         let packages = Path.Combine(root, "obj", "fuaran-cobuild-packages")
 
-        let scratch =
-            let key =
-                System.Security.Cryptography.SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(root.ToLowerInvariant())
-                )
-                |> System.Convert.ToHexString
-
-            Path.Combine(Path.GetTempPath(), "toolup-fuaran-cobuild-" + key.Substring(0, 12).ToLowerInvariant())
+        let scratch = Scratch.root ("toolup-fuaran-cobuild-" + checkoutKey)
 
         // The tool resolver cache is machine-wide (`~/.dotnet/toolResolverCache`)
         // and records the path a local tool was restored to. Restored under this
@@ -2515,6 +2517,171 @@ let main args =
 
     Target.create "VerifyFuaranCoBuild" (fun _ ->
         runVerifyFuaranCoBuild (Flags.value "--ui-version" flags) (Flags.value "--toolup-version" flags))
+
+    // The Fuaran reference scan: every Fuaran package the pins resolve, each
+    // type and member reference its assemblies make into a Fuaran assembly
+    // resolved against the Fuaran assemblies the graph resolves. A pinned
+    // package built on an older substrate compiles beside a newer one and
+    // fails only when it runs; this refuses it at the gate, naming the
+    // reference. The rule is FuaranReferenceScan.fs (pure, proved offline in
+    // ToolUp.Platform.Build.Tests); this target restores and reads.
+    //
+    // A scratch project outside the repository references every Fuaran pin of
+    // `Directory.Packages.props` and restores from nuget.org alone, into a
+    // package folder private to this checkout (under obj/), so NuGet resolves
+    // the graph a consumer composing the pins resolves. Every Fuaran package in
+    // that graph is scanned, pinned or transitive, and gets one verdict line.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyFuaranReferences`
+    //        `… Fuaran.DB=0.2.0 Fuaran.Core.*=0.45.0` scans the named packages
+    //        instead of the pins, with every package of a `Family.*` the first
+    //        restore resolves re-pinned at that version (how a break is shown
+    //        red without moving a pin).
+    let runVerifyFuaranReferences (args: string list) : int =
+        let root = __SOURCE_DIRECTORY__
+        let packages = Path.Combine(root, "obj", "fuaran-references-packages")
+        let scratch = Scratch.root ("toolup-fuaran-references-" + checkoutKey)
+
+        let request =
+            match args with
+            | [] ->
+                FuaranCoResolution.pinsOfPackagesProps (
+                    File.ReadAllText(Path.Combine(root, "Directory.Packages.props"))
+                )
+                |> Result.map (fun pins -> {
+                    FuaranReferenceScan.Packages = pins
+                    FuaranReferenceScan.Lifts = []
+                })
+            | args -> FuaranReferenceScan.requestOf args
+
+        let restore (refs: FuaranCoResolution.Pin list) =
+            Shell.deleteDir scratch
+            Directory.ensure scratch
+            File.WriteAllText(Path.Combine(scratch, "nuget.config"), FuaranCoResolution.CoBuild.nugetConfig None)
+            File.WriteAllText(Path.Combine(scratch, "Scan.fsproj"), FuaranReferenceScan.restoreProject refs)
+
+            let result =
+                Proc.execWith
+                    {
+                        Proc.options with
+                            Environment = [ "NUGET_PACKAGES", packages ]
+                            Redirect = true
+                    }
+                    "dotnet"
+                    [ "restore"; "--nologo" ]
+                    scratch
+
+            if result.ExitCode <> 0 then
+                printfn "%s%s" result.StdOut result.StdErr
+
+                Error(
+                    sprintf "the restore of %d package(s) failed (exit %d), printed above" refs.Length result.ExitCode
+                )
+            else
+                FuaranReferenceScan.packagesOfAssets
+                    "net10.0"
+                    (File.ReadAllText(Path.Combine(scratch, "obj", "project.assets.json")))
+
+        let resolved =
+            request
+            |> Result.mapError (String.concat "; ")
+            |> Result.bind (fun request ->
+                restore request.Packages
+                |> Result.bind (fun (folder, first) ->
+                    if List.isEmpty request.Lifts then
+                        Ok(folder, first)
+                    else
+                        restore (FuaranReferenceScan.lifted request first)))
+
+        try
+            match resolved with
+            | Error why ->
+                Trace.traceError ("VerifyFuaranReferences: " + why)
+                1
+            | Ok(folder, resolved) ->
+                let fuaran =
+                    resolved
+                    |> List.filter (fun p -> (FuaranCoResolution.familyOf p.Id).IsSome)
+                    |> List.sortBy _.Id
+
+                let dir (p: FuaranReferenceScan.ResolvedPackage) = Path.Combine(folder, p.Path)
+
+                let images = [
+                    for p in fuaran do
+                        for dll in p.Runtime do
+                            p, File.ReadAllBytes(Path.Combine(dir p, dll))
+                ]
+
+                let owners =
+                    images
+                    |> List.map (fun (p, bytes) -> FuaranReferenceScan.assemblyNameOf bytes, p)
+                    |> Map.ofList
+
+                let ix = FuaranReferenceScan.index (images |> List.map snd)
+
+                let verdicts = [
+                    for p in fuaran do
+                        let nuspec = Path.Combine(dir p, p.Id.ToLowerInvariant() + ".nuspec")
+
+                        let verdict: FuaranReferenceScan.PackageVerdict = {
+                            Package = p
+                            BuiltOn =
+                                if File.Exists nuspec then
+                                    FuaranCoResolution.floorsOfNuspec (File.ReadAllText nuspec)
+                                else
+                                    Map.empty
+                            Reports = [
+                                for owner, bytes in images do
+                                    if owner = p then
+                                        FuaranReferenceScan.scan ix FuaranReferenceScan.isFuaranAssembly bytes
+                            ]
+                        }
+
+                        verdict
+                ]
+
+                Trace.tracefn ""
+
+                Trace.tracefn
+                    "VerifyFuaranReferences: %d Fuaran package(s) resolved, %d assembly(ies) indexed"
+                    fuaran.Length
+                    images.Length
+
+                for v in verdicts do
+                    if FuaranReferenceScan.isRefused v then
+                        Trace.traceError ("  REFUSED " + FuaranReferenceScan.describeVerdict v)
+
+                        for r in v.Reports do
+                            for f in r.Findings do
+                                Trace.traceError ("          " + FuaranReferenceScan.describeFinding owners.TryFind v f)
+                    else
+                        Trace.tracefn "  ok      %s" (FuaranReferenceScan.describeVerdict v)
+
+                    for r in v.Reports do
+                        for u in r.Unverified do
+                            Trace.tracefn "          unverified: %s: %s" r.Assembly u
+
+                match verdicts |> List.filter FuaranReferenceScan.isRefused with
+                | [] ->
+                    Trace.tracefn
+                        "VerifyFuaranReferences: OK — every Fuaran reference of every resolved Fuaran package binds."
+
+                    0
+                | refused ->
+                    Trace.traceError (
+                        sprintf
+                            "VerifyFuaranReferences: %d package(s) refused, named above: each would fail at run time on the reference shown."
+                            refused.Length
+                    )
+
+                    1
+        finally
+            Shell.deleteDir scratch
+
+    Target.create "VerifyFuaranReferences" (fun _ ->
+        match runVerifyFuaranReferences flags.Positionals with
+        | 0 -> ()
+        | code -> failwithf "VerifyFuaranReferences: exited %d; the verdicts are printed above." code)
 
     // Phase 326 — the ToolUp.Sdk meta-manifest, emitted from the tree.
     //

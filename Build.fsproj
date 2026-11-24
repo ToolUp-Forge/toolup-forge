@@ -152,6 +152,11 @@
          ToolUp.Platform.Build.Tests, so the gate and its go-red proofs run one
          implementation. -->
     <Compile Include="FuaranCoResolution.fs" />
+    <!-- The Fuaran reference scan behind VerifyFuaranReferences: every Fuaran
+         reference a resolved Fuaran package makes, bound against the resolved
+         Fuaran assemblies. BCL-only and source-linked into
+         ToolUp.Platform.Build.Tests, like the file above. -->
+    <Compile Include="FuaranReferenceScan.fs" />
     <Compile Include="src\ToolUp.Platform.Testing\Testing\TempDir.fs" Link="TempDir.fs" />
     <Compile Include="NavRoleFinding.fs" />
     <Compile Include="Build.fs" />
