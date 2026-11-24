@@ -274,4 +274,61 @@ The first row is the worked example. The 0.35.0 release pinned `Fuaran.Core.Colu
 every published Fuaran.UI was built on Core 0.38.1, and Fuaran.UI 0.98.1, built on Core 0.40.2,
 closed it. Both ends are pinned in `ToolUp.Platform.Build.Tests` (the rule) and reproduced by the
 probe (`--toolup-version 0.35.0 --ui-version 0.97.0` fails, `--ui-version 0.98.1` passes).
+## Running on the Fuaran assemblies the pins resolve
+
+**The hazard.** A Fuaran package forge pins is compiled against the substrate it declared as its
+floor, and runs against the substrate the graph resolves, which is the highest floor any package
+declares. When a pin moves a substrate past a package's floor across a breaking boundary, the
+solution still compiles, because forge's own code never calls what changed, and the package fails
+when it runs: a `MissingMethodException`, `MissingFieldException` or `TypeLoadException`, often in
+a type initialiser. `Fuaran.DB` 0.2.0, built on `Fuaran.Core` 0.42.0, calls a `RuleFamily`
+constructor that `Fuaran.Core` 0.45.0 no longer has. Neither gate above sees it: the co-resolution
+rule compares floors with the UI tier's, and the co-build probe compiles and runs only the fact
+tier beside the UI tier.
+
+**The rule** (`dotnet run --project Build.fsproj -- VerifyFuaranReferences`;
+`FuaranReferenceScan.fs`). A scratch project outside the repository references every Fuaran pin of
+`Directory.Packages.props` and restores from nuget.org alone into a package folder private to the
+checkout, so NuGet resolves the graph a consumer composing the pins resolves. Every Fuaran package
+in that graph, pinned or transitive, is scanned: each type and member reference its assemblies make
+into a Fuaran assembly is resolved against the Fuaran assemblies the graph resolved, the way the
+runtime binds it. The rule refuses, naming it:
+
+- a member reference no resolved type has with that name and that whole signature (return type,
+  static or instance, generic arity, every parameter), after the walk up the type's base types a
+  method or field lookup makes (a constructor binds only on the type it names);
+- a type reference the named assembly neither defines nor forwards to an assembly that does;
+- a type or member that still exists and is no longer accessible to the package (internal without
+  `InternalsVisibleTo` naming it, or private);
+- a reference to a Fuaran assembly the graph does not resolve at all.
+
+A package built on an older substrate is not refused for that alone: `Fuaran.Facts` 0.2.1, built
+on `Fuaran.Core` 0.40.3, binds every reference beside `Fuaran.Core` 0.45.0. Every Fuaran package of
+the graph is scanned, not only those built on an older minor, because a scan costs milliseconds and
+a patch release can break a package as surely as a minor can.
+
+**What it cannot see.** The scan reads metadata and never runs the package, so these are still
+found only by running it: changed behaviour behind an unchanged signature; a type named in a string
+(reflection, or a `typeof` argument of an attribute, which metadata stores as text); an assembly
+version above the one resolved; a member reached only through a base type outside the Fuaran
+assemblies that the runtime doing the scan cannot load (reported as `unverified`, never as a
+refusal); and a reference made only by a package that is not a Fuaran package.
+
+**Reading a refusal.** Each Fuaran package gets one verdict line, `ok` or `REFUSED`, naming its
+version and the substrate floors it was built on. A refused package is followed by one line per
+reference that does not bind: the referencing assembly, the member spelt as the runtime's own
+exception spells it, why it does not bind, the package and version that lacks it, and the floor the
+refused package was built on for that package. The refusal for `Fuaran.DB` 0.2.0 beside
+`Fuaran.Core` 0.45.0 reads:
+
+```text
+REFUSED Fuaran.DB 0.2.0 (built on Fuaran.Compute 0.44.0, Fuaran.Core 0.42.0): 1 of 382 Fuaran reference(s) do not bind
+        Fuaran.DB references `Void Fuaran.Core.RuleFamily`2..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2<Fuaran.Core.NodeWitness`2<!0,!1>,Microsoft.FSharp.Core.FSharpFunc`2<!0,Microsoft.FSharp.Collections.FSharpList`1<Fuaran.Core.Defect`1<!1>>>>)`, a member it does not have in Fuaran.Core.Validator 0.45.0; Fuaran.DB 0.2.0 was built on Fuaran.Core.Validator 0.42.0
+```
+
+The remedy is the package's, never this repository's: a release of the refused package built on
+the substrate the pins resolve, or a pin that waits for one. To try a set of versions without moving
+a pin, name them: `dotnet run --project Build.fsproj -- VerifyFuaranReferences Fuaran.DB=0.2.0
+Fuaran.Core.*=0.45.0` restores `Fuaran.DB` 0.2.0, then re-pins every `Fuaran.Core` package it
+resolved at 0.45.0 (`Family.*=<version>` lifts a family), and judges that graph.
 
