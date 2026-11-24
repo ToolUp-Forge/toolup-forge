@@ -11,12 +11,10 @@
     <FuaranComputeVersion>0.46.0</FuaranComputeVersion>
     <!-- The Fuaran-DB repository's pin, for Fuaran.DB (the dataset model and
          its pipeline check; ToolUp.Facts.Server only). Public: a release on
-         nuget.org whose Core and Compute floors the pins above satisfy (0.2.0
-         floors Fuaran.Core at 0.42.0 and Fuaran.Compute at 0.44.0; no
-         Fuaran.DB release is built on a newer Core, so it runs on the Core
-         above rather than the one it was compiled against). The core package
-         only: no provider, session or dialect. -->
-    <FuaranDbVersion>0.2.0</FuaranDbVersion>
+         nuget.org built on the pins above (0.5.0 floors Fuaran.Core at 0.45.0
+         and Fuaran.Compute at 0.46.0, so the restore graph carries one Core
+         version). The core package only: no provider, session or dialect. -->
+    <FuaranDbVersion>0.5.0</FuaranDbVersion>
     <!-- The fuaran-facts repository's pin, for Fuaran.Facts: the Fact kernel,
          its identity rule, codec, laws, definitions and rendering standard,
          which ToolUp.Platform.Core and ToolUp.Facts.Core build on. Public: a
