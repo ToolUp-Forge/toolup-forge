@@ -83,6 +83,9 @@
         <Compile Include="Client\Remoting\PlatformClientProxies.fs" />
         <Compile Include="Client\Elmish\Prelude.fs" />
         <Compile Include="Client\Elmish\Cmd.fs" />
+        <!-- Remote calls as effect values, their performer over Cmd.OfRemoting
+             and the adapter that runs a step list on today's loop. -->
+        <Compile Include="Client\RemoteEffect.fs" />
         <Compile Include="Client\Elmish\Sub.fs" />
         <Compile Include="Client\Elmish\Dispatcher.fs" />
         <Compile Include="Client\Elmish\Prefetch.fs" />
@@ -572,5 +575,8 @@
     <PackageReference Include="Fable.SimpleHttp" />
     <PackageReference Include="Feliz" />
     <PackageReference Include="Fuaran.UI.Renderer" />
+    <!-- The published runtime's step and performance types, which a ported
+         module's remote calls are written in (Client/RemoteEffect.fs). -->
+    <PackageReference Include="Fuaran.MVU" />
   </ItemGroup>
 </Project>
