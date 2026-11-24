@@ -40,6 +40,7 @@ type Bodies = {
     NavRoleFinding: unit -> Verdict
     FuaranCoResolution: unit -> Verdict
     FuaranCoBuild: unit -> Verdict
+    FuaranReferences: unit -> Verdict
     MergeDrivers: unit -> Verdict
     WireFable: unit -> Verdict
     WireConformanceFable: unit -> Verdict
@@ -70,6 +71,7 @@ let unbound: Bodies =
         NavRoleFinding = unboundBody
         FuaranCoResolution = unboundBody
         FuaranCoBuild = unboundBody
+        FuaranReferences = unboundBody
         MergeDrivers = unboundBody
         WireFable = unboundBody
         WireConformanceFable = unboundBody
@@ -503,6 +505,11 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     // Restores the published Fuaran.UI from nuget.org and Fable-compiles
     // the fact tier beside it: the full lane only.
     leg "FuaranCoBuild" b.FuaranCoBuild (set [ Lane.Full ]) [ Input.Tree; Input.Node; Input.Network ]
+    // Restores every Fuaran pin from nuget.org and binds each resolved Fuaran
+    // package's type and member references against the resolved Fuaran
+    // assemblies: a pin move is gated here, in the full lane.
+    leg "FuaranReferences" b.FuaranReferences (set [ Lane.Full ]) [ Input.Tree; Input.Network ]
+    |> seed (seconds 10.)
     leg "MergeDrivers" b.MergeDrivers readingLanes [ Input.Git ]
 
     // ── Rows CI runs and `VerifyAll` does not ──────────────────────────
