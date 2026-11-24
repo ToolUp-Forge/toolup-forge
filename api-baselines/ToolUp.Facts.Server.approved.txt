@@ -2007,6 +2007,9 @@ ToolUp.Facts.PipelineProfileModule.knownFunctions : Microsoft.FSharp.Collections
 ToolUp.Facts.PipelineProfileModule.knownOperators : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.PipelineProfileModule.knownSteps : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.PipelineProfileModule.named(System.String) : ToolUp.Facts.PipelineProfile
+ToolUp.Facts.PipelineProfileModule.notOffered(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PipelineRefusal]
+ToolUp.Facts.PipelineProfileModule.notOfferedExamples : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform] { get }
+ToolUp.Facts.PipelineProfileModule.notOfferedSteps : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.PipelineProfileModule.operatorName(Fuaran.Compute.BinOp) : System.String
 ToolUp.Facts.PipelineProfileModule.register(ToolUp.Facts.PipelineProfile) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.RegisteredPipelineProfile, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineProfileRefusal]]
 ToolUp.Facts.PipelineProfileModule.stepExamples : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform] { get }
