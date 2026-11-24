@@ -707,6 +707,9 @@
         <PackageReference Include="Expecto" />
         <PackageReference Include="StackExchange.Redis" />
         <PackageReference Include="MailKit" />
+        <!-- MailKit brings Pkcs 10.0.0 through MimeKit; referenced directly to
+             lift it to the patched central pin (see Directory.Packages.props). -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" />
         <PackageReference Include="WebPush" />
         <PackageReference Include="HNSW" />
         <PackageReference Include="Microsoft.AspNetCore.TestHost" />

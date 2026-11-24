@@ -432,7 +432,8 @@
          sake: Microsoft.Data.SqlClient brings 9.0.13 and MimeKit 10.0.0
          transitively, and this solution does not pin transitives, so each
          project that receives it (DataSources.Sql, DataSources.Synapse,
-         NotificationChannels.Email.Smtp and the two test packs over them)
+         NotificationChannels.Email.Smtp, the two test packs over them and
+         ToolUp.Platform.Tests, which takes MailKit directly)
          references it directly to lift it here. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.7" />

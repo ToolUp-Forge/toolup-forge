@@ -53,6 +53,16 @@
         <ProjectReference Include="..\..\..\src\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\..\..\src\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
     </ItemGroup>
+    <!-- PublishAot makes the SDK reference Microsoft.DotNet.ILCompiler at the
+         version it bundles, which on an older 10.0 SDK sits inside
+         GHSA-p3jp-9v83-76w9 (high; [10.0.0, 10.0.13]). Raised to the first
+         patched 10.0.x so restore never resolves a vulnerable compiler. -->
+    <Target Name="RaiseILCompilerPack" BeforeTargets="ProcessFrameworkReferences">
+        <ItemGroup>
+            <KnownILCompilerPack Condition="'%(TargetFramework)' == 'net10.0'"
+                                 ILCompilerPackVersion="10.0.14" />
+        </ItemGroup>
+    </Target>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />
     </ItemGroup>
