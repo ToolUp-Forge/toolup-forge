@@ -3,6 +3,7 @@
 
 module PlatformKnowledgeAdminUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Fable.Core.JsInterop
@@ -11,10 +12,10 @@ open ToolUp.Platform
 open SharedTypes
 open PlatformKnowledgeApi
 
-// ─── Phase 4b — built-in Platform Knowledge Base admin module ────────
+// ─── Built-in Platform Knowledge Base admin module ───────────────────
 //
-// SDK-built-in admin module surfacing `IPlatformKnowledgeApi` (Phase 4b
-// commit 4e). Lets a Platform Admin upload, list, and delete documents
+// SDK-built-in admin module surfacing `IPlatformKnowledgeApi`. Lets a
+// Platform Admin upload, list, and delete documents
 // in the cross-team Platform Knowledge Base. Sister module to the
 // team-side `KnowledgeBase` (multi-page) module — separate registration
 // because the audience and scope are different (Platform Admins,
@@ -70,25 +71,37 @@ let private platformKnowledgeApi =
 
 // ─── Init / commands ─────────────────────────────────────────────────
 
-let private loadDocsCmd () =
-    Cmd.OfRemoting.call platformKnowledgeApi.ListPlatformDocuments () (fun list -> DocsLoaded(Ok list)) (fun ex ->
-        DocsLoaded(Error ex.Message))
+let private loadDocs () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IPlatformKnowledgeApi.ListPlatformDocuments"
+            platformKnowledgeApi.ListPlatformDocuments
+            ()
+            (Result.mapError _.Message >> DocsLoaded)
+    )
+]
 
-let private uploadCmd (bytes: byte[]) (fileName: string) =
-    Cmd.OfRemoting.call
-        (fun () -> platformKnowledgeApi.UploadPlatformDocument bytes fileName)
-        ()
-        UploadResolved
-        (fun ex -> UploadResolved(Error ex.Message))
+let private upload (bytes: byte[]) (fileName: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IPlatformKnowledgeApi.UploadPlatformDocument"
+            (fun (b, n) -> platformKnowledgeApi.UploadPlatformDocument b n)
+            (bytes, fileName)
+            (RemoteEffect.flatten >> UploadResolved)
+    )
+]
 
-let private deleteCmd (docId: string) =
-    Cmd.OfRemoting.call
-        platformKnowledgeApi.DeletePlatformDocument
-        docId
-        (fun result -> DeleteResolved(docId, result))
-        (fun ex -> DeleteResolved(docId, Error ex.Message))
+let private delete (docId: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IPlatformKnowledgeApi.DeletePlatformDocument"
+            platformKnowledgeApi.DeletePlatformDocument
+            docId
+            (fun reply -> DeleteResolved(docId, RemoteEffect.flatten reply))
+    )
+]
 
-let init () =
+let init () : Model * Cmd<Msg> =
     let model = {
         Documents = Remote.Loading
         Uploading = false
@@ -96,25 +109,26 @@ let init () =
         DeleteError = Map.empty
     }
 
-    model, loadDocsCmd ()
+    (model, loadDocs ()) |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | RefreshDocs ->
         {
             model with
                 Documents = Remote.Loading
         },
-        loadDocsCmd ()
+        loadDocs ()
 
     | DocsLoaded result ->
         {
             model with
                 Documents = result |> Result.map (List.sortByDescending _.UploadedAt) |> Remote.ofResult
         },
-        Cmd.none
+        []
 
     | UploadFile(bytes, fileName) ->
         {
@@ -122,7 +136,7 @@ let update (msg: Msg) (model: Model) =
                 Uploading = true
                 UploadError = None
         },
-        uploadCmd bytes fileName
+        upload bytes fileName
 
     | UploadResolved(Ok _) ->
         {
@@ -131,7 +145,7 @@ let update (msg: Msg) (model: Model) =
                 UploadError = None
                 Documents = Remote.Loading
         },
-        loadDocsCmd ()
+        loadDocs ()
 
     | UploadResolved(Error msg) ->
         {
@@ -139,28 +153,31 @@ let update (msg: Msg) (model: Model) =
                 Uploading = false
                 UploadError = Some msg
         },
-        Cmd.none
+        []
 
     | RequestDelete docId ->
         {
             model with
                 DeleteError = model.DeleteError |> Map.remove docId
         },
-        deleteCmd docId
+        delete docId
 
     | DeleteResolved(_, Ok()) ->
         {
             model with
                 Documents = Remote.Loading
         },
-        loadDocsCmd ()
+        loadDocs ()
 
     | DeleteResolved(docId, Error msg) ->
         {
             model with
                 DeleteError = model.DeleteError |> Map.add docId msg
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
@@ -274,7 +291,7 @@ let private documentsPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispat
 /// _)` fan-out. Without this, an admin watching the list in one tab
 /// wouldn't see another admin's upload / delete / promote until they
 /// clicked Refresh. The publisher (the admin doing the action) reloads
-/// the list locally via `loadDocsCmd ()` in `update`; this subscription
+/// the list locally via `loadDocs ()` in `step`; this subscription
 /// covers the cross-session case.
 [<ReactComponent>]
 let private AdminPanel (msgs: KnowledgeAdminMessages) (model: Model) (dispatch: Msg -> unit) =
@@ -302,7 +319,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 /// by hand add `ShellSlots.builtIn PlatformKnowledgeAdminUI.builtIn None`
 /// in `Client.fs` alongside `KnowledgeBaseView.register ()`.
 ///
-/// Phase 1e — `KnowledgeBaseClientConfig.withKnowledgeBase` now appends
+/// `KnowledgeBaseClientConfig.withKnowledgeBase` appends
 /// this module alongside the team-side one on
 /// `DefaultKnowledgeBase` / `ConfiguredKnowledgeBase`. The v1 note here
 /// deferred auto-injection on the grounds that the team-side module was

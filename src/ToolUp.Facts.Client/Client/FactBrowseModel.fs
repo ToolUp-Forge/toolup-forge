@@ -3,7 +3,7 @@
 
 module ToolUp.Facts.Client.FactBrowseModel
 
-// ─── Fact browse — state and transitions (Phase 895) ─────────────────
+// ─── Fact browse — state and transitions ─────────────────────────────
 //
 // The Elmish half of the fact browse companion. Three pages share this
 // model — Tables, Table detail, Drill-down — and it holds what the server
@@ -11,8 +11,8 @@ module ToolUp.Facts.Client.FactBrowseModel
 // one run's movers at a time, one opened fact, and the open table's VIEW
 // SLICE.
 //
-// **The drill-down reads once and refines locally (Phase 1127, revising
-// Phase 895's "every change is a server read").** Opening a table's
+// **The drill-down reads once and refines locally**, rather than making
+// every change a server read. Opening a table's
 // drill-down reads its slice — every head of every metric over every
 // period, gated, as one columnar table — once, and holds it prepared.
 // Every change of page, metric, direction or subject prefix inside it is
@@ -29,9 +29,12 @@ module ToolUp.Facts.Client.FactBrowseModel
 // they replaced) stay server reads: neither answer is in a slice of
 // current heads.
 //
-// `updateWith` takes the API record as a parameter so the transitions
-// are testable against a fake; `update` binds the real proxy.
+// `stepWith` takes the API record as a parameter so the transitions are
+// testable against a fake, and returns the remote calls as effect values
+// (`RemoteEffect`); `updateWith` runs them on the loop and `update` binds
+// the real proxy.
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Facts
@@ -68,7 +71,7 @@ type Model = {
     Rows: Load<FactRowPage>
     /// The opened fact.
     Fact: Load<FactDetailView>
-    /// Phase 1127 — the selected table's view slice, prepared. `LoadFailed`
+    /// The selected table's view slice, prepared. `LoadFailed`
     /// (a slice over the cap, say) sends the drill-down to the server's
     /// page reads until the table is opened again.
     Slice: Load<FactBrowseSlice.Held>
@@ -110,7 +113,7 @@ type Msg =
     | CloseFact
     /// A run committed in this scope — the per-run notification.
     | RunCommitted of FactTableRunNotice
-    /// A table's view slice arrived (Phase 1127).
+    /// A table's view slice arrived.
     | SliceLoaded of tableId: string * Result<FactSlice, string>
 
 /// The empty state: nothing loaded yet.
@@ -163,21 +166,32 @@ let private settle (result: Result<'T, string>) : Load<'T> =
     | Ok value -> Loaded value
     | Error message -> LoadFailed message
 
-let private failure (ofResult: Result<'T, string> -> Msg) : exn -> Msg = fun ex -> ofResult (Error ex.Message)
+/// One step's remote calls and follow-ups.
+type private Steps = Step<Msg, RemoteEffect<Msg>> list
 
-let private loadTables (api: IFactBrowseApi) : Cmd<Msg> =
-    Cmd.OfRemoting.call api.ListTables () TablesLoaded (failure TablesLoaded)
+let private loadTables (api: IFactBrowseApi) : Steps = [
+    Do(RemoteEffect.call "IFactBrowseApi.ListTables" api.ListTables () (RemoteEffect.flatten >> TablesLoaded))
+]
 
-let private loadRuns (api: IFactBrowseApi) (tableId: string) (page: int) : Cmd<Msg> =
-    Cmd.OfRemoting.call api.ListRuns (tableId, page, FactBrowseApi.DefaultPageSize) RunsLoaded (failure RunsLoaded)
+let private loadRuns (api: IFactBrowseApi) (tableId: string) (page: int) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IFactBrowseApi.ListRuns"
+            api.ListRuns
+            (tableId, page, FactBrowseApi.DefaultPageSize)
+            (RemoteEffect.flatten >> RunsLoaded)
+    )
+]
 
-let private loadRows (api: IFactBrowseApi) (query: FactRowQuery) : Cmd<Msg> =
-    Cmd.OfRemoting.call api.QueryRows query RowsLoaded (failure RowsLoaded)
+let private loadRows (api: IFactBrowseApi) (query: FactRowQuery) : Steps = [
+    Do(RemoteEffect.call "IFactBrowseApi.QueryRows" api.QueryRows query (RemoteEffect.flatten >> RowsLoaded))
+]
 
-let private loadDetail (api: IFactBrowseApi) (tableId: string) : Cmd<Msg> =
-    Cmd.OfRemoting.call api.GetTable tableId DetailLoaded (failure DetailLoaded)
+let private loadDetail (api: IFactBrowseApi) (tableId: string) : Steps = [
+    Do(RemoteEffect.call "IFactBrowseApi.GetTable" api.GetTable tableId (RemoteEffect.flatten >> DetailLoaded))
+]
 
-/// The slice a table's drill-down reads (Phase 1127): every metric over
+/// The slice a table's drill-down reads: every metric over
 /// every period across the whole table, so every drill-down request on the
 /// table is answered inside it.
 let sliceQueryFor (tableId: string) : FactSliceQuery = {
@@ -188,15 +202,18 @@ let sliceQueryFor (tableId: string) : FactSliceQuery = {
     Metrics = []
 }
 
-let private loadSlice (api: IFactBrowseApi) (tableId: string) : Cmd<Msg> =
-    Cmd.OfRemoting.call api.QuerySlice (sliceQueryFor tableId) (fun r -> SliceLoaded(tableId, r)) (fun ex ->
-        SliceLoaded(tableId, Error ex.Message))
+let private loadSlice (api: IFactBrowseApi) (tableId: string) : Steps = [
+    Do(
+        RemoteEffect.call "IFactBrowseApi.QuerySlice" api.QuerySlice (sliceQueryFor tableId) (fun reply ->
+            SliceLoaded(tableId, RemoteEffect.flatten reply))
+    )
+]
 
 /// Answer a drill-down request: locally when the held slice covers it;
 /// after the slice when one is in flight; by reading the slice first when
 /// none is held; and from the server page by page when the table's slice
 /// was refused (over the cap, say).
-let private requestRows (api: IFactBrowseApi) (model: Model) (query: FactRowQuery) : Model * Cmd<Msg> =
+let private requestRows (api: IFactBrowseApi) (model: Model) (query: FactRowQuery) : Model * Steps =
     let model = { model with RowQuery = Some query }
 
     match model.Slice with
@@ -205,8 +222,8 @@ let private requestRows (api: IFactBrowseApi) (model: Model) (query: FactRowQuer
             model with
                 Rows = settle (FactBrowseSlice.rowPage held query)
         },
-        Cmd.none
-    | Loading -> { model with Rows = Loading }, Cmd.none
+        []
+    | Loading -> { model with Rows = Loading }, []
     | LoadFailed _ -> { model with Rows = Loading }, loadRows api query
     | NotAsked
     | Loaded _ ->
@@ -220,22 +237,23 @@ let private requestRows (api: IFactBrowseApi) (model: Model) (query: FactRowQuer
 /// Drop the held slice when the table's listing names a run stamp other
 /// than the slice's — a run landed since the slice was read — and read the
 /// open drill-down again through a fresh slice.
-let private dropStaleSlice (api: IFactBrowseApi) (listing: FactTableListing) (model: Model) : Model * Cmd<Msg> =
+let private dropStaleSlice (api: IFactBrowseApi) (listing: FactTableListing) (model: Model) : Model * Steps =
     match model.Slice with
     | Loaded held when held.Slice.TableId = listing.TableId && held.Slice.RunStamp <> listing.RunStamp ->
         let model = { model with Slice = NotAsked }
 
         match model.RowQuery with
         | Some query -> requestRows api model query
-        | None -> model, Cmd.none
-    | _ -> model, Cmd.none
+        | None -> model, []
+    | _ -> model, []
 
 /// Initial state: load the table list.
 let initWith (api: IFactBrowseApi) () : Model * Cmd<Msg> =
-    { empty with Tables = Loading }, loadTables api
+    ({ empty with Tables = Loading }, loadTables api) |> RemoteEffect.run
 
-/// The transitions, over an explicit API.
-let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, over an explicit API, with their remote calls as
+/// values.
+let stepWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | RefreshTables ->
         let reloadSelected =
@@ -243,7 +261,7 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
             | Some tableId -> [ loadDetail api tableId; loadRuns api tableId 0 ]
             | None -> []
 
-        { model with Tables = Loading }, Cmd.batch (loadTables api :: reloadSelected)
+        { model with Tables = Loading }, loadTables api @ List.concat reloadSelected
 
     | TablesLoaded result ->
         let model = { model with Tables = settle result }
@@ -254,13 +272,13 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
             | Ok tables, Some tableId ->
                 match tables |> List.tryFind (fun t -> t.TableId = tableId) with
                 | Some row -> dropStaleSlice api row model
-                | None -> model, Cmd.none
-            | _ -> model, Cmd.none
+                | None -> model, []
+            | _ -> model, []
 
         // A metric filter that narrows to exactly one table selects it.
         match model.MetricFilter, visibleTables model with
         | Some _, [ only ] when model.SelectedTable <> Some only.TableId ->
-            model, Cmd.batch [ refresh; Cmd.ofMsg (OpenTable only.TableId) ]
+            model, refresh @ [ Then(OpenTable only.TableId) ]
         | _ -> model, refresh
 
     | FilterByMetric metric ->
@@ -272,13 +290,13 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
         match model.Tables with
         | Loaded _ ->
             match visibleTables model with
-            | [ only ] -> model, Cmd.ofMsg (OpenTable only.TableId)
-            | _ -> model, Cmd.none
-        | Loading -> model, Cmd.none
+            | [ only ] -> model, [ Then(OpenTable only.TableId) ]
+            | _ -> model, []
+        | Loading -> model, []
         | NotAsked
         | LoadFailed _ -> { model with Tables = Loading }, loadTables api
 
-    | ClearMetricFilter -> { model with MetricFilter = None }, Cmd.none
+    | ClearMetricFilter -> { model with MetricFilter = None }, []
 
     | OpenTable tableId ->
         {
@@ -296,7 +314,7 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
                     | Loaded held when held.Slice.TableId = tableId -> model.Slice
                     | _ -> NotAsked
         },
-        Cmd.batch [ loadDetail api tableId; loadRuns api tableId 0 ]
+        loadDetail api tableId @ loadRuns api tableId 0
 
     | DetailLoaded result ->
         let model = { model with Detail = settle result }
@@ -304,7 +322,7 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
         let model, refresh =
             match result with
             | Ok detail -> dropStaleSlice api detail.Listing model
-            | Error _ -> model, Cmd.none
+            | Error _ -> model, []
 
         match result, model.RowQuery with
         // The detail names the table's metrics, so the drill-down's first
@@ -316,7 +334,7 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
                 let model, cmd =
                     requestRows api model (defaultRowQuery detail.Listing.TableId metric)
 
-                model, Cmd.batch [ refresh; cmd ]
+                model, refresh @ cmd
             | [] -> model, refresh
         | _ -> model, refresh
 
@@ -329,21 +347,25 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
                     Movers = None
             },
             loadRuns api tableId page
-        | None -> model, Cmd.none
+        | None -> model, []
 
-    | RunsLoaded result -> { model with Runs = settle result }, Cmd.none
+    | RunsLoaded result -> { model with Runs = settle result }, []
 
     | ToggleMovers runId ->
         match model.Movers, model.SelectedTable with
-        | Some(openRun, _), _ when openRun = runId -> { model with Movers = None }, Cmd.none
+        | Some(openRun, _), _ when openRun = runId -> { model with Movers = None }, []
         | _, Some tableId ->
             {
                 model with
                     Movers = Some(runId, Loading)
             },
-            Cmd.OfRemoting.call api.GetRunMovers (tableId, runId) (fun r -> MoversLoaded(runId, r)) (fun ex ->
-                MoversLoaded(runId, Error ex.Message))
-        | _, None -> model, Cmd.none
+            [
+                Do(
+                    RemoteEffect.call "IFactBrowseApi.GetRunMovers" api.GetRunMovers (tableId, runId) (fun reply ->
+                        MoversLoaded(runId, RemoteEffect.flatten reply))
+                )
+            ]
+        | _, None -> model, []
 
     | MoversLoaded(runId, result) ->
         match model.Movers with
@@ -353,8 +375,8 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
                 model with
                     Movers = Some(runId, settle result)
             },
-            Cmd.none
-        | _ -> model, Cmd.none
+            []
+        | _ -> model, []
 
     | RowsRequested query ->
         let query = {
@@ -365,12 +387,12 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
 
         requestRows api model query
 
-    | RowsLoaded result -> { model with Rows = settle result }, Cmd.none
+    | RowsLoaded result -> { model with Rows = settle result }, []
 
     | SliceLoaded(tableId, result) ->
         // A late answer for a table the user has since left is dropped.
         if model.SelectedTable <> Some tableId then
-            model, Cmd.none
+            model, []
         else
             let held = result |> Result.bind FactBrowseSlice.hold
             let model = { model with Slice = settle held }
@@ -380,10 +402,13 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
             match model.RowQuery, model.Slice with
             | Some query, Loaded slice when FactBrowseSlice.coversRows slice.Slice query -> requestRows api model query
             | Some query, _ -> { model with Rows = Loading }, loadRows api query
-            | None, _ -> model, Cmd.none
+            | None, _ -> model, []
 
     | OpenFact factId ->
-        { model with Fact = Loading }, Cmd.OfRemoting.call api.GetFact factId FactLoaded (failure FactLoaded)
+        { model with Fact = Loading },
+        [
+            Do(RemoteEffect.call "IFactBrowseApi.GetFact" api.GetFact factId (RemoteEffect.flatten >> FactLoaded))
+        ]
 
     | FactLoaded result ->
         let model = { model with Fact = settle result }
@@ -418,11 +443,11 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
                         }
                         query
 
-                model, Cmd.batch (rows :: reloadTable)
-            | None -> model, Cmd.none
-        | Error _ -> model, Cmd.none
+                model, rows @ List.concat reloadTable
+            | None -> model, []
+        | Error _ -> model, []
 
-    | CloseFact -> { model with Fact = NotAsked }, Cmd.none
+    | CloseFact -> { model with Fact = NotAsked }, []
 
     | RunCommitted notice ->
         // One notification per run: refresh the list's standing, and the
@@ -433,10 +458,10 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
             let model, rows =
                 match model.RowQuery with
                 | Some query -> requestRows api { model with Slice = NotAsked } query
-                | None -> { model with Slice = NotAsked }, Cmd.none
+                | None -> { model with Slice = NotAsked }, []
 
             model,
-            Cmd.batch [
+            List.concat [
                 loadTables api
                 loadDetail api notice.TableId
                 loadRuns api notice.TableId 0
@@ -444,6 +469,10 @@ let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg
             ]
         else
             model, loadTables api
+
+/// The transitions, over an explicit API, on today's loop.
+let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    stepWith api msg model |> RemoteEffect.run
 
 // ─── The proxy ───────────────────────────────────────────────────────
 

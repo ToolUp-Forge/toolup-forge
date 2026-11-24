@@ -3,6 +3,7 @@
 
 module ClientModel
 
+open Fuaran.MVU
 open ToolUp.Platform
 open ToolUp.Elmish
 open SharedTypes
@@ -135,7 +136,7 @@ type Msg =
     | TagsUpdated of KnowledgeDocument
     | SetTagsFailed of string
     /// The upload / delete RPC threw (network, 413, 500, expired auth) — without
-    /// these the `Cmd.OfAsync.perform` swallowed the error and the spinner hung.
+    /// these a failed call was swallowed and the spinner hung.
     | UploadFailed of string
     | DeleteFailed of string
     | PollStatuses
@@ -187,9 +188,15 @@ type Msg =
     | VersionHistoryFailed of docId: string * reason: string
     | CloseVersionHistory
     /// Fetch and hand a version's preserved original to the browser
-    /// through the Phase 108 delivery path.
+    /// through the original-delivery path.
     | DownloadVersionRequested of version: KnowledgeDocumentVersion
     | DownloadVersionSettled of Result<unit, string>
+
+    /// The one error branch of the calls this module has never reported a
+    /// failure for (the list and context reads, the status poll, the
+    /// note and context saves, the index reset and the context refresh):
+    /// the model is left as it is, as it was when the failure was swallowed.
+    | CallFailed of reason: string
 
 // `withMultipartOptimization` is required for the `byte[]` argument on
 // `UploadDocument`: ToolUp.Remoting's default JSON transport encodes byte
@@ -208,8 +215,8 @@ let private knowledgeApi =
 let private platformKnowledgeApi =
     Api.makeProxy<IPlatformKnowledgeApi> (customOptions = UserSession.withRequestHeaders)
 
-let init (ctx: ClientModuleContext) =
-    {
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+    ({
         Documents = []
         Uploading = false
         UploadError = None
@@ -238,17 +245,47 @@ let init (ctx: ClientModuleContext) =
 
         VersionHistory = None
         Messages = ctx.Messages.KnowledgeBase
-    },
-    Cmd.batch [ Cmd.ofMsg (LoadDocuments(Start())); Cmd.ofMsg (LoadAIContext(Start())) ]
+     },
+     [ Then(LoadDocuments(Start())); Then(LoadAIContext(Start())) ])
+    |> RemoteEffect.run
 
 let private hasNonTerminal (docs: KnowledgeDocument list) =
     docs |> List.exists (fun d -> not (IngestionStatus.isTerminal d.Status))
 
+/// One step's remote calls and follow-ups.
+type private Steps = Step<Msg, RemoteEffect<Msg>> list
+
+/// A call's reply, with a failure sent to the one error branch.
+let private orFailed (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) : Msg =
+    match reply with
+    | Ok answer -> ofAnswer answer
+    | Error ex -> CallFailed ex.Message
+
+/// A call's reply, with a failure sent to the call's own failure message.
+let private orElse (ofAnswer: 'result -> Msg) (ofFailure: string -> Msg) (reply: Result<'result, exn>) : Msg =
+    match reply with
+    | Ok answer -> ofAnswer answer
+    | Error ex -> ofFailure ex.Message
+
+/// The poll timer's site label: a timer has no value form until the
+/// runtime's standard vocabulary arrives.
+[<Literal>]
+let private PollSite = "KnowledgeBase.schedulePoll"
+
 /// Schedule a delayed `PollStatuses` dispatch. Used to drive a 2s polling
 /// loop while at least one document is non-terminal — the loop self-terminates
 /// once every doc reaches `Complete` / `Failed`.
-let private schedulePoll () =
-    Cmd.OfAsync.perform (fun () -> Async.Sleep 2000) () (fun () -> PollStatuses)
+let private schedulePoll () : Steps = [
+    Do(
+        RemoteEffect.legacy PollSite (fun dispatch ->
+            Async.StartImmediate(
+                async {
+                    do! Async.Sleep 2000
+                    dispatch PollStatuses
+                }
+            ))
+    )
+]
 
 // ─── Original-bytes → browser ──────────
 //
@@ -258,9 +295,8 @@ let private schedulePoll () =
 // link where present; other locator kinds have no portable in-document
 // anchor and degrade to opening at the top.
 //
-// Phase 636 relocated this block ABOVE `update` — unchanged — because
-// the version-history drawer's download arm is an `update` effect and
-// F# resolves in file order. `originalDocumentOpener` (the AI Sources
+// This block sits ABOVE `update` because the version-history drawer's
+// download arm is an `update` effect and F# resolves in file order. `originalDocumentOpener` (the AI Sources
 // panel's bridge, at the foot of this file) still consumes it.
 
 [<Fable.Core.Emit("new Blob([new Uint8Array($0)], { type: $1 })")>]
@@ -304,7 +340,7 @@ let private openOriginal (original: OriginalDocument) (location: VK.SourceLocato
     revokeOriginalUrlLater url
 
 /// Deliver a document's preserved original to the browser
-/// through the **existing** Phase 108 delivery path, rather than through
+/// through the **existing** original-delivery path, rather than through
 /// a second byte route invented for the drawer.
 ///
 /// `Inline` takes the blob-URL route above; a `SignedUrl` is opened
@@ -334,13 +370,23 @@ let private deliverOriginal (msgs: KnowledgeErrorMessages) (docId: string) : Asy
     | Error(OriginalRetrievalFailed _) -> return Error msgs.OriginalFetchFailed
 }
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadDocuments(Start()) ->
-        model, Cmd.OfAsync.perform (fun () -> knowledgeApi.GetDocuments()) () (fun docs -> LoadDocuments(Finished docs))
+        model,
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.GetDocuments"
+                    knowledgeApi.GetDocuments
+                    ()
+                    (orFailed (fun docs -> LoadDocuments(Finished docs)))
+            )
+        ]
 
     | LoadDocuments(Finished docs) ->
-        let pollCmd = if hasNonTerminal docs then schedulePoll () else Cmd.none
+        let pollCmd = if hasNonTerminal docs then schedulePoll () else []
 
         {
             model with
@@ -355,11 +401,15 @@ let update (msg: Msg) (model: Model) =
                 Uploading = true
                 UploadError = None
         },
-        Cmd.OfAsync.either
-            (fun (b, n) -> knowledgeApi.UploadDocument b n)
-            (bytes, fileName)
-            (fun doc -> UploadCompleted(Finished doc))
-            (fun ex -> UploadFailed ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.UploadDocument"
+                    (fun (b, n) -> knowledgeApi.UploadDocument b n)
+                    (bytes, fileName)
+                    (orElse (fun doc -> UploadCompleted(Finished doc)) UploadFailed)
+            )
+        ]
 
     | UploadCompleted(Finished doc) ->
         match doc.Status with
@@ -372,7 +422,7 @@ let update (msg: Msg) (model: Model) =
                     Uploading = false
                     UploadError = Some reason
             },
-            Cmd.none
+            []
         | _ ->
             let docs =
                 model.Documents |> List.filter (fun d -> d.Id <> doc.Id) |> List.append [ doc ]
@@ -392,7 +442,7 @@ let update (msg: Msg) (model: Model) =
                 Uploading = false
                 UploadError = Some model.Messages.Errors.UploadFailed
         },
-        Cmd.none
+        []
 
     // ── Bulk import ──
 
@@ -403,11 +453,15 @@ let update (msg: Msg) (model: Model) =
                 BulkImportError = None
                 BulkReport = None
         },
-        Cmd.OfAsync.either
-            (fun (req: BulkImportRequest) -> knowledgeApi.ImportBatch req)
-            { Sources = sources }
-            BulkImportCompleted
-            (fun ex -> BulkImportFailed ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.ImportBatch"
+                    knowledgeApi.ImportBatch
+                    ({ Sources = sources }: BulkImportRequest)
+                    (orElse BulkImportCompleted BulkImportFailed)
+            )
+        ]
 
     | BulkImportCompleted report ->
         // Merge every admitted document into the list, replacing any
@@ -438,7 +492,7 @@ let update (msg: Msg) (model: Model) =
         },
         // Freshly-admitted documents start non-terminal; restart the poll
         // loop in case it had stopped because everything was terminal.
-        (if List.isEmpty admitted then Cmd.none else schedulePoll ())
+        (if List.isEmpty admitted then [] else schedulePoll ())
 
     | BulkImportFailed reason ->
         {
@@ -446,7 +500,7 @@ let update (msg: Msg) (model: Model) =
                 BulkImporting = false
                 BulkImportError = Some reason
         },
-        Cmd.none
+        []
 
     | DismissBulkReport ->
         {
@@ -454,7 +508,7 @@ let update (msg: Msg) (model: Model) =
                 BulkReport = None
                 BulkImportError = None
         },
-        Cmd.none
+        []
 
     // ── Version history ──
 
@@ -471,11 +525,16 @@ let update (msg: Msg) (model: Model) =
                         DownloadError = None
                     }
         },
-        Cmd.OfAsync.either
-            knowledgeApi.GetDocumentVersions
-            docId
-            (fun versions -> VersionHistoryLoaded(docId, versions))
-            (fun ex -> VersionHistoryFailed(docId, ex.Message))
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.GetDocumentVersions"
+                    knowledgeApi.GetDocumentVersions
+                    docId
+                    (orElse (fun versions -> VersionHistoryLoaded(docId, versions)) (fun reason ->
+                        VersionHistoryFailed(docId, reason)))
+            )
+        ]
 
     // Both arrival arms are gated on the drawer still being open on the
     // SAME document. Without it, closing the drawer and reopening it on
@@ -494,8 +553,8 @@ let update (msg: Msg) (model: Model) =
                                 LoadError = None
                         }
             },
-            Cmd.none
-        | _ -> model, Cmd.none
+            []
+        | _ -> model, []
 
     | VersionHistoryFailed(docId, reason) ->
         match model.VersionHistory with
@@ -504,10 +563,10 @@ let update (msg: Msg) (model: Model) =
                 model with
                     VersionHistory = Some { state with LoadError = Some reason }
             },
-            Cmd.none
-        | _ -> model, Cmd.none
+            []
+        | _ -> model, []
 
-    | CloseVersionHistory -> { model with VersionHistory = None }, Cmd.none
+    | CloseVersionHistory -> { model with VersionHistory = None }, []
 
     | DownloadVersionRequested version ->
         match model.VersionHistory with
@@ -521,12 +580,16 @@ let update (msg: Msg) (model: Model) =
                                 DownloadError = None
                         }
             },
-            Cmd.OfAsync.either
-                (deliverOriginal model.Messages.Errors)
-                version.DocumentId
-                DownloadVersionSettled
-                (fun ex -> DownloadVersionSettled(Error ex.Message))
-        | None -> model, Cmd.none
+            [
+                Do(
+                    RemoteEffect.call
+                        "KnowledgeApi.GetOriginalDelivery"
+                        (deliverOriginal model.Messages.Errors)
+                        version.DocumentId
+                        (RemoteEffect.flatten >> DownloadVersionSettled)
+                )
+            ]
+        | None -> model, []
 
     | DownloadVersionSettled result ->
         match model.VersionHistory with
@@ -543,27 +606,39 @@ let update (msg: Msg) (model: Model) =
                                     | Error reason -> Some reason
                         }
             },
-            Cmd.none
-        | None -> model, Cmd.none
+            []
+        | None -> model, []
 
     | DeleteRequested docId ->
         model,
-        Cmd.OfAsync.either (fun id -> knowledgeApi.DeleteDocument id) docId (fun _ -> DocumentDeleted docId) (fun ex ->
-            DeleteFailed ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.DeleteDocument"
+                    knowledgeApi.DeleteDocument
+                    docId
+                    (orElse (fun _ -> DocumentDeleted docId) DeleteFailed)
+            )
+        ]
 
     | DocumentDeleted docId ->
         let docs = model.Documents |> List.filter (fun d -> d.Id <> docId)
-        { model with Documents = docs }, Cmd.none
+        { model with Documents = docs }, []
 
     | SetTagsRequested(docId, tags) ->
         model,
-        Cmd.OfAsync.either
-            (fun req -> knowledgeApi.SetDocumentTags req)
-            { DocId = docId; Tags = tags }
-            (function
-            | Ok doc -> TagsUpdated doc
-            | Error reason -> SetTagsFailed reason)
-            (fun ex -> SetTagsFailed ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.SetDocumentTags"
+                    knowledgeApi.SetDocumentTags
+                    { DocId = docId; Tags = tags }
+                    (fun reply ->
+                        match RemoteEffect.flatten reply with
+                        | Ok doc -> TagsUpdated doc
+                        | Error reason -> SetTagsFailed reason)
+            )
+        ]
 
     | TagsUpdated doc ->
         // Replace in place with the SERVER's document: tags are
@@ -573,14 +648,14 @@ let update (msg: Msg) (model: Model) =
         // that narrows nothing.
         let docs = model.Documents |> List.map (fun d -> if d.Id = doc.Id then doc else d)
 
-        { model with Documents = docs }, Cmd.none
+        { model with Documents = docs }, []
 
     | SetTagsFailed reason ->
         {
             model with
                 LoadError = Some(model.Messages.Errors.TagsUpdateFailed reason)
         },
-        Cmd.none
+        []
 
     | UploadFailed reason ->
         {
@@ -588,14 +663,14 @@ let update (msg: Msg) (model: Model) =
                 Uploading = false
                 UploadError = Some reason
         },
-        Cmd.none
+        []
 
     | DeleteFailed reason ->
         {
             model with
                 LoadError = Some(model.Messages.Errors.DeleteFailed reason)
         },
-        Cmd.none
+        []
 
     | PollStatuses ->
         // Fire all status fetches in parallel and queue the next poll cycle.
@@ -609,25 +684,30 @@ let update (msg: Msg) (model: Model) =
         let fetchCmds =
             nonTerminal
             |> List.map (fun doc ->
-                Cmd.OfAsync.perform knowledgeApi.GetStatus doc.Id (fun status -> StatusPolled(doc.Id, status)))
+                Do(
+                    RemoteEffect.call
+                        "KnowledgeApi.GetStatus"
+                        knowledgeApi.GetStatus
+                        doc.Id
+                        (orFailed (fun status -> StatusPolled(doc.Id, status)))
+                ))
 
-        let nextPoll =
-            if not nonTerminal.IsEmpty then
-                schedulePoll ()
-            else
-                Cmd.none
+        let nextPoll = if not nonTerminal.IsEmpty then schedulePoll () else []
 
-        model, Cmd.batch (nextPoll :: fetchCmds)
+        model, nextPoll @ fetchCmds
 
     | StatusPolled(docId, status) ->
         let docs =
             model.Documents
             |> List.map (fun d -> if d.Id = docId then { d with Status = status } else d)
 
-        { model with Documents = docs }, Cmd.none
+        { model with Documents = docs }, []
 
     | ResetIndexRequested ->
-        { model with Resetting = true }, Cmd.OfAsync.perform knowledgeApi.ResetIndex () ResetIndexCompleted
+        { model with Resetting = true },
+        [
+            Do(RemoteEffect.call "KnowledgeApi.ResetIndex" knowledgeApi.ResetIndex () (orFailed ResetIndexCompleted))
+        ]
 
     | ResetIndexCompleted(Ok()) ->
         // Server publishes `DataRefreshed("KnowledgeBase", _)` after the wipe;
@@ -641,7 +721,7 @@ let update (msg: Msg) (model: Model) =
                 UploadError = None
                 LoadError = None
         },
-        Cmd.none
+        []
 
     | ResetIndexCompleted(Error reason) ->
         {
@@ -649,21 +729,29 @@ let update (msg: Msg) (model: Model) =
                 Resetting = false
                 UploadError = Some(model.Messages.Errors.ResetFailed reason)
         },
-        Cmd.none
+        []
 
     | RefreshAIContextRequested ->
         {
             model with
                 RefreshingAIContext = true
         },
-        Cmd.OfAsync.perform knowledgeApi.RefreshAIContext () (fun () -> RefreshAIContextCompleted)
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.RefreshAIContext"
+                    knowledgeApi.RefreshAIContext
+                    ()
+                    (orFailed (fun () -> RefreshAIContextCompleted))
+            )
+        ]
 
     | RefreshAIContextCompleted ->
         {
             model with
                 RefreshingAIContext = false
         },
-        Cmd.none
+        []
 
     | DismissError ->
         {
@@ -674,7 +762,7 @@ let update (msg: Msg) (model: Model) =
                 AIContextSaveError = None
                 AIContextLoadError = None
         },
-        Cmd.none
+        []
 
     // ── Notes ──
 
@@ -684,7 +772,7 @@ let update (msg: Msg) (model: Model) =
                 NoteEditor = Some target
                 NoteSaveError = None
         },
-        Cmd.none
+        []
 
     | CloseNoteEditor ->
         {
@@ -692,25 +780,34 @@ let update (msg: Msg) (model: Model) =
                 NoteEditor = None
                 NoteSaveError = None
         },
-        Cmd.none
+        []
 
     | SaveNote(target, title, body) ->
         let cmd =
             match target with
             | CreateNew ->
-                Cmd.OfAsync.perform (fun (t, b) -> knowledgeApi.AddNote { Title = t; Body = b }) (title, body) NoteSaved
+                RemoteEffect.call
+                    "KnowledgeApi.AddNote"
+                    knowledgeApi.AddNote
+                    { Title = title; Body = body }
+                    (orFailed NoteSaved)
             | EditExisting docId ->
-                Cmd.OfAsync.perform
-                    (fun (id, t, b) -> knowledgeApi.UpdateNote { DocId = id; Title = t; Body = b })
-                    (docId, title, body)
-                    NoteSaved
+                RemoteEffect.call
+                    "KnowledgeApi.UpdateNote"
+                    knowledgeApi.UpdateNote
+                    {
+                        DocId = docId
+                        Title = title
+                        Body = body
+                    }
+                    (orFailed NoteSaved)
 
         {
             model with
                 SavingNote = true
                 NoteSaveError = None
         },
-        cmd
+        [ Do cmd ]
 
     | NoteSaved(Ok doc) ->
         let docs =
@@ -734,13 +831,21 @@ let update (msg: Msg) (model: Model) =
                 SavingNote = false
                 NoteSaveError = Some reason
         },
-        Cmd.none
+        []
 
     // ── Standing AI context ──
 
     | LoadAIContext(Start()) ->
         model,
-        Cmd.OfAsync.perform (fun () -> knowledgeApi.GetAIContext()) () (fun entry -> LoadAIContext(Finished entry))
+        [
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.GetAIContext"
+                    knowledgeApi.GetAIContext
+                    ()
+                    (orFailed (fun entry -> LoadAIContext(Finished entry)))
+            )
+        ]
 
     | LoadAIContext(Finished entry) ->
         {
@@ -748,7 +853,7 @@ let update (msg: Msg) (model: Model) =
                 AIContext = Some entry
                 AIContextLoadError = None
         },
-        Cmd.none
+        []
 
     | OpenAIContextEditor ->
         {
@@ -756,7 +861,7 @@ let update (msg: Msg) (model: Model) =
                 AIContextEditorOpen = true
                 AIContextSaveError = None
         },
-        Cmd.none
+        []
 
     | CloseAIContextEditor ->
         {
@@ -764,7 +869,7 @@ let update (msg: Msg) (model: Model) =
                 AIContextEditorOpen = false
                 AIContextSaveError = None
         },
-        Cmd.none
+        []
 
     | SaveAIContext body ->
         {
@@ -772,7 +877,9 @@ let update (msg: Msg) (model: Model) =
                 SavingAIContext = true
                 AIContextSaveError = None
         },
-        Cmd.OfAsync.perform knowledgeApi.SetAIContext body AIContextSaved
+        [
+            Do(RemoteEffect.call "KnowledgeApi.SetAIContext" knowledgeApi.SetAIContext body (orFailed AIContextSaved))
+        ]
 
     | AIContextSaved(Ok entry) ->
         {
@@ -782,7 +889,7 @@ let update (msg: Msg) (model: Model) =
                 SavingAIContext = false
                 AIContextSaveError = None
         },
-        Cmd.none
+        []
 
     | AIContextSaved(Error reason) ->
         {
@@ -790,7 +897,7 @@ let update (msg: Msg) (model: Model) =
                 SavingAIContext = false
                 AIContextSaveError = Some reason
         },
-        Cmd.none
+        []
 
     // ── Platform Library ──
 
@@ -800,11 +907,15 @@ let update (msg: Msg) (model: Model) =
                 PlatformDocsLoading = true
                 PlatformDocsLoadError = None
         },
-        Cmd.OfAsync.either
-            (fun () -> platformKnowledgeApi.ListPlatformDocuments())
-            ()
-            (fun docs -> LoadPlatformDocuments(Finished docs))
-            (fun ex -> PlatformDocumentsLoadFailed ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "IPlatformKnowledgeApi.ListPlatformDocuments"
+                    platformKnowledgeApi.ListPlatformDocuments
+                    ()
+                    (orElse (fun docs -> LoadPlatformDocuments(Finished docs)) PlatformDocumentsLoadFailed)
+            )
+        ]
 
     | LoadPlatformDocuments(Finished docs) ->
         {
@@ -814,7 +925,7 @@ let update (msg: Msg) (model: Model) =
                 PlatformDocsLoading = false
                 PlatformDocsLoadError = None
         },
-        Cmd.none
+        []
 
     | PlatformDocumentsLoadFailed reason ->
         {
@@ -823,7 +934,12 @@ let update (msg: Msg) (model: Model) =
                 PlatformDocsLoading = false
                 PlatformDocsLoadError = Some reason
         },
-        Cmd.none
+        []
+
+    | CallFailed _ -> model, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Narrative → KB commit handler ─────────────────────
 //
