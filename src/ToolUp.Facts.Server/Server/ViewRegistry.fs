@@ -136,6 +136,8 @@ module ViewRegistry =
         | Fuaran.DB.PipelineRefusal.UnitMismatch _ -> "UnitMismatch"
         | Fuaran.DB.PipelineRefusal.Operand _ -> "Operand"
         | Fuaran.DB.PipelineRefusal.OperandMisused _ -> "OperandMisused"
+        | Fuaran.DB.PipelineRefusal.UnresolvedJoinKey _ -> "UnresolvedJoinKey"
+        | Fuaran.DB.PipelineRefusal.StepNotAdmitted _ -> "StepNotAdmitted"
 
     /// Check one view against the model it is declared over.
     let checkView (model: RegisteredDatasetModel) (view: FactViewDefinition) : Result<RegisteredView, ViewRefusal> =

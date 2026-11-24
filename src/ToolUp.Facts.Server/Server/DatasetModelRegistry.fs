@@ -319,7 +319,7 @@ module DatasetModelRegistry =
     /// `restricted:<policy>` one is granted when the deployment's resolver
     /// permits the policy at that door, and a table's existence columns are
     /// granted when one of its metrics is.
-    let grantsFor (resolver: DisclosurePolicyResolver) (model: ModelNode) : Grant list =
+    let grantsFor (resolver: DisclosurePolicyResolver) (model: ModelNode) : Fuaran.DB.Grant list =
         let admitted (cls: string) =
             if cls = "surfaceable" then
                 true
