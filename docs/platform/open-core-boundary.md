@@ -127,7 +127,8 @@ order of preference:
 
 **Ruling (2026-10-27).** This repository may depend on, and name in any shipped file, the
 published Apache-2.0 Fuaran libraries — the `Fuaran.Core.*`, `Fuaran.Compute.*` and
-`Fuaran.UI.*` packages (and, from 2026-11-11, the `Fuaran.DB.*` packages), their public
+`Fuaran.UI.*` packages (and, from 2026-11-11, the `Fuaran.DB.*` packages, and the
+published `Fuaran.MVU.*` packages), their public
 repositories and their public specifications. The bare
 `Fuaran` token is therefore not a banned word here. The first adopter is the fact browse's
 view slice, which carries a `Fuaran.Core.Column` table and refines it with
@@ -205,6 +206,22 @@ from a public repository, so a released ToolUp package that carries it restores 
   is judged by the fact gate exactly as any other read, and withholding propagates through
   lineage. A pipeline must pass both the model check and the gate, and neither admits what
   the other refuses. See [Fact tables](fact-tables.md#a-dataset-model-over-the-tables).
+
+### The fourth instance: the model-update-view runtime
+
+`ToolUp.Platform.Client` references `Fuaran.MVU`, the published Apache-2.0 model-update-view
+runtime whose effects are values. A client module names its remote calls as effect values in
+the runtime's step list (`Step`), and forge's own loop performs them through `Cmd.OfRemoting`
+until the shell moves onto the runtime (`Client/RemoteEffect.fs`). The package is published on
+nuget.org with its sources under `fable/`, as is its kernel, `Fuaran.MVU.Kernel`, so a released
+ToolUp client restores anonymously and compiles in a browser.
+
+- **One pin for the producing repository**, `FuaranMvuVersion`, beside the Core, Compute, UI
+  and DB pins.
+- **The pin agrees with the Core pin.** `Fuaran.MVU` 0.1.0 floors `Fuaran.Core.Function` and
+  `Fuaran.Core.AiSurface` at 0.44.1 and `FSharp.Core` at 10.1.300, which the pins above
+  satisfy, so taking it moved no other pin. `Fuaran.Core.AiSurface` resolves at its 0.44.1
+  floor beside the 0.45.0 Core packages; its 0.45.0 release only adds to it.
 
 ## Resolving beside the published Fuaran-UI tier
 

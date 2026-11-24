@@ -177,6 +177,10 @@ let allTests =
         ChatWatchdogTests.tests
         ChatStreamTests.tests
         NarrativePromptAdminUITests.tests
+        // Remote calls as effect values: interceptors, retry and the read
+        // policy through the performer, one message per effect, and the
+        // ported modules' stated effects.
+        RemoteEffectTests.tests
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime

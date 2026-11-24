@@ -329,6 +329,10 @@
         <Compile Include="ChatWatchdogTests.fs" />
         <Compile Include="ChatStreamTests.fs" />
         <Compile Include="NarrativePromptAdminUITests.fs" />
+        <!-- Remote calls as effect values: the performer, the adapter and the
+             two ported modules (Platform.Client, Facts.Client and
+             KnowledgeBase.Client, all referenced below). -->
+        <Compile Include="RemoteEffectTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
