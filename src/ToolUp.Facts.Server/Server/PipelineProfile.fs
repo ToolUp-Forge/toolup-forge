@@ -103,7 +103,8 @@ type PipelineProfileRefusal =
     | NoName
     /// The profile admits no verb.
     | NoSteps
-    /// The algebra has no verb of this spelling.
+    /// The algebra has no verb of this spelling, or forge does not yet offer
+    /// it (`PipelineProfile.notOfferedSteps`).
     | UnknownStep of step: string
     /// The algebra has no expression of this spelling.
     | UnknownExpression of expression: string
@@ -184,7 +185,8 @@ module PipelineProfile =
         Mode = RoundingMode.HalfEven
     }
 
-    /// One example of each verb, in the order the fragment lists them. A verb
+    /// One example of each verb forge offers, in the order the fragment lists
+    /// them (`notOfferedExamples` holds the rest of the algebra). A verb
     /// may have more than one when an example cannot show every field it has
     /// (a window's `n` belongs to `ntile` only); the fragment shows the first.
     let stepExamples: Transform list = [
@@ -275,8 +277,48 @@ module PipelineProfile =
     let private distinctNames (names: string list) : string list =
         names |> List.filter (fun n -> n <> "") |> List.distinct
 
-    /// Every verb of the algebra, by wire spelling, in example order.
+    /// Every verb of the algebra forge offers, by wire spelling, in example order.
     let knownSteps: string list = stepExamples |> List.map stepName |> distinctNames
+
+    /// One example of each verb of the algebra forge does not yet offer. No
+    /// profile may admit one, and a pipeline carrying one is refused by its
+    /// wire spelling whether or not a profile is registered: no lineage,
+    /// locality or disclosure rule here decides what a clustering or a
+    /// resampling may read or return yet. With `stepExamples` it covers every
+    /// case of `Transform`.
+    let notOfferedExamples: Transform list = [
+        KMeans(KMeansSpec.create [ "margin", Col "margin" ] 3 42L)
+        Bootstrap(
+            BootstrapSpec.create
+                [
+                    {
+                        Name = "total"
+                        Fn = Sum
+                        Of = "revenue"
+                    }
+                ]
+                200
+                42L
+        )
+    ]
+
+    /// The verbs forge does not yet offer, by wire spelling.
+    let notOfferedSteps: string list =
+        notOfferedExamples |> List.map stepName |> distinctNames
+
+    /// The first step of `pipeline` whose verb forge does not yet offer,
+    /// refused by its wire spelling and naming `admitted`, the verbs the
+    /// caller may use instead.
+    let notOffered (admitted: string list) (pipeline: Transform list) : PipelineRefusal option =
+        pipeline
+        |> List.indexed
+        |> List.tryPick (fun (i, step) ->
+            let name = stepName step
+
+            if List.contains name notOfferedSteps then
+                Some(PipelineRefusal.OutsideProfile(i + 1, "verb", name, admitted))
+            else
+                None)
 
     /// Every expression of the algebra, by wire spelling, in example order.
     let knownExpressions: string list =
@@ -561,6 +603,8 @@ module PipelineProfile =
         | Define fd -> [ fd.Body ]
         | Fit spec -> FitSpec.exprs spec
         | Predict spec -> FitSpec.exprs spec.Fit
+        | KMeans spec -> KMeansSpec.exprs spec
+        | Bootstrap _
         | Project _
         | GroupBy _
         | Join _
@@ -700,6 +744,8 @@ module PipelineProfileRefusal =
         match refusal with
         | PipelineProfileRefusal.NoName -> "the profile has no name"
         | PipelineProfileRefusal.NoSteps -> "the profile admits no verb"
+        | PipelineProfileRefusal.UnknownStep step when List.contains step PipelineProfile.notOfferedSteps ->
+            sprintf "verb '%s' is not offered yet, so no profile may admit it" step
         | PipelineProfileRefusal.UnknownStep step -> sprintf "the pipeline algebra has no verb '%s'" step
         | PipelineProfileRefusal.UnknownExpression expression ->
             sprintf "the pipeline algebra has no expression '%s'" expression

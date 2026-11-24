@@ -317,7 +317,11 @@ let fragmentTests =
     testList "Pipeline profile fragment" [
 
         test "every Transform and ColExpr case has an example, and every operator and function a name" {
-            Expect.equal (exampleCases PipelineProfile.stepExamples) (caseNames<Transform> ()) "every verb"
+            let offered = exampleCases PipelineProfile.stepExamples
+            let notOffered = exampleCases PipelineProfile.notOfferedExamples
+
+            Expect.equal (Set.union offered notOffered) (caseNames<Transform> ()) "every verb, offered or not yet"
+            Expect.isEmpty (Set.intersect offered notOffered) "no verb both offered and not yet offered"
 
             Expect.equal (exampleCases PipelineProfile.expressionExamples) (caseNames<ColExpr> ()) "every expression"
 
@@ -801,5 +805,87 @@ let measurementTests =
         }
     ]
 
+// ─── The verbs forge does not yet offer ─────────────────────────────
+
+let private clustering: Transform list = [
+    Filter(Binary(Gt, Col "revenue", Lit(Decimal "0")))
+    KMeans(KMeansSpec.create [ "revenue", Col "revenue" ] 2 7L)
+]
+
+let private resampling: Transform list = [
+    Filter(Binary(Gt, Col "revenue", Lit(Decimal "0")))
+    Bootstrap(
+        BootstrapSpec.create
+            [
+                {
+                    Name = "total"
+                    Fn = Sum
+                    Of = "revenue"
+                }
+            ]
+            50
+            7L
+    )
+]
+
+let notOfferedTests =
+    testList "Pipeline profile verbs not yet offered" [
+
+        test "a profile naming kmeans or bootstrap is refused at registration" {
+            let refusals =
+                refusalsOf (
+                    PipelineProfile.named "clusters"
+                    |> PipelineProfile.withSteps [ "filter"; "kmeans"; "bootstrap" ]
+                )
+
+            Expect.equal
+                refusals
+                [
+                    PipelineProfileRefusal.UnknownStep "bootstrap"
+                    PipelineProfileRefusal.UnknownStep "kmeans"
+                ]
+                "each by name, in the profile's step order"
+
+            Expect.equal
+                (PipelineProfileRefusal.describe (PipelineProfileRefusal.UnknownStep "kmeans"))
+                "verb 'kmeans' is not offered yet, so no profile may admit it"
+                "the text says the verb exists and is not offered"
+        }
+
+        for name, pipeline in [ "kmeans", clustering; "bootstrap", resampling ] do
+            test (sprintf "a %s step is refused by name under the default profile, the widest, and none" name) {
+                let w = world ()
+                let byDefault = registered PipelineProfile.defaultProfile
+                let wide = registered widest
+
+                Expect.equal
+                    (refusalOf (answerUnder (Some byDefault) w (revenueArgs pipeline)))
+                    (PipelineRefusal.OutsideProfile(2, "verb", name, defaultVerbs))
+                    "under the default profile"
+
+                Expect.equal
+                    (refusalOf (answerUnder (Some wide) w (revenueArgs pipeline)))
+                    (PipelineRefusal.OutsideProfile(
+                        2,
+                        "verb",
+                        name,
+                        PipelineProfile.knownSteps |> List.filter widest.Steps.Contains
+                    ))
+                    "under a profile admitting every verb registration admits"
+
+                Expect.equal
+                    (refusalOf (answerUnder None w (revenueArgs pipeline)))
+                    (PipelineRefusal.OutsideProfile(2, "verb", name, PipelineProfile.knownSteps))
+                    "with no profile registered"
+            }
+    ]
+
 let tests =
-    testList "Pipeline profile" [ registrationTests; fragmentTests; grammarTests; joinTests; measurementTests ]
+    testList "Pipeline profile" [
+        registrationTests
+        fragmentTests
+        grammarTests
+        joinTests
+        measurementTests
+        notOfferedTests
+    ]

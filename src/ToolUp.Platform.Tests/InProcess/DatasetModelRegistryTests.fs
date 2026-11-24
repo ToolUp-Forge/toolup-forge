@@ -412,6 +412,24 @@ let private tests2 =
             | other -> failtestf "expected the unrelated-join refusal, got %A" other
         }
 
+        test "a view carrying a kmeans step is refused by the model check, naming the step" {
+            let pipeline = [ KMeans(KMeansSpec.create [ "revenue", Col "revenue" ] 2 7L) ]
+
+            let c =
+                composition model described [
+                    {
+                        view "clusters" trade.Id pipeline with
+                            Parameters = []
+                            Columns = [ column "cluster" ]
+                    }
+                ]
+
+            match viewRefusals c with
+            | [ ViewRefusal.ModelCheck("clusters", "StepNotAdmitted", reason) ] ->
+                Expect.stringContains reason "kmeans" "names the step by its wire spelling"
+            | other -> failtestf "expected the step-not-admitted refusal, got %A" other
+        }
+
         test "a view whose declared columns are not its result's is refused" {
             let c =
                 composition model described [

@@ -14,7 +14,7 @@ open ToolUp.Platform.Compose
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.VectorKnowledgeTypes
 
-// ─── The dataset model over a module's fact tables (Phase 1348) ──────
+// ─── The dataset model over a module's fact tables ───────────────────
 //
 // A module's dataset model (`ServerModule.declareDatasetModel`) is lowered
 // here to a `Fuaran.DB` model and checked:
@@ -319,7 +319,7 @@ module DatasetModelRegistry =
     /// `restricted:<policy>` one is granted when the deployment's resolver
     /// permits the policy at that door, and a table's existence columns are
     /// granted when one of its metrics is.
-    let grantsFor (resolver: DisclosurePolicyResolver) (model: ModelNode) : Grant list =
+    let grantsFor (resolver: DisclosurePolicyResolver) (model: ModelNode) : Fuaran.DB.Grant list =
         let admitted (cls: string) =
             if cls = "surfaceable" then
                 true

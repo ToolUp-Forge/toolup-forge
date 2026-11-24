@@ -196,8 +196,8 @@ from a public repository, so a released ToolUp package that carries it restores 
   Its provider, session record and SQL dialects are not referenced: nothing here lowers a
   pipeline to a statement or opens a connection.
 - **One pin for the producing repository**, `FuaranDbVersion`, beside the Core, Compute and
-  UI pins. The pinned release is built on the Core and Compute versions pinned above, so the
-  graph still resolves to one Core and one Compute version.
+  UI pins. The pinned release (`Fuaran.DB` 0.5.0) is built on the Core and Compute versions
+  pinned above (0.45.0 and 0.46.0), so the graph still resolves to one Core and one Compute version.
 - **The fact gate stays the disclosure authority.** A dataset model decides the shape and
   cost of a read: which tables and columns exist, which joins are declared, how many rows,
   joins and grouping keys a pipeline may use. It never decides disclosure. A module's model
@@ -268,7 +268,7 @@ CHANGELOG generator links (for the first row below,
 | Family | Floor here | Fuaran.UI release | Its floor | Status | Broken until closed |
 |---|---|---|---|---|---|
 | `Fuaran.Core` | `0.40.2` | `0.97.0` | `0.38.1` | closed by Fuaran.UI 0.98.1 | Every consumer composing the fact tier beside Fuaran-UI pages on Fuaran.UI 0.97.0 or older: the Core minors after 0.38 removed entities the UI tier calls (`Fuaran.Core.Canon` among them), so the server failed with FS0193 or a `TypeLoadException` for `Fuaran.Core.Canon`, and the Fable client failed compiling the UI tier's own sources. Recorded after the fact: this pin shipped in 0.35.0 before the rule existed. |
-| `Fuaran.Compute` | `0.43.0` | `0.99.1` | `0.41.0` | closed by Fuaran.UI 0.102.0 | None observed: the co-build probe passes beside Fuaran.UI 0.99.1. `Fuaran.Compute.DataFrame` 0.43.0 widens the `Transform`, `ColExpr` and `EvalError` unions the UI tier's sources were compiled without, so a UI tier match over them that is not total is the shape to watch. This row supersedes the lead declared at `0.42.0` (the floor moved; no Fuaran.UI release closed it). Closed by Fuaran.UI 0.102.0, the first release built on `Fuaran.Compute.DataFrame` 0.43.0; Phase 1348 raised both floors to the line Fuaran.UI 0.104.0 is built on (Core 0.42.0, Compute 0.44.0), so no lead is open. |
+| `Fuaran.Compute` | `0.43.0` | `0.99.1` | `0.41.0` | closed by Fuaran.UI 0.102.0 | None observed: the co-build probe passes beside Fuaran.UI 0.99.1. `Fuaran.Compute.DataFrame` 0.43.0 widens the `Transform`, `ColExpr` and `EvalError` unions the UI tier's sources were compiled without, so a UI tier match over them that is not total is the shape to watch. This row supersedes the lead declared at `0.42.0` (the floor moved; no Fuaran.UI release closed it). Closed by Fuaran.UI 0.102.0, the first release built on `Fuaran.Compute.DataFrame` 0.43.0; Phase 1348 raised both floors to the line Fuaran.UI 0.104.0 is built on (Core 0.42.0, Compute 0.44.0), and Phase 1411 to the line Fuaran.UI 0.106.0 is built on (Core 0.45.0, Compute 0.46.0), so no lead is open. |
 
 The first row is the worked example. The 0.35.0 release pinned `Fuaran.Core.Column` 0.40.2 while
 every published Fuaran.UI was built on Core 0.38.1, and Fuaran.UI 0.98.1, built on Core 0.40.2,

@@ -15,7 +15,7 @@ open ToolUp.Platform
 open ToolUp.Platform.Compose
 open ToolUp.Platform.Grounding
 
-// ─── Views over a module's dataset model (Phase 1348) ────────────────
+// ─── Views over a module's dataset model ─────────────────────────────
 //
 // A view (`ServerModule.declareViews`) is a named, versioned `Fuaran.Compute`
 // pipeline over a module's modelled tables. At registration every view's
@@ -136,6 +136,8 @@ module ViewRegistry =
         | Fuaran.DB.PipelineRefusal.UnitMismatch _ -> "UnitMismatch"
         | Fuaran.DB.PipelineRefusal.Operand _ -> "Operand"
         | Fuaran.DB.PipelineRefusal.OperandMisused _ -> "OperandMisused"
+        | Fuaran.DB.PipelineRefusal.UnresolvedJoinKey _ -> "UnresolvedJoinKey"
+        | Fuaran.DB.PipelineRefusal.StepNotAdmitted _ -> "StepNotAdmitted"
 
     /// Check one view against the model it is declared over.
     let checkView (model: RegisteredDatasetModel) (view: FactViewDefinition) : Result<RegisteredView, ViewRefusal> =

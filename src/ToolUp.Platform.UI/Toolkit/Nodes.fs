@@ -238,7 +238,10 @@ module Nodes =
                     Label = literal label
                     Source =
                         Binding.Static(
-                            Some(options |> List.map (fun (value, label) -> { Value = value; Label = label }))
+                            Some(
+                                options
+                                |> List.map (fun (value, label) -> { Value = value; Label = literal label })
+                            )
                         )
                     Value = Some(Binding.Static(Some value))
                     OnChange = Some(fun chosen -> chosen |> Option.defaultValue value |> onChange |> Action.dispatch)

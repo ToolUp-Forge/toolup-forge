@@ -150,6 +150,11 @@ module PipelineAssertion =
                     && (spec.PartitionBy |> List.exists l.Copies.ContainsKey)
           }
         | Unpivot(ids, _) -> { l with Copies = keep ids l.Copies }
+        // A clustering and a resampling are refused before any walk
+        // (`PipelineProfile.notOfferedSteps`); were one to reach here, it
+        // answers as a step that pools every row.
+        | KMeans _
+        | Bootstrap _
         | Fit _
         | Predict _
         | Pivot _

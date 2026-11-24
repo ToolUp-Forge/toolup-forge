@@ -7,14 +7,14 @@
          PackageVersion entries beside FSharp.Core). Both are public:
          released versions on nuget.org, never a local-feed build. -->
     <FuaranRestorePath>public</FuaranRestorePath>
-    <FuaranCoreVersion>0.42.0</FuaranCoreVersion>
-    <FuaranComputeVersion>0.44.0</FuaranComputeVersion>
-    <!-- Phase 1348 — the Fuaran-DB repository's pin, for Fuaran.DB (the
-         dataset model and its pipeline check; ToolUp.Facts.Server only).
-         Public: a release on nuget.org, built on the Core and Compute pins
-         above (0.2.0 is built on Fuaran.Core 0.42.0 and Fuaran.Compute
-         0.44.0). The core package only: no provider, session or dialect. -->
-    <FuaranDbVersion>0.2.0</FuaranDbVersion>
+    <FuaranCoreVersion>0.45.0</FuaranCoreVersion>
+    <FuaranComputeVersion>0.46.0</FuaranComputeVersion>
+    <!-- The Fuaran-DB repository's pin, for Fuaran.DB (the dataset model and
+         its pipeline check; ToolUp.Facts.Server only). Public: a release on
+         nuget.org built on the pins above (0.5.0 floors Fuaran.Core at 0.45.0
+         and Fuaran.Compute at 0.46.0, so the restore graph carries one Core
+         version). The core package only: no provider, session or dialect. -->
+    <FuaranDbVersion>0.5.0</FuaranDbVersion>
     <!-- The fuaran-facts repository's pin, for Fuaran.Facts: the Fact kernel,
          its identity rule, codec, laws, definitions and rendering standard,
          which ToolUp.Platform.Core and ToolUp.Facts.Core build on. Public: a
@@ -23,12 +23,13 @@
     <FuaranFactsVersion>0.2.1</FuaranFactsVersion>
   </PropertyGroup>
   <PropertyGroup>
-    <!-- Phase 1129 — the Fuaran-UI repository's pin, for Fuaran.UI and
-         Fuaran.UI.Charts (ToolUp.Facts.Presentation, and InterPlatform's
-         fit-diagnostic charts). Public: a release on
-         nuget.org. 0.104.0 is the release built against the Fuaran.Core and
-         Fuaran.Compute pins above (Core 0.42.0, Compute 0.44.0). -->
-    <FuaranUIVersion>0.104.0</FuaranUIVersion>
+    <!-- The Fuaran-UI repository's pin, for Fuaran.UI and Fuaran.UI.Charts
+         (ToolUp.Facts.Presentation, and InterPlatform's fit-diagnostic
+         charts). Public: a release on nuget.org. 0.106.0 is the release built
+         against the Fuaran.Core and Fuaran.Compute pins above (Core 0.45.0,
+         Compute 0.46.0): every package of it floors Core at 0.45.0 and
+         Compute at 0.46.0, so the three pins move together. -->
+    <FuaranUIVersion>0.106.0</FuaranUIVersion>
   </PropertyGroup>
   <!--
     Phase 11.C.1 (2026-05-08) Paket -> CPM migration. Versions are
@@ -162,8 +163,8 @@
          One version property per producing repository, because the Core
          and Compute repositories are versioned independently;
          `Fuaran.Core.Unit` / `.Wire` arrive transitively at the Core pin.
-         The Core pin is 0.42.0 — the Core floor of the DataFrame and
-         Fuaran.DB releases pinned here (Phase 1348) — and deliberately an
+         The Core pin is 0.45.0 — the Core floor of the DataFrame and
+         Fuaran.UI releases pinned here — and deliberately an
          exact released number: a workspace local feed may
          hold a same-numbered build of a Core release with different bytes,
          and NuGet takes an exact version from whichever source answers
