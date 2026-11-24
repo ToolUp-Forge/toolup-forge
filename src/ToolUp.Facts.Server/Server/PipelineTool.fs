@@ -270,7 +270,9 @@ module PipelineTool =
         | Distinct
         | Limit _
         | Define _
-        | Fit _ -> None
+        | Fit _
+        | KMeans _
+        | Bootstrap _ -> None
 
     /// The refusals decided by the pipeline alone, before anything is read:
     /// another source, a parameter, the clock. A join the profile's relation
@@ -361,6 +363,8 @@ module PipelineTool =
             spec.Response :: spec.GroupBy
             @ Option.toList spec.Weights
             @ (FitSpec.exprs spec |> List.collect exprColumns)
+        | KMeans spec -> spec.GroupBy @ (KMeansSpec.exprs spec |> List.collect exprColumns)
+        | Bootstrap spec -> spec.GroupBy @ Option.toList spec.Cluster @ (spec.Aggregates |> List.map _.Of)
         | Join(_, on, _) -> List.map fst on
         | Distinct
         | Limit _
@@ -458,9 +462,13 @@ module PipelineTool =
                 lineage.Order
             // A fit pools its rows into one model per group, and a prediction
             // scores against a model: neither output is attributed column by
-            // column, so every column reads every slice column.
+            // column, so every column reads every slice column. A clustering
+            // and a resampling are refused before any walk
+            // (`PipelineProfile.notOfferedSteps`), and answer the same way.
             | Fit _
             | Predict _
+            | KMeans _
+            | Bootstrap _
             | Pivot _
             | Join _
             | Union _
@@ -849,7 +857,10 @@ module PipelineTool =
 
     /// The steps checked before anything is read: against the deployment's
     /// profile when it registered one (answering the joins its relation check
-    /// admitted), and for another source, a parameter or the clock.
+    /// admitted), and for another source, a parameter or the clock. A verb
+    /// forge does not yet offer is refused by name either way: a registered
+    /// profile cannot admit one, and with none the full algebra forge offers
+    /// is what the refusal names.
     let private admitted
         (profile: RegisteredPipelineProfile option)
         (caller: PipelineCaller)
@@ -857,7 +868,10 @@ module PipelineTool =
         (pipeline: Transform list)
         : Result<PipelineJoin list, PipelineRefusal> =
         match profile with
-        | None -> preflight false pipeline |> Result.map (fun () -> [])
+        | None ->
+            match PipelineProfile.notOffered PipelineProfile.knownSteps pipeline with
+            | Some refusal -> Error refusal
+            | None -> preflight false pipeline |> Result.map (fun () -> [])
         | Some registered ->
             PipelineProfile.admit registered caller table pipeline
             |> Result.bind (fun joins -> preflight (not joins.IsEmpty) pipeline |> Result.map (fun () -> joins))
