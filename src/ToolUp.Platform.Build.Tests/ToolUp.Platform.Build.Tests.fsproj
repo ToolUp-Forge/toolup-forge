@@ -10,32 +10,32 @@
         <Compile Include="..\ToolUp.Platform.Tests\Contracts\Approval.fs" Link="Contracts\Approval.fs" />
         <Compile Include="SbomTests.fs" />
         <Compile Include="PackagedModuleConformanceTests.fs" />
-        <!-- Phase 213 — Lighthouse / Core-Web-Vitals budget gate. -->
+        <!-- Lighthouse / Core-Web-Vitals budget gate. -->
         <Compile Include="CoreWebVitalsBudgetTests.fs" />
-        <!-- Phase 192 — cold-start / hot-path perf-budget gate. -->
+        <!-- Cold-start / hot-path perf-budget gate. -->
         <Compile Include="PerfBudgetTests.fs" />
-        <!-- Phase 903 — the template gates' per-run private packages
+        <!-- The template gates' per-run private packages
              folder. Source-linked from the repo root for the same reason
              VerifyGate.fs below is: the FAKE targets and these go-red
              proofs run one implementation. Compiled ahead of
              TemplateGateTests.fs, which exercises it. -->
         <Compile Include="..\..\TemplateGatePackages.fs" Link="TemplateGatePackages.fs" />
-        <!-- Phase 754 — the template gate's stranger's-package guard,
+        <!-- The template gate's stranger's-package guard,
              probed in both directions. -->
         <Compile Include="TemplateGateTests.fs" />
-        <!-- Phase 904 - the samples gate's pure half (discovery, the Fable
+        <!-- The samples gate's pure half (discovery, the Fable
              classification, the count reconciliation), source-linked from
              the repo root so the `VerifySamples` target and these go-red
              proofs run one implementation. -->
         <Compile Include="..\..\SampleGate.fs" Link="SampleGate.fs" />
         <Compile Include="SampleGateTests.fs" />
-        <!-- Phase 326 — the ToolUp.Sdk meta-manifest drift guard. The
+        <!-- The ToolUp.Sdk meta-manifest drift guard. The
              reconciler is source-linked from the repo root rather than
              copied, so this test and the `GenerateSdkManifest` FAKE
              target that repairs its findings run one implementation. -->
         <Compile Include="..\..\SdkManifest.fs" Link="SdkManifest.fs" />
         <Compile Include="SdkManifestTests.fs" />
-        <!-- Phase 184 — the fresh-machine published-package smoke gate's
+        <!-- The fresh-machine published-package smoke gate's
              offline-decidable rules. Source-linked from the repo root for
              the same reason SdkManifest.fs above is: the FAKE target and
              these go-red proofs run one implementation. The gate itself
@@ -43,7 +43,7 @@
              would first be exercised on the release they protect. -->
         <Compile Include="..\..\PublishedSmoke.fs" Link="PublishedSmoke.fs" />
         <Compile Include="PublishedSmokeTests.fs" />
-        <!-- Phase 260 — the release bump derived from the api-baselines
+        <!-- The release bump derived from the api-baselines
              diff. Source-linked from the repo root for the same reason
              SdkManifest.fs and PublishedSmoke.fs above are: the
              VerifySemVerBump target and these go-red proofs run one
@@ -61,16 +61,16 @@
         <Compile Include="SemVerBumpTests.fs" />
         <Compile Include="..\..\DocGates.fs" Link="DocGates.fs" />
         <Compile Include="DocGatesTests.fs" />
-        <!-- Phase 259 — the conformance-pack coverage gate. Pure file
+        <!-- The conformance-pack coverage gate. Pure file
              scanning over the checkout (api-baselines, the Contracts
              directory, the `.fs` tree), so it belongs beside the other
              build-time gates rather than in the runtime Platform pack. -->
         <Compile Include="ConformanceCoverage.fs" />
         <Compile Include="ConformanceCoverageTests.fs" />
-        <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
+        <!-- The unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
-        <!-- Phase 735 — the VerifyAll gate (a named OS mutex keyed on the
+        <!-- The VerifyAll gate (a named OS mutex keyed on the
              repository's common git directory) and the corpus-anchor
              memoisation. VerifyGate.fs is source-linked from the repo root
              for the same reason SdkManifest.fs is: the FAKE driver and
@@ -91,13 +91,13 @@
         <Compile Include="FlagsTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Support\CorpusAnchor.fs" Link="Support\CorpusAnchor.fs" />
         <Compile Include="CorpusAnchorTests.fs" />
-        <!-- Phase 183 — the consumer codemod for the 0.x breaking renames:
+        <!-- The consumer codemod for the 0.x breaking renames:
              golden-file tests over the fixture consumer tree under
              fixtures/codemod/ (rewrites land, review sites are reported not
              guessed, a second run is a no-op, BOM + CRLF survive). Pure over
              a scratch copy of the fixtures; no build, no tool, no process. -->
         <Compile Include="CodemodTests.fs" />
-        <!-- Phase 257 — the v1.0 readiness scorecard. Source-linked from
+        <!-- The v1.0 readiness scorecard. Source-linked from
              the repo root for the same reason SemVerBump.fs above is: the
              V1Readiness target and these all-green / one-red-per-cause
              fixtures run one implementation. Compiled after
@@ -105,7 +105,7 @@
              coverage row reads. -->
         <Compile Include="..\..\V1Readiness.fs" Link="V1Readiness.fs" />
         <Compile Include="V1ReadinessTests.fs" />
-        <!-- Phase 262 — the generated CHANGELOG. Source-linked from the
+        <!-- The generated CHANGELOG. Source-linked from the
              repo root for the same reason SemVerBump.fs above is: the
              Changelog target and these fixture renders (Added / Changed /
              Removed each represented, idempotent, order-insensitive) run
@@ -113,14 +113,14 @@
              per-package classification it pairs into signature changes. -->
         <Compile Include="..\..\Changelog.fs" Link="Changelog.fs" />
         <Compile Include="ChangelogTests.fs" />
-        <!-- Phase 263 - the release-candidate channel and its soak gate.
+        <!-- The release-candidate channel and its soak gate.
              Source-linked from the repo root for the same reason
              SemVerBump.fs above is: the VerifyReleaseChannel /
              VerifyRcPromotion targets and these go-red proofs run one
              implementation. -->
         <Compile Include="..\..\ReleaseChannel.fs" Link="ReleaseChannel.fs" />
         <Compile Include="ReleaseChannelTests.fs" />
-        <!-- Phase 1016 - the Publish push loop's timeout, bounded retry and
+        <!-- The Publish push loop's timeout, bounded retry and
              remainder report, driven by a fake runner (no network). -->
         <Compile Include="NugetPushTests.fs" />
         <Compile Include="StaleEsbuildTests.fs" />
@@ -153,12 +153,12 @@
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Expecto" />
     </ItemGroup>
-    <!-- Phase 213 — Core-Web-Vitals gate fixtures: Lighthouse report JSON
+    <!-- Core-Web-Vitals gate fixtures: Lighthouse report JSON
          reduced to the fields the gate reads, plus the budgets and
          server-counter snapshots they are checked against. -->
     <ItemGroup>
         <None Include="fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
-        <!-- Phase 183 — the codemod's fixture consumer tree. `.txt`-suffixed on
+        <!-- The codemod's fixture consumer tree. `.txt`-suffixed on
              purpose: a real .fsproj under src/ would be swept into Pack's
              src/**/*.fsproj glob and a real .fs would be Fantomas-checked as
              SDK source. CodemodTests strips the suffix into a scratch tree. -->
@@ -170,7 +170,7 @@
         <None Include="..\..\samples\PublicSite\cwv-budget.json"
               Link="fixtures\cwv\shipped-budget.json"
               CopyToOutputDirectory="PreserveNewest" />
-        <!-- Phase 192 — the SHIPPED perf budget, linked in for the same
+        <!-- The SHIPPED perf budget, linked in for the same
              reason as the one above: a typo in it fails this pack rather
              than the first CI gate run, and the tests decide against the
              same bytes CI does. -->

@@ -6,7 +6,7 @@ open Fake.IO
 open Fake.IO.Globbing.Operators
 open ToolUp.Platform
 open ToolUp.Platform.Build
-// Phase 326 — the ToolUp.Sdk meta-manifest reconciler (repo-root
+// The ToolUp.Sdk meta-manifest reconciler (repo-root
 // SdkManifest.fs, compiled ahead of this file).
 open ToolUp.Forge
 
@@ -30,10 +30,10 @@ let config = {
         TestPacks = Gate.packs manifestData
 }
 
-// ─── Phase 762 — gate lanes (`TOOLUP_TEST_LANE`) ────────────────────
+// ─── Gate lanes (`TOOLUP_TEST_LANE`) ────────────────────
 //
 // A full `VerifyAll` is tens of minutes, nearly all of it inside the
-// Platform pack, and the `Samples` leg (Phase 904) — every sample built
+// Platform pack, and the `Samples` leg — every sample built
 // and the Fable ones transpiled — is part of every full lane. No figure
 // is restated here: one stated six ways went stale six ways, and none
 // counted the samples leg. `VerifyAll` prints the measured figure itself
@@ -58,7 +58,7 @@ let config = {
 // every such row). Each row's `Lanes` carries the result, and the lane
 // this process runs selects the rows at registration (end of `main`).
 //
-// `preflight` (Phase 1394) is a third shape: `verify.ps1`'s own format,
+// `preflight` is a third shape: `verify.ps1`'s own format,
 // header and build steps, then only the rows the manifest opts in with
 // `preflight` — the cheap, deterministic checks, and no behavioural pack.
 // It is the lane run before a push and before a landing claims the full
@@ -163,7 +163,7 @@ let main args =
         else
             None
 
-    // Phase 762 — name the lane once, so a log cannot be mistaken for a
+    // Name the lane once, so a log cannot be mistaken for a
     // full run. Silent under `full`, so the shipping gate's output is
     // byte-for-byte what it was.
     TestLane.announce (sprintf "VerifyAll will run %d of %d pack(s)" selectedPackCount (List.length config.TestPacks))
@@ -609,7 +609,7 @@ let main args =
             TestLane.ListsVariableName
             listsFile)
 
-    // Phase 614 — the Fable-tier test gate as ONE invocation.
+    // The Fable-tier test gate as ONE invocation.
     //
     // `VerifyAll` (in ToolUp.Platform.Build) covers the twelve .NET
     // Expecto packs. The client tier's harness is a different shape —
@@ -688,11 +688,11 @@ let main args =
     // `verify.ps1` cannot go green on a tree whose Fable tier does not
     // compile.
 
-    // Phase 904 — every sample builds under a gate.
+    // Every sample builds under a gate.
     //
     // `samples/` is not in the solution, so nothing compiled it:
-    // `FormsAndAI.Server` was broken (FS0764) from Phase 6g.F until this
-    // phase and no gate noticed, and `samples/MinimalClient`'s Fable
+    // `FormsAndAI.Server` was broken (FS0764) for a long stretch and no
+    // gate noticed, and `samples/MinimalClient`'s Fable
     // compile "has never been a gate" (CLAUDE.md). This is that gate.
     //
     // Every `*.fsproj` under `samples/` is BUILT (`dotnet build`, one
@@ -825,7 +825,7 @@ let main args =
                     if List.isEmpty findings then 0 else 1)
             ]
 
-        // Phase 946 — the samples meant to RUN are run, after every build
+        // The samples meant to RUN are run, after every build
         // leg, against the build just made (`--no-build`). A sample whose
         // exit code is its verdict (HelloWorld-AOT) could otherwise exit 1
         // under a green build gate, which is what happened. The run list is
@@ -853,7 +853,7 @@ let main args =
 
     Target.create "VerifySamples" (fun _ -> runVerifySamples ())
 
-    // Phase 776 — the analyser rule set runs over the SDK's own tree.
+    // The analyser rule set runs over the SDK's own tree.
     //
     // `ToolUp.Remoting.Analyzers` carries the TUA containment rules
     // (container resolution outside registration, an `HttpClient` built
@@ -893,13 +893,12 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyAnalyzers: the analyser run exited %d; its findings are printed above." code)
 
-    // Phase 761 — the browser-level smoke gate.
+    // The browser-level smoke gate.
     //
     // The repo's first REAL-BROWSER tier. Two scenarios, both of which
     // shipped verified structurally or by hand because nothing here
-    // could open a browser: Phase 535's "two sessions co-edit the
-    // sample doc live", and Phase 24's "drop the network, make a
-    // change, restore it".
+    // could open a browser: "two sessions co-edit the sample doc
+    // live", and "drop the network, make a change, restore it".
     //
     // Usage: `dotnet run --project Build.fsproj -- VerifyBrowserSmoke`
     //
@@ -916,7 +915,7 @@ let main args =
     //
     // The scenarios are gated on a locally-installed Chromium and
     // report Pending, not Failed, without one (the `BrowserGate`
-    // convention from Phase 126). That is right for a developer's
+    // convention). That is right for a developer's
     // checkout and catastrophic for CI: a runner with no browser would
     // report every scenario skipped and the job green. So this body
     // reads the PASSED count out of the harness's JUnit summary and the
@@ -942,7 +941,7 @@ let main args =
 
         // ── 0: the compile set this gate is CLAIMED to cover ────────
         //
-        // Phase 345. `ToolUp.Offline.Client` reaches the Fable compiler
+        // `ToolUp.Offline.Client` reaches the Fable compiler
         // in CI HERE AND NOWHERE ELSE. Exactly two projects in the tree
         // reference it — this fixture and `samples/MinimalClient` — and
         // no CI job compiles the sample. (`ToolUp.Platform.Client` is
@@ -1010,7 +1009,7 @@ let main args =
         // ── 5: the harness, and the browser it drives ───────────────
         //
         // Built and then invoked as a DLL rather than through `dotnet
-        // run --project`, per Phase 731: that launch path intermittently
+        // run --project`: that launch path intermittently
         // hangs before the suite starts, and a hang costs far more than
         // a failure because nothing about it says which it is.
         Trace.tracefn "▶ VerifyBrowserSmoke (5/6): build the harness + ensure Chromium"
@@ -1856,7 +1855,7 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyScopeLiterals: exited %d; the sites are printed above." code)
 
-    // Phase 1052 — the closure-fold is written once.
+    // The closure-fold is written once.
     //
     // `ComposeExtensions.ServiceConfig` is an option of a function, so every
     // contributor that wanted to add a registration used to fold by hand —
@@ -2497,7 +2496,7 @@ let main args =
                     match run clientDir "dotnet" [ "tool"; "restore" ] with
                     | 0 -> run clientDir "dotnet" [ "fable"; "-o"; "output"; "--noCache" ]
                     | code -> code)
-                // Phase 1200 — the question Vite asks of this output, without a Vite: every
+                // The question Vite asks of this output, without a Vite: every
                 // relative dynamic import a compiled package source spells names a file. A
                 // consumer compiles the packed sources under fable_modules as `.fs.js` while
                 // Fable spells `importValueDynamic` from the `--outDir` extension (`.js`),
@@ -2683,7 +2682,7 @@ let main args =
         | 0 -> ()
         | code -> failwithf "VerifyFuaranReferences: exited %d; the verdicts are printed above." code)
 
-    // Phase 326 — the ToolUp.Sdk meta-manifest, emitted from the tree.
+    // The ToolUp.Sdk meta-manifest, emitted from the tree.
     //
     // `src/ToolUp.Sdk/build/ToolUp.Sdk.props` is the one-line
     // coordinated-bump path a consumer imports into their
@@ -2790,7 +2789,7 @@ let main args =
                 (SdkManifest.manifestPath root)
                 (List.length reconciliation.Expected))
 
-    // Phase 72 — template-pack packaging.
+    // Template-pack packaging.
     //
     // The standard Pack target (in ToolUp.Platform.Build) walks
     // `src/**/*.fsproj` and packs each SDK fsproj as a NuGet assembly
@@ -2819,7 +2818,7 @@ let main args =
             |> Proc.ensure
             |> ignore)
 
-    // Phase 167 — pack the `toolup` CLI as a tool-manifest-installable
+    // Pack the `toolup` CLI as a tool-manifest-installable
     // `dotnet tool` into the shared local feed. The standard `Pack`
     // target (in ToolUp.Platform.Build) already walks `src/**/*.fsproj`
     // and picks up ToolUp.Cli too — `PackCli` is the fast single-package
@@ -2846,7 +2845,7 @@ let main args =
         |> Proc.ensure
         |> ignore)
 
-    // Phase 626 — unreferenced-definition report.
+    // Unreferenced-definition report.
     //
     // Nothing in this repo detected a definition with no call sites, and
     // the compiler does not fill the gap: `--warnon:1182` fires only for
@@ -2877,7 +2876,7 @@ let main args =
 
         Proc.exec "dotnet" toolArgs __SOURCE_DIRECTORY__ |> Proc.ensure |> ignore)
 
-    // Phase 213 — Lighthouse / Core-Web-Vitals budget gate. The deciding
+    // Lighthouse / Core-Web-Vitals budget gate. The deciding
     // half only: it reads a committed budget file plus the Lighthouse
     // JSON reports a run already produced, and fails on any breach. The
     // measuring half (build the sample site, serve it on a throwaway
@@ -2890,7 +2889,7 @@ let main args =
     // set; the target body resolves and reports its own missing inputs.
     CoreWebVitalsBudgetGate.registerTarget ()
 
-    // Phase 192 — cold-start / hot-path perf-budget gate. Same split as
+    // Cold-start / hot-path perf-budget gate. Same split as
     // the Core-Web-Vitals gate directly above, for the same reason: this
     // is the deciding half only. It reads the committed perf-budgets.json
     // plus the measurement file a run already wrote, and fails on any
@@ -2915,7 +2914,7 @@ let main args =
     Target.create "VerifyDataPlatformTemplate" (fun _ ->
         TemplateGate.run TemplateGatePackages.verifyDataPlatformTemplate)
 
-    // ─── Phase 184 — the fresh-machine published-package smoke gate ──
+    // ─── The fresh-machine published-package smoke gate ──
     //
     // "A fresh machine can `dotnet add package` the SDK and build it"
     // was a Wave-5.5 exit criterion, run ONCE by hand and never again.
@@ -2955,7 +2954,7 @@ let main args =
 
         // `diagnose` reads a failed step's captured output and returns an
         // account to print beside it ("" for none) — the restore steps use
-        // it to say which ToolUp id missed and why (Phase 1004).
+        // it to say which ToolUp id missed and why.
         let runCheckedInWith (diagnose: string -> string) label exe args dir =
             Trace.tracefn "▶ VerifyPublishedPackages: %s — %s %s" label exe (String.concat " " args)
             let r = Proc.redirected exe args dir
@@ -3024,8 +3023,7 @@ let main args =
         // ── 3. Wait for nuget.org to INDEX the push ──────────────────
         //
         // A push is accepted before it is served. Probing immediately
-        // records a false red about a release that is fine (the Phase 255
-        // lesson), so this waits, and says how long it waited when it
+        // records a false red about a release that is fine, so this waits, and says how long it waited when it
         // gives up rather than claiming the package does not exist.
         let timeout =
             match Environment.environVarOrNone "TOOLUP_PUBLISHED_INDEX_TIMEOUT_MINUTES" with
@@ -3051,7 +3049,7 @@ let main args =
                 sprintf "(request failed: %s)" e.Message
 
         // The CLOSURE the restore resolves, not only the ids the probe
-        // names (Phase 1004): a restore pulls the probes' transitive
+        // names: a restore pulls the probes' transitive
         // `ToolUp.*` dependencies at this version too, and nuget.org
         // indexes each push independently. `v0.25.1` failed NU1102 on
         // `ToolUp.Feliz.AgGrid`, `v0.26.0` on `ToolUp.Platform.Transport`
@@ -3209,7 +3207,7 @@ let main args =
 
     Target.create "VerifyPublishedPackages" (fun _ -> runVerifyPublishedPackages ())
 
-    // ── Phase 260 — the release bump, derived from the api-baselines diff ──
+    // ── The release bump, derived from the api-baselines diff ──
     //
     // At 1.0 the version becomes a promise rather than a label, and the
     // way that promise gets broken is not malice — it is a hand-typed
@@ -3223,16 +3221,15 @@ let main args =
     // The default fails on an under-bump; `--propose` only reports, which
     // is the mode for deciding a number rather than defending one.
     //
-    // WHAT IT DIFFS, and why it is not what the phase shard asked for.
-    // The shard (2026-06-27) asked for the working surface against the
-    // approved baselines. Phase 618 has since made the approval gate fail
+    // WHAT IT DIFFS, and why it is not the working surface against the
+    // approved baselines. The approval gate fails
     // in BOTH directions, so those two are identical on every tree that
     // passes `verify.ps1` — a bump derived from that difference would say
     // "unchanged" forever and this check, which only fails on an
-    // under-bump, could never fire. The measurement that survives 618 is
+    // under-bump, could never fire. The measurement that survives that is
     // between RELEASES: the committed baselines at the last release tag
-    // against the working tree. See `SemVerBump.fs` for why 618 is what
-    // makes that faithful rather than approximate.
+    // against the working tree. See `SemVerBump.fs` for why the two-way
+    // approval gate is what makes that faithful rather than approximate.
     //
     // It is registered here and NOT added to `verify.ps1`. That script is
     // a hard-denied path on the roadmap side (its hash is recorded gate
@@ -3240,11 +3237,11 @@ let main args =
     // about to tag big enough?" — is a release question, not a
     // per-commit one. The pure decision logic is exercised on every
     // commit by the Build test pack; the live reading of git runs at
-    // release, from `publish-nuget.yml`, beside Phase 326's manifest
+    // release, from `publish-nuget.yml`, beside the SDK manifest
     // check and for the same reason: it is the moment the two facts meet.
     // The per-package surface classification between a tag and the
-    // WORKING tree — VerifySemVerBump's measurement, shared since Phase
-    // 263 with the release-candidate soak gate, which takes the same
+    // WORKING tree — VerifySemVerBump's measurement, shared with the
+    // release-candidate soak gate, which takes the same
     // reading from a candidate tag. One reader, so the bump check and the
     // soak gate cannot disagree about whether the surface moved.
     //
@@ -3479,7 +3476,7 @@ let main args =
     Target.create "VerifySemVerBump" (fun _ -> runVerifySemVerBump ())
 
 
-    // Phase 805 — register the generated files' three-way merge drivers in
+    // Register the generated files' three-way merge drivers in
     // THIS CLONE's `.git/config`.
     //
     // `.gitattributes` can name a driver per path but cannot define what it
@@ -3652,7 +3649,7 @@ let main args =
 
         Verdict.Pass None
 
-    // Phase 805 — the regenerate-from-the-merged-tree fallback.
+    // The regenerate-from-the-merged-tree fallback.
     //
     // The driver refuses the cases it cannot compute, and the honest answer to
     // each of them is the same: regenerate the projection from the tree that
@@ -3767,14 +3764,14 @@ let main args =
             "▶ MergeBaselines: %s regenerated from the merged tree and re-checked against the driver. Commit api-baselines/ with the merge."
             scope)
 
-    // ── Phase 257 — the v1.0 readiness scorecard ──
+    // ── The v1.0 readiness scorecard ──
     //
     // "Are we 1.0 yet?" as a regenerated table rather than a judgement
     // call. Six discrete checks, each pass/fail with its measured value
     // and the threshold it was graded against, written to
     // `docs/reference/v1-readiness.md` — the document the operator reads
-    // before tagging. The render is gitignored and never committed (Phase
-    // 1096): a committed copy went nine releases stale, because no workflow
+    // before tagging. The render is gitignored and never committed: a
+    // committed copy went nine releases stale, because no workflow
     // runs this target. What each row reads and why is in `V1Readiness.fs`;
     // this target only does the READING (git, files, the environment)
     // and hands data to the pure checks, so a fixture can score every row
@@ -3798,7 +3795,7 @@ let main args =
     // VerifySemVerBump gives: the question is a release question, the
     // pure checks run on every commit in the Build test pack, and the
     // stability row's reading of git is not a per-commit fact.
-    // The Phase 257 scorecard's READING, shared since Phase 263: the
+    // The readiness scorecard's READING, shared with the RC gate: the
     // V1Readiness target renders it, and VerifyRcPromotion requires it
     // all-green before a candidate may be promoted. One reader, so the
     // document the operator reads and the gate that acts on it cannot
@@ -3863,7 +3860,7 @@ let main args =
             with e ->
                 V1Readiness.Unavailable(sprintf "git could not be read (%s)" e.Message)
 
-        // 2. conformance-coverage: Phase 259's own derivation.
+        // 2. conformance-coverage: the coverage gate's own derivation.
         let conformance =
             try
                 let r = ConformanceCoverage.reconcile root
@@ -3877,13 +3874,13 @@ let main args =
             else
                 V1Readiness.Unavailable(sprintf "%s is absent (%s)" what (Path.GetFileName path))
 
-        // 3. doc-coverage: Phase 261's sidecar.
+        // 3. doc-coverage: the doc-coverage sidecar.
         let docSidecar =
             readIfExists
                 (Path.Combine(root, "api-baselines", "doc-coverage.approved.txt"))
                 "the Phase 261 doc-coverage sidecar"
 
-        // 4. undecided-renames: Phase 256's decision table.
+        // 4. undecided-renames: the migration doc's decision table.
         let renameDoc =
             readIfExists
                 (Path.Combine(root, "docs", "migrations", "256-public-surface-minimization.md"))
@@ -3983,7 +3980,7 @@ let main args =
                 failingIds
                 outPath)
 
-    // ── Phase 262 — the generated CHANGELOG ──
+    // ── The generated CHANGELOG ──
     //
     // One `## [version]` section per release tag, newest first, each
     // carrying the public-surface movement since the release before it
@@ -4040,7 +4037,7 @@ let main args =
 
         // ── the release line, oldest first ──
         //
-        // Release candidates (Phase 263) are not releases here: each
+        // Release candidates are not releases here: each
         // parses to the version it is a candidate for, so it would render
         // a second `## [1.0.0]` claiming a release that has not happened.
         // The stable section covers the whole interval they soaked in.
@@ -4269,7 +4266,7 @@ let main args =
                     "▶ Changelog: CHANGELOG.md rendered (%d release(s)). Commit it with the release; `-- Changelog --draft` prints the unreleased section."
                     releases.Length)
 
-    // ── Phase 263 — the release-candidate channel and its soak gate ──
+    // ── The release-candidate channel and its soak gate ──
     //
     // `1.0.0` is a one-way commitment; a release candidate lets consumers
     // validate the frozen surface before it is made. The rules are in
@@ -4292,7 +4289,7 @@ let main args =
     // where Directory.Build.targets reads it.
     //
     // VerifyRcPromotion is the operator's pre-tag check: the whole soak
-    // gate for the declared `<Version>`, INCLUDING the Phase 257
+    // gate for the declared `<Version>`, INCLUDING the readiness
     // scorecard. The scorecard is not in the workflow because its
     // adoption row reads private consumer facts the public workflow must
     // not reach (see `V1Readiness.matrixEnvVar`); the workflow therefore
@@ -4559,7 +4556,7 @@ let main args =
     // docs/platform/testing-conventions.md.
     //
     // Usage: `dotnet run --project Build.fsproj -- Census [--check]`
-    // Phase 1198 — the server tier's per-part namespaces. Three forge-side
+    // The server tier's per-part namespaces. Three forge-side
     // acts over the scan `SubsystemNamespaces.scan` performs on the part
     // project files and their sources: `--write-table` regenerates the
     // name table the Codemod target's 1198 migration ships as an embedded
@@ -4986,7 +4983,7 @@ let main args =
                                 (String.concat "; " errors))
 
 
-    // Phase 735 — `VerifyAll` serialises itself machine-wide, per repository:
+    // `VerifyAll` serialises itself machine-wide, per repository:
     // a named OS mutex keyed on `git rev-parse --git-common-dir`, so every
     // worktree of this clone contends for ONE gate and a second run waits
     // visibly instead of thrashing the first. The dispatcher's gate queue

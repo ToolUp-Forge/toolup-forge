@@ -8,20 +8,20 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.BuildTypes.fs" />
-    <!-- Phase 182 — SBOM/provenance emission consumed by the Publish
+    <!-- SBOM/provenance emission consumed by the Publish
          target in SDK.Build.fs (compiled after this). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Sbom.fs" />
-    <!-- Phase 1198 - the server tier's per-part namespaces: the scan, the
+    <!-- The server tier's per-part namespaces: the scan, the
          shipped name table (an embedded resource) and the derived-opens
          pass the Codemod target's 1198 migration runs (compiled before
          SDK.Codemod.fs, which hooks it). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CodemodNamespaces.fs" />
     <EmbeddedResource Include="src\ToolUp.Platform.Build\Build\codemod-1198-namespaces.txt" LogicalName="codemod-1198-namespaces.txt" />
     <EmbeddedResource Include="src\ToolUp.Platform.Build\Build\codemod-1198-reach.txt" LogicalName="codemod-1198-reach.txt" />
-    <!-- Phase 183 — the consumer codemod behind the Codemod target
+    <!-- The consumer codemod behind the Codemod target
          registerTargets registers (compiled after this). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Codemod.fs" />
-    <!-- Phase 1016 - the transport tier's RetryPolicy, the push budget the
+    <!-- The transport tier's RetryPolicy, the push budget the
          Publish target's retry loop in SDK.Build.fs takes. The packaged
          ToolUp.Platform.Build reaches it through Core; this driver has no
          project references, so it compiles the one file. -->
@@ -29,16 +29,16 @@
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.FelizRatchet.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Build.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.HostPackaging.fs" />
-    <!-- Phase 213 — the Core-Web-Vitals budget parser + check behind the
+    <!-- The Core-Web-Vitals budget parser + check behind the
          VerifyCoreWebVitalsBudget target Build.fs registers. Independent
          of SDK.Build.fs (its own options record, not BuildConfig). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.CoreWebVitalsBudget.fs" />
-    <!-- Phase 192 — the cold-start / hot-path perf budget parser + check
+    <!-- The cold-start / hot-path perf budget parser + check
          behind the VerifyPerfBudget target Build.fs registers.
          Independent of SDK.Build.fs (its own options record, not
          BuildConfig). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.PerfBudget.fs" />
-    <!-- Phase 326 — the ToolUp.Sdk meta-manifest reconciler behind the
+    <!-- The ToolUp.Sdk meta-manifest reconciler behind the
          GenerateSdkManifest target Build.fs registers. Repo-root rather
          than inside ToolUp.Platform.Build because it is forge's OWN
          release hygiene, not SDK surface a consumer composes against;
@@ -46,7 +46,7 @@
          the FAKE target and the drift test run one implementation. It
          takes no FAKE dependency for exactly that reason. -->
     <Compile Include="SdkManifest.fs" />
-    <!-- Phase 184 — the fresh-machine published-package smoke gate's
+    <!-- The fresh-machine published-package smoke gate's
          offline-decidable rules, behind the VerifyPublishedPackages
          target Build.fs registers. Same shape and same reason as
          SdkManifest.fs above: forge's own release hygiene rather than
@@ -55,7 +55,7 @@
          run one implementation. Compiled after SdkManifest.fs — the
          target reconciles its probe closure against `expected`. -->
     <Compile Include="PublishedSmoke.fs" />
-    <!-- Phase 260 — the release bump derived from the api-baselines
+    <!-- The release bump derived from the api-baselines
          diff, behind the VerifySemVerBump target Build.fs registers.
          Same shape and same reason as SdkManifest.fs and
          PublishedSmoke.fs above: forge's own release hygiene rather than
@@ -79,7 +79,7 @@
          the targets and their go-red proofs run one implementation. After
          SurfaceDiff.fs, whose parse is how it reads the api-baselines. -->
     <Compile Include="DocGates.fs" />
-    <!-- Phase 762 — the TOOLUP_TEST_LANE vocabulary. Source-linked from
+    <!-- The TOOLUP_TEST_LANE vocabulary. Source-linked from
          the Platform test pack rather than copied: the VerifyAll target
          below selects PACKS by lane and that pack's entry point selects
          LISTS by lane, in assemblies that cannot reference each other,
@@ -91,21 +91,21 @@
          GateManifestTests read one list. After TestLane.fs (its lanes) and
          ahead of VerifyGate.fs (whose gated set and bound derive from it). -->
     <Compile Include="GateManifest.fs" />
-    <!-- Phase 735 — the VerifyAll gate: a named OS mutex keyed on the
+    <!-- The VerifyAll gate: a named OS mutex keyed on the
          repository's common git directory, so concurrent runs from the
          worktrees of one clone serialise instead of thrashing. Repo-root,
          FAKE-free and source-linked into ToolUp.Platform.Build.Tests for
          the same reason SdkManifest.fs is: forge's own build hygiene, one
          implementation under the driver and under its go-red proofs. -->
     <Compile Include="VerifyGate.fs" />
-    <!-- Phase 257 — the v1.0 readiness scorecard behind the V1Readiness
+    <!-- The v1.0 readiness scorecard behind the V1Readiness
          target Build.fs registers. Same shape and same reason as
          SemVerBump.fs above: forge's own release hygiene rather than SDK
          surface, FAKE-free, and source-linked (not copied) into
          ToolUp.Platform.Build.Tests so the target and its all-green /
          one-red-per-cause fixtures run one implementation.
 
-         ConformanceCoverage.fs is Phase 259's gate, source-linked from
+         ConformanceCoverage.fs is the conformance-coverage gate, source-linked from
          the Build test pack ahead of it so the scorecard's coverage row
          reads the SAME derivation of "replaceable seam" the gate does —
          a second derivation would disagree with the gate about what a
@@ -113,7 +113,7 @@
     <Compile Include="src\ToolUp.Platform.Tests\Contracts\Approval.fs" Link="Approval.fs" />
     <Compile Include="src\ToolUp.Platform.Build.Tests\ConformanceCoverage.fs" Link="ConformanceCoverage.fs" />
     <Compile Include="V1Readiness.fs" />
-    <!-- Phase 262 — the per-release CHANGELOG generated from the
+    <!-- The per-release CHANGELOG generated from the
          api-baselines diffs, behind the Changelog target Build.fs
          registers. Same shape and same reason as SemVerBump.fs above:
          release hygiene rather than SDK surface, FAKE-free, and
@@ -122,7 +122,7 @@
          reads SemVerBump's per-package classification, so it compiles
          after it. -->
     <Compile Include="Changelog.fs" />
-    <!-- Phase 263 - the release-candidate channel and its soak gate, behind
+    <!-- The release-candidate channel and its soak gate, behind
          the VerifyReleaseChannel and VerifyRcPromotion targets Build.fs
          registers. Same shape and same reason as SemVerBump.fs above:
          release hygiene rather than SDK surface, FAKE-free, and
@@ -131,14 +131,14 @@
          SemVerBump's versions and classifications and PublishedSmoke's
          workflow job reader, so it compiles after both. -->
     <Compile Include="ReleaseChannel.fs" />
-    <!-- Phase 903 — the template gates' per-run private packages folder,
+    <!-- The template gates' per-run private packages folder,
          behind the VerifyTemplates / VerifyPackagedModuleTemplate targets
          in Build.fs. Same shape and same reason as VerifyGate.fs above:
          forge's own build hygiene rather than SDK surface, FAKE-free, and
          source-linked (not copied) into ToolUp.Platform.Build.Tests so the
          targets and their go-red proofs run one implementation. -->
     <Compile Include="TemplateGatePackages.fs" />
-    <!-- Phase 904 — the samples gate's pure half: finding the sample
+    <!-- The samples gate's pure half: finding the sample
          projects, deciding which Fable transpiles, and reconciling the
          built count with the directory. Behind the VerifySamples target
          and the `Samples` leg of VerifyAll in Build.fs; source-linked into
