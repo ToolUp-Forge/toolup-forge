@@ -2536,7 +2536,7 @@ let main args =
     //        `… Fuaran.DB=0.2.0 Fuaran.Core.*=0.45.0` scans the named packages
     //        instead of the pins, with every package of a `Family.*` the first
     //        restore resolves re-pinned at that version (how a break is shown
-    //        red without moving a pin).
+    //        red without moving a pin). A leg of `VerifyAll` in the full lane.
     let runVerifyFuaranReferences (args: string list) : int =
         let root = __SOURCE_DIRECTORY__
         let packages = Path.Combine(root, "obj", "fuaran-references-packages")
@@ -4727,6 +4727,12 @@ let main args =
                     "▶ VerifyAll: FuaranCoBuild (the fact tier beside the published Fuaran.UI, via VerifyFuaranCoBuild)"
 
                 Gate.verdictOf (fun () -> runVerifyFuaranCoBuild None None)
+        FuaranReferences =
+            fun () ->
+                Trace.tracefn
+                    "▶ VerifyAll: FuaranReferences (every resolved Fuaran package's references, via VerifyFuaranReferences)"
+
+                Gate.verdictOfExit (runVerifyFuaranReferences [])
         MergeDrivers = runMergeDrivers
         WireFable = fun () -> runWireFable "src/ToolUp.AI.Wire.Fable.Tests" "output/Program.js" "WireFable"
         WireConformanceFable =

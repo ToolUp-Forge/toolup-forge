@@ -286,8 +286,8 @@ constructor that `Fuaran.Core` 0.45.0 no longer has. Neither gate above sees it:
 rule compares floors with the UI tier's, and the co-build probe compiles and runs only the fact
 tier beside the UI tier.
 
-**The rule** (`dotnet run --project Build.fsproj -- VerifyFuaranReferences`;
-`FuaranReferenceScan.fs`). A scratch project outside the repository references every Fuaran pin of
+**The rule** (`dotnet run --project Build.fsproj -- VerifyFuaranReferences`, a `VerifyAll` leg in
+the full lane; `FuaranReferenceScan.fs`). A scratch project outside the repository references every Fuaran pin of
 `Directory.Packages.props` and restores from nuget.org alone into a package folder private to the
 checkout, so NuGet resolves the graph a consumer composing the pins resolves. Every Fuaran package
 in that graph, pinned or transitive, is scanned: each type and member reference its assemblies make
