@@ -2927,6 +2927,34 @@ ToolUp.Elmish.React.StoreSnapshot`2 (class)
 ToolUp.Elmish.React.StoreSnapshot`2..ctor(model, Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit])
 ToolUp.Elmish.React.StoreSnapshot`2.Dispatch : Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.Elmish.React.StoreSnapshot`2.Model : model { get }
+ToolUp.Elmish.RemoteCallSite (class)
+ToolUp.Elmish.RemoteCallSite..ctor(System.String, System.Object, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Elmish.Cmd+RetryPolicy])
+ToolUp.Elmish.RemoteCallSite.Argument : System.Object { get }
+ToolUp.Elmish.RemoteCallSite.Equals(System.Object) : System.Boolean
+ToolUp.Elmish.RemoteCallSite.GetHashCode() : System.Int32
+ToolUp.Elmish.RemoteCallSite.Method : System.String { get }
+ToolUp.Elmish.RemoteCallSite.Retry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Elmish.Cmd+RetryPolicy] { get }
+ToolUp.Elmish.RemoteCall`1 (class)
+ToolUp.Elmish.RemoteEffect (class)
+ToolUp.Elmish.RemoteEffect.callWithRetry`3(System.String, ToolUp.Elmish.Cmd+RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Elmish.RemoteEffect`1[msg]
+ToolUp.Elmish.RemoteEffect.call`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Elmish.RemoteEffect`1[msg]
+ToolUp.Elmish.RemoteEffect.flatten`1(Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpResult`2[t, System.String], System.Exception]) : Microsoft.FSharp.Core.FSharpResult`2[t, System.String]
+ToolUp.Elmish.RemoteEffect.legacy`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Elmish.RemoteEffect`1[msg]
+ToolUp.Elmish.RemoteEffect.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, b], ToolUp.Elmish.RemoteEffect`1[a]) : ToolUp.Elmish.RemoteEffect`1[b]
+ToolUp.Elmish.RemoteEffect.perform`1(ToolUp.Elmish.RemoteEffect`1[msg]) : Fuaran.MVU.Performance`1[msg]
+ToolUp.Elmish.RemoteEffect.run`2(model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Elmish.RemoteEffect`1[msg]]]) : System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.Elmish.RemoteEffect.toCmd`1(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Elmish.RemoteEffect`1[msg]]]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
+ToolUp.Elmish.RemoteEffect`1 (class)
+ToolUp.Elmish.RemoteEffect`1.IsInvoke : System.Boolean { get }
+ToolUp.Elmish.RemoteEffect`1.IsLegacy : System.Boolean { get }
+ToolUp.Elmish.RemoteEffect`1.Tag : System.Int32 { get }
+ToolUp.Elmish.RemoteEffect`1+Invoke (class)
+ToolUp.Elmish.RemoteEffect`1+Invoke.Item : ToolUp.Elmish.RemoteCall`1[msg] { get }
+ToolUp.Elmish.RemoteEffect`1+Legacy (class)
+ToolUp.Elmish.RemoteEffect`1+Legacy.Item : Fuaran.MVU.LegacyEffect`1[msg] { get }
+ToolUp.Elmish.RemoteEffect`1+Tags (class)
+ToolUp.Elmish.RemoteEffect`1+Tags.Invoke : System.Int32 (literal)
+ToolUp.Elmish.RemoteEffect`1+Tags.Legacy : System.Int32 (literal)
 ToolUp.Elmish.Sub (class)
 ToolUp.Elmish.Sub.batch`2(a) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]
 ToolUp.Elmish.Sub.map`2(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, msg], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.Unit], System.IDisposable]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]

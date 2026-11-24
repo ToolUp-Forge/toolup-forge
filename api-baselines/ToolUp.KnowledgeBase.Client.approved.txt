@@ -7,6 +7,7 @@ ClientModel (class)
 ClientModel.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ClientModel.narrativeCommitHandler : ToolUp.Platform.NarrativeCommitHandler { get }
 ClientModel.originalDocumentOpener(ToolUp.Platform.MessageCatalog, ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ClientModel.step(ClientModel+Msg, ClientModel+Model) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ClientModel+Msg, ToolUp.Elmish.RemoteEffect`1[ClientModel+Msg]]]]
 ClientModel.update(ClientModel+Msg, ClientModel+Model) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ClientModel+Model (class)
 ClientModel+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+BulkImportReport], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ClientModel+VersionHistoryState], ToolUp.Platform.KnowledgeBaseMessages)
@@ -43,6 +44,7 @@ ClientModel+Msg.IsAIContextSaved : System.Boolean { get }
 ClientModel+Msg.IsBulkImportCompleted : System.Boolean { get }
 ClientModel+Msg.IsBulkImportFailed : System.Boolean { get }
 ClientModel+Msg.IsBulkImportRequested : System.Boolean { get }
+ClientModel+Msg.IsCallFailed : System.Boolean { get }
 ClientModel+Msg.IsCloseAIContextEditor : System.Boolean { get }
 ClientModel+Msg.IsCloseNoteEditor : System.Boolean { get }
 ClientModel+Msg.IsCloseVersionHistory : System.Boolean { get }
@@ -91,6 +93,8 @@ ClientModel+Msg+BulkImportFailed (class)
 ClientModel+Msg+BulkImportFailed.Item : System.String { get }
 ClientModel+Msg+BulkImportRequested (class)
 ClientModel+Msg+BulkImportRequested.Item : Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+BulkImportSource] { get }
+ClientModel+Msg+CallFailed (class)
+ClientModel+Msg+CallFailed.reason : System.String { get }
 ClientModel+Msg+DeleteFailed (class)
 ClientModel+Msg+DeleteFailed.Item : System.String { get }
 ClientModel+Msg+DeleteRequested (class)
@@ -137,6 +141,7 @@ ClientModel+Msg+Tags.AIContextSaved : System.Int32 (literal)
 ClientModel+Msg+Tags.BulkImportCompleted : System.Int32 (literal)
 ClientModel+Msg+Tags.BulkImportFailed : System.Int32 (literal)
 ClientModel+Msg+Tags.BulkImportRequested : System.Int32 (literal)
+ClientModel+Msg+Tags.CallFailed : System.Int32 (literal)
 ClientModel+Msg+Tags.CloseAIContextEditor : System.Int32 (literal)
 ClientModel+Msg+Tags.CloseNoteEditor : System.Int32 (literal)
 ClientModel+Msg+Tags.CloseVersionHistory : System.Int32 (literal)
@@ -316,6 +321,7 @@ KnowledgeListView+SortKey+Tags.SortByUploader : System.Int32 (literal)
 PlatformKnowledgeAdminUI (class)
 PlatformKnowledgeAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[PlatformKnowledgeAdminUI+Model, PlatformKnowledgeAdminUI+Msg] { get }
 PlatformKnowledgeAdminUI.init() : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformKnowledgeAdminUI.step(PlatformKnowledgeAdminUI+Msg, PlatformKnowledgeAdminUI+Model) : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformKnowledgeAdminUI+Msg, ToolUp.Elmish.RemoteEffect`1[PlatformKnowledgeAdminUI+Msg]]]]
 PlatformKnowledgeAdminUI.update(PlatformKnowledgeAdminUI+Msg, PlatformKnowledgeAdminUI+Model) : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PlatformKnowledgeAdminUI+Model (class)
 PlatformKnowledgeAdminUI+Model..ctor(ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
