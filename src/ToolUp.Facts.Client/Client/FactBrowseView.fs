@@ -362,7 +362,11 @@ module internal Trees =
     /// chosen when it is listed, and `OpenTable` on a change.
     let tableSelect (tables: FactTableListing list) (selected: string option) : Node<Msg> =
         let options: SelectOption list =
-            tables |> List.map (fun t -> { Label = t.TableId; Value = t.TableId })
+            tables
+            |> List.map (fun t -> {
+                Label = literal t.TableId
+                Value = t.TableId
+            })
 
         let chosen =
             selected

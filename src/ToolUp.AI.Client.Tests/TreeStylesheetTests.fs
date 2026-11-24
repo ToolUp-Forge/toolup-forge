@@ -147,7 +147,15 @@ let private surface: Node<Msg> =
         Fuaran.select "choice" {
             Defaults.select with
                 Label = literal "Table"
-                Source = Binding.Static(Some [ { Label = "sales"; Value = "sales" } ])
+                Source =
+                    Binding.Static(
+                        Some [
+                            {
+                                Label = literal "sales"
+                                Value = "sales"
+                            }
+                        ]
+                    )
                 Value = Some(Binding.Static(Some "sales"))
                 Placeholder = Some(literal "Choose a table")
         }
