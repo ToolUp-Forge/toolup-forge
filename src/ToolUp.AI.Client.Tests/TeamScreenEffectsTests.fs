@@ -276,7 +276,7 @@ let private providerProfileTests =
 
             same (effects fallback) [ call "IProviderProfileApi.SetFallback" [ "work"; "home" ] ] "the fallback"
 
-        testCase "a verify runs the consumer's delegate as the one legacy body"
+        testCase "a verify awaits the consumer's delegate with the candidate"
         <| fun () ->
             let verifying =
                 config
@@ -295,7 +295,7 @@ let private providerProfileTests =
             let _, steps =
                 ProviderProfileUI.step verifying (ProviderProfileUI.Verify candidate) model
 
-            same (effects steps) [ legacy "ProviderProfileUI.verify" ] "the delegate"
+            same (effects steps) [ await "ProviderProfileUI.verify" candidate ] "the delegate"
 
         testCase "a rename's save sends only the save, never the old label's removal"
         <| fun () ->

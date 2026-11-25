@@ -236,8 +236,8 @@ let private load (config: ProviderProfileConfig) : Step<Msg, RemoteEffect<Msg>> 
 let private mutated (confirmation: string) (reply: Result<Result<unit, string>, exn>) : Msg =
     Mutated(RemoteEffect.flatten reply, confirmation)
 
-/// The verification delegate's site label: the embedding app's own code,
-/// not a call on the profile API, so it has no value form yet.
+/// The verification delegate's name: the embedding app's own code, not a
+/// call on the profile API, so it is awaited rather than called.
 [<Literal>]
 let private VerifySite = "ProviderProfileUI.verify"
 
@@ -365,11 +365,9 @@ let internal step
             },
             [
                 Do(
-                    RemoteEffect.legacy VerifySite (fun dispatch ->
-                        for effect in
-                            Cmd.OfAsync.either verify candidate VerifyCompleted (fun e ->
-                                VerifyCompleted(Error e.Message)) do
-                            effect dispatch)
+                    RemoteEffect.await VerifySite verify candidate (function
+                        | Ok verdict -> VerifyCompleted verdict
+                        | Error e -> VerifyCompleted(Error e.Message))
                 )
             ]
 
