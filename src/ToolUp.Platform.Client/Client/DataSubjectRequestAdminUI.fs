@@ -3,6 +3,7 @@
 
 module DataSubjectRequestAdminUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -13,7 +14,7 @@ open Toolup.UIToolkit
 open ToolUp.Platform
 open ToolUp.Platform.DataSubjectRequestApi
 
-// ─── Phase 9h — DSR admin module (client) ────────────────────────────
+// ─── DSR admin module (client) ───────────────────────────────────────
 //
 // Admin-facing UI for GDPR Article 15 (export) + Article 17 (erase).
 // Two-tab layout — "Export" + "Erase" — mirrors the API's two flows:
@@ -65,7 +66,7 @@ type Model = {
     /// Latest confirmed-erasure summary. Persisted so the admin can
     /// inspect per-handler counts after confirmation lands.
     LastRunSummary: ErasureRunSummary option
-    /// Phase 9h.A — when true, the Export tab submits through the async
+    /// When true, the Export tab submits through the async
     /// background-job path (`RequestExportAsync` → poll `GetExportStatus`
     /// → `DownloadExport`) so large-tenant exports don't hit the HTTP
     /// timeout. Requires `DataSubjectRequests = Enabled { Async = true }`
@@ -174,10 +175,96 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
 
     model, Cmd.none
 
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
+
 /// Re-poll the active background-export ticket after a short
 /// delay. The loop runs while a ticket stays `Preparing`.
-let private pollDelay: Cmd<Msg> =
-    Cmd.OfAsync.perform (fun () -> Async.Sleep 1500) () (fun _ -> PollTicket)
+let internal pollDelay: Steps = [
+    Do(
+        RemoteEffect.legacy "DataSubjectRequestAdminUI.pollDelay" (fun dispatch ->
+            Async.StartImmediate(
+                async {
+                    do! Async.Sleep 1500
+                    dispatch PollTicket
+                }
+            ))
+    )
+]
+
+let internal requestExport (input: ExportRequestInput) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IDataSubjectRequestApi.RequestExport"
+            dsrApi.RequestExport
+            input
+            (RemoteEffect.flatten >> ExportResolved)
+    )
+]
+
+let internal requestExportAsync (input: ExportRequestInput) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IDataSubjectRequestApi.RequestExportAsync"
+            dsrApi.RequestExportAsync
+            input
+            (RemoteEffect.flatten >> AsyncExportStarted)
+    )
+]
+
+let internal getExportStatus (ticket: ExportTicket) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IDataSubjectRequestApi.GetExportStatus"
+            dsrApi.GetExportStatus
+            ticket
+            (RemoteEffect.flatten >> TicketStatusResolved)
+    )
+]
+
+let internal downloadTicket (ticket: ExportTicket) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IDataSubjectRequestApi.DownloadExport"
+            dsrApi.DownloadExport
+            ticket
+            (RemoteEffect.flatten >> DownloadResolved)
+    )
+]
+
+let internal cancelExport (ticket: ExportTicket) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IDataSubjectRequestApi.CancelExport"
+            dsrApi.CancelExport
+            ticket
+            (RemoteEffect.flatten >> CancelResolved)
+    )
+]
+
+let internal previewErasure (input: ErasureRequestInput) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IDataSubjectRequestApi.PreviewErasure"
+            dsrApi.PreviewErasure
+            input
+            (RemoteEffect.flatten >> PreviewResolved)
+    )
+]
+
+let internal confirmErasure (requestId: DataSubjectRequestId) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IDataSubjectRequestApi.ConfirmErasure"
+            dsrApi.ConfirmErasure
+            requestId
+            (RemoteEffect.flatten >> ConfirmResolved)
+    )
+]
+
+/// The browser download of an export archive. It dispatches nothing.
+let internal download (subject: string) (bytes: byte[]) : Steps = [
+    Do(RemoteEffect.legacy "DataSubjectRequestAdminUI.downloadExport" (fun _ -> downloadExport subject bytes))
+]
 
 let private exportInput (model: Model) : ExportRequestInput = {
     SubjectUserId = model.SubjectInput.Trim()
@@ -205,7 +292,7 @@ let private validateForm (model: Model) =
 /// The background-export ticket's lifecycle: queued, polled while it is
 /// `Preparing`, downloaded once `Ready`, or ended (failed, cancelled,
 /// expired). `update` routes exactly these messages here.
-let private updateBackgroundExport (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let private stepBackgroundExport (msg: Msg) (model: Model) : Model * Steps =
     let msgs = model.Messages
 
     let ticketEnded (status: ExportStatus) (banner: Notice) =
@@ -216,7 +303,7 @@ let private updateBackgroundExport (msg: Msg) (model: Model) : Model * Cmd<Msg> 
                 TicketStatus = Some status
                 Banner = Some banner
         },
-        Cmd.none
+        []
 
     match msg with
     | AsyncExportStarted(Ok ticket) ->
@@ -235,38 +322,29 @@ let private updateBackgroundExport (msg: Msg) (model: Model) : Model * Cmd<Msg> 
                 Busy = Idle
                 Banner = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | PollTicket ->
         match model.ActiveTicket with
-        | None -> model, Cmd.none
-        | Some ticket ->
-            let cmd =
-                Cmd.OfRemoting.call dsrApi.GetExportStatus ticket TicketStatusResolved (fun ex ->
-                    TicketStatusResolved(Result.Error ex.Message))
-
-            model, cmd
+        | None -> model, []
+        | Some ticket -> model, getExportStatus ticket
 
     | TicketStatusResolved(Ok status) ->
         match status with
         | ExportStatus.Ready _ ->
             match model.ActiveTicket with
             | Some ticket ->
-                let cmd =
-                    Cmd.OfRemoting.call dsrApi.DownloadExport ticket DownloadResolved (fun ex ->
-                        DownloadResolved(Result.Error ex.Message))
-
                 {
                     model with
                         TicketStatus = Some status
                 },
-                cmd
+                downloadTicket ticket
             | None ->
                 {
                     model with
                         TicketStatus = Some status
                 },
-                Cmd.none
+                []
         | ExportStatus.Preparing ->
             {
                 model with
@@ -285,7 +363,7 @@ let private updateBackgroundExport (msg: Msg) (model: Model) : Model * Cmd<Msg> 
                 ActiveTicket = None
                 Banner = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | DownloadResolved(Ok bytes) ->
         let subject = model.SubjectInput.Trim()
@@ -297,7 +375,7 @@ let private updateBackgroundExport (msg: Msg) (model: Model) : Model * Cmd<Msg> 
                 TicketStatus = None
                 Banner = Some(Notice.Info(msgs.BackgroundExportReady bytes.Length))
         },
-        Cmd.ofEffect (fun _ -> downloadExport subject bytes)
+        download subject bytes
 
     | DownloadResolved(Result.Error err) ->
         {
@@ -306,17 +384,12 @@ let private updateBackgroundExport (msg: Msg) (model: Model) : Model * Cmd<Msg> 
                 ActiveTicket = None
                 Banner = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | CancelAsyncExport ->
         match model.ActiveTicket with
-        | None -> model, Cmd.none
-        | Some ticket ->
-            let cmd =
-                Cmd.OfRemoting.call dsrApi.CancelExport ticket CancelResolved (fun ex ->
-                    CancelResolved(Result.Error ex.Message))
-
-            model, cmd
+        | None -> model, []
+        | Some ticket -> model, cancelExport ticket
 
     | CancelResolved(Ok()) ->
         {
@@ -326,18 +399,19 @@ let private updateBackgroundExport (msg: Msg) (model: Model) : Model * Cmd<Msg> 
                 TicketStatus = Some ExportStatus.Cancelled
                 Banner = Some(Notice.Info msgs.ExportCancelled)
         },
-        Cmd.none
+        []
 
     | CancelResolved(Result.Error err) ->
         {
             model with
                 Banner = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | _ -> model, Cmd.none
+    | _ -> model, []
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     // The catalog is a pure input carried on the model from `init`.
     let msgs = model.Messages
 
@@ -351,15 +425,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PendingPreview = None
                 Banner = None
         },
-        Cmd.none
+        []
 
-    | SetSubjectInput value -> { model with SubjectInput = value }, Cmd.none
+    | SetSubjectInput value -> { model with SubjectInput = value }, []
 
-    | SetTeamInput value -> { model with TeamInput = value }, Cmd.none
+    | SetTeamInput value -> { model with TeamInput = value }, []
 
-    | SetReasonInput value -> { model with ReasonInput = value }, Cmd.none
+    | SetReasonInput value -> { model with ReasonInput = value }, []
 
-    | SetOverridePolicy policy -> { model with OverridePolicy = policy }, Cmd.none
+    | SetOverridePolicy policy -> { model with OverridePolicy = policy }, []
 
     | SubmitExport ->
         match validateForm model with
@@ -368,12 +442,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Banner = Some(Notice.Problem err)
             },
-            Cmd.none
+            []
         | None when model.AsyncMode ->
-            let cmd =
-                Cmd.OfRemoting.call dsrApi.RequestExportAsync (exportInput model) AsyncExportStarted (fun ex ->
-                    AsyncExportStarted(Result.Error ex.Message))
-
             {
                 model with
                     Busy = RunningExport
@@ -381,27 +451,23 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     ActiveTicket = None
                     TicketStatus = None
             },
-            cmd
+            requestExportAsync (exportInput model)
         | None ->
-            let cmd =
-                Cmd.OfRemoting.call dsrApi.RequestExport (exportInput model) ExportResolved (fun ex ->
-                    ExportResolved(Result.Error ex.Message))
-
             {
                 model with
                     Busy = RunningExport
                     Banner = None
             },
-            cmd
+            requestExport (exportInput model)
 
-    | SetAsyncMode value -> { model with AsyncMode = value }, Cmd.none
+    | SetAsyncMode value -> { model with AsyncMode = value }, []
 
     | AsyncExportStarted _
     | PollTicket
     | TicketStatusResolved _
     | DownloadResolved _
     | CancelAsyncExport
-    | CancelResolved _ -> updateBackgroundExport msg model
+    | CancelResolved _ -> stepBackgroundExport msg model
 
     | ExportResolved(Ok bytes) ->
         let subject = model.SubjectInput.Trim()
@@ -411,7 +477,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 Banner = Some(Notice.Info(msgs.ExportReady bytes.Length))
         },
-        Cmd.ofEffect (fun _ -> downloadExport subject bytes)
+        download subject bytes
 
     | ExportResolved(Result.Error err) ->
         {
@@ -419,7 +485,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 Banner = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | SubmitPreview ->
         match validateForm model with
@@ -428,19 +494,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Banner = Some(Notice.Problem err)
             },
-            Cmd.none
+            []
         | None ->
-            let cmd =
-                Cmd.OfRemoting.call dsrApi.PreviewErasure (erasureInput model) PreviewResolved (fun ex ->
-                    PreviewResolved(Result.Error ex.Message))
-
             {
                 model with
                     Busy = RunningPreview
                     Banner = None
                     PendingPreview = None
             },
-            cmd
+            previewErasure (erasureInput model)
 
     | PreviewResolved(Ok preview) ->
         {
@@ -449,7 +511,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PendingPreview = Some preview
                 Banner = None
         },
-        Cmd.none
+        []
 
     | PreviewResolved(Result.Error err) ->
         {
@@ -457,7 +519,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 Banner = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | CancelPreview ->
         {
@@ -465,7 +527,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PendingPreview = None
                 Banner = None
         },
-        Cmd.none
+        []
 
     | SubmitConfirm ->
         match model.PendingPreview with
@@ -474,18 +536,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Banner = Some(Notice.Problem msgs.RunPreviewFirst)
             },
-            Cmd.none
+            []
         | Some preview ->
-            let cmd =
-                Cmd.OfRemoting.call dsrApi.ConfirmErasure preview.Request.Id ConfirmResolved (fun ex ->
-                    ConfirmResolved(Result.Error ex.Message))
-
             {
                 model with
                     Busy = RunningConfirm
                     Banner = None
             },
-            cmd
+            confirmErasure preview.Request.Id
 
     | ConfirmResolved(Ok(Completed summary)) ->
         let banner =
@@ -501,7 +559,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PendingPreview = None
                 Banner = banner
         },
-        Cmd.none
+        []
 
     | ConfirmResolved(Ok(Refused reason)) ->
         {
@@ -509,7 +567,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 Banner = Some(Notice.Problem(msgs.EraseRefused reason))
         },
-        Cmd.none
+        []
 
     | ConfirmResolved(Ok(NotImplemented detail)) ->
         {
@@ -517,7 +575,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 Banner = Some(Notice.Problem(msgs.EraseNotImplemented detail))
         },
-        Cmd.none
+        []
 
     | ConfirmResolved(Result.Error err) ->
         {
@@ -525,9 +583,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = Idle
                 Banner = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissBanner -> { model with Banner = None }, Cmd.none
+    | DismissBanner -> { model with Banner = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────────
 
@@ -850,7 +911,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataSubjectRequests"
