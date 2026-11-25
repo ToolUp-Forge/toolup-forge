@@ -3,6 +3,7 @@
 
 module TeamManagerUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -70,24 +71,25 @@ module IssueByEmail =
         Submitting = false
     }
 
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
+    /// The transitions, with the remote call as a value.
+    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
         match msg with
-        | SetEmail email -> { model with Email = email }, Cmd.none, Stay
-        | SetRole role -> { model with Role = role }, Cmd.none, Stay
+        | SetEmail email -> { model with Email = email }, [], Stay
+        | SetRole role -> { model with Role = role }, [], Stay
         | SetExpiresInDays days ->
             {
                 model with
                     ExpiresInDays = max 1 days
             },
-            Cmd.none,
+            [],
             Stay
-        | Submit when model.Submitting -> model, Cmd.none, Stay
+        | Submit when model.Submitting -> model, [], Stay
         | Submit when model.Email.Trim() = "" ->
             {
                 model with
                     SubmitError = Some model.EmailRequired
             },
-            Cmd.none,
+            [],
             Stay
         | Submit ->
             let request: PendingInviteIssueRequest = {
@@ -102,19 +104,31 @@ module IssueByEmail =
                     Submitting = true
                     SubmitError = None
             },
-            Cmd.OfRemoting.call inviteApi.IssuePendingInviteByEmail request Submitted (fun e ->
-                Submitted(Error e.Message)),
+            [
+                Do(
+                    RemoteEffect.call
+                        "ITeamInviteApi.IssuePendingInviteByEmail"
+                        inviteApi.IssuePendingInviteByEmail
+                        request
+                        (RemoteEffect.flatten >> Submitted)
+                )
+            ],
             Stay
-        | Submitted(Ok()) -> model, Cmd.none, Issued model.TeamId
+        | Submitted(Ok()) -> model, [], Issued model.TeamId
         | Submitted(Error e) ->
             {
                 model with
                     Submitting = false
                     SubmitError = Some e
             },
-            Cmd.none,
+            [],
             Stay
-        | Close -> model, Cmd.none, Closed
+        | Close -> model, [], Closed
+
+    /// The transitions, on today's loop.
+    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
+        let model, steps, outcome = step msg model
+        model, RemoteEffect.toCmd steps, outcome
 
 /// The two-step ownership transfer. Step one picks the incoming Owner from
 /// the team's current members through a filter; step two confirms, naming
@@ -160,9 +174,10 @@ module TransferOwnership =
         SubmitError = None
     }
 
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
+    /// The transitions, with the remote call as a value.
+    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
         match msg with
-        | SetQuery query -> { model with Query = query }, Cmd.none, Stay
+        | SetQuery query -> { model with Query = query }, [], Stay
         | SelectCandidate userId ->
             {
                 model with
@@ -170,7 +185,7 @@ module TransferOwnership =
                     Step = ConfirmTransfer
                     SubmitError = None
             },
-            Cmd.none,
+            [],
             Stay
         | BackToPick ->
             {
@@ -178,7 +193,7 @@ module TransferOwnership =
                     Step = PickNewOwner
                     SubmitError = None
             },
-            Cmd.none,
+            [],
             Stay
         | Submit ->
             match model.SelectedUserId with
@@ -188,20 +203,32 @@ module TransferOwnership =
                         Submitting = true
                         SubmitError = None
                 },
-                Cmd.OfRemoting.call teamApi.TransferOwnership (model.TeamId, target) Done (fun e ->
-                    Done(Error e.Message)),
+                [
+                    Do(
+                        RemoteEffect.call
+                            "TeamApi.TransferOwnership"
+                            teamApi.TransferOwnership
+                            (model.TeamId, target)
+                            (RemoteEffect.flatten >> Done)
+                    )
+                ],
                 Stay
-            | _ -> model, Cmd.none, Stay
-        | Done(Ok()) -> model, Cmd.none, Transferred model.TeamId
+            | _ -> model, [], Stay
+        | Done(Ok()) -> model, [], Transferred model.TeamId
         | Done(Error e) ->
             {
                 model with
                     Submitting = false
                     SubmitError = Some e
             },
-            Cmd.none,
+            [],
             Stay
-        | Close -> model, Cmd.none, Closed
+        | Close -> model, [], Closed
+
+    /// The transitions, on today's loop.
+    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
+        let model, steps, outcome = step msg model
+        model, RemoteEffect.toCmd steps, outcome
 
 /// The confirmation before a pending email invite is revoked.
 module RevokeByEmail =
@@ -231,16 +258,30 @@ module RevokeByEmail =
         Submitting = false
     }
 
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
+    /// The transitions, with the remote call as a value.
+    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
         match msg with
-        | Confirm when model.Submitting -> model, Cmd.none, Stay
+        | Confirm when model.Submitting -> model, [], Stay
         | Confirm ->
             { model with Submitting = true },
-            Cmd.OfRemoting.call inviteApi.RevokePendingInviteByEmail model.Email Done (fun e -> Done(Error e.Message)),
+            [
+                Do(
+                    RemoteEffect.call
+                        "ITeamInviteApi.RevokePendingInviteByEmail"
+                        inviteApi.RevokePendingInviteByEmail
+                        model.Email
+                        (RemoteEffect.flatten >> Done)
+                )
+            ],
             Stay
-        | Done(Ok()) -> model, Cmd.none, Revoked model.TeamId
-        | Done(Error e) -> model, Cmd.none, Failed e
-        | Cancel -> model, Cmd.none, Closed
+        | Done(Ok()) -> model, [], Revoked model.TeamId
+        | Done(Error e) -> model, [], Failed e
+        | Cancel -> model, [], Closed
+
+    /// The transitions, on today's loop.
+    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
+        let model, steps, outcome = step msg model
+        model, RemoteEffect.toCmd steps, outcome
 
 // ─── Model ───────────────────────────────────────────────────────────
 
@@ -355,7 +396,35 @@ type Msg =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) =
+/// A call's reply, with a failure sent to the screen's one error branch.
+let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) : Msg =
+    match reply with
+    | Ok answer -> ofAnswer answer
+    | Error ex -> ApiError ex.Message
+
+/// A child's steps in this screen's message type.
+let private lift
+    (wrap: 'child -> Msg)
+    (steps: Step<'child, RemoteEffect<'child>> list)
+    : Step<Msg, RemoteEffect<Msg>> list =
+    steps |> Step.mapAll wrap (RemoteEffect.map wrap)
+
+let private loadTeams: Step<Msg, RemoteEffect<Msg>> =
+    Do(RemoteEffect.call "TeamApi.GetMyTeams" teamApi.GetMyTeams () (orApiError TeamsLoaded))
+
+let private loadActiveTeam: Step<Msg, RemoteEffect<Msg>> =
+    Do(RemoteEffect.call "TeamApi.GetActiveTeam" teamApi.GetActiveTeam () (orApiError ActiveTeamLoaded))
+
+let private loadMembers (teamId: string) : Step<Msg, RemoteEffect<Msg>> =
+    Do(
+        RemoteEffect.call
+            "TeamApi.GetTeamMembers"
+            teamApi.GetTeamMembers
+            teamId
+            (orApiError (fun members -> MembersLoaded(teamId, members)))
+    )
+
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
         Teams = []
         ActiveTeamId = None
@@ -378,21 +447,21 @@ let init (ctx: ClientModuleContext) =
         Messages = ctx.Messages.TeamManager
     }
 
-    let loadTeams =
-        Cmd.OfRemoting.call teamApi.GetMyTeams () TeamsLoaded (fun e -> ApiError e.Message)
-
-    let loadActive =
-        Cmd.OfRemoting.call teamApi.GetActiveTeam () ActiveTeamLoaded (fun e -> ApiError e.Message)
-
     // Fetch the caller's platform-admin status so the management
     // controls can apply the "Platform Admin has full rights across
     // all teams" bypass. Failure falls through to `ApiError` and
     // leaves the bypass disabled (`IsPlatformAdmin = None`) — server
     // gates remain the real enforcement.
     let loadAdminStatus =
-        Cmd.OfRemoting.call platformAdminApi.IsPlatformAdmin () IsPlatformAdminLoaded (fun e -> ApiError e.Message)
+        Do(
+            RemoteEffect.call
+                "PlatformAdminApi.IsPlatformAdmin"
+                platformAdminApi.IsPlatformAdmin
+                ()
+                (orApiError IsPlatformAdminLoaded)
+        )
 
-    model, Cmd.batch [ loadTeams; loadActive; loadAdminStatus ]
+    (model, [ loadTeams; loadActiveTeam; loadAdminStatus ]) |> RemoteEffect.run
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -404,17 +473,19 @@ let private roleFor (userId: string) (members: TeamMembership list) =
 let private selfUserId () = UserSession.getUserId ()
 
 /// Reload the members of the team on screen, if one is.
-let private refreshCurrentTeam (model: Model) =
+let private refreshCurrentTeam (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
     match model.CurrentView with
-    | TeamDetails teamId -> Cmd.ofMsg (LoadMembers teamId)
-    | _ -> Cmd.none
+    | TeamDetails teamId -> [ Then(LoadMembers teamId) ]
+    | _ -> []
 
 /// Reload both invite lists of a team: a change to one moves an email between them.
-let private reloadInvites (teamId: string) =
-    Cmd.batch [ Cmd.ofMsg (LoadPendingByEmail teamId); Cmd.ofMsg (LoadExpiredInvites teamId) ]
+let private reloadInvites (teamId: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Then(LoadPendingByEmail teamId)
+    Then(LoadExpiredInvites teamId)
+]
 
 /// The "Add a member" form: an email becomes a pending invite, anything else a direct add.
-let private addMember (teamId: string) (model: Model) =
+let private addMember (teamId: string) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     let raw = model.AddMemberUserId.Trim()
 
     if raw = "" then
@@ -422,7 +493,7 @@ let private addMember (teamId: string) (model: Model) =
             model with
                 Error = Some(Notice.Problem model.Messages.IdentifierRequired)
         },
-        Cmd.none
+        []
     // An email goes through the pending-invite flow, never straight
     // to `AddTeamMember`: a membership keyed by the email string would
     // never match the invitee's token, whose user id is the identity
@@ -447,61 +518,75 @@ let private addMember (teamId: string) (model: Model) =
             model with
                 AddMemberSubmitting = true
         },
-        Cmd.OfRemoting.call inviteApi.IssuePendingInviteByEmail request (fun r -> AddMemberInvited(teamId, r)) (fun e ->
-            AddMemberInvited(teamId, Error e.Message))
+        [
+            Do(
+                RemoteEffect.call
+                    "ITeamInviteApi.IssuePendingInviteByEmail"
+                    inviteApi.IssuePendingInviteByEmail
+                    request
+                    (fun reply -> AddMemberInvited(teamId, RemoteEffect.flatten reply))
+            )
+        ]
     else
         {
             model with
                 AddMemberSubmitting = true
         },
-        Cmd.OfRemoting.call teamApi.AddTeamMember (teamId, raw, model.AddMemberRole) MemberAdded (fun e ->
-            ApiError e.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "TeamApi.AddTeamMember"
+                    teamApi.AddTeamMember
+                    (teamId, raw, model.AddMemberRole)
+                    (orApiError MemberAdded)
+            )
+        ]
 
 /// Route a step of the transfer modal and act on its outcome.
-let private routeTransfer (subMsg: TransferOwnership.Msg) (model: Model) =
+let private routeTransfer (subMsg: TransferOwnership.Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match model.Transfer with
-    | None -> model, Cmd.none
+    | None -> model, []
     | Some transfer ->
-        let transfer, cmd, outcome = TransferOwnership.update subMsg transfer
-        let cmd = Cmd.map TransferMsg cmd
+        let transfer, steps, outcome = TransferOwnership.step subMsg transfer
+        let steps = lift TransferMsg steps
 
         match outcome with
-        | TransferOwnership.Stay -> { model with Transfer = Some transfer }, cmd
-        | TransferOwnership.Closed -> { model with Transfer = None }, cmd
+        | TransferOwnership.Stay -> { model with Transfer = Some transfer }, steps
+        | TransferOwnership.Closed -> { model with Transfer = None }, steps
         | TransferOwnership.Transferred teamId ->
             {
                 model with
                     Transfer = None
                     Error = None
             },
-            Cmd.batch [ cmd; Cmd.ofMsg (LoadMembers teamId) ]
+            steps @ [ Then(LoadMembers teamId) ]
 
 /// Route a step of the invite-by-email modal and act on its outcome.
-let private routeIssueByEmail (subMsg: IssueByEmail.Msg) (model: Model) =
+let private routeIssueByEmail (subMsg: IssueByEmail.Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match model.IssueByEmail with
-    | None -> model, Cmd.none
+    | None -> model, []
     | Some issue ->
-        let issue, cmd, outcome = IssueByEmail.update subMsg issue
-        let cmd = Cmd.map IssueByEmailMsg cmd
+        let issue, steps, outcome = IssueByEmail.step subMsg issue
+        let steps = lift IssueByEmailMsg steps
 
         match outcome with
-        | IssueByEmail.Stay -> { model with IssueByEmail = Some issue }, cmd
-        | IssueByEmail.Closed -> { model with IssueByEmail = None }, cmd
+        | IssueByEmail.Stay -> { model with IssueByEmail = Some issue }, steps
+        | IssueByEmail.Closed -> { model with IssueByEmail = None }, steps
         | IssueByEmail.Issued teamId ->
             {
                 model with
                     IssueByEmail = None
                     Error = None
             },
-            Cmd.batch [ cmd; Cmd.ofMsg (LoadPendingByEmail teamId) ]
+            steps @ [ Then(LoadPendingByEmail teamId) ]
 
 /// Route a step of the revoke confirmation and act on its outcome.
-let private routeRevokeByEmail (subMsg: RevokeByEmail.Msg) (model: Model) =
+let private routeRevokeByEmail (subMsg: RevokeByEmail.Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match model.RevokeByEmail with
-    | None -> model, Cmd.none
+    | None -> model, []
     | Some revoke ->
-        let revoke, cmd, outcome = RevokeByEmail.update subMsg revoke
-        let cmd = Cmd.map RevokeByEmailMsg cmd
+        let revoke, steps, outcome = RevokeByEmail.step subMsg revoke
+        let steps = lift RevokeByEmailMsg steps
 
         match outcome with
         | RevokeByEmail.Stay ->
@@ -509,45 +594,32 @@ let private routeRevokeByEmail (subMsg: RevokeByEmail.Msg) (model: Model) =
                 model with
                     RevokeByEmail = Some revoke
             },
-            cmd
-        | RevokeByEmail.Closed -> { model with RevokeByEmail = None }, cmd
+            steps
+        | RevokeByEmail.Closed -> { model with RevokeByEmail = None }, steps
         | RevokeByEmail.Revoked teamId ->
-            { model with RevokeByEmail = None }, Cmd.batch [ cmd; Cmd.ofMsg (LoadPendingByEmail teamId) ]
+            { model with RevokeByEmail = None }, steps @ [ Then(LoadPendingByEmail teamId) ]
         | RevokeByEmail.Failed e ->
             {
                 model with
                     RevokeByEmail = None
                     Error = Some(Notice.Problem e)
             },
-            cmd
+            steps
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | LoadTeams -> model, Cmd.OfRemoting.call teamApi.GetMyTeams () TeamsLoaded (fun e -> ApiError e.Message)
+    | LoadTeams -> model, [ loadTeams ]
 
-    | TeamsLoaded teams ->
-        let cmds =
-            teams
-            |> List.map (fun t ->
-                Cmd.OfRemoting.call
-                    teamApi.GetTeamMembers
-                    t.TeamId
-                    (fun members -> MembersLoaded(t.TeamId, members))
-                    (fun e -> ApiError e.Message))
+    | TeamsLoaded teams -> { model with Teams = teams }, teams |> List.map (fun t -> loadMembers t.TeamId)
 
-        { model with Teams = teams }, Cmd.batch cmds
+    | LoadActiveTeam -> model, [ loadActiveTeam ]
 
-    | LoadActiveTeam ->
-        model, Cmd.OfRemoting.call teamApi.GetActiveTeam () ActiveTeamLoaded (fun e -> ApiError e.Message)
+    | ActiveTeamLoaded t -> { model with ActiveTeamId = t }, []
 
-    | ActiveTeamLoaded t -> { model with ActiveTeamId = t }, Cmd.none
-
-    | LoadMembers teamId ->
-        model,
-        Cmd.OfRemoting.call teamApi.GetTeamMembers teamId (fun members -> MembersLoaded(teamId, members)) (fun e ->
-            ApiError e.Message)
+    | LoadMembers teamId -> model, [ loadMembers teamId ]
 
     | MembersLoaded(teamId, members) ->
         let roleMap =
@@ -560,22 +632,29 @@ let update (msg: Msg) (model: Model) =
                 Members = model.Members |> Map.add teamId members
                 RoleInTeam = roleMap
         },
-        UserDirectory.resolve (members |> List.map _.UserId) model.Directory
-        |> Cmd.map DirectoryMsg
+        UserDirectory.resolveSteps (members |> List.map _.UserId) model.Directory
+        |> lift DirectoryMsg
 
     | SelectTeam teamId ->
         {
             model with
                 CurrentView = TeamDetails teamId
         },
-        Cmd.ofMsg (LoadMembers teamId)
+        [ Then(LoadMembers teamId) ]
 
-    | BackToMyTeams -> { model with CurrentView = MyTeams }, Cmd.none
+    | BackToMyTeams -> { model with CurrentView = MyTeams }, []
 
     | SwitchActiveTeam teamId ->
         model,
-        Cmd.OfRemoting.call teamApi.SetActiveTeam teamId (fun r -> ActiveTeamSwitched(teamId, r)) (fun e ->
-            ApiError e.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "TeamApi.SetActiveTeam"
+                    teamApi.SetActiveTeam
+                    teamId
+                    (orApiError (fun r -> ActiveTeamSwitched(teamId, r)))
+            )
+        ]
 
     | ActiveTeamSwitched(teamId, Ok()) ->
         // Notify the shell so it re-inits every module against the
@@ -589,14 +668,14 @@ let update (msg: Msg) (model: Model) =
                 ActiveTeamId = Some teamId
                 Error = None
         },
-        Cmd.none
+        []
 
-    | SetAddMemberUserId id -> { model with AddMemberUserId = id }, Cmd.none
+    | SetAddMemberUserId id -> { model with AddMemberUserId = id }, []
 
-    | SetAddMemberRole role -> { model with AddMemberRole = role }, Cmd.none
+    | SetAddMemberRole role -> { model with AddMemberRole = role }, []
 
     // Ignore a second click while an add/invite is already in flight.
-    | AddMember _ when model.AddMemberSubmitting -> model, Cmd.none
+    | AddMember _ when model.AddMemberSubmitting -> model, []
 
     | AddMember teamId -> addMember teamId model
 
@@ -616,7 +695,7 @@ let update (msg: Msg) (model: Model) =
                 AddMemberSubmitting = false
                 Error = None
         },
-        Cmd.ofMsg (LoadPendingByEmail teamId)
+        [ Then(LoadPendingByEmail teamId) ]
 
     | MemberAdded(Error e)
     | AddMemberInvited(_, Error e) ->
@@ -625,15 +704,31 @@ let update (msg: Msg) (model: Model) =
                 AddMemberSubmitting = false
                 Error = Some(Notice.Problem e)
         },
-        Cmd.none
+        []
 
     | RemoveMember(teamId, userId) ->
-        model, Cmd.OfRemoting.call teamApi.RemoveTeamMember (teamId, userId) MemberRemoved (fun e -> ApiError e.Message)
+        model,
+        [
+            Do(
+                RemoteEffect.call
+                    "TeamApi.RemoveTeamMember"
+                    teamApi.RemoveTeamMember
+                    (teamId, userId)
+                    (orApiError MemberRemoved)
+            )
+        ]
 
     | ChangeMemberRole(teamId, targetUserId, newRole) ->
         model,
-        Cmd.OfRemoting.call teamApi.ChangeMemberRole (teamId, targetUserId, newRole) MemberRoleChanged (fun e ->
-            ApiError e.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "TeamApi.ChangeMemberRole"
+                    teamApi.ChangeMemberRole
+                    (teamId, targetUserId, newRole)
+                    (orApiError MemberRoleChanged)
+            )
+        ]
 
     | MemberRemoved(Ok())
     | MemberRoleChanged(Ok()) -> { model with Error = None }, refreshCurrentTeam model
@@ -643,14 +738,14 @@ let update (msg: Msg) (model: Model) =
             model with
                 IsPlatformAdmin = Some isAdmin
         },
-        Cmd.none
+        []
 
     | OpenTransferOwnership teamId ->
         {
             model with
                 Transfer = Some(TransferOwnership.init teamId)
         },
-        Cmd.none
+        []
 
     | TransferMsg subMsg -> routeTransfer subMsg model
 
@@ -667,21 +762,30 @@ let update (msg: Msg) (model: Model) =
             | Ok entries -> PendingByEmailLoaded(teamId, entries)
             | Error e -> ApiError e
 
-        model, Cmd.OfRemoting.call inviteApi.ListPendingInvitesByEmail teamId onLoad (fun e -> ApiError e.Message)
+        model,
+        [
+            Do(
+                RemoteEffect.call
+                    "ITeamInviteApi.ListPendingInvitesByEmail"
+                    inviteApi.ListPendingInvitesByEmail
+                    teamId
+                    (orApiError onLoad)
+            )
+        ]
 
     | PendingByEmailLoaded(teamId, entries) ->
         {
             model with
                 PendingByEmail = model.PendingByEmail |> Map.add teamId entries
         },
-        Cmd.none
+        []
 
     | OpenIssueByEmail teamId ->
         {
             model with
                 IssueByEmail = Some(IssueByEmail.init teamId model.Messages.EmailRequired)
         },
-        Cmd.none
+        []
 
     | IssueByEmailMsg subMsg -> routeIssueByEmail subMsg model
 
@@ -690,7 +794,7 @@ let update (msg: Msg) (model: Model) =
             model with
                 RevokeByEmail = Some(RevokeByEmail.init teamId email)
         },
-        Cmd.none
+        []
 
     | RevokeByEmailMsg subMsg -> routeRevokeByEmail subMsg model
 
@@ -700,14 +804,23 @@ let update (msg: Msg) (model: Model) =
             | Ok entries -> ExpiredInvitesLoaded(teamId, entries)
             | Error e -> ApiError e
 
-        model, Cmd.OfRemoting.call inviteApi.ListRecentlyExpiredInvites teamId onLoad (fun e -> ApiError e.Message)
+        model,
+        [
+            Do(
+                RemoteEffect.call
+                    "ITeamInviteApi.ListRecentlyExpiredInvites"
+                    inviteApi.ListRecentlyExpiredInvites
+                    teamId
+                    (orApiError onLoad)
+            )
+        ]
 
     | ExpiredInvitesLoaded(teamId, entries) ->
         {
             model with
                 ExpiredInvites = model.ExpiredInvites |> Map.add teamId entries
         },
-        Cmd.none
+        []
 
     | ReissueExpiredInvite(teamId, email, role) ->
         // One-click re-issue: same email, the original role, the default
@@ -724,11 +837,15 @@ let update (msg: Msg) (model: Model) =
             model with
                 ReissueInFlight = model.ReissueInFlight |> Set.add (teamId, email)
         },
-        Cmd.OfRemoting.call
-            inviteApi.IssuePendingInviteByEmail
-            request
-            (fun r -> ExpiredInviteReissued(teamId, email, r))
-            (fun e -> ExpiredInviteReissued(teamId, email, Error e.Message))
+        [
+            Do(
+                RemoteEffect.call
+                    "ITeamInviteApi.IssuePendingInviteByEmail"
+                    inviteApi.IssuePendingInviteByEmail
+                    request
+                    (fun reply -> ExpiredInviteReissued(teamId, email, RemoteEffect.flatten reply))
+            )
+        ]
 
     | ExpiredInviteReissued(teamId, email, result) ->
         let cleared = {
@@ -744,11 +861,11 @@ let update (msg: Msg) (model: Model) =
                 cleared with
                     Error = Some(Notice.Problem e)
             },
-            Cmd.none
+            []
 
     | DirectoryMsg subMsg ->
-        let directory, cmd = UserDirectory.update subMsg model.Directory
-        { model with Directory = directory }, Cmd.map DirectoryMsg cmd
+        let directory, steps = UserDirectory.step subMsg model.Directory
+        { model with Directory = directory }, lift DirectoryMsg steps
 
     | ActiveTeamSwitched(_, Error e)
     | MemberRemoved(Error e)
@@ -758,9 +875,12 @@ let update (msg: Msg) (model: Model) =
             model with
                 Error = Some(Notice.Problem e)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────────
 

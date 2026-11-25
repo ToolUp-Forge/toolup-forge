@@ -167,6 +167,7 @@ let allTests =
         // Phase 942 - the team output-visibility section and the member
         // notice, mounted.
         TeamOutputVisibilityUITests.tests
+        TeamScreenEffectsTests.tests
         // Phase 1130 - the panel draws a block part, re-read under the
         // reader's gate, with its furniture and the page's theme; a
         // conversation with no block renders as it did before.

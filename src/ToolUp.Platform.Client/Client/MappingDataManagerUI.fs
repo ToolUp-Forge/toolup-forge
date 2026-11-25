@@ -22,6 +22,7 @@
 /// `ServerConfig.ColumnMapping = FeatureMode.Enabled` to back the store.
 module MappingDataManagerUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Fable.SimpleJson
@@ -66,6 +67,20 @@ let private conversionApi: IConversionApi =
 
 let private dataCatalogApi: DataCatalogApi =
     Api.makeProxy<DataCatalogApi> (customOptions = UserSession.withRequestHeaders)
+
+/// An async composed of several calls has no value form until the
+/// runtime's standard vocabulary arrives, so it runs as a legacy body
+/// under `site`, answering once as `Cmd.OfAsync.either` answers.
+let private composed
+    (site: string)
+    (task: 'a -> Async<'result>)
+    (arg: 'a)
+    (ofAnswer: 'result -> 'msg)
+    (ofFailure: exn -> 'msg)
+    : RemoteEffect<'msg> =
+    RemoteEffect.legacy site (fun dispatch ->
+        for effect in Cmd.OfAsync.either task arg ofAnswer ofFailure do
+            effect dispatch)
 
 // ─── Mapping helpers (pure) ───────────────────────────────────────
 
@@ -460,12 +475,13 @@ module Wizard =
             ReusedSaved = false
     }
 
-    let update
+    /// The transitions, with their remote calls as values.
+    let internal step
         (msgs: MappingDataManagerMessages)
         (displays: DataTypeDisplay list)
         (msg: Msg)
         (model: Model)
-        : Model * Cmd<Msg> * Outcome =
+        : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
         match msg with
         | ToggleColumnFixes column ->
             let disabled =
@@ -474,17 +490,17 @@ module Wizard =
                 else
                     Set.add column model.DisabledFixes
 
-            { model with DisabledFixes = disabled }, Cmd.none, Stayed
+            { model with DisabledFixes = disabled }, [], Stayed
 
         | SetDateOrder(column, order) ->
             {
                 model with
                     DateOrders = Map.add column order model.DateOrders
             },
-            Cmd.none,
+            [],
             Stayed
 
-        | ProceedToMapping -> { model with Step = PickTarget }, Cmd.none, Stayed
+        | ProceedToMapping -> { model with Step = PickTarget }, [], Stayed
 
         | SelectTarget typeId ->
             match schemaFor displays typeId with
@@ -500,16 +516,16 @@ module Wizard =
                         Suggestion = Some suggestion
                         Step = ReviewMapping
                 },
-                Cmd.none,
+                [],
                 Stayed
-            | None -> model, Cmd.none, Errored msgs.NoSchemaCannotMap
+            | None -> model, [], Errored msgs.NoSchemaCannotMap
 
         | ChangeFormat ->
             {
                 resetMapping model with
                     Step = PickTarget
             },
-            Cmd.none,
+            [],
             Stayed
 
         | OverrideColumn(field, col) ->
@@ -517,7 +533,7 @@ module Wizard =
                 model with
                     Overrides = Map.add field col model.Overrides
             },
-            Cmd.none,
+            [],
             Stayed
 
         | AddDerivedColumn derived ->
@@ -531,7 +547,7 @@ module Wizard =
                     Derived = next
                     Overrides = Map.add derived.Field None model.Overrides
             },
-            Cmd.none,
+            [],
             Stayed
 
         | RemoveDerivedColumn field ->
@@ -539,10 +555,10 @@ module Wizard =
                 model with
                     Derived = model.Derived |> List.filter (fun d -> d.Field <> field)
             },
-            Cmd.none,
+            [],
             Stayed
 
-        | Cancel -> model, Cmd.none, Cancelled
+        | Cancel -> model, [], Cancelled
 
         | ConfirmMapping ->
             // Confirm does not commit: it runs the dry-run validation first
@@ -556,11 +572,20 @@ module Wizard =
                 }
 
                 { model with Validating = true },
-                Cmd.OfAsync.either conversionApi.ValidateConversion request ValidationFinished (fun ex ->
-                    CallFailed ex.Message),
+                [
+                    Do(
+                        RemoteEffect.call
+                            "IConversionApi.ValidateConversion"
+                            conversionApi.ValidateConversion
+                            request
+                            (function
+                             | Ok report -> ValidationFinished report
+                             | Error ex -> CallFailed ex.Message)
+                    )
+                ],
                 ErrorCleared
-            | Error(Some e) -> model, Cmd.none, Errored e
-            | Error None -> model, Cmd.none, Stayed
+            | Error(Some e) -> model, [], Errored e
+            | Error None -> model, [], Stayed
 
         | ValidationFinished(Ok report) ->
             {
@@ -569,10 +594,10 @@ module Wizard =
                     Validation = Some report
                     Step = ReviewValidation
             },
-            Cmd.none,
+            [],
             Stayed
 
-        | ValidationFinished(Error e) -> { model with Validating = false }, Cmd.none, Errored e
+        | ValidationFinished(Error e) -> { model with Validating = false }, [], Errored e
 
         | BackToMapping ->
             {
@@ -580,7 +605,7 @@ module Wizard =
                     Step = ReviewMapping
                     Validation = None
             },
-            Cmd.none,
+            [],
             Stayed
 
         | CommitConversion ->
@@ -592,15 +617,23 @@ module Wizard =
             match readyConversion msgs displays model with
             | Ok conversion ->
                 { model with Saving = true },
-                Cmd.OfAsync.either (saveAndImport msgs displays model.File) conversion CommitFinished (fun ex ->
-                    CallFailed ex.Message),
+                [
+                    Do(
+                        composed
+                            "MappingDataManagerUI.saveAndImport"
+                            (saveAndImport msgs displays model.File)
+                            conversion
+                            CommitFinished
+                            (fun ex -> CallFailed ex.Message)
+                    )
+                ],
                 Stayed
-            | Error(Some e) -> model, Cmd.none, Errored e
-            | Error None -> model, Cmd.none, Stayed
+            | Error(Some e) -> model, [], Errored e
+            | Error None -> model, [], Stayed
 
-        | CommitFinished(Ok _) -> { model with Saving = false }, Cmd.none, Imported
+        | CommitFinished(Ok _) -> { model with Saving = false }, [], Imported
 
-        | CommitFinished(Error e) -> { model with Saving = false }, Cmd.none, Errored e
+        | CommitFinished(Error e) -> { model with Saving = false }, [], Errored e
 
         | CallFailed e ->
             {
@@ -608,8 +641,18 @@ module Wizard =
                     Saving = false
                     Validating = false
             },
-            Cmd.none,
+            [],
             Errored e
+
+    /// The transitions, on today's loop.
+    let update
+        (msgs: MappingDataManagerMessages)
+        (displays: DataTypeDisplay list)
+        (msg: Msg)
+        (model: Model)
+        : Model * Cmd<Msg> * Outcome =
+        let model, steps, outcome = step msgs displays msg model
+        model, RemoteEffect.toCmd steps, outcome
 
     // ─── View ─────────────────────────────────────────────────────────
 
@@ -1386,8 +1429,8 @@ type Msg =
 
 // ─── Update ───────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) =
-    {
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+    ({
         UploadedFiles = []
         ProcessedData = []
         IngestionStatus = Map.empty
@@ -1398,29 +1441,43 @@ let init (ctx: ClientModuleContext) =
         Error = None
         AllowedTypeIds = None
         Messages = ctx.Messages.MappingDataManager
-    },
-    Cmd.ofMsg LoadFiles
+     },
+     [ Then LoadFiles ])
+    |> RemoteEffect.run
+
+/// A call's reply, with a failure sent to the screen's one error branch.
+let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) : Msg =
+    match reply with
+    | Ok answer -> ofAnswer answer
+    | Error ex -> ApiError ex.Message
 
 /// Read a chosen file through a direct effect rather than
 /// `Cmd.OfAsync.perform` + `Async.FromContinuations`: under Fable 5 that
 /// async path silently no-ops (the deferred start never runs the reader,
 /// so `FileChosen` is never dispatched and the import hangs with no error).
-/// An effect runs synchronously when the runtime execs the Cmd, and the
-/// reader callbacks dispatch straight back — no trampoline, no swallowed
-/// errors.
-let private readFile (msgs: MappingDataManagerMessages) (file: Browser.Types.File) : Cmd<Msg> =
-    Cmd.ofEffect (fun dispatch ->
-        let reader = Browser.Dom.FileReader.Create()
-        reader.onload <- fun _ -> dispatch (FileChosen(file.name, reader.result :?> string))
-        reader.onerror <- fun _ -> dispatch (ApiError(msgs.FileReadFailed file.name))
-        reader.readAsText file)
+/// The body runs synchronously when the effect is performed, and
+/// dispatches once, from whichever reader callback fires — no trampoline,
+/// no swallowed errors.
+let private readFile (msgs: MappingDataManagerMessages) (file: Browser.Types.File) : Step<Msg, RemoteEffect<Msg>> =
+    Do(
+        RemoteEffect.legacy "MappingDataManagerUI.readFile" (fun dispatch ->
+            let reader = Browser.Dom.FileReader.Create()
+            reader.onload <- fun _ -> dispatch (FileChosen(file.name, reader.result :?> string))
+            reader.onerror <- fun _ -> dispatch (ApiError(msgs.FileReadFailed file.name))
+            reader.readAsText file)
+    )
 
 /// Frictionless re-import when the structure is already known: apply every
 /// saved mapping whose target type is still registered and whose owning
 /// module is available to this team. With none usable, upload the file
 /// as-is so the server attempts native detection — recognised or not, it
 /// then lands in the list to be mapped later via "New Mapping".
-let private importOrUpload (model: Model) (displays: DataTypeDisplay list) (held: HeldFile) (saved: Conversion list) =
+let private importOrUpload
+    (model: Model)
+    (displays: DataTypeDisplay list)
+    (held: HeldFile)
+    (saved: Conversion list)
+    : Step<Msg, RemoteEffect<Msg>> =
     let isAvailable (typeId: DataTypeId) =
         match model.AllowedTypeIds with
         | Some allowed -> allowed.Contains typeId
@@ -1431,8 +1488,14 @@ let private importOrUpload (model: Model) (displays: DataTypeDisplay list) (held
         |> List.filter (fun m -> (schemaFor displays m.TargetTypeId).IsSome && isAvailable m.TargetTypeId)
 
     if not importable.IsEmpty then
-        Cmd.OfAsync.either (importConversions model.Messages displays held) importable ImportFinished (fun ex ->
-            ApiError ex.Message)
+        Do(
+            composed
+                "MappingDataManagerUI.importConversions"
+                (importConversions model.Messages displays held)
+                importable
+                ImportFinished
+                (fun ex -> ApiError ex.Message)
+        )
     else
         let upload = {
             filename = held.FileName
@@ -1440,17 +1503,27 @@ let private importOrUpload (model: Model) (displays: DataTypeDisplay list) (held
             dataType = "UnrecognisedData"
         }
 
-        Cmd.OfRemoting.call fileApi.UploadFile { File = upload } NativeUploaded (fun ex -> ApiError ex.Message)
+        Do(
+            RemoteEffect.call
+                "FileManagementApi.UploadFile"
+                fileApi.UploadFile
+                { File = upload }
+                (orApiError NativeUploaded)
+        )
 
 /// Route a message to the open wizard and act on its outcome.
-let private updateWizard (displays: DataTypeDisplay list) (wizardMsg: Wizard.Msg) (model: Model) =
+let private updateWizard
+    (displays: DataTypeDisplay list)
+    (wizardMsg: Wizard.Msg)
+    (model: Model)
+    : Model * Step<Msg, RemoteEffect<Msg>> list =
     match model.Wizard with
-    | None -> model, Cmd.none
+    | None -> model, []
     | Some wizard ->
-        let wizard, wizardCmd, outcome =
-            Wizard.update model.Messages displays wizardMsg wizard
+        let wizard, wizardSteps, outcome =
+            Wizard.step model.Messages displays wizardMsg wizard
 
-        let cmd = Cmd.map WizardMsg wizardCmd
+        let cmd = wizardSteps |> Step.mapAll WizardMsg (RemoteEffect.map WizardMsg)
 
         match outcome with
         | Wizard.Stayed -> { model with Wizard = Some wizard }, cmd
@@ -1475,19 +1548,34 @@ let private updateWizard (displays: DataTypeDisplay list) (wizardMsg: Wizard.Msg
                     Wizard = None
                     Busy = false
             },
-            Cmd.batch [ cmd; Cmd.ofMsg LoadFiles ]
+            cmd @ [ Then LoadFiles ]
 
-let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step
+    (displays: DataTypeDisplay list)
+    (msg: Msg)
+    (model: Model)
+    : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadFiles ->
         model,
-        Cmd.batch [
-            Cmd.OfRemoting.call fileApi.ListFiles () FilesLoaded (fun ex -> ApiError ex.Message)
-            Cmd.OfRemoting.call conversionApi.ListConversionRecords () RecordsLoaded (fun _ -> RecordsLoaded [])
+        [
+            Do(RemoteEffect.call "FileManagementApi.ListFiles" fileApi.ListFiles () (orApiError FilesLoaded))
+            Do(
+                RemoteEffect.call
+                    "IConversionApi.ListConversionRecords"
+                    conversionApi.ListConversionRecords
+                    ()
+                    (fun reply -> RecordsLoaded(reply |> Result.defaultValue []))
+            )
             // The availability-filtered catalog: a type whose owning module
             // the team marked `Unavailable` is absent here, so it is never
             // offered as a mapping target.
-            Cmd.OfRemoting.call dataCatalogApi.GetDataCatalog () CatalogLoaded (fun _ -> CatalogLoadFailed)
+            Do(
+                RemoteEffect.call "DataCatalogApi.GetDataCatalog" dataCatalogApi.GetDataCatalog () (function
+                    | Ok response -> CatalogLoaded response
+                    | Error _ -> CatalogLoadFailed)
+            )
         ]
 
     | FilesLoaded snapshot ->
@@ -1497,32 +1585,41 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 ProcessedData = snapshot.Processed
                 IngestionStatus = Map.ofList snapshot.Ingestion
         },
-        Cmd.none
+        []
 
-    | RecordsLoaded records -> { model with Records = records }, Cmd.none
+    | RecordsLoaded records -> { model with Records = records }, []
 
     | IngestionStatusChanged(fileName, status) ->
         {
             model with
                 IngestionStatus = model.IngestionStatus |> Map.add fileName status
         },
-        Cmd.none
+        []
 
     | RetryIngestionMsg fileName ->
-        model, Cmd.OfRemoting.call fileApi.RetryIngestion fileName RetryIngestionDone (fun ex -> ApiError ex.Message)
+        model,
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.RetryIngestion"
+                    fileApi.RetryIngestion
+                    fileName
+                    (orApiError RetryIngestionDone)
+            )
+        ]
 
     // No optimistic state — the server transitions the store to `Pending`
     // and the live notification flips the badge.
-    | RetryIngestionDone(Ok()) -> model, Cmd.none
+    | RetryIngestionDone(Ok()) -> model, []
 
     | RetryIngestionDone(Error msg) ->
         {
             model with
                 Error = Some(model.Messages.ReingestionFailed msg)
         },
-        Cmd.none
+        []
 
-    | SetStatusFilter filter -> { model with StatusFilter = filter }, Cmd.none
+    | SetStatusFilter filter -> { model with StatusFilter = filter }, []
 
     | SessionStoreCleared ->
         {
@@ -1534,7 +1631,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 Wizard = None
                 Busy = false
         },
-        Cmd.none
+        []
 
     | CatalogLoaded response ->
         let allowed = response.Types |> List.map (fun e -> e.Info.Id) |> Set.ofList
@@ -1543,23 +1640,27 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             model with
                 AllowedTypeIds = Some allowed
         },
-        Cmd.none
+        []
 
-    | CatalogLoadFailed -> model, Cmd.none
+    | CatalogLoadFailed -> model, []
 
-    | SelectFile file -> model, readFile model.Messages file
+    | SelectFile file -> model, [ readFile model.Messages file ]
 
     | FileChosen(fileName, contents) ->
         let held = heldOf fileName contents
 
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call
-            conversionApi.GetConversions
-            held.Fingerprint
-            (fun saved -> MappingsFetched(held, saved))
-            (fun ex -> ApiError ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "IConversionApi.GetConversions"
+                    conversionApi.GetConversions
+                    held.Fingerprint
+                    (orApiError (fun saved -> MappingsFetched(held, saved)))
+            )
+        ]
 
-    | MappingsFetched(held, saved) -> model, importOrUpload model displays held saved
+    | MappingsFetched(held, saved) -> model, [ importOrUpload model displays held saved ]
 
     | NativeUploaded result ->
         match result with
@@ -1567,16 +1668,16 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             // Recognised → the file now carries its detected type; not
             // recognised → it persists as a normal row to be mapped later
             // via "New Mapping". Either way, just refresh the list.
-            { model with Busy = false }, Cmd.ofMsg LoadFiles
+            { model with Busy = false }, [ Then LoadFiles ]
         | Error e ->
             {
                 model with
                     Busy = false
                     Error = Some e
             },
-            Cmd.none
+            []
 
-    | ImportFinished(Ok _) -> { model with Busy = false }, Cmd.ofMsg LoadFiles
+    | ImportFinished(Ok _) -> { model with Busy = false }, [ Then LoadFiles ]
 
     | ImportFinished(Error msg) ->
         {
@@ -1584,7 +1685,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 Busy = false
                 Error = Some msg
         },
-        Cmd.none
+        []
 
     | StartMapping fileName ->
         // Re-fetch the uploaded file's bytes, then open the wizard on it.
@@ -1594,11 +1695,15 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
         // a per-file "not found in session" error. A failed epoch READ does
         // not block the call: `check` swallows it.
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call
-            (fun name -> SessionEpoch.preflight (fileApi.GetFileContent name))
-            fileName
-            FileContentLoaded
-            (fun ex -> ApiError ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.GetFileContent"
+                    (fun name -> SessionEpoch.preflight (fileApi.GetFileContent name))
+                    fileName
+                    (orApiError FileContentLoaded)
+            )
+        ]
 
     | FileContentLoaded(Ok upload) ->
         {
@@ -1606,7 +1711,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 Busy = false
                 Wizard = Some(Wizard.init (heldOf upload.filename upload.contents))
         },
-        Cmd.none
+        []
 
     | FileContentLoaded(Error e) ->
         {
@@ -1614,7 +1719,7 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 Busy = false
                 Error = Some e
         },
-        Cmd.none
+        []
 
     | WizardMsg wizardMsg -> updateWizard displays wizardMsg model
 
@@ -1629,16 +1734,30 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             |> List.distinct
 
         model,
-        Cmd.OfAsync.either
-            deleteFiles
-            (fileName :: derived)
-            (function
-            | Ok() -> LoadFiles
-            | Error e -> ApiError e)
-            (fun ex -> ApiError ex.Message)
+        [
+            Do(
+                composed
+                    "MappingDataManagerUI.deleteFiles"
+                    deleteFiles
+                    (fileName :: derived)
+                    (function
+                    | Ok() -> LoadFiles
+                    | Error e -> ApiError e)
+                    (fun ex -> ApiError ex.Message)
+            )
+        ]
 
     | ReprocessFile fileName ->
-        model, Cmd.OfRemoting.call fileApi.ReprocessFile fileName Reprocessed (fun ex -> ApiError ex.Message)
+        model,
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.ReprocessFile"
+                    fileApi.ReprocessFile
+                    fileName
+                    (orApiError Reprocessed)
+            )
+        ]
 
     | Reprocessed(Ok entry) ->
         // The server has already overwritten the persisted sidecar by the
@@ -1648,16 +1767,20 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
             (model.ProcessedData |> List.filter (fun e -> e.FileName <> entry.FileName))
             @ [ entry ]
 
-        { model with ProcessedData = updated }, Cmd.none
+        { model with ProcessedData = updated }, []
 
     | Reprocessed(Error msg) ->
         {
             model with
                 Error = Some(model.Messages.ReprocessFailed msg)
         },
-        Cmd.none
+        []
 
-    | ResetDataStore -> model, Cmd.OfRemoting.call fileApi.ResetDataStore () ResetDone (fun ex -> ApiError ex.Message)
+    | ResetDataStore ->
+        model,
+        [
+            Do(RemoteEffect.call "FileManagementApi.ResetDataStore" fileApi.ResetDataStore () (orApiError ResetDone))
+        ]
 
     | ResetDone(Ok _) ->
         // Re-fetch rather than trusting the local view — keeps the client
@@ -1667,14 +1790,14 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 UploadedFiles = []
                 ProcessedData = []
         },
-        Cmd.ofMsg LoadFiles
+        [ Then LoadFiles ]
 
     | ResetDone(Error msg) ->
         {
             model with
                 Error = Some(model.Messages.ResetFailed msg)
         },
-        Cmd.none
+        []
 
     | ApiError errorMsg ->
         {
@@ -1682,9 +1805,13 @@ let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) =
                 Busy = false
                 Error = Some errorMsg
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
+
+/// The transitions, on today's loop.
+let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    step displays msg model |> RemoteEffect.run
 
 // ─── View ─────────────────────────────────────────────────────────
 
