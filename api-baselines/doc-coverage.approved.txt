@@ -115,7 +115,7 @@ ToolUp.Hosts.EdgeCache 35/76
 ToolUp.Hosts.GoogleCloudFunctions 2/4
 ToolUp.IngestionQueues.Redis 27/39
 ToolUp.JobSchedulers.Quartz 26/35
-ToolUp.KnowledgeBase.Client 60/385
+ToolUp.KnowledgeBase.Client 60/398
 ToolUp.KnowledgeBase.Core 198/472
 ToolUp.KnowledgeBase.Server 271/442
 ToolUp.Media.CloudTranscode 2/3

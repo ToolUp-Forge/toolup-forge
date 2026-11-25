@@ -21,7 +21,7 @@ open SharedTypes
 /// `FileReader` round-trip the single-file path has always done, lifted
 /// out so the bulk path can wait for several at once.
 ///
-/// Phase 751 — plain helper, `msgs` first: the failure message ends up in
+/// A plain helper, `msgs` first: the failure message ends up in
 /// `model.BulkImportError` and is rendered by `bulkImportPanel` below, so
 /// it is user-visible even though this function itself renders nothing.
 let private readFileBytes (msgs: KnowledgeMainMessages) (file: Browser.Types.File) : Async<byte[]> =
@@ -63,9 +63,9 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
 
         reader.readAsArrayBuffer file
 
-    /// Phase 511 — route a selection to the right surface.
+    /// Route a selection to the right surface.
     ///
-    /// **A single non-archive file still takes the pre-511 path,
+    /// **A single non-archive file still takes the single-file path,
     /// unchanged** (GP 11): same `UploadDocument` call, same
     /// multipart-optimised wire, same spinner. The batch surface is
     /// entered only when the selection genuinely IS a batch — several
@@ -83,7 +83,7 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
                         |> List.map (fun file -> async {
                             let! bytes = readFileBytes msgs file
 
-                            // Phase 725.B — the browser composes the
+                            // The browser composes the
                             // BASE64 cases, not the `byte[]` ones. A
                             // `byte[]` nested in the DU is not the
                             // multipart-optimised top-level argument
@@ -172,7 +172,7 @@ let private UploadZone (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
-// ─── Batch import roll-up (Phase 511.D) ───────────────────────────
+// ─── Batch import roll-up ─────────────────────────────────────────
 //
 // The batch's single completion surface. One panel summarising N items
 // replaces N transient toasts: a migration that refused 12 of 500 files
@@ -265,7 +265,7 @@ let private bulkImportPanel (msgs: KnowledgeMainMessages) (model: Model) (dispat
 // because they have their own dedicated page (the Documents list shows
 // uploads + narratives only).
 
-/// Phase 502.C — inline tag editor for one document row.
+/// Inline tag editor for one document row.
 ///
 /// The draft lives in `React.useState` and is dispatched only on submit
 /// (Enter or Save), per the MVU discipline in `CLAUDE.md`: a
@@ -347,7 +347,7 @@ let private deleteRowAction
     Html.div [
         prop.className "inline-flex items-center gap-3"
         prop.children [
-            // Phase 502.C — narrative documents cannot carry tags (their
+            // Narrative documents cannot carry tags (their
             // chunks are the owning module's, so a tag could never reach
             // a retrieval filter and the server refuses outright). Not
             // offering the affordance is better than offering one that
@@ -356,7 +356,7 @@ let private deleteRowAction
             | FromNarrative _ -> Html.none
             | UploadedFile
             | Note _ -> TagEditor doc dispatch
-            // Phase 636 — the drawer trigger, present only where there
+            // The drawer trigger, present only where there
             // is history to show. On a deployment that never composed
             // `withDocumentVersioning` every document is version 1, so
             // this action column is byte-for-byte what it was (GP 11).
@@ -391,9 +391,9 @@ let private documentList (msgs: KnowledgeMainMessages) (model: Model) (dispatch:
 
     KnowledgeListView.KnowledgeListView config nonNote
 
-// ─── Version-history drawer (Phase 636) ───────────────────────────
+// ─── Version-history drawer ───────────────────────────────────────
 //
-// What Phase 510 put on the wire, rendered. A versioned re-upload
+// The wire's document versions, rendered. A versioned re-upload
 // supersedes in place — same document id, incremented `Version` — so
 // without this the only visible evidence that a document HAS a history
 // was that its size or timestamp had quietly changed.
@@ -644,12 +644,13 @@ let private MainPanel (model: Model) (dispatch: Msg -> unit) =
                 ]
             ]
             model.UploadError
+            |> Option.orElse model.LoadError
             |> Option.map (Notice.Problem >> StateViews.noticeStatic)
             |> Option.defaultValue Html.none
             bulkImportPanel msgs model dispatch
             UploadZone model dispatch
             documentList msgs model dispatch
-            // Phase 636 — absent unless a "History" action was clicked,
+            // Absent unless a "History" action was clicked,
             // which itself only exists above version 1.
             match model.VersionHistory with
             | Some state -> VersionHistoryDrawer state dispatch
@@ -1020,7 +1021,7 @@ let private AIContextEditor (initialBody: string) (saving: bool) (dispatch: Msg 
 [<ReactComponent>]
 let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
     let msgs = (MessageCatalogProvider.useMessages ()).KnowledgeBase.AIContext
-    // Phase 66 Stream B.8 — read resolved subject kind directly;
+    // Read the resolved subject kind directly;
     // `AnonymousKind` has no persistent scope so the standing-context
     // panel is unavailable. The retiring `getMode ()` call collapsed
     // every authenticated mode into the catch-all branch — same
@@ -1030,7 +1031,7 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
 
     let body =
         match subjectKind with
-        // Phase 1002 — a publication reader holds no scope either.
+        // A publication reader holds no scope either.
         | AnonymousKind
         | PublicationReaderKind ->
             Html.div [
@@ -1136,7 +1137,7 @@ let private platformLibraryView (model: Model) (ctx: RenderContext<Msg>) : PageC
 /// KnowledgeBaseView.narrativeCommitHandler`) to enable
 /// `NarrativeRenderer`'s "Save to Knowledge Base" button.
 ///
-/// Phase 13a — replaces the legacy `installNarrativeCommit ()`
+/// Replaces the legacy `installNarrativeCommit ()`
 /// module-load side effect. The value reference from the consumer's
 /// `ClientConfig` pulls the KB client module into the Fable import
 /// graph automatically — no separate boot-time call needed.
@@ -1178,7 +1179,7 @@ let private platformLibraryPage: PageConfig = {
 /// `Definition.Id` ("KnowledgeBase"), which is the RBAC key in
 /// `ServerConfig.ModuleNames` (GP 11).
 let create (config: ToolUp.KnowledgeBase.KnowledgeBaseConfig option) : ToolUp.Platform.ErasedModule =
-    // Phase 102–107 tail — broker the "view original" affordance to the
+    // Broker the "view original" affordance to the
     // AI Sources panel. Composing the Knowledge Base in is what makes a
     // citation's original openable; a deployment without it leaves the
     // bridge unregistered and the panel renders as before (GP 11).

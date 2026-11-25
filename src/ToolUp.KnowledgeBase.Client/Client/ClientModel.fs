@@ -31,7 +31,7 @@ type NoteEditorTarget =
 /// every session starts and where a deployment that never composed
 /// `withDocumentVersioning` stays forever: nothing is fetched until a
 /// drawer is opened, so rendering the document list costs precisely what
-/// it cost before this phase — no eager N+1 sweep over
+/// it cost without version history — no eager N+1 sweep over
 /// `GetDocumentVersions` (GP 11 / GP 13).
 type VersionHistoryState = {
     /// The lineage id whose history this is.
@@ -141,10 +141,15 @@ type Msg =
     | DeleteFailed of string
     | PollStatuses
     | StatusPolled of string * IngestionStatus
+    /// A status poll that failed in transport. Nothing changes: the poll
+    /// loop's next cycle asks again while the document is still ingesting.
+    | StatusPollFailed of docId: string * reason: string
     | ResetIndexRequested
     | ResetIndexCompleted of Result<unit, string>
     | RefreshAIContextRequested
     | RefreshAIContextCompleted
+    | RefreshAIContextFailed of reason: string
+    | DocumentsLoadFailed of reason: string
     | DismissError
 
     // ── Notes ──
@@ -157,6 +162,7 @@ type Msg =
 
     // ── Standing AI context ──
     | LoadAIContext of ApiCall<unit, AIContextEntry option>
+    | AIContextLoadFailed of reason: string
     | OpenAIContextEditor
     | CloseAIContextEditor
     | SaveAIContext of body: string
@@ -191,12 +197,6 @@ type Msg =
     /// through the original-delivery path.
     | DownloadVersionRequested of version: KnowledgeDocumentVersion
     | DownloadVersionSettled of Result<unit, string>
-
-    /// The one error branch of the calls this module has never reported a
-    /// failure for (the list and context reads, the status poll, the
-    /// note and context saves, the index reset and the context refresh):
-    /// the model is left as it is, as it was when the failure was swallowed.
-    | CallFailed of reason: string
 
 // `withMultipartOptimization` is required for the `byte[]` argument on
 // `UploadDocument`: ToolUp.Remoting's default JSON transport encodes byte
@@ -254,12 +254,6 @@ let private hasNonTerminal (docs: KnowledgeDocument list) =
 
 /// One step's remote calls and follow-ups.
 type private Steps = Step<Msg, RemoteEffect<Msg>> list
-
-/// A call's reply, with a failure sent to the one error branch.
-let private orFailed (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) : Msg =
-    match reply with
-    | Ok answer -> ofAnswer answer
-    | Error ex -> CallFailed ex.Message
 
 /// A call's reply, with a failure sent to the call's own failure message.
 let private orElse (ofAnswer: 'result -> Msg) (ofFailure: string -> Msg) (reply: Result<'result, exn>) : Msg =
@@ -381,7 +375,7 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                     "KnowledgeApi.GetDocuments"
                     knowledgeApi.GetDocuments
                     ()
-                    (orFailed (fun docs -> LoadDocuments(Finished docs)))
+                    (orElse (fun docs -> LoadDocuments(Finished docs)) DocumentsLoadFailed)
             )
         ]
 
@@ -689,7 +683,8 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                         "KnowledgeApi.GetStatus"
                         knowledgeApi.GetStatus
                         doc.Id
-                        (orFailed (fun status -> StatusPolled(doc.Id, status)))
+                        (orElse (fun status -> StatusPolled(doc.Id, status)) (fun reason ->
+                            StatusPollFailed(doc.Id, reason)))
                 ))
 
         let nextPoll = if not nonTerminal.IsEmpty then schedulePoll () else []
@@ -703,10 +698,18 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
 
         { model with Documents = docs }, []
 
+    | StatusPollFailed _ -> model, []
+
     | ResetIndexRequested ->
         { model with Resetting = true },
         [
-            Do(RemoteEffect.call "KnowledgeApi.ResetIndex" knowledgeApi.ResetIndex () (orFailed ResetIndexCompleted))
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.ResetIndex"
+                    knowledgeApi.ResetIndex
+                    ()
+                    (RemoteEffect.flatten >> ResetIndexCompleted)
+            )
         ]
 
     | ResetIndexCompleted(Ok()) ->
@@ -742,7 +745,7 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                     "KnowledgeApi.RefreshAIContext"
                     knowledgeApi.RefreshAIContext
                     ()
-                    (orFailed (fun () -> RefreshAIContextCompleted))
+                    (orElse (fun () -> RefreshAIContextCompleted) RefreshAIContextFailed)
             )
         ]
 
@@ -752,6 +755,16 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                 RefreshingAIContext = false
         },
         []
+
+    | RefreshAIContextFailed reason ->
+        {
+            model with
+                RefreshingAIContext = false
+                UploadError = Some reason
+        },
+        []
+
+    | DocumentsLoadFailed reason -> { model with LoadError = Some reason }, []
 
     | DismissError ->
         {
@@ -790,7 +803,7 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                     "KnowledgeApi.AddNote"
                     knowledgeApi.AddNote
                     { Title = title; Body = body }
-                    (orFailed NoteSaved)
+                    (RemoteEffect.flatten >> NoteSaved)
             | EditExisting docId ->
                 RemoteEffect.call
                     "KnowledgeApi.UpdateNote"
@@ -800,7 +813,7 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                         Title = title
                         Body = body
                     }
-                    (orFailed NoteSaved)
+                    (RemoteEffect.flatten >> NoteSaved)
 
         {
             model with
@@ -843,7 +856,7 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                     "KnowledgeApi.GetAIContext"
                     knowledgeApi.GetAIContext
                     ()
-                    (orFailed (fun entry -> LoadAIContext(Finished entry)))
+                    (orElse (fun entry -> LoadAIContext(Finished entry)) AIContextLoadFailed)
             )
         ]
 
@@ -852,6 +865,13 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
             model with
                 AIContext = Some entry
                 AIContextLoadError = None
+        },
+        []
+
+    | AIContextLoadFailed reason ->
+        {
+            model with
+                AIContextLoadError = Some reason
         },
         []
 
@@ -878,7 +898,13 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                 AIContextSaveError = None
         },
         [
-            Do(RemoteEffect.call "KnowledgeApi.SetAIContext" knowledgeApi.SetAIContext body (orFailed AIContextSaved))
+            Do(
+                RemoteEffect.call
+                    "KnowledgeApi.SetAIContext"
+                    knowledgeApi.SetAIContext
+                    body
+                    (RemoteEffect.flatten >> AIContextSaved)
+            )
         ]
 
     | AIContextSaved(Ok entry) ->
@@ -935,8 +961,6 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                 PlatformDocsLoadError = Some reason
         },
         []
-
-    | CallFailed _ -> model, []
 
 /// The transitions, on today's loop.
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run

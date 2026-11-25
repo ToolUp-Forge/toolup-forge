@@ -136,6 +136,30 @@ let private pendingDocument: SharedTypes.KnowledgeDocument = {
     Tags = []
 }
 
+/// What the interceptor chain makes of every failure of the call under test.
+[<Literal>]
+let private TransportDown = "transport down"
+
+/// Send `msg` through the knowledge base's real `update` with the call
+/// `methodName` failing, collect the replies, and hand back the model before
+/// the replies and a function that folds them through `step`. The page has
+/// no server, so the call fails in transport; the chain replaces the
+/// exception so the reason is known.
+let private kbFailing (methodName: string) (msg: ClientModel.Msg) (model: ClientModel.Model) =
+    let interceptor = recording methodName (Some TransportDown)
+    let seen = ResizeArray<ClientModel.Msg>()
+    let requested, cmd = ClientModel.update msg model
+
+    for effect in cmd do
+        effect seen.Add
+
+    requested,
+    fun () ->
+        same (events interceptor) [ "calling"; "error" ] (sprintf "%s failed in transport" methodName)
+        let replies = List.ofSeq seen
+        same (List.length replies) 1 "one reply"
+        replies |> List.fold (fun m reply -> fst (ClientModel.step reply m)) requested
+
 let tests =
     testList "Remote calls as effect values" [
 
@@ -393,5 +417,108 @@ let tests =
                     PlatformKnowledgeAdminUI.step (PlatformKnowledgeAdminUI.RequestDelete "doc-9") m0
 
                 same steps [ expectCall "IPlatformKnowledgeApi.DeletePlatformDocument" "doc-9" ] "one call")
+        ]
+
+        testList "the knowledge base surfaces a failed call" [
+            testCaseDeferred "a failed index reset clears its spinner and reports the reset failure" 200 (fun () ->
+                let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                let requested, settle =
+                    kbFailing "KnowledgeApi.ResetIndex" ClientModel.ResetIndexRequested m0
+
+                same requested.Resetting true "the spinner runs while the call is in flight"
+
+                fun () ->
+                    let settled = settle ()
+                    same settled.Resetting false "the spinner clears"
+                    same settled.UploadError (Some(m0.Messages.Errors.ResetFailed TransportDown)) "the reason is shown")
+
+            testCaseDeferred "a failed context refresh clears its spinner and reports the reason" 200 (fun () ->
+                let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                let requested, settle =
+                    kbFailing "KnowledgeApi.RefreshAIContext" ClientModel.RefreshAIContextRequested m0
+
+                same requested.RefreshingAIContext true "the spinner runs while the call is in flight"
+
+                fun () ->
+                    let settled = settle ()
+                    same settled.RefreshingAIContext false "the spinner clears"
+                    same settled.UploadError (Some TransportDown) "the reason is shown")
+
+            testCaseDeferred "a failed new note clears its spinner and reports the reason" 200 (fun () ->
+                let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                let requested, settle =
+                    kbFailing "KnowledgeApi.AddNote" (ClientModel.SaveNote(ClientModel.CreateNew, "t", "b")) m0
+
+                same requested.SavingNote true "the spinner runs while the call is in flight"
+
+                fun () ->
+                    let settled = settle ()
+                    same settled.SavingNote false "the spinner clears"
+                    same settled.NoteSaveError (Some TransportDown) "the reason is shown")
+
+            testCaseDeferred "a failed note edit clears its spinner and reports the reason" 200 (fun () ->
+                let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                let requested, settle =
+                    kbFailing
+                        "KnowledgeApi.UpdateNote"
+                        (ClientModel.SaveNote(ClientModel.EditExisting "doc-1", "t", "b"))
+                        m0
+
+                same requested.SavingNote true "the spinner runs while the call is in flight"
+
+                fun () ->
+                    let settled = settle ()
+                    same settled.SavingNote false "the spinner clears"
+                    same settled.NoteSaveError (Some TransportDown) "the reason is shown")
+
+            testCaseDeferred "a failed context save clears its spinner and reports the reason" 200 (fun () ->
+                let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                let requested, settle =
+                    kbFailing "KnowledgeApi.SetAIContext" (ClientModel.SaveAIContext "body") m0
+
+                same requested.SavingAIContext true "the spinner runs while the call is in flight"
+
+                fun () ->
+                    let settled = settle ()
+                    same settled.SavingAIContext false "the spinner clears"
+                    same settled.AIContextSaveError (Some TransportDown) "the reason is shown")
+
+            testCaseDeferred "a failed document list read reports the reason" 200 (fun () ->
+                let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                let _, settle =
+                    kbFailing "KnowledgeApi.GetDocuments" (ClientModel.LoadDocuments(Start())) m0
+
+                fun () -> same (settle ()).LoadError (Some TransportDown) "the reason is shown")
+
+            testCaseDeferred "a failed context read reports the reason" 200 (fun () ->
+                let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                let _, settle =
+                    kbFailing "KnowledgeApi.GetAIContext" (ClientModel.LoadAIContext(Start())) m0
+
+                fun () -> same (settle ()).AIContextLoadError (Some TransportDown) "the reason is shown")
+
+            testCaseDeferred
+                "a failed status poll is silent: the document keeps its status for the next cycle"
+                200
+                (fun () ->
+                    let m0, _ = ClientModel.init ClientModuleContext.empty
+
+                    let loaded =
+                        fst (ClientModel.step (ClientModel.LoadDocuments(Finished [ pendingDocument ])) m0)
+
+                    let requested, settle =
+                        kbFailing "KnowledgeApi.GetStatus" ClientModel.PollStatuses loaded
+
+                    fun () ->
+                        let settled = settle ()
+                        same settled.Documents requested.Documents "the document keeps its status"
+                        same settled.LoadError None "and nothing is reported")
         ]
     ]
