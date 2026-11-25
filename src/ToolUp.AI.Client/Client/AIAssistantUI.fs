@@ -140,16 +140,6 @@ let private call (methodName: string) (proxyCall: 'a -> Async<'r>) (arg: 'a) (on
     Do(RemoteEffect.call methodName proxyCall arg (orApiError onOk))
 ]
 
-/// Code with no value form yet, run as today's command under its site
-/// label. Each body here dispatches at most once.
-let private legacy (site: string) (cmd: Cmd<Msg>) : Steps = [
-    Do(
-        RemoteEffect.legacy site (fun dispatch ->
-            for effect in cmd do
-                effect dispatch)
-    )
-]
-
 let private loadTools () =
     call "AIAssistantApi.GetAvailableTools" aiApi.GetAvailableTools () (Finished >> LoadTools)
 
@@ -159,9 +149,14 @@ let private loadProviders () =
 let private loadMessages (conversationId: Guid) =
     call "AIAssistantApi.GetConversation" aiApi.GetConversation conversationId (Finished >> LoadMessages)
 
-/// The watchdog's timer for `token`: it answers once, with the token.
-let private armWatchdog (token: Guid) =
-    legacy "AIAssistantUI.watchdog" (Cmd.OfAsync.perform ChatStream.watchdogDelay token WatchdogFired)
+/// The watchdog's timer for `token`: one delay that answers once, with the
+/// token.
+let private armWatchdog (token: Guid) : Steps = [
+    Do(
+        RemoteEffect.await "ChatStream.watchdogDelay" ChatStream.watchdogDelay token (fun outcome ->
+            WatchdogFired(Result.defaultValue token outcome))
+    )
+]
 
 /// Ask the server where the task got to; a failed poll answers `None`.
 let private pollTask (token: Guid) (taskId: Guid) : Steps = [
@@ -432,10 +427,12 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
 
             sent,
             armSteps
-            @ legacy
-                "AIAssistantUI.fastPath"
-                (Cmd.OfAsync.perform FastPathBridge.resolve fastPathRequest (fun outcome ->
-                    FastPathAnswered(request, outcome)))
+            @ [
+                Do(
+                    RemoteEffect.await "FastPathBridge.resolve" FastPathBridge.resolve fastPathRequest (fun outcome ->
+                        FastPathAnswered(request, Result.defaultValue FastPathBridge.NoResolution outcome))
+                )
+            ]
 
     | FastPathAnswered(request, _) when model.ActiveConversation <> Some request.ConversationId -> model, []
 
@@ -447,8 +444,8 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
                 Messages = settled.Messages @ [ synthAssist ]
         },
         [
-            Do(RemoteEffect.legacy "AIAssistantUI.fastPathAction" (fun _ -> dispatchAction ()))
-            Do(RemoteEffect.legacy "AIAssistantUI.fastPathBeacon" (fun _ -> sendBeacon ()))
+            Do(RemoteEffect.signal "AIAssistantUI.fastPathAction" (fun () -> dispatchAction ()))
+            Do(RemoteEffect.signal "AIAssistantUI.fastPathBeacon" (fun () -> sendBeacon ()))
         ]
 
     | FastPathAnswered(request, FastPathBridge.NoResolution) ->
@@ -543,7 +540,7 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
     | CancelTask taskId ->
         model,
         [
-            Do(RemoteEffect.legacy "AIAssistantUI.cancel" (fun _ -> ChatStream.AIStream.cancel taskId))
+            Do(RemoteEffect.signal "AIAssistantUI.cancel" (fun () -> ChatStream.AIStream.cancel taskId))
         ]
 
     | WatchdogFired token -> model |> reduceStream (ChatStream.fire token)

@@ -68,19 +68,20 @@ let private conversionApi: IConversionApi =
 let private dataCatalogApi: DataCatalogApi =
     Api.makeProxy<DataCatalogApi> (customOptions = UserSession.withRequestHeaders)
 
-/// An async composed of several calls has no value form until the
-/// runtime's standard vocabulary arrives, so it runs as a legacy body
-/// under `site`, answering once as `Cmd.OfAsync.either` answers.
+/// An async composed of several calls, as one value: its name and its
+/// argument identify it, and it answers once, with its answer or its
+/// failure.
 let private composed
-    (site: string)
+    (name: string)
     (task: 'a -> Async<'result>)
     (arg: 'a)
     (ofAnswer: 'result -> 'msg)
     (ofFailure: exn -> 'msg)
     : RemoteEffect<'msg> =
-    RemoteEffect.legacy site (fun dispatch ->
-        for effect in Cmd.OfAsync.either task arg ofAnswer ofFailure do
-            effect dispatch)
+    RemoteEffect.await name task arg (fun outcome ->
+        match outcome with
+        | Ok answer -> ofAnswer answer
+        | Error ex -> ofFailure ex)
 
 // ─── Mapping helpers (pure) ───────────────────────────────────────
 

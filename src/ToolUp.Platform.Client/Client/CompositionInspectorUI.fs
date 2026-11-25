@@ -184,7 +184,7 @@ let private downloadJson (panel: InspectorPanel) (json: string) =
 
 /// The browser download of an exported panel. It dispatches nothing.
 let internal download (panel: InspectorPanel) (json: string) : Step<Msg, RemoteEffect<Msg>> list = [
-    Do(RemoteEffect.legacy "CompositionInspectorUI.downloadJson" (fun _ -> downloadJson panel json))
+    Do(RemoteEffect.signal "CompositionInspectorUI.downloadJson" (fun () -> downloadJson panel json))
 ]
 
 /// The transitions, with their remote calls as values.

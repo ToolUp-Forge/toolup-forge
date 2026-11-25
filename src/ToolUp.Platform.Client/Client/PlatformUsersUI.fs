@@ -193,20 +193,13 @@ let internal requestToken (scopeId: string) (reason: string) : Steps = [
     )
 ]
 
-/// The directory's commands as steps, one per command element, each a
-/// `RemoteEffect.legacy` body that dispatches the element's one message:
-/// the directory does not name its calls as values.
-let private directorySteps (site: string) (cmd: Cmd<UserDirectory.Msg>) : Steps =
-    cmd
-    |> List.mapi (fun index effect ->
-        Do(RemoteEffect.legacy (sprintf "%s #%d" site index) (fun dispatch -> effect (DirectoryMsg >> dispatch))))
+/// The directory's steps in this screen's message type.
+let private lift (steps: Step<UserDirectory.Msg, RemoteEffect<UserDirectory.Msg>> list) : Steps =
+    Step.mapAll DirectoryMsg (RemoteEffect.map DirectoryMsg) steps
 
 /// Ask the directory for `ids`; it skips blank and already-known ids.
 let internal resolve (ids: string list) (model: Model) : Steps =
-    let pending = UserDirectory.unresolved ids model.Directory
-
-    UserDirectory.resolve ids model.Directory
-    |> directorySteps ("UserDirectory.resolve " + String.concat "," pending)
+    UserDirectory.resolveSteps ids model.Directory |> lift
 
 // ─── Init ────────────────────────────────────────────────────────────
 
@@ -359,8 +352,8 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
         []
 
     | DirectoryMsg subMsg ->
-        let directory, cmd = UserDirectory.update subMsg model.Directory
-        { model with Directory = directory }, directorySteps "UserDirectory.update" cmd
+        let directory, steps = UserDirectory.step subMsg model.Directory
+        { model with Directory = directory }, lift steps
 
     | DismissError -> { model with Error = None }, []
 

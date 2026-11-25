@@ -192,7 +192,17 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         ]
 
     // `update` performs the navigation; see above.
-    | ConnectUrlReady(_, Ok _) -> model, []
+    | ConnectUrlReady(_, Ok url) ->
+        // Navigate the browser to the upstream provider's authorize
+        // endpoint. `assign` records a history entry; the user can
+        // back-button to ToolUp if they cancel consent.
+        model,
+        [
+            Do(
+                RemoteEffect.signal ("DataIngestionUI.authorize " + url) (fun () ->
+                    Browser.Dom.window.location.assign url)
+            )
+        ]
 
     | ConnectUrlReady(_, Error msg) ->
         {
@@ -247,16 +257,7 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
     | CancelCreate -> { model with Creating = None }, []
 
 /// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
-    match msg with
-    | ConnectUrlReady(_, Ok url) ->
-        // Navigate the browser to the upstream provider's authorize
-        // endpoint. `assign` records a history entry; the user can
-        // back-button to ToolUp if they cancel consent. Deferred through
-        // a Cmd so the transition stays pure (effect runs after the model
-        // commits).
-        model, Cmd.ofEffect (fun _ -> Browser.Dom.window.location.assign url)
-    | _ -> step msg model |> RemoteEffect.run
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 

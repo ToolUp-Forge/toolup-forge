@@ -32,6 +32,17 @@ let private call (methodName: string) (arg: 'a) : RemoteEffect<'msg> =
 /// The expected value of a legacy body: it compares by its site label.
 let private legacy (site: string) : RemoteEffect<'msg> = RemoteEffect.legacy site ignore
 
+/// The expected value of a signal: it compares by its site label.
+let private signal (site: string) : RemoteEffect<'msg> = RemoteEffect.signal site ignore
+
+/// What kind of effect a value is, and the name or site it carries.
+let private shape (effect: RemoteEffect<'msg>) : string * string =
+    match effect with
+    | Invoke call -> "call", call.Method
+    | Await operation -> "await", operation.Method
+    | Legacy body -> "legacy", body.Site
+    | Fire body -> "signal", body.Site
+
 let private effects (steps: Step<'msg, RemoteEffect<'msg>> list) : RemoteEffect<'msg> list = Step.effects steps
 
 let private followUps (steps: Step<'msg, RemoteEffect<'msg>> list) : 'msg list =
@@ -194,13 +205,19 @@ let private assistantTests =
         <| fun () ->
             let m0, _ = AIAssistantUI.initSteps ()
 
-            let _, steps =
-                AIAssistantUI.step (AIAssistantUI.SubmitMessagePrepared(prepared (Guid.NewGuid()))) m0
+            let p = prepared (Guid.NewGuid())
+            let _, steps = AIAssistantUI.step (AIAssistantUI.SubmitMessagePrepared p) m0
 
             same
-                (effects steps)
-                [ legacy "AIAssistantUI.watchdog"; legacy "AIAssistantUI.fastPath" ]
+                (effects steps |> List.map shape)
+                [ "await", "ChatStream.watchdogDelay"; "await", "FastPathBridge.resolve" ]
                 "the watchdog first, as Cmd.batch ran them"
+
+            Expect.equal
+                (List.head (effects steps))
+                (RemoteEffect.await "ChatStream.watchdogDelay" (fun (_: Guid) -> noCall ()) p.WatchdogId (fun _ ->
+                    Unchecked.defaultof<AIAssistantUI.Msg>))
+                "the watchdog names its token"
 
         testCase "a firing with a task in flight polls the task's status"
         <| fun () ->
@@ -230,11 +247,11 @@ let private assistantTests =
 
             Expect.isTrue reloads "one follow-up: the list reload"
 
-        testCase "a cancel is one legacy body"
+        testCase "a cancel is one signal"
         <| fun () ->
             let m0, _ = AIAssistantUI.initSteps ()
             let _, steps = AIAssistantUI.step (AIAssistantUI.CancelTask(Guid.NewGuid())) m0
-            same (effects steps) [ legacy "AIAssistantUI.cancel" ] "the cancel POST, by its site"
+            same (effects steps) [ signal "AIAssistantUI.cancel" ] "the cancel POST, by its site"
 
         testCase "update hands today's loop one command element per step"
         <| fun () ->

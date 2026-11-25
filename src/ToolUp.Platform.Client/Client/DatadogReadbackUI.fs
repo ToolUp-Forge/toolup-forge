@@ -106,9 +106,7 @@ let inline private fetchJson<'T> (url: string) : Async<Result<'T, string>> = asy
 // These are plain HTTP reads, not remote calls, so they are not
 // `RemoteEffect.call` values: that would route them through the
 // remoting interceptor chain, which has never seen them. Each is a
-// `RemoteEffect.legacy` body under a site label naming its URL, and
-// dispatches exactly once (`fetchJson` answers every failure as an
-// `Error`).
+// `RemoteEffect.await` value naming the read and its URL.
 
 let private fetchMonitors (url: string) : Async<Result<DatadogMonitorsResponse, string>> = fetchJson url
 
@@ -116,32 +114,25 @@ let private fetchLogs (url: string) : Async<Result<DatadogLogsResponse, string>>
 
 let private fetchMetric (url: string) : Async<Result<DatadogMetricResponse, string>> = fetchJson url
 
-/// One read as an effect value: the site label names the URL, so two
+/// One read as an effect value, named by the read and its URL, so two
 /// reads compare equal exactly when they fetch the same thing.
 let private fetch
+    (name: string)
     (read: string -> Async<Result<'T, string>>)
     (url: string)
     (reply: Result<'T, string> -> Msg)
     : Step<Msg, RemoteEffect<Msg>> =
-    Do(
-        RemoteEffect.legacy ("DatadogReadbackUI.fetch " + url) (fun dispatch ->
-            Async.StartImmediate(
-                async {
-                    let! result = read url
-                    dispatch (reply result)
-                }
-            ))
-    )
+    Do(RemoteEffect.await ("DatadogReadbackUI." + name) read url (RemoteEffect.flatten >> reply))
 
 let internal loadMonitors () : Step<Msg, RemoteEffect<Msg>> list = [
-    fetch fetchMonitors (RoutePrefix + "/monitors") MonitorsLoaded
+    fetch "fetchMonitors" fetchMonitors (RoutePrefix + "/monitors") MonitorsLoaded
 ]
 
 let internal loadLogs (config: DatadogReadbackConfig) : Step<Msg, RemoteEffect<Msg>> list =
     let url =
         sprintf "%s/logs?minutes=%d&limit=%d" RoutePrefix config.DefaultWindowMinutes config.LogPageLimit
 
-    [ fetch fetchLogs url LogsLoaded ]
+    [ fetch "fetchLogs" fetchLogs url LogsLoaded ]
 
 /// `encodeURIComponent` rather than `Uri.EscapeDataString`: the BCL
 /// call has no Fable implementation, and the browser's own is what this
@@ -153,7 +144,7 @@ let internal loadMetric (config: DatadogReadbackConfig) (metric: string) : Step<
     let url =
         sprintf "%s/metric?metric=%s&minutes=%d" RoutePrefix (encodeUriComponent metric) config.DefaultWindowMinutes
 
-    fetch fetchMetric url (fun result -> MetricLoaded(metric, result))
+    fetch "fetchMetric" fetchMetric url (fun result -> MetricLoaded(metric, result))
 
 let internal loadMetrics (config: DatadogReadbackConfig) : Step<Msg, RemoteEffect<Msg>> list =
     DatadogReadback.defaultChartedMetrics |> List.map (loadMetric config)

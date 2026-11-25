@@ -28,6 +28,7 @@ module ToolUp.AI.Client.AIClientConfig
 // Apps that do not want AI skip this module entirely and call
 // Client.run directly.
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open ToolUp.Elmish.React
@@ -160,6 +161,9 @@ let internal turnStatus (model: SidePanelModel) : string option = ChatStream.tur
 let private errorNote (conversationId: Guid) (body: string) : ConversationMessage =
     ConversationMessage.note AIAssistant conversationId $"⚠️ {body}"
 
+/// The side panel's step list: its remote calls and operations as values.
+type internal SidePanelSteps = Step<SidePanelMsg, RemoteEffect<SidePanelMsg>> list
+
 /// Write the reduced stream state back and apply its effects the side
 /// panel's way. An unchanged state with nothing to do leaves the model as it
 /// was, by reference.
@@ -167,9 +171,9 @@ let private applyStream
     (model: SidePanelModel)
     (before: ChatStream.ChatStreamState)
     (after: ChatStream.ChatStreamState, effects: ChatStream.StreamEffect list)
-    : SidePanelModel * Cmd<SidePanelMsg> =
+    : SidePanelModel * SidePanelSteps =
     if obj.ReferenceEquals(before, after) && List.isEmpty effects then
-        model, Cmd.none
+        model, []
     else
         let written = {
             model with
@@ -183,7 +187,7 @@ let private applyStream
 
         effects
         |> List.fold
-            (fun (m: SidePanelModel, cmds) effect ->
+            (fun (m: SidePanelModel, steps) effect ->
                 match effect with
                 | ChatStream.Commit message
                 | ChatStream.Note message ->
@@ -191,34 +195,51 @@ let private applyStream
                         m with
                             Messages = m.Messages @ [ message ]
                     },
-                    cmds
+                    steps
                 | ChatStream.Fault message ->
                     {
                         m with
                             Messages = m.Messages @ [ errorNote m.ConversationId message ]
                     },
-                    cmds
-                | ChatStream.RefreshList -> m, cmds
+                    steps
+                | ChatStream.RefreshList -> m, steps
                 | ChatStream.Arm token ->
-                    m, cmds @ [ Cmd.OfAsync.perform ChatStream.watchdogDelay token WatchdogFired ]
+                    m,
+                    steps
+                    @ [
+                        Do(
+                            RemoteEffect.await
+                                "ChatStream.watchdogDelay"
+                                ChatStream.watchdogDelay
+                                token
+                                (fun outcome -> WatchdogFired(Result.defaultValue token outcome))
+                        )
+                    ]
                 | ChatStream.Poll(token, taskId) ->
                     m,
-                    cmds
+                    steps
                     @ [
-                        Cmd.OfRemoting.call
-                            aiApi.GetTaskStatus
-                            taskId
-                            (fun status -> TaskStatusPolled(token, status))
-                            (fun _ -> TaskStatusPolled(token, None))
+                        Do(
+                            RemoteEffect.call "AIAssistantApi.GetTaskStatus" aiApi.GetTaskStatus taskId (fun reply ->
+                                TaskStatusPolled(token, Result.defaultValue None reply))
+                        )
                     ]
                 | ChatStream.Reload conversationId ->
                     m,
-                    cmds
+                    steps
                     @ [
-                        Cmd.OfRemoting.call aiApi.GetConversation conversationId ConversationReloaded ApiError
+                        Do(
+                            RemoteEffect.call
+                                "AIAssistantApi.GetConversation"
+                                aiApi.GetConversation
+                                conversationId
+                                (fun reply ->
+                                    match reply with
+                                    | Ok messages -> ConversationReloaded messages
+                                    | Error ex -> ApiError ex)
+                        )
                     ])
             (written, [])
-        |> fun (m, cmds) -> m, Cmd.batch cmds
 
 let private reduceStream
     (step: ChatStream.ChatStreamState -> ChatStream.ChatStreamState * ChatStream.StreamEffect list)
@@ -227,9 +248,10 @@ let private reduceStream
     let before = streamOf model
     applyStream model before (step before)
 
-let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePanelModel * Cmd<SidePanelMsg> =
+/// The side panel's transitions, as a step list.
+let internal sidePanelStep (msg: SidePanelMsg) (model: SidePanelModel) : SidePanelModel * SidePanelSteps =
     match msg with
-    | Toggle -> { model with Open = not model.Open }, Cmd.none
+    | Toggle -> { model with Open = not model.Open }, []
 
     | SSEEvent event -> model |> reduceStream (fun s -> ChatStream.reduce s event)
 
@@ -243,7 +265,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                     Messages = model.Messages @ [ userMsg; ChatStream.debugAck model.ConversationId enabled ]
                     DebugMode = enabled
             },
-            Cmd.none
+            []
         | None ->
             // The side panel carries the active analytical module, so a
             // fast-path resolver can match field patterns as well as
@@ -269,7 +291,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 RetrievalFilters = None
             }
 
-            let sent, armCmd =
+            let sent, armSteps =
                 {
                     model with
                         Messages = model.Messages @ [ userMsg ]
@@ -277,13 +299,15 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 |> reduceStream (ChatStream.start (Guid.NewGuid()))
 
             sent,
-            Cmd.batch [
-                armCmd
-                Cmd.OfAsync.perform FastPathBridge.resolve fastPathRequest (fun outcome ->
-                    FastPathAnswered(request, outcome))
+            armSteps
+            @ [
+                Do(
+                    RemoteEffect.await "FastPathBridge.resolve" FastPathBridge.resolve fastPathRequest (fun outcome ->
+                        FastPathAnswered(request, Result.defaultValue FastPathBridge.NoResolution outcome))
+                )
             ]
 
-    | FastPathAnswered(request, _) when request.ConversationId <> model.ConversationId -> model, Cmd.none
+    | FastPathAnswered(request, _) when request.ConversationId <> model.ConversationId -> model, []
 
     | FastPathAnswered(_, FastPathBridge.Resolved(synthAssist, dispatchAction, sendBeacon)) ->
         let settled, _ = model |> reduceStream (fun s -> ChatStream.settle s, [])
@@ -292,17 +316,29 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
             settled with
                 Messages = settled.Messages @ [ synthAssist ]
         },
-        Cmd.batch [
-            Cmd.ofEffect (fun _ -> dispatchAction ())
-            Cmd.ofEffect (fun _ -> sendBeacon ())
+        [
+            Do(RemoteEffect.signal "AIClientConfig.fastPathAction" (fun () -> dispatchAction ()))
+            Do(RemoteEffect.signal "AIClientConfig.fastPathBeacon" (fun () -> sendBeacon ()))
         ]
 
     | FastPathAnswered(request, FastPathBridge.NoResolution) ->
-        model, Cmd.OfRemoting.call aiApi.SubmitMessage request Submitted ApiError
+        model,
+        [
+            Do(
+                RemoteEffect.call "AIAssistantApi.SubmitMessage" aiApi.SubmitMessage request (fun reply ->
+                    match reply with
+                    | Ok task -> Submitted task
+                    | Error ex -> ApiError ex)
+            )
+        ]
 
-    | Submitted task -> { model with CurrentTask = Some task }, Cmd.none
+    | Submitted task -> { model with CurrentTask = Some task }, []
 
-    | CancelTask taskId -> model, Cmd.ofEffect (fun _ -> ChatStream.AIStream.cancel taskId)
+    | CancelTask taskId ->
+        model,
+        [
+            Do(RemoteEffect.signal "AIClientConfig.cancel" (fun () -> ChatStream.AIStream.cancel taskId))
+        ]
 
     | ApiError ex ->
         // Submit itself failed (a network error before the server saw the
@@ -323,18 +359,18 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                     ended.Messages
                     @ [ errorNote model.ConversationId $"Couldn't reach the AI service: {reason}" ]
         },
-        Cmd.none
+        []
 
     | WatchdogFired token -> model |> reduceStream (ChatStream.fire token)
 
     | TaskStatusPolled(token, status) -> model |> reduceStream (ChatStream.polled token status)
 
-    | ConversationReloaded messages -> { model with Messages = messages }, Cmd.none
+    | ConversationReloaded messages -> { model with Messages = messages }, []
 
     // Intercepted by `outerUpdate` and translated to a shell Msg before
     // it reaches here; this branch is only present to keep the match
     // exhaustive.
-    | NavigateToKnowledgeBase -> model, Cmd.none
+    | NavigateToKnowledgeBase -> model, []
 
     | ClearSession ->
         // A fresh conversation. The server-side history is not deleted — the
@@ -350,7 +386,7 @@ let private sidePanelUpdate (msg: SidePanelMsg) (model: SidePanelModel) : SidePa
                 CurrentTask = None
                 RunningTool = None
         },
-        Cmd.none
+        []
 
 // ─── Side-panel chrome ───────────────────────────────────────────
 
@@ -556,8 +592,8 @@ let internal composerUpdate
 
         { model with Shell = s }, Cmd.map ShellMsg c
     | SidePanelMsg m ->
-        let s, c = sidePanelUpdate m model.SidePanel
-        { model with SidePanel = s }, Cmd.map SidePanelMsg c
+        let s, steps = sidePanelStep m model.SidePanel
+        { model with SidePanel = s }, steps |> RemoteEffect.toCmd |> Cmd.map SidePanelMsg
 
 /// A fresh side-panel model, as the composer's `init` starts it.
 let internal composerSidePanelInit () : SidePanelModel = sidePanelInit ()

@@ -172,9 +172,8 @@ let inline private fetchJson<'T> (url: string) : Async<Result<'T, FetchError>> =
 // load-bearing: `Json.parseAs<'T>` needs the type at compile time, and
 // handing the generic function itself to `fetch` below would erase it.
 // They are plain HTTP reads, not remote calls, so each is a
-// `RemoteEffect.legacy` body under a site label naming its URL, off the
-// remoting interceptor chain, and dispatches exactly once (`fetchJson`
-// answers every failure as an `Error`).
+// `RemoteEffect.await` value naming the read and its URL, off the
+// remoting interceptor chain.
 
 let private fetchSources (url: string) : Async<Result<ObservabilitySources, FetchError>> = fetchJson url
 
@@ -197,25 +196,25 @@ let private levelToken (level: LogLevel) : string =
     | LogLevel.Warn -> "warn"
     | LogLevel.Error -> "error"
 
-/// One read as an effect value: the site label names the URL, so two
-/// reads compare equal exactly when they fetch the same thing.
+/// One read as an effect value, named by the read and its URL, so two
+/// reads compare equal exactly when they fetch the same thing. `fetchJson`
+/// answers every failure as an `Error`; a throw it did not catch is an
+/// unreachable source.
 let private fetch
+    (name: string)
     (read: string -> Async<Result<'T, FetchError>>)
     (url: string)
     (reply: Result<'T, FetchError> -> Msg)
     : Step<Msg, RemoteEffect<Msg>> =
     Do(
-        RemoteEffect.legacy ("ObservabilityUI.fetch " + url) (fun dispatch ->
-            Async.StartImmediate(
-                async {
-                    let! result = read url
-                    dispatch (reply result)
-                }
-            ))
+        RemoteEffect.await ("ObservabilityUI." + name) read url (fun outcome ->
+            match outcome with
+            | Ok result -> reply result
+            | Error ex -> reply (Error(Unreachable ex.Message)))
     )
 
 let internal loadSources () : Step<Msg, RemoteEffect<Msg>> list = [
-    fetch fetchSources (ObservabilityReadback.RoutePrefix + "/sources") SourcesLoaded
+    fetch "fetchSources" fetchSources (ObservabilityReadback.RoutePrefix + "/sources") SourcesLoaded
 ]
 
 let internal loadLogs (filter: LogFilter) : Step<Msg, RemoteEffect<Msg>> list =
@@ -241,7 +240,7 @@ let internal loadLogs (filter: LogFilter) : Step<Msg, RemoteEffect<Msg>> list =
             (optional "scope" filter.ScopeId)
             (optional "correlationId" filter.CorrelationId)
 
-    [ fetch fetchLogs url LogsLoaded ]
+    [ fetch "fetchLogs" fetchLogs url LogsLoaded ]
 
 let internal loadMetric (windowMinutes: int) (metric: string) : Step<Msg, RemoteEffect<Msg>> list =
     let url =
@@ -251,13 +250,15 @@ let internal loadMetric (windowMinutes: int) (metric: string) : Step<Msg, Remote
             (encodeUriComponent metric)
             windowMinutes
 
-    [ fetch fetchMetric url (fun result -> MetricLoaded(metric, result)) ]
+    [
+        fetch "fetchMetric" fetchMetric url (fun result -> MetricLoaded(metric, result))
+    ]
 
 let internal loadMetrics (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
     model.Metrics |> List.collect (fst >> loadMetric model.MetricsWindow)
 
 let internal loadAlerts () : Step<Msg, RemoteEffect<Msg>> list = [
-    fetch fetchAlerts (ObservabilityReadback.RoutePrefix + "/alerts") AlertsLoaded
+    fetch "fetchAlerts" fetchAlerts (ObservabilityReadback.RoutePrefix + "/alerts") AlertsLoaded
 ]
 
 // ─── Init / update ───────────────────────────────────────────────────

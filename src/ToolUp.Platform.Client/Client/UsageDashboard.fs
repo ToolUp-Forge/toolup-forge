@@ -103,7 +103,7 @@ let private downloadCsv (bytes: byte[]) =
 
 /// The browser download of an exported CSV. It dispatches nothing.
 let internal download (bytes: byte[]) : Step<Msg, RemoteEffect<Msg>> list = [
-    Do(RemoteEffect.legacy "UsageDashboard.downloadCsv" (fun _ -> downloadCsv bytes))
+    Do(RemoteEffect.signal "UsageDashboard.downloadCsv" (fun () -> downloadCsv bytes))
 ]
 
 /// The transitions, with their remote calls as values.

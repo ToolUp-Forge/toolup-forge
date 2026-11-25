@@ -28,6 +28,10 @@ let private call (methodName: string) (arg: 'a) : RemoteEffect<'msg> =
 /// The expected value of a legacy body: it compares by its site label.
 let private legacy (site: string) : RemoteEffect<'msg> = RemoteEffect.legacy site ignore
 
+/// The expected value of a one-shot operation that is not a remote call.
+let private await (name: string) (arg: 'a) : RemoteEffect<'msg> =
+    RemoteEffect.await name (fun (_: 'a) -> noCall ()) arg (fun (_: Result<obj, exn>) -> Unchecked.defaultof<'msg>)
+
 let private effects (steps: Step<'msg, RemoteEffect<'msg>> list) : RemoteEffect<'msg> list = Step.effects steps
 
 let private followUps (steps: Step<'msg, RemoteEffect<'msg>> list) : 'msg list =
@@ -149,19 +153,19 @@ let private dataIngestionTests =
                 ]
                 "the credential status, then the token status"
 
-        testCase "the authorize-URL navigation is no effect value: update keeps it"
+        testCase "the authorize-URL navigation is a signal the host performs, labelled by its URL"
         <| fun () ->
             let model = fst (DataIngestionUI.init ())
 
             let _, steps =
                 DataIngestionUI.step (DataIngestionUI.ConnectUrlReady("src-1", Ok "https://idp.test/authorize")) model
 
-            same (effects steps) [] "the step list holds no effect"
-
-            let _, cmd =
-                DataIngestionUI.update (DataIngestionUI.ConnectUrlReady("src-1", Ok "https://idp.test/authorize")) model
-
-            Expect.equal (List.length cmd) 1 "update builds the one navigation command (not run here)"
+            same
+                (effects steps)
+                [
+                    RemoteEffect.signal "DataIngestionUI.authorize https://idp.test/authorize" ignore
+                ]
+                "one signal, naming the URL"
     ]
 
 let private externalContactTests =
@@ -319,14 +323,14 @@ let private mappingDataManagerTests =
                 ]
                 "three reads, in order"
 
-        testCase "a delete cascades through the one legacy body"
+        testCase "a delete cascades through one named operation over the file and what it produced"
         <| fun () ->
             let model = fst (MappingDataManagerUI.init ClientModuleContext.empty)
 
             let _, steps =
                 MappingDataManagerUI.step [] (MappingDataManagerUI.DeleteFile "sales.csv") model
 
-            same (effects steps) [ legacy "MappingDataManagerUI.deleteFiles" ] "the cascade"
+            same (effects steps) [ await "MappingDataManagerUI.deleteFiles" [ "sales.csv" ] ] "the cascade"
     ]
 
 /// Every team and data screen's stated effects.

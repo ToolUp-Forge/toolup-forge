@@ -121,13 +121,29 @@ type RemoteCall<'msg>
     /// Send the call; its reply is dispatched through the callback.
     member internal _.Send = send
 
-/// What a ported module's step list performs: a remote call, or code with
-/// no value form yet, compared by its site label.
+/// Code that dispatches nothing (a browser redirect, a beacon), compared by
+/// its site label as a `LegacyEffect` is.
+[<Sealed>]
+type SignalEffect(site: string, run: unit -> unit) =
+    inherit LegacySite(site)
+
+    /// The code; it answers nothing.
+    member _.Run: unit -> unit = run
+
+/// What a ported module's step list performs: a remote call, code with no
+/// value form yet, or code that answers nothing, each compared by its
+/// identity.
 type RemoteEffect<'msg> =
     /// A remote call.
     | Invoke of RemoteCall<'msg>
+    /// A one-shot asynchronous operation that is not a remote call (a plain
+    /// HTTP read, a delay, a resolver), named and compared as a call is; it
+    /// does not pass the remoting interceptor chain.
+    | Await of RemoteCall<'msg>
     /// Code with no value form yet (a timer, say), which dispatches once.
     | Legacy of LegacyEffect<'msg>
+    /// Code that dispatches nothing, performed as a signal.
+    | Fire of SignalEffect
 
 /// The effect shape's constructors, its performer and the adapter that runs
 /// a step list on today's loop.
@@ -175,9 +191,42 @@ module RemoteEffect =
             )
         )
 
+    /// A one-shot asynchronous operation that is not a remote call: its
+    /// name, the operation, its argument and the constructor that turns its
+    /// one outcome into the module's message. Two are equal when they name
+    /// the same operation with an equal argument.
+    let await
+        (name: string)
+        (operation: 'a -> Async<'result>)
+        (arg: 'a)
+        (reply: Result<'result, exn> -> 'msg)
+        : RemoteEffect<'msg> =
+        Await(
+            RemoteCall(
+                name,
+                box arg,
+                None,
+                fun dispatch ->
+                    Async.StartImmediate(
+                        async {
+                            let! outcome = Async.Catch(operation arg)
+
+                            match outcome with
+                            | Choice1Of2 result -> dispatch (reply (Ok result))
+                            | Choice2Of2 ex -> dispatch (reply (Error ex))
+                        }
+                    )
+            )
+        )
+
     /// Code with no value form yet, under a site label unique to it. The
     /// body must dispatch exactly once.
     let legacy (site: string) (body: Dispatch<'msg> -> unit) : RemoteEffect<'msg> = Legacy(LegacyEffect(site, body))
+
+    /// Code that answers nothing (a redirect, a beacon), under a site label
+    /// unique to it: put what distinguishes one firing from another, a URL
+    /// say, in the label.
+    let signal (site: string) (body: unit -> unit) : RemoteEffect<'msg> = Fire(SignalEffect(site, body))
 
     /// The reply of a call that answers `Result<'t, string>`, with a thrown
     /// exception folded into its `Error` branch as the exception's message.
@@ -191,7 +240,10 @@ module RemoteEffect =
         match effect with
         | Invoke call ->
             Invoke(RemoteCall(call.Method, call.Argument, call.Retry, (fun dispatch -> call.Send(f >> dispatch))))
+        | Await call ->
+            Await(RemoteCall(call.Method, call.Argument, call.Retry, (fun dispatch -> call.Send(f >> dispatch))))
         | Legacy legacy -> Legacy(LegacyEffect(legacy.Site, (fun dispatch -> legacy.Run(f >> dispatch))))
+        | Fire signal -> Fire signal
 
     let private once (deliver: Dispatch<'msg>) : Dispatch<'msg> =
         let answered = ref false
@@ -202,11 +254,13 @@ module RemoteEffect =
                 deliver msg
 
     /// The performer: an effect's one reply, delivered through the callback
-    /// it is handed. A second answer is dropped.
+    /// it is handed, or none for a signal. A second answer is dropped.
     let perform (effect: RemoteEffect<'msg>) : Performance<'msg> =
         match effect with
-        | Invoke call -> Reply(fun deliver -> call.Send(once deliver))
+        | Invoke call
+        | Await call -> Reply(fun deliver -> call.Send(once deliver))
         | Legacy legacy -> Reply(fun deliver -> legacy.Run(once deliver))
+        | Fire signal -> Performance.Signal signal.Run
 
     let private ofStep (step: Step<'msg, RemoteEffect<'msg>>) : Effect<'msg> =
         match step with
@@ -220,6 +274,9 @@ module RemoteEffect =
     /// The adapter: a step list as today's command, one command element per
     /// step, in order.
     let toCmd (steps: Step<'msg, RemoteEffect<'msg>> list) : Cmd<'msg> = List.map ofStep steps
+
+    /// The adapter over one effect value.
+    let asCmd (effect: RemoteEffect<'msg>) : Cmd<'msg> = toCmd [ Do effect ]
 
     /// The adapter over an `init` or `update` result.
     let run (model: 'model, steps: Step<'msg, RemoteEffect<'msg>> list) : 'model * Cmd<'msg> = model, toCmd steps

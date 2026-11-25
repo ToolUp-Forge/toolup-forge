@@ -24,9 +24,9 @@ open Toolup.Samples.ToyTreeBinding
 //   - `Navigate` routes through the REAL shell/sidebar router
 //     (`NavigationRequest.request`), observed through the REAL
 //     subscription, so the bar exercises the genuine hook.
-//   - `Call` rides the REAL `Cmd.OfRemoting` effect (interceptor chain,
+//   - `Call` rides the REAL `RemoteEffect.call` effect (interceptor chain,
 //     error envelope), executed against the host's dispatch — the
-//     substantive "Cmd.OfRemoting semantics" claim, asserted live.
+//     substantive "RemoteEffect.call semantics" claim, asserted live.
 //     Its `Async.Start` shape means the success / error message lands
 //     on a background turn, so the pack waits with a bounded poll.
 //   - `Dispatch` forwards straight into the module's Elmish loop —
@@ -127,7 +127,7 @@ let contract (fixture: ClientHostCapabilitiesContractFixture<'Msg>) : Test =
 
             Expect.contains (fixture.Dispatched()) fixture.SampleMsg "the dispatched message reached the module loop"
 
-        testCase "Call dispatches the success message (Cmd.OfRemoting semantics)"
+        testCase "Call dispatches the success message (RemoteEffect.call semantics)"
         <| fun _ ->
             let expected = fixture.OnCallSuccess fixture.CallSuccessValue
             let value = fixture.CallSuccessValue
@@ -160,7 +160,7 @@ let contract (fixture: ClientHostCapabilitiesContractFixture<'Msg>) : Test =
 //
 // Both witnesses route the three .NET-reachable capabilities through the
 // GENUINE shipped seams (`NavigationRequest`, the host dispatch, and
-// `Cmd.OfRemoting`) and observe the toast vocabulary through a sink. A
+// `RemoteEffect.call`) and observe the toast vocabulary through a sink. A
 // fresh bag per witness keeps the dispatch observations isolated; the
 // navigation hook is a per-tab global, so each witness uses a distinct
 // `NavigateTarget` and the bar asserts by membership.
@@ -184,11 +184,9 @@ let private makeBag () : Bag<'Msg> =
             member _.Dispatch msg = dispatched.Enqueue msg
 
             member _.Call(call, onSuccess, onError) =
-                // The exact shape the shipped `create` uses: ride the
-                // OfRemoting effect and run it immediately against the
-                // host's dispatch.
-                Cmd.OfRemoting.call (fun () -> call) () onSuccess onError
-                |> List.iter (fun effect -> effect dispatched.Enqueue)
+                // The body the shipped `create` uses, against the host's
+                // dispatch.
+                ClientHostCapabilities.performCall dispatched.Enqueue call onSuccess onError
         }
 
     // Observe the REAL navigation router hook (the shell's own
@@ -214,7 +212,7 @@ let private defaultFixture () : ClientHostCapabilitiesContractFixture<DefaultMsg
     let bag: Bag<DefaultMsg> = makeBag ()
 
     {
-        Name = "in-tree default (NavigationRequest + Cmd.OfRemoting)"
+        Name = "in-tree default (NavigationRequest + RemoteEffect.call)"
         Capabilities = bag.Caps
         NavigateTarget = "ClientHostDefault/Home"
         Navigations = fun () -> List.ofSeq bag.Navs
@@ -386,7 +384,7 @@ let private boundaryTests =
                 "Notification.SystemMessage"
                 "Notify maps the intent level + text to a SystemMessage"
 
-            Expect.stringContains text "Cmd.OfRemoting.call" "Call rides the OfRemoting effect"
+            Expect.stringContains text "performCall dispatch" "Call performs the remote-call effect"
 
         testCase "the capability bag round-trips from a ClientModule view via withElementView (source-shape)"
         <| fun _ ->

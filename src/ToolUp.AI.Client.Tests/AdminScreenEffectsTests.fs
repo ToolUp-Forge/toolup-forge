@@ -38,6 +38,13 @@ let private expectCall (methodName: string) (arg: 'a) : Step<'msg, RemoteEffect<
 /// The expected value of code with no value form yet: compared by its site.
 let private expectLegacy (site: string) : Step<'msg, RemoteEffect<'msg>> = Do(RemoteEffect.legacy site ignore)
 
+/// The expected value of a one-shot operation that is not a remote call.
+let private expectAwait (name: string) (arg: 'a) : Step<'msg, RemoteEffect<'msg>> =
+    Do(RemoteEffect.await name (fun (_: 'a) -> noCall ()) arg (fun (_: Result<obj, exn>) -> Unchecked.defaultof<'msg>))
+
+/// The expected value of code that answers nothing: compared by its site.
+let private expectSignal (site: string) : Step<'msg, RemoteEffect<'msg>> = Do(RemoteEffect.signal site ignore)
+
 let private ctx = ClientModuleContext.empty
 
 let tests =
@@ -64,7 +71,7 @@ let tests =
                 "the query carries the applied actor"
 
             let _, exported = AuditLogUI.step (AuditLogUI.ExportComplete(Ok [| 1uy |])) m0
-            same exported [ expectLegacy "AuditLogUI.downloadCsv" ] "the download, by its site")
+            same exported [ expectSignal "AuditLogUI.downloadCsv" ] "the download, by its site")
 
         testCase "CompositionInspectorUI: a refresh reads the five panels in order" (fun () ->
             let m0, _ = CompositionInspectorUI.init ()
@@ -105,7 +112,9 @@ let tests =
 
             same
                 steps
-                [ expectLegacy "DatadogReadbackUI.fetch /api/observability/datadog/monitors" ]
+                [
+                    expectAwait "DatadogReadbackUI.fetchMonitors" "/api/observability/datadog/monitors"
+                ]
                 "a plain HTTP read, off the remoting chain")
 
         testCase "HealthMonitorUI: a live refresh reads four panels in order, as four commands" (fun () ->
@@ -209,7 +218,7 @@ let tests =
                     ))
                     m0
 
-            same steps [ expectLegacy "ObservabilityUI.fetch /api/observability/alerts" ] "one read of its URL")
+            same steps [ expectAwait "ObservabilityUI.fetchAlerts" "/api/observability/alerts" ] "one read of its URL")
 
         testCase "PermissionsAdminUI: a refresh reads the snapshot" (fun () ->
             let m0, _ = PermissionsAdminUI.init ctx
@@ -224,7 +233,7 @@ let tests =
             let _, owner =
                 PlatformAdminUI.step (PlatformAdminUI.SetNewTeamOwnerUserId " u9 ") m0
 
-            same owner [ expectLegacy "UserDirectory.resolve u9 #0" ] "the directory's one lookup"
+            same owner [ expectCall "IUserDirectoryApi.ResolveUsers" [ "u9" ] ] "the directory's one lookup"
 
             let confirming = {
                 m0 with
@@ -303,7 +312,7 @@ let tests =
             let _, exported =
                 UsageDashboard.step (UsageDashboard.ExportComplete(Ok [| 1uy |])) m0
 
-            same exported [ expectLegacy "UsageDashboard.downloadCsv" ] "the download, by its site")
+            same exported [ expectSignal "UsageDashboard.downloadCsv" ] "the download, by its site")
 
         testCase "WebhookAdminUI: a test fire names its subscription" (fun () ->
             let id = Guid.NewGuid()

@@ -402,8 +402,8 @@ module Client =
         /// throws, the module is left with no host, `OnError` reports it,
         /// and the next `ModuleSelected` for this module retries.
         | ResetModule of moduleId: string
-        /// Phase 121 — a boot loader threw (routed via `Cmd.OfAsync.either`
-        /// in `bootLoadCmd`, or dispatched directly by a failing effect).
+        /// A boot loader threw (answered through `bootLoadCmd`'s operation,
+        /// or dispatched directly by a failing effect).
         /// Accumulates a `BootDegradation` entry on the Model and warns
         /// through the category logger; the Model keeps the loader's
         /// benign default, so rendering is unchanged except for the
@@ -517,8 +517,8 @@ module Client =
     /// doesn't expose it). A failed load leaves the sidebar
     /// permissive.
     let private loadAccessibleModules = async {
-        // Phase 121 — no internal catch: a thrown fetch routes through
-        // `bootLoadCmd`'s `Cmd.OfAsync.either` to `BootLoadFailed`, and
+        // No internal catch: a thrown fetch routes through
+        // `bootLoadCmd`'s operation to `BootLoadFailed`, and
         // `AccessibleModules` stays `None` (the permissive fallback) —
         // same render, but the failure is now visible.
         let! response = accessibilityApi.GetAccessibleModules()
@@ -583,13 +583,11 @@ module Client =
     /// the manual affordances — but Phase 121 surfaces the failure as
     /// a degradation (with retry) instead of swallowing it.
     let private autoSelectSoleTeamCmd (teamId: string) : Cmd<Msg> =
-        Cmd.OfRemoting.call
-            (fun id -> withCsrf (teamApi.SetActiveTeam id))
-            teamId
-            (function
+        RemoteEffect.call "TeamApi.SetActiveTeam" (fun id -> withCsrf (teamApi.SetActiveTeam id)) teamId (fun reply ->
+            match RemoteEffect.flatten reply with
             | Ok() -> TeamSwitched(Some teamId)
             | Error reason -> BootLoadFailed(BootSources.Key.TeamAutoSelect, reason))
-            (fun ex -> BootLoadFailed(BootSources.Key.TeamAutoSelect, ex.Message))
+        |> RemoteEffect.asCmd
 
     /// Fire the sole-team auto-select when (and only when) all three
     /// hold: the boot-time active-team fetch has resolved, it resolved
@@ -661,11 +659,12 @@ module Client =
     /// benign-looking default. GP 9 — a failed load must be
     /// distinguishable from empty data.
     let private bootLoadCmd (source: string) (loader: Async<'T>) (onLoaded: 'T -> Msg) : Cmd<Msg> =
-        Cmd.OfAsync.either (fun () -> loader) () onLoaded (fun ex ->
-            if isPublicationReaderRefusal ex then
-                PublicationReaderRefused
-            else
-                BootLoadFailed(source, ex.Message))
+        RemoteEffect.await ("Client.bootLoad " + source) (fun () -> loader) () (fun outcome ->
+            match outcome with
+            | Ok loaded -> onLoaded loaded
+            | Error ex when isPublicationReaderRefusal ex -> PublicationReaderRefused
+            | Error ex -> BootLoadFailed(source, ex.Message))
+        |> RemoteEffect.asCmd
 
     /// Phase 568 — re-read the caller's role on the (new) active team,
     /// or clear it when there is no active team to have a role on. The
@@ -769,7 +768,12 @@ module Client =
     /// private window, blocked site data) surfaces as the sidebar-preference
     /// banner row rather than an exception out of `update`.
     let private persistSidebarPrefs (prefs: SidebarPreferences.UserSidebarPreferences) : Cmd<Msg> =
-        SidebarPreferences.persist (fun ex -> BootLoadFailed(BootSources.Key.SidebarPrefs, ex.Message)) prefs
+        SidebarPreferences.persist
+            (function
+            | Ok() -> BootLoadRecovered BootSources.Key.SidebarPrefs
+            | Error ex -> BootLoadFailed(BootSources.Key.SidebarPrefs, ex.Message))
+            prefs
+        |> RemoteEffect.asCmd
 
     /// The captured shell dispatcher as the shell reads it (see
     /// `shellDispatcher`).
@@ -1104,7 +1108,7 @@ module Client =
 
     /// Report a module whose `Init` threw, as a command.
     let private reportInitFailure (config: ClientConfig) (moduleId: string) (ex: exn) : Cmd<Msg> =
-        Cmd.ofEffect (fun _ ->
+        RemoteEffect.signal ("Client.reportInitFailure " + moduleId) (fun () ->
             match config.Composition.OnError with
             | Some report ->
                 report {
@@ -1113,6 +1117,7 @@ module Client =
                     ComponentStack = ex.StackTrace |> Option.ofObj |> Option.defaultValue ""
                 }
             | None -> log.Error(sprintf "[ModuleBoundary] %s Init crashed: %s" moduleId ex.Message, Some ex))
+        |> RemoteEffect.asCmd
 
     /// Initialise `moduleId`: the one call site of a module's `Init`.
     ///
@@ -1454,13 +1459,14 @@ module Client =
                 let view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute
 
                 [
-                    Cmd.ofEffect (fun _ ->
+                    RemoteEffect.signal ("BrowserHistory.firstEntry " + view) (fun () ->
                         BrowserHistory.replace view
 
                         if signedIn then
                             BrowserHistory.forget ()
                         elif signedOut && restoredView.IsSome then
                             BrowserHistory.store view)
+                    |> RemoteEffect.asCmd
                 ]
 
         model, Cmd.batch (initCmds @ firstEntryCmd)
@@ -1531,14 +1537,15 @@ module Client =
                     // cached read's key does not carry it, so the move is an
                     // identity change: drop every cached read BEFORE the
                     // re-issued loads go out.
-                    Cmd.ofEffect (fun _ -> UserSession.identityChanged ())
+                    RemoteEffect.asCmd (RemoteEffect.signal "UserSession.identityChanged" UserSession.identityChanged)
                     reissued
                     // The session file store on the other side is now a
                     // different one: re-seed the epoch against it, or the next
                     // focus check reports a reset that never happened.
-                    Cmd.ofEffect (fun _ ->
+                    RemoteEffect.signal "SessionEpoch.reseed" (fun () ->
                         SessionEpoch.reset ()
                         Async.StartImmediate(SessionEpoch.prime ()))
+                    |> RemoteEffect.asCmd
                 ]
             | BootSources.ResetKind.LocaleSwitch _
             | BootSources.ResetKind.TokenAcquired -> next, reissued
@@ -1578,10 +1585,11 @@ module Client =
                     model with
                         PrefetchedProcessedData = []
                 },
-                Cmd.ofEffect (fun _ ->
+                RemoteEffect.signal ("NotificationClient.publishLocal " + text) (fun () ->
                     NotificationClient.publishLocal (
                         NotificationEnvelope.create "" (Notification.SystemMessage(SystemMessageLevel.Warning, text))
                     ))
+                |> RemoteEffect.asCmd
 
             | DataSnapshotPrefetched snapshot ->
                 // Boot-time data prefetch: store the snapshot's processed
@@ -1616,7 +1624,10 @@ module Client =
                             // from), so this only establishes the baseline the
                             // later checks compare against. Failure is swallowed
                             // inside `SessionEpoch.check`.
-                            Cmd.ofEffect (fun _ -> Async.StartImmediate(SessionEpoch.prime ()))
+                            RemoteEffect.asCmd (
+                                RemoteEffect.signal "SessionEpoch.prime" (fun () ->
+                                    Async.StartImmediate(SessionEpoch.prime ()))
+                            )
                         ]
                     else
                         []
@@ -2032,12 +2043,13 @@ module Client =
                                     .Shell.ResultsAvailableIn
                                     moduleImpl.Definition.Name
 
-                            Cmd.ofEffect (fun _ ->
+                            RemoteEffect.signal ("NotificationClient.publishLocal " + text) (fun () ->
                                 NotificationClient.publishLocal (
                                     NotificationEnvelope.create
                                         (UserSession.getUserId ())
                                         (Notification.SystemMessage(SystemMessageLevel.Info, text))
                                 ))
+                            |> RemoteEffect.asCmd
                         else
                             Cmd.none
 
@@ -2145,22 +2157,30 @@ module Client =
             if view = BrowserHistory.viewId model.ActiveModuleId model.ActivePageRoute then
                 match msg with
                 | AuthTokenAcquired ->
-                    next, Cmd.batch [ cmd; Cmd.ofEffect (fun _ -> BrowserHistory.forgetIfNames view) ]
+                    next,
+                    Cmd.batch [
+                        cmd
+                        RemoteEffect.asCmd (
+                            RemoteEffect.signal ("BrowserHistory.forgetIfNames " + view) (fun () ->
+                                BrowserHistory.forgetIfNames view)
+                        )
+                    ]
                 | _ -> next, cmd
             else
-                let write =
+                let writeName, write =
                     match msg with
-                    | ModuleSelected _ -> BrowserHistory.push
-                    | _ -> BrowserHistory.replace
+                    | ModuleSelected _ -> "BrowserHistory.push ", BrowserHistory.push
+                    | _ -> "BrowserHistory.replace ", BrowserHistory.replace
 
                 next,
                 Cmd.batch [
                     cmd
-                    Cmd.ofEffect (fun _ ->
+                    RemoteEffect.signal (writeName + view) (fun () ->
                         write view
 
                         if isSignedOut config then
                             BrowserHistory.store view)
+                    |> RemoteEffect.asCmd
                 ]
 
     /// The module-state observer publish, kept out of `update` so `update`

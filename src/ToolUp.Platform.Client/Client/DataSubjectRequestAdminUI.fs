@@ -263,7 +263,7 @@ let internal confirmErasure (requestId: DataSubjectRequestId) : Steps = [
 
 /// The browser download of an export archive. It dispatches nothing.
 let internal download (subject: string) (bytes: byte[]) : Steps = [
-    Do(RemoteEffect.legacy "DataSubjectRequestAdminUI.downloadExport" (fun _ -> downloadExport subject bytes))
+    Do(RemoteEffect.signal "DataSubjectRequestAdminUI.downloadExport" (fun () -> downloadExport subject bytes))
 ]
 
 let private exportInput (model: Model) : ExportRequestInput = {

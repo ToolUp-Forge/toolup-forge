@@ -91,7 +91,7 @@ type Routed =
 let WatchdogTimeoutMs = 60_000
 
 /// The watchdog's timer: completes with `token` after the timeout. A surface
-/// maps an `Arm token` effect to `Cmd.OfAsync.perform watchdogDelay token`.
+/// maps an `Arm token` effect to a `RemoteEffect.await` of `watchdogDelay token`.
 let watchdogDelay (token: Guid) : Async<Guid> = async {
     do! Async.Sleep WatchdogTimeoutMs
     return token

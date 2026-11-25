@@ -17,7 +17,7 @@ open ToolUp.Elmish
 // shipped concretes — nothing here is new behaviour:
 //
 //   - `Navigate`  → `NavigationRequest.request` (shell / sidebar router)
-//   - `Call`      → `Cmd.OfRemoting` semantics (interceptor chain,
+//   - `Call`      → a `RemoteEffect.call` (interceptor chain,
 //                   correlation ids, error envelopes), executed against
 //                   the module's Elmish dispatch
 //   - `Notify`    → `NotificationClient.publishLocal` (`ToastCentre`
@@ -73,14 +73,27 @@ type ClientHostCapabilities<'Msg> =
     abstract Dispatch: msg: 'Msg -> unit
 
     /// Execute a remoting-shaped async call, mapping the outcome into
-    /// the module's `Msg` and dispatching it — `Cmd.OfRemoting.call`
-    /// semantics (interceptor chain, error envelope) without the
-    /// caller owning a `Cmd` value, which an external runtime is not
+    /// the module's `Msg` and dispatching it — a `RemoteEffect.call`
+    /// performed at once (interceptor chain, error envelope) without the
+    /// caller owning a step list, which an external runtime is not
     /// shaped to thread back through `update`.
     abstract Call<'r> : call: Async<'r> * onSuccess: ('r -> 'Msg) * onError: (exn -> 'Msg) -> unit
 
 [<RequireQualifiedAccess>]
 module ClientHostCapabilities =
+
+    /// The `Call` capability's body: the call as a `RemoteEffect` value,
+    /// performed at once and answered into `dispatch`.
+    let performCall (dispatch: 'Msg -> unit) (call: Async<'r>) (onSuccess: 'r -> 'Msg) (onError: exn -> 'Msg) : unit =
+        let effect =
+            RemoteEffect.call "ClientHostCapabilities.Call" (fun () -> call) () (fun reply ->
+                match reply with
+                | Ok answer -> onSuccess answer
+                | Error ex -> onError ex)
+
+        match RemoteEffect.perform effect with
+        | Fuaran.MVU.Performance.Reply answer -> answer dispatch
+        | Fuaran.MVU.Performance.Signal fire -> fire ()
 
     /// Build the capability bag from a module view's dispatch. The
     /// other three hooks are module-level shipped concretes, so
@@ -98,12 +111,9 @@ module ClientHostCapabilities =
             member _.Dispatch msg = dispatch msg
 
             member _.Call(call, onSuccess, onError) =
-                // Ride the OfRemoting effect (interceptors, error
-                // envelope) and execute it immediately against the
-                // module's dispatch — the imperative shape an external
-                // runtime's action handler needs.
-                Cmd.OfRemoting.call (fun () -> call) () onSuccess onError
-                |> List.iter (fun effect -> effect dispatch)
+                // The imperative shape an external runtime's action
+                // handler needs.
+                performCall dispatch call onSuccess onError
         }
 
 /// full-width `ClientModule.withView`-shaped builder step whose view also
