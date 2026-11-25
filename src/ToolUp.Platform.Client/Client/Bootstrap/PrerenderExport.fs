@@ -21,7 +21,7 @@ open Fable.Core.JsInterop
 // Why a globalThis registration rather than a Fable ES module
 // export? Two reasons:
 //   1. The consumer's bundle entry point is `Client.fs`, which
-//      kicks off `Program.run` on module load. Calling
+//      mounts the shell on module load. Calling
 //      `installEntryPoint` *before* the program-run lets the Node
 //      script reach the renderer without also triggering the SPA
 //      mount (which would fail outside the browser anyway because
@@ -62,11 +62,13 @@ let isBrowser () : bool = hasBrowserGlobals ()
 [<Import("renderToString", "react-dom/server")>]
 let private renderToString (element: obj) : string = jsNative
 
-/// Render a single declared route's Elmish view tree to an HTML
-/// body string. Builds the same `Program<unit, Model, Msg,
-/// ReactElement>` the SPA does via `Client.program`, then walks
-/// the program's `init` + `view` once to produce a static
-/// snapshot.
+[<Import("createElement", "react")>]
+let private createElement (kind: obj, props: obj) : obj = jsNative
+
+/// Render a single declared route's view tree to an HTML body
+/// string. Builds the same shell program the SPA does via
+/// `Client.program`, then renders its `Init` model through its view
+/// once to produce a static snapshot.
 ///
 /// **Determinism contract** — the prerendered HTML MUST be
 /// byte-for-byte identical across two runs of the same route
@@ -100,34 +102,15 @@ let renderRouteToHtml (config: ClientConfig) (modules: ErasedModule list) (route
         globalThis.__toolup_prerender_path = $1;
     """
 
-    // The Elmish `Program` exposes its `init` and `view` only
-    // through `Program.run`, which mounts to a DOM node. For
-    // static prerender we bypass `Program.run` and build the
-    // initial render manually via the same primitives. The
-    // re-import here uses the underlying `Client.program`
-    // function's init + view closures — we re-create the
-    // model+view at the snapshot point, then hand the
-    // ReactElement to `renderToString`.
-    //
-    // We construct the program once to capture its closures via
-    // Fable's internal representation of `Program<...>`. The
-    // record has fields named `init` / `view` / `update` / etc.
-    // We read them by JS property access; this is brittle to
-    // Fable.Elmish internals but is the only way to extract
-    // them without a public accessor.
+    // The program's `Init` model, rendered once through its view inside a
+    // component of its own (the view reads React hooks), against a dispatch
+    // that drops every message: the snapshot the browser hydrates over.
     let program = Client.program config modules
+    let model, _ = program.Component.Init()
+    let view = program.Component.View model
 
-    // Capture init and view via Fable's record-property access.
-    // The fields on the Elmish `Program<arg, model, msg, view>`
-    // record are typed but private; the runtime JS object
-    // exposes them at predictable property names matching the
-    // F# field names.
-    let initFn: unit -> obj * obj = program?init
-    let viewFn: obj -> (obj -> unit) -> obj = program?view
-
-    let model, _cmd = initFn ()
-    let noopDispatch (_msg: obj) : unit = ()
-    let element = viewFn model noopDispatch
+    let element =
+        createElement (System.Func<obj, obj>(fun _ -> box (view.Build ignore)), null)
 
     let html = renderToString element
 

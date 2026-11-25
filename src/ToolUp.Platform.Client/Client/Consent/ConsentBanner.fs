@@ -5,6 +5,7 @@ module ToolUp.Platform.Consent.ConsentBanner
 
 open System
 open Feliz
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 
@@ -102,12 +103,12 @@ let mutable private commitSink: ConsentState -> unit = ignore
 let onCommit (sink: ConsentState -> unit) : unit = commitSink <- sink
 
 /// Invoke the registered commit sink with the saved state. Exposed for
-/// the Cmd effect (and reachable by tests that drive the Cmd).
+/// the commit signal (and reachable by tests that perform it).
 let commit (state: ConsentState) : unit = commitSink state
 
 /// Pure MVU update. `SavePreferences` dismisses the banner and emits a
-/// Cmd that fires the commit sink with the projected `ConsentState`.
-let update (now: DateTimeOffset) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// signal that fires the commit sink with the projected `ConsentState`.
+let update (now: DateTimeOffset) (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | ToggleCategory c ->
         match Map.tryFind c model.Pending with
@@ -116,29 +117,25 @@ let update (now: DateTimeOffset) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Pending = Map.add c (not on) model.Pending
             },
-            Cmd.none
-        | None -> model, Cmd.none
+            []
+        | None -> model, []
     | AcceptAll ->
         {
             model with
                 Pending = model.Managed |> List.map (fun c -> c, true) |> Map.ofList
         },
-        Cmd.none
+        []
     | RejectAll ->
         {
             model with
                 Pending = model.Managed |> List.map (fun c -> c, false) |> Map.ofList
         },
-        Cmd.none
+        []
     | SavePreferences ->
         let state = toConsentState now model
-        // Raw Cmd: a single fire-and-forget subscription that commits
-        // the saved state. Kept out of `update`'s pure body so the
-        // transition stays testable.
-        { model with Dismissed = true },
-        [
-            fun _ -> commit state
-        ]
+        // The commit is a signal: it answers nothing, and the transition
+        // stays testable as a value.
+        { model with Dismissed = true }, [ Do(RemoteEffect.signal "ConsentBanner.commit" (fun () -> commit state)) ]
 
 // ─── View ──────────────────────────────────────────────────────────
 
@@ -183,12 +180,14 @@ let ConsentBanner (managed: ConsentCategory list) : ReactElement =
             FsReact.createDisposable (fun () -> cancelled <- true))
 
         let dispatch (msg: Msg) =
-            let next, cmd = update DateTimeOffset.UtcNow msg model
+            let next, steps = update DateTimeOffset.UtcNow msg model
             setModel next
-            // Run the Cmd's fire-and-forget subscriptions (the commit
-            // effect). Dispatch is a no-op for these subs.
-            for sub in cmd do
-                sub (fun _ -> ())
+            // Perform the commit signal; the banner's update asks for no
+            // follow-up and no reply.
+            for effect in Step.effects steps do
+                match RemoteEffect.perform effect with
+                | Performance.Signal fire -> fire ()
+                | Reply answer -> answer ignore
 
         if model.Dismissed then
             Html.none

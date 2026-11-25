@@ -3,20 +3,13 @@
 
 namespace ToolUp.Platform
 
+open Fuaran.MVU
+open Fuaran.MVU.React
 open ToolUp.Elmish
-open ToolUp.Elmish.React
 open Feliz
 open ProcessedDataTypes
 
 // ─── Shell MVU ────────────────────────────────────────────────────
-
-// HMR is always open; the ToolUp.Elmish.HMR overrides of `Program.run` /
-// `Program.withReactSynchronous` etc. detect the absence of Vite's
-// `import.meta.hot` at runtime and become identity functions in
-// production builds. The previous `#if DEBUG`-gated open was removed
-// when ToolUp.Platform stopped carrying compile-time gates (App-side
-// `#if DEBUG` is unaffected).
-open ToolUp.Elmish.HMR
 
 module Client =
 
@@ -402,7 +395,7 @@ module Client =
         /// throws, the module is left with no host, `OnError` reports it,
         /// and the next `ModuleSelected` for this module retries.
         | ResetModule of moduleId: string
-        /// A boot loader threw (answered through `bootLoadCmd`'s operation,
+        /// A boot loader threw (answered through `bootLoad`'s operation,
         /// or dispatched directly by a failing effect).
         /// Accumulates a `BootDegradation` entry on the Model and warns
         /// through the category logger; the Model keeps the loader's
@@ -518,7 +511,7 @@ module Client =
     /// permissive.
     let private loadAccessibleModules = async {
         // No internal catch: a thrown fetch routes through
-        // `bootLoadCmd`'s operation to `BootLoadFailed`, and
+        // `bootLoad`'s operation to `BootLoadFailed`, and
         // `AccessibleModules` stays `None` (the permissive fallback) —
         // same render, but the failure is now visible.
         let! response = accessibilityApi.GetAccessibleModules()
@@ -582,12 +575,13 @@ module Client =
     /// no-active-team state with the header switcher / Team Manager as
     /// the manual affordances — but Phase 121 surfaces the failure as
     /// a degradation (with retry) instead of swallowing it.
-    let private autoSelectSoleTeamCmd (teamId: string) : Cmd<Msg> =
+    let private autoSelectSoleTeam (teamId: string) : Step<Msg, RemoteEffect<Msg>> list =
         RemoteEffect.call "TeamApi.SetActiveTeam" (fun id -> withCsrf (teamApi.SetActiveTeam id)) teamId (fun reply ->
             match RemoteEffect.flatten reply with
             | Ok() -> TeamSwitched(Some teamId)
             | Error reason -> BootLoadFailed(BootSources.Key.TeamAutoSelect, reason))
-        |> RemoteEffect.asCmd
+        |> Do
+        |> List.singleton
 
     /// Fire the sole-team auto-select when (and only when) all three
     /// hold: the boot-time active-team fetch has resolved, it resolved
@@ -600,10 +594,10 @@ module Client =
     /// active selection are NOT auto-selected — choosing among N teams
     /// is theirs to make via the header switcher, which renders in the
     /// no-active-team state for exactly that purpose.
-    let private maybeAutoSelectSoleTeam (model: Model) : Cmd<Msg> =
+    let private maybeAutoSelectSoleTeam (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
         match model.ActiveTeamLoadCompleted, model.ActiveTeamId, model.MyTeams with
-        | true, None, [ soleTeam ] -> autoSelectSoleTeamCmd soleTeam.TeamId
-        | _ -> Cmd.none
+        | true, None, [ soleTeam ] -> autoSelectSoleTeam soleTeam.TeamId
+        | _ -> []
 
     /// Phase 4b — fetch whether the caller holds
     /// `PlatformRole.PlatformAdmin`. Failure (CSRF/auth seam, network
@@ -658,13 +652,18 @@ module Client =
     /// (typed accumulator + banner) instead of being swallowed into a
     /// benign-looking default. GP 9 — a failed load must be
     /// distinguishable from empty data.
-    let private bootLoadCmd (source: string) (loader: Async<'T>) (onLoaded: 'T -> Msg) : Cmd<Msg> =
+    let private bootLoad
+        (source: string)
+        (loader: Async<'T>)
+        (onLoaded: 'T -> Msg)
+        : Step<Msg, RemoteEffect<Msg>> list =
         RemoteEffect.await ("Client.bootLoad " + source) (fun () -> loader) () (fun outcome ->
             match outcome with
             | Ok loaded -> onLoaded loaded
             | Error ex when isPublicationReaderRefusal ex -> PublicationReaderRefused
             | Error ex -> BootLoadFailed(source, ex.Message))
-        |> RemoteEffect.asCmd
+        |> Do
+        |> List.singleton
 
     /// Phase 568 — re-read the caller's role on the (new) active team,
     /// or clear it when there is no active team to have a role on. The
@@ -673,22 +672,22 @@ module Client =
     /// `TeamSwitched` (switch / revoke). Clearing goes through the same
     /// message rather than an inline record update so the arm keeps one
     /// definition of what the field means.
-    let private activeTeamRoleCmd (teamId: string option) : Cmd<Msg> =
+    let private activeTeamRole (teamId: string option) : Step<Msg, RemoteEffect<Msg>> list =
         match teamId with
-        | Some id -> bootLoadCmd BootSources.Key.TeamRole (withCsrf (loadActiveTeamRole id)) ActiveTeamRoleLoaded
-        | None -> Cmd.ofMsg (ActiveTeamRoleLoaded None)
+        | Some id -> bootLoad BootSources.Key.TeamRole (withCsrf (loadActiveTeamRole id)) ActiveTeamRoleLoaded
+        | None -> [ Then(ActiveTeamRoleLoaded None) ]
 
     /// The loaders the boot-source table's rows pick from.
     let private bootLoads: BootSources.BootLoads<Model, Msg> = {
-        Permissions = bootLoadCmd BootSources.Key.Permissions (withCsrf loadAccessibleModules) AccessibleModulesLoaded
-        Configs = bootLoadCmd BootSources.Key.Configs (withCsrf loadAllConfigs) ConfigsLoaded
-        Flags = bootLoadCmd BootSources.Key.Flags (withCsrf loadResolvedFlags) FlagsLoaded
-        Teams = bootLoadCmd BootSources.Key.Teams (withCsrf loadMyTeams) MyTeamsLoaded
-        ActiveTeam = bootLoadCmd BootSources.Key.ActiveTeam (withCsrf loadActiveTeam) ActiveTeamLoaded
-        PlatformRole = bootLoadCmd BootSources.Key.PlatformRole loadPlatformRole PlatformRoleLoaded
-        PlatformInfo = bootLoadCmd BootSources.Key.PlatformInfo loadPlatformInfo PlatformInfoLoaded
-        DataSnapshot = bootLoadCmd BootSources.Key.DataSnapshot loadFileSnapshot DataSnapshotPrefetched
-        TeamRole = fun model -> activeTeamRoleCmd model.ActiveTeamId
+        Permissions = bootLoad BootSources.Key.Permissions (withCsrf loadAccessibleModules) AccessibleModulesLoaded
+        Configs = bootLoad BootSources.Key.Configs (withCsrf loadAllConfigs) ConfigsLoaded
+        Flags = bootLoad BootSources.Key.Flags (withCsrf loadResolvedFlags) FlagsLoaded
+        Teams = bootLoad BootSources.Key.Teams (withCsrf loadMyTeams) MyTeamsLoaded
+        ActiveTeam = bootLoad BootSources.Key.ActiveTeam (withCsrf loadActiveTeam) ActiveTeamLoaded
+        PlatformRole = bootLoad BootSources.Key.PlatformRole loadPlatformRole PlatformRoleLoaded
+        PlatformInfo = bootLoad BootSources.Key.PlatformInfo loadPlatformInfo PlatformInfoLoaded
+        DataSnapshot = bootLoad BootSources.Key.DataSnapshot loadFileSnapshot DataSnapshotPrefetched
+        TeamRole = fun model -> activeTeamRole model.ActiveTeamId
         TeamAutoSelect = maybeAutoSelectSoleTeam
     }
 
@@ -697,8 +696,11 @@ module Client =
         BootSources.all ()
 
     /// Issue the loads of `sources` against `model`.
-    let private issueLoads (model: Model) (sources: BootSources.BootSource<Model, Msg> list) : Cmd<Msg> =
-        sources |> List.map (fun source -> source.Load bootLoads model) |> Cmd.batch
+    let private issueLoads
+        (model: Model)
+        (sources: BootSources.BootSource<Model, Msg> list)
+        : Step<Msg, RemoteEffect<Msg>> list =
+        sources |> List.map (fun source -> source.Load bootLoads model) |> List.concat
 
     /// The source keys the active module's first `Init` waits for.
     let firstInitGates: Set<string> = BootSources.firstInitGates bootSources
@@ -767,13 +769,16 @@ module Client =
     /// Persist the sidebar preferences as an effect. A throwing store (quota,
     /// private window, blocked site data) surfaces as the sidebar-preference
     /// banner row rather than an exception out of `update`.
-    let private persistSidebarPrefs (prefs: SidebarPreferences.UserSidebarPreferences) : Cmd<Msg> =
+    let private persistSidebarPrefs
+        (prefs: SidebarPreferences.UserSidebarPreferences)
+        : Step<Msg, RemoteEffect<Msg>> list =
         SidebarPreferences.persist
             (function
             | Ok() -> BootLoadRecovered BootSources.Key.SidebarPrefs
             | Error ex -> BootLoadFailed(BootSources.Key.SidebarPrefs, ex.Message))
             prefs
-        |> RemoteEffect.asCmd
+        |> Do
+        |> List.singleton
 
     /// The captured shell dispatcher as the shell reads it (see
     /// `shellDispatcher`).
@@ -782,28 +787,24 @@ module Client =
         ShellIsActive: unit -> bool
     }
 
-    /// Module-level capture of the shell's Elmish `dispatch` function,
-    /// set once at program start (see the capture paragraph below). Lets
-    /// `ClientModuleContext.OnTeamSwitched`
-    /// dispatch a shell-level `TeamSwitched` from within a module's
-    /// update handler — the module's own `dispatch` is typed to its own
-    /// `Msg`, so it can't otherwise reach the shell.
+    /// Module-level capture of the shell's dispatch. Lets
+    /// `ClientModuleContext.OnTeamSwitched` dispatch a shell-level
+    /// `TeamSwitched` from within a module's update handler — the module's
+    /// own `dispatch` is typed to its own `Msg`, so it can't otherwise reach
+    /// the shell.
     ///
-    /// Sanctioned mutable: initialisation-time set, read after. Mirrors
-    /// `UserSession.session` and `NotificationClient.state`
-    /// — documented in the platform README's "No new side effects"
-    /// exceptions list.
+    /// Sanctioned mutable: set when the runtime starts the shell-dispatcher
+    /// subscription, read after. Mirrors `UserSession.session` and
+    /// `NotificationClient.state` — documented in the platform README's "No
+    /// new side effects" exceptions list.
     ///
-    /// Read off the program's `IDispatcher` (ToolUp.Elmish primitive —
-    /// replaces the legacy `(Msg -> unit) option` shape), captured at
-    /// program-start via `Program.withDispatcherHandle` by
-    /// `withShellLifetimeEffects`, for the shell and every composer over it
-    /// (Phase 931). A composer's loop takes its own message type, so what is
-    /// held is that dispatcher's `Dispatch` lifted through the composer's
-    /// shell-message constructor, beside its `IsActive` — which flips to
-    /// `false` when `withTermination` triggers, so background callbacks
-    /// check before dispatching and no-op cleanly on hot-reload / teardown
-    /// rather than spraying messages at a dead loop.
+    /// The subscription is one of the shell's resources (`subscriptions`),
+    /// so the shell and every composer that lists them set it; a composer's
+    /// message type differs, so what is held is the subscription's emit
+    /// lifted through the composer's shell-message constructor, beside an
+    /// activity flag that goes `false` when the runtime stops it, so
+    /// background callbacks check before dispatching and no-op cleanly on a
+    /// hot reload or an unmount.
     let mutable private shellDispatcher: ShellDispatch option = None
 
     /// Optional caller-supplied UI to inject into the shell. Companion
@@ -846,10 +847,14 @@ module Client =
     let moduleState (moduleId: string) (model: Model) : obj option =
         model.Hosts |> Map.tryFind moduleId |> Option.map _.State
 
-    /// A command the named module's `Init` or `Update` returned, its messages
+    /// The steps the named module's `Init` or `Update` returned, its messages
     /// addressed back to that module.
-    let private moduleCmd (moduleId: string) (cmd: Cmd<obj>) : Cmd<Msg> =
-        Cmd.map (fun message -> ModuleMsg(moduleId, message)) cmd
+    let private moduleSteps
+        (moduleId: string)
+        (steps: Step<obj, RemoteEffect<obj>> list)
+        : Step<Msg, RemoteEffect<Msg>> list =
+        let address message = ModuleMsg(moduleId, message)
+        Step.mapAll address (RemoteEffect.map address) steps
 
     let private tryFind (modules: ErasedModule list) id =
         modules |> List.tryFind (fun m -> m.Definition.Id = id)
@@ -1107,7 +1112,11 @@ module Client =
     // guard, its deferral or its routing.
 
     /// Report a module whose `Init` threw, as a command.
-    let private reportInitFailure (config: ClientConfig) (moduleId: string) (ex: exn) : Cmd<Msg> =
+    let private reportInitFailure
+        (config: ClientConfig)
+        (moduleId: string)
+        (ex: exn)
+        : Step<Msg, RemoteEffect<Msg>> list =
         RemoteEffect.signal ("Client.reportInitFailure " + moduleId) (fun () ->
             match config.Composition.OnError with
             | Some report ->
@@ -1117,7 +1126,8 @@ module Client =
                     ComponentStack = ex.StackTrace |> Option.ofObj |> Option.defaultValue ""
                 }
             | None -> log.Error(sprintf "[ModuleBoundary] %s Init crashed: %s" moduleId ex.Message, Some ex))
-        |> RemoteEffect.asCmd
+        |> Do
+        |> List.singleton
 
     /// Initialise `moduleId`: the one call site of a module's `Init`.
     ///
@@ -1134,7 +1144,7 @@ module Client =
         (modules: ErasedModule list)
         (moduleId: string)
         (model: Model)
-        : Model * Cmd<Msg> =
+        : Model * Step<Msg, RemoteEffect<Msg>> list =
         match tryFind modules moduleId with
         | Some moduleImpl when model.InitPhase <> Prefetching && canNavigateToModule config model moduleImpl ->
             try
@@ -1145,19 +1155,25 @@ module Client =
                     model with
                         Hosts = model.Hosts |> Map.add moduleId { State = state; Generation = 0 }
                 },
-                moduleCmd moduleId (RemoteEffect.toCmd steps)
+                moduleSteps moduleId steps
             with ex ->
                 {
                     model with
                         Hosts = model.Hosts |> Map.remove moduleId
                 },
                 reportInitFailure config moduleId ex
-        | _ -> model, Cmd.none
+        | _ -> model, []
 
     /// Initialise `moduleId` unless it already has a host.
-    let private ensureHost config queryBus modules (moduleId: string) (model: Model) : Model * Cmd<Msg> =
+    let private ensureHost
+        config
+        queryBus
+        modules
+        (moduleId: string)
+        (model: Model)
+        : Model * Step<Msg, RemoteEffect<Msg>> list =
         if model.Hosts |> Map.containsKey moduleId then
-            model, Cmd.none
+            model, []
         else
             initModule config queryBus modules moduleId model
 
@@ -1173,8 +1189,8 @@ module Client =
                 model with
                     Hosts = model.Hosts |> Map.add moduleId { host with State = state }
             },
-            moduleCmd moduleId (RemoteEffect.toCmd steps)
-        | _ -> model, Cmd.none
+            moduleSteps moduleId steps
+        | _ -> model, []
 
     /// Deliver a message the module's own view did not send — a decoded
     /// action or a subscribed event — initialising the module first if it
@@ -1188,12 +1204,12 @@ module Client =
         (moduleImpl: ErasedModule)
         (message: obj)
         (model: Model)
-        : (Model * Cmd<Msg>) option =
+        : (Model * Step<Msg, RemoteEffect<Msg>> list) option =
         if canNavigateToModule config model moduleImpl then
             let moduleId = moduleImpl.Definition.Id
-            let hosted, initCmd = ensureHost config queryBus modules moduleId model
-            let stepped, updateCmd = applyToHost modules moduleId message hosted
-            Some(stepped, Cmd.batch [ initCmd; updateCmd ])
+            let hosted, initSteps = ensureHost config queryBus modules moduleId model
+            let stepped, updateSteps = applyToHost modules moduleId message hosted
+            Some(stepped, initSteps @ updateSteps)
         else
             None
 
@@ -1216,7 +1232,13 @@ module Client =
     /// the flags, or the surface the no-team gate settles on), compared with
     /// `prior`, the model before the answer: a refresh that brings the same
     /// values keeps the module and its React subtree.
-    let private onFirstInitReady config queryBus modules (prior: Model) (model: Model) : Model * Cmd<Msg> =
+    let private onFirstInitReady
+        config
+        queryBus
+        modules
+        (prior: Model)
+        (model: Model)
+        : Model * Step<Msg, RemoteEffect<Msg>> list =
         let settled = settleActive config modules { model with InitPhase = Ready }
 
         let unchanged =
@@ -1228,7 +1250,7 @@ module Client =
             && prior.ResolvedFlags = model.ResolvedFlags
 
         if unchanged then
-            { model with InitPhase = Ready }, Cmd.none
+            { model with InitPhase = Ready }, []
         else
             initModule config queryBus modules settled.ActiveModuleId { settled with Hosts = Map.empty }
 
@@ -1246,7 +1268,7 @@ module Client =
         if awaiting.IsEmpty then
             onFirstInitReady config queryBus modules prior updated
         else
-            updated, Cmd.none
+            updated, []
 
     /// Aggregate processed data from every module that exposes it.
     /// Pure — callers store the result in `Model.ProcessedData` and the
@@ -1403,7 +1425,7 @@ module Client =
             LocaleOverride = None
         }
 
-        let hosted, moduleInitCmd =
+        let hosted, moduleInitSteps =
             initModule _config queryBus modules moduleImpl.Definition.Id unhosted
 
         let model = {
@@ -1411,38 +1433,24 @@ module Client =
                 ProcessedData = resolveProcessedData _config modules hosted.Hosts []
         }
 
-        let bootLoadCommands =
+        let bootLoadSteps =
             issueLoads model (BootSources.issuedAtBoot (ClientConfig.hasTeamScope _config) bootSources)
 
-        // Shell dispatcher capture lives at the `Program` site via
-        // `Program.withDispatcherHandle` (ToolUp.Elmish primitive), inside
-        // `withShellLifetimeEffects` below so every composer gets it
-        // (Phase 931). The previous `Cmd.ofEffect`-capture pattern
-        // (running once at init, writing the raw `Dispatch<Msg>` into a
-        // mutable) is no longer needed: `IDispatcher<Msg>` is captured
-        // before `init`'s commands fire, so background callbacks reading
-        // it from the very first dispatch will see a live handle.
+        // The long-lived sources (the notification stream, the buses, the
+        // shell dispatcher) are not started here: they are the resources the
+        // model lists (`resources` below), which the runtime starts when the
+        // boot step commits, before any of these steps' effects is performed.
 
-        // 0.4.1 — the boot-time background subscriptions (notification
-        // stream + NavigationRequest bus) used to land here as
-        // `Cmd.ofEffect` commands. They now register via
-        // `Program.withEffect (EffectHandle.programLifetime ...)` at the
-        // `program` site below, so the runtime knows their lifetime and
-        // disposes them cleanly on `IDispatcher.Terminate()` — fixing
-        // the SSE / notification leak across HMR hot-reloads and
-        // page-navigation that the 0.4.0 README headlines as resolved.
-        // See `programLifetimeEffects` below.
-
-        let initCmds =
+        let initSteps =
             if signedOut then
                 // Welcome-Page case: the user hasn't signed in yet and
                 // every auth-required fetch would 401. Drop them
                 // entirely; the `auth-token-acquired` lifetime effect
                 // dispatches `AuthTokenAcquired` once `setAuthToken`
-                // runs and we re-fire `bootLoadCommands` then.
-                [ moduleInitCmd ]
+                // runs and we re-fire `bootLoadSteps` then.
+                [ moduleInitSteps ]
             else
-                [ moduleInitCmd; bootLoadCommands ]
+                [ moduleInitSteps; bootLoadSteps ]
 
         // Phase 1240 — the first entry names its view too, or Back to it would
         // land on a URL with nothing to restore.
@@ -1452,7 +1460,7 @@ module Client =
         // URL named, and only that: an issuer's callback boots the shell signed
         // out with no fragment, on its way to reloading `/`, and the default view
         // it shows meanwhile must not overwrite the view being carried.
-        let firstEntryCmd =
+        let firstEntry =
             match _config.Shell.BrowserHistory with
             | NoBrowserHistory -> []
             | HashHistory ->
@@ -1466,10 +1474,11 @@ module Client =
                             BrowserHistory.forget ()
                         elif signedOut && restoredView.IsSome then
                             BrowserHistory.store view)
-                    |> RemoteEffect.asCmd
+                    |> Do
+                    |> List.singleton
                 ]
 
-        model, Cmd.batch (initCmds @ firstEntryCmd)
+        model, List.concat (initSteps @ firstEntry)
 
     /// The shell's one reset. A team switch and a locale switch wipe the
     /// per-scope state (the hosts, the loaded configs, flags and access
@@ -1482,7 +1491,11 @@ module Client =
     ///
     /// A locale switch to the locale already chosen, and a token arriving
     /// while the boot loads are still in flight, change nothing.
-    let private reset (config: ClientConfig) (kind: BootSources.ResetKind) (model: Model) : Model * Cmd<Msg> =
+    let private reset
+        (config: ClientConfig)
+        (kind: BootSources.ResetKind)
+        (model: Model)
+        : Model * Step<Msg, RemoteEffect<Msg>> list =
         let rescoped =
             match kind with
             | BootSources.ResetKind.TeamSwitch teamId ->
@@ -1501,7 +1514,7 @@ module Client =
             | BootSources.ResetKind.TokenAcquired -> None
 
         match rescoped with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some rescoped ->
             let next =
                 match kind with
@@ -1532,12 +1545,14 @@ module Client =
             match kind with
             | BootSources.ResetKind.TeamSwitch _ ->
                 next,
-                Cmd.batch [
+                List.concat [
                     // The server scopes a read to the active team and a
                     // cached read's key does not carry it, so the move is an
                     // identity change: drop every cached read BEFORE the
                     // re-issued loads go out.
-                    RemoteEffect.asCmd (RemoteEffect.signal "UserSession.identityChanged" UserSession.identityChanged)
+                    [
+                        Do(RemoteEffect.signal "UserSession.identityChanged" UserSession.identityChanged)
+                    ]
                     reissued
                     // The session file store on the other side is now a
                     // different one: re-seed the epoch against it, or the next
@@ -1545,13 +1560,14 @@ module Client =
                     RemoteEffect.signal "SessionEpoch.reseed" (fun () ->
                         SessionEpoch.reset ()
                         Async.StartImmediate(SessionEpoch.prime ()))
-                    |> RemoteEffect.asCmd
+                    |> Do
+                    |> List.singleton
                 ]
             | BootSources.ResetKind.LocaleSwitch _
             | BootSources.ResetKind.TokenAcquired -> next, reissued
 
     let private updateShell (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
-        let newModel, cmd =
+        let newModel, steps =
             match msg with
             | ModuleMsg(moduleId, message) -> applyToHost modules moduleId message model
 
@@ -1576,9 +1592,9 @@ module Client =
                     else
                         "by a server restart"
 
-                // Phase 1069 — published from a `Cmd`, not inline: the
-                // envelope's id and timestamp are minted when the effect
-                // runs, so `update` itself performs no I/O.
+                // Published from a signal, not inline: the envelope's id
+                // and timestamp are minted when the effect runs, so `update`
+                // itself performs no I/O.
                 let text = $"Your server session was reset {cause}; please re-upload your files."
 
                 {
@@ -1589,7 +1605,8 @@ module Client =
                     NotificationClient.publishLocal (
                         NotificationEnvelope.create "" (Notification.SystemMessage(SystemMessageLevel.Warning, text))
                     ))
-                |> RemoteEffect.asCmd
+                |> Do
+                |> List.singleton
 
             | DataSnapshotPrefetched snapshot ->
                 // Boot-time data prefetch: store the snapshot's processed
@@ -1599,7 +1616,7 @@ module Client =
                     model with
                         PrefetchedProcessedData = snapshot.Processed
                 },
-                Cmd.none
+                []
 
             | PlatformInfoLoaded info ->
                 // Phase 1046 — arm (or disarm) the session-epoch reads on
@@ -1624,15 +1641,17 @@ module Client =
                             // from), so this only establishes the baseline the
                             // later checks compare against. Failure is swallowed
                             // inside `SessionEpoch.check`.
-                            RemoteEffect.asCmd (
-                                RemoteEffect.signal "SessionEpoch.prime" (fun () ->
-                                    Async.StartImmediate(SessionEpoch.prime ()))
-                            )
+                            [
+                                Do(
+                                    RemoteEffect.signal "SessionEpoch.prime" (fun () ->
+                                        Async.StartImmediate(SessionEpoch.prime ()))
+                                )
+                            ]
                         ]
                     else
                         []
 
-                model, Cmd.batch fileLoads
+                model, List.concat fileLoads
 
             // Phase 567 — the two-surface area switcher fires through the
             // same onSelect as modules; its reserved ids flip the rendered
@@ -1659,20 +1678,20 @@ module Client =
                         CurrentArea = ModuleArea.Administration
                 }
 
-                let landingCmd =
+                let landing =
                     if modules |> List.exists (fun m -> m.Definition.Id = AdminHome.moduleId) then
-                        Cmd.ofMsg (ModuleSelected AdminHome.moduleId)
+                        [ Then(ModuleSelected AdminHome.moduleId) ]
                     else
-                        Cmd.none
+                        []
 
-                flipped, landingCmd
+                flipped, landing
 
             | ModuleSelected sidebarId when sidebarId = Toolup.Sidebar.ProductAreaId ->
                 {
                     model with
                         CurrentArea = ModuleArea.Product
                 },
-                Cmd.none
+                []
 
             | ModuleSelected sidebarId ->
                 // Sidebar Ids for multi-page modules are composite
@@ -1705,14 +1724,14 @@ module Client =
                                 ActivePageRoute = pageRoute
                                 CurrentArea = targetArea
                         },
-                        Cmd.none
+                        []
                     elif model.ActiveModuleId = moduleId then
                         {
                             model with
                                 ActivePageRoute = pageRoute
                                 CurrentArea = targetArea
                         },
-                        Cmd.none
+                        []
                     else
                         // The selection moves even when the route guard
                         // refuses the module (a deep link reaches here; the
@@ -1727,7 +1746,7 @@ module Client =
                                 CurrentArea = targetArea
                         }
                         |> ensureHost _config queryBus modules moduleId
-                | None -> model, Cmd.none
+                | None -> model, []
 
             | AccessibleModulesLoaded accessible ->
                 // A route-guard input landed; mount the active module if it
@@ -1746,7 +1765,7 @@ module Client =
                     model with
                         ShowAllModules = not model.ShowAllModules
                 },
-                Cmd.none
+                []
 
             | ConfigsLoaded configs ->
                 let updated = {
@@ -1790,7 +1809,7 @@ module Client =
                 // we're not currently in, and `MyTeams` refresh is
                 // enough.
                 if model.ActiveTeamId = Some teamId then
-                    model, Cmd.ofMsg (TeamSwitched None)
+                    model, [ Then(TeamSwitched None) ]
                 else
                     model, bootLoads.Teams
 
@@ -1802,9 +1821,9 @@ module Client =
                 // (already handled via `TeamSwitched`), and we don't
                 // want to double-reset.
                 if model.ActiveTeamId <> Some teamId then
-                    model, Cmd.ofMsg (TeamSwitched(Some teamId))
+                    model, [ Then(TeamSwitched(Some teamId)) ]
                 else
-                    model, Cmd.none
+                    model, []
 
             | MembershipAdded _ ->
                 // Added to a team (without an active-team switch) — refresh
@@ -1858,16 +1877,16 @@ module Client =
                 // has mounted, settle the surface again (landing or default),
                 // re-initialising only if the gate moved it. Before mount the
                 // first-init gate settles it.
-                let reconciled, reconcileCmd =
+                let reconciled, reconcileSteps =
                     match updated.InitPhase with
                     | Ready -> onFirstInitReady _config queryBus modules updated updated
                     | Prefetching
-                    | Reprefetching -> updated, Cmd.none
+                    | Reprefetching -> updated, []
 
                 // The moment the active team becomes known at boot, so the
                 // caller's role on it is read here; a team switch re-reads it
                 // through `reset`.
-                reconciled, Cmd.batch [ reconcileCmd; activeTeamRoleCmd teamId; maybeAutoSelectSoleTeam reconciled ]
+                reconciled, List.concat [ reconcileSteps; activeTeamRole teamId; maybeAutoSelectSoleTeam reconciled ]
 
             | AuthTokenAcquired -> reset _config BootSources.ResetKind.TokenAcquired model
 
@@ -1889,7 +1908,7 @@ module Client =
                 // `Prefetching` skeleton for good.
                 match BootSources.tryFind source bootSources with
                 | Some row when row.GatesFirstInit -> onSourceLoaded _config queryBus modules source updated updated
-                | _ -> updated, Cmd.none
+                | _ -> updated, []
 
             | RetryBootLoad source ->
                 // Optimistic clear — a re-failure re-adds via
@@ -1902,18 +1921,18 @@ module Client =
 
                 match BootSources.tryFind source bootSources with
                 | Some row when row.Retryable -> updated, row.Load bootLoads updated
-                | _ -> updated, Cmd.none
+                | _ -> updated, []
 
             | BootLoadRecovered source ->
                 {
                     model with
                         Degradations = BootDegradation.remove source model.Degradations
                 },
-                Cmd.none
+                []
 
-            | DismissBootDegradations -> { model with Degradations = [] }, Cmd.none
+            | DismissBootDegradations -> { model with Degradations = [] }, []
 
-            | PublicationReaderRefused -> { model with AppAccessRefused = true }, Cmd.none
+            | PublicationReaderRefused -> { model with AppAccessRefused = true }, []
 
             // ─── Phase 571 — command palette ──────────────────────────
             //
@@ -1927,28 +1946,28 @@ module Client =
                     model with
                         CommandPalette = CommandPaletteNav.opened
                 },
-                Cmd.none
+                []
 
             | CommandPaletteDismissed ->
                 {
                     model with
                         CommandPalette = CommandPaletteNav.closed
                 },
-                Cmd.none
+                []
 
             | CommandPaletteQueryChanged query ->
                 {
                     model with
                         CommandPalette = CommandPaletteNav.withQuery query model.CommandPalette
                 },
-                Cmd.none
+                []
 
             | CommandPaletteHighlightMoved delta ->
                 {
                     model with
                         CommandPalette = CommandPaletteNav.moveHighlight delta model.CommandPalette
                 },
-                Cmd.none
+                []
 
             | CommandPaletteSelected sidebarId ->
                 // Close, then navigate through the ORDINARY path — the
@@ -1961,7 +1980,7 @@ module Client =
                     model with
                         CommandPalette = CommandPaletteNav.closed
                 },
-                Cmd.ofMsg (ModuleSelected sidebarId)
+                [ Then(ModuleSelected sidebarId) ]
 
             | ResetModule moduleId ->
                 // Re-initialise the module and advance its host's generation,
@@ -1974,7 +1993,7 @@ module Client =
                     |> Option.map (fun host -> host.Generation + 1)
                     |> Option.defaultValue 0
 
-                let reinitialised, cmd =
+                let reinitialised, steps =
                     initModule _config queryBus modules moduleId {
                         model with
                             Hosts = model.Hosts |> Map.remove moduleId
@@ -1986,8 +2005,8 @@ module Client =
                         reinitialised with
                             Hosts = reinitialised.Hosts |> Map.add moduleId { host with Generation = generation }
                     },
-                    cmd
-                | None -> reinitialised, cmd
+                    steps
+                | None -> reinitialised, steps
 
             | SidebarGroupToggled groupKey ->
                 let prefs = SidebarPreferences.toggleExpanded groupKey model.SidebarPrefs
@@ -2031,12 +2050,12 @@ module Client =
                         |> Option.map (fun stepped -> moduleImpl, stepped))
 
                 match delivered with
-                | None -> model, Cmd.none
-                | Some(moduleImpl, (updatedModel, routedCmd)) ->
+                | None -> model, []
+                | Some(moduleImpl, (updatedModel, routedSteps)) ->
                     // A local toast when the target is not the module on
-                    // screen. A `Cmd`, because the envelope (user id, id,
+                    // screen. A signal, because the envelope (user id, id,
                     // timestamp) is built when the effect runs.
-                    let toastCmd =
+                    let toast =
                         if moduleId <> model.ActiveModuleId then
                             let text =
                                 (resolveCatalog _config model.LocaleOverride model.PlatformConfig)
@@ -2049,11 +2068,12 @@ module Client =
                                         (UserSession.getUserId ())
                                         (Notification.SystemMessage(SystemMessageLevel.Info, text))
                                 ))
-                            |> RemoteEffect.asCmd
+                            |> Do
+                            |> List.singleton
                         else
-                            Cmd.none
+                            []
 
-                    updatedModel, Cmd.batch [ routedCmd; toastCmd ]
+                    updatedModel, List.concat [ routedSteps; toast ]
 
             | ModuleEventPublished(topic, payload) ->
                 // Fan a cross-module event out to every module subscribed to
@@ -2063,16 +2083,16 @@ module Client =
                 // message, initialised first if it has never been opened.
                 // Not a trust boundary: the publisher runs in this user's
                 // client, and the server enforces access.
-                let folder (accModel, accCmds) (moduleImpl: ErasedModule) =
+                let folder (accModel, accSteps) (moduleImpl: ErasedModule) =
                     moduleImpl.EventSubscriptions
                     |> Map.tryFind topic
                     |> Option.bind (fun mapMsg ->
                         stepModule _config queryBus modules moduleImpl (mapMsg payload) accModel)
-                    |> Option.map (fun (next, cmd) -> next, cmd :: accCmds)
-                    |> Option.defaultValue (accModel, accCmds)
+                    |> Option.map (fun (next, steps) -> next, steps :: accSteps)
+                    |> Option.defaultValue (accModel, accSteps)
 
-                let finalModel, cmds = modules |> List.fold folder (model, [])
-                finalModel, Cmd.batch cmds
+                let finalModel, stepLists = modules |> List.fold folder (model, [])
+                finalModel, List.concat stepLists
 
         // Phase 852 — return the same list when nothing changed. The
         // aggregation re-runs on every message and always allocates, so
@@ -2112,7 +2132,7 @@ module Client =
         // initialised yet (no host) are skipped — the
         // lazy init at `ModuleSelected` already starts from a clean
         // slate.
-        let processedDataResetCmds =
+        let processedDataResets =
             let toKeySet (entries: ProcessedFileEntry list) =
                 entries |> List.map (fun e -> e.FileName, e.DataType) |> Set.ofList
 
@@ -2121,17 +2141,17 @@ module Client =
             let removed = Set.difference oldKeys newKeys
 
             if Set.isEmpty removed then
-                Cmd.none
+                []
             else
                 modules
                 |> List.choose (fun m ->
                     match m.NeedsData with
                     | Some _ when finalModel.Hosts |> Map.containsKey m.Definition.Id ->
-                        Some(Cmd.ofMsg (ResetModule m.Definition.Id))
+                        Some([ Then(ResetModule m.Definition.Id) ])
                     | _ -> None)
-                |> Cmd.batch
+                |> List.concat
 
-        finalModel, Cmd.batch [ cmd; processedDataResetCmds ]
+        finalModel, List.concat [ steps; processedDataResets ]
 
     /// The shell's `update`. Phase 1240 — under browser history, a message that
     /// moved the view also writes the URL, as a command (`update` performs no
@@ -2147,10 +2167,10 @@ module Client =
     /// `update` stays free of reads too. A token arriving with the reader still
     /// on the kept view is a sign-in that did not leave the page, so it goes.
     let update (config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) msg model =
-        let next, cmd = updateShell config queryBus modules msg model
+        let next, steps = updateShell config queryBus modules msg model
 
         match config.Shell.BrowserHistory with
-        | NoBrowserHistory -> next, cmd
+        | NoBrowserHistory -> next, steps
         | HashHistory ->
             let view = BrowserHistory.viewId next.ActiveModuleId next.ActivePageRoute
 
@@ -2158,14 +2178,16 @@ module Client =
                 match msg with
                 | AuthTokenAcquired ->
                     next,
-                    Cmd.batch [
-                        cmd
-                        RemoteEffect.asCmd (
-                            RemoteEffect.signal ("BrowserHistory.forgetIfNames " + view) (fun () ->
-                                BrowserHistory.forgetIfNames view)
-                        )
+                    List.concat [
+                        steps
+                        [
+                            Do(
+                                RemoteEffect.signal ("BrowserHistory.forgetIfNames " + view) (fun () ->
+                                    BrowserHistory.forgetIfNames view)
+                            )
+                        ]
                     ]
-                | _ -> next, cmd
+                | _ -> next, steps
             else
                 let writeName, write =
                     match msg with
@@ -2173,14 +2195,15 @@ module Client =
                     | _ -> "BrowserHistory.replace ", BrowserHistory.replace
 
                 next,
-                Cmd.batch [
-                    cmd
+                List.concat [
+                    steps
                     RemoteEffect.signal (writeName + view) (fun () ->
                         write view
 
                         if isSignedOut config then
                             BrowserHistory.store view)
-                    |> RemoteEffect.asCmd
+                    |> Do
+                    |> List.singleton
                 ]
 
     /// The module-state observer publish, kept out of `update` so `update`
@@ -2219,29 +2242,25 @@ module Client =
                     ModuleStateObserver.publishState moduleImpl.InspectState moduleId host.State
             | _ -> ()
 
-    /// Install `observeModuleStates` as the program's one post-update hook,
-    /// through the fork's `withTrace` seam. `unwrap` recovers the shell message from the program's
-    /// message type and `shellOf` the shell model, so a composer that
-    /// embeds the shell (ToolUp.AI's `AIClientConfig`) installs the same
-    /// hook as `Client.program`. The hook keeps the last hosts it saw, which
-    /// is what a shell message's prior state was: only shell messages move
-    /// them.
+    /// Wrap `update` with `observeModuleStates`, run after each message with
+    /// the hosts the model held before it. `unwrap` recovers the shell
+    /// message from the program's message type and `shellOf` the shell
+    /// model, so a composer that embeds the shell (ToolUp.AI's
+    /// `AIClientConfig`) observes as `Client.program` does.
     let withModuleStateObserver
         (modules: ErasedModule list)
         (unwrap: 'msg -> Msg option)
         (shellOf: 'model -> Model)
-        (prog: Program<'arg, 'model, 'msg, 'view>)
-        : Program<'arg, 'model, 'msg, 'view> =
-        let lastHosts: Map<string, ModuleHost> ref = ref Map.empty
+        (update: 'msg -> 'model -> 'model * 'steps)
+        : 'msg -> 'model -> 'model * 'steps =
+        fun msg model ->
+            let next, steps = update msg model
 
-        prog
-        |> Program.withTrace (fun msg model _ ->
             match unwrap msg with
-            | Some shellMsg ->
-                let shell = shellOf model
-                observeModuleStates modules shellMsg lastHosts.Value shell
-                lastHosts.Value <- shell.Hosts
-            | None -> ())
+            | Some shellMsg -> observeModuleStates modules shellMsg (shellOf model).Hosts (shellOf next)
+            | None -> ()
+
+            next, steps
 
     /// Controlled team switcher for the page header. Replaces the previous
     /// native `<details>` element, which had neither close-on-outside-click
@@ -2467,13 +2486,13 @@ module Client =
     // each wrapper is a FRESH closure on every render, so the props of the
     // module's memo boundary (`React.memo`, a `[<ReactComponent>]` keyed on
     // props) and of the sidebar's (`Layout.AppShell`) change identity on
-    // every shell render and neither boundary holds. The loop's own
-    // dispatcher is one function for the loop's life, so the program builds
-    // the wrappers from it once (`Program.withStableDispatch dispatchers`)
-    // and every render hands out the same ones. The wrappers are compared by
+    // every shell render and neither boundary holds. A mount hands its view
+    // one dispatch for its life, so the program builds the wrappers from it
+    // once (`programOver ... dispatchers`) and every render hands out the
+    // same ones. The wrappers are compared by
     // REFERENCE because that is the property the boundaries key on.
 
-    /// The sidebar's six callbacks for one Elmish loop.
+    /// The sidebar's six callbacks for one mount.
     type internal SidebarDispatchers = {
         Select: string -> unit
         ToggleGroup: string -> unit
@@ -2484,9 +2503,9 @@ module Client =
     }
 
     /// The shell's dispatch and the wrappers its views hand out, for one
-    /// loop. Build it with `Client.dispatchers` through
-    /// `Program.withStableDispatch`, so it is built once per loop: a set
-    /// built per render hands every boundary a new callback and holds none.
+    /// mount. Build it with `Client.dispatchers` as `programOver`'s `build`,
+    /// so it is built once per mount: a set built per render hands every
+    /// boundary a new callback and holds none.
     [<Sealed>]
     type Dispatchers internal (dispatch: Msg -> unit) =
         let byModule = System.Collections.Generic.Dictionary<string, obj -> unit>()
@@ -2500,7 +2519,7 @@ module Client =
             Reorder = fun groupKey orderedIds -> dispatch (SidebarModuleReordered(groupKey, orderedIds))
         }
 
-        /// The loop's dispatcher.
+        /// The mount's dispatcher.
         member _.Dispatch: Msg -> unit = dispatch
 
         /// The dispatcher one module's view receives: the same function on
@@ -2516,8 +2535,8 @@ module Client =
         /// The sidebar's callbacks.
         member internal _.Sidebar: SidebarDispatchers = sidebar
 
-    /// The shell's wrapper set over a loop's dispatcher — the `build` a
-    /// program hands `Program.withStableDispatch`.
+    /// The shell's wrapper set over a mount's dispatcher — the `build` a
+    /// program hands `programOver`.
     let dispatchers (dispatch: Dispatch<Msg>) : Dispatchers = Dispatchers dispatch
 
     // ─── The chrome's context values, memoised per input ────────────────
@@ -2620,7 +2639,7 @@ module Client =
 
     // ─── Phase 852 — the sliced shell (store-bound `Client.run` only) ────
     //
-    // Under the store binding (`Program.withReactStore`), the shell's chrome
+    // Mounted over a model store (`mountAt`), the shell's chrome
     // and the active module are two separate React boundaries that each
     // read their own slice of the model:
     //
@@ -2670,16 +2689,20 @@ module Client =
         /// changes by reference.
         member internal _.UseSlice(select: Model -> obj) : obj = useShellSlice select
 
-    /// Phase 910 — a `ShellStore` over `store`, finding the shell's model in
+    /// React as the store's selector hook reaches it.
+    let private reactApi = lazy (Live.react ())
+
+    /// A `ShellStore` over `store`, finding the shell's model in
     /// each published model with `shellOf`. `shellOf` must be a pure
     /// projection that returns the SAME `Model` object while the shell's
     /// model is unchanged (a record field read, e.g. `_.Shell`) — the
     /// shell's slices are compared by reference. For a program whose model
     /// IS the shell's, pass `id`.
-    let shellStore (store: ModelStore<'model, 'msg>) (shellOf: 'model -> Model) : ShellStore =
+    let shellStore (store: ModelStore<'model, 'view>) (shellOf: 'model -> Model) : ShellStore =
         ShellStore(
             box store,
-            fun select -> ModelStore.useSelector store (fun model -> select (shellOf model)) ModelStore.refEquals
+            fun select ->
+                ModelStore.useSelector reactApi.Value store (fun model -> select (shellOf model)) ModelStore.refEquals
         )
 
     /// The props of the active-module host. Every member is stable across
@@ -3519,8 +3542,8 @@ module Client =
             viewShell slot config modules chrome model dispatchers
 
     /// The shell's view: chrome, sidebar and the active module, built from
-    /// the model it is handed. `dispatchers` is the loop's wrapper set
-    /// (`Client.dispatchers` through `Program.withStableDispatch`).
+    /// the model it is handed. `dispatchers` is the mount's wrapper set
+    /// (`Client.dispatchers`, built once by `programOver`).
     let view
         (config: ClientConfig)
         (modules: ErasedModule list)
@@ -3613,9 +3636,9 @@ module Client =
         // A chrome that throws keeps the last good shell on screen and
         // reports the error as uncaught — what the whole-tree binding,
         // which builds the view outside React, always did.
-        let lastGood = useRef null
+        let lastGood = ToolUp.Elmish.React.StoreBindings.useRef null
 
-        buildHoldingLastGood lastGood (fun () ->
+        ToolUp.Elmish.React.StoreBindings.buildHoldingLastGood lastGood (fun () ->
             viewWithSignInWith (ModuleSlot.Subscribed p.Store) p.Config p.Modules p.Chrome p.Model p.Dispatchers)
 
     let private shellChrome: obj =
@@ -3629,13 +3652,13 @@ module Client =
     /// re-renders only when a shell-model field other than `Hosts`
     /// (or the `chrome` record, or the `Dispatchers`) changes, and the active
     /// module, which reads its own state from the store `shell` names.
-    /// Mount it on that same store (`Program.withReactStore`): the module
-    /// host reads the store, so the store and the binding must be one.
+    /// Mount it on that same store (`mountAt`): the module host reads the
+    /// store, so the store and the mount must be one.
     /// `Client.run` renders it over the shell's own store; a composer that
     /// wraps the shell in a model of its own renders it over its store
     /// (`Client.shellStore store _.Shell`), passing a `chrome` record and a
     /// `Dispatchers` set that keep their identity from render to render
-    /// (`Program.withStableDispatch`) — a fresh one per render re-renders
+    /// (`programOver`'s `build`) — a fresh one per render re-renders
     /// the chrome every time, which is correct output at the whole-tree cost.
     let viewSlicedOver
         (shell: ShellStore)
@@ -3659,7 +3682,7 @@ module Client =
     /// Phase 852 — the store-bound shell view over the shell's own store
     /// (`Client.run`).
     let internal viewSliced
-        (store: ModelStore<Model, Msg>)
+        (store: ModelStore<Model, ElementView<Msg>>)
         (config: ClientConfig)
         (modules: ErasedModule list)
         (chrome: ExtraChrome)
@@ -4126,7 +4149,7 @@ module Client =
         let csrfEnabled = ClientConfig.requiresAnyAuth config
         CsrfClient.installRequestGuard identityGetter apiOriginGetter correlationGetter csrfEnabled
 
-        // 0.4.1 — install the SDK's standard `Cmd.OfRemoting`
+        // Install the SDK's standard remoting
         // interceptor chain (categorised-error bridge + telemetry).
         // Idempotent: re-registering the same interceptor instance
         // no-ops via the underlying registry's reference check.
@@ -4252,75 +4275,71 @@ module Client =
         // composition without dev tools.
         log.Info(bootSummary config modules)
 
-    /// The shell's boot-time background subscriptions — the
-    /// NavigationRequest bus (deep links, Home tool cards, admin-landing
-    /// tiles, AI navigate tools), the cross-module client event bus, the
-    /// SSE notification stream, the auth-token-acquired watcher, and the
-    /// auth-bridge health observer — as lifetime-aware `EffectHandle`s.
+    /// The shell's long-lived message sources, each a `Subscription` the
+    /// shell's model lists as a resource under its site label: the
+    /// navigation-request bus (deep links, Home tool cards, admin-landing
+    /// tiles, AI navigate tools), the locale-request bus, the cross-module
+    /// event bus, the session-epoch reconciliation, the notification stream,
+    /// the auth-token-acquired watcher, the auth-bridge health observer, the
+    /// cross-tab identity watch, the shell dispatcher the modules' context
+    /// callbacks send through, and browser history when it is configured.
+    /// The runtime starts each once and stops each once when the mount
+    /// terminates (an unmount, or a hot reload).
     ///
-    /// `Client.program` attaches every one of these (via
-    /// `withShellLifetimeEffects` below). **So must any outer composer
-    /// that rebuilds the Program from the shell's `init`/`update`/`view`
-    /// pieces** (e.g. ToolUp.AI's `withSidePanel`), mapping each handle
-    /// into its outer Msg with `EffectHandle.map` — Elmish does not expose
-    /// a built Program's internals post-construction, so a composer that
-    /// stitches the shell's pieces into an outer Program starts from an
-    /// EMPTY effect list. Dropping them silently severs every seam listed
-    /// above: the failure mode is not an error but a bus with no
-    /// subscriber (`NavigationRequest.request` is a documented no-op with
-    /// zero subscribers — an admin-landing tile click simply does
-    /// nothing).
-    let programLifetimeEffects (config: ClientConfig) : EffectHandle<Msg> list =
-        // 0.4.1 — boot-time NavigationRequest + NotificationClient
-        // subscriptions registered as lifetime-aware `EffectHandle`s.
-        // The runtime disposes them on `IDispatcher.Terminate()` (which
-        // the React adapter fires on `beforeunload` and HMR fires on
-        // hot-reload), so the SSE / notification leak across page
-        // navigation and HMR is gone. Wrapping the upstream
-        // `unit -> unit` unsubscribe into `IDisposable.Dispose` is
-        // mechanical — both `NavigationRequest.subscribe` and
-        // `NotificationClient.subscribe` already return their own
-        // teardown thunk.
-        let navigationEffect =
-            EffectHandle.programLifetime "navigation-request" (fun dispatch ->
-                let unsubscribe =
-                    NavigationRequest.subscribe (fun sidebarId -> dispatch (ModuleSelected sidebarId))
+    /// A composer that embeds the shell in a model of its own lists these
+    /// too (`resources`, lifted with `Subscription.map`), or every seam above
+    /// is silently severed: `NavigationRequest.request` is a documented
+    /// no-op with zero subscribers, so an admin-landing tile click simply
+    /// does nothing.
+    let subscriptions (config: ClientConfig) : Subscription<Msg> list =
+        let navigation =
+            Subscription(
+                "navigation-request",
+                fun dispatch ->
+                    let unsubscribe =
+                        NavigationRequest.subscribe (fun sidebarId -> dispatch (ModuleSelected sidebarId))
 
-                { new System.IDisposable with
-                    member _.Dispose() = unsubscribe ()
-                })
+                    { new System.IDisposable with
+                        member _.Dispose() = unsubscribe ()
+                    }
+            )
 
-        // Phase 444 — shell-locale switch subscription. Translates every
+        // The shell-locale switch subscription. Translates every
         // `LocaleRequest.request` into a `LocaleSwitched` dispatch, which
-        // runs the `TeamSwitched`-shaped reset. Same lifetime-aware shape
-        // and the same teardown contract as the navigation subscription
+        // runs the `TeamSwitched`-shaped reset. The same shape and the
+        // same teardown contract as the navigation subscription
         // above; the seam is a mutable global for the same reason
         // `NavigationRequest` is, so a language picker in a consumer's own
         // chrome needs no dependency on the shell's `Msg` type.
-        let localeRequestEffect =
-            EffectHandle.programLifetime "locale-request" (fun dispatch ->
-                let unsubscribe =
-                    LocaleRequest.subscribe (fun locale -> dispatch (LocaleSwitched locale))
+        let localeRequest =
+            Subscription(
+                "locale-request",
+                fun dispatch ->
+                    let unsubscribe =
+                        LocaleRequest.subscribe (fun locale -> dispatch (LocaleSwitched locale))
 
-                { new System.IDisposable with
-                    member _.Dispose() = unsubscribe ()
-                })
+                    { new System.IDisposable with
+                        member _.Dispose() = unsubscribe ()
+                    }
+            )
 
         // Cross-module client event bus subscription. Translates every
         // `ModuleEvents.publish` into a `ModuleEventPublished` dispatch the
-        // shell update fans out to subscribing modules. Same
-        // lifetime-aware shape as the navigation subscription above —
-        // disposed on `IDispatcher.Terminate()` / HMR.
-        let moduleEventsEffect =
-            EffectHandle.programLifetime "module-events" (fun dispatch ->
-                let unsubscribe =
-                    ModuleEvents.subscribe (fun topic payload -> dispatch (ModuleEventPublished(topic, payload)))
+        // shell update fans out to subscribing modules. The same shape as
+        // the navigation subscription above.
+        let moduleEvents =
+            Subscription(
+                "module-events",
+                fun dispatch ->
+                    let unsubscribe =
+                        ModuleEvents.subscribe (fun topic payload -> dispatch (ModuleEventPublished(topic, payload)))
 
-                { new System.IDisposable with
-                    member _.Dispose() = unsubscribe ()
-                })
+                    { new System.IDisposable with
+                        member _.Dispose() = unsubscribe ()
+                    }
+            )
 
-        // Phase 6p — session-store reconciliation. Three jobs, one
+        // Session-store reconciliation. Three jobs, one
         // lifetime: relay `SessionEpoch`'s fan-out into the shell's
         // `Msg` (so the shell's own state clears wherever the reset was
         // detected), re-check the epoch when the tab comes back to the
@@ -4333,135 +4352,139 @@ module Client =
         // Both are events that fire rarely and cost one read each; a
         // deployment that never evicts sees the read return a matching
         // epoch and dispatches nothing (GP 11).
-        let sessionEpochEffect =
-            EffectHandle.programLifetime "session-epoch" (fun dispatch ->
-                let unsubscribeReset =
-                    SessionEpoch.subscribe (fun notice -> dispatch (SessionStoreReset notice))
+        let sessionEpoch =
+            Subscription(
+                "session-epoch",
+                fun dispatch ->
+                    let unsubscribeReset =
+                        SessionEpoch.subscribe (fun notice -> dispatch (SessionStoreReset notice))
 
-                let recheck () =
-                    Async.StartImmediate(
-                        async {
-                            let! _ = SessionEpoch.check ()
-                            return ()
-                        }
-                    )
+                    let recheck () =
+                        Async.StartImmediate(
+                            async {
+                                let! _ = SessionEpoch.check ()
+                                return ()
+                            }
+                        )
 
-                // `visibilitychange` rather than `focus`: it fires for the
-                // tab-switch case the operator report describes (the user
-                // left the tab open and came back), and unlike `focus` it
-                // does not fire for every click back into the window from
-                // a devtools pane or another app, which would turn a
-                // once-per-return read into a per-interaction one.
-                let onVisibility =
-                    fun (_: Browser.Types.Event) ->
-                        if SessionEpoch.documentVisible () then
-                            recheck ()
+                    // `visibilitychange` rather than `focus`: it fires for the
+                    // tab-switch case the operator report describes (the user
+                    // left the tab open and came back), and unlike `focus` it
+                    // does not fire for every click back into the window from
+                    // a devtools pane or another app, which would turn a
+                    // once-per-return read into a per-interaction one.
+                    let onVisibility =
+                        fun (_: Browser.Types.Event) ->
+                            if SessionEpoch.documentVisible () then
+                                recheck ()
 
-                Browser.Dom.document.addEventListener ("visibilitychange", unbox onVisibility)
+                    Browser.Dom.document.addEventListener ("visibilitychange", unbox onVisibility)
 
-                let unsubscribeOpened = NotificationClient.onConnectionOpened recheck
+                    let unsubscribeOpened = NotificationClient.onConnectionOpened recheck
 
-                { new System.IDisposable with
-                    member _.Dispose() =
-                        unsubscribeReset ()
-                        unsubscribeOpened ()
-                        Browser.Dom.document.removeEventListener ("visibilitychange", unbox onVisibility)
-                })
+                    { new System.IDisposable with
+                        member _.Dispose() =
+                            unsubscribeReset ()
+                            unsubscribeOpened ()
+                            Browser.Dom.document.removeEventListener ("visibilitychange", unbox onVisibility)
+                    }
+            )
 
-        let notificationsEffect =
-            EffectHandle.programLifetime "notifications-stream" (fun dispatch ->
-                let onEnvelope (envelope: NotificationEnvelope) =
-                    match envelope.Notification with
-                    | Notification.ModuleAction(moduleId, actionKey, payloadJson) ->
-                        dispatch (ModuleActionReceived(moduleId, actionKey, payloadJson))
-                    | Notification.CustomNotification(key, payloadJson) when key = SessionStoreResetKey ->
-                        // Phase 6p — the authoritative arm. The server
-                        // publishes this on eviction-then-recreate, so
-                        // the epoch it carries needs no round trip to
-                        // confirm. `applyServerNotice` adopts it and
-                        // fans out once; a focus check moments later
-                        // sees a match and stays silent.
-                        SessionEpoch.applyServerNoticeJson payloadJson
-                    | Notification.MembershipChanged payload ->
-                        // Server-side bridge filters by AffectedUserId
-                        // before forwarding to this connection — every
-                        // event delivered here targets this user. Route
-                        // by `ChangeKind` to internal Msgs that compare
-                        // against `model.ActiveTeamId` (this closure
-                        // can't read the model directly).
-                        match payload.ChangeKind with
-                        | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId.Value)
-                        | MembershipChangeKind.ActiveTeamSet -> dispatch (MembershipActiveTeamSet payload.TeamId.Value)
-                        | MembershipChangeKind.Added -> dispatch (MembershipAdded payload.TeamId.Value)
-                        | MembershipChangeKind.RoleChanged -> ()
-                    | _ -> ()
+        let notifications =
+            Subscription(
+                "notifications-stream",
+                fun dispatch ->
+                    let onEnvelope (envelope: NotificationEnvelope) =
+                        match envelope.Notification with
+                        | Notification.ModuleAction(moduleId, actionKey, payloadJson) ->
+                            dispatch (ModuleActionReceived(moduleId, actionKey, payloadJson))
+                        | Notification.CustomNotification(key, payloadJson) when key = SessionStoreResetKey ->
+                            // The authoritative arm. The server
+                            // publishes this on eviction-then-recreate, so
+                            // the epoch it carries needs no round trip to
+                            // confirm. `applyServerNotice` adopts it and
+                            // fans out once; a focus check moments later
+                            // sees a match and stays silent.
+                            SessionEpoch.applyServerNoticeJson payloadJson
+                        | Notification.MembershipChanged payload ->
+                            // Server-side bridge filters by AffectedUserId
+                            // before forwarding to this connection — every
+                            // event delivered here targets this user. Route
+                            // by `ChangeKind` to internal Msgs that compare
+                            // against `model.ActiveTeamId` (this closure
+                            // can't read the model directly).
+                            match payload.ChangeKind with
+                            | MembershipChangeKind.Removed -> dispatch (MembershipRevoked payload.TeamId.Value)
+                            | MembershipChangeKind.ActiveTeamSet ->
+                                dispatch (MembershipActiveTeamSet payload.TeamId.Value)
+                            | MembershipChangeKind.Added -> dispatch (MembershipAdded payload.TeamId.Value)
+                            | MembershipChangeKind.RoleChanged -> ()
+                        | _ -> ()
 
-                // 0.5.5 — gate the SSE subscribe on auth state. In an
-                // auth-required deployment, opening the EventSource
-                // before sign-in produces a guaranteed 401 (the server
-                // can't read an Authorization header — EventSource
-                // doesn't send custom headers — and the cookie isn't
-                // populated yet either). The pre-0.5.5 path eagerly
-                // subscribed at boot, the connection 401'd, and SSE's
-                // no-retry policy kept it closed for the rest of the
-                // session — so even a successful sign-in didn't restore
-                // notifications. Defer the subscribe until a token is
-                // present; re-subscribe on `None → Some` transitions so
-                // sign-in mid-session restores the channel without
-                // a page reload.
-                let needsAuth = ClientConfig.requiresAnyAuth config
-                let mutable currentUnsubscribe: (unit -> unit) option = None
+                    // Gate the SSE subscribe on auth state. In an
+                    // auth-required deployment, opening the EventSource
+                    // before sign-in produces a guaranteed 401 (the server
+                    // can't read an Authorization header — EventSource
+                    // doesn't send custom headers — and the cookie isn't
+                    // populated yet either). An eager
+                    // subscribed at boot, the connection 401'd, and SSE's
+                    // no-retry policy kept it closed for the rest of the
+                    // session — so even a successful sign-in didn't restore
+                    // notifications. Defer the subscribe until a token is
+                    // present; re-subscribe on `None → Some` transitions so
+                    // sign-in mid-session restores the channel without
+                    // a page reload.
+                    let needsAuth = ClientConfig.requiresAnyAuth config
+                    let mutable currentUnsubscribe: (unit -> unit) option = None
 
-                let subscribeNow () =
-                    if currentUnsubscribe.IsNone then
-                        currentUnsubscribe <- Some(NotificationClient.subscribe onEnvelope)
+                    let subscribeNow () =
+                        if currentUnsubscribe.IsNone then
+                            currentUnsubscribe <- Some(NotificationClient.subscribe onEnvelope)
 
-                let unsubscribeNow () =
-                    match currentUnsubscribe with
-                    | Some u ->
-                        u ()
-                        currentUnsubscribe <- None
-                    | None -> ()
+                    let unsubscribeNow () =
+                        match currentUnsubscribe with
+                        | Some u ->
+                            u ()
+                            currentUnsubscribe <- None
+                        | None -> ()
 
-                let hasTokenNow () =
-                    UserSession.getAuthToken () |> Option.isSome
+                    let hasTokenNow () =
+                        UserSession.getAuthToken () |> Option.isSome
 
-                if not needsAuth || hasTokenNow () then
-                    subscribeNow ()
+                    if not needsAuth || hasTokenNow () then
+                        subscribeNow ()
 
-                let stopWatcher =
-                    if needsAuth then
-                        UserSession.onAuthTokenChange (fun token ->
-                            match token with
-                            | Some _ ->
-                                subscribeNow ()
-                                // Phase 117 — a transition with a token present
-                                // is a sign-in or a token-identity change: cycle
-                                // the EventSource so the stream re-registers
-                                // under the fresh identity (no-op for same-user
-                                // token refreshes; also clears the give-up
-                                // latch so a pre-sign-in 401 doesn't keep
-                                // notifications dead after sign-in).
-                                NotificationClient.reconnect ()
-                            | None ->
-                                unsubscribeNow ()
-                                // Phase 117 — sign-out: close the stream so the
-                                // previous user's subscription doesn't outlive
-                                // the session (pre-117 only the shell's handler
-                                // was removed; the EventSource stayed registered
-                                // under the old identity and kept receiving
-                                // their broadcasts).
-                                NotificationClient.reset ())
-                    else
-                        ignore
+                    let stopWatcher =
+                        if needsAuth then
+                            UserSession.onAuthTokenChange (fun token ->
+                                match token with
+                                | Some _ ->
+                                    subscribeNow ()
+                                    // A transition with a token present
+                                    // is a sign-in or a token-identity change: cycle
+                                    // the EventSource so the stream re-registers
+                                    // under the fresh identity (no-op for same-user
+                                    // token refreshes; also clears the give-up
+                                    // latch so a pre-sign-in 401 doesn't keep
+                                    // notifications dead after sign-in).
+                                    NotificationClient.reconnect ()
+                                | None ->
+                                    unsubscribeNow ()
+                                    // Sign-out: close the stream so the
+                                    // previous user's subscription doesn't outlive
+                                    // the session.
+                                    NotificationClient.reset ())
+                        else
+                            ignore
 
-                { new System.IDisposable with
-                    member _.Dispose() =
-                        stopWatcher ()
-                        unsubscribeNow ()
-                })
+                    { new System.IDisposable with
+                        member _.Dispose() =
+                            stopWatcher ()
+                            unsubscribeNow ()
+                    }
+            )
 
-        // 0.5.5 — auth-token-acquired observer. Polls
+        // The auth-token-acquired observer. Polls
         // `localStorage.toolup-auth-token` via
         // `UserSession.onAuthTokenChange` and dispatches
         // `AuthTokenAcquired` when it transitions `None → Some` (the
@@ -4477,128 +4500,211 @@ module Client =
         // `None → Some` is the only transition that fires the dispatch.
         // `Some → Some` (rotation / refresh) and `Some → None`
         // (sign-out) are no-ops — the shell's `TeamSwitched` /
-        // `MembershipRevoked` paths and the `Cmd.OfRemoting`
-        // categorised-error interceptor handle those concerns.
-        let authTokenAcquiredEffect =
-            EffectHandle.programLifetime "auth-token-acquired" (fun dispatch ->
-                let mutable lastWasNone = UserSession.getAuthToken () |> Option.isNone
+        // `MembershipRevoked` paths and the remoting interceptor
+        // chain's categorised-error interceptor handle those concerns.
+        let authTokenAcquired =
+            Subscription(
+                "auth-token-acquired",
+                fun dispatch ->
+                    let mutable lastWasNone = UserSession.getAuthToken () |> Option.isNone
 
-                let unsubscribe =
-                    UserSession.onAuthTokenChange (fun token ->
-                        match lastWasNone, token with
-                        | true, Some _ ->
-                            lastWasNone <- false
-                            dispatch AuthTokenAcquired
-                        | _, None -> lastWasNone <- true
-                        | false, Some _ -> ())
+                    let unsubscribe =
+                        UserSession.onAuthTokenChange (fun token ->
+                            match lastWasNone, token with
+                            | true, Some _ ->
+                                lastWasNone <- false
+                                dispatch AuthTokenAcquired
+                            | _, None -> lastWasNone <- true
+                            | false, Some _ -> ())
 
-                { new System.IDisposable with
-                    member _.Dispose() = unsubscribe ()
-                })
+                    { new System.IDisposable with
+                        member _.Dispose() = unsubscribe ()
+                    }
+            )
 
-        // Phase 121 — auth-bridge health observer. `UserSession` counts
+        // The auth-bridge health observer. `UserSession` counts
         // consecutive `GetJwt` failures and notifies once the streak
         // crosses its threshold (and again on recovery); the shell maps
         // the transition onto the boot-degradation banner so a silently-
         // expiring session is visible before the user is signed out.
-        let bridgeHealthEffect =
-            EffectHandle.programLifetime "auth-bridge-health" (fun dispatch ->
-                let unsubscribe =
-                    UserSession.onBridgeHealthChange (fun health ->
-                        match health with
-                        | Some message -> dispatch (BootLoadFailed(BootSources.Key.AuthBridge, message))
-                        | None -> dispatch (BootLoadRecovered BootSources.Key.AuthBridge))
-
-                { new System.IDisposable with
-                    member _.Dispose() = unsubscribe ()
-                })
-
-        // Another tab's sign-in / sign-out changes the identity this tab's
-        // requests carry; the watch routes it through the one identity-change
-        // seam. A program-lifetime effect, so a hot reload disposes the
-        // listener with the loop that installed it.
-        let identityAcrossTabsEffect =
-            EffectHandle.programLifetime "identity-across-tabs" (fun _ ->
-                let unsubscribe = UserSession.watchIdentityAcrossTabs ()
-
-                { new System.IDisposable with
-                    member _.Dispose() = unsubscribe ()
-                })
-
-        // Phase 1240 — Back and Forward reach the shell as the ordinary
-        // `ModuleSelected`, so the route guard, the area flip and the lazy
-        // `Init` all apply. Attached only under browser history: by default the
-        // shell does not listen, and this list is what it was.
-        let browserHistoryEffects =
-            match config.Shell.BrowserHistory with
-            | NoBrowserHistory -> []
-            | HashHistory -> [
-                EffectHandle.programLifetime "browser-history" (fun dispatch ->
+        let bridgeHealth =
+            Subscription(
+                "auth-bridge-health",
+                fun dispatch ->
                     let unsubscribe =
-                        BrowserHistory.subscribe RegisteredModules.snapshot (fun sidebarId ->
-                            dispatch (ModuleSelected sidebarId))
+                        UserSession.onBridgeHealthChange (fun health ->
+                            match health with
+                            | Some message -> dispatch (BootLoadFailed(BootSources.Key.AuthBridge, message))
+                            | None -> dispatch (BootLoadRecovered BootSources.Key.AuthBridge))
 
                     { new System.IDisposable with
                         member _.Dispose() = unsubscribe ()
-                    })
+                    }
+            )
+
+        // Another tab's sign-in / sign-out changes the identity this tab's
+        // requests carry; the watch routes it through the one identity-change
+        // seam. A resource, so a hot reload disposes the listener with the
+        // runtime that started it.
+        let identityAcrossTabs =
+            Subscription(
+                "identity-across-tabs",
+                fun _ ->
+                    let unsubscribe = UserSession.watchIdentityAcrossTabs ()
+
+                    { new System.IDisposable with
+                        member _.Dispose() = unsubscribe ()
+                    }
+            )
+
+        // Back and Forward reach the shell as the ordinary
+        // `ModuleSelected`, so the route guard, the area flip and the lazy
+        // `Init` all apply. Attached only under browser history: by default the
+        // shell does not listen, and this list is what it was.
+        let browserHistory =
+            match config.Shell.BrowserHistory with
+            | NoBrowserHistory -> []
+            | HashHistory -> [
+                Subscription(
+                    "browser-history",
+                    fun dispatch ->
+                        let unsubscribe =
+                            BrowserHistory.subscribe RegisteredModules.snapshot (fun sidebarId ->
+                                dispatch (ModuleSelected sidebarId))
+
+                        { new System.IDisposable with
+                            member _.Dispose() = unsubscribe ()
+                        }
+                )
               ]
 
+        // The shell dispatcher: a module's `OnTeamSwitched` and
+        // `OnAccessibleModulesChanged` callbacks send through it. Held while
+        // the runtime runs this resource and inactive from its stop on, so a
+        // callback after an unmount or a hot reload sends nothing.
+        let dispatcher =
+            Subscription(
+                "shell-dispatcher",
+                fun dispatch ->
+                    let active = ref true
+
+                    shellDispatcher <-
+                        Some {
+                            SendToShell = dispatch
+                            ShellIsActive = fun () -> active.Value
+                        }
+
+                    { new System.IDisposable with
+                        member _.Dispose() = active.Value <- false
+                    }
+            )
+
         [
-            navigationEffect
-            localeRequestEffect
-            moduleEventsEffect
-            sessionEpochEffect
-            notificationsEffect
-            authTokenAcquiredEffect
-            bridgeHealthEffect
-            identityAcrossTabsEffect
+            navigation
+            localeRequest
+            moduleEvents
+            sessionEpoch
+            notifications
+            authTokenAcquired
+            bridgeHealth
+            identityAcrossTabs
+            dispatcher
         ]
-        @ browserHistoryEffects
+        @ browserHistory
 
-    /// Attach every shell program-lifetime effect to `prog`, lifting each
-    /// into the program's message type via `wrap`. `Client.program` calls
-    /// this with `id`; an outer composer wrapping the shell calls it with
-    /// its shell-message constructor (e.g. `ShellMsg`). One definition
-    /// site, so the shell and every composer attach the same set and a
-    /// new shell effect cannot be silently missing from a composed app.
-    ///
-    /// Phase 931 — it also captures the program's dispatcher as the
-    /// shell's (lifted through `wrap`), which is what the
-    /// `ClientModuleContext.OnTeamSwitched` and `OnAccessibleModulesChanged`
-    /// callbacks dispatch through. The capture used to live at
-    /// `Client.run`'s mount alone, so a composer that rebuilt the Program
-    /// from the shell's pieces (ToolUp.AI's `AIClientConfig.run`) handed
-    /// its modules two callbacks that did nothing.
-    let withShellLifetimeEffects
-        (config: ClientConfig)
-        (wrap: Msg -> 'msg)
-        (prog: Program<'arg, 'model, 'msg, 'view>)
-        : Program<'arg, 'model, 'msg, 'view> =
-        let captureShellDispatcher (dispatcher: IDispatcher<'msg>) =
-            shellDispatcher <-
-                Some {
-                    SendToShell = fun msg -> dispatcher.Dispatch(wrap msg)
-                    ShellIsActive = fun () -> dispatcher.IsActive
-                }
+    /// The shell's resources: each of `subscriptions` under its site label.
+    /// They do not depend on the model, so the runtime starts each once.
+    let resources (config: ClientConfig) : Map<ResourceKey, Subscription<Msg>> =
+        subscriptions config
+        |> List.map (fun subscription -> ResourceKey.constant subscription.Site, subscription)
+        |> Map.ofList
 
-        (prog, programLifetimeEffects config)
-        ||> List.fold (fun p effect -> p |> Program.withEffect (EffectHandle.map wrap effect))
-        |> Program.withDispatcherHandle captureShellDispatcher
+    /// A shell-hosting application ready to mount: the component, the
+    /// interpreter its effects and subscriptions run through, and the
+    /// runtime host its clock and its error reports come from.
+    type ShellProgram<'model, 'msg> = {
+        Component: Component<unit, 'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>>
+        Interpreter: Interpreter<'msg, RemoteEffect<'msg>, Subscription<'msg>>
+        Host: Host<'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>>
+    }
+
+    /// The error a runtime report carries to the shell's error sink, in the
+    /// context the shell has always reported: the phase, the text and the
+    /// exception. `None` for a report that is not an error.
+    let errorContextOf (report: Report<'msg, RemoteEffect<'msg>, Subscription<'msg>>) : ErrorContext option =
+        let context phase message ex : ErrorContext option =
+            Some {
+                Phase = phase
+                ModuleId = None
+                CorrelationId = None
+                Message = message
+                Exception = ex
+            }
+
+        let refusalText refusal =
+            match refusal with
+            | Denied reason -> "denied: " + reason
+            | ChainTooLong limit -> sprintf "the message chain was longer than %d" limit
+            | Unregistered kind -> "no performer registers the effect kind " + kind
+            | Refusal.PerformerThrew(_, ex) -> "an effect's performer threw: " + ex.Message
+            | Stale -> "stale"
+            | Rejected -> "rejected"
+            | Cancelled -> "cancelled"
+            | UpdateThrew ex -> ex.Message
+
+        match report with
+        | StepRefused(BootStep _, UpdateThrew ex) -> context ErrorPhase.Init "Error initialising" ex
+        | StepRefused(Step envelope, UpdateThrew ex) ->
+            context
+                (ErrorPhase.Update(box envelope.Msg))
+                ("Unable to process the message: " + Program.safeMsgRepr envelope.Msg)
+                ex
+        | StepRefused(BootStep _, refusal) ->
+            let text = refusalText refusal
+            context ErrorPhase.Init ("Error initialising: " + text) (exn text)
+        | StepRefused(Step envelope, refusal) ->
+            let text = refusalText refusal
+
+            context
+                (ErrorPhase.Update(box envelope.Msg))
+                ("Unable to process the message: "
+                 + Program.safeMsgRepr envelope.Msg
+                 + ": "
+                 + text)
+                (exn text)
+        | Report.PerformerThrew(_, effect, ex) ->
+            let args =
+                (RemoteEffect.handle effect).Invocation.Args
+                |> Option.defaultValue "<anonymous>"
+
+            context (ErrorPhase.Update(box ())) ("Error handling the effect: " + args) ex
+        | ResourceLost(ResourceKey path, _, ex) ->
+            let key = String.concat "/" path
+            context (ErrorPhase.Subscription key) ("Error starting subscription: " + key) ex
+        | StopThrew(ResourceKey path, ex) ->
+            let key = String.concat "/" path
+            context (ErrorPhase.Subscription key) ("Error stopping subscription: " + key) ex
+        | ResourcesThrew ex -> context (ErrorPhase.Update(box ())) "Error listing the resources" ex
+        | EnvelopeNotAccepted _
+        | Yielded _ -> None
 
     /// The program builder every shell-hosting program shares — the shell's
     /// own and any composer that embeds the shell in a model of its own.
-    /// Runtime errors go to `ClientConfig.Composition.OnElmishError` (else the
-    /// `client.elmish` logger), each update is traced through the
-    /// `client.elmish.trace` logger when `EnableElmishConsoleTrace` is set,
-    /// and the view receives the loop's wrapper set, built once per loop
-    /// from its dispatcher by `build` (`Program.withStableDispatch`).
+    /// Runtime errors (a throwing `update`, `view` or performer, a refused
+    /// step, a subscription that fails to start or stop) go to
+    /// `ClientConfig.Composition.OnElmishError` (else the `client.elmish`
+    /// logger); each update is traced through the `client.elmish.trace`
+    /// logger when `EnableElmishConsoleTrace` is set; and the view receives
+    /// the wrapper set `build` makes from the mount's dispatch, built once
+    /// per mount: a mount hands its view one dispatch for its life.
     let programOver
         (config: ClientConfig)
-        (init: unit -> 'model * Cmd<'msg>)
-        (update: 'msg -> 'model -> 'model * Cmd<'msg>)
+        (init: unit -> 'model * Step<'msg, RemoteEffect<'msg>> list)
+        (update: 'msg -> 'model -> 'model * Step<'msg, RemoteEffect<'msg>> list)
+        (resources: 'model -> Map<ResourceKey, Subscription<'msg>>)
         (build: Dispatch<'msg> -> 'stable)
         (view: 'model -> 'stable -> ReactElement)
-        : Program<unit, 'model, 'msg, ReactElement> =
+        : ShellProgram<'model, 'msg> =
         let elmishLog = Logger.forCategory "client.elmish"
 
         let elmishReporter (ctx: ErrorContext) =
@@ -4622,28 +4728,71 @@ module Client =
             traceLog.Debug("msg=" + Program.safeMsgRepr msg)
             next
 
-        // The view is set by `withStableDispatch` below; `mkProgram` only
-        // needs a placeholder for it.
-        Program.mkProgram
-            init
-            (if config.Composition.EnableElmishConsoleTrace then
-                 traceUpdate
-             else
-                 update)
-            (fun _ _ -> Html.none)
-        |> Program.withStableDispatch build view
-        |> Program.withErrorReporter elmishReporter
+        // The wrapper set for the mount's one dispatch: built on the first
+        // render, and again only when a new mount (a hot reload) hands the
+        // view a new dispatch.
+        let built: (Dispatch<'msg> * 'stable) option ref = ref None
 
-    /// The shell Program over a given shell view (whole-tree or sliced).
+        let stableFor (dispatch: Dispatch<'msg>) =
+            match built.Value with
+            | Some(seen, stable) when obj.ReferenceEquals(seen, dispatch) -> stable
+            | _ ->
+                let stable = build dispatch
+                built.Value <- Some(dispatch, stable)
+                stable
+
+        // The view is built inside React's render of the mount's root. A view
+        // that throws is reported to the error sink, and the last element
+        // that built stays on screen (reported as uncaught), as the store
+        // binding always held it; a throw on the first build propagates.
+        let render (model: 'model) : ElementView<'msg> =
+            ElementView(fun dispatch ->
+                let lastGood = ToolUp.Elmish.React.StoreBindings.useRef null
+
+                ToolUp.Elmish.React.StoreBindings.buildHoldingLastGood lastGood (fun () ->
+                    try
+                        view model (stableFor dispatch)
+                    with ex ->
+                        elmishReporter {
+                            ErrorContext.Phase = ErrorPhase.View
+                            ModuleId = None
+                            CorrelationId = None
+                            Message = "Error rendering the model"
+                            Exception = ex
+                        }
+
+                        reraise ()))
+
+        let host = {
+            Host.create (fun () -> System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) 0UL ignore with
+                Report = fun report -> errorContextOf report |> Option.iter elmishReporter
+        }
+
+        {
+            Component =
+                Component.plain
+                    init
+                    (if config.Composition.EnableElmishConsoleTrace then
+                         traceUpdate
+                     else
+                         update)
+                    resources
+                    render
+            Interpreter = RemoteEffect.interpreter
+            Host = host
+        }
+
+    /// The shell program over a given shell view (whole-tree or sliced).
     let private programWith
         (shellView: ClientConfig -> ErasedModule list -> ExtraChrome -> Model -> Dispatchers -> ReactElement)
         (config: ClientConfig)
         (modules: ErasedModule list)
-        : Program<unit, Model, Msg, ReactElement> =
+        : ShellProgram<Model, Msg> =
         boot config modules
 
         let allModules = prepareModules config modules
         let queryBus = buildQueryBus allModules
+        let shellResources = resources config
 
         // AuthUI gating is driven by ClientConfig.Auth.AuthUI — default
         // NoAuthUI is pass-through, so DEBUG and RELEASE behave the
@@ -4651,74 +4800,76 @@ module Client =
         programOver
             config
             (init config queryBus allModules)
-            (update config queryBus allModules)
+            (withModuleStateObserver allModules Some id (update config queryBus allModules))
+            (fun _ -> shellResources)
             dispatchers
             (fun model stable -> shellView config allModules emptyChrome model stable)
-        |> withModuleStateObserver allModules Some id
-        |> withShellLifetimeEffects config id
 
-    /// Build the shell Elmish Program without running it. Outer composition
-    /// (e.g. AIClientConfig.withAIAssistant) consumes this to layer
-    /// additional state, messages, subscriptions, and view chrome on top.
-    /// Its view is the whole-tree `viewWithSignIn`, which any React binding
-    /// renders; `run` mounts the store-bound sliced shell instead.
-    let program (config: ClientConfig) (modules: ErasedModule list) : Program<unit, Model, Msg, ReactElement> =
+    /// Build the shell program without mounting it. An outer composer
+    /// (ToolUp.AI's `AIClientConfig`) builds its own over the shell's
+    /// `init`, `update`, `resources` and views instead. Its view is the
+    /// whole-tree `viewWithSignIn`; `run` mounts the store-bound sliced
+    /// shell.
+    let program (config: ClientConfig) (modules: ErasedModule list) : ShellProgram<Model, Msg> =
         programWith viewWithSignIn config modules
 
+    /// Mount `program` at `"elmish-app"`, publishing to `store`: fresh, or
+    /// over server-rendered markup with `Hydrate`, and hot-reloaded under
+    /// the same id in a development build. A view that reads slices of the
+    /// model reads them from `store` (`shellStore`).
+    let inline mountAt
+        (attach: Attach)
+        (store: ModelStore<'model, ElementView<'msg>>)
+        (program: ShellProgram<'model, 'msg>)
+        : Mounted<unit, 'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>> =
+        Mount.mount
+            (Live.binding ())
+            {
+                Mount.options (Live.container "elmish-app") ElementView.toElement program.Host with
+                    Attach = attach
+                    Store = store
+                    HotKey = Some "elmish-app"
+                    Shape = Live.shapeOf<'model> ()
+            }
+            program.Component
+            program.Interpreter
+            ()
+
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
-    /// the full shell bootstrap (the dispatcher has rendered its own program).
+    /// the full shell bootstrap (the dispatcher has rendered its own page).
     /// Returns `false` otherwise — the caller should bootstrap the full shell.
-    ///
-    /// 0.4.1 — PublicEntryDispatcher implementors should compose
-    /// `Program.withDispatcherHandle (fun _ -> ())` against their
-    /// minimal program (or accept the React adapter's auto-installed
-    /// dispatch sink that fires on `beforeunload`) so any background
-    /// callback they grow gets the same `IDispatcher.IsActive` /
-    /// `Terminate()` lifecycle guard the full shell enjoys. The
-    /// `IDispatcher` dispatched here is per-dispatcher-program — the
-    /// shell's `shellDispatcher` does not bleed across.
     let tryDispatchPublicEntry (config: ClientConfig) : bool =
         config.Composition.PublicEntryDispatchers
         |> List.exists (fun dispatch -> dispatch config)
 
-    /// Phase 852 / 910 — mount the store-bound shell at `"elmish-app"`: the
-    /// chrome and the active module are separate boundaries over one model
-    /// store, so a message that changes only the active module's state
-    /// re-renders that module and no chrome. One store per run; the view's
-    /// module host and the binding read the same one. `hydrate` adopts a
-    /// server-rendered tree (`hydrateRoot`) instead of rendering from
-    /// scratch — `Bootstrap.Hydration.run`'s prerendered branch.
+    /// Mount the store-bound shell at `"elmish-app"`: the chrome and the
+    /// active module are separate boundaries over one model store, so a
+    /// message that changes only the active module's state re-renders that
+    /// module and no chrome. One store per run; the view's module host and
+    /// the mount read the same one. `hydrate` adopts a server-rendered tree
+    /// (`hydrateRoot`) instead of rendering from scratch —
+    /// `Bootstrap.Hydration.run`'s prerendered branch.
     let internal runStoreBound (hydrate: bool) (config: ClientConfig) (modules: ErasedModule list) =
-        let store = ModelStore.create<Model, Msg> ()
+        let store = ModelStore<Model, ElementView<Msg>>()
 
-        let bind =
-            if hydrate then
-                Program.withReactStoreHydrate store "elmish-app"
-            else
-                Program.withReactStore store "elmish-app"
-
-        // The shell dispatcher is captured by `withShellLifetimeEffects`,
-        // which `programWith` attaches (Phase 931).
-        programWith (viewSliced store) config modules |> bind |> Program.run
+        programWith (viewSliced store) config modules
+        |> mountAt (if hydrate then Hydrate else Fresh) store
+        |> ignore
 
     /// Run the client application with the given modules. Convenience entry
-    /// point — builds the shell Program and starts React. Applications that
-    /// layer a companion wrapper (e.g. ToolUp.AI's withAIAssistant) should
-    /// call `program` directly, wrap, then run.
+    /// point — builds the shell program and mounts it. An application that
+    /// layers a companion over the shell (ToolUp.AI's `AIClientConfig.run`)
+    /// mounts its own composer instead.
     ///
     /// Consults `ClientConfig.Composition.PublicEntryDispatchers` first; any dispatcher
     /// that returns `true` (e.g. matching a `/r/{token}` survey URL) has
-    /// rendered its own minimal Elmish program and the full shell is skipped.
+    /// rendered its own page and the full shell is skipped.
     let run (config: ClientConfig) (modules: ErasedModule list) =
-        // Phase 13a — install the request seam BEFORE consulting
-        // PublicEntryDispatchers so dispatchers that fire authenticated
-        // requests get the same header attachment any other request
-        // gets. The 0.1.x `do installRequestGuard ()` module-load block
-        // in CsrfClient.fs had this timing effect implicitly; Phase 13a
-        // relocates it here. For dispatchers that only hit anonymous
-        // token-gated endpoints (PublicEmbed) this is benign overhead
-        // (the prefetched CSRF token is unused) but it future-proofs
-        // dispatchers that need authenticated headers.
+        // Install the request seam BEFORE consulting PublicEntryDispatchers
+        // so dispatchers that fire authenticated requests get the same
+        // header attachment any other request gets. For dispatchers that
+        // only hit anonymous token-gated endpoints (PublicEmbed) this is
+        // benign overhead (the prefetched CSRF token is unused).
         installRequestSeam config
 
         if tryDispatchPublicEntry config then

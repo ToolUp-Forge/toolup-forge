@@ -1,7 +1,9 @@
 module ToolUp.AI.Client.Tests.ConsentBannerTests
 
 open System
+open Fuaran.MVU
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.Consent
 
@@ -84,15 +86,15 @@ let tests =
             let m0 = ConsentBanner.init managed ConsentState.initial
             let accepted, _ = ConsentBanner.update fixedNow ConsentBanner.AcceptAll m0
 
-            let saved, cmd =
+            let saved, steps =
                 ConsentBanner.update fixedNow ConsentBanner.SavePreferences accepted
 
             Expect.isTrue saved.Dismissed "SavePreferences dismisses the banner"
 
-            // Run the Cmd's fire-and-forget commit effect (dispatch is a
-            // no-op for these subscriptions).
-            for sub in cmd do
-                sub (fun _ -> ())
+            // Perform the commit signal the save asks for.
+            match steps with
+            | [ Do(Fire commit) ] -> commit.Run()
+            | other -> failwithf "Save asked for %d steps, not one commit signal" other.Length
 
             match committed with
             | Some state ->

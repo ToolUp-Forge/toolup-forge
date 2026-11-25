@@ -12,6 +12,7 @@
 /// Retry carries) and nothing matches on it but the lookups below.
 module ToolUp.Platform.BootSources
 
+open Fuaran.MVU
 open ToolUp.Elmish
 
 /// Which reset a source is re-issued by. Payload-free, so a row can declare
@@ -57,21 +58,22 @@ type BootScope =
     /// bridge, which retries itself; a sidebar-preference write).
     | Reported
 
-/// The loaders a row's `Load` picks from. A record, so a source whose loader
-/// is missing fails to compile rather than retrying nothing.
+/// The loaders a row's `Load` picks from, each the steps that issue it. A
+/// record, so a source whose loader is missing fails to compile rather than
+/// retrying nothing.
 type BootLoads<'model, 'msg> = {
-    Permissions: Cmd<'msg>
-    Configs: Cmd<'msg>
-    Flags: Cmd<'msg>
-    Teams: Cmd<'msg>
-    ActiveTeam: Cmd<'msg>
-    PlatformRole: Cmd<'msg>
-    PlatformInfo: Cmd<'msg>
-    DataSnapshot: Cmd<'msg>
+    Permissions: Step<'msg, RemoteEffect<'msg>> list
+    Configs: Step<'msg, RemoteEffect<'msg>> list
+    Flags: Step<'msg, RemoteEffect<'msg>> list
+    Teams: Step<'msg, RemoteEffect<'msg>> list
+    ActiveTeam: Step<'msg, RemoteEffect<'msg>> list
+    PlatformRole: Step<'msg, RemoteEffect<'msg>> list
+    PlatformInfo: Step<'msg, RemoteEffect<'msg>> list
+    DataSnapshot: Step<'msg, RemoteEffect<'msg>> list
     /// The caller's role on the model's active team (cleared with none).
-    TeamRole: 'model -> Cmd<'msg>
+    TeamRole: 'model -> Step<'msg, RemoteEffect<'msg>> list
     /// The sole-team select, when the model says there is one to make.
-    TeamAutoSelect: 'model -> Cmd<'msg>
+    TeamAutoSelect: 'model -> Step<'msg, RemoteEffect<'msg>> list
 }
 
 /// One boot source.
@@ -81,8 +83,8 @@ type BootSource<'model, 'msg> = {
     /// The banner row's label, from the resolved catalog.
     Label: BootSourceMessages -> string
     Scope: BootScope
-    /// Issue the load. `Cmd.none` for a `Reported` source.
-    Load: BootLoads<'model, 'msg> -> 'model -> Cmd<'msg>
+    /// Issue the load. No step for a `Reported` source.
+    Load: BootLoads<'model, 'msg> -> 'model -> Step<'msg, RemoteEffect<'msg>> list
     /// Whether the banner offers Retry (which re-runs `Load`).
     Retryable: bool
     /// Whether the active module's first `Init` waits for this source to
@@ -238,7 +240,7 @@ let all<'model, 'msg> () : BootSource<'model, 'msg> list = [
         Key = Key.AuthBridge
         Label = _.AuthBridge
         Scope = BootScope.Reported
-        Load = fun _ _ -> Cmd.none
+        Load = fun _ _ -> []
         // The bridge retries itself on its refresh interval.
         Retryable = false
         GatesFirstInit = false
@@ -248,7 +250,7 @@ let all<'model, 'msg> () : BootSource<'model, 'msg> list = [
         Key = Key.SidebarPrefs
         Label = _.SidebarPrefs
         Scope = BootScope.Reported
-        Load = fun _ _ -> Cmd.none
+        Load = fun _ _ -> []
         // A failed preference write has nothing to re-issue: the next
         // preference change writes again.
         Retryable = false
