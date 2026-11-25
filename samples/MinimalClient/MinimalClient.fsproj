@@ -23,7 +23,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
-    <!-- Fable ecosystem (Feliz, ToolUp.Elmish.HMR, ToolUp.Remoting.MsgPack,
+    <!-- Fable ecosystem (Feliz, Fuaran.MVU.React, ToolUp.Remoting.MsgPack,
          Fable.SimpleJson) pre-dates F# 10's nullable reference types;
          enabling nullness here would cascade "null / not null inconsistent"
          errors. Per `CLAUDE.md` guidance: nullable reference types
@@ -75,10 +75,9 @@
     <ProjectReference Include="..\..\src\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" />
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
-    <!-- 0.4.3 — ToolUp.Elmish.* folded into ToolUp.Platform.Client; the
-         elmish runtime arrives transitively through the ProjectReference
-         above, so a Fable invocation here still drives the full elmish
-         + Platform.Client + sample source tree. -->
+    <!-- The Fuaran.MVU runtime and its React adapter arrive transitively
+         through the ProjectReference above, so a Fable invocation here
+         drives the runtime + Platform.Client + sample source tree. -->
     <PackageReference Include="Feliz" />
   </ItemGroup>
 </Project>

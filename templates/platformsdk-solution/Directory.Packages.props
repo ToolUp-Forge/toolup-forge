@@ -48,10 +48,10 @@
     <PackageVersion Include="Giraffe" Version="8.2" />
     <!-- Client stack -->
     <PackageVersion Include="Fable.Core" Version="5.0" />
-    <!-- The MVU runtime (ToolUp.Elmish, folded into ToolUp.Platform.Client
-         in 0.4.3) and the RPC transport (ToolUp.Remoting, folded in 0.4.4)
-         need no PackageVersion entries here: both ship inside
-         ToolUp.Platform.{Client,Server} and arrive transitively. -->
+    <!-- The MVU runtime (Fuaran.MVU, which ToolUp.Platform.Client
+         references) and the RPC transport (ToolUp.Remoting, inside
+         ToolUp.Platform.{Client,Server}) need no PackageVersion entries
+         here: both arrive transitively. -->
     <PackageVersion Include="Fable.SimpleJson" Version="3.24" />
     <PackageVersion Include="Feliz" Version="3.3.3" />
     <!-- Build -->

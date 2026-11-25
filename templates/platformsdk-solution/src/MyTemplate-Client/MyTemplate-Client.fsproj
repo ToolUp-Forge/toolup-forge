@@ -22,9 +22,8 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fable.Core" />
-    <!-- 0.4.3 — ToolUp.Elmish.* were folded into ToolUp.Platform.Client;
-         the runtime arrives transitively through that PackageReference.
-         0.4.4 — ToolUp.Remoting.Client folded in too; same path. -->
+    <!-- The MVU runtime (Fuaran.MVU and its React adapter) and the RPC
+         transport arrive transitively through ToolUp.Platform.Client. -->
     <PackageReference Include="Fable.SimpleJson" />
     <PackageReference Include="Feliz" />
   </ItemGroup>

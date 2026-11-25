@@ -5,7 +5,7 @@ import base from "./vite.config.mts";
 // bundle-size budget (`client.shellBundleKiB` in perf-budgets.json).
 //
 // The minimal sample's own entry (`index.html` -> `output/Client.js`) never
-// reaches the shell: it mounts a plain Elmish program, so its bundle holds no
+// reaches the shell: it mounts a plain Fuaran.MVU component, so its bundle holds no
 // part of `SDK.Client`, the remoting proxies or the generated client module.
 // This build takes the shell module Fable emitted for this sample as the
 // entry and keeps EVERY export of it (`preserveEntrySignatures: "strict"`),

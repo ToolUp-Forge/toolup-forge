@@ -1,6 +1,6 @@
 # ToolUp.SAFER — minimal F# full-stack starter
 
-A minimal F# full-stack starter for the [ToolUp Platform SDK](https://github.com/ToolUp-Forge/toolup-forge), with thanks to the [Compositional IT](https://safe-stack.github.io/) team — SAFER mirrors the SAFE Stack get-started experience for F# developers arriving from that template, and demonstrates the in-tree improvements ToolUp brings to its MVU and RPC layers, ToolUp.Elmish and ToolUp.Remoting.
+A minimal F# full-stack starter for the [ToolUp Platform SDK](https://github.com/ToolUp-Forge/toolup-forge), with thanks to the [Compositional IT](https://safe-stack.github.io/) team — SAFER mirrors the SAFE Stack get-started experience for F# developers arriving from that template, and demonstrates what ToolUp brings to its MVU and RPC layers: `update` returns effects as values that the `Fuaran.MVU` runtime performs, and remote calls go through the in-tree ToolUp.Remoting.
 
 > **Not affiliated with [SAFEr.Template](https://github.com/Dzoukr/SAFEr.Template)**, Dzoukr's independent SAFE Stack variant on NuGet — different scope, different stack assumptions, different maintainer. This template is published as `ToolUp.Templates.SAFER` and installed as `dotnet new toolup-safer`.
 
@@ -11,7 +11,7 @@ A runnable F# full-stack app — **Tiny Chat** — in about 200 lines of consume
 - Single in-memory chat channel, no auth, no users, no persistence
 - Open the page in two browser tabs, type a message in one, see it in the other (~2 s latency via polling)
 - Optimistic UI: your own message appears instantly, reconciles with the server's confirmed copy
-- Send-message uses `Cmd.OfRemoting.callWithRetry` with a 3-attempt exponential-backoff retry policy
+- Send-message is a `RemoteEffect.callWithRetry` value with a 3-attempt exponential-backoff retry policy
 - A red error banner with the structured `ChatError` reason + correlation id appears when retries exhaust
 - Process restart wipes the message ring buffer — anonymity-by-design
 
@@ -47,15 +47,16 @@ If you've used SAFE Stack, these are the patterns that changed:
 | SAFE Stack | SAFER (ToolUp.Platform) |
 |---|---|
 | Saturn `application { ... }` DSL | `ServerApp.empty \|> ServerApp.withConfig config \|> ServerApp.withLogger logger \|> ServerApp.run` |
-| `Fable.Elmish` PackageReference | Replaced by `ToolUp.Elmish`, which ships inside `ToolUp.Platform.Client` — no PackageReference of its own |
+| `Fable.Elmish` PackageReference | Replaced by the `Fuaran.MVU` runtime and its React adapter, which `ToolUp.Platform.Client` references — no PackageReference of your own |
 | `Fable.Remoting.{Client,Server,Json,Giraffe}` PackageReferences | Replaced by `ToolUp.Remoting.{Client,Server,Json,Giraffe}`, which ship inside `ToolUp.Platform.{Client,Server}` — no PackageReferences of their own |
 | Manual JSON converter wiring on the server | The `ToolUp.Remoting.Json` converter set ships inside `ToolUp.Platform.Server`; nothing to register |
 | Manual `RemotingBodyNormalizationMiddleware` registration | Folded into the dispatcher itself; `unit -> Async<T>` API methods just work |
-| `Cmd.OfAsync.either api.X arg ok err` | `Cmd.OfRemoting.call api.X arg ok err` |
-| Transient transport-failure retry boilerplate | `Cmd.OfRemoting.callWithRetry retryPolicy api.X arg ok err` with `Cmd.RetryPolicy { MaxAttempts; InitialDelayMs; BackoffMultiplier; MaxDelayMs }` (retry-as-data per GP 12 rule 3) |
-| `let mutable shellDispatch : (Msg -> unit) option = None` capture pattern | `IDispatcher<'msg>` typed handle with `IsActive` teardown signal (SDK shell exercises this on your behalf via `Client.run`) |
-| Ad-hoc `Cmd.ofEffect (fun d -> SomeClient.subscribe ... \|> ignore)` (leaks on hot-reload) | `EffectHandle<'msg>` with explicit `Lifetime` — `Program` / `Module` / `Manual`; SDK shell disposes lifetime-scoped effects on HMR + page-leave |
-| `(string * exn) -> unit` upstream `onError` | Structured `ErrorContext` with module id + correlation id + exn — see `Cmd.OfRemoting` failure branch in `Modules/Chat/ClientModel.fs` |
+| `update : Msg -> Model -> Model * Cmd<Msg>` | `update : Msg -> Model -> Model * Step<Msg, RemoteEffect<Msg>> list` — `Do` an effect value, or `Then` a follow-up message; a test compares the list |
+| `Cmd.OfAsync.either api.X arg ok err` | `Do(RemoteEffect.call "Api.X" api.X arg reply)` — one reply, folded into one message |
+| Transient transport-failure retry boilerplate | `RemoteEffect.callWithRetry "Api.X" retryPolicy api.X arg reply` with `RetryPolicy { MaxAttempts; InitialDelayMs; BackoffMultiplier; MaxDelayMs }` (retry-as-data per GP 12 rule 3) |
+| `let mutable shellDispatch : (Msg -> unit) option = None` capture pattern | The runtime owns dispatch; a long-lived source is a `Subscription` the model lists as a resource, started and stopped by the runtime |
+| Ad-hoc `Cmd.ofEffect (fun d -> SomeClient.subscribe ... \|> ignore)` (leaks on hot-reload) | The shell's long-lived sources are `Subscription` resources the runtime starts once and stops at unmount; a module hears them by topic through `ClientModule.withEventSubscription` |
+| `(string * exn) -> unit` upstream `onError` | Structured `ErrorContext` (phase, module id, correlation id, exception) through `OnElmishError` |
 
 The full list of fork additions and the source-compat guarantee is at the [forge README's "In-tree client + transport forks" section](https://github.com/ToolUp-Forge/toolup-forge#in-tree-client--transport-forks).
 
@@ -76,28 +77,28 @@ A `ConcurrentQueue<Message>` size-capped at 50. `sendMessage` validates the requ
 This is where SAFER earns its keep. Read these primitives in order:
 
 - **Module-level proxy** (`let private chatApi: ChatApi = Api.makeProxy<ChatApi> (customOptions = UserSession.withRequestHeaders)`) — built once at module load. Identity / CSRF / correlation-id headers attach at *send* time via the SDK's request-guard. See [`docs/platform/client-remoting-proxies.md`](https://github.com/ToolUp-Forge/toolup-forge/blob/main/docs/platform/client-remoting-proxies.md) for why this pattern is canonical and per-call construction is a regression.
-- **`Cmd.RetryPolicy`** (`sendRetryPolicy = { MaxAttempts = 3; InitialDelayMs = 250; BackoffMultiplier = 2.0; MaxDelayMs = 2_000 }`) — declared as data, not as a callback. Tunable per-call-site without touching transport code.
-- **`Cmd.OfRemoting.callWithRetry sendRetryPolicy chatApi.SendMessage request ok err`** — exponential-backoff retry on transient transport failure; the failure path delivers either a typed `ChatError` (server rejected the message) or a transport `exn` (network blip after retries). The `update`'s `SendFailed` arm classifies both into the structured `ErrorBanner` record.
-- **`Cmd.OfRemoting.call chatApi.ListMessages () ok err`** — the no-retry variant for read paths. Read failures don't trip the red banner (transient errors clear on the next poll); only write failures do.
-- **Optimistic UI** — `SendRequested` appends an `OptimisticMessage` to the local list immediately, dispatches the retry-policied send. `SendSucceeded` removes the optimistic row and inserts the server-confirmed `Message`. `SendFailed` removes the optimistic row and shows the banner. One field in the model, two branches in `update`.
+- **`RetryPolicy`** (`sendRetryPolicy = { MaxAttempts = 3; InitialDelayMs = 250; BackoffMultiplier = 2.0; MaxDelayMs = 2_000 }`) — declared as data, not as a callback. Tunable per-call-site without touching transport code.
+- **`RemoteEffect.callWithRetry "ChatApi.SendMessage" sendRetryPolicy chatApi.SendMessage request reply`** — an effect value `update` returns as `Do send`; the runtime performs it with exponential-backoff retry on transient transport failure, and its one reply delivers either a typed `ChatError` (server rejected the message) or a transport `exn` (network blip after retries). The `update`'s `SendFailed` arm classifies both into the structured `ErrorBanner` record.
+- **`RemoteEffect.call "ChatApi.ListMessages" chatApi.ListMessages () reply`** — the no-retry variant for read paths. Read failures don't trip the red banner (transient errors clear on the next poll); only write failures do.
+- **Optimistic UI** — `SendRequested` appends an `OptimisticMessage` to the local list immediately, returns the retry-policied send as an effect. `SendSucceeded` removes the optimistic row and inserts the server-confirmed `Message`. `SendFailed` removes the optimistic row and shows the banner. One field in the model, two branches in `update`.
 
 ### 4. `src/Modules/Chat/ClientView.fs` — the view
 
-A Feliz component. Two text inputs (display name, message body), a Send button, a polling-driven message list, and a conditional red error banner. ~120 lines including the polling-timer setup via `Cmd.ofEffect` + `setInterval`. Polling at 2 s is the v1 simplification — see "How to extend" below for the SSE upgrade.
+A Feliz component. Two text inputs (display name, message body), a Send button, a polling-driven message list, and a conditional red error banner. ~120 lines including the polling-timer setup (`React.useEffectOnce` + `setInterval`). Polling at 2 s is the v1 simplification — see "How to extend" below for the SSE upgrade.
 
 ### 5. `src/MyApp-Client/Client.fs` — the entry point
 
-Three lines of code under the imports. `Client.run config modules` is the SDK shell's high-level entry — it wires `Program.mkProgram`, `Program.withErrorReporter`, `Program.withDispatcherHandle`, `Program.withEffect`, and HMR coordination on the consumer's behalf. The consumer-facing surface is `init`/`update`/`view` per module + the module's `register ()` factory. Everything else is the shell's job.
+Three lines of code under the imports. `Client.run config modules` is the SDK shell's high-level entry — it mounts the shell on the `Fuaran.MVU` runtime through its React adapter, lists the shell's own subscriptions as resources, routes errors to the reporter, and keeps the model across a hot reload on the consumer's behalf. The consumer-facing surface is `init`/`update`/`view` per module + the module's `register ()` factory. Everything else is the shell's job.
 
 ## What the SDK shell handles on your behalf
 
-SAFER's user code touches the **consumer-facing** primitives: `Cmd.OfRemoting`, optimistic state, `Cmd.ofEffect` for subscriptions, typed error DUs. The **shell-level** primitives — the things that distinguish ToolUp.Elmish from the upstream Fable.Elmish it was forked from — are exercised by `Client.run` on your behalf:
+SAFER's user code touches the **consumer-facing** primitives: effect values in a step list, optimistic state, typed error DUs. The **shell-level** work is done by `Client.run` on your behalf:
 
-- **`IDispatcher<'msg>`** with the `IsActive` teardown signal — the dispatch parameter your `update` receives is backed by an `IDispatcher`. The SDK shell flips `IsActive` to `false` on HMR / page-leave; background callbacks (the polling timer, future SSE subscriptions) no-op cleanly instead of dispatching against a dead loop.
-- **`EffectHandle.programLifetime`** — when you eventually wire SSE (see "How to extend"), the shell's effect registry disposes your subscription on hot-reload automatically. No more zombie `EventSource` in DevTools.
-- **`Program.withErrorReporter`** + structured `ErrorContext` — the shell installs a default reporter that captures module id + correlation id. Tiny Chat's typed `ChatError` flows through this on retry exhaustion; you see a structured banner instead of a `(string * exn)` log line.
+- **One runtime, one dispatch.** The shell mounts on `Fuaran.MVU`; a message's follow-ups run before the next queued message, each effect is performed after the model it came from is committed, and the view renders once per drain.
+- **Resources, not ad-hoc subscriptions.** The shell's long-lived sources (navigation requests, module events, the notifications stream) are `Subscription` resources: the runtime starts each once and stops each at unmount — no zombie `EventSource` in DevTools. A module hears them through `ClientModule.withEventSubscription` instead of starting its own.
+- **Structured errors.** A throwing `update`, a failing effect, a resource that fails to start and a throwing view each reach the `OnElmishError` reporter as an `ErrorContext` naming its phase; a view that throws after a good render keeps the last good tree on screen.
 
-These are real, in this build, exercised every time you run `pwsh ./run.ps1` — just from inside the shell rather than the demo's own code. If you want to wire them yourself (e.g. a non-shell client embedded in a larger React app), the primitives are public — see [`ToolUp.Platform.Client/Client/Elmish/*.fs`](https://github.com/ToolUp-Forge/toolup-forge/tree/main/src/ToolUp.Platform.Client/Client/Elmish) in the forge repo.
+These run every time you run `pwsh ./run.ps1`. A non-shell client embedded in a larger React app mounts its own component with `Fuaran.MVU.React` and `RemoteEffect.interpreter`; `samples/MinimalClient` in the forge repository shows the whole mount.
 
 ## How to extend
 
@@ -127,7 +128,7 @@ If any of these grow beyond "a small addition to SAFER", that's the signal to gr
     │   └── Chat/                   — the chat module (4-file convention)
     │       ├── SharedTypes.fs         — wire contract: Message, ChatApi, ChatError
     │       ├── Server.fs              — in-memory ring buffer + handler
-    │       ├── ClientModel.fs         — Elmish Model + Msg + init + update
+    │       ├── ClientModel.fs         — MVU Model + Msg + init + update
     │       ├── ClientView.fs          — Feliz view + register ()
     │       ├── Chat.fsproj            — server-side fsproj
     │       └── Chat.Client.props      — MSBuild props injected into client

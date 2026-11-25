@@ -21,7 +21,7 @@
         <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**</DefaultItemExcludes>
         <!-- Per CLAUDE.md: nullable reference types stay disabled on
              Fable-touching projects until Feliz / Fable.SimpleJson and
-             the in-tree ToolUp.Remoting / ToolUp.Elmish.HMR sources ship
+             the in-tree ToolUp.Remoting sources ship
              nullness annotations. -->
         <Nullable>disable</Nullable>
     </PropertyGroup>
