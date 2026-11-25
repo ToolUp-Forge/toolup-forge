@@ -6,45 +6,45 @@ let allTests =
     testList "ToolUp.AI.Client.Tests" [
         PlatformAIKeysAdminUITests.tests
         AIScreenEffectsTests.tests
-        // Phase 110 — ClientHostCapabilities routing (Platform.Client tier).
+        // ClientHostCapabilities routing (Platform.Client tier).
         ClientHostBridgeTests.tests
-        // Phase 117 — NotificationClient identity-aware SSE lifecycle
+        // NotificationClient identity-aware SSE lifecycle
         // (Platform.Client tier).
         NotificationClientTests.tests
-        // Phase 121 — boot-degradation surface (Platform.Client tier).
+        // Boot-degradation surface (Platform.Client tier).
         BootDegradationTests.tests
-        // Phase 159 — ConsentBanner MVU core (Platform.Client tier).
+        // ConsentBanner MVU core (Platform.Client tier).
         ConsentBannerTests.tests
-        // Phase 171 — Home/Overview landing selection: prepareModules
+        // Home/Overview landing selection: prepareModules
         // head-injection behind ClientConfig.HomeModule (Platform.Client
         // tier; ClientConfig.defaults only resolves under Fable).
         HomeLandingTests.tests
-        // Phase 817 — the ProcessedData summary envelope's browser half:
+        // The ProcessedData summary envelope's browser half:
         // Fable.SimpleJson reads what the server's FableConverters wrote.
         ProcessedDataEnvelopeTests.tests
-        // Phase 1128 - a conversation block part: the browser decodes the
+        // A conversation block part: the browser decodes the
         // parts the server's conversation-blob writer wrote.
         ConversationBlockPartDecodeTests.tests
-        // Phase 843 - the client's JSON response decode joins the algebra:
+        // The client's JSON response decode joins the algebra:
         // the pinned payload read in the browser, the proxy through the
         // registry, and the 785.F losses closed on the client.
         JsonClientDecodeTests.tests
-        // Phase 854 - declared reads: identical in-flight calls share one
+        // Declared reads: identical in-flight calls share one
         // request, Cacheable reads are served stale-while-revalidate, and
         // the interceptor chain counts one request once.
         ReadPolicyTests.tests
-        // Phase 855 - the fetch transport, and same-tick calls as one request.
+        // The fetch transport, and same-tick calls as one request.
         RemoteBatchingTests.tests
-        // Phase 853 - generated client proxies and encoders, transpiled.
+        // Generated client proxies and encoders, transpiled.
         GeneratedProxyTests.tests
-        // Phase 217 — module-contributed Home-widget seam: the
+        // Module-contributed Home-widget seam: the
         // HomeWidgetRegistry contract (flatten + weight-sort) in
         // Platform.Client.
         HomeWidgetContributorTests.tests
-        // Phase 54e — tenant-lifecycle diagnostics admin MVU
+        // Tenant-lifecycle diagnostics admin MVU
         // (TenantLifecycleAdminUI in Platform.Client tier).
         TenantLifecycleAdminUITests.tests
-        // Phase 1106 - background-jobs admin MVU: standing, ordering,
+        // Background-jobs admin MVU: standing, ordering,
         // re-run offer and the TriggerOnce round-trip (Platform.Client).
         JobsAdminUITests.tests
         AdminScreenEffectsTests.tests
@@ -56,21 +56,21 @@ let allTests =
         // Nested multi-page module sidebar entries — buildSections/flatten
         // nesting + module-expand persistence + legacy blob (Platform.Client).
         SidebarNestingTests.tests
-        // Phase 572 — per-user entry hiding: buildSections exclusion, the
+        // Per-user entry hiding: buildSections exclusion, the
         // Hidden items reveal section, and the legacy-blob load path
         // (Platform.Client).
         SidebarHidingTests.tests
-        // Phase 611 — rail placement as declared data: an undeclared row
+        // Rail placement as declared data: an undeclared row
         // buckets exactly as before, a declared row lands in its slot, and
         // no reserved row can resolve to the collapsed `_other` catch-all
-        // (the Phase 608 fresh-profile switcher defect).
+        // (the fresh-profile switcher defect).
         SidebarPlacementTests.tests
-        // Phase 612 — rail keyboard navigation: the traversal order (a
+        // Rail keyboard navigation: the traversal order (a
         // collapsed group announced, not skipped), the arrow/Home/End
         // bindings, the roving single tab stop, and the modifier bail-out
-        // that keeps Ctrl+K the Phase 571 palette's.
+        // that keeps Ctrl+K the command palette's.
         SidebarKeyboardTests.tests
-        // Phase 573 follow-up — shell program-lifetime effects: the
+        // Shell program-lifetime effects: the
         // outer-composer contract (withSidePanel must re-attach the
         // shell's background subscriptions; the admin-tile click-through
         // silent-no-op regression).
@@ -79,36 +79,36 @@ let allTests =
         BootSourcesTests.tests
         ModuleHostTests.tests
         BrowserHistoryTests.tests
-        // Phase 879 - shell slots: the prepared module list and the
+        // Shell slots: the prepared module list and the
         // built-ins' admin tiles over reference configurations, pinned by
         // baselines recorded before the slot refactor.
         ShellSlotSnapshotTests.tests
         ShellSlotTests.tests
-        // Phase 610 — the Phase 180 a11y floor over the shell rail's STATES:
+        // The a11y floor over the shell rail's STATES:
         // the real component mounted in each rail state (both widths, both
         // areas, a collapsed group, the hidden-items list, the
         // no-active-team collapse) and run through the shipped rules.
         SidebarRailA11yTests.tests
-        // Phase 613 — structural snapshot gate for the composed shell: the
+        // Structural snapshot gate for the composed shell: the
         // rail's shape (section keys, row order, row ids, accessible names,
         // collapse flags) serialised per state and diffed against committed
         // baselines, so a shape change is a reviewable diff rather than a
-        // discovery. Plus the two rendered-tree invariants Phase 612's pure
+        // discovery. Plus the two rendered-tree invariants the keyboard tests' pure
         // pack could only assert one side of.
         SidebarRailShapeSnapshotTests.tests
-        // The Phase 180 a11y floor over an ordinary MODULE view — the
+        // The a11y floor over an ordinary MODULE view — the
         // UsageDashboard SDK module driven through its real init/update
         // and rendered through `ModuleHarness.AssertAccessibleView`, so a
         // module gets the floor over its OWN `view` rather than over a
         // hand-written tree that can drift away from it.
         ModuleViewA11yTests.tests
-        // Phase 901 — the data-manager template publishes processed data:
+        // The data-manager template publishes processed data:
         // `MyDataManager.ClientView.register()` declares
         // `ClientModule.withProcessedData`, and the extractor publishes
         // what `IngestSucceeded` recorded, driven through the template's
         // real `init` / `update` (Platform.Client tier).
         DataManagerTemplateProcessedDataTests.tests
-        // Phase 636 — the KB version-history client surface: the GP 11
+        // The KB version-history client surface: the GP 11
         // gate (a single-version row renders byte-for-byte what it did
         // before the phase, asserted over mounted markup) and the
         // drawer's lazy-fetch MVU arms.
@@ -118,19 +118,19 @@ let allTests =
         // not surface, and the resolved-vs-edited distinction the pane
         // exists to make legible.
         ModuleVisibilityAdminUITests.tests
-        // Phase 784 — the remoting wire corpus's Fable parity leg: the
+        // The remoting wire corpus's Fable parity leg: the
         // committed `tests/remoting-corpus/*.msgpack` fixtures decoded
         // through the MsgPack reader as Fable transpiles it, compared
         // against the same F# declaration the .NET suites compare
         // against. Two readers, one corpus, one set of expected values.
         RemotingCorpusParityTests.tests
         StreamingProxyTests.tests
-        // Phase 536 — ClientModule.withInspectState: the latest UiStateReport per
+        // ClientModule.withInspectState: the latest UiStateReport per
         // module at the shell publish points; undeclared modules report nothing.
         ModuleInspectStateTests.tests
-        // Phase 851.D - the module dispatch prop is stable across renders.
+        // The module dispatch prop is stable across renders.
         ModuleDispatchStabilityTests.tests
-        // Phase 852 - the sliced model store: store binding, selectors, shell
+        // The sliced model store: store binding, selectors, shell
         // render scope, and the AG Grid props compare.
         SlicedStoreTests.tests
         // A tree surface's fuaran-* classes all have a rule in the reference
@@ -138,37 +138,37 @@ let allTests =
         TreeStylesheetTests.tests
         NodeToolkitTests.tests
         TreeViewParityTests.tests
-        // Phase 537 - the UI-awareness companion's inspect_active_module executor:
+        // The UI-awareness companion's inspect_active_module executor:
         // the live report for the request's active module and both status branches.
         UiAwarenessInspectTests.tests
-        // Phase 542 - the UI-awareness companion's list_active_actions executor:
+        // The UI-awareness companion's list_active_actions executor:
         // enabled/disabled action states for the request's active module, and
         // both status branches.
         ListActiveActionsTests.tests
-        // Phase 908 - every identity-change route clears the declared-read
+        // Every identity-change route clears the declared-read
         // cache: tokens, boot configuration, the team switch, another tab.
         IdentityChangeReadCacheTests.tests
-        // Phase 895 - the fact browse client companion and the knowledge
+        // The fact browse client companion and the knowledge
         // base list's fact-table badge.
         FactBrowseClientTests.tests
-        // Phase 910 - the sliced store reaches every composer: the HMR
+        // The sliced store reaches every composer: the HMR
         // pass-throughs, hydration parity, the AI composer's stable dispatch
         // and store, and the chrome's memoised context values.
         ComposerStoreTests.tests
-        // Phase 931 - an AI-composed shell wires the shell dispatcher, the
+        // An AI-composed shell wires the shell dispatcher, the
         // whole-tree hydrating binding adopts the server markup, and the
         // conversation panel's fact link, mounted.
         ComposerStoreTests.tests931
-        // Phase 942 - the team output-visibility section and the member
+        // The team output-visibility section and the member
         // notice, mounted.
         TeamOutputVisibilityUITests.tests
         TeamScreenEffectsTests.tests
-        // Phase 1130 - the panel draws a block part, re-read under the
+        // The panel draws a block part, re-read under the
         // reader's gate, with its furniture and the page's theme; a
         // conversation with no block renders as it did before.
         ConversationBlockTests.tests
         BlockRenderTests.tests
-        // Phase 1140 - the chat watchdog measures idleness, not elapsed time:
+        // The chat watchdog measures idleness, not elapsed time:
         // a live turn's events re-arm it on both chat surfaces, and a silent
         // turn still gets the note.
         ChatWatchdogTests.tests
@@ -180,7 +180,7 @@ let allTests =
         RemoteEffectTests.tests
     ]
 
-// Phase 849 — `output/Program.js ClientBench` runs the browser-runtime
+// `output/Program.js ClientBench` runs the browser-runtime
 // benchmark INSTEAD of the tests; `node --test` passes no arguments, so the
 // ordinary run never reaches it.
 [<EntryPoint>]

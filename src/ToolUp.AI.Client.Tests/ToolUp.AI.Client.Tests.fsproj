@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     ToolUp.AI.Client.Tests — Fable-tier test harness for the AI.Client
-    surface (Phase 70 E.4 follow-up).
+    surface.
 
     The .NET Expecto runners in `ToolUp.Platform.Tests` cannot reach
     AI.Client's MVU code at runtime: module-level Remoting proxy
@@ -46,37 +46,37 @@
         <Compile Include="StepDriver.fs" />
         <Compile Include="PlatformAIKeysAdminUITests.fs" />
         <Compile Include="AIScreenEffectsTests.fs" />
-        <!-- Phase 110 — ClientHostCapabilities routing tests (the bridge
+        <!-- ClientHostCapabilities routing tests (the bridge
              lives in Platform.Client, reached transitively; this is the
              established Fable-tier client harness). -->
         <Compile Include="ClientHostBridgeTests.fs" />
-        <!-- Phase 117 — NotificationClient identity-aware lifecycle
-             (Platform.Client tier, reached transitively; same Phase 110
+        <!-- NotificationClient identity-aware lifecycle
+             (Platform.Client tier, reached transitively; same
              precedent as ClientHostBridgeTests). -->
         <Compile Include="NotificationClientTests.fs" />
-        <!-- Phase 121 — boot-degradation accumulator + shell update arms +
+        <!-- Boot-degradation accumulator + shell update arms +
              UserSession bridge-failure counter (Platform.Client tier). -->
         <Compile Include="BootDegradationTests.fs" />
-        <!-- Phase 159 — ConsentBanner MVU core (Platform.Client tier,
+        <!-- ConsentBanner MVU core (Platform.Client tier,
              reached transitively; pure init/update/toConsentState). -->
         <Compile Include="ConsentBannerTests.fs" />
-        <!-- Phase 171 — Home/Overview landing-selection (prepareModules
+        <!-- Home/Overview landing-selection (prepareModules
              head-injection in Platform.Client; needs ClientConfig.defaults,
              which only resolves under Fable — see HomeLandingTests.fs). -->
         <Compile Include="HomeLandingTests.fs" />
-        <!-- Phase 217 — module-contributed Home-widget registry contract
+        <!-- Module-contributed Home-widget registry contract
              (HomeWidgetRegistry in Platform.Client; needs ClientConfig.defaults,
              which only resolves under Fable — see HomeWidgetContributorTests.fs). -->
         <Compile Include="HomeWidgetContributorTests.fs" />
-        <!-- Phase 54e — tenant-lifecycle diagnostics admin MVU
+        <!-- Tenant-lifecycle diagnostics admin MVU
              (TenantLifecycleAdminUI lives in Platform.Client, reached
-             transitively; same Phase 110 precedent as the others). -->
+             transitively; same precedent as the others). -->
         <Compile Include="TenantLifecycleAdminUITests.fs" />
         <!-- Module-visibility profile editor MVU (ModuleVisibilityAdminUI
              lives in Platform.Client, reached transitively; same precedent
              as TenantLifecycleAdminUITests). -->
         <Compile Include="ModuleVisibilityAdminUITests.fs" />
-        <!-- Phase 1106 - background-jobs admin MVU (JobsAdminUI lives in
+        <!-- Background-jobs admin MVU (JobsAdminUI lives in
              Platform.Client, reached transitively). -->
         <Compile Include="JobsAdminUITests.fs" />
         <Compile Include="AdminScreenEffectsTests.fs" />
@@ -90,21 +90,21 @@
              flatten nesting + SidebarPreferences module-expand + legacy
              blob (Platform.Client tier). -->
         <Compile Include="SidebarNestingTests.fs" />
-        <!-- Phase 572 — per-user sidebar entry hiding: the buildSections
+        <!-- Per-user sidebar entry hiding: the buildSections
              exclusion, the "Hidden items" reveal section, and the real
              localStorage legacy-blob load path (Platform.Client tier).
              The pure preference algebra is pinned .NET-side in
              ToolUp.Platform.Tests/InProcess/SidebarHidingContractTests.fs. -->
         <Compile Include="SidebarHidingTests.fs" />
-        <!-- Phase 611 — rail placement as declared data: the buildSections
+        <!-- Rail placement as declared data: the buildSections
              slot resolution (undeclared ⇒ grouped, declared ⇒ placed, no
-             reserved row in `_other`) and the Phase 608 fresh-profile
+             reserved row in `_other`) and the fresh-profile
              switcher-reachability case. Same reason as the two packs above:
              `Toolup.Sidebar` cannot be touched from the .NET harness. The
              code-shape pins are .NET-side in
              ToolUp.Platform.Tests/InProcess/SidebarVisibilityContractTests.fs. -->
         <Compile Include="SidebarPlacementTests.fs" />
-        <!-- Phase 612 — keyboard navigation for the rail: the one traversal
+        <!-- Keyboard navigation for the rail: the one traversal
              order (`railStops`), the bindings (`railKey`), the roving
              single tab stop (`railTabIndex`) and the never-zero-tab-stops
              guard (`resolveActiveStop`). Same reason as the packs above:
@@ -121,12 +121,12 @@
         <Compile Include="BootSourcesTests.fs" />
         <Compile Include="ModuleHostTests.fs" />
         <Compile Include="BrowserHistoryTests.fs" />
-        <!-- Phase 879 - the prepared module list and the built-ins' admin
+        <!-- The prepared module list and the built-ins' admin
              tiles over reference configurations, pinned by baselines
              recorded BEFORE the shell-slot refactor (shell-slot-baselines/). -->
         <Compile Include="ShellSlotSnapshotTests.fs" />
         <Compile Include="ShellSlotTests.fs" />
-        <!-- Phase 610 — the Phase 180 a11y rule set over the shell rail's
+        <!-- The a11y rule set over the shell rail's
              states. The rules are COMPILED IN from ToolUp.Platform.Testing
              rather than reimplemented: that project ProjectReferences
              Platform.Server, which must not be dragged through Fable, but
@@ -134,8 +134,7 @@
              `fable/`. Reusing it verbatim is the point of the phase — a
              second a11y vocabulary is the failure mode it exists to avoid. -->
         <Compile Include="..\ToolUp.Platform.Testing\Testing\AccessibilityAssertions.fs" />
-        <!-- The a11y floor for ordinary MODULE views (Phase 180 / 610
-             follow-up). Both files are compiled in from
+        <!-- The a11y floor for ordinary MODULE views. Both files are compiled in from
              ToolUp.Platform.Testing rather than reimplemented, for the
              same reason as AccessibilityAssertions above: that project
              ProjectReferences Platform.Server, which must not be dragged
@@ -152,7 +151,7 @@
         <Compile Include="..\ToolUp.Platform.Testing\Testing\TreeViewParity.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\ModuleHarness.fs" />
         <Compile Include="..\ToolUp.Platform.Testing\Testing\ViewMount.fs" />
-        <!-- Phase 613 — the shell rail's nine STATES plus the jsdom render
+        <!-- The shell rail's nine STATES plus the jsdom render
              harness, extracted out of SidebarRailA11yTests so the a11y floor
              and the structural snapshot gate share ONE enumeration (613.B).
              Two lists would be the defect both gates exist to catch: a state
@@ -160,16 +159,16 @@
              state that is fine. Must precede both consuming packs. -->
         <Compile Include="SidebarRailFixtures.fs" />
         <Compile Include="SidebarRailA11yTests.fs" />
-        <!-- Phase 613 — structural snapshot gate over the composed rail:
+        <!-- Structural snapshot gate over the composed rail:
              section keys, row order, row ids, accessible names and collapse
              flags per state, diffed against committed baselines in
-             rail-shape-baselines/. Also carries the two halves Phase 612's
-             pure-function pack could not reach — the railStops iff invariant
+             rail-shape-baselines/. Also carries the two halves the keyboard
+             tests' pure-function pack could not reach — the railStops iff invariant
              and the single-tab-stop invariant — which need rendered markup. -->
         <Compile Include="SidebarRailShapeSnapshotTests.fs" />
-        <!-- The Phase 180 a11y floor over an ordinary MODULE view, driven
+        <!-- The a11y floor over an ordinary MODULE view, driven
              through ModuleHarness's real init/update and its own `view` —
-             the half Phase 610 left open (it covered the shell rail only,
+             the half the rail's floor left open (it covered the shell rail only,
              and `AssertAccessible` still needed a hand-supplied render). -->
         <!-- The migration kit's three assertions over a view moving to a tree:
              accessibility through the lowering, behaviour through update,
@@ -177,7 +176,7 @@
              Before ModuleViewA11yTests, which uses its tree lowering. -->
         <Compile Include="TreeViewParityTests.fs" />
         <Compile Include="ModuleViewA11yTests.fs" />
-        <!-- Phase 901 — the data-manager template publishes processed
+        <!-- The data-manager template publishes processed
              data. The template's three module files are compiled in
              directly from `templates/platformsdk-datamanager/MyDataManager/`
              rather than copied — see templates/README.md's "Programmatic
@@ -194,22 +193,22 @@
         <Compile Include="..\..\templates\platformsdk-datamanager\MyDataManager\ClientModel.fs" />
         <Compile Include="..\..\templates\platformsdk-datamanager\MyDataManager\ClientView.fs" />
         <Compile Include="DataManagerTemplateProcessedDataTests.fs" />
-        <!-- Phase 636 — the KB version-history client surface: the GP 11
+        <!-- The KB version-history client surface: the GP 11
              gate asserted over REAL mounted markup (a single-version row
              must be byte-for-byte what it was) plus the drawer's MVU
              arms. Same reason as every pack above — `ClientModel` holds a
              module-level `Api.makeProxy`, so it cannot be touched from
              the .NET harness at all. Must follow ViewMount.fs. -->
         <Compile Include="KnowledgeVersionHistoryTests.fs" />
-        <!-- Phase 895 — the fact browse client companion (model, pages)
+        <!-- The fact browse client companion (model, pages)
              and the knowledge base list's fact-table badge. Must follow
              ViewMount.fs. -->
         <Compile Include="FactBrowseClientTests.fs" />
-        <!-- Phase 942 — the team output-visibility section and the
+        <!-- The team output-visibility section and the
              member-visible notice, mounted. Must follow ViewMount.fs. -->
         <Compile Include="TeamOutputVisibilityUITests.fs" />
         <Compile Include="TeamScreenEffectsTests.fs" />
-        <!-- Phase 784 — the remoting wire corpus's parity leg. WireCorpus.fs
+        <!-- The remoting wire corpus's parity leg. WireCorpus.fs
              is COMPILED IN from ToolUp.Platform.Tests rather than
              transcribed, so the value a committed fixture must decode to is
              ONE F# declaration both hosts read; its encoders and its
@@ -223,53 +222,53 @@
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\WireCorpus.fs" />
         <Compile Include="Remoting\MsgPackWrite.fs" />
         <Compile Include="RemotingCorpusParityTests.fs" />
-        <!-- Phase 817 — the ProcessedData summary envelope: the fixture is the same file the
+        <!-- The ProcessedData summary envelope: the fixture is the same file the
              .NET pack compiles, and the test holds Fable.SimpleJson's read of the pinned
              literal to the sample value. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ProcessedDataEnvelopeFixture.fs" />
         <Compile Include="ProcessedDataEnvelopeTests.fs" />
-        <!-- Phase 1128 - the block part: the fixture is the wire conformance pack's
+        <!-- The block part: the fixture is the wire conformance pack's
              shared file, which the .NET Platform pack also compiles (holding the
              server's writer to its pinned literal); this pack holds the transpiled
              reflection decoder to the same values. -->
         <Compile Include="..\ToolUp.AI.Wire.Conformance\Shared\BlockPartFixtures.fs" Link="Remoting\BlockPartFixtures.fs" />
         <Compile Include="ConversationBlockPartDecodeTests.fs" />
-        <!-- Phase 843 - the client's JSON response decode through the algebra: the
+        <!-- The client's JSON response decode through the algebra: the
              fixture is the same file the .NET pack compiles (it holds the writer and
              System.Text.Json to the pinned text and model); this pack holds JsonText
              and the proxy to the same model and value. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\JsonClientDecodeFixture.fs" />
-        <!-- Phase 885 - the browser's writer pinned as data: this pack holds the
+        <!-- The browser's writer pinned as data: this pack holds the
              transpiled Fable.SimpleJson to each pinned text, the .NET pack holds
              its mirror (BrowserJsonWriter) to the same text. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\BrowserWriterFixture.fs" />
         <Compile Include="Remoting\XhrStub.fs" />
         <Compile Include="Remoting\JsonClientDecodeTests.fs" />
-        <!-- Phase 854 - declared reads through the real proxy and Cmd.OfRemoting:
+        <!-- Declared reads through the real proxy and Cmd.OfRemoting:
              in-flight sharing, stale-while-revalidate, invalidation, and the
              interceptor chain counting one request once. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyFixture.fs" />
         <Compile Include="Remoting\ReadPolicyTests.fs" />
-        <!-- Phase 855 - the fetch transport and same-tick batching through the
+        <!-- The fetch transport and same-tick batching through the
              real proxy, against a scripted fetch. -->
         <Compile Include="Remoting\RemoteBatchingTests.fs" />
-        <!-- Phase 853 - generated client proxies and encoders, transpiled: the
+        <!-- Generated client proxies and encoders, transpiled: the
              shared encoder fixture and the generated ReadCatalogApi proxy (both
              compiled by the .NET pack too), Api.makeProxy generated-first, and
              composition with the 854 read table and 855 batching. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadCatalogClientProxies.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ClientEncoderFixture.fs" />
         <Compile Include="Remoting\GeneratedProxyTests.fs" />
-        <!-- Phase 69c.D — the streaming proxy: cold RemoteStream for an
+        <!-- The streaming proxy: cold RemoteStream for an
              IAsyncEnumerable field, SSE decoding across chunk boundaries,
              every non-happy ending as OnError. fetch is stubbed. -->
         <Compile Include="StreamingProxyTests.fs" />
-        <!-- Phase 536 — module inspect-state contract, driven through the shell update. -->
+        <!-- Module inspect-state contract, driven through the shell update. -->
         <Compile Include="ModuleInspectStateTests.fs" />
-        <!-- Phase 851.D - the module view's dispatch prop is referentially stable
+        <!-- The module view's dispatch prop is referentially stable
              across renders (Client.moduleDispatchFor), pinned on the transpiled code. -->
         <Compile Include="ModuleDispatchStabilityTests.fs" />
-        <!-- Phase 852 - the sliced model store: the store binding, selector reads, the
+        <!-- The sliced model store: the store binding, selector reads, the
              shell render scope (RenderScope.fs is shared with ClientBench) and the
              AG Grid props compare, pinned on the transpiled code. -->
         <Compile Include="RenderScope.fs" />
@@ -280,15 +279,15 @@
         <!-- The node toolkit's ids, Keep's identity table and the lowering's
              kept render context, on the transpiled code. -->
         <Compile Include="NodeToolkitTests.fs" />
-        <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
+        <!-- The UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
-        <!-- Phase 910 - the composition routes' render scope (the AI composer
+        <!-- The composition routes' render scope (the AI composer
              on both render paths, the shell's context readers; ComposerScope.fs
              is shared with ClientBench, so it precedes it) and the pack that
              asserts it. -->
         <Compile Include="ComposerScope.fs" />
         <Compile Include="ComposerStoreTests.fs" />
-        <!-- Phase 849 — the browser runtime, measured. MinimalClient's entry
+        <!-- The browser runtime, measured. MinimalClient's entry
              module is COMPILED IN so its transpiled output sits beside the
              harness; nothing in this pack references it, so no test imports
              it and its module-level `Program.run` never executes here. Only
@@ -301,12 +300,12 @@
              client-bench-browser.mjs can bundle it for a page. -->
         <Compile Include="ClientBenchTables.fs" />
         <Compile Include="ClientBench.fs" />
-        <!-- Phase 542 - the UI-awareness companion's list_active_actions executor. -->
+        <!-- The UI-awareness companion's list_active_actions executor. -->
         <Compile Include="ListActiveActionsTests.fs" />
-        <!-- Phase 908 - every identity change clears the read cache (after
+        <!-- Every identity change clears the read cache (after
              RenderScope.fs, whose jsdom each case installs). -->
         <Compile Include="Remoting\IdentityChangeReadCacheTests.fs" />
-        <!-- Phase 1130 - the conversation panel draws a block part: re-read
+        <!-- The conversation panel draws a block part: re-read
              through a resolver, its furniture, the page's theme, and the
              no-block panel pinned byte for byte (after RenderScope.fs, whose
              jsdom each case installs). -->
@@ -327,7 +326,7 @@
              compiler — so AI.Client modules under test compile against
              the same source the SDK ships. -->
         <ProjectReference Include="..\ToolUp.AI.Client\ToolUp.AI.Client.fsproj" />
-        <!-- Phase 636 — the KB client tier, driven through Fable for the
+        <!-- The KB client tier, driven through Fable for the
              same reason AI.Client is: its MVU code is unreachable from
              .NET reflection. This is the estate's ONE Fable-tier test
              harness (the project name predates that), so a KB client
@@ -335,10 +334,10 @@
              have to re-derive the loader, the jsdom mount and the
              node:test facade. -->
         <ProjectReference Include="..\ToolUp.KnowledgeBase.Client\ToolUp.KnowledgeBase.Client.fsproj" />
-        <!-- Phase 895 — the fact browse client companion, transpiled here so
+        <!-- The fact browse client companion, transpiled here so
              the fable-tier gate compiles it. -->
         <ProjectReference Include="..\ToolUp.Facts.Client\ToolUp.Facts.Client.fsproj" />
-        <!-- Phase 537 - the UI-awareness companion's Fable client tier. -->
+        <!-- The UI-awareness companion's Fable client tier. -->
         <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Fable.Core" />
