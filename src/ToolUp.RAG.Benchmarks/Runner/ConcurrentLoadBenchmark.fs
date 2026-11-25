@@ -28,15 +28,15 @@ open ToolUp.Platform.Infra
 open ToolUp.Platform.Audit
 open ToolUp.Platform.Compose
 
-// ─── Phase 886 — the concurrent load harness (retrieval half) ─────────
+// ─── The concurrent load harness (retrieval half) ─────────────────────
 //
-// Every scale figure on record before this phase was taken ONE QUERY AT A
-// TIME over an in-memory blob backend, where a blob read is a dictionary
-// lookup. This harness drives N simultaneous callers against one composed
+// A scale figure taken ONE QUERY AT A TIME over an in-memory blob backend,
+// where a blob read is a dictionary lookup, says little about a deployment.
+// This harness drives N simultaneous callers against one composed
 // pipeline and reports what a caller waits (TOTAL latency, p50/p95/p99),
 // how much gets done (throughput), and — beside every clock — how many
 // blob reads it cost, because the count is the number that survives a
-// change of backend and the clock is not (the Phase 702 lesson).
+// change of backend and the clock is not.
 //
 // Every row names its backend, its corpus size, its concurrency and its
 // statistic. The in-memory blob arm is labelled `memory` everywhere it
@@ -392,8 +392,8 @@ type VectorBackend =
     | Hnsw
     | Pgvector
 
-/// The local PostgreSQL the harness's database arm runs against. Phase 929:
-/// the fact half's `postgres` store reads it too — one local server serves
+/// The local PostgreSQL the harness's database arm runs against. The fact
+/// half's `postgres` store reads it too — one local server serves
 /// the pgvector store and the database-backed fact store, each in tables of
 /// its own, so the database arm needs one service and one variable.
 [<Literal>]
@@ -421,7 +421,7 @@ type RetrievalCell = {
     QueriesPerRound: int
     Rounds: int
     /// Queries whose store-level top-10 is compared with the exact flat
-    /// scan (Phase 14k's deferred recall item). 0 skips recall.
+    /// scan. 0 skips recall.
     RecallQueries: int
     Seed: int
 }
@@ -500,7 +500,7 @@ let private buildStore
                     AnnIndex = PgvectorVectorStore.HnswAnnIndex(16, 64)
             }
 
-            // Phase 929 — the run's table is dropped when the run ends, so a
+            // The run's table is dropped when the run ends, so a
             // local database the harness is pointed at again and again does
             // not accumulate a table per run.
             let drop () =
@@ -531,8 +531,10 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
             match buildStore cell.Backend storage embedder.Dimensions with
             | Error e -> return Error e
             | Ok(store, dropStore) ->
-                let sparse =
+                let openSparse () =
                     new InMemoryBM25Index(storage, (SilentLogger() :> ILogger), flushIntervalMs = 50) :> ISparseIndex
+
+                let sparse = openSparse ()
 
                 // Seed.
                 let seedClock = Stopwatch.StartNew()
@@ -555,7 +557,7 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                             sprintf "c%07d" (start + j), embedded[j], chunk
                     ]
 
-                    // Phase 946 — one batched write per embedding batch
+                    // One batched write per embedding batch
                     // (`IVectorStoreBatch`, one round-trip on pgvector)
                     // where the store offers it, one `Upsert` per chunk
                     // where it does not. Seeding pgvector one upsert at a
@@ -570,6 +572,27 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                             vectors[start + j] <- embedded[j]
 
                 seedClock.Stop()
+
+                // The seed's persistence passes are still owed when the seed
+                // returns, and each reads its blob before writing it back.
+                // Finish them now and reopen the indexes, so that no read
+                // counted after the reset below is the seed's.
+                let store, sparse =
+                    RestingIndexes.atRest
+                        {
+                            ReopenVector =
+                                match cell.Backend with
+                                | Pgvector -> None
+                                | Flat
+                                | Hnsw ->
+                                    Some(fun () ->
+                                        match buildStore cell.Backend storage embedder.Dimensions with
+                                        | Ok(reopened, _) -> reopened
+                                        | Error e -> failwith e)
+                            OpenSparse = openSparse
+                        }
+                        store
+                        sparse
 
                 // Compose the production hybrid pipeline and meter it.
                 let telemetry = RagTelemetry.createRolling 3600
@@ -608,8 +631,8 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                 let queries =
                     Array.init (cell.QueriesPerRound * cell.Rounds) (fun i -> queryText cell.Seed i cell.Chunks)
 
-                // Warm: the index load, the HNSW graph build and the JIT are
-                // paid here, outside every measured round.
+                // Warm: the index load from the blob, the HNSW graph build and
+                // the JIT are paid here, outside every measured round.
                 for i in 0 .. min 20 (queries.Length - 1) do
                     let! _ = measured.Retrieve (request (queryText (cell.Seed + 1) i cell.Chunks)) EvalCore.evalContext
                     ()
@@ -634,6 +657,11 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                     roundP95s.Add (summarise latencies).P95
                     wallSeconds <- wallSeconds + wall
 
+                // Retrieval writes nothing, so a write in the measured window
+                // is persistence work the rounds were not at rest from, and a
+                // read counted beside it may be that work's rather than a
+                // retrieval's. Such a window measures nothing.
+                let writesInWindow = counting.Uploads
                 let measuredQueries = float (cell.QueriesPerRound * cell.Rounds)
                 let reads = float counting.Downloads / measuredQueries
                 let lists = float counting.Lists / measuredQueries
@@ -664,27 +692,33 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                         return Some(float hits / float (max 1 possible))
                 }
 
-                match store with
-                | :? IDisposable as disposable -> disposable.Dispose()
-                | _ -> ()
+                for index in [ box store; box sparse ] do
+                    match index with
+                    | :? IDisposable as disposable -> disposable.Dispose()
+                    | _ -> ()
 
                 dropStore ()
                 arm.Cleanup()
 
-                return
-                    Ok {
-                        Cell = cell
-                        BlobLabel = arm.Label
-                        SeedSeconds = seedClock.Elapsed.TotalSeconds
-                        Latency = summarise (all.ToArray())
-                        RoundP95s = roundP95s.ToArray()
-                        ThroughputQps = measuredQueries / max 1e-9 wallSeconds
-                        BlobReadsPerQuery = reads
-                        BlobListsPerQuery = lists
-                        PeakInFlight = metered.PeakInFlight
-                        TelemetryTotalP95Ms = telemetryTotal
-                        RecallAt10 = recall
-                    }
+                if writesInWindow > 0L then
+                    return
+                        Error
+                            $"{backendLabel cell.Backend}/{arm.Label} at {cell.Chunks} chunks: {writesInWindow} blob write(s) landed in the measured rounds, so the indexes were not at rest and the read count does not measure retrieval"
+                else
+                    return
+                        Ok {
+                            Cell = cell
+                            BlobLabel = arm.Label
+                            SeedSeconds = seedClock.Elapsed.TotalSeconds
+                            Latency = summarise (all.ToArray())
+                            RoundP95s = roundP95s.ToArray()
+                            ThroughputQps = measuredQueries / max 1e-9 wallSeconds
+                            BlobReadsPerQuery = reads
+                            BlobListsPerQuery = lists
+                            PeakInFlight = metered.PeakInFlight
+                            TelemetryTotalP95Ms = telemetryTotal
+                            RecallAt10 = recall
+                        }
         with ex ->
             arm.Cleanup()
             return Error $"{backendLabel cell.Backend}/{cell.BlobArm} at {cell.Chunks} chunks failed: {ex.Message}"

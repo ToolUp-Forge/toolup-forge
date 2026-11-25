@@ -306,6 +306,7 @@ let private registeredTests =
         IndexLifecycleTests.tests
         CrossIndexErasureConformanceTests.tests
         ScopedSnapshotIndexTests.tests
+        RestingIndexesTests.tests
         AIAgentEngineClientResidentAuthorizationTests.tests
         AIAllowlistDiagnosticsTests.tests
         DevVersionEndpointTests.tests
