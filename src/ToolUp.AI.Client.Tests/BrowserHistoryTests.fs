@@ -15,9 +15,11 @@ module ToolUp.AI.Client.Tests.BrowserHistoryTests
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.StepDriver
 
 // ─── The browser ─────────────────────────────────────────────────────
 
@@ -175,14 +177,14 @@ let private fixture () =
 let private boot (config: ClientConfig) (modules: ErasedModule list) : Client.Model =
     fst (Client.init config bus modules ())
 
-/// The write `init` appends is its last command; the ones before it are the
+/// The write `init` appends is its last step; the ones before it are the
 /// boot fetches, which these tests have no server for.
 let private runFirstEntryWrite (config: ClientConfig) (modules: ErasedModule list) : unit =
-    let _, cmd = Client.init config bus modules ()
-    (List.last cmd) ignore
+    let _, steps = Client.init config bus modules ()
+    runStep ignore (List.last steps)
 
-/// A running shell: `init`, then an elmish loop over `update`, with the shell's
-/// own `browser-history` effect started on it.
+/// A running shell: `init`, then a hand-driven loop over `update`, with the
+/// shell's own `browser-history` subscription started on it.
 type private Running = {
     Model: unit -> Client.Model
     Dispatch: Client.Msg -> unit
@@ -194,17 +196,12 @@ let private run (config: ClientConfig) (modules: ErasedModule list) : Running =
     let mutable model = boot config modules
 
     let rec dispatch (msg: Client.Msg) =
-        let next, cmd = Client.update config bus modules msg model
+        let next, steps = Client.update config bus modules msg model
         model <- next
-
-        for effect in cmd do
-            effect dispatch
+        runSteps dispatch steps
 
     let subscription =
-        (Client.programLifetimeEffects config
-         |> List.find (fun e -> e.Id = "browser-history"))
-            .Start
-            dispatch
+        (Client.subscriptions config |> List.find (fun s -> s.Site = "browser-history")).Start dispatch
 
     {
         Model = fun () -> model
@@ -229,11 +226,11 @@ let private settle (config: ClientConfig) (modules: ErasedModule list) (model: C
 
     fst (Client.update config bus modules (Client.FlagsLoaded Map.empty) configs)
 
-/// One `update`, running only the command the shell's history adds, which is its
+/// One `update`, running only the step the shell's history adds, which is its
 /// last: the ones before it are fetches these tests have no server for.
 let private updateAndWrite (config: ClientConfig) (modules: ErasedModule list) (msg: Client.Msg) (model: Client.Model) =
-    let next, cmd = Client.update config bus modules msg model
-    (List.last cmd) ignore
+    let next, steps = Client.update config bus modules msg model
+    runStep ignore (List.last steps)
     next
 
 /// Stand-in for a composer's outer message type (`OuterMsg.ShellMsg`).
@@ -533,12 +530,12 @@ let tests =
                     let modules = gatedModules ()
                     let model = boot gated modules
 
-                    let noTeam, cmd =
+                    let noTeam, steps =
                         Client.update gated bus modules (Client.ActiveTeamLoaded None) model
 
                     Expect.equal noTeam.ActiveModuleId "landing" "no team, so the gate forces the landing"
 
-                    (List.last cmd) ignore
+                    runStep ignore (List.last steps)
 
                     Expect.equal (hash browser) "#/landing" "the URL follows"
                     Expect.equal (pushes browser) 0 "no entry for Back to bounce off"
@@ -757,7 +754,7 @@ let tests =
                     }
 
                     let walk () =
-                        let next, cmd =
+                        let next, steps =
                             Client.update
                                 defaults
                                 bus
@@ -765,14 +762,12 @@ let tests =
                                 (Client.ModuleSelected "paged/second")
                                 (boot defaults modules)
 
-                        for effect in cmd do
-                            effect ignore
+                        runSteps ignore steps
 
                         Client.update defaults bus modules Client.AuthTokenAcquired next |> ignore
 
-                    // Signed out `init` issues no fetch, so all of its commands can run.
-                    for effect in snd (Client.init defaults bus modules ()) do
-                        effect ignore
+                    // Signed out `init` issues no fetch, so all of its steps can run.
+                    runSteps ignore (snd (Client.init defaults bus modules ()))
 
                     walk ()
                     signIn browser
@@ -800,11 +795,10 @@ let tests =
                     let model = boot defaults modules
                     Expect.equal model.ActiveModuleId "home" "the URL chooses nothing"
 
-                    let next, cmd =
+                    let next, steps =
                         Client.update defaults bus modules (Client.ModuleSelected "paged/second") model
 
-                    for effect in cmd do
-                        effect ignore
+                    runSteps ignore steps
 
                     Expect.equal next.ActiveModuleId "paged" "the navigation still happens"
                     Expect.equal (pushes browser) 0 "no entry"
@@ -818,7 +812,7 @@ let tests =
                     let modules = [ singlePage "home" inits ]
 
                     // Signed out on an authenticated surface `init` issues no
-                    // boot fetch, so its command is exactly what was added.
+                    // boot fetch, so its steps are exactly what was added.
                     let config = {
                         ClientConfig.defaults with
                             Surfaces = Surfaces.team
@@ -826,7 +820,7 @@ let tests =
 
                     let _, off = Client.init config bus modules ()
 
-                    let _, onCmd =
+                    let _, onSteps =
                         Client.init
                             {
                                 config with
@@ -836,24 +830,24 @@ let tests =
                             modules
                             ()
 
-                    Expect.isEmpty off "no command by default"
-                    Expect.equal (List.length onCmd) 1 "one when the option is on")
+                    Expect.isEmpty off "no step by default"
+                    Expect.equal (List.length onSteps) 1 "one when the option is on")
 
-            testCase "no effect is attached"
+            testCase "no subscription is listed"
             <| fun () ->
-                let ids = Client.programLifetimeEffects ClientConfig.defaults |> List.map _.Id
+                let ids = Client.subscriptions ClientConfig.defaults |> List.map _.Site
 
                 Expect.isFalse (List.contains "browser-history" ids) "the shell does not listen"
         ]
 
-        testCase "a composed shell attaches the subscription too"
+        testCase "a composed shell lists the subscription too"
         <| fun () ->
-            // Every composer attaches through `withShellLifetimeEffects` and
-            // updates through `Client.update`, so it takes both halves.
-            let outer: Program<unit, int, Outer, unit> =
-                Program.mkProgram (fun () -> 0, Cmd.none) (fun (_: Outer) model -> model, Cmd.none) (fun _ _ -> ())
+            // Every composer lists the shell's resources and updates through
+            // `Client.update`, so it takes both halves.
+            let composed =
+                Client.resources on |> Component.prefixResources "shell" (Subscription.map Wrap)
 
-            let composed = outer |> Client.withShellLifetimeEffects on Wrap
-
-            Expect.isTrue (Program.effectIds composed |> List.contains "browser-history") "present on the outer program"
+            Expect.isTrue
+                (composed |> Map.containsKey (ResourceKey [ "shell"; "browser-history" ]))
+                "present among the composer's resources"
     ]

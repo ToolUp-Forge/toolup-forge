@@ -21,6 +21,7 @@ open Fable.Core
 open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.StepDriver
 
 [<Emit("Object.is($0, $1)")>]
 let private objectIs (a: obj) (b: obj) : bool = jsNative
@@ -34,13 +35,14 @@ let private moduleDispatchFor =
     let view =
         Client.programOver
             ClientConfig.defaults
-            (fun () -> (), Cmd.none)
-            (fun (_: Client.Msg) () -> (), Cmd.none)
+            (fun () -> (), [])
+            (fun (_: Client.Msg) () -> (), [])
+            (fun _ -> Map.empty)
             Client.dispatchers
             (fun () dispatchers ->
                 rendered.Value <- Some dispatchers
                 Feliz.Html.none)
-        |> Program.view
+        |> viewOf
 
     fun (moduleId: string) (dispatch: Client.Msg -> unit) ->
         view () dispatch |> ignore
@@ -52,8 +54,8 @@ let tests =
         testCase "the same loop's dispatch yields the identical module dispatcher on every render"
         <| fun () ->
             let received = ResizeArray<Client.Msg>()
-            // One loop, one `dispatch'` — as `Program.runWithDispatch` hands
-            // the shell's view the same function on every render.
+            // One mount, one `dispatch` — a mount hands the shell's view the
+            // same function on every render.
             let dispatch: Client.Msg -> unit = received.Add
 
             let first = moduleDispatchFor "m1" dispatch

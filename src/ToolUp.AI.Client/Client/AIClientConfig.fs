@@ -732,7 +732,7 @@ let run (fills: AISlotFills) (config: ClientConfig) (modules: ErasedModule list)
 
         composerProgram fills (withAISlots fills config) modules (fun allModules ->
             Client.viewSlicedOver shell config allModules)
-        |> Client.mountAt Fresh store
+        |> Client.mountAt "elmish-app" Fresh store
         |> ignore
 
 /// Register the series read a conversation block part is

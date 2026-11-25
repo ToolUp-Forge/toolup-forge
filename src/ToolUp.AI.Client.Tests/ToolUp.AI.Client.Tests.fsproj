@@ -43,6 +43,7 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="NodeTest.fs" />
+        <Compile Include="StepDriver.fs" />
         <Compile Include="PlatformAIKeysAdminUITests.fs" />
         <Compile Include="AIScreenEffectsTests.fs" />
         <!-- Phase 110 — ClientHostCapabilities routing tests (the bridge

@@ -26,6 +26,7 @@ open ToolUp.Elmish.React
 open ToolUp.Platform
 open Toolup.UIToolkit
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.StepDriver
 open ToolUp.AI.Client.Tests.RenderScope
 
 [<Import("createRoot", from = "react-dom/client")>]
@@ -445,13 +446,14 @@ let private sidebarBoundaryTests =
             let view =
                 Client.programOver
                     ClientConfig.defaults
-                    (fun () -> (), Cmd.none)
-                    (fun (_: Client.Msg) () -> (), Cmd.none)
+                    (fun () -> (), [])
+                    (fun (_: Client.Msg) () -> (), [])
+                    (fun _ -> Map.empty)
                     Client.dispatchers
                     (fun () dispatchers ->
                         seen.Add dispatchers
                         Feliz.Html.none)
-                |> Program.view
+                |> viewOf
 
             let loopA = fun (_: Client.Msg) -> ()
             let loopB = fun (_: Client.Msg) -> ()

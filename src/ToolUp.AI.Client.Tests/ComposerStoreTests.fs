@@ -30,6 +30,7 @@ open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.Client
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.StepDriver
 open ToolUp.AI.Client.Tests.RenderScope
 
 [<Import("createElement", from = "react")>]
@@ -231,25 +232,28 @@ let private hydrate (sliced: bool) (report: Hydrated -> unit) : unit =
         Client.update config Unchecked.defaultof<IModuleQueryBus> modules msg model
 
     if sliced then
-        let store = ModelStore.create<Client.Model, Client.Msg> ()
+        let store =
+            Fuaran.MVU.React.ModelStore<Client.Model, Fuaran.MVU.React.ElementView<Client.Msg>>()
 
         Client.programOver
             config
             (fun () -> model0, [])
             update
+            (fun _ -> Map.empty)
             Client.dispatchers
             (capture (Client.viewSliced store config modules Client.emptyChrome))
-        |> Program.withReactStoreHydrate store placeholder
-        |> Program.run
+        |> Client.mountAt placeholder Fuaran.MVU.React.Hydrate store
+        |> ignore
     else
         Client.programOver
             config
             (fun () -> model0, [])
             update
+            (fun _ -> Map.empty)
             Client.dispatchers
             (capture (Client.viewWithSignIn config modules Client.emptyChrome))
-        |> Program.withReactHydrate placeholder
-        |> Program.run
+        |> Client.mountAt placeholder Fuaran.MVU.React.Hydrate (Fuaran.MVU.React.ModelStore())
+        |> ignore
 
     JS.setTimeout
         (fun () ->
@@ -365,11 +369,12 @@ let private composerTests =
                     ClientConfig.defaults
                     (fun () -> (), [])
                     (fun (_: AIClientConfig.OuterMsg) () -> (), [])
+                    (fun _ -> Map.empty)
                     AIClientConfig.composerDispatchersFor
                     (fun () dispatchers ->
                         seen.Add dispatchers
                         Feliz.Html.none)
-                |> Program.view
+                |> viewOf
 
             let loop1: AIClientConfig.OuterMsg -> unit = fun _ -> ()
             let loop2: AIClientConfig.OuterMsg -> unit = fun _ -> ()

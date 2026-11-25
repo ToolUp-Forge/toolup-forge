@@ -85,11 +85,11 @@ let private shellModel (activeId: string) (state: obj) : Client.Model = {
 // post-update hook (`Client.observeModuleStates`, installed through
 // `withTrace`), so the helper runs both halves exactly as the program does.
 let private update (modules: ErasedModule list) msg (model: Client.Model) =
-    let next, cmd =
+    let next, steps =
         Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> modules msg model
 
     Client.observeModuleStates modules msg model.Hosts next
-    next, cmd
+    next, steps
 
 let tests =
     testList "Module inspect-state (Phase 536)" [

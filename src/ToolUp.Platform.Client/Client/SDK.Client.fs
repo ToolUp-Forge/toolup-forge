@@ -4626,6 +4626,10 @@ module Client =
         Component: Component<unit, 'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>>
         Interpreter: Interpreter<'msg, RemoteEffect<'msg>, Subscription<'msg>>
         Host: Host<'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>>
+        /// Start a new mount: the view's next render builds a fresh wrapper
+        /// set. `mountAt` calls it; a host that mounts `Component` itself
+        /// calls it before each mount.
+        BeginMount: unit -> unit
     }
 
     /// The error a runtime report carries to the shell's error sink, in the
@@ -4728,18 +4732,25 @@ module Client =
             traceLog.Debug("msg=" + Program.safeMsgRepr msg)
             next
 
-        // The wrapper set for the mount's one dispatch: built on the first
-        // render, and again only when a new mount (a hot reload) hands the
-        // view a new dispatch.
-        let built: (Dispatch<'msg> * 'stable) option ref = ref None
+        // The wrapper set, one per mount, built on the mount's first render
+        // over a dispatch of the set's own that forwards to the dispatch the
+        // latest render was handed. The mount hands every render a dispatch
+        // into the same runtime, but not always the same function, so the
+        // set cannot key on it: it keys on the mount (`BeginMount`).
+        let mounted: (Dispatch<'msg> ref * Lazy<'stable>) option ref = ref None
+
+        let beginMount () =
+            let current: Dispatch<'msg> ref = ref ignore
+            let forward (msg: 'msg) = current.Value msg
+            mounted.Value <- Some(current, lazy (build forward))
 
         let stableFor (dispatch: Dispatch<'msg>) =
-            match built.Value with
-            | Some(seen, stable) when obj.ReferenceEquals(seen, dispatch) -> stable
-            | _ ->
-                let stable = build dispatch
-                built.Value <- Some(dispatch, stable)
-                stable
+            if mounted.Value.IsNone then
+                beginMount ()
+
+            let current, stable = mounted.Value.Value
+            current.Value <- dispatch
+            stable.Value
 
         // The view is built inside React's render of the mount's root. A view
         // that throws is reported to the error sink, and the last element
@@ -4780,6 +4791,7 @@ module Client =
                     render
             Interpreter = RemoteEffect.interpreter
             Host = host
+            BeginMount = beginMount
         }
 
     /// The shell program over a given shell view (whole-tree or sliced).
@@ -4813,27 +4825,40 @@ module Client =
     let program (config: ClientConfig) (modules: ErasedModule list) : ShellProgram<Model, Msg> =
         programWith viewWithSignIn config modules
 
-    /// Mount `program` at `"elmish-app"`, publishing to `store`: fresh, or
-    /// over server-rendered markup with `Hydrate`, and hot-reloaded under
-    /// the same id in a development build. A view that reads slices of the
-    /// model reads them from `store` (`shellStore`).
+    /// Unmount `mounted` when the page unloads (`beforeunload`): the runtime
+    /// terminates, every subscription stops once, and nothing reaches it
+    /// after. `mountAt` arranges it for every mount.
+    let unmountOnUnload
+        (mounted: Mounted<unit, 'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>>)
+        : Mounted<unit, 'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>> =
+        Browser.Dom.window.addEventListener ("beforeunload", fun _ -> mounted.Unmount())
+        mounted
+
+    /// Mount `program` at the element with id `containerId`, publishing to
+    /// `store`: fresh, or over server-rendered markup with `Hydrate`, and
+    /// hot-reloaded under the same id in a development build. A view that
+    /// reads slices of the model reads them from `store` (`shellStore`).
     let inline mountAt
+        (containerId: string)
         (attach: Attach)
         (store: ModelStore<'model, ElementView<'msg>>)
         (program: ShellProgram<'model, 'msg>)
         : Mounted<unit, 'model, 'msg, RemoteEffect<'msg>, Subscription<'msg>, ElementView<'msg>> =
+        program.BeginMount()
+
         Mount.mount
             (Live.binding ())
             {
-                Mount.options (Live.container "elmish-app") ElementView.toElement program.Host with
+                Mount.options (Live.container containerId) ElementView.toElement program.Host with
                     Attach = attach
                     Store = store
-                    HotKey = Some "elmish-app"
+                    HotKey = Some containerId
                     Shape = Live.shapeOf<'model> ()
             }
             program.Component
             program.Interpreter
             ()
+        |> unmountOnUnload
 
     /// Returns `true` if a registered `PublicEntryDispatchers` short-circuits
     /// the full shell bootstrap (the dispatcher has rendered its own page).
@@ -4853,7 +4878,7 @@ module Client =
         let store = ModelStore<Model, ElementView<Msg>>()
 
         programWith (viewSliced store) config modules
-        |> mountAt (if hydrate then Hydrate else Fresh) store
+        |> mountAt "elmish-app" (if hydrate then Hydrate else Fresh) store
         |> ignore
 
     /// Run the client application with the given modules. Convenience entry

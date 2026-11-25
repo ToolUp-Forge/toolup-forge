@@ -38,7 +38,8 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Elmish
-open ToolUp.Elmish.React
+open Fuaran.MVU
+open Fuaran.MVU.React
 open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.Client
@@ -265,7 +266,7 @@ let run (route: Route) (report: Run -> unit) : unit =
 
     match route with
     | Route.ShellStore ->
-        let store = ModelStore.create<Client.Model, Client.Msg> ()
+        let store = ModelStore<Client.Model, ElementView<Client.Msg>>()
 
         let messages = [|
             Client.ModuleMsg(ModuleId, box Increment)
@@ -275,14 +276,15 @@ let run (route: Route) (report: Run -> unit) : unit =
 
         Client.programOver
             config
-            (fun () -> shellModel0 (), Cmd.none)
+            (fun () -> shellModel0 (), [])
             (fun msg model -> Client.update config bus modules msg model)
+            (fun _ -> Map.empty)
             Client.dispatchers
             (fun model (dispatchers: Client.Dispatchers) ->
                 send <- Some(fun i -> dispatchers.Dispatch messages[i])
                 Client.viewSliced store config modules Client.emptyChrome model dispatchers)
-        |> Program.withReactStore store placeholder
-        |> Program.run
+        |> Client.mountAt placeholder Fresh store
+        |> ignore
     | Route.ComposerWholeTree
     | Route.ComposerStore ->
         let messages = [|
@@ -291,12 +293,14 @@ let run (route: Route) (report: Run -> unit) : unit =
             AIClientConfig.SidePanelMsg AIClientConfig.Toggle
         |]
 
-        let init () : AIClientConfig.OuterModel * Cmd<AIClientConfig.OuterMsg> =
+        let init
+            ()
+            : AIClientConfig.OuterModel * Step<AIClientConfig.OuterMsg, RemoteEffect<AIClientConfig.OuterMsg>> list =
             {
                 Shell = shellModel0 ()
                 SidePanel = AIClientConfig.composerSidePanelInit ()
             },
-            Cmd.none
+            []
 
         let update = AIClientConfig.composerUpdate config bus modules
 
@@ -308,7 +312,8 @@ let run (route: Route) (report: Run -> unit) : unit =
                 view model dispatchers
 
         if route = Route.ComposerStore then
-            let store = ModelStore.create<AIClientConfig.OuterModel, AIClientConfig.OuterMsg> ()
+            let store =
+                ModelStore<AIClientConfig.OuterModel, ElementView<AIClientConfig.OuterMsg>>()
 
             let shell = Client.shellStore store _.Shell
 
@@ -316,19 +321,21 @@ let run (route: Route) (report: Run -> unit) : unit =
                 config
                 init
                 update
+                (fun _ -> Map.empty)
                 AIClientConfig.composerDispatchersFor
                 (capture (Client.viewSlicedOver shell config modules))
-            |> Program.withReactStore store placeholder
-            |> Program.run
+            |> Client.mountAt placeholder Fresh store
+            |> ignore
         else
             Client.programOver
                 config
                 init
                 update
+                (fun _ -> Map.empty)
                 AIClientConfig.composerDispatchersFor
                 (capture (Client.viewWithSignIn config modules))
-            |> Program.withReactSynchronous placeholder
-            |> Program.run
+            |> Client.mountAt placeholder Fresh (ModelStore())
+            |> ignore
 
     let routeName =
         match route with

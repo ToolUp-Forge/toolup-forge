@@ -342,10 +342,10 @@ let tests =
                         $"`{source.Key}`'s banner row offers Retry exactly when its table row says so"
 
                     if source.Retryable then
-                        let _, cmd = update (Client.RetryBootLoad source.Key) model
+                        let _, steps = update (Client.RetryBootLoad source.Key) model
 
                         Expect.isFalse
-                            (List.isEmpty cmd)
+                            (List.isEmpty steps)
                             $"`{source.Key}` offers Retry but RetryBootLoad re-issues nothing for it")
 
             testCase "the non-retryable sources are exactly the self-retrying and the non-load ones" (fun () ->

@@ -14,10 +14,11 @@ module ToolUp.AI.Client.Tests.ShellUpdateEffectsTests
 // These drive the real `Client.update` under Node (the
 // `BootDegradationTests` precedent) and pin the effect boundary:
 //   • a throwing store never throws out of `update` — the arm returns a
-//     `Cmd`, and running it dispatches the `"sidebar-prefs"` boot row;
-//   • `update` publishes nothing to observers — the post-update hook
-//     (`Client.observeModuleStates`, installed through `withTrace`) does;
-//   • the two toasts are `Cmd`s, published only when the effect runs.
+//     step, and running it dispatches the `"sidebar-prefs"` boot row;
+//   • `update` publishes nothing to observers — the observer wrapped
+//     around it (`Client.observeModuleStates`, through
+//     `withModuleStateObserver`) does;
+//   • the two toasts are signals, published only when the effect runs.
 //
 // Plus the permissions-admin banner polarity (a successful exposure
 // change is not an error banner), which is the same "the arm says the
@@ -25,9 +26,11 @@ module ToolUp.AI.Client.Tests.ShellUpdateEffectsTests
 
 open Fable.Core
 open Feliz
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.StepDriver
 
 // ─── Substrate stubs ─────────────────────────────────────────────────
 
@@ -62,12 +65,11 @@ let private restoreStore (prior: obj) : unit = jsNative
 })()""")>]
 let private ensureEventSource () : unit = jsNative
 
-/// Run a command's effects against a recording dispatch.
-let private runCmd (cmd: Cmd<'msg>) : 'msg list =
+/// Run a step list against a recording dispatch.
+let private record (steps: Step<'msg, RemoteEffect<'msg>> list) : 'msg list =
     let dispatched = ResizeArray<'msg>()
 
-    for effect in cmd do
-        effect dispatched.Add
+    runSteps dispatched.Add steps
 
     List.ofSeq dispatched
 
@@ -264,10 +266,10 @@ let private catalogModule () =
 
 let private readState = box { Detail = "none" }
 
-/// Drives `Client.update` the way the Elmish loop does: every message goes
-/// through `update`, its command's effects run against one queue, and the
-/// queue drains. A test names no shell message for a module's command, so it
-/// reads the same on any route the shell gives one.
+/// Drives `Client.update` by hand: every message goes through `update`, its
+/// steps run against one queue, and the queue drains. A test names no shell
+/// message for a module's step, so it reads the same on any route the shell
+/// gives one.
 type private ShellLoop(modules: ErasedModule list, start: Client.Model) =
     let queue = System.Collections.Generic.Queue<Client.Msg>()
     let mutable model = start
@@ -276,11 +278,10 @@ type private ShellLoop(modules: ErasedModule list, start: Client.Model) =
 
     member _.Drain() =
         while queue.Count > 0 do
-            let next, cmd = update modules (queue.Dequeue()) model
+            let next, steps = update modules (queue.Dequeue()) model
             model <- next
 
-            for effect in cmd do
-                effect queue.Enqueue
+            runSteps queue.Enqueue steps
 
     member this.Send(msg: Client.Msg) =
         queue.Enqueue msg
@@ -308,14 +309,14 @@ let private answerFor (table: string) (inFlight: ReadsInFlight) =
 let tests =
     testList "Shell update effects (Phase 1069)" [
         testList "sidebar preferences (B13)" [
-            testCase "a throwing store never throws out of update — each arm returns a Cmd" (fun () ->
+            testCase "a throwing store never throws out of update — each arm returns a step" (fun () ->
                 let prior = installThrowingStore ()
 
                 try
                     for msg in sidebarArms do
-                        let model, cmd = update [] msg (shellModel "m1" [])
+                        let model, steps = update [] msg (shellModel "m1" [])
 
-                        Expect.isFalse (List.isEmpty cmd) $"{msg} persists through a Cmd"
+                        Expect.isFalse (List.isEmpty steps) $"{msg} persists through a step"
 
                         Expect.isTrue
                             (obj.ReferenceEquals(model.SidebarPrefs, SidebarPreferences.UserSidebarPreferences.empty)
@@ -324,15 +325,15 @@ let tests =
                 finally
                     restoreStore prior)
 
-            testCase "running the persist Cmd against a throwing store raises the sidebar-prefs boot row" (fun () ->
+            testCase "running the persist step against a throwing store raises the sidebar-prefs boot row" (fun () ->
                 let prior = installThrowingStore ()
 
                 try
                     for msg in sidebarArms do
-                        let _, cmd = update [] msg (shellModel "m1" [])
+                        let _, steps = update [] msg (shellModel "m1" [])
 
                         let failures =
-                            runCmd cmd
+                            record steps
                             |> List.choose (function
                                 | Client.BootLoadFailed(source, _) -> Some source
                                 | _ -> None)
@@ -406,7 +407,7 @@ let tests =
         ]
 
         testList "toasts" [
-            testCase "a session-store reset toasts through a Cmd, not inline" (fun () ->
+            testCase "a session-store reset toasts through a signal, not inline" (fun () ->
                 ensureEventSource ()
                 let seen = ResizeArray<NotificationEnvelope>()
                 let unsubscribe = NotificationClient.subscribe seen.Add
@@ -419,15 +420,15 @@ let tests =
                         Reason = ProcessedDataTypes.SessionStoreResetReasonEvicted
                     }
 
-                    let _, cmd = update [] (Client.SessionStoreReset notice) (shellModel "m1" [])
+                    let _, steps = update [] (Client.SessionStoreReset notice) (shellModel "m1" [])
                     Expect.equal seen.Count 0 "update publishes no toast"
 
-                    runCmd cmd |> ignore
-                    Expect.equal seen.Count 1 "the Cmd publishes it"
+                    record steps |> ignore
+                    Expect.equal seen.Count 1 "the signal publishes it"
                 finally
                     unsubscribe ())
 
-            testCase "an action for an inactive module toasts through a Cmd, not inline" (fun () ->
+            testCase "an action for an inactive module toasts through a signal, not inline" (fun () ->
                 ensureEventSource ()
                 let target = "_test1069.toast"
                 let erased = counterModule target
@@ -437,13 +438,13 @@ let tests =
                 try
                     let before = shellModel "_test1069.elsewhere" [ target, box { Count = 0 } ]
 
-                    let _, cmd =
+                    let _, steps =
                         update [ erased ] (Client.ModuleActionReceived(target, "inc", "")) before
 
                     Expect.equal seen.Count 0 "update publishes no toast"
 
-                    runCmd cmd |> ignore
-                    Expect.equal seen.Count 1 "the Cmd publishes the results-available toast"
+                    record steps |> ignore
+                    Expect.equal seen.Count 1 "the signal publishes the results-available toast"
                 finally
                     unsubscribe ())
         ]
@@ -537,8 +538,7 @@ let tests =
                         (Client.ModuleEventPublished(readTopic, "sales"))
                         (shellModel readId [ homeId, homeState; readId, readState ])
 
-                for effect in routed do
-                    effect answer.Add
+                runSteps answer.Add routed
 
                 (answerFor "sales" inFlight) (TableAnswered "sales")
                 let answerMsg = Seq.exactlyOne answer

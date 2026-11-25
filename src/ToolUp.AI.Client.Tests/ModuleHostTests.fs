@@ -16,6 +16,7 @@ open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.StepDriver
 
 type private AskMsg =
     | Ask of string
@@ -103,13 +104,12 @@ type private Loop(config: ClientConfig, modules: ErasedModule list, start: Clien
 
     member _.Drain() =
         while queue.Count > 0 do
-            let next, cmd =
+            let next, steps =
                 Client.update config Unchecked.defaultof<IModuleQueryBus> modules (queue.Dequeue()) model
 
             model <- next
 
-            for effect in cmd do
-                effect queue.Enqueue
+            runSteps queue.Enqueue steps
 
     member this.Send(msg: Client.Msg) =
         queue.Enqueue msg
@@ -272,7 +272,7 @@ let tests =
                 |> ClientModule.withId askerId
                 |> ClientModule.register
 
-            let next, cmd =
+            let next, steps =
                 Client.update
                     config
                     Unchecked.defaultof<IModuleQueryBus>
@@ -283,8 +283,7 @@ let tests =
             Expect.isFalse (next.Hosts |> Map.containsKey askerId) "no host"
             Expect.equal reported.Count 0 "update reported nothing itself"
 
-            for effect in cmd do
-                effect ignore
+            runSteps ignore steps
 
             Expect.equal (List.ofSeq reported) [ askerId ] "the command reports it")
     ]

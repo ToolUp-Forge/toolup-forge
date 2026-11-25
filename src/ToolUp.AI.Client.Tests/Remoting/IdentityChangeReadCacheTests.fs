@@ -30,6 +30,7 @@ open ToolUp.Platform
 open ToolUp.Remoting.Client
 open ToolUp.Platform.Tests.Remoting.ReadPolicyFixture
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.AI.Client.Tests.StepDriver
 open ToolUp.AI.Client.Tests.XhrStub
 
 /// A JWT-shaped token whose payload names `sub` (the signature is never
@@ -151,7 +152,7 @@ let private shellModel () : Client.Model = {
 /// Run the shell's `TeamSwitched` arm and every command it returns (the
 /// reloads go to the scripted stub; their messages are dropped).
 let private switchTeam (teamId: string option) () =
-    let _, cmd =
+    let _, steps =
         Client.update
             ClientConfig.defaults
             Unchecked.defaultof<IModuleQueryBus>
@@ -159,8 +160,7 @@ let private switchTeam (teamId: string option) () =
             (Client.TeamSwitched teamId)
             (shellModel ())
 
-    for effect in cmd do
-        effect ignore
+    runSteps ignore steps
 
 // ─── The cross-tab watch ─────────────────────────────────────────────
 

@@ -41,7 +41,7 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Elmish
-open ToolUp.Elmish.React
+open Fuaran.MVU.React
 open ToolUp.Platform
 
 [<Import("JSDOM", from = "jsdom")>]
@@ -248,34 +248,35 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
 
     let mutable dispatch: (Client.Msg -> unit) option = None
 
-    // The shell's own builder: the view receives the loop's wrapper set,
-    // built once per loop, exactly as `Client.program` / `Client.run` hand it.
+    // The shell's own builder: the view receives the mount's wrapper set,
+    // built once per mount, exactly as `Client.program` / `Client.run` hand it.
     let capture (view: Client.Model -> Client.Dispatchers -> ReactElement) =
         fun model (dispatchers: Client.Dispatchers) ->
             dispatch <- Some dispatchers.Dispatch
             view model dispatchers
 
-    let program =
-        if sliced then
-            let store = ModelStore.create<Client.Model, Client.Msg> ()
+    if sliced then
+        let store = ModelStore<Client.Model, ElementView<Client.Msg>>()
 
-            Client.programOver
-                config
-                (fun () -> model0, [])
-                update
-                Client.dispatchers
-                (capture (Client.viewSliced store config modules Client.emptyChrome))
-            |> Program.withReactStore store placeholder
-        else
-            Client.programOver
-                config
-                (fun () -> model0, [])
-                update
-                Client.dispatchers
-                (capture (Client.viewWithSignIn config modules Client.emptyChrome))
-            |> Program.withReactSynchronous placeholder
-
-    Program.run program
+        Client.programOver
+            config
+            (fun () -> model0, [])
+            update
+            (fun _ -> Map.empty)
+            Client.dispatchers
+            (capture (Client.viewSliced store config modules Client.emptyChrome))
+        |> Client.mountAt placeholder Fresh store
+        |> ignore
+    else
+        Client.programOver
+            config
+            (fun () -> model0, [])
+            update
+            (fun _ -> Map.empty)
+            Client.dispatchers
+            (capture (Client.viewWithSignIn config modules Client.emptyChrome))
+        |> Client.mountAt placeholder Fresh (ModelStore())
+        |> ignore
 
     after
         (fun () ->
