@@ -213,7 +213,7 @@ let private assistantTests =
                 [ "await", "ChatStream.watchdogDelay"; "await", "FastPathBridge.resolve" ]
                 "the watchdog first, as Cmd.batch ran them"
 
-            Expect.equal
+            same
                 (List.head (effects steps))
                 (RemoteEffect.await "ChatStream.watchdogDelay" (fun (_: Guid) -> noCall ()) p.WatchdogId (fun _ ->
                     Unchecked.defaultof<AIAssistantUI.Msg>))
