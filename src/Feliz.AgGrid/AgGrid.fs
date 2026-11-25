@@ -1529,7 +1529,7 @@ type AgGrid<'row> =
                         fun () ->
                             // Runs the column autoSize in a 0ms timeout so the cellRenderer
                             // cells render before the grid measures them. An Elmish re-render
-                            // (commonly the post-auth `Prefetch.onAllReady` active-module
+                            // (commonly the post-auth active-module
                             // re-init) can destroy the grid before the timeout fires; AG Grid
                             // v31+ exposes `isDestroyed()` for exactly this case and warns
                             // (#26) on every API call past destroy. Gate the whole block on

@@ -213,10 +213,10 @@
              via __TOOLUP_AUTH_TRACE__ Vite define. -->
         <Compile Include="Client\AuthDiagnostics.fs" />
         <Compile Include="Client\CsrfClient.fs" />
-        <!-- 0.4.1 — Cmd.OfRemoting.IRemotingInterceptor bridge. Parses
-             ToolUp.Remoting's Phase 69b.E CategorisedErrorResult envelope
-             into a typed RemotingCategorisedException + ErrorCategory DU
-             so downstream ofError handlers can pattern-match without
+        <!-- The IRemotingInterceptor bridge. Parses ToolUp.Remoting's
+             CategorisedErrorResult envelope into a typed
+             RemotingCategorisedException + ErrorCategory DU so a
+             remote call's reply handler can pattern-match without
              reading message strings. Registered at boot from
              SDK.Client.installRequestSeam. -->
         <Compile Include="Client\RemotingInterceptors.fs" />

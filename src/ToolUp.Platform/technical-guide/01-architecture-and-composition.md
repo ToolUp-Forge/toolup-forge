@@ -147,14 +147,14 @@ let register (m: ClientModule<'Model, 'Msg>) : ErasedModule =
         Definition = m.Definition
         Init =
             fun ctx ->
-                let model, cmd = m.Init ctx
-                box model, Cmd.map box cmd
+                let model, steps = m.Init ctx
+                box model, Step.mapAll box (RemoteEffect.map box) steps
         Update =
             fun msg state ->
                 let typedMsg = unbox<'Msg> msg
                 let typedModel = unbox<'Model> state
-                let newModel, cmd = m.Update typedMsg typedModel
-                box newModel, Cmd.map box cmd
+                let newModel, steps = m.Update typedMsg typedModel
+                box newModel, Step.mapAll box (RemoteEffect.map box) steps
         View =
             m.View
             |> Option.map (fun v ->
@@ -168,9 +168,9 @@ let register (m: ClientModule<'Model, 'Msg>) : ErasedModule =
     }
 ```
 
-`Init` takes a `ClientModuleContext` — the shell hands each module its persisted config and platform identity at init time, and `ClientModule.withUnitInit` adapts a plain `unit -> 'Model * Cmd<'Msg>` into that shape (which is what `create` does for you). `View` is an *option* because a multi-page module supplies `PageViews` instead; `register` rejects a module that sets neither.
+`Init` takes a `ClientModuleContext` — the shell hands each module its persisted config and platform identity at init time, and `ClientModule.withUnitInit` adapts a plain `unit -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list` into that shape (which is what `create` does for you). `View` is an *option* because a multi-page module supplies `PageViews` instead; `register` rejects a module that sets neither.
 
-All `box`/`unbox` calls are contained within this single function. Module code never sees type erasure. The shell Elmish program works with `ErasedModule list`, routing messages to the active module's update function and rendering its view.
+All `box`/`unbox` calls are contained within this single function. Module code never sees type erasure. The shell program works with `ErasedModule list`, routing messages to the active module's update function and rendering its view.
 
 **Why not use a DU for messages?** A discriminated union like `type Msg = Module1Msg of Module1.Msg | Module2Msg of Module2.Msg` would couple the shell to every module at compile time. The type-erased approach means the shell only knows about `ErasedModule` — it never names a module.
 
@@ -195,25 +195,28 @@ After every update cycle, the shell calls `computeProcessedData` — a pure aggr
 
 The view function builds the sidebar from `ModuleDefinition` metadata — module names, icons, and data availability. No module name is hardcoded in the SDK.
 
-`SDK.Client.run` is the entry point the app's `Client.fs` calls. It installs the outbound-request seam, gives a public-entry dispatcher (a share-token embed, say) the chance to take the page instead of the shell, and otherwise starts the shell program on the React root:
+`SDK.Client.run` is the entry point the app's `Client.fs` calls. It installs the outbound-request seam, gives a public-entry dispatcher (a share-token embed, say) the chance to take the page instead of the shell, and otherwise mounts the shell program on the `Fuaran.MVU` runtime at the React root:
 
 ```fsharp skip=fragment
 let run (config: ClientConfig) (modules: ErasedModule list) =
-    // Phase 13a — the request seam is installed BEFORE consulting the
-    // public-entry dispatchers, so a dispatcher that fires authenticated
-    // requests gets the same header attachment any other request gets.
+    // the request seam is installed BEFORE consulting the public-entry
+    // dispatchers, so a dispatcher that fires authenticated requests gets
+    // the same header attachment any other request gets
     installRequestSeam config
 
     if tryDispatchPublicEntry config then
         ()
     else
-        program config modules
-        |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
-        |> Program.withReactSynchronous "elmish-app"
-        |> Program.run
+        let store = ModelStore<Model, ElementView<Msg>>()
+
+        programWith (viewSliced store) config modules
+        |> mountAt "elmish-app" Fresh store
+        |> ignore
 ```
 
-`program` is where the composition happens: it calls `prepareModules`, which folds the consumer's modules together with the SDK built-ins and every built-in the shell's slot table (`ShellSlots`) admits — the data manager among them, filled per `ClientConfig.Slots.DataManager` (`SlotFill.Empty` / `Default` / `Configured` / `External`), builds the module query bus, and assembles the Elmish program from `init` / `update` / `viewWithSignIn`.
+The shell's own long-lived sources (navigation requests, module events, the notification stream, the shell dispatcher itself) are `Subscription` resources the program lists, so the runtime starts each once at boot and stops each once at teardown.
+
+`program` is where the composition happens: it calls `prepareModules`, which folds the consumer's modules together with the SDK built-ins and every built-in the shell's slot table (`ShellSlots`) admits — the data manager among them, filled per `ClientConfig.Slots.DataManager` (`SlotFill.Empty` / `Default` / `Configured` / `External`), builds the module query bus, and assembles the shell program from `init` / `update` / `viewWithSignIn`.
 
 `viewWithSignIn` runs `view` and pipes the result through the `AuthUIProvider` gate. The gate is a pass-through when the deployment's surface admits anonymous callers and when `ClientConfig.Auth.AuthUI = NoAuthUI` (the default) — it only wraps when a companion-backed sign-in UI has been selected. See the [Sign-in UI companions](03-authentication-secrets-and-encryption.md#sign-in-ui-companions) section (Chapter 3) for the delegate-registry pattern.
 

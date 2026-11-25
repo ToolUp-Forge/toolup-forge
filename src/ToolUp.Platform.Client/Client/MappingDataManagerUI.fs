@@ -1440,8 +1440,8 @@ let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) 
     | Ok answer -> ofAnswer answer
     | Error ex -> ApiError ex.Message
 
-/// Read a chosen file through a direct effect rather than
-/// `Cmd.OfAsync.perform` + `Async.FromContinuations`: under Fable 5 that
+/// Read a chosen file through a direct effect rather than an `Async`
+/// built with `Async.FromContinuations`: under Fable 5 that
 /// async path silently no-ops (the deferred start never runs the reader,
 /// so `FileChosen` is never dispatched and the import hangs with no error).
 /// The body runs synchronously when the effect is performed, and

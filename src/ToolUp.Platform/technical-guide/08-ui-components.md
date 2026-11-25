@@ -179,9 +179,9 @@ The boundary is the SDK's only class component. `Fable.React.Types.Component<'P,
 
 ### What the boundary does NOT catch (out of scope for Phase 12c)
 
-- **Errors in module `Update` functions.** These throw inside the synchronous Elmish update tick and crash the whole MVU loop. A separate phase should wrap the boxed `Update` invocation at the `ModuleMsg` handler in `SDK.Client.fs:559-580`.
+- **Errors in module `Update` functions.** A throw inside `update` refuses that message's whole chain: no model of it is installed and none of its effects is performed, and the error reaches `ClientConfig.Composition.OnElmishError` as an `Update` error. The module keeps the state it had before the message.
 - **Errors in shell chrome** — sidebar render, `pageHeader`, `AppShell` skeleton, side-panel, `GlobalOverlays`, `ToastCentre`. Every component above the per-module boundary is unprotected.
-- **In-flight cmd cancellation.** Stale `Cmd<obj>` from the dead module state will still fire after Reset and route through `ModuleMsg`. The new state's `Update` may not handle them; this is acceptable for an emergency reset and avoids inventing an AbortController-style scope-id pattern.
+- **In-flight reply cancellation.** A remote call issued from the dead module state still answers after Reset and routes through `ModuleMsg`. The new state's `Update` may not handle them; this is acceptable for an emergency reset and avoids inventing an AbortController-style scope-id pattern.
 
 ### `ClientConfig.Composition.OnError` telemetry contract
 

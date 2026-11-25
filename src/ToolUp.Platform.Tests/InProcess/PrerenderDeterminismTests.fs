@@ -238,7 +238,7 @@ let private wrapHtmlMountNodeShape =
     testCase "wrapHtmlDocument — body contains the elmish-app mount node Hydration expects"
     <| fun () ->
         let html = wrapHtmlDocument sampleMetaMinimal "<p>body</p>" "/output/Client.js" None
-        // Hydration calls `Program.withReactHydrate "elmish-app"`
+        // Hydration mounts the shell at "elmish-app" with `Attach.Hydrate`
         // — the prerendered HTML must wrap the body in
         // `<div id="elmish-app">...</div>` for `hydrateRoot` to
         // adopt the prerendered DOM without re-rendering. Pin

@@ -275,11 +275,11 @@ banners, notices and validation sentences from it:
 type Model = { Banner: Notice option; Messages: TeamManagerMessages }
 
 let init (ctx: ClientModuleContext) =
-    { Banner = None; Messages = ctx.Messages.TeamManager }, Cmd.none
+    { Banner = None; Messages = ctx.Messages.TeamManager }, []
 
 let update msg model =
     match msg with
-    | Saved -> { model with Banner = Some(Notice.Info model.Messages.Saved) }, Cmd.none
+    | Saved -> { model with Banner = Some(Notice.Info model.Messages.Saved) }, []
 ```
 
 Register such an `init` with `ClientModule.withContextInit`. The model keeps

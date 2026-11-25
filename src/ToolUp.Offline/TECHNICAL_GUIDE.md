@@ -106,7 +106,7 @@ SDK's supply chain for six functions (GP 1's spirit applied to the client tier).
 ### Why promises and not `Async.FromContinuations`
 
 IndexedDB is callback-shaped, so the natural F# wrapper is `Async.FromContinuations` — and that path
-is recorded in this repo as **silently no-opping under Fable 5** when driven through `Cmd.OfAsync`
+is recorded in this repo as **silently no-opping under Fable 5** when started as a deferred `Async`
 (see the note in `Platform.Client/Client/FileManagerUI.fs`, where it hung an upload with no error).
 Every request is therefore wrapped into a JS promise inside its `[<Emit>]` body and awaited with
 `Async.AwaitPromise` — the pattern `Platform.Client/Client/CsrfClient.fs` already proves.

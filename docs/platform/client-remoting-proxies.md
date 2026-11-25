@@ -198,12 +198,13 @@ packs compile.
 
 - **Plain `Async`** (`let! x = api.GetCatalog ()`): a shared call returns the shared result; a
   cache hit returns **synchronously**, and the refresh updates the cache for the next caller.
-- **`Cmd.OfRemoting.call` / `callWithName`**: a cache hit dispatches `ofSuccess cached`, then — when
-  the refresh lands — `ofSuccess fresh` as an ordinary second message. A refresh that fails
-  dispatches nothing more: the served value stands, the interceptor chain's `OnError` observes the
-  failure, and the stale entry is evicted so the next call goes to the server. `callWithRetry`
-  receives the shared or cached value but not the second message.
-- **Interceptors observe requests, not call sites.** The first `Cmd.OfRemoting` call to reach a
+- **`RemoteEffect.call`** (an effect value `update` returns): a call answers **once**. A cache hit
+  answers with the cached value, and the refresh it started still runs to the end, so it refills the
+  cache for the next caller; it sends no second message. A refresh that fails changes nothing the
+  module sees: the served value stands, the interceptor chain's `OnError` observes the failure, and
+  the stale entry is evicted so the next call goes to the server. `callWithRetry` receives the
+  shared or cached value the same way.
+- **Interceptors observe requests, not call sites.** The first `RemoteEffect.call` to reach a
   shared request owns its chain: `OnCalling` once, then `OnSuccess` or `OnError` once, and every
   waiting call receives that chain's outcome — an `OnError` replacement exception included. A cache
   hit sends nothing, so fires nothing; its refresh is a request and fires the chain.
@@ -230,7 +231,7 @@ control beside every route that has one. `identityChanged` is public for a route
 a deployment's own impersonation flow, say. `ReadPolicies.invalidate` is there for a change the
 client learns of some other way (a notification, say).
 
-With nothing registered, `Cmd.OfRemoting` runs its pre-854 path exactly — the check is one count.
+With nothing registered, `RemoteEffect.call` runs its undeclared path exactly — the check is one count.
 Migration notes and the measured before/after: [`docs/migrations/854-client-read-policies.md`](../migrations/854-client-read-policies.md).
 
 ## The transport, and same-tick batching (Phase 855)
@@ -286,10 +287,10 @@ streaming. Elements run one after another on the server, in order. An envelope c
 calls (`RemotingBatchOptions.MaxElements` on the server, `RemoteBatching.enableWith` on the client);
 a larger tick is sent as several envelopes.
 
-**What "same tick" catches today.** Calls started in the same JavaScript task. An Elmish
-`Cmd.OfAsync` / `Cmd.OfRemoting` command currently starts its async behind a `setTimeout` hop, one
-per command, so commands issued by one `update` start in separate tasks and are not coalesced until
-that hop is removed (Phase 851's "no timer hop"); calls started directly (`Async.StartImmediate`,
-promise-returning proxies, several calls inside one async) are coalesced now.
+**What "same tick" catches.** Calls started in the same JavaScript task. The runtime performs a
+chain's effects one after another, in the order `update` emitted them, as soon as the chain commits,
+and each `RemoteEffect.call` starts its request at once — so the calls one `update` returns start in
+one task and are coalesced, as are calls started directly (`Async.StartImmediate`,
+promise-returning proxies, several calls inside one async).
 
 Migration notes and the measured before/after: [`docs/migrations/855-fetch-and-batching.md`](../migrations/855-fetch-and-batching.md).

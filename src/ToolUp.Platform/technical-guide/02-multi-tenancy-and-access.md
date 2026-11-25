@@ -117,8 +117,8 @@ The dictionary is **unbounded by design**. `userId` cardinality is bounded by re
 
 **Client side** propagation goes through three pieces:
 
-1. **`mutable shellDispatch: (Msg -> unit) option`** in `SDK.Client.fs`. Captured once at `init` time via `Cmd.ofEffect (fun dispatch -> shellDispatch <- Some dispatch)` — same pattern the notification subscriber uses. Lets non-shell-update code dispatch shell messages.
-2. **`ClientModuleContext.OnTeamSwitched: (string -> unit) option`**. Built by `buildOnTeamSwitched mode`: in team-scoped modes (`Team` / `MultiTeam`) it returns `Some (fun teamId -> shellDispatch |> Option.iter (fun d -> d (TeamSwitched teamId)))`; otherwise `None`. Handed to every module via `ClientModuleContext` at init / re-init.
+1. **`mutable shellDispatcher`** in `SDK.Client.fs`. Set by the shell's `shell-dispatcher` subscription when the runtime starts it, and marked inactive when the runtime stops it — the same resource shape the notification subscriber uses. Lets non-shell-update code dispatch shell messages.
+2. **`ClientModuleContext.OnTeamSwitched: (string -> unit) option`**. Built by `buildOnTeamSwitched mode`: in team-scoped modes (`Team` / `MultiTeam`) it returns a callback that dispatches `TeamSwitched teamId` through `shellDispatcher` while it is active; otherwise `None`. Handed to every module via `ClientModuleContext` at init / re-init.
 3. **`Msg.TeamSwitched of string`** handler in the shell. Runs the shell's one `reset`: clears `Hosts`, `ModuleConfigs`, `PlatformConfig`, `ResolvedFlags`, `AccessibleModules`; sets `ActiveTeamId = Some newTeamId`; re-issues the boot sources a team switch clears (`BootSources.all`). The async `ConfigsLoaded` / `FlagsLoaded` follow-ups re-init the active module — exactly the bootstrap path. No new re-init code; the bootstrap pattern doubles as the switch pattern.
 
 The built-in `TeamManagerUI` invokes `ctx.OnTeamSwitched` from `ActiveTeamSwitched(_, Ok())` and `TeamCreated(Ok _)`. The header switcher dispatches `TeamSwitched` directly after `teamApi.SetActiveTeam` succeeds. Both routes converge on the same shell handler.
@@ -247,7 +247,7 @@ Model.ModuleConfigs : Map<string, Map<string, string>>  ─── merged into Mo
 ConfigsLoaded ─► evict active module's state ─► re-init with fresh ClientModuleContext
 ```
 
-`ClientModuleContext` carries `{ ModuleKey; Config; PlatformConfig; User; ... }`. A module that doesn't need config keeps `Init = ClientModule.withUnitInit oldInit` — the adapter drops the context and calls the old `unit -> _ * Cmd<_>` shape. A module that does need config takes the context directly and reads from `ctx.Config`.
+`ClientModuleContext` carries `{ ModuleKey; Config; PlatformConfig; User; ... }`. A module that doesn't need config keeps `Init = ClientModule.withUnitInit oldInit` — the adapter drops the context and calls the plain `unit -> _ * Step<_, RemoteEffect<_>> list` shape. A module that does need config takes the context directly and reads from `ctx.Config`.
 
 **Why re-init and not a `Msg` broadcast?** Module state often mirrors config at boot (`Ledger.Currency` derives from a config field on `Init`). A broadcast would force every module to handle `ConfigChanged` in `update` and rederive state in-place — more surface for subtle bugs than a clean re-init. The downside (transient "Loading…" flash for the active module) is acceptable because config changes are rare.
 

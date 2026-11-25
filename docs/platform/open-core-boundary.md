@@ -211,8 +211,8 @@ from a public repository, so a released ToolUp package that carries it restores 
 
 `ToolUp.Platform.Client` references `Fuaran.MVU`, the published Apache-2.0 model-update-view
 runtime whose effects are values. A client module names its remote calls as effect values in
-the runtime's step list (`Step`), and forge's own loop performs them through `Cmd.OfRemoting`
-until the shell moves onto the runtime (`Client/RemoteEffect.fs`). The package is published on
+the runtime's step list (`Step`), and the shell, mounted on the runtime through its React adapter
+`Fuaran.MVU.React`, performs them (`Client/RemoteEffect.fs`). The package is published on
 nuget.org with its sources under `fable/`, as is its kernel, `Fuaran.MVU.Kernel`, so a released
 ToolUp client restores anonymously and compiles in a browser.
 

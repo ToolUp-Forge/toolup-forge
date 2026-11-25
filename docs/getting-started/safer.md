@@ -48,24 +48,22 @@ A single-channel chat room in ~200 lines of consumer code:
 - **No multi-tenancy** — single global channel.
 - **Two-tab sync** — open two tabs, type in one, message appears in the other within 2 seconds (polling-based in v1; SSE upgrade documented in the template's "How to extend" section).
 - **Optimistic UI** — sender sees their message immediately; reconciles when the server's confirmed copy arrives.
-- **Retry policy** — `Cmd.OfRemoting.callWithRetry` with 3 attempts, 250 ms initial delay, exponential backoff.
-- **Structured error banner** — `Program.withErrorReporter` + `ErrorContext` (module id + correlation id + exn) drives a dismissible red banner on send failure.
-- **Hot-reload survival** — SSE subscription cleans up and re-establishes across hot reloads via `EffectHandle.programLifetime` (when SSE is wired in the extension path).
+- **Retry policy** — `RemoteEffect.callWithRetry` with 3 attempts, 250 ms initial delay, exponential backoff.
+- **Structured error banner** — a classified send failure (reason + correlation id) drives a dismissible red banner; the shell's own errors reach `ClientConfig.Composition.OnElmishError` as a structured `ErrorContext`.
+- **Hot-reload survival** — an SSE stream is a `Subscription` the model lists, which the runtime starts once and stops at unmount (when SSE is wired in the extension path).
 
 ## What this teaches
 
-The template's README walks through each in-tree-fork primitive with `file:line` citations:
+The template's README walks through each primitive with `file:line` citations:
 
 | Mechanic | Primitive demonstrated |
 |---|---|
-| Boot loader splash | `Prefetch.onAllReady` — multi-source data gating |
-| Send-message command | `Cmd.OfRemoting.callWithRetry` with `Cmd.RetryPolicy` — retry-as-data (GP 12 rule 3) |
+| Send-message call | `RemoteEffect.callWithRetry` with a `RetryPolicy` — an effect value `update` returns; retry-as-data (GP 12 rule 3) |
 | Optimistic UI on send | One line of model state for the local-then-confirmed pattern |
-| SSE message subscription (extension) | `EffectHandle.programLifetime` — lifetime-aware subscription, disposed on hot-reload + page-leave |
-| SSE callback safety (extension) | `IDispatcher.IsActive` — no-op against torn-down loops |
-| Send-failure red banner | `Program.withErrorReporter` + structured `ErrorContext` |
+| SSE message subscription (extension) | a `Subscription` resource the model lists — started once, stopped at unmount |
+| Send-failure red banner | a classified failure in the model, plus the shell's structured `ErrorContext` |
 
-The scaffold has a "SAFE Stack ↔ SAFER comparison table" mapping `Saturn` → `ServerApp`, `Cmd.OfAsync` → `Cmd.OfRemoting`, ad-hoc subscriptions → `EffectHandle`, `(string * exn)` → structured `ErrorContext`, etc. If you arrived from SAFE Stack docs, that table is the highest-leverage section.
+The scaffold has a "SAFE Stack ↔ SAFER comparison table" mapping `Saturn` → `ServerApp`, `Cmd.OfAsync` → `RemoteEffect.call`, ad-hoc subscriptions → `Subscription` resources, `(string * exn)` → structured `ErrorContext`, etc. If you arrived from SAFE Stack docs, that table is the highest-leverage section.
 
 ## When to choose SAFER vs `platformsdk-solution`
 

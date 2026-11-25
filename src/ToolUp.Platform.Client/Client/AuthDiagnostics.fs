@@ -30,7 +30,7 @@ open Fable.Core.JsInterop
 //     [auth] <corr> <stage>[ <detail>][ err=<kind> sub=<sub-cause>]
 //
 // A `forwarding` tracer lets deployments wire the timeline to a
-// server-side activity sink via a Cmd.OfRemoting call, so a Datadog /
+// server-side activity sink via a remote call, so a Datadog /
 // OpenTelemetry-instrumented deployment can capture client auth
 // traces without devtools access.
 
@@ -119,7 +119,7 @@ let private consoleLog (msg: string) : unit = jsNative
 let consoleTracer: IAuthTracer = writingTracer consoleLog
 
 /// Tracer that forwards each transition to a consumer-supplied
-/// handler (typically a `Cmd.OfRemoting.call` to a server-side
+/// handler (typically a proxy call to a server-side
 /// activity sink, or a wrapper that fans out to multiple
 /// destinations). Use when a deployment runs Datadog / OpenTelemetry
 /// and wants client-side auth traces in the same store as server

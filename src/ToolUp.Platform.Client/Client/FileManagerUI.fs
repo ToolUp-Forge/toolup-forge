@@ -124,7 +124,7 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
     | SelectFile action ->
         match action with
         | Start file ->
-            // Read via a direct effect, not `Cmd.OfAsync.perform` +
+            // Read via a direct effect, not an `Async` built with
             // `Async.FromContinuations`. Under Fable 5 that async path
             // silently no-ops (the deferred async start never runs the
             // reader), so the upload hangs with no error. The body runs

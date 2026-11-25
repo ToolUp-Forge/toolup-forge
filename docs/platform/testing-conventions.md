@@ -715,7 +715,7 @@ The harness uses Node's built-in test runner (`node:test`, stable in Node 20+) p
 
 ### What this harness does and does not exercise
 
-- **Does exercise**: pure `update` functions, model transitions, Msg → Cmd plumbing, `Cmd.batch` / `Cmd.none` composition, any pure F# code reachable from the Fable-transpiled output.
+- **Does exercise**: pure `update` functions, model transitions, the step lists `update` returns (`Do` / `Then`, `RemoteEffect` values), any pure F# code reachable from the Fable-transpiled output.
 - **Does not exercise**: Feliz `view` rendering (no DOM), React `useState` interaction, browser-only APIs (SSE event sources, IndexedDB, `window.*`), `Cmd` execution (Cmds are constructed but not run).
 
 Adding view-level tests is a follow-on once a concrete view-level case lands. That work would add JSDOM as a devDependency, plus a small `Feliz` mount helper, and would compose on top of the same `NodeTest.fs` facade.

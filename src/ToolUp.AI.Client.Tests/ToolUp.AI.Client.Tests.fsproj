@@ -244,7 +244,7 @@
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\BrowserWriterFixture.fs" />
         <Compile Include="Remoting\XhrStub.fs" />
         <Compile Include="Remoting\JsonClientDecodeTests.fs" />
-        <!-- Declared reads through the real proxy and Cmd.OfRemoting:
+        <!-- Declared reads through the real proxy and RemoteEffect.call:
              in-flight sharing, stale-while-revalidate, invalidation, and the
              interceptor chain counting one request once. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ReadPolicyFixture.fs" />

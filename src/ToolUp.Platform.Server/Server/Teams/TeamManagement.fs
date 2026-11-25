@@ -928,7 +928,7 @@ module ActiveTeamPolicy =
     /// `missing-tenant` — previously silent. The default emits one line
     /// to stderr so the condition is diagnosable; override at composition
     /// to route into structured logging. Mirrors
-    /// `Cmd.OfRemoting.Interceptors.errorReporter`.
+    /// the client's `RemoteEffect.Interceptors.setErrorReporter`.
     let mutable errorReporter: string -> exn -> unit =
         fun userId ex ->
             try

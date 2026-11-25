@@ -264,11 +264,13 @@ exception SessionStoreResetException of string
 /// Consumers wrap the call rather than the proxy:
 ///
 /// ```fsharp
-/// Cmd.OfRemoting.call
+/// RemoteEffect.call
+///     "MyApi.RunPriceElasticity"
 ///     (fun args -> SessionEpoch.preflight (myApi.RunPriceElasticity args))
 ///     args
-///     Finished
-///     (fun ex -> ApiError ex.Message)
+///     (function
+///      | Ok result -> Finished result
+///      | Error ex -> ApiError ex.Message)
 /// ```
 ///
 /// A failed epoch READ does not block the call: `check` swallows it and

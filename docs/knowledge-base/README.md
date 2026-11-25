@@ -85,9 +85,7 @@ let modules = [
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
 
-AIClientConfig.program aiSlots clientConfig modules
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+AIClientConfig.run aiSlots clientConfig modules
 ```
 
 That's it. The Knowledge Base sidebar entry appears with three pages: Documents (upload + list + delete), Notes (text snippets), AI Context (standing team instructions for the assistant).

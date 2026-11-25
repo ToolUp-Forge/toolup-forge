@@ -935,21 +935,21 @@ type AIOptions = {
 
 Apps that want RAG compose `RAGCompose.withRAG` instead, which composes the AI tier itself from `RagOptions.AI`; see `src/ToolUp.RAG/README.md`. Apps without AI use `ServerApp.run` without `withAI` and never touch this companion.
 
-## Client side — Elmish outer-program wrapper
+## Client side — the outer-program wrapper
 
-`AIClientConfig.fs` wraps the Platform shell's Elmish Program to layer AI state and chrome on top without the shell knowing any AI types. The shell itself is AI-agnostic: it exposes `Client.init / update / view / program / run`, a public `Model` / `Msg`, and an `ExtraChrome = { HeaderAction; SidePanel }` slot record.
+`AIClientConfig.fs` wraps the Platform shell's program to layer AI state and chrome on top without the shell knowing any AI types. The shell itself is AI-agnostic: it exposes `Client.init / update / view / program / run`, a public `Model` / `Msg`, and an `ExtraChrome = { HeaderAction; SidePanel }` slot record.
 
 ### What the wrapper does
 
 ```fsharp skip=signature
-AIClientConfig.withAIAssistant
-    (mode: AISlotFills)
+AIClientConfig.program
+    (fills: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
-    : Program<unit, OuterModel, OuterMsg, ReactElement>
+    : Client.ShellProgram<OuterModel, OuterMsg>
 ```
 
-Under the hood, `withAIAssistant`:
+Under the hood, `program`:
 
 1. **Fills the AI slots** (`withAISlots`, Phase 1074) — the assistant, AI settings and platform-keys pages compose through `ShellSlotFills.Extensions` after the app's modules, each `Empty`, `Default`, `Configured` or `External` per `AISlotFills`.
 2. **Builds an outer program** on the `Fuaran.MVU` runtime, parameterised over `OuterModel = { Shell: Client.Model; SidePanel: SidePanelModel }` and `OuterMsg = ShellMsg of Client.Msg | SidePanelMsg of SidePanelMsg`.

@@ -7,7 +7,7 @@
 | `Navigate: SidebarId -> unit` | `NavigationRequest.request` | Shell/sidebar routing — `"ModuleId"` or `"ModuleId/route"` |
 | `Notify: ToastIntent -> unit` | `NotificationClient.publishLocal` | A `SystemMessage` toast the shipped `ToastCentre` renders |
 | `Dispatch: 'Msg -> unit` | the module's Elmish dispatch | Feeds the module's `update` loop |
-| `Call<'r>(call, onSuccess, onError)` | `Cmd.OfRemoting` semantics | Runs a remoting-shaped async through the interceptor chain, mapping the outcome into the module's `Msg` |
+| `Call<'r>(call, onSuccess, onError)` | `RemoteEffect.call` semantics | Runs a remoting-shaped async through the interceptor chain, mapping the outcome into the module's `Msg` |
 
 The surface is renderer-neutral: nothing in it names any particular tree language. An adapter for language X maps X's action vocabulary onto these four hooks (and, for action *gating*, consults the [action authorizer](action-authorizer.md) before executing).
 
@@ -44,7 +44,7 @@ let register () : ErasedModule =
 
 ## Semantics worth knowing
 
-- **`Call` executes immediately** (it is not a `Cmd` you return from `update`): the OfRemoting effect — interceptor chain, error-envelope categorisation — runs and the mapped `Msg` arrives via dispatch one timer hop later. External runtimes are action-handler-shaped, not MVU-command-shaped; this is the imperative bridge. Module code that *is* inside `update` should keep using `Cmd.OfRemoting` directly.
+- **`Call` executes immediately** (it is not a step you return from `update`): the remote call's performer — interceptor chain, error-envelope categorisation — runs it, and the mapped `Msg` arrives via dispatch when the call answers. External runtimes are action-handler-shaped, not MVU-step-shaped; this is the imperative bridge. Module code that *is* inside `update` returns `Do(RemoteEffect.call …)` instead.
 - **`Notify` rides the platform notification stream** — the toast renders with the standard `SystemMessageLevel` styling and dismiss behaviour (`Error` sticks until dismissed).
 - **Cost when unused: zero.** The bag is constructed per render only by views that opt in; nothing global changes (GP 11 / GP 13).
 

@@ -36,8 +36,8 @@ let private log = Logger.forCategory "client.module-events"
 // Sanctioned mutable global — same precedent as
 // `NavigationRequest.listeners` and `ModuleStateObserver.observers`.
 // Per-tab singleton; the shell registers its subscriber at Client
-// startup and disposes it on program teardown (the boot effect is a
-// lifetime-aware `EffectHandle`). Subscriber exceptions are
+// startup and disposes it on program teardown (the shell's
+// `module-events` subscription, which the runtime stops). Subscriber exceptions are
 // swallowed (with a console warning where one exists) so a buggy
 // listener can never break the publishing module's step.
 
@@ -52,9 +52,9 @@ let private listeners = List<Listener>()
 
 /// Register a bus listener. Called by the shell at Client startup to
 /// translate every publication into a shell `Msg` dispatch. Returns a
-/// dispose thunk that removes the callback (the shell wires this into
-/// an `EffectHandle` so it is torn down on program termination /
-/// HMR). Re-registration of the same callback adds a second entry
+/// dispose thunk that removes the callback (the shell's `module-events`
+/// subscription calls it when the runtime stops the subscription, at
+/// termination or a hot reload). Re-registration of the same callback adds a second entry
 /// deliberately — symmetry with `NavigationRequest.subscribe`.
 let subscribe (callback: Listener) : unit -> unit =
     listeners.Add(callback)

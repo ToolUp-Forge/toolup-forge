@@ -76,14 +76,14 @@ Injected into the consuming server project via `ToolUp.AI.Server.props`. Compile
 
 ### Client-side UI — [Client/](Client/)
 
-Injected into the consuming client project via `ToolUp.AI.Client.props`. The Platform shell (`ToolUp.Platform.Client.Client`) is AI-agnostic; this companion layers the AI MVU + chrome back on via an Elmish outer-program wrapper (`AIClientConfig.withAIAssistant`).
+Injected into the consuming client project via `ToolUp.AI.Client.props`. The Platform shell (`ToolUp.Platform.Client.Client`) is AI-agnostic; this companion layers the AI MVU + chrome back on via an outer-program wrapper (`AIClientConfig.program`, mounted by `AIClientConfig.run`).
 
 | File | Purpose |
 |---|---|
 | `SSEClient.fs` | EventSource wrapper with mode-aware query parameter |
 | `ConversationPanel.fs` | Reusable chat panel component |
 | `AIAssistantUI.fs` | Built-in AI assistant module page (full conversation view) |
-| `AIClientConfig.fs` | `SidePanelModel` / `SidePanelMsg` / `sidePanelUpdate`, `OuterModel`/`OuterMsg`, `slotExtensions` / `withAISlots`, `withSidePanel`, `withAIAssistant` — the outer-program composition that wraps the shell's Elmish program |
+| `AIClientConfig.fs` | `SidePanelModel` / `SidePanelMsg` / `sidePanelUpdate`, `OuterModel`/`OuterMsg`, `slotExtensions` / `withAISlots`, `withSidePanel`, `program`, `run` — the outer-program composition that wraps the shell's program |
 
 ## How to enable AI in a deployment
 

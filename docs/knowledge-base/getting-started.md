@@ -72,9 +72,7 @@ let modules = [
 let clientConfig, modules =
     KnowledgeBaseClientConfig.withKnowledgeBase DefaultKnowledgeBase clientConfig modules
 
-AIClientConfig.program aiSlots clientConfig modules
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+AIClientConfig.run aiSlots clientConfig modules
 ```
 
 ## 4. Optional — wire the standing AI context builder

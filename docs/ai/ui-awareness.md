@@ -104,8 +104,8 @@ module's `withInspectState` chain and the companion's client executor through
 the real Fable + Feliz + Fuaran.MVU toolchain, which is what proves the
 seam is Fable-safe end to end. It is a compile-time proof, not a running
 demo — the sample is not wired into a `ClientConfig` module shell (the
-`Program.mkProgram` loop `samples/MinimalClient/Client.fs` runs is a bare
-Elmish counter, not the shell `ModuleStateObserver` publishes through), and
+program `samples/MinimalClient/Client.fs` mounts is a bare
+counter on the `Fuaran.MVU` runtime, not the shell `ModuleStateObserver` publishes through), and
 there is no live LLM or browser session to drive the tool end to end in this
 environment. `src/ToolUp.AI.Client.Tests/ModuleInspectStateTests.fs` and
 `UiAwarenessInspectTests.fs` are what exercise the seam's actual runtime

@@ -508,20 +508,22 @@ The function is the agent's heart. Most apps don't call it directly — `AICompo
 
 ```fsharp skip=signature
 module AIClientConfig =
-    val withAIAssistant:
-        mode: AISlotFills ->
+    val program:
+        fills: AISlotFills ->
         config: ClientConfig ->
         modules: ErasedModule list ->
-        Program<unit, OuterModel, OuterMsg, ReactElement>
+        Client.ShellProgram<OuterModel, OuterMsg>
+
+    val run: fills: AISlotFills -> config: ClientConfig -> modules: ErasedModule list -> unit
 ```
 
-Wraps the shell's Elmish `Program`. Adds the AI side-panel MVU + chrome around the base shell. The returned `Program` is fed into `Program.withReactSynchronous "elmish-app" |> Program.run`.
+`program` wraps the shell's program: it adds the AI side-panel model, its `update` and its chrome around the base shell, and lists the assistant's SSE stream as a resource beside the shell's own subscriptions. `run` mounts it at `"elmish-app"` (`Client.mountAt`), as `Client.run` mounts the bare shell.
 
 For deployments wanting just the side panel but not the full-page module, pass `AISlotFills.configured { ... ShowSidePanel = true }` with `Branding.Name = ""` to suppress the sidebar entry.
 
 ### `SidePanelModel` / `OuterModel` / `OuterMsg`
 
-Internal types exposed for apps that want to compose additional Elmish wrappers around `AIClientConfig.withAIAssistant`. Most apps don't need these.
+Internal types exposed for apps that want to compose additional wrappers around `AIClientConfig.program`. Most apps don't need these.
 
 ### `ConversationPanel` (Feliz component)
 

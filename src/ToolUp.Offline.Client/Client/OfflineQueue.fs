@@ -27,7 +27,7 @@ open ToolUp.Offline
 // **Promises, not `Async.FromContinuations`.** IndexedDB is
 // callback-shaped, so the natural F# wrapper is `FromContinuations` —
 // and that path is recorded IN THIS REPO as silently no-opping under
-// Fable 5 when driven through `Cmd.OfAsync` (see the note in
+// Fable 5 when started as a deferred `Async` (see the note in
 // `Platform.Client/Client/FileManagerUI.fs`). Every request below is
 // therefore wrapped into a JS promise inside the `[<Emit>]` body and
 // awaited with `Async.AwaitPromise`, which is the pattern

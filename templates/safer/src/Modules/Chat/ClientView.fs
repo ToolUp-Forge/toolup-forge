@@ -25,12 +25,11 @@ let private clearInterval (id: int) : unit = jsNative
 
 let private pollingTicker (dispatch: Msg -> unit) : unit =
     let id = setInterval (fun () -> dispatch PollTick) 2_000
-    // The Elmish runtime owns teardown via its EffectHandle lifecycle when
-    // running inside the SDK shell. For a minimal starter we let the
-    // interval live for the page's lifetime — page navigation / refresh
-    // clears it; production deployments using `EffectHandle.programLifetime`
-    // get explicit dispose. See README "Walking tour" → "What the SDK
-    // shell handles on your behalf".
+    // Inside the SDK shell a long-lived source is a `Subscription` the
+    // model lists, and the runtime stops it at teardown. For a minimal
+    // starter we let the interval live for the page's lifetime — page
+    // navigation / refresh clears it. See README "Walking tour" → "What
+    // the SDK shell handles on your behalf".
     ignore id
 
 [<ReactComponent>]

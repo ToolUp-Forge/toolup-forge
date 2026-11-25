@@ -19,7 +19,7 @@ open ToolUp.Remoting
 /// custom attributes, a browser proxy receives it as data through
 /// `register`, and on .NET `ofAttributes` reads the attributes into the
 /// same data so a test can pin the two equal. With nothing registered every
-/// proxy call — and every `Cmd.OfRemoting` call — takes the pre-854 path
+/// proxy call — and every `RemoteEffect.call` — takes the undeclared path
 /// unchanged.
 ///
 /// **One table per page, not per proxy.** The shell builds several proxies
@@ -136,7 +136,7 @@ module ReadPolicies =
                     this.Start())
 
         /// Await the outcome after the interceptor chain (sending the
-        /// request if nothing has yet). What `Cmd.OfRemoting` awaits.
+        /// request if nothing has yet). What `RemoteEffect`'s performer awaits.
         member this.AwaitFinal() : Async<Result<obj, exn>> = this.Await(snd, finalWaiters)
 
         member internal this.AwaitRaw() : Async<obj> = async {
@@ -147,7 +147,7 @@ module ReadPolicies =
             | Error ex -> return raise ex
         }
 
-    /// What invoking a declared read found. Read by `Cmd.OfRemoting`.
+    /// What invoking a declared read found. Read by `RemoteEffect`'s performer.
     type ReadLeg =
         /// No result within its max age: the caller awaits this request —
         /// one already in flight, or a new one it will send.
@@ -351,7 +351,7 @@ module ReadPolicies =
     /// The proxy's half: `send` is the undeclared request, `key` the
     /// request's wire identity (`None` for a body that cannot be compared,
     /// a multipart upload). A read decides its leg HERE, at invocation, so
-    /// `Cmd.OfRemoting` can read it synchronously; the returned call uses
+    /// `RemoteEffect`'s performer can read it synchronously; the returned call uses
     /// that leg on its first run and decides afresh on any later run, so a
     /// re-run `Async` is a new call, as an undeclared one is.
     let internal invoke
@@ -393,9 +393,9 @@ module ReadPolicies =
           }
         | _ -> send ()
 
-    /// `Cmd.OfRemoting`'s half: invoke a proxy call and report whether it
+    /// The performer's half: invoke a proxy call and report whether it
     /// was a declared read. `None` — without invoking — when nothing is
-    /// registered, so the caller runs its pre-854 path exactly. A call
+    /// registered, so the caller runs its undeclared path exactly. A call
     /// that throws while being invoked is reported as a `Plain` call that
     /// raises the same exception when run.
     let tryObserve (invoke: unit -> Async<'r>) : Observation<'r> option =

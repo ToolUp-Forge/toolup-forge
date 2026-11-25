@@ -255,7 +255,7 @@ module internal ReflectiveWideIntegers =
 // The consumer shape is the one this client tier already uses for every
 // push stream (`NotificationClient`, the AI `SSEClient`): a callback per
 // element plus a disposable that closes the connection — not a new
-// abstraction, and it composes with `EffectHandle` lifetimes unchanged.
+// abstraction, and it fits a `Subscription` resource unchanged.
 // `EventSource` itself is NOT used: it can only GET, and a streaming method
 // takes its argument in a POST body.
 //
