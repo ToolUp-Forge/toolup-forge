@@ -43,8 +43,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         | None -> model, Cmd.none
         | Some uri ->
             let cmd =
-                Cmd.OfRemoting.call api.Ingest { SourceUri = uri; Format = "csv" } IngestSucceeded (fun ex ->
-                    IngestFailed ex.Message)
+                RemoteEffect.call "MyDataManagerApi.Ingest" api.Ingest { SourceUri = uri; Format = "csv" } (function
+                    | Ok response -> IngestSucceeded response
+                    | Error ex -> IngestFailed ex.Message)
+                |> RemoteEffect.asCmd
 
             model, cmd
     | IngestSucceeded response ->

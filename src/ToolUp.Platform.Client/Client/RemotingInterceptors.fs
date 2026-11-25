@@ -144,7 +144,7 @@ module ScopeDenial =
         | _ -> None
 
 /// 0.4.1 — forge-side bridge that registers
-/// `Cmd.OfRemoting.IRemotingInterceptor` instances at boot time. The
+/// `IRemotingInterceptor` instances at boot time. The
 /// `categorisedErrorBridge` parses Phase 69b.E `CategorisedErrorResult`
 /// envelopes out of `ProxyRequestException.ResponseBody` and substitutes
 /// a typed `RemotingCategorisedException`; downstream `ofError` handlers
@@ -205,8 +205,8 @@ module RemotingInterceptors =
     /// `RemotingCategorisedException`. On any other exception (transport,
     /// timeout, 500-without-categorised-body) the original exception
     /// propagates unchanged.
-    let private categorisedErrorBridge: Cmd.OfRemoting.IRemotingInterceptor =
-        { new Cmd.OfRemoting.IRemotingInterceptor with
+    let private categorisedErrorBridge: IRemotingInterceptor =
+        { new IRemotingInterceptor with
             member _.OnCalling _ = ()
             member _.OnSuccess(_, _) = ()
 
@@ -230,7 +230,7 @@ module RemotingInterceptors =
         }
 
     /// 0.4.1 — observability interceptor. Stashes the correlation id
-    /// (set by the per-request CsrfClient guard) into `CallInfo.Bag`
+    /// (set by the per-request CsrfClient guard) into `RemoteCallInfo.Bag`
     /// under the key `"x-correlation-id"`, and emits per-method
     /// telemetry (start / success / error) through
     /// `Logger.forCategory "client.remoting.telemetry"`. The
@@ -256,8 +256,8 @@ module RemotingInterceptors =
     let private correlationGetterRef: (unit -> string) ref =
         ref fallbackCorrelationGetter
 
-    let private telemetry: Cmd.OfRemoting.IRemotingInterceptor =
-        { new Cmd.OfRemoting.IRemotingInterceptor with
+    let private telemetry: IRemotingInterceptor =
+        { new IRemotingInterceptor with
             member _.OnCalling info =
                 // Stash the current correlation id at call-start using
                 // the same provider the CsrfClient JS guard reads —
@@ -293,7 +293,7 @@ module RemotingInterceptors =
         }
 
     /// Install the SDK's standard interceptor chain. Called once from
-    /// `SDK.Client.installRequestSeam` so every `Cmd.OfRemoting.call`
+    /// `SDK.Client.installRequestSeam` so every performed remote call
     /// site benefits without per-call wiring.
     ///
     /// `correlationGetter` is the same thunk passed to
@@ -308,5 +308,5 @@ module RemotingInterceptors =
     /// stored correlationGetter without re-registering the interceptors.
     let install (correlationGetter: unit -> string) : unit =
         correlationGetterRef.Value <- correlationGetter
-        Cmd.OfRemoting.Interceptors.register telemetry
-        Cmd.OfRemoting.Interceptors.register categorisedErrorBridge
+        RemoteEffect.Interceptors.register telemetry
+        RemoteEffect.Interceptors.register categorisedErrorBridge

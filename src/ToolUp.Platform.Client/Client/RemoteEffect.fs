@@ -16,13 +16,11 @@ namespace ToolUp.Elmish
 //     the same method with an equal argument and the same retry numbers;
 //     the proxy and the reply are functions and take no part, exactly as a
 //     `Fuaran.MVU.LegacyEffect` compares by its site label alone.
-//   * **The performer.** `RemoteEffect.perform` turns that value into the
-//     call through `Cmd.OfRemoting.callWithName` (or
-//     `callWithRetryAndName`), so a performed effect passes through the
-//     interceptor chain, the retry policy and the declared read policy that
-//     `Cmd.OfRemoting` already carries, and nothing of them is written a
-//     second time. It answers once: a declared read served from the cache
-//     delivers the cached value, and its refresh only refills the cache.
+//   * **The performer.** `RemoteEffect.perform` sends that value's call
+//     through the interceptor chain (`RemoteEffect.Interceptors`), its
+//     retry policy and the declared read policy, all of which live here.
+//     It answers once: a declared read served from the cache delivers the
+//     cached value, and its refresh only refills the cache.
 //   * **The adapter.** `RemoteEffect.run` / `RemoteEffect.toCmd` hand each
 //     `Do` to the performer and dispatch its one reply, and turn each `Then`
 //     into the follow-up message `Cmd.ofMsg` would dispatch. They exist so a
@@ -77,12 +75,70 @@ namespace ToolUp.Elmish
 
 open Fuaran.MVU
 
+/// The retry policy a remote call runs under: exponential backoff with a
+/// cap on attempts. Anything richer (circuit-breaking, jitter, branching
+/// per error class) composes at the call site.
+type RetryPolicy = {
+    /// Maximum number of attempts, the first included. At least 1.
+    MaxAttempts: int
+    /// The delay before the first retry, in milliseconds.
+    InitialDelayMs: int
+    /// The multiplier applied to the delay on each later retry.
+    BackoffMultiplier: float
+    /// Whether a failure is worth another attempt.
+    ShouldRetry: exn -> bool
+}
+
+/// Ready-made retry policies.
+[<RequireQualifiedAccess>]
+module RetryPolicy =
+
+    /// Three attempts, 200 ms then 400 ms between them, retrying any failure.
+    let defaultPolicy: RetryPolicy = {
+        MaxAttempts = 3
+        InitialDelayMs = 200
+        BackoffMultiplier = 2.0
+        ShouldRetry = fun _ -> true
+    }
+
+    /// One attempt; a failure answers at once.
+    let none: RetryPolicy = {
+        MaxAttempts = 1
+        InitialDelayMs = 0
+        BackoffMultiplier = 1.0
+        ShouldRetry = fun _ -> false
+    }
+
+/// What every interceptor sees of one remote call.
+type RemoteCallInfo = {
+    /// When the call entered the interceptor chain, UTC.
+    StartedAt: System.DateTime
+    /// The method the call names, as the API record and its field.
+    MethodName: string
+    /// A per-call bag where interceptors stash state (a correlation id, a
+    /// span id) for the later hooks of the same call.
+    Bag: System.Collections.Generic.Dictionary<string, obj>
+}
+
+/// A hook around every performed remote call. Implementations must be
+/// cheap and should not throw: a hook that throws is reported and skipped,
+/// so it cannot break the call.
+type IRemotingInterceptor =
+    /// Before the request is sent.
+    abstract OnCalling: info: RemoteCallInfo -> unit
+    /// On a successful result, boxed so the hook stays non-generic.
+    abstract OnSuccess: info: RemoteCallInfo * result: obj -> unit
+    /// On a failure: `Some replacement` substitutes the exception the call
+    /// answers with (the last interceptor to replace it wins), `None`
+    /// leaves it as it is.
+    abstract OnError: info: RemoteCallInfo * exn: exn -> exn option
+
 /// The identity of a remote call: the method it names, its argument and
 /// its retry policy's numbers. A non-generic base, so equality is one type
 /// test that both hosts honour; the retry predicate is a function and takes
 /// no part.
 [<AllowNullLiteral>]
-type RemoteCallSite(methodName: string, argument: obj, retry: Cmd.RetryPolicy option) =
+type RemoteCallSite(methodName: string, argument: obj, retry: RetryPolicy option) =
 
     /// The method the call names, as the API record and its field.
     member _.Method = methodName
@@ -111,14 +167,14 @@ type RemoteCallSite(methodName: string, argument: obj, retry: Cmd.RetryPolicy op
     override _.GetHashCode() = hash methodName
 
 /// One remote call as a value: its identity, and the typed call it sends
-/// through `Cmd.OfRemoting` when it is performed. Built by
-/// `RemoteEffect.call` and `RemoteEffect.callWithRetry`.
+/// when it is performed. Built by `RemoteEffect.call` and
+/// `RemoteEffect.callWithRetry`.
 [<Sealed>]
 type RemoteCall<'msg>
-    internal (methodName: string, argument: obj, retry: Cmd.RetryPolicy option, send: Dispatch<'msg> -> unit) =
+    internal (methodName: string, argument: obj, retry: RetryPolicy option, send: ('msg -> unit) -> unit) =
     inherit RemoteCallSite(methodName, argument, retry)
 
-    /// Send the call; its reply is dispatched through the callback.
+    /// Send the call; its one reply is delivered through the callback.
     member internal _.Send = send
 
 /// Code that dispatches nothing (a browser redirect, a beacon), compared by
@@ -145,14 +201,188 @@ type RemoteEffect<'msg> =
     /// Code that dispatches nothing, performed as a signal.
     | Fire of SignalEffect
 
-/// The effect shape's constructors, its performer and the adapter that runs
-/// a step list on today's loop.
+/// The effect shape's constructors, the interceptor registry and the
+/// performer.
 [<RequireQualifiedAccess>]
 module RemoteEffect =
 
-    let private sendThrough (cmd: Cmd<'msg>) (dispatch: Dispatch<'msg>) =
-        for effect in cmd do
-            effect dispatch
+    /// The interceptors every performed remote call passes through, in
+    /// registration order. Register at boot, before the first call.
+    [<RequireQualifiedAccess>]
+    module Interceptors =
+
+        let private interceptors = System.Collections.Generic.List<IRemotingInterceptor>()
+
+        let mutable private errorReporter: string -> exn -> unit =
+            fun hook ex ->
+                try
+                    eprintfn "[RemoteEffect.Interceptors] %s threw: %s" hook ex.Message
+                with _ ->
+                    ()
+
+        /// Replace where an interceptor's own exception is reported (by
+        /// default one line to stderr, `console.error` in the browser).
+        let setErrorReporter (reporter: string -> exn -> unit) : unit = errorReporter <- reporter
+
+        /// Register an interceptor. The same instance twice is ignored.
+        let register (interceptor: IRemotingInterceptor) : unit =
+            if not (interceptors.Contains interceptor) then
+                interceptors.Add interceptor
+
+        /// Remove an interceptor; one never registered is ignored.
+        let unregister (interceptor: IRemotingInterceptor) : unit =
+            interceptors.Remove interceptor |> ignore
+
+        let internal fireOnCalling (info: RemoteCallInfo) =
+            for interceptor in interceptors do
+                try
+                    interceptor.OnCalling info
+                with ex ->
+                    errorReporter (sprintf "OnCalling[%s]" info.MethodName) ex
+
+        let internal fireOnSuccess (info: RemoteCallInfo) (result: obj) =
+            for interceptor in interceptors do
+                try
+                    interceptor.OnSuccess(info, result)
+                with ex ->
+                    errorReporter (sprintf "OnSuccess[%s]" info.MethodName) ex
+
+        let internal fireOnError (info: RemoteCallInfo) (ex: exn) : exn =
+            let mutable current = ex
+
+            for interceptor in interceptors do
+                try
+                    match interceptor.OnError(info, current) with
+                    | Some replacement -> current <- replacement
+                    | None -> ()
+                with iex ->
+                    errorReporter (sprintf "OnError[%s]" info.MethodName) iex
+
+            current
+
+    let private makeInfo (methodName: string) : RemoteCallInfo = {
+        StartedAt = System.DateTime.UtcNow
+        MethodName = methodName
+        Bag = System.Collections.Generic.Dictionary<string, obj>()
+    }
+
+    // A proxy method with a registered read policy
+    // (`ToolUp.Remoting.Client.ReadPolicies`) shares one request among
+    // identical calls in flight, and may be served from a cache while a
+    // refresh runs. The interceptor chain observes REQUESTS, not calls: the
+    // first call to reach a shared request owns its chain (`OnCalling` once,
+    // then `OnSuccess` or `OnError` once, as the request settles), and every
+    // call waiting on it receives that chain's outcome, a replaced exception
+    // included. A cache hit sends no request of its own, so it fires nothing;
+    // the refresh it starts is a request, and fires the chain like any other.
+
+    let private claimChain (methodName: string) (request: ToolUp.Remoting.Client.ReadPolicies.SharedRequest) =
+        let info = makeInfo methodName
+
+        let intercept (raw: Result<obj, exn>) =
+            match raw with
+            | Ok value ->
+                Interceptors.fireOnSuccess info value
+                raw
+            | Error ex -> Error(Interceptors.fireOnError info ex)
+
+        if request.TryClaimChain intercept then
+            Interceptors.fireOnCalling info
+
+    /// A declared read answers once: an awaited request with its outcome,
+    /// a cache hit with the cached value. The refresh a hit starts only
+    /// refills the cache; a failed refresh leaves the served value standing
+    /// and the stale entry gone, so the next call goes to the server.
+    let private awaitDeclaredRead
+        (methodName: string)
+        (leg: ToolUp.Remoting.Client.ReadPolicies.ReadLeg)
+        (reply: Result<'result, exn> -> unit)
+        : Async<unit> =
+        async {
+            match leg with
+            | ToolUp.Remoting.Client.ReadPolicies.Awaiting request ->
+                claimChain methodName request
+
+                match! request.AwaitFinal() with
+                | Ok value -> reply (Ok(unbox<'result> value))
+                | Error ex -> reply (Error ex)
+            | ToolUp.Remoting.Client.ReadPolicies.Served(cached, refresh) ->
+                reply (Ok(unbox<'result> cached))
+                claimChain methodName refresh
+                // Awaiting sends the refresh; its outcome lands in the cache.
+                let! _ = refresh.AwaitFinal()
+                ()
+        }
+
+    let private sendOnce
+        (methodName: string)
+        (proxyCall: 'a -> Async<'result>)
+        (arg: 'a)
+        (reply: Result<'result, exn> -> unit)
+        : Async<unit> =
+        let plain (invoke: unit -> Async<'result>) = async {
+            let info = makeInfo methodName
+            Interceptors.fireOnCalling info
+
+            try
+                let! r = invoke ()
+                Interceptors.fireOnSuccess info (box r)
+                reply (Ok r)
+            with ex ->
+                reply (Error(Interceptors.fireOnError info ex))
+        }
+
+        // With no read policy registered anywhere, `tryObserve` invokes
+        // nothing and answers `None`: the proxy is invoked inside the `try`,
+        // after `OnCalling`.
+        match ToolUp.Remoting.Client.ReadPolicies.tryObserve (fun () -> proxyCall arg) with
+        | None -> plain (fun () -> proxyCall arg)
+        | Some(ToolUp.Remoting.Client.ReadPolicies.Plain call) -> plain (fun () -> call)
+        | Some(ToolUp.Remoting.Client.ReadPolicies.Shared leg) -> awaitDeclaredRead methodName leg reply
+
+    // `OnCalling` fires once per attempt and `OnSuccess` on the attempt that
+    // succeeds; `OnError` fires once, after the last attempt. No message is
+    // delivered between attempts.
+    let private sendWithRetry
+        (methodName: string)
+        (policy: RetryPolicy)
+        (proxyCall: 'a -> Async<'result>)
+        (arg: 'a)
+        (reply: Result<'result, exn> -> unit)
+        : Async<unit> =
+        let attempts = max 1 policy.MaxAttempts
+
+        async {
+            let mutable attempt = 1
+            let mutable lastError: exn option = None
+            let mutable result: 'result option = None
+
+            while attempt <= attempts && result.IsNone do
+                let info = makeInfo methodName
+                Interceptors.fireOnCalling info
+
+                try
+                    let! r = proxyCall arg
+                    Interceptors.fireOnSuccess info (box r)
+                    result <- Some r
+                with ex ->
+                    lastError <- Some ex
+
+                    if policy.ShouldRetry ex && attempt < attempts then
+                        let delay =
+                            float policy.InitialDelayMs * (policy.BackoffMultiplier ** float (attempt - 1))
+                            |> int
+
+                        do! Async.Sleep delay
+                        attempt <- attempt + 1
+                    else
+                        attempt <- attempts + 1
+
+            match result, lastError with
+            | Some r, _ -> reply (Ok r)
+            | None, Some ex -> reply (Error(Interceptors.fireOnError (makeInfo methodName) ex))
+            | None, None -> reply (Error(exn "RemoteEffect.callWithRetry: no result and no error"))
+        }
 
     /// A remote call: the method's name, the proxy field, its argument and
     /// the constructor that turns the reply into the module's message.
@@ -167,15 +397,14 @@ module RemoteEffect =
                 methodName,
                 box arg,
                 None,
-                sendThrough (Cmd.OfRemoting.callWithName methodName proxyCall arg (Ok >> reply) (Error >> reply))
+                fun dispatch -> Async.StartImmediate(sendOnce methodName proxyCall arg (reply >> dispatch))
             )
         )
 
-    /// As `call`, retried under `policy` as `Cmd.OfRemoting.callWithRetryAndName`
-    /// retries it.
+    /// As `call`, retried under `policy`.
     let callWithRetry
         (methodName: string)
-        (policy: Cmd.RetryPolicy)
+        (policy: RetryPolicy)
         (proxyCall: 'a -> Async<'result>)
         (arg: 'a)
         (reply: Result<'result, exn> -> 'msg)
@@ -185,9 +414,7 @@ module RemoteEffect =
                 methodName,
                 box arg,
                 Some policy,
-                sendThrough (
-                    Cmd.OfRemoting.callWithRetryAndName methodName policy proxyCall arg (Ok >> reply) (Error >> reply)
-                )
+                fun dispatch -> Async.StartImmediate(sendWithRetry methodName policy proxyCall arg (reply >> dispatch))
             )
         )
 

@@ -20,7 +20,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | SubmitEcho text ->
         let cmd =
-            Cmd.OfRemoting.call myModuleApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
+            RemoteEffect.call "MyModuleApi.Echo" myModuleApi.Echo { Text = text } (function
+                | Ok response -> EchoSucceeded response
+                | Error ex -> EchoFailed ex.Message)
+            |> RemoteEffect.asCmd
 
         model, cmd
     | EchoSucceeded response ->

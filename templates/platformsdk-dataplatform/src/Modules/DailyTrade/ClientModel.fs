@@ -56,7 +56,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Uploading = true
                     Error = None
             },
-            Cmd.OfRemoting.call api.Upload request Uploaded (fun ex -> UploadFailed ex.Message)
+            RemoteEffect.call "DailyTradeApi.Upload" api.Upload request (function
+                | Ok response -> Uploaded response
+                | Error ex -> UploadFailed ex.Message)
+            |> RemoteEffect.asCmd
     | Uploaded response ->
         {
             model with

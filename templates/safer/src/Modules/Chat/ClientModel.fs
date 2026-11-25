@@ -8,7 +8,7 @@ open Chat.SharedTypes
 // ─── Model ──────────────────────────────────────────────────────────────
 //
 // `OptimisticMessage` tracks messages the user has typed but the server
-// hasn't yet acknowledged. After `Cmd.OfRemoting.callWithRetry`
+// hasn't yet acknowledged. After `RemoteEffect.callWithRetry`
 // succeeds, the optimistic row is removed (the server's confirmed
 // message arrives via the next `ListMessages` poll). After the retry
 // policy exhausts, the optimistic row gets a "failed" mark + the
@@ -58,7 +58,7 @@ type Msg =
 let private chatApi: ChatApi =
     Api.makeProxy<ChatApi> (customOptions = UserSession.withRequestHeaders)
 
-// ─── Retry policy for Cmd.OfRemoting.callWithRetry ──────────────────────
+// ─── Retry policy for RemoteEffect.callWithRetry ──────────────────────
 //
 // 3 attempts, 250 ms initial delay, exponential backoff (×2). On retry
 // exhaustion the failure flows through `SendFailed` with the structured
@@ -68,7 +68,7 @@ let private chatApi: ChatApi =
 // returns `true` for every exception — chat sends are short and idempotent
 // from the user's perspective (an optimistic row is already on screen).
 
-let private sendRetryPolicy: Cmd.RetryPolicy = {
+let private sendRetryPolicy: RetryPolicy = {
     MaxAttempts = 3
     InitialDelayMs = 250
     BackoffMultiplier = 2.0
@@ -85,7 +85,10 @@ let init () : Model * Cmd<Msg> =
     }
 
     let initialLoad =
-        Cmd.OfRemoting.call chatApi.ListMessages () MessagesLoaded MessagesLoadFailed
+        RemoteEffect.call "ChatApi.ListMessages" chatApi.ListMessages () (function
+            | Ok messages -> MessagesLoaded messages
+            | Error ex -> MessagesLoadFailed ex)
+        |> RemoteEffect.asCmd
 
     model, initialLoad
 
@@ -118,12 +121,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             let request = { SenderName = name; Body = trimmed }
 
             let sendCmd =
-                Cmd.OfRemoting.callWithRetry
-                    sendRetryPolicy
-                    chatApi.SendMessage
-                    request
-                    (fun result -> classifyServerError result localId)
-                    (fun ex -> SendFailed(localId, None, ex.Message))
+                RemoteEffect.callWithRetry "ChatApi.SendMessage" sendRetryPolicy chatApi.SendMessage request (function
+                    | Ok result -> classifyServerError result localId
+                    | Error ex -> SendFailed(localId, None, ex.Message))
+                |> RemoteEffect.asCmd
 
             let model' = {
                 model with
@@ -170,7 +171,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
     | PollTick ->
         let cmd =
-            Cmd.OfRemoting.call chatApi.ListMessages () MessagesLoaded MessagesLoadFailed
+            RemoteEffect.call "ChatApi.ListMessages" chatApi.ListMessages () (function
+                | Ok messages -> MessagesLoaded messages
+                | Error ex -> MessagesLoadFailed ex)
+            |> RemoteEffect.asCmd
 
         model, cmd
 

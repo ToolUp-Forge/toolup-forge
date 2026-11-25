@@ -47,7 +47,7 @@ let private reply (answer: Result<int, exn>) : Msg =
 type private Recording(methodName: string, replaceWith: string option) =
     member val Events = ResizeArray<string>()
 
-    interface Cmd.OfRemoting.IRemotingInterceptor with
+    interface IRemotingInterceptor with
         member this.OnCalling info =
             if info.MethodName = methodName then
                 this.Events.Add "calling"
@@ -66,11 +66,11 @@ type private Recording(methodName: string, replaceWith: string option) =
 /// Register an interceptor for the duration of one case's assertions.
 let private recording (methodName: string) (replaceWith: string option) : Recording =
     let interceptor = Recording(methodName, replaceWith)
-    Cmd.OfRemoting.Interceptors.register interceptor
+    RemoteEffect.Interceptors.register interceptor
     interceptor
 
 let private events (interceptor: Recording) : string list =
-    Cmd.OfRemoting.Interceptors.unregister interceptor
+    RemoteEffect.Interceptors.unregister interceptor
     List.ofSeq interceptor.Events
 
 // ─── A declared read, without a transport ────────────────────────────
@@ -200,7 +200,7 @@ let tests =
                 let interceptor = recording "Probe.Flaky" None
 
                 let policy = {
-                    Cmd.RetryPolicy.defaultPolicy with
+                    RetryPolicy.defaultPolicy with
                         InitialDelayMs = 1
                 }
 
@@ -343,7 +343,7 @@ let tests =
                 let retried =
                     RemoteEffect.callWithRetry
                         "Probe.Eq"
-                        Cmd.RetryPolicy.defaultPolicy
+                        RetryPolicy.defaultPolicy
                         (fun (x: int) -> async { return x })
                         1
                         reply

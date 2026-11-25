@@ -47,7 +47,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | SubmitEcho text ->
         let cmd =
-            Cmd.OfRemoting.call helloWorldApi.Echo { Text = text } EchoSucceeded (fun ex -> EchoFailed ex.Message)
+            RemoteEffect.call "HelloWorldApi.Echo" helloWorldApi.Echo { Text = text } (function
+                | Ok response -> EchoSucceeded response
+                | Error ex -> EchoFailed ex.Message)
+            |> RemoteEffect.asCmd
 
         { model with Input = text }, cmd
     | EchoSucceeded response ->

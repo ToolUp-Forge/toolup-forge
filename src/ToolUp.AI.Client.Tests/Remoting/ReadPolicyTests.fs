@@ -100,7 +100,7 @@ type private Counting(methodName: string, replaceWith: string option) =
     member val Succeeded = 0 with get, set
     member val Errored = 0 with get, set
 
-    interface Cmd.OfRemoting.IRemotingInterceptor with
+    interface IRemotingInterceptor with
         member this.OnCalling info =
             if info.MethodName = methodName then
                 this.Calling <- this.Calling + 1
@@ -194,7 +194,7 @@ let tests =
                     setUp ()
                     scriptResponse 200 "9"
                     let counting = Counting("ReadCatalogApi.GetShared", None)
-                    Cmd.OfRemoting.Interceptors.register counting
+                    RemoteEffect.Interceptors.register counting
                     let before = callCount ()
                     let seen = ResizeArray<Msg>()
 
@@ -205,7 +205,7 @@ let tests =
                     |> run seen.Add
 
                     fun () ->
-                        Cmd.OfRemoting.Interceptors.unregister counting
+                        RemoteEffect.Interceptors.unregister counting
                         same (callCount () - before) 1 "one request"
                         same (counting.Calling, counting.Succeeded, counting.Errored) (1, 1, 0) "one set of events"
                         same (List.ofSeq seen) [ Got 9; Got 9 ] "every waiter receives the result")
@@ -217,7 +217,7 @@ let tests =
                     setUp ()
                     scriptResponse 500 "boom"
                     let counting = Counting("ReadCatalogApi.GetShared", Some "replaced by the chain")
-                    Cmd.OfRemoting.Interceptors.register counting
+                    RemoteEffect.Interceptors.register counting
                     let before = callCount ()
                     let seen = ResizeArray<Msg>()
 
@@ -228,7 +228,7 @@ let tests =
                     |> run seen.Add
 
                     fun () ->
-                        Cmd.OfRemoting.Interceptors.unregister counting
+                        RemoteEffect.Interceptors.unregister counting
                         same (callCount () - before) 1 "one request"
                         same (counting.Calling, counting.Succeeded, counting.Errored) (1, 0, 1) "one set of events"
 
@@ -241,7 +241,7 @@ let tests =
                 setUp ()
                 scriptResponse 200 "4"
                 let counting = Counting("ReadCatalogApi.GetUndeclared", None)
-                Cmd.OfRemoting.Interceptors.register counting
+                RemoteEffect.Interceptors.register counting
                 let before = callCount ()
                 let seen = ResizeArray<Msg>()
 
@@ -252,7 +252,7 @@ let tests =
                 |> run seen.Add
 
                 fun () ->
-                    Cmd.OfRemoting.Interceptors.unregister counting
+                    RemoteEffect.Interceptors.unregister counting
                     same (callCount () - before) 2 "two requests"
                     same (counting.Calling, counting.Succeeded, counting.Errored) (2, 2, 0) "one set per call"
                     same (List.ofSeq seen) [ Got 4; Got 4 ] "both answered")
