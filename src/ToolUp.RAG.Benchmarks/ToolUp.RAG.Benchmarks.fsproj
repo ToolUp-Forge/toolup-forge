@@ -14,18 +14,21 @@
     <Compile Include="Metrics\LatencyMetrics.fs" />
     <Compile Include="Runner\PipelineFactory.fs" />
     <Compile Include="Runner\BenchmarkRunner.fs" />
-    <!-- Phase 14k WS5 Item 3 — fixture-driven mixed-dim latency
+    <!-- Fixture-driven mixed-dim latency
          benchmark. Bypasses IRetrievalPipeline (which expects text
          content + embedder) and drives HnswVectorStore directly with
          the pre-computed mixed-dim vectors. -->
     <Compile Include="Runner\MixedDimBenchmark.fs" />
-    <!-- Phase 970 - HNSW at representative scale: recall@10 against a
+    <!-- HNSW at representative scale: recall@10 against a
          flat scan over a BEIR corpus, padded to 500k chunks for latency. -->
     <Compile Include="Runner\HnswScaleBenchmark.fs" />
-    <!-- Phase 886 — the concurrent load harness: N simultaneous callers
+    <!-- The concurrent load harness: N simultaneous callers
          against one composed retrieval pipeline and against the fact
          store, with blob read counts beside every clock. Its gate
-         configuration feeds the `load` block of perf-budgets.json. -->
+         configuration feeds the `load` block of perf-budgets.json.
+         RestingIndexes finishes a seed's persistence before a cell
+         measures anything; ToolUp.Platform.Tests links it. -->
+    <Compile Include="Runner\RestingIndexes.fs" />
     <Compile Include="Runner\ConcurrentLoadBenchmark.fs" />
     <Compile Include="Runner\FactStoreLoadBenchmark.fs" />
     <Compile Include="Runner\ReportWriter.fs" />
@@ -34,7 +37,7 @@
 
   <!-- SDK server infrastructure (interfaces + storage + logger + secret store)
        — wired via <ProjectReference> below. AI / LocalEmbedding / OpenAIEmbedding /
-       Hnsw companion sources similarly DLL-referenced (Phase 11.B follow-up cutover). -->
+       Hnsw companion sources similarly DLL-referenced. -->
   <Import Project="..\ToolUp.Platform\ToolUp.Platform.Server.props" />
   <ItemGroup>
     <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
@@ -46,17 +49,17 @@
     <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" />
     <ProjectReference Include="..\EmbeddingProviders\OpenAI\OpenAIEmbeddingProvider.fsproj" />
     <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
-    <!-- Phase 886 — the load harness's other arms: the pgvector store, the
+    <!-- The load harness's other arms: the pgvector store, the
          object-storage arm (Azure Blob against the local emulator) and the
          fact store. -->
     <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
     <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
     <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
     <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
-    <!-- Phase 929 — the fact half's database arm: the Phase 888 store. -->
+    <!-- The fact half's database arm: the database-backed fact store. -->
     <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" />
   </ItemGroup>
-  <!-- Phase 14k WS5 Item 3 — mixed-dim fixture JSON, linked from the
+  <!-- Mixed-dim fixture JSON, linked from the
        co-located RAG.Evaluation/fixtures/ directory into the benchmark
        runner's output so the loader finds it at runtime. -->
   <ItemGroup>
