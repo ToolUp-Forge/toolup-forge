@@ -3,6 +3,7 @@
 
 module ToolUp.AI.Client.AIAssistantUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Fable.Core
@@ -124,7 +125,51 @@ let private aiApi =
 let private aiSettingsApi =
     Api.makeProxy<AISettingsApi> (customOptions = UserSession.withRequestHeaders)
 
-// ─── Init ─────────────────────────────────────────────────────────
+// ─── Effects ──────────────────────────────────────────────────────
+
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
+
+/// A call's reply: its answer through `onOk`, a failure to the page's one
+/// error branch.
+let private orApiError (onOk: 'r -> Msg) (reply: Result<'r, exn>) : Msg =
+    match reply with
+    | Ok answer -> onOk answer
+    | Error ex -> ApiError ex.Message
+
+let private call (methodName: string) (proxyCall: 'a -> Async<'r>) (arg: 'a) (onOk: 'r -> Msg) : Steps = [
+    Do(RemoteEffect.call methodName proxyCall arg (orApiError onOk))
+]
+
+/// Code with no value form yet, run as today's command under its site
+/// label. Each body here dispatches at most once.
+let private legacy (site: string) (cmd: Cmd<Msg>) : Steps = [
+    Do(
+        RemoteEffect.legacy site (fun dispatch ->
+            for effect in cmd do
+                effect dispatch)
+    )
+]
+
+let private loadTools () =
+    call "AIAssistantApi.GetAvailableTools" aiApi.GetAvailableTools () (Finished >> LoadTools)
+
+let private loadProviders () =
+    call "AISettingsApi.GetMyConfig" aiSettingsApi.GetMyConfig () (Finished >> LoadProviders)
+
+let private loadMessages (conversationId: Guid) =
+    call "AIAssistantApi.GetConversation" aiApi.GetConversation conversationId (Finished >> LoadMessages)
+
+/// The watchdog's timer for `token`: it answers once, with the token.
+let private armWatchdog (token: Guid) =
+    legacy "AIAssistantUI.watchdog" (Cmd.OfAsync.perform ChatStream.watchdogDelay token WatchdogFired)
+
+/// Ask the server where the task got to; a failed poll answers `None`.
+let private pollTask (token: Guid) (taskId: Guid) : Steps = [
+    Do(
+        RemoteEffect.call "AIAssistantApi.GetTaskStatus" aiApi.GetTaskStatus taskId (fun reply ->
+            TaskStatusPolled(token, Result.defaultValue None reply))
+    )
+]
 
 // ─── The stream ───────────────────────────────────────────────────
 
@@ -144,12 +189,12 @@ let private streamOf (model: Model) : ChatStream.ChatStreamState = {
 let private reduceStream
     (step: ChatStream.ChatStreamState -> ChatStream.ChatStreamState * ChatStream.StreamEffect list)
     (model: Model)
-    : Model * Cmd<Msg> =
+    : Model * Steps =
     let before = streamOf model
     let after, effects = step before
 
     if obj.ReferenceEquals(before, after) && List.isEmpty effects then
-        model, Cmd.none
+        model, []
     else
         let written = {
             model with
@@ -173,28 +218,11 @@ let private reduceStream
                     },
                     cmds
                 | ChatStream.Fault message -> { m with ErrorMessage = Some message }, cmds
-                | ChatStream.RefreshList -> m, cmds @ [ Cmd.ofMsg (LoadConversations(Start())) ]
-                | ChatStream.Arm token ->
-                    m, cmds @ [ Cmd.OfAsync.perform ChatStream.watchdogDelay token WatchdogFired ]
-                | ChatStream.Poll(token, taskId) ->
-                    m,
-                    cmds
-                    @ [
-                        Cmd.OfRemoting.call
-                            aiApi.GetTaskStatus
-                            taskId
-                            (fun status -> TaskStatusPolled(token, status))
-                            (fun _ -> TaskStatusPolled(token, None))
-                    ]
-                | ChatStream.Reload conversationId ->
-                    m,
-                    cmds
-                    @ [
-                        Cmd.OfRemoting.call aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
-                            ApiError ex.Message)
-                    ])
+                | ChatStream.RefreshList -> m, cmds @ [ Then(LoadConversations(Start())) ]
+                | ChatStream.Arm token -> m, cmds @ armWatchdog token
+                | ChatStream.Poll(token, taskId) -> m, cmds @ pollTask token taskId
+                | ChatStream.Reload conversationId -> m, cmds @ loadMessages conversationId)
             (written, [])
-        |> fun (m, cmds) -> m, Cmd.batch cmds
 
 /// The first-page query for `search`.
 let private firstPageFor (search: string) : ConversationListQuery = {
@@ -206,17 +234,16 @@ let private firstPageFor (search: string) : ConversationListQuery = {
                 Some(search.Trim())
 }
 
-let private loadPage (query: ConversationListQuery) : Cmd<Msg> =
+let private loadPage (query: ConversationListQuery) : Steps =
     let search = query.Search |> Option.defaultValue ""
     let append = query.Cursor.IsSome
 
-    Cmd.OfRemoting.call
-        aiApi.ListConversationsPage
-        query
-        (fun page -> ConversationPageLoaded(search, append, page))
-        (fun ex -> ApiError ex.Message)
+    call "AIAssistantApi.ListConversationsPage" aiApi.ListConversationsPage query (fun page ->
+        ConversationPageLoaded(search, append, page))
 
-let init () =
+// ─── Init ─────────────────────────────────────────────────────────
+
+let internal initSteps () : Model * Steps =
     {
         Conversations = []
         ActiveConversation = None
@@ -234,34 +261,33 @@ let init () =
         ConversationsCursor = None
         ConversationTotal = 0
     },
-    Cmd.batch [
-        loadPage ConversationListQuery.firstPage
-        Cmd.OfRemoting.call aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
-        Cmd.OfRemoting.call aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
-    // The SSE stream subscription is NOT a boot-time `Cmd.ofEffect` —
-    // that pattern discarded the unsubscribe handle, orphaning an
-    // EventSource on every mount / HMR / navigation. It is owned by the
-    // `SseSubscription` component (below), whose `useEffectOnce` disposer
-    // closes the stream on unmount. See `AIClientConfig.fs` for the
-    // matching shell-side lifetime-aware handle.
-    ]
+    loadPage ConversationListQuery.firstPage @ loadTools () @ loadProviders ()
+
+// The SSE stream subscription is NOT a boot-time effect: that pattern
+// discarded the unsubscribe handle, orphaning an EventSource on every
+// mount / HMR / navigation. It is owned by the `SseSubscription` component
+// (below), whose `useEffectOnce` disposer closes the stream on unmount.
+// See `AIClientConfig.fs` for the matching shell-side lifetime-aware handle.
+
+let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
 
 // ─── Update ───────────────────────────────────────────────────────
 
-let update msg model =
+/// The transitions, with their effects as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     match msg with
     | LoadConversations action ->
         match action with
         // A refresh reloads the first page of the current
         // search rather than every conversation in the scope.
         | Start() -> model, loadPage (firstPageFor model.ConversationSearch)
-        | Finished convos -> { model with Conversations = convos }, Cmd.none
+        | Finished convos -> { model with Conversations = convos }, []
 
     | LoadConversationPage query -> model, loadPage query
 
     | ConversationPageLoaded(search, append, page) ->
         if search <> model.ConversationSearch.Trim() then
-            model, Cmd.none
+            model, []
         else
             {
                 model with
@@ -273,7 +299,7 @@ let update msg model =
                     ConversationsCursor = page.NextCursor
                     ConversationTotal = page.TotalCount
             },
-            Cmd.none
+            []
 
     | SearchConversations term ->
         {
@@ -291,26 +317,22 @@ let update msg model =
                 firstPageFor model.ConversationSearch with
                     Cursor = Some cursor
             }
-        | None -> model, Cmd.none
+        | None -> model, []
 
     | LoadTools action ->
         match action with
-        | Start() ->
-            model,
-            Cmd.OfRemoting.call aiApi.GetAvailableTools () (Finished >> LoadTools) (fun ex -> ApiError ex.Message)
-        | Finished tools -> { model with AvailableTools = tools }, Cmd.none
+        | Start() -> model, loadTools ()
+        | Finished tools -> { model with AvailableTools = tools }, []
 
     | LoadProviders action ->
         match action with
-        | Start() ->
-            model,
-            Cmd.OfRemoting.call aiSettingsApi.GetMyConfig () (Finished >> LoadProviders) (fun ex -> ApiError ex.Message)
+        | Start() -> model, loadProviders ()
         | Finished view ->
             {
                 model with
                     ConfiguredProviders = view.ConfiguredProviders
             },
-            Cmd.none
+            []
 
     | SelectConversation conversationId ->
         {
@@ -319,16 +341,12 @@ let update msg model =
                 Messages = []
                 StreamingContent = ""
         },
-        Cmd.OfRemoting.call aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
-            ApiError ex.Message)
+        loadMessages conversationId
 
     | LoadMessages action ->
         match action with
-        | Start conversationId ->
-            model,
-            Cmd.OfRemoting.call aiApi.GetConversation conversationId (Finished >> LoadMessages) (fun ex ->
-                ApiError ex.Message)
-        | Finished messages -> { model with Messages = messages }, Cmd.none
+        | Start conversationId -> model, loadMessages conversationId
+        | Finished messages -> { model with Messages = messages }, []
 
     | SubmitMessage content ->
         // MVU purity (2026-07 idiom sweep): `Guid.NewGuid()` /
@@ -337,16 +355,20 @@ let update msg model =
         // the ids/timestamp and immediately re-dispatches the prepared
         // submission; `SubmitMessagePrepared` below is the pure fold.
         model,
-        Cmd.ofEffect (fun dispatch ->
-            dispatch (
-                SubmitMessagePrepared {
-                    Content = content
-                    ConversationId = model.ActiveConversation |> Option.defaultWith Guid.NewGuid
-                    MessageId = Guid.NewGuid()
-                    Timestamp = DateTime.UtcNow
-                    WatchdogId = Guid.NewGuid()
-                }
-            ))
+        [
+            Do(
+                RemoteEffect.legacy "AIAssistantUI.prepareSubmission" (fun dispatch ->
+                    dispatch (
+                        SubmitMessagePrepared {
+                            Content = content
+                            ConversationId = model.ActiveConversation |> Option.defaultWith Guid.NewGuid
+                            MessageId = Guid.NewGuid()
+                            Timestamp = DateTime.UtcNow
+                            WatchdogId = Guid.NewGuid()
+                        }
+                    ))
+            )
+        ]
 
     | SubmitMessagePrepared prepared ->
         let content = prepared.Content
@@ -366,7 +388,7 @@ let update msg model =
                     Messages = model.Messages @ [ userMsg; ChatStream.debugAck conversationId enabled ]
                     DebugMode = enabled
             },
-            Cmd.none
+            []
         | None ->
             // The full page has no active analytical module, so a fast-path
             // resolver can match only module-switch patterns here.
@@ -400,7 +422,7 @@ let update msg model =
                 RetrievalFilters = None
             }
 
-            let sent, armCmd =
+            let sent, armSteps =
                 {
                     model with
                         ActiveConversation = Some conversationId
@@ -409,13 +431,13 @@ let update msg model =
                 |> reduceStream (ChatStream.start prepared.WatchdogId)
 
             sent,
-            Cmd.batch [
-                armCmd
-                Cmd.OfAsync.perform FastPathBridge.resolve fastPathRequest (fun outcome ->
-                    FastPathAnswered(request, outcome))
-            ]
+            armSteps
+            @ legacy
+                "AIAssistantUI.fastPath"
+                (Cmd.OfAsync.perform FastPathBridge.resolve fastPathRequest (fun outcome ->
+                    FastPathAnswered(request, outcome)))
 
-    | FastPathAnswered(request, _) when model.ActiveConversation <> Some request.ConversationId -> model, Cmd.none
+    | FastPathAnswered(request, _) when model.ActiveConversation <> Some request.ConversationId -> model, []
 
     | FastPathAnswered(_, FastPathBridge.Resolved(synthAssist, dispatchAction, sendBeacon)) ->
         let settled, _ = model |> reduceStream (fun s -> ChatStream.settle s, [])
@@ -424,19 +446,18 @@ let update msg model =
             settled with
                 Messages = settled.Messages @ [ synthAssist ]
         },
-        Cmd.batch [
-            Cmd.ofEffect (fun _ -> dispatchAction ())
-            Cmd.ofEffect (fun _ -> sendBeacon ())
+        [
+            Do(RemoteEffect.legacy "AIAssistantUI.fastPathAction" (fun _ -> dispatchAction ()))
+            Do(RemoteEffect.legacy "AIAssistantUI.fastPathBeacon" (fun _ -> sendBeacon ()))
         ]
 
     | FastPathAnswered(request, FastPathBridge.NoResolution) ->
-        model,
-        Cmd.OfRemoting.call aiApi.SubmitMessage request (Finished >> MessageSubmitted) (fun ex -> ApiError ex.Message)
+        model, call "AIAssistantApi.SubmitMessage" aiApi.SubmitMessage request (Finished >> MessageSubmitted)
 
     | MessageSubmitted action ->
         match action with
-        | Start _ -> model, Cmd.none
-        | Finished task -> { model with CurrentTask = Some task }, Cmd.none
+        | Start _ -> model, []
+        | Finished task -> { model with CurrentTask = Some task }, []
 
     | NewConversation ->
         {
@@ -446,22 +467,25 @@ let update msg model =
                 StreamingContent = ""
                 CurrentTask = None
         },
-        Cmd.none
+        []
 
     | DeleteConversation action ->
         match action with
         | Start conversationId ->
             model,
-            Cmd.OfRemoting.call aiApi.DeleteConversation conversationId (Finished >> DeleteConversation) (fun ex ->
-                ApiError ex.Message)
+            call
+                "AIAssistantApi.DeleteConversation"
+                aiApi.DeleteConversation
+                conversationId
+                (Finished >> DeleteConversation)
         | Finished(Ok()) ->
             {
                 model with
                     ActiveConversation = None
                     Messages = []
             },
-            Cmd.ofMsg (LoadConversations(Start()))
-        | Finished(Error err) -> { model with ErrorMessage = Some err }, Cmd.none
+            [ Then(LoadConversations(Start())) ]
+        | Finished(Error err) -> { model with ErrorMessage = Some err }, []
 
     | SetProviderOverride newLabel ->
         match model.ActiveConversation with
@@ -485,18 +509,21 @@ let update msg model =
                 model with
                     Conversations = updatedConversations
             },
-            Cmd.OfRemoting.call aiApi.SetConversationOverride (convId, newLabel) ProviderOverrideSet (fun ex ->
-                ApiError ex.Message)
-        | None -> model, Cmd.none
+            call
+                "AIAssistantApi.SetConversationOverride"
+                aiApi.SetConversationOverride
+                (convId, newLabel)
+                ProviderOverrideSet
+        | None -> model, []
 
     | ProviderOverrideSet result ->
         match result with
-        | Ok() -> model, Cmd.none
+        | Ok() -> model, []
         | Error err ->
             // Server rejected the override (unknown label, scope
             // doesn't permit persistence, …). Reload the canonical
             // server view so the dropdown re-syncs.
-            { model with ErrorMessage = Some err }, Cmd.ofMsg (LoadConversations(Start()))
+            { model with ErrorMessage = Some err }, [ Then(LoadConversations(Start())) ]
 
     | SSEEvent event -> model |> reduceStream (fun s -> ChatStream.reduce s event)
 
@@ -510,14 +537,21 @@ let update msg model =
                 // Terminal: clear the running task so the spinner/Cancel don't hang.
                 CurrentTask = None
         },
-        Cmd.none
-    | DismissError -> { model with ErrorMessage = None }, Cmd.none
+        []
+    | DismissError -> { model with ErrorMessage = None }, []
 
-    | CancelTask taskId -> model, Cmd.ofEffect (fun _ -> ChatStream.AIStream.cancel taskId)
+    | CancelTask taskId ->
+        model,
+        [
+            Do(RemoteEffect.legacy "AIAssistantUI.cancel" (fun _ -> ChatStream.AIStream.cancel taskId))
+        ]
 
     | WatchdogFired token -> model |> reduceStream (ChatStream.fire token)
 
     | TaskStatusPolled(token, status) -> model |> reduceStream (ChatStream.polled token status)
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ─────────────────────────────────────────────────────────
 
