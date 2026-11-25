@@ -3,7 +3,6 @@ module MinimalClient.Client
 open Fable.Core.JsInterop
 open Fuaran.MVU
 open Fuaran.MVU.React
-open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 open Feliz.AgGrid

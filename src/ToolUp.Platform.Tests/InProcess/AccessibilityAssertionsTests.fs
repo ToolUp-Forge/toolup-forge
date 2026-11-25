@@ -5,7 +5,7 @@ open System.Text.RegularExpressions
 open Expecto
 open Giraffe.ViewEngine
 open ToolUp.BrandKit
-open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.Platform.Testing
 open ToolUp.Platform.Jobs
 
@@ -398,13 +398,13 @@ type private PanelMsg =
     | Rename of string
     | HideIcon
 
-let private panelInit () : PanelModel * Fuaran.MVU.Step<PanelMsg, ToolUp.Elmish.RemoteEffect<PanelMsg>> list =
+let private panelInit () : PanelModel * Fuaran.MVU.Step<PanelMsg, RemoteEffect<PanelMsg>> list =
     { Label = "Export"; ShowIcon = false }, []
 
 let private panelUpdate
     (msg: PanelMsg)
     (model: PanelModel)
-    : PanelModel * Fuaran.MVU.Step<PanelMsg, ToolUp.Elmish.RemoteEffect<PanelMsg>> list =
+    : PanelModel * Fuaran.MVU.Step<PanelMsg, RemoteEffect<PanelMsg>> list =
     match msg with
     | Rename label -> { model with Label = label }, []
     | HideIcon -> { model with ShowIcon = false }, []

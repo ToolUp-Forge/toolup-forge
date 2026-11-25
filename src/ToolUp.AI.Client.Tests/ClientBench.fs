@@ -104,7 +104,7 @@ open Fable.Core.JsInterop
 open Fable.SimpleJson
 open Feliz
 open Fuaran.MVU
-open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.Platform.Tests.Remoting
 open ToolUp.AI.Client.Tests.ClientBenchTables
 

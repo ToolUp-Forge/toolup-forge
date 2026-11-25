@@ -2,7 +2,6 @@ module Chat.ClientModel
 
 open System
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open Chat.SharedTypes
 

@@ -6,7 +6,6 @@ module ToolUp.Platform.Tests.Contracts.ClientHostCapabilitiesContract
 open System.IO
 open Expecto
 open ToolUp.Platform
-open ToolUp.Elmish
 open Toolup.Samples.ToyTreeBinding
 
 // ─── Phase 265 — ClientHostCapabilities conformance contract pack ─────

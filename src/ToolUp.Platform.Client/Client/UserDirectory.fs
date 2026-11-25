@@ -15,7 +15,6 @@ module UserDirectory
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open ToolUp.Platform
 
 type Model = {

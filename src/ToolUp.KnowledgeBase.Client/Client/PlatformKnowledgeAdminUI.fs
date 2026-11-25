@@ -4,7 +4,6 @@
 module PlatformKnowledgeAdminUI
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open Feliz
 open Fable.Core.JsInterop
 open Toolup.UIToolkit

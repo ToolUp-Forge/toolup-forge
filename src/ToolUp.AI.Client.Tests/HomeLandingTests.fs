@@ -2,7 +2,6 @@ module ToolUp.AI.Client.Tests.HomeLandingTests
 
 open ToolUp.AI.Client.Tests.NodeTest
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 
 // ─── Phase 171 — Home / Overview landing-selection tests ──────────────

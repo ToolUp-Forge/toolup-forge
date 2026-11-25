@@ -1,7 +1,6 @@
 module Starter.ClientModel
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open Starter.SharedTypes
 

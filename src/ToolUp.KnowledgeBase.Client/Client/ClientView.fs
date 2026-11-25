@@ -4,7 +4,6 @@
 module KnowledgeBaseView
 
 open Feliz
-open ToolUp.Elmish
 open Toolup.UIToolkit
 open ToolUp.Platform
 open ClientModel

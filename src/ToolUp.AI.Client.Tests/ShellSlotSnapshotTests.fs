@@ -3,7 +3,6 @@ module ToolUp.AI.Client.Tests.ShellSlotSnapshotTests
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 

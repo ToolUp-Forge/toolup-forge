@@ -3,7 +3,6 @@ module ToolUp.Platform.Tests.InProcess.ModuleBuilderSemanticsTests
 open Expecto
 open System
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes

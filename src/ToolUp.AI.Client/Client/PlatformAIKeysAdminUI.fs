@@ -4,7 +4,6 @@
 module ToolUp.AI.Client.PlatformAIKeysAdminUI
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform

@@ -1,7 +1,6 @@
 module DailyTrade.ClientModel
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ProcessedDataTypes
 open DailyTrade.SharedTypes

@@ -2,7 +2,7 @@
 // Copyright (c) Eugene Tolmachev and Fable.Elmish contributors
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Elmish
+namespace ToolUp.Platform
 
 /// Which part of the shell's program raised the exception, so a reporter
 /// does not have to infer it from the message text. Carries the offending

@@ -5,7 +5,6 @@ module ClientModel
 
 open Fuaran.MVU
 open ToolUp.Platform
-open ToolUp.Elmish
 open SharedTypes
 open PlatformKnowledgeApi
 open ToolUp.Remoting.Client

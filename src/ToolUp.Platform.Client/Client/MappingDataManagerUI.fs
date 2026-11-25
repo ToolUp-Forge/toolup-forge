@@ -23,7 +23,6 @@
 module MappingDataManagerUI
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open Feliz
 open Fable.SimpleJson
 open Toolup.UIToolkit

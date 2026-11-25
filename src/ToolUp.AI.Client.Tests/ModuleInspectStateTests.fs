@@ -21,7 +21,6 @@ module ToolUp.AI.Client.Tests.ModuleInspectStateTests
 // on different paths compare unequal.
 
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 

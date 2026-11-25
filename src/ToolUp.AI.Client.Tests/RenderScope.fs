@@ -40,7 +40,6 @@ module ToolUp.AI.Client.Tests.RenderScope
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
-open ToolUp.Elmish
 open Fuaran.MVU.React
 open ToolUp.Platform
 

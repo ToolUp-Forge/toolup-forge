@@ -20,7 +20,6 @@ open Fable.Core.JsInterop
 open Feliz
 open Fuaran.MVU
 open Fuaran.MVU.React
-open ToolUp.Elmish
 open ToolUp.Platform
 open Toolup.UIToolkit
 open ToolUp.AI.Client.Tests.NodeTest

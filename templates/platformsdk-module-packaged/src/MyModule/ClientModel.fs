@@ -1,7 +1,6 @@
 module MODULE_NAMESPACE_ROOT.ClientModel
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open MODULE_NAMESPACE_ROOT.SharedTypes
 open ToolUp.Platform.Config

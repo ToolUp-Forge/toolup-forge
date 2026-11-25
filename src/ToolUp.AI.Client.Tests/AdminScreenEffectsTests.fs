@@ -14,7 +14,6 @@ module ToolUp.AI.Client.Tests.AdminScreenEffectsTests
 
 open System
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.Usage
 open ToolUp.AI.Client.Tests.NodeTest

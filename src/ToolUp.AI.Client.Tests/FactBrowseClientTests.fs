@@ -115,7 +115,7 @@ let private fakeApi: IFactBrowseApi = {
 let private step (msg: Msg) (model: Model) = updateWith fakeApi msg model |> fst
 
 /// The follow-up messages a step list asks for.
-let private dispatched (steps: Fuaran.MVU.Step<Msg, ToolUp.Elmish.RemoteEffect<Msg>> list) : Msg list =
+let private dispatched (steps: Fuaran.MVU.Step<Msg, RemoteEffect<Msg>> list) : Msg list =
     steps
     |> List.choose (function
         | Fuaran.MVU.Then msg -> Some msg

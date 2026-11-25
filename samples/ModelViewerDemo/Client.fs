@@ -5,7 +5,7 @@ module ModelViewerDemo.Client
 
 open Fuaran.MVU
 open Fuaran.MVU.React
-open ToolUp.Elmish
+open ToolUp.Platform
 open Feliz
 open ToolUp.Client.ModelViewer
 

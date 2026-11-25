@@ -1,7 +1,6 @@
 module MyDataManager.ClientModel
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ProcessedDataTypes
 open MyDataManager.SharedTypes

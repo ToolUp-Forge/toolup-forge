@@ -15,7 +15,6 @@
 open Microsoft.AspNetCore.Http
 open Expecto
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Audit

@@ -4,7 +4,6 @@
 namespace ToolUp.Platform
 
 open System
-open ToolUp.Elmish
 open Fable.SimpleJson
 open ToolUp.Remoting.Client
 

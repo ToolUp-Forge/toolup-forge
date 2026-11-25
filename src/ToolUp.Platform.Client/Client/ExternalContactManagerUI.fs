@@ -5,7 +5,6 @@ module ExternalContactManagerUI
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open Feliz
 open Feliz.AgGrid
 open Toolup.UIToolkit

@@ -18,7 +18,6 @@ module ToolUp.AI.Client.Tests.ModuleDispatchStabilityTests
 // memo boundary makes.
 
 open Fable.Core
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.StepDriver

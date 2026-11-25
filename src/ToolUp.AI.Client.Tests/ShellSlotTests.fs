@@ -1,7 +1,6 @@
 module ToolUp.AI.Client.Tests.ShellSlotTests
 
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 

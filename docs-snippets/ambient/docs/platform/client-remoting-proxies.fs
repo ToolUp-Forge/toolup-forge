@@ -7,7 +7,7 @@
 // are what the reader's own module supplies. A block that declares its
 // own `fooApi` shadows this one, which is why they sit in an auto-opened
 // module.
-open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.Remoting.Client
 
 [<AutoOpen>]

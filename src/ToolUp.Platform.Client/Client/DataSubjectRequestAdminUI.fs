@@ -5,7 +5,6 @@ module DataSubjectRequestAdminUI
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open Feliz
 open Browser
 open Browser.Types

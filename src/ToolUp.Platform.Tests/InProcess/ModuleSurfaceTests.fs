@@ -5,7 +5,6 @@ open System
 open System.Text.Json
 open FSharp.Reflection
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.VectorisationTypes

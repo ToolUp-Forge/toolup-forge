@@ -49,7 +49,6 @@ module ToolUp.AI.Client.Tests.ModuleViewA11yTests
 
 open Fuaran.MVU
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.Testing
 open ToolUp.Platform.Testing.ModuleHarness

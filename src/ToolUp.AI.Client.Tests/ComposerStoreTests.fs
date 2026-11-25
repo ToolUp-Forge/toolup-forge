@@ -20,7 +20,6 @@ module ToolUp.AI.Client.Tests.ComposerStoreTests
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.Client

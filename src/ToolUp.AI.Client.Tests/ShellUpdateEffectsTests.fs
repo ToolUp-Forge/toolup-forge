@@ -27,7 +27,6 @@ module ToolUp.AI.Client.Tests.ShellUpdateEffectsTests
 open Fable.Core
 open Feliz
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.StepDriver

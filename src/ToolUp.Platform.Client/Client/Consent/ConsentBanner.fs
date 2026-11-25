@@ -6,7 +6,6 @@ module ToolUp.Platform.Consent.ConsentBanner
 open System
 open Feliz
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 
 // ─── Phase 159 — Feliz consent banner ──────────────────────────────

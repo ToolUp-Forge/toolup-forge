@@ -4,7 +4,6 @@
 module ToolUp.Platform.Testing.ModuleHarness
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 
 // ─── Elmish module harness ────────────────────────────────────────────

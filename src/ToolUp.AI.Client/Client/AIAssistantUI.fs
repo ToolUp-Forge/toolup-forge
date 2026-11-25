@@ -5,7 +5,6 @@ module ToolUp.AI.Client.AIAssistantUI
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.SimpleJson

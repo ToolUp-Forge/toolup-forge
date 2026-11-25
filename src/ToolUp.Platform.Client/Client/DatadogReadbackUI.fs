@@ -10,7 +10,6 @@ open Fable.SimpleHttp
 open Fable.SimpleJson
 open Feliz
 open Feliz.AgCharts
-open ToolUp.Elmish
 open ToolUp.Platform
 open Toolup.UIToolkit
 

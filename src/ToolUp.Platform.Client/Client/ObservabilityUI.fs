@@ -11,7 +11,6 @@ open Fable.SimpleJson
 open Feliz
 open Feliz.AgCharts
 open Feliz.AgGrid
-open ToolUp.Elmish
 open ToolUp.Platform
 open Toolup.UIToolkit
 

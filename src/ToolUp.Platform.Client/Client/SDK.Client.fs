@@ -5,7 +5,6 @@ namespace ToolUp.Platform
 
 open Fuaran.MVU
 open Fuaran.MVU.React
-open ToolUp.Elmish
 open Feliz
 open ProcessedDataTypes
 

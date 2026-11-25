@@ -31,7 +31,6 @@ module ToolUp.AI.Client.AIClientConfig
 open Fuaran.MVU
 open Fuaran.MVU.React
 open System
-open ToolUp.Elmish
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz

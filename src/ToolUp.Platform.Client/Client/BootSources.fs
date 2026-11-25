@@ -13,7 +13,6 @@
 module ToolUp.Platform.BootSources
 
 open Fuaran.MVU
-open ToolUp.Elmish
 
 /// Which reset a source is re-issued by. Payload-free, so a row can declare
 /// the set; `ResetKind.trigger` names the trigger a reset carries.

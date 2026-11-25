@@ -5,7 +5,6 @@ module ToolUp.AI.Client.NarrativePromptAdminUI
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 open ToolUp.AI

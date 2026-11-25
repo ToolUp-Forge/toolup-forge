@@ -4,7 +4,6 @@ open System
 open System.Reflection
 open Expecto
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Compose

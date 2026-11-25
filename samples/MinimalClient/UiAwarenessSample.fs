@@ -33,7 +33,6 @@ module MinimalClient.UiAwarenessSample
 
 open Fuaran.MVU
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 
 /// A deliberately tiny model: one text field a user might filter by,

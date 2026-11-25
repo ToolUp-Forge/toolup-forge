@@ -35,7 +35,6 @@ module ToolUp.Facts.Client.FactBrowseModel
 // the real proxy.
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Facts
 

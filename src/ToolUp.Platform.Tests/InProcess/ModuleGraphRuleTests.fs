@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.ModuleGraphRuleTests
 
 open Expecto
-open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 open ToolUp.Platform.Compose

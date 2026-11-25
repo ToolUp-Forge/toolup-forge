@@ -5,7 +5,6 @@ module WebhookAdminUI
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open Feliz
 open Fable.Core
 open Fable.Core.JsInterop

@@ -11,7 +11,7 @@
 // `TreePage` would shadow rather than collide, which is why these sit in
 // an auto-opened module.
 open Feliz
-open ToolUp.Elmish
+open ToolUp.Platform
 
 [<AutoOpen>]
 module PageAmbient =

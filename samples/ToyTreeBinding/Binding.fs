@@ -5,7 +5,6 @@ module Toolup.Samples.ToyTreeBinding.Binding
 
 open Fuaran.MVU
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open Toolup.Samples.ToyTreeBinding.ToyNode
 

@@ -15,7 +15,6 @@ module ToolUp.AI.Client.Tests.AIScreenEffectsTests
 
 open System
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.Client

@@ -5,7 +5,6 @@ module CompositionInspectorUI
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open Browser

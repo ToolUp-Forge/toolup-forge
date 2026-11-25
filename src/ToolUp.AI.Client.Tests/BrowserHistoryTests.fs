@@ -16,7 +16,6 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.StepDriver

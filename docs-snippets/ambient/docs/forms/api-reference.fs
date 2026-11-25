@@ -3,7 +3,7 @@
 // Most of the page is signature listings, which the gate skips as such.
 // What is left are the handful of blocks that CALL something: the
 // default `WorkflowEngine`'s ten constructor dependencies, the six
-// client components, and one Elmish command. Each of those reads values
+// client components, and one remote-call step. Each of those reads values
 // a consuming deployment supplies — its own store, ledger, registries
 // and DI provider; the schema and submissions it is rendering; its own
 // `Msg` type. They are declared once here so the calls compile exactly
@@ -12,7 +12,7 @@
 //
 // SDK module opens stay in the BLOCKS where the page is teaching which
 // module a name lives in — `ToolUp.Forms.WorkflowEngine` and
-// `ToolUp.Elmish` are both part of what those two blocks say.
+// `Fuaran.MVU` / `ToolUp.Platform` are both part of what those two blocks say.
 open System
 open ToolUp.Platform.Infra
 

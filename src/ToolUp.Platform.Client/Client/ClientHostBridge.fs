@@ -4,7 +4,6 @@
 namespace ToolUp.Platform
 
 open Feliz
-open ToolUp.Elmish
 
 // ─── Phase 110 — host-neutral client tree-hosting seam ────────────────
 //

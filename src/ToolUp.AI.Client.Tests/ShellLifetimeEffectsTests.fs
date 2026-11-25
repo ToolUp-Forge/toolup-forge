@@ -4,7 +4,6 @@ open System
 open Fuaran.MVU
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.StepDriver
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client
 

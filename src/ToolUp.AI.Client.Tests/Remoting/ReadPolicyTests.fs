@@ -27,7 +27,7 @@ module ToolUp.AI.Client.Tests.ReadPolicyTests
 
 open Fuaran.MVU
 open Fable.Core
-open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.Remoting.Client
 open ToolUp.Platform.Tests.Remoting.ReadPolicyFixture
 open ToolUp.AI.Client.Tests.NodeTest

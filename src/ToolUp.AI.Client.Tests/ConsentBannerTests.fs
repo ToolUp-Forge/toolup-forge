@@ -3,7 +3,6 @@ module ToolUp.AI.Client.Tests.ConsentBannerTests
 open System
 open Fuaran.MVU
 open ToolUp.AI.Client.Tests.NodeTest
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.Consent
 

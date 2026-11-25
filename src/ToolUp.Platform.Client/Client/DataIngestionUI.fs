@@ -5,7 +5,6 @@ module DataIngestionUI
 
 open Fuaran.MVU
 open System
-open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 open Toolup.UIToolkit

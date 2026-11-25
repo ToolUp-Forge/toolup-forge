@@ -4,7 +4,6 @@
 module FileManagerUI
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open Feliz
 open Fable.Core.JsInterop
 open Fable.SimpleJson

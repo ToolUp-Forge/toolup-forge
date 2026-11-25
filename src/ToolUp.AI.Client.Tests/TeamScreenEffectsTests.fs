@@ -13,7 +13,6 @@ module ToolUp.AI.Client.Tests.TeamScreenEffectsTests
 // Nothing is performed: a case only builds values.
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 

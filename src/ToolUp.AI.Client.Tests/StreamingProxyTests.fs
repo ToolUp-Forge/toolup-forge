@@ -27,7 +27,7 @@ module ToolUp.AI.Client.Tests.StreamingProxyTests
 open System.Collections.Generic
 open Fable.Core
 open Fable.Core.JsInterop
-open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.Remoting
 open ToolUp.Remoting.Client
 open ToolUp.AI.Client.Tests.NodeTest

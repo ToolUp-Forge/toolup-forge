@@ -15,7 +15,7 @@
 // something the deployment supplies.
 open Feliz
 open Microsoft.Extensions.DependencyInjection
-open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.FileProcessor

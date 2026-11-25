@@ -5,7 +5,6 @@ module ToolUp.Platform.ModuleEvents
 
 open System.Collections.Generic
 open Fuaran.MVU
-open ToolUp.Elmish
 
 let private log = Logger.forCategory "client.module-events"
 

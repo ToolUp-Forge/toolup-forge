@@ -22,7 +22,6 @@ module ToolUp.AI.Client.Tests.BootDegradationTests
 
 open Fable.Core
 open Fable.Core.JsInterop
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 

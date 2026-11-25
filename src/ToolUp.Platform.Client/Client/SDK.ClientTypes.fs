@@ -4,7 +4,6 @@
 namespace ToolUp.Platform
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open Feliz
 open Fable.SimpleJson
 

@@ -4,7 +4,6 @@
 namespace ToolUp.Platform
 
 open Feliz
-open ToolUp.Elmish
 
 // ─── Phase 264 — host-state projection + binding (client / CSR) ────────
 //

@@ -13,7 +13,6 @@ module ToolUp.AI.Client.Tests.ModuleHostTests
 
 open Fuaran.MVU
 open Feliz
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.StepDriver

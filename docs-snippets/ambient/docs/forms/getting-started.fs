@@ -9,7 +9,7 @@
 // blocks are). None of those are SDK types; they are what the page's own
 // program provides, declared once here so each block compiles exactly as
 // a reader would copy it.
-open ToolUp.Elmish
+open ToolUp.Platform
 open ToolUp.Forms.Workflow
 open ToolUp.Forms.FormApi
 open ToolUp.Platform.Jobs

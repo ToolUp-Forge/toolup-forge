@@ -14,7 +14,7 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open Microsoft.Extensions.DependencyInjection
-open ToolUp.Elmish
+open ToolUp.Platform
 open Feliz
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets

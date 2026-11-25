@@ -38,7 +38,6 @@ module ToolUp.Facts.Client.FactBrowseView
 open System
 open Feliz
 open Fable.SimpleJson
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts

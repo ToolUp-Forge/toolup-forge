@@ -9,7 +9,7 @@
 module ToolUp.AI.Client.Tests.StepDriver
 
 open Fuaran.MVU
-open ToolUp.Elmish
+open ToolUp.Platform
 
 /// Run one step against `dispatch`.
 let runStep (dispatch: 'msg -> unit) (step: Step<'msg, RemoteEffect<'msg>>) : unit =

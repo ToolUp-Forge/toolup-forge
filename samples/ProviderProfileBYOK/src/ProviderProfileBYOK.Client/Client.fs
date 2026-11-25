@@ -4,7 +4,7 @@
 module ProviderProfileBYOK.Client
 
 open Fuaran.MVU
-open ToolUp.Elmish
+open ToolUp.Platform
 open Feliz
 
 // Phase 44 — the non-AI BYOK sample's client half.

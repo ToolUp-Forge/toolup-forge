@@ -4,7 +4,6 @@
 module ToolUp.Platform.Tests.InProcess.RemoteAndMemoTests
 
 open Expecto
-open ToolUp.Elmish
 open ToolUp.Platform
 
 // ─── The client's async-state and memo primitives ─────────────────────

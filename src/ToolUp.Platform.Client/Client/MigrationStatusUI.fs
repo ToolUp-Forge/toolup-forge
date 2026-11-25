@@ -4,7 +4,6 @@
 module MigrationStatusUI
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 open Toolup.UIToolkit

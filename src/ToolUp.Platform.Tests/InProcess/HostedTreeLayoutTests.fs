@@ -41,9 +41,9 @@ type private Msg =
     | Bumped
     | Echoed of string
 
-let private init () : Model * Fuaran.MVU.Step<Msg, ToolUp.Elmish.RemoteEffect<Msg>> list = { Count = 0 }, []
+let private init () : Model * Fuaran.MVU.Step<Msg, RemoteEffect<Msg>> list = { Count = 0 }, []
 
-let private update (msg: Msg) (model: Model) : Model * Fuaran.MVU.Step<Msg, ToolUp.Elmish.RemoteEffect<Msg>> list =
+let private update (msg: Msg) (model: Model) : Model * Fuaran.MVU.Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Bumped -> { model with Count = model.Count + 1 }, []
     | Echoed _ -> model, []

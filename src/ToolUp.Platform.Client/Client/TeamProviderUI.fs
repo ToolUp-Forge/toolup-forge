@@ -6,7 +6,6 @@ module TeamProviderUI
 open Fuaran.MVU
 open Feliz
 open Toolup.UIToolkit
-open ToolUp.Elmish
 open ToolUp.Platform
 
 // ─── Phase 44a — the "Team AI providers" surface ─────────────────

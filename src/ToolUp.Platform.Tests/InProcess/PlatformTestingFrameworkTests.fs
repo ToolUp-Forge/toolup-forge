@@ -1,7 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.PlatformTestingFrameworkTests
 
 open System.Text
-open ToolUp.Elmish
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -49,13 +48,13 @@ type private CounterMsg =
     | Increment
     | DecrementBy of int
 
-let private counterInit () : CounterModel * Fuaran.MVU.Step<CounterMsg, ToolUp.Elmish.RemoteEffect<CounterMsg>> list =
+let private counterInit () : CounterModel * Fuaran.MVU.Step<CounterMsg, RemoteEffect<CounterMsg>> list =
     { Count = 0 }, []
 
 let private counterUpdate
     (msg: CounterMsg)
     (model: CounterModel)
-    : CounterModel * Fuaran.MVU.Step<CounterMsg, ToolUp.Elmish.RemoteEffect<CounterMsg>> list =
+    : CounterModel * Fuaran.MVU.Step<CounterMsg, RemoteEffect<CounterMsg>> list =
     match msg with
     | Increment -> { model with Count = model.Count + 1 }, []
     | DecrementBy n -> { model with Count = model.Count - n }, []

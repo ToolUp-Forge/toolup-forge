@@ -34,7 +34,6 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Fuaran.UI
 open Fuaran.UI.Types
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Platform.Testing
 open ToolUp.Platform.Testing.ModuleHarness

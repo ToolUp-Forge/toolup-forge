@@ -19,7 +19,6 @@ module ToolUp.AI.Client.Tests.RemoteEffectTests
 //   * a ported `update` returns the effect values a test can state.
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open ToolUp.Remoting.Client
 open ToolUp.Platform
 open ToolUp.Facts

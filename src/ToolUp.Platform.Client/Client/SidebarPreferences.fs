@@ -202,8 +202,8 @@ let save (prefs: UserSidebarPreferences) : unit =
 /// good save as `Ok`, instead of throwing out of the dispatch loop. The
 /// in-memory preferences already changed, so the rail still reflects the
 /// user's action for this session; only the persistence failed.
-let persist (reply: Result<unit, exn> -> 'msg) (prefs: UserSidebarPreferences) : ToolUp.Elmish.RemoteEffect<'msg> =
-    ToolUp.Elmish.RemoteEffect.await "SidebarPreferences.save" (fun p -> async { return save p }) prefs reply
+let persist (reply: Result<unit, exn> -> 'msg) (prefs: UserSidebarPreferences) : RemoteEffect<'msg> =
+    RemoteEffect.await "SidebarPreferences.save" (fun p -> async { return save p }) prefs reply
 
 /// Toggle a module's pinned state. Returns the updated preferences
 /// (caller decides when to persist). Newly pinned modules land at the

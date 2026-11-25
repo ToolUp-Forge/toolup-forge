@@ -4,7 +4,6 @@
 module MixedMode.Client
 
 open Fuaran.MVU
-open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 

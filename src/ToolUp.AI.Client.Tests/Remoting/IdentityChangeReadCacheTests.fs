@@ -25,7 +25,6 @@ module ToolUp.AI.Client.Tests.IdentityChangeReadCacheTests
 // handler by hand.
 
 open Fable.Core
-open ToolUp.Elmish
 open ToolUp.Platform
 open ToolUp.Remoting.Client
 open ToolUp.Platform.Tests.Remoting.ReadPolicyFixture
