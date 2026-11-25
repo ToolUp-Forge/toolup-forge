@@ -3,6 +3,7 @@
 
 module ModuleVisibilityAdminUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
@@ -126,19 +127,58 @@ let private visibilityApi: IModuleVisibilityApi =
 
 // ─── Commands ────────────────────────────────────────────────────────
 
-let private loadRegisteredCmd () =
-    Cmd.OfRemoting.call visibilityApi.ListRegisteredModules () (Ok >> RegisteredLoaded) (fun e ->
-        RegisteredLoaded(Error e.Message))
+let internal loadRegistered () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IModuleVisibilityApi.ListRegisteredModules"
+            visibilityApi.ListRegisteredModules
+            ()
+            (Result.mapError _.Message >> RegisteredLoaded)
+    )
+]
 
-let private loadProfileCmd () =
-    Cmd.OfRemoting.call visibilityApi.GetProfile () ProfileLoaded (fun e -> ProfileLoaded(Error e.Message))
+let internal loadProfile () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IModuleVisibilityApi.GetProfile"
+            visibilityApi.GetProfile
+            ()
+            (RemoteEffect.flatten >> ProfileLoaded)
+    )
+]
 
-let private loadResolutionCmd () =
-    Cmd.OfRemoting.call visibilityApi.GetResolvedVisibility () (Ok >> ResolutionLoaded) (fun e ->
-        ResolutionLoaded(Error e.Message))
+let internal loadResolution () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IModuleVisibilityApi.GetResolvedVisibility"
+            visibilityApi.GetResolvedVisibility
+            ()
+            (Result.mapError _.Message >> ResolutionLoaded)
+    )
+]
 
-let private loadAllCmd () =
-    Cmd.batch [ loadRegisteredCmd (); loadProfileCmd (); loadResolutionCmd () ]
+let internal loadAll () : Step<Msg, RemoteEffect<Msg>> list =
+    loadRegistered () @ loadProfile () @ loadResolution ()
+
+let internal saveProfile (input: ModuleVisibilityProfileInput) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IModuleVisibilityApi.SetProfile"
+            visibilityApi.SetProfile
+            input
+            (RemoteEffect.flatten >> SaveCompleted)
+    )
+]
+
+let internal clearProfile () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IModuleVisibilityApi.ClearProfile"
+            visibilityApi.ClearProfile
+            ()
+            (RemoteEffect.flatten >> ClearCompleted)
+    )
+]
 
 // ─── Editor seeding ──────────────────────────────────────────────────
 
@@ -186,7 +226,7 @@ let profileInput (note: string) (model: Model) : ModuleVisibilityProfileInput =
 // ─── Init ────────────────────────────────────────────────────────────
 
 let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
-    {
+    ({
         RegisteredModuleIds = []
         StoredProfile = None
         Resolved = None
@@ -200,23 +240,25 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Error = None
         Status = None
         Messages = ctx.Messages.ModuleVisibilityAdmin
-    },
-    loadAllCmd ()
+     },
+     loadAll ())
+    |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Load -> { model with Error = None }, loadAllCmd ()
+    | Load -> { model with Error = None }, loadAll ()
 
-    | RegisteredLoaded(Ok ids) -> { model with RegisteredModuleIds = ids }, Cmd.none
+    | RegisteredLoaded(Ok ids) -> { model with RegisteredModuleIds = ids }, []
 
     | RegisteredLoaded(Error err) ->
         {
             model with
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | ProfileLoaded(Ok profile) ->
         let kind, selection, note, excluded = seedEditor profile
@@ -230,7 +272,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 CarriedExcludedEntryIds = excluded
                 Loaded = true
         },
-        Cmd.none
+        []
 
     | ProfileLoaded(Error err) ->
         {
@@ -238,7 +280,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Loaded = true
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | ResolutionLoaded(Ok resolution) ->
         {
@@ -246,7 +288,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Resolved = resolution
                 ResolvedLoaded = true
         },
-        Cmd.none
+        []
 
     | ResolutionLoaded(Error err) ->
         {
@@ -254,12 +296,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 ResolvedLoaded = true
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     // Flipping the rule shape keeps the selection: the operator has
     // named the same modules, and is deciding whether that naming means
     // "only these" or "everything but these".
-    | SetKind kind -> { model with Kind = kind }, Cmd.none
+    | SetKind kind -> { model with Kind = kind }, []
 
     | ToggleModule moduleId ->
         let selection =
@@ -270,11 +312,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 // operator's curation, and they built it front-to-back.
                 model.Selection @ [ moduleId ]
 
-        { model with Selection = selection }, Cmd.none
+        { model with Selection = selection }, []
 
     | Save note ->
         if model.Busy || not model.Loaded then
-            model, Cmd.none
+            model, []
         else
             let input = profileInput note model
 
@@ -284,7 +326,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Error = None
                     Status = None
             },
-            Cmd.OfRemoting.call visibilityApi.SetProfile input SaveCompleted (fun e -> SaveCompleted(Error e.Message))
+            saveProfile input
 
     | SaveCompleted(Ok()) ->
         // Reload rather than patch the model locally: the resolution is
@@ -296,7 +338,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Status = Some(Notice.Info model.Messages.ProfileSaved)
         },
-        Cmd.ofMsg Load
+        [ Then Load ]
 
     | SaveCompleted(Error err) ->
         {
@@ -304,11 +346,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | Clear ->
         if model.Busy || not model.Loaded then
-            model, Cmd.none
+            model, []
         else
             {
                 model with
@@ -316,7 +358,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Error = None
                     Status = None
             },
-            Cmd.OfRemoting.call visibilityApi.ClearProfile () ClearCompleted (fun e -> ClearCompleted(Error e.Message))
+            clearProfile ()
 
     | ClearCompleted(Ok()) ->
         {
@@ -324,7 +366,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Status = Some(Notice.Info model.Messages.ProfileCleared)
         },
-        Cmd.ofMsg Load
+        [ Then Load ]
 
     | ClearCompleted(Error err) ->
         {
@@ -332,11 +374,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
 
-    | DismissStatus -> { model with Status = None }, Cmd.none
+    | DismissStatus -> { model with Status = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
@@ -576,7 +621,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.ModuleVisibilityAdmin"
