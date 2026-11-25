@@ -227,6 +227,36 @@ let private teamConfigTests =
 let private providerProfileTests =
     let config = ProviderProfileUI.ProviderProfileConfig.create []
 
+    let candidate (label: string) : ProviderProfileUI.ProviderCandidate = {
+        Label = label
+        ProviderId = "provider"
+        Model = None
+        Tags = []
+        ApiKey = None
+    }
+
+    let input (label: string) : ProviderEntryInput = {
+        Label = label
+        ProviderId = "provider"
+        Model = None
+        Tags = []
+        ApiKey = None
+    }
+
+    /// The editor open on the stored entry `original`.
+    let editingStored (original: string) =
+        let seed = {
+            ProviderProfileUI.EditorSeed.blank with
+                Original = Some original
+                Label = original
+                ProviderId = "provider"
+        }
+
+        {
+            fst (ProviderProfileUI.init config) with
+                Editing = Some seed
+        }
+
     testList "ProviderProfileUI" [
         testCase "a remove names its entry; a fallback names its order"
         <| fun () ->
@@ -262,6 +292,69 @@ let private providerProfileTests =
                 ProviderProfileUI.step verifying (ProviderProfileUI.Verify candidate) model
 
             same (effects steps) [ legacy "ProviderProfileUI.verify" ] "the delegate"
+
+        testCase "a rename's save sends only the save, never the old label's removal"
+        <| fun () ->
+            let _, save =
+                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
+
+            same (effects save) [ call "IProviderProfileApi.SaveEntry" (input "office") ] "the save alone"
+
+        testCase "a rename's good save then removes the old label, before the reload"
+        <| fun () ->
+            let saving, _ =
+                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
+
+            let _, saved =
+                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Ok())) saving
+
+            same (effects saved) [ call "IProviderProfileApi.RemoveEntry" "work" ] "the old label's removal"
+
+            match followUps saved with
+            | [ ProviderProfileUI.Load ] -> ()
+            | other -> failwithf "expected the one reload, got %A" other
+
+        testCase "a rename whose save fails removes nothing at either step"
+        <| fun () ->
+            let saving, save =
+                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
+
+            let _, failed =
+                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Error "refused")) saving
+
+            same
+                (effects (save @ failed))
+                [ call "IProviderProfileApi.SaveEntry" (input "office") ]
+                "the save, and no removal"
+
+        testCase "a save under the same label removes nothing at either step"
+        <| fun () ->
+            let editing = editingStored "work"
+
+            let saving, save =
+                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "work")) editing
+
+            same (effects save) [ call "IProviderProfileApi.SaveEntry" (input "work") ] "the save alone"
+
+            let _, saved =
+                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Ok())) saving
+
+            same (effects saved) [] "no removal after the save"
+
+            let adding = {
+                fst (ProviderProfileUI.init config) with
+                    Editing = Some ProviderProfileUI.EditorSeed.blank
+            }
+
+            let added, addSave =
+                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "home")) adding
+
+            same (effects addSave) [ call "IProviderProfileApi.SaveEntry" (input "home") ] "a new entry's save"
+
+            let _, addSaved =
+                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Ok())) added
+
+            same (effects addSaved) [] "no removal after a new entry's save"
     ]
 
 let private teamManagerTests =
