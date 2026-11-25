@@ -240,7 +240,7 @@ let main args =
 
     /// The mark a `HighWater` floor file holds, read from the repository.
     let readHighWater (file: string) =
-        int ((File.ReadAllText(Path.Combine(__SOURCE_DIRECTORY__, file))).Trim())
+        Gate.highWaterOfText (File.ReadAllText(Path.Combine(__SOURCE_DIRECTORY__, file)))
 
     /// A row's verdict with the row's floor applied — the same judgement
     /// `VerifyAll` makes, for the row's standalone target.

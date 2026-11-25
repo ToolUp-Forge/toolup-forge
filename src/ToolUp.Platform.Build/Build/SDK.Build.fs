@@ -705,6 +705,17 @@ module Gate =
         with Failure reason ->
             Verdict.Fail reason
 
+    /// The mark a `HighWater` floor file's text holds: the first line that is
+    /// neither blank nor a `#` comment, parsed as an integer. The file opens
+    /// with a comment header, so the whole text is never the number.
+    let internal highWaterOfText (text: string) : int =
+        text.Split('\n')
+        |> Array.map _.Trim()
+        |> Array.tryFind (fun l -> l <> "" && not (l.StartsWith "#"))
+        |> function
+            | Some l -> int l
+            | None -> failwith "a HighWater floor file holds no mark"
+
     /// Apply a row's floor to its verdict. `readHighWater` reads the mark a
     /// `HighWater` file holds. A `FromRegistry` floor is the leg's own
     /// script's to apply and passes through; a floor over a `Pass` that
@@ -2316,7 +2327,8 @@ let registerTargets (config: BuildConfig) =
                 | LegKind.Script _ -> ()
         ]
 
-        let readHighWater (file: string) = int ((IO.File.ReadAllText file).Trim())
+        let readHighWater (file: string) =
+            Gate.highWaterOfText (IO.File.ReadAllText file)
 
         let clock = Diagnostics.Stopwatch.StartNew()
 
