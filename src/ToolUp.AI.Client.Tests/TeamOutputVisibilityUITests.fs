@@ -3,7 +3,7 @@
 
 module ToolUp.AI.Client.Tests.TeamOutputVisibilityUITests
 
-// ─── Phase 942 — the client UI for team output visibility ────────────
+// ─── The client UI for team output visibility ────────────────────────
 //
 // Pins, under Fable and over real markup from a real mount, the platform
 // team configuration's output-visibility section and the member-visible
@@ -175,6 +175,6 @@ let private noticeTests =
             Expect.equal (empty None) "" "not read"
     ]
 
-/// Every Phase 942 client case.
+/// Every team output-visibility client case.
 let tests =
     testList "Phase 942 — team output visibility UI" [ sectionTests; noticeTests ]

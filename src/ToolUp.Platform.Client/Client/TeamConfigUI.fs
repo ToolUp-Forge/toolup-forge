@@ -3,6 +3,7 @@
 
 module TeamConfigUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
@@ -24,7 +25,7 @@ type FormStatus =
 type Tab =
     | ConfigTab
     | FlagsTab
-    /// Phase 942 — the team's output-visibility level. Self-contained: the
+    /// The team's output-visibility level. Self-contained: the
     /// section reads and sets the level itself, so this tab adds nothing to
     /// `Model`.
     | OutputVisibilityTab
@@ -116,11 +117,21 @@ let private loadFlagsBoot () = async {
     return overrides |> Result.map (fun m -> declared, m)
 }
 
-let private loadFlagsCmd () =
-    Cmd.OfRemoting.call loadFlagsBoot () FlagsBootLoaded (fun e -> FlagsBootLoaded(Error e.Message))
+/// The flags boot names no one API method: it is the two reads above, so
+/// it is named for this screen's own call.
+let private loadFlags () : Step<Msg, RemoteEffect<Msg>> =
+    Do(RemoteEffect.call "TeamConfigUI.loadFlagsBoot" loadFlagsBoot () (RemoteEffect.flatten >> FlagsBootLoaded))
 
-let init () =
-    let model = {
+let private loadModules () : Step<Msg, RemoteEffect<Msg>> =
+    Do(
+        RemoteEffect.call "IConfigApi.ListModules" configApi.ListModules () (fun reply ->
+            match reply with
+            | Ok modules -> ModulesLoaded modules
+            | Error e -> ListFailed e.Message)
+    )
+
+let init () : Model * Cmd<Msg> =
+    ({
         ActiveTab = ConfigTab
         Modules = []
         Values = Map.empty
@@ -133,35 +144,28 @@ let init () =
         FlagStatus = Map.empty
         FlagsError = None
         FlagsLoaded = false
-    }
-
-    let loadModules =
-        Cmd.OfRemoting.call configApi.ListModules () ModulesLoaded (fun e -> ListFailed e.Message)
-
-    let loadFlags = loadFlagsCmd ()
-
-    model, Cmd.batch [ loadModules; loadFlags ]
+     },
+     [ loadModules (); loadFlags () ])
+    |> RemoteEffect.run
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 /// Fetch the persisted values for a module. Errors fall through to
 /// `ModuleValuesLoaded (Error _)` so the page can render a banner
 /// under the selected form rather than swallowing the failure.
-let private loadValues (moduleKey: string) =
-    Cmd.OfRemoting.call
-        configApi.GetModuleConfig
-        moduleKey
-        (fun result ->
-            match result with
-            | Ok view -> ModuleValuesLoaded(moduleKey, Ok view.Values)
-            | Error e -> ModuleValuesLoaded(moduleKey, Error e))
-        (fun e -> ModuleValuesLoaded(moduleKey, Error e.Message))
+let private loadValues (moduleKey: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "IConfigApi.GetModuleConfig" configApi.GetModuleConfig moduleKey (fun reply ->
+            ModuleValuesLoaded(moduleKey, RemoteEffect.flatten reply |> Result.map _.Values))
+    )
+]
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | LoadModules -> model, Cmd.OfRemoting.call configApi.ListModules () ModulesLoaded (fun e -> ListFailed e.Message)
+    | LoadModules -> model, [ loadModules () ]
 
     | ModulesLoaded modules ->
         // Auto-select the first entry so the admin lands directly on a
@@ -177,12 +181,12 @@ let update (msg: Msg) (model: Model) =
                 Loaded = true
         }
 
-        let cmd =
+        let steps =
             match selected with
             | Some key -> loadValues key
-            | None -> Cmd.none
+            | None -> []
 
-        newModel, cmd
+        newModel, steps
 
     | ListFailed err ->
         {
@@ -190,7 +194,7 @@ let update (msg: Msg) (model: Model) =
                 Error = Some(Notice.Problem err)
                 Loaded = true
         },
-        Cmd.none
+        []
 
     | SelectModule key ->
         // Re-fetch every time the user switches modules — cheap, and
@@ -204,28 +208,26 @@ let update (msg: Msg) (model: Model) =
                 Values = model.Values |> Map.add key values
                 Status = model.Status |> Map.add key Idle
         },
-        Cmd.none
+        []
 
     | ModuleValuesLoaded(key, Error err) ->
         {
             model with
                 Status = model.Status |> Map.add key (Failed err)
         },
-        Cmd.none
+        []
 
     | SubmitSave(key, values) ->
-        let cmd =
-            Cmd.OfRemoting.call
-                configApi.SaveModuleConfig
-                (key, values)
-                (fun result -> SaveCompleted(key, result))
-                (fun e -> SaveCompleted(key, Error e.Message))
-
         {
             model with
                 Status = model.Status |> Map.add key Saving
         },
-        cmd
+        [
+            Do(
+                RemoteEffect.call "IConfigApi.SaveModuleConfig" configApi.SaveModuleConfig (key, values) (fun reply ->
+                    SaveCompleted(key, RemoteEffect.flatten reply))
+            )
+        ]
 
     | SaveCompleted(key, Ok()) ->
         {
@@ -239,18 +241,19 @@ let update (msg: Msg) (model: Model) =
             model with
                 Status = model.Status |> Map.add key (Failed err)
         },
-        Cmd.none
+        []
 
     | SubmitClear key ->
-        let cmd =
-            Cmd.OfRemoting.call configApi.ClearModuleConfig key (fun result -> ClearCompleted(key, result)) (fun e ->
-                ClearCompleted(key, Error e.Message))
-
         {
             model with
                 Status = model.Status |> Map.add key Saving
         },
-        cmd
+        [
+            Do(
+                RemoteEffect.call "IConfigApi.ClearModuleConfig" configApi.ClearModuleConfig key (fun reply ->
+                    ClearCompleted(key, RemoteEffect.flatten reply))
+            )
+        ]
 
     | ClearCompleted(key, Ok()) ->
         {
@@ -264,18 +267,18 @@ let update (msg: Msg) (model: Model) =
             model with
                 Status = model.Status |> Map.add key (Failed err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
 
     | DismissStatus key ->
         {
             model with
                 Status = model.Status |> Map.remove key
         },
-        Cmd.none
+        []
 
-    | SwitchTab tab -> { model with ActiveTab = tab }, Cmd.none
+    | SwitchTab tab -> { model with ActiveTab = tab }, []
 
     | FlagsBootLoaded(Ok(declared, overrides)) ->
         {
@@ -285,7 +288,7 @@ let update (msg: Msg) (model: Model) =
                 FlagsLoaded = true
                 FlagsError = None
         },
-        Cmd.none
+        []
 
     | FlagsBootLoaded(Error err) ->
         {
@@ -293,79 +296,74 @@ let update (msg: Msg) (model: Model) =
                 FlagsLoaded = true
                 FlagsError = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | SubmitSetFlag(key, value) ->
-        let cmd =
-            Cmd.OfRemoting.call
-                featureFlagApi.SetOverride
-                (key, value)
-                (fun result -> SetFlagCompleted(key, result))
-                (fun e -> SetFlagCompleted(key, Error e.Message))
-
         {
             model with
                 FlagStatus = model.FlagStatus |> Map.add key Saving
         },
-        cmd
+        [
+            Do(
+                RemoteEffect.call "IFeatureFlagApi.SetOverride" featureFlagApi.SetOverride (key, value) (fun reply ->
+                    SetFlagCompleted(key, RemoteEffect.flatten reply))
+            )
+        ]
 
     | SetFlagCompleted(key, Ok()) ->
         // Optimistically reload overrides so the UI shows the persisted
         // value rather than trusting the submitted draft — mirrors the
         // ConfigTab pattern where a successful save refetches values.
-        let reload = loadFlagsCmd ()
-
         {
             model with
                 FlagStatus = model.FlagStatus |> Map.add key Saved
         },
-        reload
+        [ loadFlags () ]
 
     | SetFlagCompleted(key, Error err) ->
         {
             model with
                 FlagStatus = model.FlagStatus |> Map.add key (Failed err)
         },
-        Cmd.none
+        []
 
     | SubmitClearFlag key ->
-        let cmd =
-            Cmd.OfRemoting.call
-                featureFlagApi.ClearOverride
-                key
-                (fun result -> ClearFlagCompleted(key, result))
-                (fun e -> ClearFlagCompleted(key, Error e.Message))
-
         {
             model with
                 FlagStatus = model.FlagStatus |> Map.add key Saving
         },
-        cmd
+        [
+            Do(
+                RemoteEffect.call "IFeatureFlagApi.ClearOverride" featureFlagApi.ClearOverride key (fun reply ->
+                    ClearFlagCompleted(key, RemoteEffect.flatten reply))
+            )
+        ]
 
     | ClearFlagCompleted(key, Ok()) ->
-        let reload = loadFlagsCmd ()
-
         {
             model with
                 FlagStatus = model.FlagStatus |> Map.add key Saved
         },
-        reload
+        [ loadFlags () ]
 
     | ClearFlagCompleted(key, Error err) ->
         {
             model with
                 FlagStatus = model.FlagStatus |> Map.add key (Failed err)
         },
-        Cmd.none
+        []
 
-    | DismissFlagsError -> { model with FlagsError = None }, Cmd.none
+    | DismissFlagsError -> { model with FlagsError = None }, []
 
     | DismissFlagStatus key ->
         {
             model with
                 FlagStatus = model.FlagStatus |> Map.remove key
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── JSON helpers ────────────────────────────────────────────────────
 
@@ -758,10 +756,10 @@ let private flagsTabView (msgs: TeamConfigMessages) (model: Model) (dispatch: Ms
         ]
     ]
 
-// ─── Phase 942 — team output visibility ─────────────────────────────
+// ─── Team output visibility ─────────────────────────────────────────
 //
-// The client half of the Phase 896 policy, over the platform's
-// `TeamOutputVisibilityApi` (mounted in every deployment since Phase 936,
+// The client half of the team output-visibility policy, over the
+// platform's `TeamOutputVisibilityApi` (mounted in every deployment,
 // answering `Enabled = false` until the axis is composed). It lives here,
 // in the platform's own team configuration, because that page is in every
 // authenticated deployment — a facts-only one included — where the AI
@@ -937,7 +935,7 @@ let outputVisibilityNoticeView (msgs: TeamConfigMessages) (view: TeamOutputVisib
         ]
     | _ -> Html.none
 
-/// Phase 942 — the member-visible notice of the team's output level, for a
+/// The member-visible notice of the team's output level, for a
 /// surface that serves the team's published output (the fact browse pages
 /// mount it). Every member reaches it, where the configuration page that
 /// changes the level is for team owners and admins.
@@ -1094,7 +1092,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.TeamConfig"
