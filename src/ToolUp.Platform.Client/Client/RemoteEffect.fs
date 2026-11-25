@@ -181,6 +181,15 @@ type Subscription<'msg>(site: string, start: ('msg -> unit) -> System.IDisposabl
     /// and the returned handle stops it.
     member _.Start: ('msg -> unit) -> System.IDisposable = start
 
+/// Functions over subscriptions.
+[<RequireQualifiedAccess>]
+module Subscription =
+
+    /// A child's subscription in its parent's message type; the site label,
+    /// and so the identity, is kept.
+    let map (f: 'a -> 'b) (subscription: Subscription<'a>) : Subscription<'b> =
+        Subscription(subscription.Site, (fun emit -> subscription.Start(f >> emit)))
+
 /// The effect shape's constructors, the interceptor registry and the
 /// performer.
 [<RequireQualifiedAccess>]

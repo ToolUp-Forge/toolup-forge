@@ -1,8 +1,9 @@
 module MinimalClient.Client
 
 open Fable.Core.JsInterop
+open Fuaran.MVU
+open Fuaran.MVU.React
 open ToolUp.Elmish
-open ToolUp.Elmish.React
 open Feliz
 open ToolUp.Platform
 open Feliz.AgGrid
@@ -228,12 +229,12 @@ type Msg =
     | Increment
     | Decrement
 
-let init () : Model * Cmd<Msg> = { Count = 0 }, Cmd.none
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list = { Count = 0 }, []
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Increment -> { model with Count = model.Count + 1 }, Cmd.none
-    | Decrement -> { model with Count = model.Count - 1 }, Cmd.none
+    | Increment -> { model with Count = model.Count + 1 }, []
+    | Decrement -> { model with Count = model.Count - 1 }, []
 
 let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
@@ -247,6 +248,11 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
         ]
     ]
 
-Program.mkProgram init update view
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+Live.elements
+    "elmish-app"
+    Fresh
+    (Host.create (fun () -> System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) 0UL ignore)
+    (Component.plain init update (fun _ -> Map.empty) (ElementView.ofView view))
+    RemoteEffect.interpreter
+    ()
+|> ignore

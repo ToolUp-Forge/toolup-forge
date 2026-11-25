@@ -3,8 +3,9 @@
 
 module ModelViewerDemo.Client
 
+open Fuaran.MVU
+open Fuaran.MVU.React
 open ToolUp.Elmish
-open ToolUp.Elmish.React
 open Feliz
 open ToolUp.Client.ModelViewer
 
@@ -28,18 +29,18 @@ type Msg =
     | Loaded
     | Errored of ModelViewerError
 
-let init () : Model * Cmd<Msg> = { State = Loading 0.0 }, Cmd.none
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list = { State = Loading 0.0 }, []
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Progressed fraction -> { model with State = Loading fraction }, Cmd.none
-    | Loaded -> { model with State = Ready }, Cmd.none
+    | Progressed fraction -> { model with State = Loading fraction }, []
+    | Loaded -> { model with State = Ready }, []
     | Errored error ->
         {
             model with
                 State = Failed error.ErrorType
         },
-        Cmd.none
+        []
 
 let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
     Html.div [
@@ -73,6 +74,11 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement =
         ]
     ]
 
-Program.mkProgram init update view
-|> Program.withReactSynchronous "elmish-app"
-|> Program.run
+Live.elements
+    "elmish-app"
+    Fresh
+    (Host.create (fun () -> System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) 0UL ignore)
+    (Component.plain init update (fun _ -> Map.empty) (ElementView.ofView view))
+    RemoteEffect.interpreter
+    ()
+|> ignore

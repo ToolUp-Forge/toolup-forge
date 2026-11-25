@@ -29,20 +29,14 @@ module ToolUp.AI.Client.AIClientConfig
 // Client.run directly.
 
 open Fuaran.MVU
+open Fuaran.MVU.React
 open System
 open ToolUp.Elmish
-open ToolUp.Elmish.React
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
 open ToolUp.AI
-
-// HMR is always open; the ToolUp.Elmish.HMR overrides detect the absence of
-// Vite's `import.meta.hot` at runtime and become identity functions in
-// production builds. Mirrors the SDK.Client.fs change made when
-// ToolUp.AI stopped carrying compile-time `#if DEBUG` gates.
-open ToolUp.Elmish.HMR
 
 /// ─── Side-panel MVU ───────────────────────────────────────────────
 
@@ -488,27 +482,27 @@ let withAISlots (fills: AISlotFills) (config: ClientConfig) : ClientConfig = {
         Slots.Extensions = config.Slots.Extensions @ slotExtensions fills
 }
 
-// ─── The composer's view, with one set of dispatchers per loop ──
+// ─── The composer's view, with one set of dispatchers per mount ──
 //
 // The shell holds two memo boundaries that key on its dispatch wrappers by
 // reference — the active module's dispatcher and the sidebar's callbacks —
 // and both come from the `Client.Dispatchers` set the shell's view is
 // handed. Built inline in the view — `ShellMsg >> dispatch` — the set would
 // be a fresh one on every render and neither boundary would hold in this
-// composer. The loop's own `dispatch` is one function for the loop's life,
-// so the program builds the composer's routes from it once
-// (`Program.withStableDispatch`, through `Client.programOver`).
+// composer. A mount hands its view one `dispatch` for its life, so the
+// program builds the composer's routes from it once (`Client.programOver`'s
+// `build`).
 
-/// The two message routes the composer's view hands out, for one loop.
+/// The two message routes the composer's view hands out, for one mount.
 type internal ComposerDispatchers = {
-    /// The loop's own dispatcher.
+    /// The mount's own dispatcher.
     Dispatch: OuterMsg -> unit
     Shell: Client.Dispatchers
     SidePanel: SidePanelMsg -> unit
 }
 
-/// The composer's routes over a loop's `dispatch` — the `build` the
-/// composer's program hands `Program.withStableDispatch`.
+/// The composer's routes over a mount's `dispatch` — the `build` the
+/// composer's program hands `Client.programOver`.
 let internal composerDispatchersFor (dispatch: OuterMsg -> unit) : ComposerDispatchers = {
     Dispatch = dispatch
     Shell = Client.dispatchers (ShellMsg >> dispatch)
@@ -529,7 +523,7 @@ let private sameInputs (a: obj array) (b: obj array) =
     a.Length = b.Length && Array.forall2 (fun x y -> obj.ReferenceEquals(x, y)) a b
 
 /// The composer's view over a shell view: the side-panel chrome, and the
-/// shell rendered with the loop's stable shell dispatchers. `shellView` is
+/// shell rendered with the mount's stable shell dispatchers. `shellView` is
 /// the whole-tree `Client.viewWithSignIn` (`withSidePanel`) or the
 /// store-bound `Client.viewSlicedOver` (`run`). Build it once per program:
 /// the view it returns keeps the last chrome record it built.
@@ -567,6 +561,12 @@ let internal composerView
     fun (model: OuterModel) (dispatchers: ComposerDispatchers) ->
         shellView (chromeFor model dispatchers.SidePanel) model.Shell dispatchers.Shell
 
+/// The shell's steps in the composer's message type.
+let private liftShell
+    (steps: Step<Client.Msg, RemoteEffect<Client.Msg>> list)
+    : Step<OuterMsg, RemoteEffect<OuterMsg>> list =
+    Step.mapAll ShellMsg (RemoteEffect.map ShellMsg) steps
+
 /// The composer's update: shell messages to the shell, side-panel messages
 /// to the side panel, and the knowledge-base badge's navigation re-issued
 /// against the shell.
@@ -576,45 +576,59 @@ let internal composerUpdate
     (allModules: ErasedModule list)
     (msg: OuterMsg)
     (model: OuterModel)
-    : OuterModel * Cmd<OuterMsg> =
+    : OuterModel * Step<OuterMsg, RemoteEffect<OuterMsg>> list =
     match msg with
     | ShellMsg m ->
-        let s, c = Client.update config queryBus allModules m model.Shell
-        { model with Shell = s }, Cmd.map ShellMsg c
+        let s, steps = Client.update config queryBus allModules m model.Shell
+        { model with Shell = s }, liftShell steps
     // The KB-inventory badge is owned by the side panel but its click
     // navigates the shell. Intercept here and re-issue against the
     // shell so the side panel's Msg surface stays free of shell
     // concerns. Falls through to the generic side-panel handler for
     // every other Msg.
     | SidePanelMsg NavigateToKnowledgeBase ->
-        let s, c =
+        let s, steps =
             Client.update config queryBus allModules (Client.ModuleSelected "KnowledgeBase") model.Shell
 
-        { model with Shell = s }, Cmd.map ShellMsg c
+        { model with Shell = s }, liftShell steps
     | SidePanelMsg m ->
         let s, steps = sidePanelStep m model.SidePanel
-        { model with SidePanel = s }, steps |> RemoteEffect.toCmd |> Cmd.map SidePanelMsg
+        { model with SidePanel = s }, Step.mapAll SidePanelMsg (RemoteEffect.map SidePanelMsg) steps
 
 /// A fresh side-panel model, as the composer's `init` starts it.
 let internal composerSidePanelInit () : SidePanelModel = sidePanelInit ()
 
-// ─── Outer Program construction ──────────────────────────────────
+// ─── The composer's program ──────────────────────────────────────
 
 /// The side panel's subscription to the tab's AI stream.
 let internal streamSubscription (dispatch: OuterMsg -> unit) : IDisposable =
     ChatStream.AIStream.subscribe (SSEEvent >> SidePanelMsg >> dispatch)
 
-// The composer's Program over a shell view (whole-tree or store-bound).
-// It builds an outer Program from the shell's init/update/view directly
-// rather than composing over an already-built Program: Elmish does not
-// expose a Program's pieces post-construction, so the shell pieces are
-// stitched into the outer Program at build time.
+/// The composer's resources: the shell's own, lifted into `ShellMsg`, and the
+/// side panel's AI stream when the assistant is enabled. The shell's must
+/// ride this composer: without them every seam the shell's subscriptions
+/// carry is silently severed (the navigation bus has no subscriber, so an
+/// admin-landing tile click is a no-op with no error), and a module's
+/// `OnTeamSwitched` callback dispatches into nothing.
+let internal composerResources (fills: AISlotFills) (config: ClientConfig) : Map<ResourceKey, Subscription<OuterMsg>> =
+    let shell =
+        Client.resources config
+        |> Component.prefixResources "shell" (Subscription.map ShellMsg)
+
+    if isAiEnabled fills then
+        shell
+        |> Map.add (ResourceKey.constant "ai-sse-events") (Subscription("ai-sse-events", streamSubscription))
+    else
+        shell
+
+// The composer's program over a shell view (whole-tree or store-bound),
+// built from the shell's init, update, resources and views.
 let private composerProgram
     (fills: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
     (shellViewFor: ErasedModule list -> Client.ExtraChrome -> Client.Model -> Client.Dispatchers -> ReactElement)
-    : Program<unit, OuterModel, OuterMsg, ReactElement> =
+    : Client.ShellProgram<OuterModel, OuterMsg> =
 
     // `Client.boot` performs the boot-time composition
     // seam setup that every entry point (including `Client.program`)
@@ -627,28 +641,28 @@ let private composerProgram
 
     let allModules = Client.prepareModules config modules
     let queryBus = Client.buildQueryBus allModules
+    let resources = composerResources fills config
 
-    // The stream subscription is a lifetime-aware `EffectHandle`: the
-    // runtime disposes it on `IDispatcher.Terminate()` (React's
-    // `beforeunload` hook + HMR's hot-reload terminator), so the panel's
-    // subscription ends across page-navigation and hot-reload rather than
-    // leaking into the next page / next build.
-    let sseEffect: EffectHandle<OuterMsg> option =
-        if isAiEnabled fills then
-            Some(EffectHandle.programLifetime "ai-sse-events" streamSubscription)
-        else
-            None
-
-    let outerInit () : OuterModel * Cmd<OuterMsg> =
-        let shellModel, shellCmd = Client.init config queryBus allModules ()
+    let outerInit () : OuterModel * Step<OuterMsg, RemoteEffect<OuterMsg>> list =
+        let shellModel, shellSteps = Client.init config queryBus allModules ()
 
         {
             Shell = shellModel
             SidePanel = composerSidePanelInit ()
         },
-        Cmd.map ShellMsg shellCmd
+        liftShell shellSteps
 
-    let outerUpdate = composerUpdate config queryBus allModules
+    // The module-state observer runs after each shell message, over the
+    // composer's `ShellMsg` / `Shell` projection, as it does for
+    // `Client.program`, or no AI deployment would publish.
+    let outerUpdate =
+        composerUpdate config queryBus allModules
+        |> Client.withModuleStateObserver
+            allModules
+            (function
+            | ShellMsg m -> Some m
+            | _ -> None)
+            _.Shell
 
     // The shell view routes through the sign-in gate (both
     // `viewWithSignIn` and the store-bound `viewSlicedOver` do), so the
@@ -661,83 +675,42 @@ let private composerProgram
     // The reporter, the trace and the stable dispatch are the shell's own
     // builder's (`Client.programOver`), so this composer and `Client.program`
     // route errors and trace updates alike.
-    let prog =
-        Client.programOver config outerInit outerUpdate composerDispatchersFor outerView
+    Client.programOver config outerInit outerUpdate (fun _ -> resources) composerDispatchersFor outerView
 
-    // The module-state observer publish left the shell's
-    // `update`; it is the shell program's post-update hook now, so a
-    // composer that embeds the shell installs the same hook over its
-    // `ShellMsg` / `Shell` projection, or no AI deployment would publish.
-    let progWithReporter =
-        prog
-        |> Client.withModuleStateObserver
-            allModules
-            (function
-            | ShellMsg m -> Some m
-            | _ -> None)
-            _.Shell
-
-    // The shell's own program-lifetime effects — the NavigationRequest
-    // bus (admin-landing tiles, Home tool cards, deep links, the
-    // client-resident navigate AI tool), the cross-module event bus,
-    // the notification stream, the auth-token-acquired watcher, and
-    // the auth-bridge health observer — must ride this outer Program
-    // too. This composer builds the Program from the shell's
-    // init/update/view pieces, so nothing else attaches them: without
-    // this fold every one of those seams is silently severed (the bus
-    // has no subscriber, so e.g. an admin-landing tile click is a
-    // no-op with no error). One shared definition site
-    // (`Client.programLifetimeEffects`) keeps this composer and
-    // `Client.program` attaching the same set.
-    //
-    // The same call captures this Program's dispatcher as the
-    // shell's, lifted through `ShellMsg`, exactly as `Client.run` does for
-    // the plain shell. Without it a module's `OnTeamSwitched` and
-    // `OnAccessibleModulesChanged` callbacks dispatched into nothing in
-    // every AI deployment, so a team switch never reached the shell.
-    let progWithShellEffects =
-        progWithReporter |> Client.withShellLifetimeEffects config ShellMsg
-
-    match sseEffect with
-    | Some effect -> progWithShellEffects |> Program.withEffect effect
-    | None -> progWithShellEffects
-
-/// Wrap the shell Program with side-panel state, SSE subscription, and
-/// AI chrome, over `modules` as given: it adds no AI page (`program` and
+/// Wrap the shell program with side-panel state, the AI stream and AI
+/// chrome, over `modules` as given: it adds no AI page (`program` and
 /// `run` fill the AI slots first, `withAISlots`). With the assistant slot
-/// `Empty` the wrapper is still built (so types line up) but the SSE
-/// subscription and chrome are both disabled.
+/// `Empty` the wrapper is still built (so types line up) but the AI stream
+/// and chrome are both disabled.
 ///
-/// Its view renders the whole shell per message (`Client.viewWithSignIn`),
-/// so any React binding can mount it; `run` mounts the store-bound
-/// composition instead.
+/// Its view renders the whole shell per message (`Client.viewWithSignIn`);
+/// `run` mounts the store-bound composition instead.
 let withSidePanel
     (fills: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
-    : Program<unit, OuterModel, OuterMsg, ReactElement> =
+    : Client.ShellProgram<OuterModel, OuterMsg> =
     composerProgram fills config modules (fun allModules -> Client.viewWithSignIn config allModules)
 
-/// Build the Elmish `Program` with the AI slots filled (`withAISlots`),
-/// the side-panel state machine wrapped around the shell, the SSE
-/// subscription wired, and the chrome rendered alongside the module
-/// view. Use this when you want to layer additional chrome (custom
-/// metrics overlay, debug panel, error boundary) before mounting React.
-/// For the common case, use `AIClientConfig.run` instead.
+/// Build the program with the AI slots filled (`withAISlots`), the
+/// side-panel state machine wrapped around the shell, the AI stream listed
+/// and the chrome rendered alongside the module view. Use this when you want
+/// to mount it yourself (`Client.mountAt`). For the common case, use
+/// `AIClientConfig.run` instead.
 let program
     (fills: AISlotFills)
     (config: ClientConfig)
     (modules: ErasedModule list)
-    : Program<unit, OuterModel, OuterMsg, ReactElement> =
+    : Client.ShellProgram<OuterModel, OuterMsg> =
     withSidePanel fills (withAISlots fills config) modules
 
-/// Build the AI-augmented Program and run it against React mounted at
-/// `"elmish-app"`. Mirrors `Client.run` for the AI-enabled case so the
-/// composition reads the same regardless of which companions are imported.
+/// Build the AI-augmented program and mount it at `"elmish-app"`. Mirrors
+/// `Client.run` for the AI-enabled case so the composition reads the same
+/// regardless of which companions are imported.
 ///
 /// Consults `ClientConfig.Composition.PublicEntryDispatchers` first; any dispatcher
 /// that returns `true` short-circuits the full AI shell bootstrap (the
-/// dispatcher has rendered its own minimal program).
+/// dispatcher has rendered its own page).
 let run (fills: AISlotFills) (config: ClientConfig) (modules: ErasedModule list) : unit =
     // Install the request seam BEFORE consulting
     // PublicEntryDispatchers so dispatchers that fire authenticated
@@ -748,19 +721,19 @@ let run (fills: AISlotFills) (config: ClientConfig) (modules: ErasedModule list)
     if Client.tryDispatchPublicEntry config then
         ()
     else
-        // The store-bound composition, as `Client.run` mounts
-        // the shell: the composer publishes its model to one store per
-        // run, and the shell's chrome and active module read their slices
-        // of `OuterModel.Shell` from it, so a module message re-renders
-        // that module and no chrome, and a side-panel message re-renders
-        // the chrome and no module.
-        let store = ModelStore.create<OuterModel, OuterMsg> ()
+        // The store-bound composition, as `Client.run` mounts the shell:
+        // the composer publishes its model to one store per run, and the
+        // shell's chrome and active module read their slices of
+        // `OuterModel.Shell` from it, so a module message re-renders that
+        // module and no chrome, and a side-panel message re-renders the
+        // chrome and no module.
+        let store = ModelStore<OuterModel, ElementView<OuterMsg>>()
         let shell = Client.shellStore store _.Shell
 
         composerProgram fills (withAISlots fills config) modules (fun allModules ->
             Client.viewSlicedOver shell config allModules)
-        |> Program.withReactStore store "elmish-app"
-        |> Program.run
+        |> Client.mountAt Fresh store
+        |> ignore
 
 /// Register the series read a conversation block part is
 /// re-read through: the reader's own gated fact read. A client boot that

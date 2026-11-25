@@ -102,8 +102,8 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 /// Registers as a `DebugOnly` module — reference-only, like
 /// `ToolUp.AI.SampleClientTool`, never meant to ship in a production
-/// sidebar. Not wired into this sample's `Program.mkProgram` shell
-/// (`Client.fs` runs a bare Elmish loop, not the `ClientConfig` module
+/// sidebar. Not wired into this sample's bare mount
+/// (`Client.fs` mounts a bare component, not the `ClientConfig` module
 /// shell `withInspectState` reports through) — `register ()` exists so
 /// the module-registration + `withInspectState` chain compiles and is
 /// reachable, matching how `ToolUp.AI.SampleClientTool.Server.Compose`
