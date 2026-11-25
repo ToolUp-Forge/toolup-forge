@@ -56,14 +56,18 @@ let internal resolveSteps (ids: string list) (model: Model) : Step<Msg, RemoteEf
 let resolve (ids: string list) (model: Model) : Cmd<Msg> =
     resolveSteps ids model |> RemoteEffect.toCmd
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions; a reply asks for nothing further.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Resolved(Ok summaries) ->
         {
             Entries = summaries |> List.fold (fun acc s -> Map.add s.UserId s acc) model.Entries
         },
-        Cmd.none
-    | Resolved(Error _) -> model, Cmd.none
+        []
+    | Resolved(Error _) -> model, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 let private nonBlank (value: string option) =
     value |> Option.filter (String.IsNullOrWhiteSpace >> not)
