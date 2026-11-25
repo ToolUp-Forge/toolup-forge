@@ -1050,45 +1050,45 @@
   -->
   <PropertyGroup>
     <ToolUpProjectRelativePath>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectFullPath)').Replace('\', '/'))</ToolUpProjectRelativePath>
-    <ToolUpAIProvidersVersion>0.40.0</ToolUpAIProvidersVersion>
-    <ToolUpAlgorithmProvidersVersion>0.39.3</ToolUpAlgorithmProvidersVersion>
-    <ToolUpArtefactSigningVersion>0.39.3</ToolUpArtefactSigningVersion>
-    <ToolUpAuditSinksVersion>0.39.3</ToolUpAuditSinksVersion>
+    <ToolUpAIProvidersVersion>0.40.1</ToolUpAIProvidersVersion>
+    <ToolUpAlgorithmProvidersVersion>0.39.4</ToolUpAlgorithmProvidersVersion>
+    <ToolUpArtefactSigningVersion>0.39.4</ToolUpArtefactSigningVersion>
+    <ToolUpAuditSinksVersion>0.39.4</ToolUpAuditSinksVersion>
     <ToolUpAuthProvidersVersion>0.41.0</ToolUpAuthProvidersVersion>
     <ToolUpCalendarVersion>0.39.4</ToolUpCalendarVersion>
     <ToolUpCloudVersion>0.39.1</ToolUpCloudVersion>
-    <ToolUpContainerSchedulersVersion>0.39.3</ToolUpContainerSchedulersVersion>
-    <ToolUpContentScannersVersion>0.39.3</ToolUpContentScannersVersion>
+    <ToolUpContainerSchedulersVersion>0.39.4</ToolUpContainerSchedulersVersion>
+    <ToolUpContentScannersVersion>0.39.4</ToolUpContentScannersVersion>
     <ToolUpDataSourcesVersion>0.40.1</ToolUpDataSourcesVersion>
-    <ToolUpEmbeddingCachesVersion>0.39.3</ToolUpEmbeddingCachesVersion>
-    <ToolUpEmbeddingProvidersVersion>0.39.3</ToolUpEmbeddingProvidersVersion>
-    <ToolUpEncryptionVersion>0.39.3</ToolUpEncryptionVersion>
-    <ToolUpEntityStoresVersion>0.39.3</ToolUpEntityStoresVersion>
+    <ToolUpEmbeddingCachesVersion>0.39.4</ToolUpEmbeddingCachesVersion>
+    <ToolUpEmbeddingProvidersVersion>0.39.4</ToolUpEmbeddingProvidersVersion>
+    <ToolUpEncryptionVersion>0.39.4</ToolUpEncryptionVersion>
+    <ToolUpEntityStoresVersion>0.39.4</ToolUpEntityStoresVersion>
     <ToolUpFactStoresVersion>0.40.0</ToolUpFactStoresVersion>
-    <ToolUpFeatureFlagProvidersVersion>0.1.4-alpha</ToolUpFeatureFlagProvidersVersion>
-    <ToolUpHostsVersion>0.39.3</ToolUpHostsVersion>
-    <ToolUpIngestionQueuesVersion>0.39.3</ToolUpIngestionQueuesVersion>
-    <ToolUpJobSchedulersVersion>0.39.3</ToolUpJobSchedulersVersion>
-    <ToolUpMediaVersion>0.39.3</ToolUpMediaVersion>
-    <ToolUpMetricsVersion>0.39.3</ToolUpMetricsVersion>
-    <ToolUpModelProvidersVersion>0.39.3</ToolUpModelProvidersVersion>
-    <ToolUpNotificationChannelsVersion>0.39.3</ToolUpNotificationChannelsVersion>
-    <ToolUpObservabilityVersion>0.39.3</ToolUpObservabilityVersion>
-    <ToolUpOcrProvidersVersion>0.39.3</ToolUpOcrProvidersVersion>
-    <ToolUpRateLimitVersion>0.39.3</ToolUpRateLimitVersion>
-    <ToolUpReportRenderersVersion>0.39.3</ToolUpReportRenderersVersion>
-    <ToolUpRerankersVersion>0.39.3</ToolUpRerankersVersion>
-    <ToolUpSecretsVersion>0.39.3</ToolUpSecretsVersion>
-    <ToolUpShareTokenStoreDecoratorsVersion>0.39.3</ToolUpShareTokenStoreDecoratorsVersion>
-    <ToolUpSparseIndicesVersion>0.39.3</ToolUpSparseIndicesVersion>
-    <ToolUpStorageVersion>0.40.0</ToolUpStorageVersion>
-    <ToolUpSvgRasterizersVersion>0.39.3</ToolUpSvgRasterizersVersion>
-    <ToolUpTelemetrySinksVersion>0.39.3</ToolUpTelemetrySinksVersion>
-    <ToolUpTimeSeriesStoresVersion>0.39.3</ToolUpTimeSeriesStoresVersion>
-    <ToolUpVectorStoresVersion>0.40.0</ToolUpVectorStoresVersion>
-    <ToolUpVoiceProvidersVersion>0.39.3</ToolUpVoiceProvidersVersion>
+    <ToolUpFeatureFlagProvidersVersion>0.1.5-alpha</ToolUpFeatureFlagProvidersVersion>
+    <ToolUpHostsVersion>0.39.4</ToolUpHostsVersion>
+    <ToolUpIngestionQueuesVersion>0.39.4</ToolUpIngestionQueuesVersion>
+    <ToolUpJobSchedulersVersion>0.39.4</ToolUpJobSchedulersVersion>
+    <ToolUpMediaVersion>0.39.4</ToolUpMediaVersion>
+    <ToolUpMetricsVersion>0.39.4</ToolUpMetricsVersion>
+    <ToolUpModelProvidersVersion>0.39.4</ToolUpModelProvidersVersion>
+    <ToolUpNotificationChannelsVersion>0.39.4</ToolUpNotificationChannelsVersion>
+    <ToolUpObservabilityVersion>0.39.4</ToolUpObservabilityVersion>
+    <ToolUpOcrProvidersVersion>0.39.4</ToolUpOcrProvidersVersion>
+    <ToolUpRateLimitVersion>0.39.4</ToolUpRateLimitVersion>
+    <ToolUpReportRenderersVersion>0.39.4</ToolUpReportRenderersVersion>
+    <ToolUpRerankersVersion>0.39.4</ToolUpRerankersVersion>
+    <ToolUpSecretsVersion>0.39.4</ToolUpSecretsVersion>
+    <ToolUpShareTokenStoreDecoratorsVersion>0.39.4</ToolUpShareTokenStoreDecoratorsVersion>
+    <ToolUpSparseIndicesVersion>0.39.4</ToolUpSparseIndicesVersion>
+    <ToolUpStorageVersion>0.40.1</ToolUpStorageVersion>
+    <ToolUpSvgRasterizersVersion>0.39.4</ToolUpSvgRasterizersVersion>
+    <ToolUpTelemetrySinksVersion>0.39.4</ToolUpTelemetrySinksVersion>
+    <ToolUpTimeSeriesStoresVersion>0.39.4</ToolUpTimeSeriesStoresVersion>
+    <ToolUpVectorStoresVersion>0.40.1</ToolUpVectorStoresVersion>
+    <ToolUpVoiceProvidersVersion>0.39.4</ToolUpVoiceProvidersVersion>
     <ToolUpExperimentsVersion>0.1.0-alpha</ToolUpExperimentsVersion>
-    <ToolUpStripeVersion>0.2.4</ToolUpStripeVersion>
+    <ToolUpStripeVersion>0.2.5</ToolUpStripeVersion>
     <ToolUpWorkflowVersion>0.1.0-alpha</ToolUpWorkflowVersion>
     <ToolUpWebhooksVersion>0.1.0-alpha</ToolUpWebhooksVersion>
   </PropertyGroup>
