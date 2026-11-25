@@ -1154,10 +1154,7 @@ let main args =
     /// be held to none of them.
     let shellMountId () : string =
         let ids =
-            System.Text.RegularExpressions.Regex.Matches(
-                File.ReadAllText shellMountSource,
-                @"withReactStore(?:Hydrate)?\s+\w+\s+""([^""]+)"""
-            )
+            System.Text.RegularExpressions.Regex.Matches(File.ReadAllText shellMountSource, @"mountAt\s+""([^""]+)""")
             |> Seq.map _.Groups[1].Value
             |> Seq.distinct
             |> List.ofSeq

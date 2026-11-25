@@ -5,7 +5,6 @@ module ToolUp.Platform.Bootstrap.Hydration
 
 open ToolUp.Platform
 open ToolUp.Elmish
-open ToolUp.Elmish.React
 open Fable.Core
 
 // ─── Phase 57 — hydration-aware bootstrap ─────────────────────────

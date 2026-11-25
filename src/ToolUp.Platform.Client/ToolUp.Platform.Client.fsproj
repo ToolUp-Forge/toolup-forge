@@ -34,13 +34,6 @@
              toolkit component.
              See ToolUp.Platform.UI.fsproj's header. -->
         <ProjectReference Include="..\ToolUp.Platform.UI\ToolUp.Platform.UI.fsproj" />
-        <!-- The proved half of the ToolUp.Elmish runtime: the ring buffer,
-             the subscription diff and the dispatch loop's step machine.
-             This tier wraps it: `ToolUp.Elmish.Program` supplies the
-             update, the render hook, the command performer and the
-             reporter, and `Sub.Internal` keeps the diff's upstream names,
-             so no public name under `ToolUp.Elmish` moved. -->
-        <ProjectReference Include="..\ToolUp.Elmish.Kernel\ToolUp.Elmish.Kernel.fsproj" />
     </ItemGroup>
     <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
          under fable/. The library's own .fsproj + .fs files ship inside
@@ -54,19 +47,8 @@
         <None Include="..\ToolUp.Platform\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
     <ItemGroup>
-        <!-- 0.4.3 — the MVU runtime folded in from the formerly-separate
-             ToolUp.Elmish / ToolUp.Elmish.React / ToolUp.Elmish.HMR
-             packages. The runtime is a forge implementation detail
-             rather than a separately consumable concern; one package
-             instead of three, one version line instead of three. Phase 73
-             renamed its namespaces to `ToolUp.Elmish` / `.React` / `.HMR`;
-             consumer `open` sites move per docs/migrations/73-*.md.
-             Compile order matches the prior cross-package dependency
-             order (core → React → HMR). -->
-        <!-- 0.4.4 — ToolUp.Remoting.Client folded in. The Fable-side
-             RPC proxy + transport. Compiled BEFORE the MVU runtime so
-             Cmd.OfRemoting in the ToolUp.Elmish source can reference
-             the Remoting types. -->
+        <!-- The Fable-side RPC proxy + transport, compiled before the
+             effect values and their performer, which send through it. -->
         <Compile Include="Client\Remoting\Types.fs" />
         <Compile Include="Client\Remoting\Extensions.fs" />
         <Compile Include="Client\Remoting\Http.fs" />
@@ -81,20 +63,11 @@
              held byte-for-byte to the emission by Remoting/ClientProxyGenerationTests.
              Api.makeProxy reads it before building a reflective proxy. -->
         <Compile Include="Client\Remoting\PlatformClientProxies.fs" />
-        <Compile Include="Client\Elmish\Prelude.fs" />
-        <Compile Include="Client\Elmish\Cmd.fs" />
-        <!-- Remote calls as effect values, their performer over Cmd.OfRemoting
-             and the adapter that runs a step list on today's loop. -->
+        <!-- Remote calls as effect values, their performer and interpreter,
+             and the resource type the shell's lifetime effects use. -->
         <Compile Include="Client\RemoteEffect.fs" />
-        <Compile Include="Client\Elmish\Sub.fs" />
-        <Compile Include="Client\Elmish\Dispatcher.fs" />
-        <Compile Include="Client\Elmish\Prefetch.fs" />
         <Compile Include="Client\Elmish\ErrorContext.fs" />
-        <Compile Include="Client\Elmish\EffectHandle.fs" />
         <Compile Include="Client\Elmish\Memo.fs" />
-        <Compile Include="Client\Elmish\Program.fs" />
-        <Compile Include="Client\Elmish\React.fs" />
-        <Compile Include="Client\Elmish\HMR.fs" />
         <Compile Include="Client\Api.fs" />
         <!-- Phase 307 — `Client\Icon.fs` (the `?react`-import → ReactElement
              primitive) moved to ToolUp.Platform.UI beside the icon set that
@@ -561,10 +534,7 @@
          declared in Directory.Packages.props. -->
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Fable.Core" />
-    <!-- 0.4.3 — Fable.React.Types and Fable.Browser.Dom were pulled
-         in transitively via ToolUp.Elmish.React. Declared directly
-         now that the elmish runtime is folded in, so the dep is
-         explicit and survives any future Elmish source restructure. -->
+    <!-- The shell's views and its browser interop use these directly. -->
     <PackageReference Include="Fable.React.Types" />
     <PackageReference Include="Fable.Browser.Dom" />
     <!-- 0.4.4 — ToolUp.Remoting.Client folded in; PackageReference dropped.

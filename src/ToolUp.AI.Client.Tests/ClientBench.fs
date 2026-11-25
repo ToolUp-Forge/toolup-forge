@@ -33,11 +33,11 @@
 ///     the fixture's declared value first; a fixture that does not decode
 ///     to it is EXCLUDED with its reason printed, never timed.
 ///   * DISPATCH TO RENDER HOOK — a model-changing message dispatched
-///     through `Program.runWithDispatch` to the render hook
-///     (`Program.withSetState`), timing the `view` construction per
-///     message; the number of render-hook calls one drain of several
-///     messages makes; and the latency between an update issuing a
-///     `Cmd.OfAsync` command and that async body starting.
+///     through a `Fuaran.MVU` runtime to its host's render hook, timing the
+///     `view` construction per message; the number of render-hook calls one
+///     drain of several messages makes; and the latency between an update
+///     returning an awaited effect (`RemoteEffect.await`) and that async
+///     body starting — the runtime's hop from the commit to the performer.
 ///   * RENDER SCOPE (Phase 852, 883) — components rendered per message in
 ///     a mounted SDK shell (`RenderScope`): chrome renders, module-view
 ///     runs and sidebar-component renders for a module message, a chrome
@@ -75,8 +75,8 @@
 ///
 /// The statistic is MIN over rounds, as the server perf gate's is
 /// (Phase 192): wall-clock noise on a shared machine is one-sided. The
-/// fixture order and the dispatch sequence come from the proof corpus's
-/// LCG (`ElmishProofDifferential.Lcg`) under one seed, printed on every
+/// fixture order and the dispatch sequence come from a seeded LCG
+/// (`Lcg`, below) under one seed, printed on every
 /// run, so a run is reproducible by seed. Node is not a browser: decode
 /// and view construction are the same JavaScript a browser runs; boot's
 /// import cost transfers, its paint does not (jsdom commits the DOM and
@@ -103,9 +103,9 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Fable.SimpleJson
 open Feliz
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform.Tests.Remoting
-open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 open ToolUp.AI.Client.Tests.ClientBenchTables
 
 // ─── Host surface ──────────────────────────────────────────────────────
@@ -184,6 +184,16 @@ let private spawnSync (command: string, args: string[], options: obj) : obj = js
 /// The default seed. Any run prints the seed it used; `--seed` replays it.
 [<Literal>]
 let DefaultSeed = 849_001
+
+/// A 32-bit linear congruential generator: the same sequence for a seed on
+/// every run, so a run is reproducible by the seed it prints.
+type Lcg(seed: int) =
+    let mutable state = uint32 seed
+
+    /// The next value in `[0, bound)`.
+    member _.Next(bound: int) : int =
+        state <- uint32 (uint64 state * 1664525UL + 1013904223UL)
+        int ((state >>> 8) % uint32 bound)
 
 type private Options = {
     Out: string option
@@ -667,9 +677,9 @@ let private startLoop (rng: Lcg) (probe: LoopProbe) =
             Value = rng.Next 1000
         })
 
-    let init () = { Rows = rows; Tick = 0 }, Cmd.none
+    let init () : BenchModel * Step<BenchMsg, RemoteEffect<BenchMsg>> list = { Rows = rows; Tick = 0 }, []
 
-    let update (msg: BenchMsg) (model: BenchModel) =
+    let update (msg: BenchMsg) (model: BenchModel) : BenchModel * Step<BenchMsg, RemoteEffect<BenchMsg>> list =
         match msg with
         | Bump i ->
             let rows' = Array.copy model.Rows
@@ -684,29 +694,47 @@ let private startLoop (rng: Lcg) (probe: LoopProbe) =
                     Rows = rows'
                     Tick = model.Tick + 1
             },
-            Cmd.none
-        | Burst n -> { model with Tick = model.Tick + 1 }, Cmd.batch [ for _ in 1..n -> Cmd.ofMsg Step ]
-        | Step -> { model with Tick = model.Tick + 1 }, Cmd.none
+            []
+        | Burst n -> { model with Tick = model.Tick + 1 }, [ for _ in 1..n -> Then Step ]
+        | Step -> { model with Tick = model.Tick + 1 }, []
         | StartAsync ->
             probe.AsyncIssuedAt <- now ()
 
-            model, Cmd.OfAsync.perform (fun () -> async { probe.AsyncStartedAt <- now () }) () (fun () -> AsyncDone)
+            model,
+            [
+                Do(
+                    RemoteEffect.await
+                        "ClientBench.hop"
+                        (fun () -> async { probe.AsyncStartedAt <- now () })
+                        ()
+                        (fun _ -> AsyncDone)
+                )
+            ]
         | AsyncDone ->
             probe.OnAsyncDone |> Option.iter (fun k -> k ())
-            model, Cmd.none
+            model, []
 
-    // The render hook: exactly what `withReactSynchronous` does minus the
-    // DOM — build the view — timed, and counted.
-    let setState (model: BenchModel) (dispatch: BenchMsg -> unit) =
+    let runtime
+        : Runtime<unit, BenchModel, BenchMsg, RemoteEffect<BenchMsg>, Subscription<BenchMsg>, BenchModel> option ref =
+        ref None
+
+    let dispatch (msg: BenchMsg) =
+        runtime.Value |> Option.iter (fun r -> r.Dispatch(msg, User "local") |> ignore)
+
+    // The render hook: what the React mount does minus the DOM — build the
+    // view — timed, and counted. The view is the model; the hook builds it.
+    let render (model: BenchModel) =
         probe.Dispatch <- Some dispatch
         probe.RenderCalls <- probe.RenderCalls + 1
         let start = now ()
         sink <- box (benchView model dispatch)
         probe.ViewMs <- probe.ViewMs + (now () - start)
 
-    Program.mkProgram init update benchView
-    |> Program.withSetState setState
-    |> Program.runWithDispatch id ()
+    let comp = Component.plain init update (fun _ -> Map.empty) id
+    let host = Host.create (fun () -> int64 (now ())) 0UL render
+    let r = Runtime(comp, RemoteEffect.interpreter, host, ())
+    runtime.Value <- Some r
+    r.Start()
 
 // ─── The run ───────────────────────────────────────────────────────────
 
@@ -1015,13 +1043,13 @@ let private runAsync (argv: string[]) : Async<int> = async {
 
     say (
         sprintf
-            "render-hook calls per drain: %d for one drain of %d messages (1 dispatched + %d Cmd.ofMsg)"
+            "render-hook calls per drain: %d for one drain of %d messages (1 dispatched + %d follow-ups)"
             hooksPerDrain
             (DrainBurst + 1)
             DrainBurst
     )
 
-    // ── The async command hop ──
+    // ── The async effect hop ──
     let hopOnce () =
         Async.FromContinuations(fun (ok, _, _) ->
             probe.OnAsyncDone <-
@@ -1047,7 +1075,7 @@ let private runAsync (argv: string[]) : Async<int> = async {
     | Some s ->
         say (
             sprintf
-                "async command hop (update issues Cmd.OfAsync -> async body starts): min %s ms  median %s ms  max %s ms  (n=%d)"
+                "async effect hop (update returns RemoteEffect.await -> async body starts): min %s ms  median %s ms  max %s ms  (n=%d)"
                 (fmt s.Min)
                 (fmt s.Median)
                 (fmt s.Max)

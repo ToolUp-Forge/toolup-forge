@@ -5,13 +5,12 @@ module ToolUp.AI.Client.Tests.TeamScreenEffectsTests
 
 // ─── The team and data screens state their effects ───────────────────
 //
-// Each screen's `step` returns its remote calls as `RemoteEffect` values
-// in a `Fuaran.MVU` step list, and its `update` runs that list on today's
-// loop. A case here drives one transition and states the effect values it
+// Each screen's `update` returns its remote calls as `RemoteEffect` values
+// in a `Fuaran.MVU` step list. A case here drives one transition and states the effect values it
 // returns: the method each call names, its argument and, where a
 // transition asks for several, their order. A call's proxy and reply take
 // no part in its equality, so the expected values are built with neither.
-// Nothing is performed: the commands `update` would build are never run.
+// Nothing is performed: a case only builds values.
 
 open Fuaran.MVU
 open ToolUp.Elmish

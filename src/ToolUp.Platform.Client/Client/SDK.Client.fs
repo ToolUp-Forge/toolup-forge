@@ -9,6 +9,39 @@ open ToolUp.Elmish
 open Feliz
 open ProcessedDataTypes
 
+/// Building a view inside a React render without losing the screen when it throws.
+module internal ViewGuard =
+
+    open Fable.Core
+    open Fable.Core.JsInterop
+
+    [<Import("useRef", "react")>]
+    let useRef (initial: obj) : obj = jsNative
+
+    /// Report an error the way an uncaught one is reported — to the
+    /// window's `error` listeners and the console — without throwing into
+    /// the caller: `reportError` where the host has it (every current
+    /// browser), else a rethrow on the microtask queue.
+    [<Emit("(typeof window !== 'undefined' && window && typeof window.reportError === 'function') ? window.reportError($0) : queueMicrotask(function () { throw $0; })")>]
+    let reportUncaught (error: exn) : unit = jsNative
+
+    /// Build a view inside a component render, keeping the last good tree on
+    /// screen when the view THROWS: remember the last element that built
+    /// (`lastGood` is a `useRef` cell), and on a throw report the error as
+    /// uncaught and render that element again. A throw on the FIRST build has
+    /// nothing to hold and propagates, as a failing first render always did.
+    let buildHoldingLastGood (lastGood: obj) (build: unit -> ReactElement) : ReactElement =
+        try
+            let element = build ()
+            lastGood?current <- element
+            element
+        with error ->
+            if isNull lastGood?current then
+                reraise ()
+            else
+                reportUncaught error
+                unbox<ReactElement> lastGood?current
+
 // ─── Shell MVU ────────────────────────────────────────────────────
 
 module Client =
@@ -3636,9 +3669,9 @@ module Client =
         // A chrome that throws keeps the last good shell on screen and
         // reports the error as uncaught — what the whole-tree binding,
         // which builds the view outside React, always did.
-        let lastGood = ToolUp.Elmish.React.StoreBindings.useRef null
+        let lastGood = ViewGuard.useRef null
 
-        ToolUp.Elmish.React.StoreBindings.buildHoldingLastGood lastGood (fun () ->
+        ViewGuard.buildHoldingLastGood lastGood (fun () ->
             viewWithSignInWith (ModuleSlot.Subscribed p.Store) p.Config p.Modules p.Chrome p.Model p.Dispatchers)
 
     let private shellChrome: obj =
@@ -4661,7 +4694,7 @@ module Client =
         | StepRefused(Step envelope, UpdateThrew ex) ->
             context
                 (ErrorPhase.Update(box envelope.Msg))
-                ("Unable to process the message: " + Program.safeMsgRepr envelope.Msg)
+                ("Unable to process the message: " + ErrorContext.safeMsgRepr envelope.Msg)
                 ex
         | StepRefused(BootStep _, refusal) ->
             let text = refusalText refusal
@@ -4672,7 +4705,7 @@ module Client =
             context
                 (ErrorPhase.Update(box envelope.Msg))
                 ("Unable to process the message: "
-                 + Program.safeMsgRepr envelope.Msg
+                 + ErrorContext.safeMsgRepr envelope.Msg
                  + ": "
                  + text)
                 (exn text)
@@ -4729,7 +4762,7 @@ module Client =
         // handling.
         let traceUpdate (msg: 'msg) (model: 'model) =
             let next = update msg model
-            traceLog.Debug("msg=" + Program.safeMsgRepr msg)
+            traceLog.Debug("msg=" + ErrorContext.safeMsgRepr msg)
             next
 
         // The wrapper set, one per mount, built on the mount's first render
@@ -4758,9 +4791,9 @@ module Client =
         // binding always held it; a throw on the first build propagates.
         let render (model: 'model) : ElementView<'msg> =
             ElementView(fun dispatch ->
-                let lastGood = ToolUp.Elmish.React.StoreBindings.useRef null
+                let lastGood = ViewGuard.useRef null
 
-                ToolUp.Elmish.React.StoreBindings.buildHoldingLastGood lastGood (fun () ->
+                ViewGuard.buildHoldingLastGood lastGood (fun () ->
                     try
                         view model (stableFor dispatch)
                     with ex ->

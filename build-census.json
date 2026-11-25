@@ -1863,14 +1863,6 @@
       "fanOut": 0
     },
     {
-      "project": "src/ToolUp.Elmish.Kernel/ToolUp.Elmish.Kernel.fsproj",
-      "compileSeconds": 4,
-      "evaluationSeconds": 0.1,
-      "lines": 353,
-      "fanIn": 1,
-      "fanOut": 0
-    },
-    {
       "project": "src/ToolUp.Stripe.Tests/ToolUp.Stripe.Tests.fsproj",
       "compileSeconds": 3.9,
       "evaluationSeconds": 0.1,

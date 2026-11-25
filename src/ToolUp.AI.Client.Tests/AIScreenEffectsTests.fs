@@ -5,14 +5,13 @@ module ToolUp.AI.Client.Tests.AIScreenEffectsTests
 
 // ─── The AI screens state their effects ──────────────────────────────
 //
-// Each AI screen's `step` returns its remote calls as `RemoteEffect` values
-// in a `Fuaran.MVU` step list, and its `update` runs that list on today's
-// loop. A case here drives one transition and states the effect values it
+// Each AI screen's `update` returns its remote calls as `RemoteEffect` values
+// in a `Fuaran.MVU` step list. A case here drives one transition and states the effect values it
 // returns: the method each call names, its argument and, where a
 // transition asks for several, their order; a legacy body by its site
 // label; a follow-up by its message. A call's proxy and reply take no part
 // in its equality, so the expected values are built with neither. Nothing
-// is performed: the commands `update` would build are never run.
+// is performed: a case only builds values.
 
 open System
 open Fuaran.MVU
@@ -69,7 +68,7 @@ let private platformKeysTests =
                     call "PlatformAIKeysApi.ListPlatformKeyStatuses" ()
                     call "PlatformAIKeysApi.ListTeams" ()
                 ]
-                "three reads, in the order Cmd.batch ran them"
+                "three reads, in the order the runtime performs them"
 
         testCase "a finished action with a team selected refreshes platform, then team"
         <| fun () ->
@@ -113,7 +112,7 @@ let private settingsTests =
                     call "PlatformAIKeysApi.ListPlatformKeyStatuses" ()
                     call "AISettingsApi.GetMyConfig" ()
                 ]
-                "four reads, in the order Cmd.batch ran them"
+                "four reads, in the order the runtime performs them"
 
         testCase "a delete names its label; a finished save re-reads the config"
         <| fun () ->
@@ -146,7 +145,7 @@ let private narrativeTests =
                     call "NarrativePromptApi.ListVersions" "summary"
                     call "NarrativePromptApi.ListProposals" "summary"
                 ]
-                "three reads, in the order Cmd.batch ran them"
+                "three reads, in the order the runtime performs them"
 
         testCase "a dismissal names its decision"
         <| fun () ->
@@ -193,7 +192,7 @@ let private assistantTests =
                     call "AIAssistantApi.GetAvailableTools" ()
                     call "AISettingsApi.GetMyConfig" ()
                 ]
-                "three reads, in the order Cmd.batch ran them"
+                "three reads, in the order the runtime performs them"
 
         testCase "a submission reads its ids and clock in one legacy body"
         <| fun () ->
@@ -211,7 +210,7 @@ let private assistantTests =
             same
                 (effects steps |> List.map shape)
                 [ "await", "ChatStream.watchdogDelay"; "await", "FastPathBridge.resolve" ]
-                "the watchdog first, as Cmd.batch ran them"
+                "the watchdog first, in the order the runtime performs them"
 
             same
                 (List.head (effects steps))
@@ -255,15 +254,6 @@ let private assistantTests =
             let m0, _ = AIAssistantUI.init ()
             let _, steps = AIAssistantUI.update (AIAssistantUI.CancelTask(Guid.NewGuid())) m0
             same (effects steps) [ signal "AIAssistantUI.cancel" ] "the cancel POST, by its site"
-
-        testCase "update hands today's loop one command element per step"
-        <| fun () ->
-            let m0, _ = AIAssistantUI.init ()
-
-            let _, cmd =
-                AIAssistantUI.update (AIAssistantUI.SubmitMessagePrepared(prepared (Guid.NewGuid()))) m0
-
-            same (List.length cmd) 2 "two elements, as the step list has two steps"
     ]
 
 let tests =

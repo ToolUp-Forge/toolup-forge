@@ -81,7 +81,6 @@ ToolUp.DataSources.Redshift 17/19
 ToolUp.DataSources.Snowflake 28/36
 ToolUp.DataSources.Sql 57/109
 ToolUp.DataSources.Synapse 31/41
-ToolUp.Elmish.Kernel 34/37
 ToolUp.EmbeddingCaches.Redis 33/63
 ToolUp.EmbeddingProviders.Local 19/23
 ToolUp.EmbeddingProviders.OpenAI 26/58

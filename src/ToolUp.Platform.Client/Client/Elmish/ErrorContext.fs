@@ -4,39 +4,33 @@
 
 namespace ToolUp.Elmish
 
-/// Which phase of the Elmish loop raised the exception. Populated by the
-/// runtime so the reporter doesn't have to infer from the error message
-/// string. Carries the offending message as `obj` for `Update` (consumers
-/// can downcast to the concrete `Msg` type if they need to introspect).
+/// Which part of the shell's program raised the exception, so a reporter
+/// does not have to infer it from the message text. Carries the offending
+/// message as `obj` for `Update` (downcast to the concrete `Msg` type to
+/// introspect it).
 [<RequireQualifiedAccess>]
 type ErrorPhase =
-    /// `init` raised — the program never got past startup.
+    /// `init` raised, or a boot step was refused: the program never got past startup.
     | Init
-    /// `update` raised — the offending message is attached. Cast `Message`
-    /// to your concrete `Msg` DU to introspect.
+    /// `update` raised, or an effect's performer threw. The offending message
+    /// is attached when there is one (`box ()` for a performer). Cast
+    /// `Message` to your concrete `Msg` DU to introspect.
     | Update of message: obj
-    /// `view` raised — the renderer threw during element construction.
+    /// `view` raised: the renderer threw during element construction.
     | View
-    /// A `Sub` subscription's start / stop / dispatch threw. The
-    /// originating `SubId` is attached as a slash-joined string.
+    /// A resource's start or stop threw. Its key is attached as a
+    /// slash-joined string.
     | Subscription of subId: string
-    /// The termination handler threw during program teardown.
-    | Termination
 
-/// Structured error report passed to `Program.withErrorReporter`. Replaces
-/// the upstream `(string * exn) -> unit` shape with enough context that
-/// the reporter can route, tag, and correlate without parsing message
-/// strings.
+/// Structured error report passed to `ClientConfig`'s `OnElmishError` sink:
+/// enough context that the reporter can route, tag and correlate without
+/// parsing message strings.
 ///
-/// - `Phase` is populated by the runtime.
-/// - `ModuleId` is populated by the runtime when the program is composed
-///   under a parent shell that named the child module (the parent wraps
-///   the reporter with `Program.scopeReporterToModule`).
-/// - `CorrelationId` is populated by `ToolUp.Elmish.Tracing` middleware
-///   when present, otherwise `None`. ToolUp.Remoting-issued requests
-///   ambient-propagate the id; consumers can plumb it manually too.
-/// - `Message` is the human-readable summary the runtime would have
-///   passed to upstream Elmish's `onError`.
+/// - `Phase` says where it was raised.
+/// - `ModuleId` is set by a reporter wrapped with `ErrorContext.withModule`.
+/// - `CorrelationId` is set by a reporter wrapped with
+///   `ErrorContext.withCorrelationId`.
+/// - `Message` is the human-readable summary.
 /// - `Exception` is the raw exception.
 type ErrorContext = {
     Phase: ErrorPhase
@@ -49,26 +43,30 @@ type ErrorContext = {
 [<RequireQualifiedAccess>]
 module ErrorContext =
 
-    /// Construct a context from raw upstream-shape arguments. Used by
-    /// `Program.withErrorReporter` to route the runtime's upstream-shape
-    /// `onError` into the reporter — most code doesn't need to call this.
-    let ofUpstreamShape (text: string) (ex: exn) = {
-        Phase = ErrorPhase.Update(box ())
-        ModuleId = None
-        CorrelationId = None
-        Message = text
-        Exception = ex
-    }
+    /// Format a message for diagnostics without ever crashing the caller. A
+    /// message can legitimately carry a large payload (e.g. an uploaded file's
+    /// raw contents); `sprintf "%A"` on multi-MB data can blow the JS call
+    /// stack ("Maximum call stack size exceeded"). That overflow must not
+    /// propagate through the error reporter — which would re-format the same
+    /// message and overflow again, recursing through the reporter itself.
+    /// Total + bounded: catches the overflow and caps the output length.
+    let safeMsgRepr (msg: 'msg) : string =
+        try
+            let s = sprintf "%A" msg
+
+            if s.Length > 1000 then
+                s.Substring(0, 1000) + "…(truncated)"
+            else
+                s
+        with _ ->
+            "<message could not be formatted (large or cyclic payload)>"
 
     /// Scope the reporter to a named module — any subsequent
     /// `ErrorContext` it receives will have `ModuleId = Some moduleId`.
-    /// Used by parent-shell composition when child programs are
-    /// erased under one runtime.
     let withModule (moduleId: string) (reporter: ErrorContext -> unit) : ErrorContext -> unit =
         fun ctx -> reporter { ctx with ModuleId = Some moduleId }
 
-    /// Attach a correlation id to subsequent reports. Used by
-    /// `ToolUp.Elmish.Tracing` middleware; consumers can call this
-    /// directly if they're stamping ids at the dispatch layer.
+    /// Attach a correlation id to subsequent reports, for a consumer stamping
+    /// ids at the dispatch layer.
     let withCorrelationId (corrId: string) (reporter: ErrorContext -> unit) : ErrorContext -> unit =
         fun ctx -> reporter { ctx with CorrelationId = Some corrId }

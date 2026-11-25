@@ -35,12 +35,11 @@ namespace ToolUp.Elmish
 //
 // **Lifting a child.** A parent maps a child's steps with
 // `Step.mapAll ChildMsg (RemoteEffect.map ChildMsg)`.
-//
-// **The adapter** (`toCmd` / `asCmd` / `run`) turns a step list into the
-// shell's command while the shell still runs its own loop; nothing outside
-// the shell uses it.
 
 open Fuaran.MVU
+
+/// The function a view hands a message to: the mount's dispatch.
+type Dispatch<'msg> = 'msg -> unit
 
 /// The retry policy a remote call runs under: exponential backoff with a
 /// cap on attempts. Anything richer (circuit-breaking, jitter, branching
@@ -549,22 +548,3 @@ module RemoteEffect =
     /// and whose resources are `Subscription` values mounts with.
     let interpreter<'msg> : Interpreter<'msg, RemoteEffect<'msg>, Subscription<'msg>> =
         Interpreter.create kinds handle start
-
-    let private ofStep (step: Step<'msg, RemoteEffect<'msg>>) : Effect<'msg> =
-        match step with
-        | Then msg -> fun dispatch -> dispatch msg
-        | Do effect ->
-            fun dispatch ->
-                match perform effect with
-                | Reply answer -> answer dispatch
-                | Performance.Signal fire -> fire ()
-
-    /// The adapter: a step list as today's command, one command element per
-    /// step, in order.
-    let toCmd (steps: Step<'msg, RemoteEffect<'msg>> list) : Cmd<'msg> = List.map ofStep steps
-
-    /// The adapter over one effect value.
-    let asCmd (effect: RemoteEffect<'msg>) : Cmd<'msg> = toCmd [ Do effect ]
-
-    /// The adapter over an `init` or `update` result.
-    let run (model: 'model, steps: Step<'msg, RemoteEffect<'msg>> list) : 'model * Cmd<'msg> = model, toCmd steps

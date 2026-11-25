@@ -120,13 +120,6 @@
       "fantomasIgnore": true
     },
     {
-      "path": "tests/elmish-proof-corpus/*-cases.txt",
-      "render": "the extracted ring and subscription-diff models over the seeded campaign",
-      "stem": "elmish-proof-corpus",
-      "heldBy": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs",
-      "regen": { "project": "src/ToolUp.Platform.Tests.Remoting/ToolUp.Platform.Tests.Remoting.fsproj", "filter": "Phase 788" }
-    },
-    {
       "path": "docs/platform/trust-boundaries.md",
       "render": "TrustBoundaries.all: the public page of the trust boundaries",
       "stem": "trust-boundaries",

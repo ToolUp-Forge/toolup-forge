@@ -264,29 +264,11 @@
              IAsyncEnumerable field, SSE decoding across chunk boundaries,
              every non-happy ending as OnError. fetch is stubbed. -->
         <Compile Include="StreamingProxyTests.fs" />
-        <!-- Phase 788 — the proved Elmish runtime as oracle, under Fable.
-             The SAME host-neutral differential the .NET pack compiles
-             (WireCorpus.fs precedent) replays the model's verdicts from
-             tests/elmish-proof-corpus/ against the transpiled Ring.fs /
-             Sub.fs — the copy every browser client executes. Since Phase
-             850 the ring EXTRACTION is compiled here too, through the
-             Fable-host oracle project referenced below, and run live
-             beside the transpiled ring. -->
-        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishProofDifferential.fs" />
-        <!-- Phase 884 - the dispatch loop's differential, host-neutral: the
-             same script generator, drivers and rows the .NET pack runs, here
-             against the transpiled Program.runWithDispatch and the ElmishLoop
-             extraction the Fable oracle project compiles. -->
-        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishLoopDifferential.fs" />
-        <Compile Include="ElmishProofOracleTests.fs" />
         <!-- Phase 536 — module inspect-state contract, driven through the shell update. -->
         <Compile Include="ModuleInspectStateTests.fs" />
         <!-- Phase 851.D - the module view's dispatch prop is referentially stable
              across renders (Client.moduleDispatchFor), pinned on the transpiled code. -->
         <Compile Include="ModuleDispatchStabilityTests.fs" />
-        <!-- Phase 851.A - the React adapter constructs the view once per task
-             (RenderScheduler over queueMicrotask), pinned on the transpiled code. -->
-        <Compile Include="RenderCoalescingTests.fs" />
         <!-- Phase 852 - the sliced model store: the store binding, selector reads, the
              shell render scope (RenderScope.fs is shared with ClientBench) and the
              AG Grid props compare, pinned on the transpiled code. -->
@@ -313,8 +295,7 @@
              ClientBench's fresh-process boot child (client-bench-boot.mjs)
              imports it, which is the boot being timed. ClientBench itself runs
              only under `output/Program.js ClientBench` — never under
-             `node:test`. Must follow WireCorpus.fs and ElmishProofDifferential.fs
-             (the corpus and the seeded LCG it reuses). -->
+             `node:test`. Must follow WireCorpus.fs (the corpus it reuses). -->
         <Compile Include="..\..\samples\MinimalClient\Client.fs" />
         <!-- The 200-row table as Feliz and as a tree, with no Node import, so
              client-bench-browser.mjs can bundle it for a page. -->
@@ -359,11 +340,6 @@
         <ProjectReference Include="..\ToolUp.Facts.Client\ToolUp.Facts.Client.fsproj" />
         <!-- Phase 537 - the UI-awareness companion's Fable client tier. -->
         <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" />
-        <!-- Phase 850 — the proved Elmish ring's extraction over a
-             machine-integer Prims, compiled by Fable with the rest of the
-             tier so ElmishProofOracleTests runs the model DIRECTLY beside
-             the transpiled runtime (read that project's header). -->
-        <ProjectReference Include="..\..\proofs\oracle\fable\ToolUp.Remoting.Proofs.Oracle.Fable.fsproj" />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Fable.Core" />
         <PackageReference Include="Fuaran.UI.Operability" />

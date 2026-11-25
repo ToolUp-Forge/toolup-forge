@@ -7,10 +7,6 @@ module ToolUp.AI.Client.Tests.ComposerStoreTests
 //
 // Pinned on the transpiled code, in a real React 19 tree in jsdom:
 //
-//   910.A  the HMR module passes both store bindings through, and a hot
-//          reload (the bundler's dispose, then the next build's run) keeps
-//          the store binding and its slices: the reloaded build re-renders
-//          by slice, and the torn-down build publishes nothing.
 //   910.B  hydration parity: the store-bound shell (`Hydration.run`'s
 //          prerendered branch) adopts the markup the whole-tree shell
 //          renders, and then updates it in place.
@@ -25,7 +21,6 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Elmish
-open ToolUp.Elmish.React
 open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.Client
@@ -33,20 +28,8 @@ open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.StepDriver
 open ToolUp.AI.Client.Tests.RenderScope
 
-[<Import("createElement", from = "react")>]
-let private createElement (elementType: obj, props: obj) : ReactElement = jsNative
-
-[<Import("memo", from = "react")>]
-let private memo (render: obj) : obj = jsNative
-
 [<Import("renderToString", from = "react-dom/server")>]
 let private renderToString (element: ReactElement) : string = jsNative
-
-[<Emit("Object.defineProperty(globalThis, $0, { value: $1, configurable: true, writable: true })")>]
-let private defineGlobal (name: string) (value: obj) : unit = jsNative
-
-[<Emit("delete globalThis[$0]")>]
-let private deleteGlobal (name: string) : unit = jsNative
 
 [<Emit("globalThis[$0]")>]
 let private readGlobal (name: string) : obj = jsNative
@@ -55,126 +38,6 @@ let private readGlobal (name: string) : obj = jsNative
 /// React warning's format string and its substitutions (the diff) arrive.
 [<Emit("(function () { $0(Array.from(arguments).map(function (a) { return String(a); }).join(' ')); })")>]
 let private allArguments (sink: string -> unit) : obj = jsNative
-
-// ─── 910.A — HMR pass-throughs ─────────────────────────────────────────
-
-type private PairMsg =
-    | BumpA
-    | BumpB
-
-let private hmrTests =
-    testList "910.A - HMR keeps the store binding and its slices" [
-
-        testCaseDeferred "a hot reload keeps the store binding and its slices" 600
-        <| fun () ->
-            let document = installDom "hmr-store"
-
-            // A bundler HMR API (webpack's `module.hot` shape), so the HMR
-            // module takes its hot-reload branch exactly as a dev build does.
-            let disposers = ResizeArray<unit -> unit>()
-
-            defineGlobal
-                "module"
-                (createObj [
-                    "hot"
-                    ==> createObj [ "dispose" ==> (fun (callback: unit -> unit) -> disposers.Add callback) ]
-                ])
-
-            let readerRenders = Array.create 4 0 // build 1 A, build 1 B, build 2 A, build 2 B
-
-            let build (index: int) (store: ModelStore<int * int, PairMsg>) (capture: (PairMsg -> unit) -> unit) =
-                // Each reader reads ONE half of the model through the store.
-                let reader (slot: int) (select: int * int -> int) : obj =
-                    memo (
-                        box (fun (_: obj) ->
-                            let value = ModelStore.useSelector store select ModelStore.refEquals
-                            readerRenders[slot] <- readerRenders[slot] + 1
-                            Html.span [ prop.className (sprintf "half-%d" slot); prop.text (string value) ])
-                    )
-
-                let readerA = reader (2 * (index - 1)) fst
-                let readerB = reader (2 * (index - 1) + 1) snd
-
-                Program.mkProgram
-                    (fun () -> (0, 0), [])
-                    (fun msg (a, b) ->
-                        match msg with
-                        | BumpA -> (a + 1, b), []
-                        | BumpB -> (a, b + 1), [])
-                    (fun _ d ->
-                        capture d
-
-                        Html.div [
-                            Html.p [ prop.id "hmr-build"; prop.text (sprintf "build %d" index) ]
-                            createElement (readerA, null)
-                            createElement (readerB, null)
-                        ])
-                |> ToolUp.Elmish.HMR.Program.withReactStore store "hmr-store"
-                |> ToolUp.Elmish.HMR.Program.run
-
-            let store1 = ModelStore.create<int * int, PairMsg> ()
-            let store2 = ModelStore.create<int * int, PairMsg> ()
-            let mutable dispatch1: (PairMsg -> unit) option = None
-            let mutable dispatch2: (PairMsg -> unit) option = None
-            let marks = ResizeArray<int array>()
-            let mutable hmrBranch = false
-
-            build 1 store1 (fun d -> dispatch1 <- Some d)
-            hmrBranch <- disposers.Count = 1
-
-            JS.setTimeout
-                (fun () ->
-                    dispatch1.Value BumpA
-
-                    JS.setTimeout
-                        (fun () ->
-                            // The hot replace: the bundler calls the build's
-                            // dispose callback, then evaluates the next build.
-                            for dispose in List.ofSeq disposers do
-                                dispose ()
-
-                            build 2 store2 (fun d -> dispatch2 <- Some d)
-
-                            JS.setTimeout
-                                (fun () ->
-                                    marks.Add(Array.copy readerRenders)
-                                    dispatch2.Value BumpA
-                                    // The torn-down build's dispatch is inert.
-                                    dispatch1.Value BumpB
-
-                                    JS.setTimeout (fun () -> marks.Add(Array.copy readerRenders)) 80 |> ignore)
-                                80
-                            |> ignore)
-                        80
-                    |> ignore)
-                80
-            |> ignore
-
-            fun () ->
-                deleteGlobal "module"
-                Expect.isTrue hmrBranch "the HMR module took its hot-reload branch (it registered a dispose)"
-
-                Expect.equal
-                    ((document?getElementById "hmr-build")?textContent: string)
-                    "build 2"
-                    "the reloaded build is on screen"
-
-                let afterReload = marks[0]
-                let afterMessage = marks[1]
-                Expect.equal (afterReload[2], afterReload[3]) (1, 1) "the reloaded build's readers mounted once each"
-
-                Expect.equal
-                    (afterMessage[2] - afterReload[2], afterMessage[3] - afterReload[3])
-                    (1, 0)
-                    "a reloaded-build message re-rendered the reader of the slice it moved, and not the other"
-
-                Expect.equal store2.Snapshot.Value.Model (1, 0) "the reloaded build's store holds its model"
-
-                Expect.equal
-                    store1.Snapshot.Value.Model
-                    (1, 0)
-                    "the torn-down build's store published nothing after the reload"
-    ]
 
 // ─── 910.B — hydration parity ──────────────────────────────────────────
 
@@ -318,9 +181,8 @@ let private hydrationTests =
             let mutable sliced: Hydrated option = None
 
             // One after the other: each installs its own document. The
-            // whole-tree mount is the route `Hydration.run` took before
-            // Phase 910 (`Program.withReactHydrate`); it is measured and
-            // printed here; Phase 931's 931.B asserts that it adopts too.
+            // whole-tree mount (`Client.program`) is measured and printed
+            // here; 931.B asserts that it adopts too.
             hydrate false (fun w ->
                 whole <- Some w
                 hydrate true (fun s -> sliced <- Some s))
@@ -508,8 +370,8 @@ let private contextTests =
 //          `OnTeamSwitched` and `OnAccessibleModulesChanged` callbacks
 //          reach the shell's update (and stop reaching it once the program
 //          is torn down).
-//   931.B  the whole-tree hydrating binding (`Program.withReactHydrate`)
-//          adopts the server's markup, as the store binding does.
+//   931.B  the whole-tree shell, mounted to hydrate, adopts the server's
+//          markup, as the store-bound shell does.
 //   931.C  the conversation panel's fact link, mounted: shown only when the
 //          fact browse module is composed, and a click publishes the fact
 //          and requests the browse module's rows page.
@@ -643,9 +505,9 @@ let private dispatcherTests =
     ]
 
 let private wholeTreeHydrationTests =
-    testList "931.B - the whole-tree hydrating binding adopts the server markup" [
+    testList "931.B - the whole-tree shell adopts the server markup when it hydrates" [
 
-        testCaseDeferred "Program.withReactHydrate adopts the server's nodes and updates them in place" 600
+        testCaseDeferred "the whole-tree mount adopts the server's nodes and updates them in place" 600
         <| fun () ->
             let mutable whole: Hydrated option = None
             hydrate false (fun w -> whole <- Some w)
@@ -804,9 +666,4 @@ let tests931 =
     ]
 
 let tests =
-    testList "Phase 910 - the sliced store reaches every composer" [
-        hmrTests
-        hydrationTests
-        composerTests
-        contextTests
-    ]
+    testList "Phase 910 - the sliced store reaches every composer" [ hydrationTests; composerTests; contextTests ]

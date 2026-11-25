@@ -137,7 +137,7 @@ The acceptance bar requires byte-identical output from `dotnet new` and direct p
   `<div id="elmish-app">`. The SDK publishes no dependency list a template could import, so the
   contract is read from where the repository keeps it: the npm list and plugin order from
   `samples/MinimalClient` (the maintained consumer the browser-smoke fixture also mirrors) and the
-  mount id from the `Program.withReactStore` call in `Client.run`
+  mount id from the `Client.mountAt` call in `Client.run`
   (`src/ToolUp.Platform.Client/Client/SDK.Client.fs`). `VerifyTemplates` holds every template client
   to all three before it packs anything, so a package the SDK client gains, a plugin it needs or a
   renamed mount id reddens it by name. It then instantiates each template with a client outside the

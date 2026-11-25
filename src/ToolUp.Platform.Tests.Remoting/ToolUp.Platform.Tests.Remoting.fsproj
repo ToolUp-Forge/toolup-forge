@@ -99,10 +99,6 @@
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\UnreducedViewPreviewTests.fs" Link="InProcess\UnreducedViewPreviewTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\FactRenderingTests.fs" Link="InProcess\FactRenderingTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\DisclosureProofOracleTests.fs" Link="InProcess\DisclosureProofOracleTests.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishProofDifferential.fs" Link="Client\ElmishProofDifferential.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ElmishProofOracleTests.fs" Link="InProcess\ElmishProofOracleTests.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishLoopDifferential.fs" Link="Client\ElmishLoopDifferential.fs" />
-        <Compile Include="..\ToolUp.Platform.Tests\InProcess\ElmishLoopProofOracleTests.fs" Link="InProcess\ElmishLoopProofOracleTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\BrandKitTests.fs" Link="InProcess\BrandKitTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\HostThemeTokensTests.fs" Link="InProcess\HostThemeTokensTests.fs" />
         <Compile Include="..\ToolUp.Platform.Tests\InProcess\BrandKitLayoutTests.fs" Link="InProcess\BrandKitLayoutTests.fs" />

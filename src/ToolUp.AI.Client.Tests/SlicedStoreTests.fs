@@ -3,14 +3,11 @@
 
 module ToolUp.AI.Client.Tests.SlicedStoreTests
 
-// ─── Phase 852 — the sliced model store, pinned on the transpiled code ──
+// ─── The sliced model store, pinned on the transpiled code ──
 //
-// Four things, each where it runs (Fable output, a real React 19 tree in
-// jsdom, React's own scheduler):
+// Each where it runs (Fable output, a real React 19 tree in jsdom, React's
+// own scheduler):
 //
-//   852.A  `Program.withReactStore` renders what `withReactSynchronous`
-//          renders, from the store, once per task; `useSelector`
-//          re-renders a reader only when its slice changes.
 //   852.B  the SDK shell under the store re-renders the active module and
 //          NO chrome on a module message, and the chrome but NOT the module
 //          on a chrome message — while the whole-tree path (every
@@ -21,19 +18,14 @@ module ToolUp.AI.Client.Tests.SlicedStoreTests
 open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
+open Fuaran.MVU
+open Fuaran.MVU.React
 open ToolUp.Elmish
-open ToolUp.Elmish.React
 open ToolUp.Platform
 open Toolup.UIToolkit
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.StepDriver
 open ToolUp.AI.Client.Tests.RenderScope
-
-[<Import("createRoot", from = "react-dom/client")>]
-let private createRoot (container: obj) : obj = jsNative
-
-[<Import("createElement", from = "react")>]
-let private createElement (elementType: obj, props: obj) : ReactElement = jsNative
 
 [<Emit("(function () { var a = {}; a.self = a; return a; })()")>]
 let private cyclic () : obj = jsNative
@@ -41,159 +33,64 @@ let private cyclic () : obj = jsNative
 [<Emit("new Date($0)")>]
 let private date (ms: float) : obj = jsNative
 
-// ─── 852.A — the store binding ─────────────────────────────────────────
-
 type private CounterMsg = | Bump
 
-let private storeBindingTests =
-    testList "852.A - the store binding" [
+/// A counter mounted on the runtime at the element `id`, fresh or over the
+/// server's markup: the host every chunk test below renders its view under.
+let private mountCounter (id: string) (attach: Attach) (view: int -> (CounterMsg -> unit) -> ReactElement) =
+    let init () : int * Step<CounterMsg, RemoteEffect<CounterMsg>> list = 0, []
+    let update Bump (model: int) : int * Step<CounterMsg, RemoteEffect<CounterMsg>> list = model + 1, []
 
-        testCaseDeferred "a store-bound program renders the view from the store, once per task" 300
+    Live.elements
+        id
+        attach
+        (Host.create (fun () -> 0L) 0UL ignore)
+        (Component.plain init update (fun _ -> Map.empty) (ElementView.ofView view))
+        RemoteEffect.interpreter
+        ()
+    |> ignore
+
+// ─── A throwing view keeps the last good tree ──────────────────────────
+
+let private heldViewTests =
+    testList "the shell's view, mounted, keeps the last good tree when it throws" [
+
+        testCaseDeferred "a view that throws keeps the last good tree and reports the error once, as uncaught" 300
         <| fun () ->
-            let document = installDom "store-a"
-            let store = ModelStore.create<int, CounterMsg> ()
-            let mutable views = 0
-            let mutable dispatch: (CounterMsg -> unit) option = None
-            let mutable afterMount = ("", 0)
+            let document = installDom "held-t"
+            let uncaught = ResizeArray<string>()
+            let sink = ResizeArray<ErrorContext>()
+            document?defaultView?reportError <- (fun (e: exn) -> uncaught.Add e.Message)
 
-            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun model d ->
-                views <- views + 1
-                dispatch <- Some d
-                Html.p [ prop.id "store-a-out"; prop.text (sprintf "count %d" model) ])
-            |> Program.withReactStore store "store-a"
-            |> Program.run
+            let config = {
+                ClientConfig.defaults with
+                    Composition.OnElmishError = Some sink.Add
+            }
 
-            JS.setTimeout
-                (fun () ->
-                    afterMount <- ((document?getElementById "store-a-out")?textContent, views)
-                    // Two dispatches in one task: two drains, one publish.
-                    dispatch.Value Bump
-                    dispatch.Value Bump)
-                80
-            |> ignore
+            let program =
+                Client.programOver
+                    config
+                    (fun () -> 0, [])
+                    (fun Bump model -> model + 1, [])
+                    (fun _ -> Map.empty)
+                    id
+                    (fun model _ ->
+                        if model = 1 then
+                            failwith "view broke at 1"
 
-            fun () ->
-                let text, viewsAtMount = afterMount
-                Expect.equal text "count 0" "the root read the first published model"
-                Expect.equal viewsAtMount 1 "the view ran once to mount"
+                        Html.p [ prop.id "held-t-out"; prop.text (sprintf "count %d" model) ])
 
-                Expect.equal
-                    ((document?getElementById "store-a-out")?textContent: string)
-                    "count 2"
-                    "both messages reached the screen"
-
-                Expect.equal views 2 "two drains in one task published once: one more view"
-                Expect.isTrue store.Snapshot.IsSome "the store holds the last model"
-                Expect.equal store.Snapshot.Value.Model 2 "and it is the model the loop ended on"
-
-        testCaseDeferred
-            "a view that throws keeps the last good tree and reports the error, as the push binding did"
-            300
-        <| fun () ->
-            let document = installDom "store-t"
-            let reported = ResizeArray<string>()
-            // Capture what the binding reports as uncaught.
-            document?defaultView?reportError <- (fun (e: exn) -> reported.Add e.Message)
-            let store = ModelStore.create<int, CounterMsg> ()
-            let mutable dispatch: (CounterMsg -> unit) option = None
-
-            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun model d ->
-                dispatch <- Some d
-
-                if model = 1 then
-                    failwith "view broke at 1"
-
-                Html.p [ prop.id "store-t-out"; prop.text (sprintf "count %d" model) ])
-            |> Program.withReactStore store "store-t"
-            |> Program.run
-
-            JS.setTimeout (fun () -> dispatch.Value Bump) 80 |> ignore
+            let mounted = Client.mountAt "held-t" Fresh (ModelStore()) program
+            JS.setTimeout (fun () -> mounted.Dispatch Bump |> ignore) 80 |> ignore
 
             fun () ->
                 Expect.equal
-                    ((document?getElementById "store-t-out")?textContent: string)
+                    ((document?getElementById "held-t-out")?textContent: string)
                     "count 0"
                     "the last good tree is still mounted"
 
-                Expect.equal (List.ofSeq reported) [ "view broke at 1" ] "the error was reported once, as uncaught"
-
-        testCaseDeferred "withReactStoreHydrate adopts the server-rendered DOM and then renders from the store" 300
-        <| fun () ->
-            let document = installDom "store-h"
-            let host = document?getElementById "store-h"
-            // What a server would have rendered for `init`'s model.
-            host?innerHTML <- "<p id=\"store-h-out\">count 0</p>"
-            let serverNode = document?getElementById "store-h-out"
-            let store = ModelStore.create<int, CounterMsg> ()
-            let mutable dispatch: (CounterMsg -> unit) option = None
-            let mutable adopted = false
-
-            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun model d ->
-                dispatch <- Some d
-                Html.p [ prop.id "store-h-out"; prop.text (sprintf "count %d" model) ])
-            |> Program.withReactStoreHydrate store "store-h"
-            |> Program.run
-
-            JS.setTimeout
-                (fun () ->
-                    adopted <- obj.ReferenceEquals(document?getElementById "store-h-out", serverNode)
-                    dispatch.Value Bump)
-                80
-            |> ignore
-
-            fun () ->
-                Expect.isTrue adopted "hydration kept the server's node (a mismatch would have replaced it)"
-                let now = document?getElementById "store-h-out"
-                Expect.isTrue (obj.ReferenceEquals(now, serverNode)) "and the update patched that same node"
-                Expect.equal (now?textContent: string) "count 1" "with the new model"
-
-        testCaseDeferred "useSelector re-renders a reader only when its slice changes" 300
-        <| fun () ->
-            let document = installDom "store-b"
-            let store = ModelStore.create<int * int, unit> ()
-            let mutable renders = 0
-            let mutable optionRenders = 0
-
-            // Reads the FIRST component only.
-            let reader (_: obj) : ReactElement =
-                let first = ModelStore.useSelector store fst ModelStore.refEquals
-                renders <- renders + 1
-                Html.span (string first)
-
-            // A selector that ALLOCATES (a fresh option per call), compared
-            // by value: must still read as unchanged, and must not loop.
-            let optionReader (_: obj) : ReactElement =
-                let first = ModelStore.useSelector store (fun (a, _) -> Some a) (fun x y -> x = y)
-
-                optionRenders <- optionRenders + 1
-                Html.span (sprintf "%A" first)
-
-            store.Publish((1, 1), ignore)
-            let root = createRoot (document?getElementById "store-b")
-
-            root?render (Html.div [ createElement (box reader, null); createElement (box optionReader, null) ])
-            |> ignore
-
-            let marks = ResizeArray<int * int>()
-
-            JS.setTimeout
-                (fun () ->
-                    marks.Add(renders, optionRenders)
-                    store.Publish((1, 2), ignore) // second component only
-
-                    JS.setTimeout
-                        (fun () ->
-                            marks.Add(renders, optionRenders)
-                            store.Publish((2, 2), ignore)) // first component
-                        60
-                    |> ignore)
-                60
-            |> ignore
-
-            fun () ->
-                Expect.equal marks[0] (1, 1) "each reader rendered once to mount"
-                Expect.equal marks[1] (1, 1) "a publish that left the slice alone re-rendered nobody"
-                Expect.equal (renders, optionRenders) (2, 2) "a publish that moved the slice re-rendered both readers"
+                Expect.equal (List.ofSeq uncaught) [ "view broke at 1" ] "the error was reported once, as uncaught"
+                Expect.equal (sink |> Seq.map _.Phase |> List.ofSeq) [ ErrorPhase.View ] "and once to the error sink"
     ]
 
 // ─── 852.B — the sliced shell ──────────────────────────────────────────
@@ -536,11 +433,7 @@ let private gridChunkTests =
             let mutable adopted = false
             let mutable placeholders = -1
             let mutable grids = 0
-            let store = ModelStore.create<int, CounterMsg> ()
-
-            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun _ _ -> view ())
-            |> Program.withReactStoreHydrate store "grid-h"
-            |> Program.run
+            mountCounter "grid-h" Hydrate (fun _ _ -> view ())
 
             JS.setTimeout
                 (fun () ->
@@ -596,11 +489,7 @@ let private treeChunkTests =
             let mutable adopted = false
             let mutable placeholders = -1
             let mutable drawn = 0
-            let store = ModelStore.create<int, CounterMsg> ()
-
-            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) (fun _ _ -> view ())
-            |> Program.withReactStoreHydrate store "tree-h"
-            |> Program.run
+            mountCounter "tree-h" Hydrate (fun _ _ -> view ())
 
             JS.setTimeout
                 (fun () ->
@@ -644,11 +533,7 @@ let private treeChunkTests =
                     InputsPaneWidth.Narrow
                     (fun () -> PageContent.Custom(lowered ()))
 
-            let store = ModelStore.create<int, CounterMsg> ()
-
-            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) view
-            |> Program.withReactStore store "tree-f"
-            |> Program.run
+            mountCounter "tree-f" Fresh view
 
             let reloadButton () =
                 arrayFrom (document?querySelectorAll "button")
@@ -744,11 +629,7 @@ let private deferredSurfaceTests =
                     (fun () ->
                         PageContent.Custom(TreeSurface.deferred "test.failing" load {| Title = "Deferred surface" |}))
 
-            let store = ModelStore.create<int, CounterMsg> ()
-
-            Program.mkProgram (fun () -> 0, Cmd.none) (fun Bump model -> model + 1, Cmd.none) view
-            |> Program.withReactStore store "surface-f"
-            |> Program.run
+            mountCounter "surface-f" Fresh view
 
             let reloadButton () =
                 arrayFrom (document?querySelectorAll "button")
@@ -786,7 +667,7 @@ let private deferredSurfaceTests =
 
 let tests =
     testList "Phase 852 - the sliced model store" [
-        storeBindingTests
+        heldViewTests
         shellScopeTests
         gridCompareTests
         sidebarBoundaryTests

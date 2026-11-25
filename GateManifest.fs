@@ -310,7 +310,6 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
              "TOOLUP_NEUTRALITY_TOKENS"
              "TOOLUP_APPROVE"
              "TOOLUP_APPROVE_BRANDKIT"
-             "TOOLUP_REGEN_ELMISH_PROOF_CORPUS"
              "TOOLUP_REGEN_LOCALIZATION_SKELETON"
              "TOOLUP_REGEN_PLATFORM_DECODERS"
              "TOOLUP_REGEN_PLATFORM_JSON_DECODERS"

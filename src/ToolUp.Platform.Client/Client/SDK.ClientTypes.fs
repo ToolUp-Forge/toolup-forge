@@ -176,7 +176,7 @@ module RenderContext =
     }
 
     /// The same context for a sub-view whose messages `wrap` lifts into
-    /// this one's (the `Cmd.map` of a view).
+    /// this one's (the `Step.mapAll` of a view).
     let map (wrap: 'Inner -> 'Msg) (ctx: RenderContext<'Msg>) : RenderContext<'Inner> = {
         Dispatch = wrap >> ctx.Dispatch
         Messages = ctx.Messages
@@ -2324,11 +2324,9 @@ and CompositionConfig = {
     /// transition via `Logger.forCategory "client.elmish.trace"`.
     /// Default `false`.
     EnableElmishConsoleTrace: bool
-    /// 0.4.1 — structured Elmish error reporter: every runtime exception
-    /// (Init / Update / View / Subscription / Termination) as an
-    /// `ErrorContext`. Default `None` — the SDK logs via
-    /// `Logger.forCategory "client.elmish"`. Consumers wiring this MUST
-    /// NOT also install their own `withErrorReporter`.
+    /// The structured error reporter: every exception the shell's runtime
+    /// reports (Init / Update / View / Subscription) as an `ErrorContext`.
+    /// Default `None` — the SDK logs via `Logger.forCategory "client.elmish"`.
     OnElmishError: (ErrorContext -> unit) option
 }
 
@@ -2722,7 +2720,7 @@ module ClientModule =
     /// readable through `ModuleStateObserver.tryInspect`. The projection
     /// is evaluated lazily, on first read after an update, so a
     /// declared module pays nothing on an Elmish tick nobody inspects.
-    /// It must be pure — no `Cmd`, no side effect. A module that never
+    /// It must be pure — no effect, no side effect. A module that never
     /// calls this declares no inspectable state.
     let withInspectState
         (project: 'Model -> UiStateReport)

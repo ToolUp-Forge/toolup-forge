@@ -5,15 +5,12 @@ module ToolUp.AI.Client.Tests.AdminScreenEffectsTests
 
 // ─── The platform administration screens return effect values ────────
 //
-// For each administration screen, one or more transitions of its `step`
+// For each administration screen, one or more transitions of its `update`
 // function, stating the effect values it returns: the remote call each
 // names (by method and argument), the follow-up message, or the site of
 // the code that has no value form yet. A remote call compares by method,
 // argument and retry numbers; a `RemoteEffect.legacy` body by its site
 // label. Nothing is performed: a transition only builds values.
-//
-// A few cases also check that the screen's `update` still hands today's
-// loop one command element per step, in the same order.
 
 open System
 open Fuaran.MVU
@@ -86,7 +83,7 @@ let tests =
                     expectCall "ICompositionInspectorApi.GetDisclosure" ()
                     expectCall "ICompositionInspectorApi.GetProvenance" ()
                 ]
-                "five calls, in the order Cmd.batch ran them"
+                "five calls, in the order the runtime performs them"
 
             let _, exported =
                 CompositionInspectorUI.update (CompositionInspectorUI.ExportRequested RulesPanel) m0
@@ -117,7 +114,7 @@ let tests =
                 ]
                 "a plain HTTP read, off the remoting chain")
 
-        testCase "HealthMonitorUI: a live refresh reads four panels in order, as four commands" (fun () ->
+        testCase "HealthMonitorUI: a live refresh reads four panels in order" (fun () ->
             let m0, _ = HealthMonitorUI.init ()
             let _, steps = HealthMonitorUI.update HealthMonitorUI.RefreshLive m0
 
@@ -129,10 +126,7 @@ let tests =
                     expectCall "IHealthMonitorApi.GetDegradedCapabilities" ()
                     expectCall "IHealthMonitorApi.GetAIDenialRollup" ()
                 ]
-                "four calls, in the order Cmd.batch ran them"
-
-            let _, cmd = HealthMonitorUI.update HealthMonitorUI.RefreshLive m0
-            same (List.length cmd) 4 "update still returns four command elements")
+                "four calls, in the order the runtime performs them")
 
         testCase "JobsAdminUI: expanding reads attempts; an accepted re-run reads and starts the poll" (fun () ->
             let id = Guid.NewGuid()

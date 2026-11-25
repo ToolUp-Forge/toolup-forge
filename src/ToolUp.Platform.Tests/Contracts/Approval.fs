@@ -59,7 +59,6 @@ module Approve =
         "TOOLUP_REGEN_PLATFORM_JSON_DECODERS", "platform-json-decoders"
         "TOOLUP_REGEN_PLATFORM_CLIENT_PROXIES", "platform-client-proxies"
         "TOOLUP_REGEN_LOCALIZATION_SKELETON", "localization-skeleton"
-        "TOOLUP_REGEN_ELMISH_PROOF_CORPUS", "elmish-proof-corpus"
         "TOOLUP_REGEN_CONFIG_REFERENCE", "config-reference"
         "TOOLUP_REGEN_AUDIT_EVENT_REFERENCE", "audit-event-reference"
         "TOOLUP_REGEN_TRUST_BOUNDARIES", "trust-boundaries"

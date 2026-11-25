@@ -148,8 +148,6 @@ let private registeredTests =
         ProofOracleTests.tests
         DisclosureProofOracleTests.tests
         ModelInputProofOracleTests.tests
-        ElmishProofOracleTests.tests
-        ElmishLoopProofOracleTests.tests
         FactPresentationTests.tests
         AppCompositionConformanceTests.tests
     ]

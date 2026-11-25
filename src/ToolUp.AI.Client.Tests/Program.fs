@@ -125,17 +125,11 @@ let allTests =
         // against. Two readers, one corpus, one set of expected values.
         RemotingCorpusParityTests.tests
         StreamingProxyTests.tests
-        // Phase 788 — the proved Elmish ring buffer and subscription diff
-        // beside the TRANSPILED runtime, from the same shared differential
-        // and the same seed as the .NET pack.
-        ElmishProofOracleTests.tests
         // Phase 536 — ClientModule.withInspectState: the latest UiStateReport per
         // module at the shell publish points; undeclared modules report nothing.
         ModuleInspectStateTests.tests
         // Phase 851.D - the module dispatch prop is stable across renders.
         ModuleDispatchStabilityTests.tests
-        // Phase 851.A - two drains in one task construct the view once.
-        RenderCoalescingTests.tests
         // Phase 852 - the sliced model store: store binding, selectors, shell
         // render scope, and the AG Grid props compare.
         SlicedStoreTests.tests

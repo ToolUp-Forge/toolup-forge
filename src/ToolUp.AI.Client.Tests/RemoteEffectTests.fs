@@ -11,12 +11,12 @@ module ToolUp.AI.Client.Tests.RemoteEffectTests
 //     chain, is retried under its retry policy and honours its declared
 //     read policy, each beside a control that shows what goes red
 //     without it;
-//   * the adapter dispatches exactly one message per effect, and a
-//     follow-up as the message it names;
+//   * mounted on a `Fuaran.MVU` runtime with forge's interpreter, each
+//     effect answers exactly one message and a follow-up runs as the
+//     message it names;
 //   * an effect value compares by method, argument and retry numbers, so a
 //     test can state it;
-//   * a ported `update` returns the effect values a test can state, and
-//     keeps returning the commands its callers read.
+//   * a ported `update` returns the effect values a test can state.
 
 open Fuaran.MVU
 open ToolUp.Elmish
@@ -30,9 +30,7 @@ type private Msg =
     | Got of int
     | Failed of string
 
-let private run (dispatch: Msg -> unit) (cmd: Cmd<Msg>) =
-    for effect in cmd do
-        effect dispatch
+let private run (dispatch: Msg -> unit) (steps: Step<Msg, RemoteEffect<Msg>> list) = StepDriver.runSteps dispatch steps
 
 let private same (actual: 'T) (expected: 'T) (message: string) : unit =
     Expect.isTrue (actual = expected) (sprintf "%s\n  actual:   %A\n  expected: %A" message actual expected)
@@ -150,8 +148,7 @@ let private kbFailing (methodName: string) (msg: ClientModel.Msg) (model: Client
     let seen = ResizeArray<ClientModel.Msg>()
     let requested, steps = ClientModel.update msg model
 
-    for effect in RemoteEffect.toCmd steps do
-        effect seen.Add
+    StepDriver.runSteps seen.Add steps
 
     requested,
     fun () ->
@@ -168,7 +165,7 @@ let tests =
                 let interceptor = recording "Probe.Plain" None
                 let seen = ResizeArray<Msg>()
 
-                RemoteEffect.toCmd [
+                [
                     Do(RemoteEffect.call "Probe.Plain" (fun (x: int) -> async { return x * 2 }) 21 reply)
                 ]
                 |> run seen.Add
@@ -181,7 +178,7 @@ let tests =
                 let interceptor = recording "Probe.Failing" (Some "replaced by the chain")
                 let seen = ResizeArray<Msg>()
 
-                RemoteEffect.toCmd [
+                [
                     Do(
                         RemoteEffect.call
                             "Probe.Failing"
@@ -219,11 +216,10 @@ let tests =
                 let seenRetried = ResizeArray<Msg>()
                 let seenOnce = ResizeArray<Msg>()
 
-                RemoteEffect.toCmd [ Do(RemoteEffect.callWithRetry "Probe.Flaky" policy (flaky retried) 0 reply) ]
+                [ Do(RemoteEffect.callWithRetry "Probe.Flaky" policy (flaky retried) 0 reply) ]
                 |> run seenRetried.Add
 
-                RemoteEffect.toCmd [ Do(RemoteEffect.call "Probe.Once" (flaky once) 0 reply) ]
-                |> run seenOnce.Add
+                [ Do(RemoteEffect.call "Probe.Once" (flaky once) 0 reply) ] |> run seenOnce.Add
 
                 fun () ->
                     same retried.Value 3 "three attempts under the policy"
@@ -244,7 +240,7 @@ let tests =
                     let seen = ResizeArray<Msg>()
                     let effect = RemoteEffect.call "Probe.Shared" read "shared-key" unboxed
 
-                    RemoteEffect.toCmd [ Do effect; Do effect ] |> run seen.Add
+                    [ Do effect; Do effect ] |> run seen.Add
 
                     fun () ->
                         same sent.Value 1 "one request"
@@ -264,7 +260,7 @@ let tests =
                         let! _ = read "cached-key"
                         answer.Value <- 2
 
-                        RemoteEffect.toCmd [ Do(RemoteEffect.call "Probe.Cached" read "cached-key" unboxed) ]
+                        [ Do(RemoteEffect.call "Probe.Cached" read "cached-key" unboxed) ]
                         |> run viaEffect.Add
                     }
                 )
@@ -274,26 +270,43 @@ let tests =
                     same sent.Value 2 "the prime and the refresh were sent")
         ]
 
-        testList "the adapter" [
-            testCaseDeferred "one message per effect, and a follow-up as the message it names" 30 (fun () ->
+        testList "on the runtime" [
+            testCaseDeferred "a follow-up runs as the message it names, and each effect answers once" 30 (fun () ->
                 let seen = ResizeArray<Msg>()
 
-                let cmd =
-                    RemoteEffect.toCmd [
-                        Then(Got 0)
-                        Do(RemoteEffect.call "Probe.One" (fun (x: int) -> async { return x }) 1 reply)
-                        Do(RemoteEffect.call "Probe.Two" (fun (x: int) -> async { return x }) 2 reply)
-                    ]
+                let update (msg: Msg) (model: unit) : unit * Step<Msg, RemoteEffect<Msg>> list =
+                    seen.Add msg
 
-                same (List.length cmd) 3 "one command element per step"
-                run seen.Add cmd
+                    match msg with
+                    | Failed "go" ->
+                        (),
+                        [
+                            Then(Got 0)
+                            Do(RemoteEffect.call "Probe.One" (fun (x: int) -> async { return x }) 1 reply)
+                            Do(RemoteEffect.call "Probe.Two" (fun (x: int) -> async { return x }) 2 reply)
+                        ]
+                    | _ -> (), []
 
-                fun () -> same (List.ofSeq seen) [ Got 0; Got 1; Got 2 ] "three messages, in order")
+                let comp = Component.plain (fun () -> (), []) update (fun _ -> Map.empty) ignore
+
+                let runtime =
+                    Runtime(comp, RemoteEffect.interpreter, Host.create (fun () -> 0L) 0UL ignore, ())
+
+                runtime.Start()
+                runtime.Dispatch(Failed "go", User "local") |> ignore
+
+                fun () ->
+                    same
+                        (List.ofSeq seen)
+                        [ Failed "go"; Got 0; Got 1; Got 2 ]
+                        "the follow-up, then one reply per call"
+
+                    same runtime.Refusals [] "every kind registered, nothing refused")
 
             testCase "a body that dispatches twice delivers once" (fun () ->
                 let seen = ResizeArray<Msg>()
 
-                RemoteEffect.toCmd [
+                [
                     Do(
                         RemoteEffect.legacy "Probe.Twice" (fun dispatch ->
                             dispatch (Got 1)
@@ -304,19 +317,16 @@ let tests =
 
                 same (List.ofSeq seen) [ Got 1 ] "the second answer is dropped")
 
-            testCase "an empty step list is an empty command" (fun () ->
-                same (List.isEmpty (RemoteEffect.toCmd ([]: Step<Msg, RemoteEffect<Msg>> list))) true "nothing to run")
-
             testCaseDeferred "a mapped effect replies in the parent's message" 30 (fun () ->
                 let seen = ResizeArray<string>()
 
-                RemoteEffect.toCmd [
+                [
                     Do(
                         RemoteEffect.call "Probe.Mapped" (fun (x: int) -> async { return x }) 5 reply
                         |> RemoteEffect.map (sprintf "%A")
                     )
                 ]
-                |> List.iter (fun effect -> effect seen.Add)
+                |> StepDriver.runSteps seen.Add
 
                 fun () -> same (List.ofSeq seen) [ "Got 5" ] "the child's reply, lifted")
         ]

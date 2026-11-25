@@ -77,7 +77,7 @@ let private returned (outcome: Outcome<int>) : int option =
     | Returned value -> Some value
     | _ -> None
 
-// ─── Elmish harness ─────────────────────────────────────────────────
+// ─── The step harness ───────────────────────────────────────────────
 
 type private Msg =
     | Got of int
@@ -89,9 +89,7 @@ let private gotOrFailed (reply: Result<int, exn>) : Msg =
     | Ok value -> Got value
     | Error e -> Failed e.Message
 
-let private run (dispatch: Msg -> unit) (cmd: Cmd<Msg>) =
-    for effect in cmd do
-        effect dispatch
+let private run (dispatch: Msg -> unit) (steps: Step<Msg, RemoteEffect<Msg>> list) = StepDriver.runSteps dispatch steps
 
 /// Counts one method's interceptor events, and optionally replaces its
 /// exceptions.
@@ -198,7 +196,7 @@ let tests =
                     let before = callCount ()
                     let seen = ResizeArray<Msg>()
 
-                    RemoteEffect.toCmd [
+                    [
                         Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-1" gotOrFailed)
                         Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-1" gotOrFailed)
                     ]
@@ -221,7 +219,7 @@ let tests =
                     let before = callCount ()
                     let seen = ResizeArray<Msg>()
 
-                    RemoteEffect.toCmd [
+                    [
                         Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-fail" gotOrFailed)
                         Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-fail" gotOrFailed)
                     ]
@@ -245,7 +243,7 @@ let tests =
                 let before = callCount ()
                 let seen = ResizeArray<Msg>()
 
-                RemoteEffect.toCmd [
+                [
                     Do(RemoteEffect.call "ReadCatalogApi.GetUndeclared" api.GetUndeclared "each" gotOrFailed)
                     Do(RemoteEffect.call "ReadCatalogApi.GetUndeclared" api.GetUndeclared "each" gotOrFailed)
                 ]
@@ -296,9 +294,9 @@ let tests =
                         let! _ = api.GetCount "swr-cmd"
                         scriptResponse 200 "5"
 
-                        RemoteEffect.asCmd (
-                            RemoteEffect.call "ReadCatalogApi.GetCount" api.GetCount "swr-cmd" gotOrFailed
-                        )
+                        [
+                            Do(RemoteEffect.call "ReadCatalogApi.GetCount" api.GetCount "swr-cmd" gotOrFailed)
+                        ]
                         |> run seen.Add
 
                         do! Async.Sleep 25
@@ -322,9 +320,9 @@ let tests =
                         let! _ = api.GetCount "swr-fail"
                         scriptResponse 500 "down"
 
-                        RemoteEffect.asCmd (
-                            RemoteEffect.call "ReadCatalogApi.GetCount" api.GetCount "swr-fail" gotOrFailed
-                        )
+                        [
+                            Do(RemoteEffect.call "ReadCatalogApi.GetCount" api.GetCount "swr-fail" gotOrFailed)
+                        ]
                         |> run seen.Add
 
                         do! Async.Sleep 25
