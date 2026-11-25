@@ -68,7 +68,7 @@ let private chatApi: ChatApi =
 // returns `true` for every exception — chat sends are short and idempotent
 // from the user's perspective (an optimistic row is already on screen).
 
-let private sendRetryPolicy: RetryPolicy = {
+let private sendRetryPolicy: RemoteRetryPolicy = {
     MaxAttempts = 3
     InitialDelayMs = 250
     BackoffMultiplier = 2.0

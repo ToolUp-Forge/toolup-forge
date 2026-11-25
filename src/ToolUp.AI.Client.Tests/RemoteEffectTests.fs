@@ -196,7 +196,7 @@ let tests =
                 let interceptor = recording "Probe.Flaky" None
 
                 let policy = {
-                    RetryPolicy.defaultPolicy with
+                    RemoteRetryPolicy.defaultPolicy with
                         InitialDelayMs = 1
                 }
 
@@ -352,7 +352,7 @@ let tests =
                 let retried =
                     RemoteEffect.callWithRetry
                         "Probe.Eq"
-                        RetryPolicy.defaultPolicy
+                        RemoteRetryPolicy.defaultPolicy
                         (fun (x: int) -> async { return x })
                         1
                         reply

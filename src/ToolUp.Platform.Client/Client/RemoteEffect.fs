@@ -44,7 +44,7 @@ type Dispatch<'msg> = 'msg -> unit
 /// The retry policy a remote call runs under: exponential backoff with a
 /// cap on attempts. Anything richer (circuit-breaking, jitter, branching
 /// per error class) composes at the call site.
-type RetryPolicy = {
+type RemoteRetryPolicy = {
     /// Maximum number of attempts, the first included. At least 1.
     MaxAttempts: int
     /// The delay before the first retry, in milliseconds.
@@ -57,10 +57,10 @@ type RetryPolicy = {
 
 /// Ready-made retry policies.
 [<RequireQualifiedAccess>]
-module RetryPolicy =
+module RemoteRetryPolicy =
 
     /// Three attempts, 200 ms then 400 ms between them, retrying any failure.
-    let defaultPolicy: RetryPolicy = {
+    let defaultPolicy: RemoteRetryPolicy = {
         MaxAttempts = 3
         InitialDelayMs = 200
         BackoffMultiplier = 2.0
@@ -68,7 +68,7 @@ module RetryPolicy =
     }
 
     /// One attempt; a failure answers at once.
-    let none: RetryPolicy = {
+    let none: RemoteRetryPolicy = {
         MaxAttempts = 1
         InitialDelayMs = 0
         BackoffMultiplier = 1.0
@@ -104,7 +104,7 @@ type IRemotingInterceptor =
 /// test that both hosts honour; the retry predicate is a function and takes
 /// no part.
 [<AllowNullLiteral>]
-type RemoteCallSite(methodName: string, argument: obj, retry: RetryPolicy option) =
+type RemoteCallSite(methodName: string, argument: obj, retry: RemoteRetryPolicy option) =
 
     /// The method the call names, as the API record and its field.
     member _.Method = methodName
@@ -137,7 +137,7 @@ type RemoteCallSite(methodName: string, argument: obj, retry: RetryPolicy option
 /// `RemoteEffect.callWithRetry`.
 [<Sealed>]
 type RemoteCall<'msg>
-    internal (methodName: string, argument: obj, retry: RetryPolicy option, send: ('msg -> unit) -> unit) =
+    internal (methodName: string, argument: obj, retry: RemoteRetryPolicy option, send: ('msg -> unit) -> unit) =
     inherit RemoteCallSite(methodName, argument, retry)
 
     /// Send the call; its one reply is delivered through the callback.
@@ -333,7 +333,7 @@ module RemoteEffect =
     // delivered between attempts.
     let private sendWithRetry
         (methodName: string)
-        (policy: RetryPolicy)
+        (policy: RemoteRetryPolicy)
         (proxyCall: 'a -> Async<'result>)
         (arg: 'a)
         (reply: Result<'result, exn> -> unit)
@@ -392,7 +392,7 @@ module RemoteEffect =
     /// As `call`, retried under `policy`.
     let callWithRetry
         (methodName: string)
-        (policy: RetryPolicy)
+        (policy: RemoteRetryPolicy)
         (proxyCall: 'a -> Async<'result>)
         (arg: 'a)
         (reply: Result<'result, exn> -> 'msg)

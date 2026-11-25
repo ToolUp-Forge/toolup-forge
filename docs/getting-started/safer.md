@@ -58,7 +58,7 @@ The template's README walks through each primitive with `file:line` citations:
 
 | Mechanic | Primitive demonstrated |
 |---|---|
-| Send-message call | `RemoteEffect.callWithRetry` with a `RetryPolicy` — an effect value `update` returns; retry-as-data (GP 12 rule 3) |
+| Send-message call | `RemoteEffect.callWithRetry` with a `RemoteRetryPolicy` — an effect value `update` returns; retry-as-data (GP 12 rule 3) |
 | Optimistic UI on send | One line of model state for the local-then-confirmed pattern |
 | SSE message subscription (extension) | a `Subscription` resource the model lists — started once, stopped at unmount |
 | Send-failure red banner | a classified failure in the model, plus the shell's structured `ErrorContext` |
