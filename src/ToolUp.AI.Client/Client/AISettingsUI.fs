@@ -3,6 +3,7 @@
 
 module ToolUp.AI.Client.AISettingsUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -26,18 +27,18 @@ type Model = {
     /// renders a platform provider+model picker driven by
     /// `PlatformDescriptors`.
     Available: AIProviderDescriptor list
-    /// Phase 70 — descriptors for every platform-configured provider
+    /// Descriptors for every platform-configured provider
     /// the deployment has wired. Empty = no platform provider; a
     /// single entry hides the provider dropdown and renders only the
-    /// model picker (byte-identical to pre-Phase-70 behaviour); ≥2
+    /// model picker; ≥2
     /// entries surface a provider+model picker.
     PlatformDescriptors: AIProviderDescriptor list
-    /// Phase 70 C.5 — per-provider key-presence status reported by
+    /// Per-provider key-presence status reported by
     /// `PlatformAIKeysApi.ListPlatformKeyStatuses`. Drives the inline
     /// "Ask a Platform Admin to configure a key for {provider}" notice
     /// inside the picker when the user-selected provider has no
     /// platform-scope key configured. Non-admin callers receive `[]`
-    /// from the handler (per D.2's gate); the picker treats a missing
+    /// from the handler; the picker treats a missing
     /// row for the selected provider as "not configured" — false
     /// positives only fire when a non-admin's deployment has providers
     /// wired but no platform-scope keys, which is the exact state the
@@ -82,16 +83,51 @@ type Msg =
 let private api =
     Api.makeProxy<AISettingsApi> (customOptions = UserSession.withRequestHeaders)
 
-// Phase 70 C.5 — read-only proxy for the platform AI keys API.
-// `ListPlatformKeyStatuses` short-circuits to `[]` for non-admins per
-// Stream D.2's RBAC gate; the picker uses the returned list to
+// Read-only proxy for the platform AI keys API.
+// `ListPlatformKeyStatuses` short-circuits to `[]` for non-admins (the
+// handler's role gate); the picker uses the returned list to
 // surface the "providers wired but no keys configured" inline notice.
 let private platformAIKeysApi =
     Api.makeProxy<PlatformAIKeysApi> (customOptions = UserSession.withRequestHeaders)
 
+// ─── Remote calls ─────────────────────────────────────────────────
+
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
+
+/// A call's reply: its answer through `onOk`, a failure to the screen's
+/// one error branch.
+let private orApiError (onOk: 'r -> Msg) (reply: Result<'r, exn>) : Msg =
+    match reply with
+    | Ok answer -> onOk answer
+    | Error ex -> ApiError ex.Message
+
+let private call (methodName: string) (proxyCall: 'a -> Async<'r>) (arg: 'a) (onOk: 'r -> Msg) : Steps = [
+    Do(RemoteEffect.call methodName proxyCall arg (orApiError onOk))
+]
+
+let private loadAvailable () =
+    call "AISettingsApi.ListAvailable" api.ListAvailable () (Finished >> LoadAvailable)
+
+let private loadPlatformDescriptors () =
+    call "AISettingsApi.GetPlatformDescriptors" api.GetPlatformDescriptors () (Finished >> LoadPlatformDescriptors)
+
+let private loadPlatformKeyStatuses () =
+    call
+        "PlatformAIKeysApi.ListPlatformKeyStatuses"
+        platformAIKeysApi.ListPlatformKeyStatuses
+        ()
+        (Finished >> LoadPlatformKeyStatuses)
+
+/// Re-fetch the current config after a successful mutation. Cheaper
+/// than optimistically updating the client model and avoids drift if
+/// the server makes its own adjustments (e.g. clearing active when
+/// the active instance is deleted).
+let private refetchConfig () =
+    call "AISettingsApi.GetMyConfig" api.GetMyConfig () (Finished >> LoadConfig)
+
 // ─── Init ─────────────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let internal initSteps () : Model * Steps =
     {
         Available = []
         PlatformDescriptors = []
@@ -101,32 +137,19 @@ let init () : Model * Cmd<Msg> =
         Status = None
         Loading = true
     },
-    Cmd.batch [
-        Cmd.OfRemoting.call api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
-        Cmd.OfRemoting.call api.GetPlatformDescriptors () (Finished >> LoadPlatformDescriptors) (fun ex ->
-            ApiError ex.Message)
-        Cmd.OfRemoting.call
-            platformAIKeysApi.ListPlatformKeyStatuses
-            ()
-            (Finished >> LoadPlatformKeyStatuses)
-            (fun ex -> ApiError ex.Message)
-        Cmd.OfRemoting.call api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
-    ]
+    loadAvailable ()
+    @ loadPlatformDescriptors ()
+    @ loadPlatformKeyStatuses ()
+    @ refetchConfig ()
+
+let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
 
 // ─── Update ───────────────────────────────────────────────────────
 
-/// Re-fetch the current config after a successful mutation. Cheaper
-/// than optimistically updating the client model and avoids drift if
-/// the server makes its own adjustments (e.g. clearing active when
-/// the active instance is deleted).
-let private refetchConfig () =
-    Cmd.OfRemoting.call api.GetMyConfig () (Finished >> LoadConfig) (fun ex -> ApiError ex.Message)
-
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     match msg with
-    | LoadAvailable(Start()) ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call api.ListAvailable () (Finished >> LoadAvailable) (fun ex -> ApiError ex.Message)
+    | LoadAvailable(Start()) -> { model with Loading = true }, loadAvailable ()
 
     | LoadAvailable(Finished descriptors) ->
         {
@@ -134,12 +157,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Available = descriptors
                 Loading = false
         },
-        Cmd.none
+        []
 
-    | LoadPlatformDescriptors(Start()) ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call api.GetPlatformDescriptors () (Finished >> LoadPlatformDescriptors) (fun ex ->
-            ApiError ex.Message)
+    | LoadPlatformDescriptors(Start()) -> { model with Loading = true }, loadPlatformDescriptors ()
 
     | LoadPlatformDescriptors(Finished descriptors) ->
         {
@@ -147,15 +167,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PlatformDescriptors = descriptors
                 Loading = false
         },
-        Cmd.none
+        []
 
-    | LoadPlatformKeyStatuses(Start()) ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call
-            platformAIKeysApi.ListPlatformKeyStatuses
-            ()
-            (Finished >> LoadPlatformKeyStatuses)
-            (fun ex -> ApiError ex.Message)
+    | LoadPlatformKeyStatuses(Start()) -> { model with Loading = true }, loadPlatformKeyStatuses ()
 
     | LoadPlatformKeyStatuses(Finished statuses) ->
         {
@@ -163,7 +177,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PlatformKeyStatuses = statuses
                 Loading = false
         },
-        Cmd.none
+        []
 
     | LoadConfig(Start()) -> { model with Loading = true }, refetchConfig ()
 
@@ -173,7 +187,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Config = cfg
                 Loading = false
         },
-        Cmd.none
+        []
 
     | StartEdit label ->
         // Look up the current view for this label — the form will
@@ -183,13 +197,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         let target =
             model.Config.ConfiguredProviders |> List.tryFind (fun i -> i.Label = label)
 
-        { model with Editing = target }, Cmd.none
+        { model with Editing = target }, []
 
-    | CancelEdit -> { model with Editing = None }, Cmd.none
+    | CancelEdit -> { model with Editing = None }, []
 
     | SaveInstance req ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call api.SaveInstance req SaveFinished (fun ex -> ApiError ex.Message)
+        { model with Loading = true }, call "AISettingsApi.SaveInstance" api.SaveInstance req SaveFinished
 
     | SaveFinished(Ok()) ->
         // Clear Editing so the form returns to add mode after a
@@ -209,11 +222,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(ErrorMsg err)
                 Loading = false
         },
-        Cmd.none
+        []
 
     | DeleteInstance label ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call api.DeleteInstance label DeleteFinished (fun ex -> ApiError ex.Message)
+        { model with Loading = true }, call "AISettingsApi.DeleteInstance" api.DeleteInstance label DeleteFinished
 
     | DeleteFinished(Ok()) ->
         {
@@ -229,11 +241,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(ErrorMsg err)
                 Loading = false
         },
-        Cmd.none
+        []
 
     | SetActive labelOpt ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call api.SetActive labelOpt SetActiveFinished (fun ex -> ApiError ex.Message)
+        { model with Loading = true }, call "AISettingsApi.SetActive" api.SetActive labelOpt SetActiveFinished
 
     | SetActiveFinished(Ok()) -> { model with Loading = false }, refetchConfig ()
 
@@ -243,11 +254,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(ErrorMsg err)
                 Loading = false
         },
-        Cmd.none
+        []
 
     | TestInstance label ->
         { model with Loading = true },
-        Cmd.OfRemoting.call api.TestConnection label (fun r -> TestFinished(label, r)) (fun ex -> ApiError ex.Message)
+        call "AISettingsApi.TestConnection" api.TestConnection label (fun r -> TestFinished(label, r))
 
     | TestFinished(label, Ok()) ->
         {
@@ -255,7 +266,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(SuccessMsg $"'{label}' connection verified — the API key is accepted.")
                 Loading = false
         },
-        Cmd.none
+        []
 
     | TestFinished(label, Error err) ->
         {
@@ -263,12 +274,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(ErrorMsg $"'{label}': {err}")
                 Loading = false
         },
-        Cmd.none
+        []
 
     | SavePlatformModelOverride modelOpt ->
         { model with Loading = true },
-        Cmd.OfRemoting.call api.SetPlatformModelOverride modelOpt SavePlatformModelOverrideFinished (fun ex ->
-            ApiError ex.Message)
+        call
+            "AISettingsApi.SetPlatformModelOverride"
+            api.SetPlatformModelOverride
+            modelOpt
+            SavePlatformModelOverrideFinished
 
     | SavePlatformModelOverrideFinished(Ok()) ->
         {
@@ -284,15 +298,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(ErrorMsg err)
                 Loading = false
         },
-        Cmd.none
+        []
 
     | SavePlatformProviderOverride providerIdOpt ->
         { model with Loading = true },
-        Cmd.OfRemoting.call
+        call
+            "AISettingsApi.SetPlatformProviderOverride"
             api.SetPlatformProviderOverride
             providerIdOpt
             SavePlatformProviderOverrideFinished
-            (fun ex -> ApiError ex.Message)
 
     | SavePlatformProviderOverrideFinished(Ok()) ->
         {
@@ -308,7 +322,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(ErrorMsg err)
                 Loading = false
         },
-        Cmd.none
+        []
 
     | ApiError msg ->
         {
@@ -316,9 +330,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Status = Some(ErrorMsg msg)
                 Loading = false
         },
-        Cmd.none
+        []
 
-    | DismissStatus -> { model with Status = None }, Cmd.none
+    | DismissStatus -> { model with Status = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Provider form (add + edit modes) ───────────────────────────
 //
@@ -560,11 +577,10 @@ let private ProviderForm
 
 // ─── Platform provider + model picker (PlatformOnly branch) ─────
 //
-// Phase 70 — when the deployment wires ≥2 platform providers
+// When the deployment wires ≥2 platform providers
 // (Anthropic + OpenAI + Gemini, etc.), the user picks both provider
 // and model. When exactly 1 is wired, the provider dropdown is
-// hidden and only the model picker renders (byte-identical UX to
-// the pre-Phase-70 single-provider deployment). API key source
+// hidden and only the model picker renders. API key source
 // stays locked end-to-end — that's the Platform Admin keys module's
 // concern, not the user's.
 //
@@ -646,7 +662,7 @@ let private PlatformProviderModelPicker
         | Some _ -> selectedModel
         | None -> "(no provider)"
 
-    // Phase 70 C.5 — inline "no platform key configured" notice. The
+    // Inline "no platform key configured" notice. The
     // picker renders even when no platform-scope key has been set for
     // the selected provider (the substrate can still resolve via team-
     // scope or BootstrapKeyFromEnv); but if `ListPlatformKeyStatuses`
@@ -711,7 +727,7 @@ let private PlatformProviderModelPicker
                 )
             ]
 
-            // Phase 70 C.5 — inline "providers wired but no keys"
+            // Inline "providers wired but no keys"
             // notice for the user's currently-selected provider. Renders
             // above the provider dropdown so the operator-facing
             // remediation path is the first thing the user reads.
@@ -927,7 +943,7 @@ let private instanceRow
         ]
     ]
 
-// ─── Phase 859.H — team conversation visibility ──────────────────
+// ─── Team conversation visibility ────────────────────────────────
 
 let private visibilityApi =
     Api.makeProxy<TeamConversationVisibilityApi> (customOptions = UserSession.withRequestHeaders)
@@ -1074,7 +1090,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
                     ]
                 ]
 
-            // Phase 859.H — the team's conversation visibility.
+            // The team's conversation visibility.
             TeamConversationVisibilitySection()
         ]
 
