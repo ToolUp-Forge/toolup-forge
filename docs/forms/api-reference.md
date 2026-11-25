@@ -746,18 +746,24 @@ val FormsClient.proxy : IFormApi
 val PublicFormsClient.proxy : IPublicFormApi
 ```
 
-Use directly in Elmish commands:
+Call them from `update` as effect values:
 
 ```fsharp
-open ToolUp.Elmish
+open Fuaran.MVU
+open ToolUp.Platform
 
-Cmd.OfAsync.either FormsClient.proxy.Submit request SubmitSucceeded SubmitFailed
+let submit: Step<FormsPageMsg, RemoteEffect<FormsPageMsg>> =
+    Do(
+        RemoteEffect.call "FormsApi.Submit" FormsClient.proxy.Submit request (function
+            | Ok outcome -> SubmitSucceeded outcome
+            | Error ex -> SubmitFailed ex)
+    )
 ```
 
-The in-tree Elmish fork lives under `namespace ToolUp.Elmish` (and
-`ToolUp.Elmish.React`), not `Elmish`. `SubmitSucceeded` receives the
+The step is a value the shell performs: `update` returns it in its step list,
+and the reply arrives as a new message. `SubmitSucceeded` receives the
 `Result<Submission, FormError>` the call returned; `SubmitFailed` receives the
-`exn`, per `Cmd.OfAsync.either`'s error arm.
+`exn` when the call itself failed.
 
 ## Audit events emitted to `_platform.audit`
 

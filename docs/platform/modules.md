@@ -40,14 +40,14 @@ let routine (input: string) : string = sprintf "did: %s" input
 ```fsharp skip=fragment
 // ClientModel.fs
 module HelloWorld.ClientModel
-open ToolUp.Elmish
+open Fuaran.MVU
 open ToolUp.Platform
 
 type Model = { Text: string }
 type Msg = NoOp
 
-let init () : Model * Cmd<Msg> = { Text = "" }, Cmd.none
-let update _ m = m, Cmd.none
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list = { Text = "" }, []
+let update (_: Msg) (m: Model) : Model * Step<Msg, RemoteEffect<Msg>> list = m, []
 ```
 
 ```fsharp skip=fragment
@@ -172,7 +172,7 @@ Routes are matched exactly on `(method, path)`, case-insensitively, the same way
 
 The client module registration carries a `Visibility: SubjectKind -> bool` predicate. The shell's sidebar filter hides modules whose predicate returns `false` for the current `Subject`. Four smart constructors cover the common shapes:
 
-`ClientModuleSpec.Init` is nullary (`unit -> 'Model * Cmd<'Msg>`) — `create` adapts it to the `ClientModuleContext -> 'Model * Cmd<'Msg>` shape the shell calls, so the common case carries no ceremony. A module that *does* need the context (its resolved config plus the platform config) chains `ClientModule.withContextInit` after `create`.
+`ClientModuleSpec.Init` is nullary (`unit -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list`) — `create` adapts it to the `ClientModuleContext -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list` shape the shell calls, so the common case carries no ceremony. A module that *does* need the context (its resolved config plus the platform config) chains `ClientModule.withContextInit` after `create`.
 
 ```fsharp
 let registerSalesAnalysis () : ErasedModule =
@@ -417,7 +417,7 @@ state.
 
 An `Init` that throws leaves the module with no host and is reported through `ClientConfig.Composition.OnError`.
 
-**Where your `Cmd` goes.** Every command your `Init` or `Update` returns, and every dispatch from
+**Where your steps go.** Every step your `Init` or `Update` returns, and every dispatch from
 your view, is addressed to your module by id (`Client.ModuleMsg(moduleId, message)`) and reaches
 your `Update` whichever module is active. A reply that lands after the reader navigated away updates
 your module, not the one on screen. A message for a module with no host (a team switch or a reset
@@ -585,9 +585,9 @@ let view (model: Model) (dispatch: Msg -> unit) =
 
 This isn't a style preference, and it is worth knowing exactly what the runtime does with a dispatch so the rule is applied where it earns its keep rather than everywhere.
 
-**How the shell schedules a dispatch (since Phase 851).** A dispatch that arrives while the loop is idle opens a *drain* synchronously: the message runs through `update`, any messages its command dispatches synchronously (`Cmd.ofMsg`, a `Cmd.OfAsync` whose body completes before its first real await, a subscription start) are queued behind it and processed in the same drain, and the render hook is called **once, when the ring is empty, with the model the drain ended on** — however many messages the drain processed. The React adapter then constructs the view **once per task**: two drains in one browser task (a keyboard handler that dispatches twice, a socket message whose subscription dispatches again) build the F# view once, on the microtask queue, never a frame late. An async command starts immediately — there is no timer hop before a remote call begins — and the loop's re-entrancy latch is what makes that safe (`proofs/ElmishLoop.fst`, `reentrant_no_loss`). The module view's `dispatch` argument is the **same function on every render** for the life of the loop, so a `React.memo` or `[<ReactComponent>]` boundary around a module view that keys on its props is not defeated by the shell.
+**How the shell schedules a dispatch.** The shell runs on the `Fuaran.MVU` runtime. A dispatch that arrives while the runtime is idle opens a *drain* synchronously: the message runs through `update`, then each `Then` follow-up its steps name, in order, inside the same chain; the chain commits as one step, and its effects are then performed once each, in the order they were emitted. A reply — a remote call's answer, a subscription's message — is a new message queued behind whatever is already queued, and the drain runs until the queue is empty. The view is rendered **once per drain, with the model the drain ended on** — however many messages it processed. A remote call starts as soon as its chain commits; there is no timer hop before it begins. The dispatch the shell hands your module's view is the **same function on every render** for the life of the mount, so a `React.memo` or `[<ReactComponent>]` boundary around a module view that keys on its props is not defeated by the shell.
 
-So the cost of a dispatch is `update` plus one view construction per task — not one per message. What that does **not** change is why free-typing inputs stay in local state: every keystroke is its own browser task, so per-keystroke dispatch still costs one `update` and one whole-module view build per character, on the input's critical path, where `React.useState` costs a re-render of the input alone. Reach for the model when the value is *meaning* the rest of the module reacts to (a committed filter, a submitted query); keep it local while it is *typing*. Where a module genuinely wants to dispatch per keystroke — a live search that must round-trip through `update` — the shell's scheduling means it pays one drain and one paint per keystroke, which is the floor, and the cost that remains is the module's own `update` and `view`.
+So the cost of a dispatch is `update` plus one view construction per drain — not one per message. What that does **not** change is why free-typing inputs stay in local state: every keystroke is its own browser task, so per-keystroke dispatch still costs one `update` and one whole-module view build per character, on the input's critical path, where `React.useState` costs a re-render of the input alone. Reach for the model when the value is *meaning* the rest of the module reacts to (a committed filter, a submitted query); keep it local while it is *typing*. Where a module genuinely wants to dispatch per keystroke — a live search that must round-trip through `update` — the shell's scheduling means it pays one drain and one paint per keystroke, which is the floor, and the cost that remains is the module's own `update` and `view`.
 
 ## Return the same state when nothing changed
 
@@ -595,26 +595,28 @@ So the cost of a dispatch is `update` plus one view construction per task — no
 state it was handed — the same object — not a copy of it:
 
 ```fsharp
+open Fuaran.MVU
+
 type Model = { Selected: string option }
 
 type Msg =
     | Select of string
     | Refresh
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Select id when model.Selected = Some id -> model, Cmd.none // unchanged: the SAME model
-    | Select id -> { model with Selected = Some id }, Cmd.none // changed: a new one
-    | Refresh -> model, Cmd.none // a command would go here; the state did not change
+    | Select id when model.Selected = Some id -> model, [] // unchanged: the SAME model
+    | Select id -> { model with Selected = Some id }, [] // changed: a new one
+    | Refresh -> model, [] // an effect would go here; the state did not change
 ```
 
-Most modules already do this by construction — `model, Cmd.none` and `model, someCommand` return
+Most modules already do this by construction — `model, []` and `model, someSteps` return
 the input — and the ones that do not usually rebuild a record with `{ model with X = model.X }` or
 re-map a list that did not change. The rule costs nothing to follow and it is what the next
 paragraph relies on.
 
 **What it buys (since Phase 852).** `Client.run` mounts the shell on a model store
-(`Program.withReactStore`): the shell's chrome and the active module are two separate React
+(a `Fuaran.MVU.React.ModelStore` the mount publishes to): the shell's chrome and the active module are two separate React
 boundaries, and each re-renders only when the slice it reads changes **by reference**. The active
 module's boundary reads your module's host from `Model.Hosts`; the shell stores exactly what your
 `update` returned there (`Map.add` leaves every other module's entry the same object). So:
@@ -648,7 +650,7 @@ reads changes, so a message costs the part of the screen it moved:
 
 The sidebar boundary is part of the shell view itself, so unlike the other two it holds on **every**
 render path, including the whole-tree composers below. What keeps it holding is that its inputs
-are stable: the shell builds the sidebar's callbacks once per Elmish loop, and a row's icon is the
+are stable: the shell builds the sidebar's callbacks once per mount, and a row's icon is the
 element your module declared — so declare icons once (`Icon = myIcon`, a value), not with a
 function that builds a fresh element per call. A fresh element is never wrong, only a rail redrawn
 on every chrome render. A custom shell composed over `Layout.AppShell` gets the same boundary if it
@@ -667,22 +669,22 @@ shell mounts it on a store: `Client.run`, `Bootstrap.Hydration.run` (its prerend
 the server's tree from the store's first model, then re-renders by slice) and
 `AIClientConfig.run` (the AI assistant's composer publishes its own model to a store and the shell
 reads its slices of `OuterModel.Shell` from it). The composer's side panel is part of the chrome: a
-side-panel message re-renders the chrome and not your module. `ToolUp.Elmish.HMR` passes both store
-bindings through (`Program.withReactStore` / `withReactStoreHydrate`), so a store-bound app keeps
-hot reload: the reloaded build tears the old loop down and re-renders by slice from its first
-message.
+side-panel message re-renders the chrome and not your module. Every mount carries a hot-reload key
+(the container's id), so a store-bound app keeps hot reload: the reloaded build resumes from the
+model it left and re-renders by slice.
 
 The *program builders* still render the whole tree per message, because they hand you a program to
-mount with any binding: `Client.program`, `AIClientConfig.program` / `withSidePanel`, and a custom
+mount where you choose: `Client.program`, `AIClientConfig.program` / `withSidePanel`, and a custom
 composition root over `Client.view` / `Client.viewWithSignIn` (GP 11) — apart from the sidebar
 boundary above, which holds there too. A custom composer that wraps the shell in a model of its own
-opts in the way the AI composer does: create a store per run, build `Client.shellStore store
-_.Shell`, render the shell with `Client.viewSlicedOver shell config modules chrome model.Shell
-shellDispatchers`, and mount with `Program.withReactStore store`. Pass a `chrome` record and a
-`Client.Dispatchers` set that keep their identity from render to render: build the program with
-`Client.programOver` (or `Program.withStableDispatch`), whose `build` makes the set once per loop —
-`Client.dispatchers (ShellMsg >> dispatch)` there, never inline in the view — and rebuild the chrome
-only when what it shows changed. A fresh one per render is correct output, but it re-renders the
+opts in the way the AI composer does: create a `Fuaran.MVU.React.ModelStore` per run, build
+`Client.shellStore store _.Shell`, render the shell with `Client.viewSlicedOver shell config modules
+chrome model.Shell shellDispatchers`, list the shell's subscriptions as its own resources
+(`Client.resources config`, lifted with `Subscription.map`), and mount with `Client.mountAt
+"elmish-app" Fresh store`. Pass a `chrome` record and a `Client.Dispatchers` set that keep their
+identity from render to render: build the program with `Client.programOver`, whose `build` makes the
+set once per mount — `Client.dispatchers (ShellMsg >> dispatch)` there, never inline in the view —
+and rebuild the chrome only when what it shows changed. A fresh one per render is correct output, but it re-renders the
 chrome, and a fresh set defeats the module's and the sidebar's boundaries as well.
 
 **Shared context values keep their identity.** The shell's React contexts — feature flags,

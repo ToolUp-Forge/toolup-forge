@@ -240,6 +240,7 @@ Client-side validation mirrors the server's; the server's is authoritative.
 The `OnSubmit` callback typically dispatches an Elmish `Msg`. The handler calls the API:
 
 ```fsharp
+open Fuaran.MVU
 open ToolUp.Forms.FormApi
 open ToolUp.Forms.FormSubmission
 
@@ -252,16 +253,17 @@ match msg with
         WorkflowId = Some leadWorkflow.Id
     }
 
-    let cmd =
-        Cmd.OfAsync.either
-            (fun req -> FormsClient.proxy.Submit req)
-            request
-            (function
-             | Ok submission -> SubmissionSucceeded submission
-             | Error err -> SubmissionFailed err)
-            (fun ex -> SubmissionFailed (FormError.StorageFailed ex.Message))
+    // the call is a step the shell performs; its one reply is a new message
+    let steps = [
+        Do(
+            RemoteEffect.call "FormApi.Submit" FormsClient.proxy.Submit request (function
+                | Ok(Ok submission) -> SubmissionSucceeded submission
+                | Ok(Error err) -> SubmissionFailed err
+                | Error ex -> SubmissionFailed(FormError.StorageFailed ex.Message))
+        )
+    ]
 
-    model, cmd
+    model, steps
 ```
 
 `IFormApi.Submit`:
@@ -291,15 +293,16 @@ match msg with
         Event = eventName
     }
 
-    let cmd =
-        Cmd.OfAsync.perform
-            (fun req -> FormsClient.proxy.ApplyTransition req)
-            request
-            (function
-             | Ok submission -> TransitionSucceeded submission
-             | Error err -> TransitionFailed err)
+    let steps = [
+        Do(
+            RemoteEffect.call "FormApi.ApplyTransition" FormsClient.proxy.ApplyTransition request (function
+                | Ok(Ok submission) -> TransitionSucceeded submission
+                | Ok(Error err) -> TransitionFailed err
+                | Error ex -> TransitionFailed(FormError.StorageFailed ex.Message))
+        )
+    ]
 
-    model, cmd
+    model, steps
 ```
 
 The server runs the guard (if any), persists the new state, fires the action under the ledger, emits a `WorkflowTransitioned` audit event. A guard returning `Error reason` surfaces as `FormError.TransitionDenied reason`; a guard exception surfaces as `GuardEvaluationFailed`.

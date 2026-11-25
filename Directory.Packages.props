@@ -111,17 +111,6 @@
     <PackageVersion Include="Fable.Browser.WebStorage" Version="1.3" />
     <PackageVersion Include="Fable.Browser.XMLHttpRequest" Version="1.4" />
     <PackageVersion Include="Fable.Core" Version="5.0" />
-    <!--
-      0.4.3 — The ToolUp.Elmish / ToolUp.Elmish.React / ToolUp.Elmish.HMR
-      packages were folded directly into ToolUp.Platform.Client; the
-      runtime is a forge implementation detail rather than a separately
-      consumable concern. Phase 73 renamed the runtime's namespaces to
-      `ToolUp.Elmish` / `.React` / `.HMR`; consumers drop the three
-      `PackageReference`s and pick up the runtime via ToolUp.Platform.Client.
-      See docs/migrations/0.4.0-toolup-elmish-adoption.md for the fold and
-      docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
-      for the `open`-site rename.
-    -->
     <PackageVersion Include="Fable.Parsimmon" Version="4.1" />
     <PackageVersion Include="Fable.React.Types" Version="18.4" />
     <PackageVersion Include="Fable.ReactDom.Types" Version="18.2" />

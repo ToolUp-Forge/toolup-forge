@@ -10,10 +10,10 @@ ToolUp Platform is a modular F# full-stack SDK for building production multi-ten
 
 Core foundations:
 - **Server**: Giraffe over ASP.NET Core; the in-tree **ToolUp.Remoting** transport (the `ToolUp.Platform.Server.Remoting` part, which `ToolUp.Platform.Server` references) for type-safe APIs. Consumers write `open ToolUp.Remoting.Server` / `open ToolUp.Remoting.Giraffe`; no separate `PackageReference` is needed.
-- **Client**: Fable + Feliz (React bindings) with the in-tree **ToolUp.Elmish** MVU runtime (distributed inside `ToolUp.Platform.Client`). Consumers write `open ToolUp.Elmish` and see classical Elm Architecture plus ToolUp additions (`IDispatcher<'msg>`, `Prefetch<'a>`, structured `ErrorContext`, `EffectHandle` lifetimes, `Cmd.OfRemoting`).
+- **Client**: Fable + Feliz (React bindings) on the published **`Fuaran.MVU`** runtime and its React adapter `Fuaran.MVU.React`, which `ToolUp.Platform.Client` references. A module's `init` / `update` return a step list (`Step<'msg, RemoteEffect<'msg>> list`; `open Fuaran.MVU` and `open ToolUp.Platform`). Forge's additions over the runtime live in `namespace ToolUp.Platform`: `RemoteEffect` (remote calls as effect values, with retry, interceptors and declared read policies), `Subscription` (a long-lived source the model lists as a resource), structured `ErrorContext` and `Memo`.
 - **Build**: FAKE targets in a Pack-able `ToolUp.Platform.Build` package.
 
-Both substrates began as forks — ToolUp.Remoting from Zaid Ajaj's Fable.Remoting (MIT), ToolUp.Elmish from Eugene Tolmachev's and the Elmish community's Fable.Elmish (Apache 2.0) — and both upstream projects remain excellent and the right choice for anyone whose use case fits them unmodified. The substantive credit lives in [`NOTICE.md`](NOTICE.md) and under [`README.md` → Standing on shoulders](README.md#in-tree-client--transport-forks), which also lists what the in-tree variants add and drop. Consumer call sites move by search-and-replace per [`docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md`](docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md).
+ToolUp.Remoting began as a fork of Zaid Ajaj's Fable.Remoting (MIT). The client's MVU runtime began as a fork of Eugene Tolmachev's and the Elmish community's Fable.Elmish (Apache 2.0); that fork is no longer in the tree, replaced by `Fuaran.MVU`. Both upstream projects remain excellent and the right choice for anyone whose use case fits them unmodified. The substantive credit lives in [`NOTICE.md`](NOTICE.md) and under [`README.md` → Standing on shoulders](README.md#in-tree-client--transport-forks), which also lists what the in-tree transport adds and drops. Consumer call sites move by search-and-replace per [`docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md`](docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md).
 
 ## Versioning
 
@@ -34,7 +34,7 @@ _Full text: [Repo layout](docs/contributing/agent-notes.md#repo-layout)_
 
 ## Architecture overview
 
-- **`ToolUp.Platform`** — the core SDK, pure infrastructure with zero domain knowledge: `Core` (shared types and interfaces, Fable-compiled from `fable/`), `Server` (the umbrella over six part assemblies, Phase 1193: `Remoting`, `Infra`, `Config`, `Scope`, `Jobs`, `Audit`), `Client` (the Fable + Feliz shell with the in-tree ToolUp.Elmish runtime), `UI` (the toolkit) and `Build`.
+- **`ToolUp.Platform`** — the core SDK, pure infrastructure with zero domain knowledge: `Core` (shared types and interfaces, Fable-compiled from `fable/`), `Server` (the umbrella over six part assemblies, Phase 1193: `Remoting`, `Infra`, `Config`, `Scope`, `Jobs`, `Audit`), `Client` (the Fable + Feliz shell, on the `Fuaran.MVU` runtime), `UI` (the toolkit) and `Build`.
 - **The parts' order is the dependency order: a file may only use files in its own part or an earlier one.** A file's part is read from the project files, not from its folder.
 - **A namespace names the part (Phase 1198).** `ToolUp.Platform.Core` stays flat (`namespace ToolUp.Platform`); a new server file opens what it uses.
 - **The feature tiers and companions** compose onto a `ServerApp`: `ToolUp.AI` (`AICompose.withAI`), `ToolUp.RAG` (`RAGCompose.withRAG`, which composes the AI tier itself), `ToolUp.KnowledgeBase`, `ToolUp.Forms` (`FormsCompose.withForms`), `ToolUp.Scheduling`, `ToolUp.Algorithms` (`AlgorithmsCompose.withAlgorithms`), `ToolUp.Stripe` and `ToolUp.InterPlatform` (`PeerCompose.withPeer`).
@@ -142,9 +142,9 @@ Client-tier SDK packages ship their `.fs` files under `fable/` in the nupkg; a F
 
 F# 9+ supports nullable reference types via `<Nullable>enable</Nullable>` in a `.fsproj`. The Fable compiler itself supports nullness (Fable 5.0.0+). However, enabling nullness in a Fable consumer causes the compiler to re-compile every transitive Fable dependency in null-aware mode, and any dependency that hasn't been nullness-annotated produces a cascade of warnings (or errors, depending on configuration).
 
-As of 2026-05, the major Fable-ecosystem libraries this SDK consumes or embeds (Feliz, Fable.SimpleJson, the in-tree ToolUp.Elmish runtime, the in-tree ToolUp.Remoting transport) have not been nullness-annotated, and there's no published timeline for that to land.
+As of 2026-05, the major Fable-ecosystem libraries this SDK consumes or embeds (Feliz, Fable.SimpleJson, the in-tree ToolUp.Remoting transport) have not been nullness-annotated, and there's no published timeline for that to land.
 
-**Rule:** do not set `<Nullable>enable</Nullable>` on any project that compiles via Fable or whose Fable-compiled output consumes Feliz / Fable.SimpleJson / the in-tree ToolUp.Elmish / ToolUp.Remoting runtimes. Leave the property unset (which inherits F#'s default of `disable`), or explicitly set `<Nullable>disable</Nullable>` for projects sitting in a solution whose `Directory.Build.props` enables nullness by default. Server-only projects with no Fable involvement may enable nullness per the standard F# 10 default.
+**Rule:** do not set `<Nullable>enable</Nullable>` on any project that compiles via Fable or whose Fable-compiled output consumes Feliz / Fable.SimpleJson / the in-tree ToolUp.Remoting transport. Leave the property unset (which inherits F#'s default of `disable`), or explicitly set `<Nullable>disable</Nullable>` for projects sitting in a solution whose `Directory.Build.props` enables nullness by default. Server-only projects with no Fable involvement may enable nullness per the standard F# 10 default.
 
 This rule retires when the upstream packages ship nullness annotations.
 
@@ -274,7 +274,7 @@ _Full text: [Public-API approval baselines](docs/contributing/agent-notes.md#pub
 
 ### Elmish MVU discipline
 
-- `update` functions must be pure. All side effects flow through `Cmd`.
+- `update` functions must be pure. Every side effect is an effect value `update` returns in its step list (`Do (RemoteEffect.call …)`), and the shell performs it; a long-lived source is a subscription the model lists.
 - No mutable global state in client code (except documented exceptions).
 - Text inputs use `React.useState` for display state. Only dispatch on submit (Enter / button click). No per-keystroke `UpdateInput` messages.
 - Modules declare what they are (`Definition`), what they need (`NeedsData`), what they provide (`ProvidesProcessedData`, `DataTypes`), and how they behave (`Init`, `Update`, `View`). The shell handles all wiring.

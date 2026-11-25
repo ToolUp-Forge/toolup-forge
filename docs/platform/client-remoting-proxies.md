@@ -12,11 +12,13 @@ let private fooApi: IFooApi =
     Api.makeProxy<IFooApi> (customOptions = UserSession.withRequestHeaders)
 ```
 
-The proxy is constructed once at module load. Every dispatcher call uses the same proxy value:
+The proxy is constructed once at module load. Every call `update` returns as an effect value uses the same proxy value:
 
 ```fsharp
-let private loadFooCmd () =
-    Cmd.OfAsync.either fooApi.GetFoo () FooLoaded (fun e -> FooLoaded(Error e.Message))
+let private loadFoo () : RemoteEffect<Msg> =
+    RemoteEffect.call "FooApi.GetFoo" fooApi.GetFoo () (function
+        | Ok reply -> FooLoaded reply
+        | Error e -> FooLoaded(Error e.Message))
 ```
 
 No `()` on the binding; no `()` at the call sites; no wrapping parens around `(fooApi ())`.

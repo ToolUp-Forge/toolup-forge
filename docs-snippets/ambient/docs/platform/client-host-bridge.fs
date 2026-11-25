@@ -11,6 +11,7 @@
 // `TreePage` would shadow rather than collide, which is why these sit in
 // an auto-opened module.
 open Feliz
+open Fuaran.MVU
 open ToolUp.Platform
 
 [<AutoOpen>]
@@ -28,6 +29,6 @@ module PageAmbient =
     module MyTreeRuntime =
         let render (page: TreePage) (handlers: 'Handlers) : ReactElement = failwith "ambient"
 
-    let init () : 'Model * Cmd<'Msg> = failwith "ambient"
+    let init () : 'Model * Step<'Msg, RemoteEffect<'Msg>> list = failwith "ambient"
 
-    let update (msg: 'Msg) (model: 'Model) : 'Model * Cmd<'Msg> = failwith "ambient"
+    let update (msg: 'Msg) (model: 'Model) : 'Model * Step<'Msg, RemoteEffect<'Msg>> list = failwith "ambient"

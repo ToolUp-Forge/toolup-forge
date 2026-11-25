@@ -952,22 +952,20 @@ AIClientConfig.withAIAssistant
 Under the hood, `withAIAssistant`:
 
 1. **Fills the AI slots** (`withAISlots`, Phase 1074) — the assistant, AI settings and platform-keys pages compose through `ShellSlotFills.Extensions` after the app's modules, each `Empty`, `Default`, `Configured` or `External` per `AISlotFills`.
-2. **Builds an outer Elmish Program** parameterised over `OuterModel = { Shell: Client.Model; SidePanel: SidePanelModel }` and `OuterMsg = ShellMsg of Client.Msg | SidePanelMsg of SidePanelMsg`.
-3. **Stitches the shell's init/update/view into the outer program** — ShellMsg dispatches to `Client.update`, SidePanelMsg dispatches to `sidePanelUpdate`, and outer `view` calls `Client.view` with an `ExtraChrome` record built from the side-panel state.
-4. **Attaches the SSE subscription** as a `Cmd.ofEffect` in outer init, wiring `AIStreamEvent` deltas into `SidePanelMsg.SSEEvent`.
+2. **Builds an outer program** on the `Fuaran.MVU` runtime, parameterised over `OuterModel = { Shell: Client.Model; SidePanel: SidePanelModel }` and `OuterMsg = ShellMsg of Client.Msg | SidePanelMsg of SidePanelMsg`.
+3. **Stitches the shell's init/update/view into the outer program** — ShellMsg dispatches to `Client.update`, SidePanelMsg dispatches to `sidePanelUpdate` (each returns a step list the outer `update` lifts with `Step.mapAll`), and outer `view` calls `Client.view` with an `ExtraChrome` record built from the side-panel state.
+4. **Lists the SSE stream as a resource** (`ai-sse-events`) beside the shell's own subscriptions, so the runtime starts it once at boot and stops it once at teardown, wiring `AIStreamEvent` deltas into `SidePanelMsg.SSEEvent`.
 5. **Builds the header-action button** from `SidePanelModel.Open` — the chat toggle's highlight follows open/closed state. Injected via `ExtraChrome.HeaderAction`.
 
 ### What the app does
 
 ```fsharp
-open ToolUp.Elmish
-open ToolUp.Elmish.React
 open ToolUp.Platform
 
 AIClientConfig.run aiSlots config modules
 ```
 
-(The in-tree Elmish fork ships under `namespace ToolUp.Elmish` / `ToolUp.Elmish.React` inside `ToolUp.Platform.Client` — same classical Elm Architecture surface, distinct namespace, so a consumer can hold upstream `Elmish` alongside it.)
+(The shell and the composer run on the published `Fuaran.MVU` runtime and mount through its React adapter, `Fuaran.MVU.React`; both arrive through `ToolUp.Platform.Client`.)
 
 Apps without AI skip `AIClientConfig` entirely and call `Client.run config modules`. Stripping `ToolUp.AI.Client.props` from the app fsproj + the `AIClientConfig.run` call in `Client.fs` produces a clean build with zero AI surface — this is the Phase 1b acceptance criterion and is verified by a temp-edit-and-revert smoke test on every release of this extraction.
 
@@ -1088,7 +1086,7 @@ and RAG / KnowledgeBase chunks that may include **PII**. Two safeguards:
 
 ## Known limitations
 
-- **ToolUp.Elmish.HMR loses SSE subscriptions on hot-reload.** The `EventSource` created in `init` is not re-run after a Fable-only recompile; `Cmd.none` is returned instead of the original commands. Full browser refresh (F5) re-initialises. Not a bug — a quirk inherited from upstream Elmish's HMR design.
+- **Hot reload across a re-evaluated module is not covered by forge's tests.** The mount carries a hot-reload key and resumes from the model it left; the SSE stream is a resource the model lists rather than a command run once by `init`, so it is started the way every listed resource is. If a stream does not reconnect after a hot reload, a full browser refresh (F5) re-initialises.
 - **Vite proxy SSE buffering (historical).** http-proxy (Vite's underlying proxy) buffers responses by default. SSE endpoints need `x-accel-buffering: no` injected on the proxied response. `vite.config.mts` has a dedicated rule for each SSE endpoint (`/api/notifications` and `/api/ai/events`) — they MUST NOT be merged into the generic `/api/` catch-all, because applying `cache-control: no-cache` to every API response would defeat browser caching of `GET` API calls.
 - **Streaming retries are intentionally impossible** once any content has been delivered. `ClaudeAIProvider` reports mid-stream failures as `StreamingAborted(partialText, …)`; the agent loop propagates these as `AITaskFailed`. Partial text is preserved for diagnostics only — the UI does not attempt to "complete" a partially-streamed response. Non-streaming retries with exponential backoff are live (see [Provider error classification](#provider-error-classification)).
 - **`AccessContext` tool scoping.** Tools currently receive `HttpContext` directly and can read any DI service, including the resolved `AccessContext` via `ctx.GetService<AccessContext>()`. Platform-level RBAC now enforces per-module permissions at the ToolUp.Remoting boundary (the gate `ServerModule.withGuardedApi` installs), so module APIs the agent invokes are already gated. Tool authors should still read the resolved `AccessContext` for any additional per-tool checks rather than assuming the agent loop has authorised the action — tools can be called across module boundaries.

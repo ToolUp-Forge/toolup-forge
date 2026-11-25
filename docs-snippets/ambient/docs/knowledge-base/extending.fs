@@ -15,6 +15,7 @@
 // something the deployment supplies.
 open Feliz
 open Microsoft.Extensions.DependencyInjection
+open Fuaran.MVU
 open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.Platform.BlobStorage
@@ -87,9 +88,9 @@ module PageAmbient =
         | NoOp
         | IngestionStatusReceived of IngestionStatusUpdate
 
-    let init () : Model * Cmd<Msg> = failwith "ambient"
+    let init () : Model * Step<Msg, RemoteEffect<Msg>> list = failwith "ambient"
 
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = failwith "ambient"
+    let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list = failwith "ambient"
 
     let documentsView (model: Model) (ctx: RenderContext<Msg>) : PageContent = failwith "ambient"
 

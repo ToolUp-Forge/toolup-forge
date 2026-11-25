@@ -301,7 +301,8 @@ There is **no `ToolUp.Scheduling.Client` package** — no built-in calendar UI, 
 The shared types and `ISchedulingApi` live in `ToolUp.Scheduling.Core`, which is Fable-compilable, so a consumer builds the proxy itself with the standard ToolUp.Remoting client and `SchedulingApi.routeBuilder`:
 
 ```fsharp skip=fragment
-open ToolUp.Elmish
+open Fuaran.MVU
+open ToolUp.Platform
 open ToolUp.Remoting.Client
 open ToolUp.Scheduling.SchedulingApi
 
@@ -310,7 +311,12 @@ let schedulingApi =
     |> Remoting.withRouteBuilder routeBuilder
     |> Remoting.buildProxy<ISchedulingApi>
 
-Cmd.OfAsync.either schedulingApi.Book booking BookSucceeded BookFailed
+// in `update`: the call is a step the shell performs; its reply is a new message
+Do(
+    RemoteEffect.call "SchedulingApi.Book" schedulingApi.Book booking (function
+        | Ok booked -> BookSucceeded booked
+        | Error ex -> BookFailed ex)
+)
 ```
 
 ## Events emitted to `IEventStore`

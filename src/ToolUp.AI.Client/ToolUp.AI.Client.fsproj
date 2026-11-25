@@ -68,8 +68,7 @@
     </ItemGroup>
     <!-- Fable.Core / ToolUp.Remoting.Client / Fable.SimpleJson /
          Fable.SimpleHttp / Feliz flow transitively from
-         ToolUp.Platform.Client. The elmish runtime (formerly the three
-         ToolUp.Elmish.* packages) was folded into ToolUp.Platform.Client
-         in 0.4.3 and arrives the same way. FSharp.Core is implicit via
+         ToolUp.Platform.Client, and so does the MVU runtime
+         (Fuaran.MVU, Fuaran.MVU.React). FSharp.Core is implicit via
          the .NET SDK. -->
 </Project>

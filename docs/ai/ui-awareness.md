@@ -101,7 +101,7 @@ so the two `ClientResident` tool shapes read side by side:
 `samples/MinimalClient` is the repo's in-tree Fable smoke-test sample (see its
 `.fsproj` header): `dotnet fable -o output` there transpiles the sample
 module's `withInspectState` chain and the companion's client executor through
-the real Fable + Feliz + ToolUp.Elmish toolchain, which is what proves the
+the real Fable + Feliz + Fuaran.MVU toolchain, which is what proves the
 seam is Fable-safe end to end. It is a compile-time proof, not a running
 demo — the sample is not wired into a `ClientConfig` module shell (the
 `Program.mkProgram` loop `samples/MinimalClient/Client.fs` runs is a bare

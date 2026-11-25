@@ -15,7 +15,7 @@ The AI assistant runtime (agent loop, SSE streaming, conversation persistence, t
 
 Provider-reported token usage rides on `AIProviderResponse.Usage: TokenUsage option` (`PromptTokens`, `CachedPromptTokens`, `OutputTokens`, plus optional Anthropic-specific `CacheCreationTokens`). Vocabulary is normalised across providers — Anthropic's `cache_read_input_tokens` and OpenAI's `prompt_tokens_details.cached_tokens` both populate `CachedPromptTokens`. Providers without a usage block (or without a prompt cache) declare `Capabilities.SupportsPromptCaching = false` and consumer-side rollups (e.g. `/dev/ai-latency`) hide the cache-hit-rate column for those buckets. See `ToolUp.AI/TECHNICAL_GUIDE.md` "Cache hit rate (Phase 6i.B)" for the full surface.
 
-For full AI architecture — SSE lifecycle, ToolUp.Remoting vs SSE serialisation rules, agent loop internals, `SystemPromptBuilder` composition, team- and module-aware prompts, tool error classification, client-side local-state pattern, ToolUp.Elmish.HMR limitations, Vite proxy configuration — see [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Deployment overview and extension points are in [`src/ToolUp.AI/README.md`](../../ToolUp.AI/README.md).
+For full AI architecture — SSE lifecycle, ToolUp.Remoting vs SSE serialisation rules, agent loop internals, `SystemPromptBuilder` composition, team- and module-aware prompts, tool error classification, client-side local-state pattern, hot-reload limitations, Vite proxy configuration — see [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Deployment overview and extension points are in [`src/ToolUp.AI/README.md`](../../ToolUp.AI/README.md).
 
 The rest of this section covers the one AI-adjacent mechanism that stays in core: the ToolUp.Remoting body-normalisation behaviour.
 
@@ -27,12 +27,7 @@ The in-tree ToolUp.Remoting transport folds body normalisation **into the dispat
 
 The change is invisible to consumer code: `unit -> Async<T>` API methods just work. If a consumer is migrating from a pre-fork SDK version that did rely on `RemotingBodyNormalizationMiddleware`, the registration can be deleted; the dispatcher already handles it.
 
-<!-- AI-specific concerns moved to src/ToolUp.AI/TECHNICAL_GUIDE.md:
-     SSE JSON serialisation (the STJ FableConverters options), SSE userId
-     matching, client-side local-state input pattern, ToolUp.Elmish.HMR SSE
-     subscription loss, Vite proxy SSE buffering. -->
-
-AI-specific concerns (SSE JSON serialisation via the `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options, SSE userId matching, client-side local-state input pattern, ToolUp.Elmish.HMR SSE subscription loss, Vite proxy SSE buffering) have all moved to [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Look there for their full explanations.
+AI-specific concerns (SSE JSON serialisation via the `ToolUp.Remoting.Json.SystemTextJson.FableConverters` options, SSE userId matching, client-side local-state input pattern, hot reload and the SSE stream, Vite proxy SSE buffering) have all moved to [`src/ToolUp.AI/TECHNICAL_GUIDE.md`](../../ToolUp.AI/TECHNICAL_GUIDE.md). Look there for their full explanations.
 
 ## Key Design Constraints
 

@@ -15,6 +15,7 @@
 open Microsoft.AspNetCore.Http
 open Expecto
 open Feliz
+open Fuaran.MVU
 open ToolUp.Platform
 open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Audit
@@ -34,9 +35,10 @@ module PageAmbient =
     /// The module's own MVU trio and its view, as `ClientModel.fs` /
     /// `ClientView.fs` declare them — read by every registration
     /// excerpt on the page.
-    let init: unit -> Model * Cmd<Msg> = failwith "ambient"
+    let init: unit -> Model * Step<Msg, RemoteEffect<Msg>> list = failwith "ambient"
 
-    let update: Msg -> Model -> Model * Cmd<Msg> = failwith "ambient"
+    let update: Msg -> Model -> Model * Step<Msg, RemoteEffect<Msg>> list =
+        failwith "ambient"
 
     let view: Model -> RenderContext<Msg> -> PageContent = failwith "ambient"
 

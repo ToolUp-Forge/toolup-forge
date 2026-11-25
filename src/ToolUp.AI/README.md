@@ -150,11 +150,9 @@ ServerApp.empty
 
 ### 3. Wire the client wrapper
 
-In the client entry point, wrap the shell Program with `AIClientConfig.withAIAssistant`:
+In the client entry point, mount the shell with the assistant through `AIClientConfig.run`:
 
 ```fsharp skip=fragment
-open ToolUp.Elmish
-open ToolUp.Elmish.React
 open ToolUp.Platform
 
 let aiSlots =

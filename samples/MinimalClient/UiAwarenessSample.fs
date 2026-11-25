@@ -25,7 +25,7 @@ module MinimalClient.UiAwarenessSample
 // smoke test (see `MinimalClient.fsproj`), which is what proves the
 // companion's client executor — `InspectActiveModule.install` below,
 // and the `withInspectState` projection it reads — actually transpiles
-// through the real Fable + Feliz + ToolUp.Elmish toolchain. There is no
+// through the real Fable + Feliz + Fuaran.MVU toolchain. There is no
 // live LLM or browser session in this environment to drive the tool
 // end-to-end (that would additionally need a running module shell +
 // AI server + model), so this sample proves the compile-time half of

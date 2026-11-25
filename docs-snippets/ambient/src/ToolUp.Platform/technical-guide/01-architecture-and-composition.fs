@@ -14,6 +14,7 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Caching.Memory
 open Microsoft.Extensions.DependencyInjection
+open Fuaran.MVU
 open ToolUp.Platform
 open Feliz
 open ToolUp.Platform.BlobStorage
@@ -49,9 +50,9 @@ module PageAmbient =
 
         type Msg = ValueChanged of string
 
-        let init () : Model * Cmd<Msg> = failwith "ambient"
+        let init () : Model * Step<Msg, RemoteEffect<Msg>> list = failwith "ambient"
 
-        let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = failwith "ambient"
+        let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list = failwith "ambient"
 
     /// The module's own single-page view, from `ClientView.fs`: it takes the
     /// shell's `RenderContext` and returns its page's `PageContent`.
