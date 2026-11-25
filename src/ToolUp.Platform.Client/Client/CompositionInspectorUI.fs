@@ -3,6 +3,7 @@
 
 module CompositionInspectorUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -13,7 +14,7 @@ open Fable.Core
 open Fable.Core.JsInterop
 open ToolUp.Platform
 
-// ─── Phase 593 — composition inspector admin module (client) ─────────
+// ─── Composition inspector admin module (client) ─────────────────────
 //
 // Five read-only pages over `ICompositionInspectorApi`, each rendering
 // ONLY what the deployment declared and each offering that declaration's
@@ -90,15 +91,50 @@ let private inspectorApi: ICompositionInspectorApi =
 
 // ─── Init / update ───────────────────────────────────────────────────
 
-let private loadAll () =
-    Cmd.batch [
-        Cmd.OfRemoting.call inspectorApi.GetComposition () CompositionLoaded (fun e ->
-            CompositionLoaded(Error e.Message))
-        Cmd.OfRemoting.call inspectorApi.GetSurfaces () SurfacesLoaded (fun e -> SurfacesLoaded(Error e.Message))
-        Cmd.OfRemoting.call inspectorApi.GetRules () RulesLoaded (fun e -> RulesLoaded(Error e.Message))
-        Cmd.OfRemoting.call inspectorApi.GetDisclosure () DisclosureLoaded (fun e -> DisclosureLoaded(Error e.Message))
-        Cmd.OfRemoting.call inspectorApi.GetProvenance () ProvenanceLoaded (fun e -> ProvenanceLoaded(Error e.Message))
-    ]
+let internal loadAll () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "ICompositionInspectorApi.GetComposition"
+            inspectorApi.GetComposition
+            ()
+            (RemoteEffect.flatten >> CompositionLoaded)
+    )
+    Do(
+        RemoteEffect.call
+            "ICompositionInspectorApi.GetSurfaces"
+            inspectorApi.GetSurfaces
+            ()
+            (RemoteEffect.flatten >> SurfacesLoaded)
+    )
+    Do(
+        RemoteEffect.call
+            "ICompositionInspectorApi.GetRules"
+            inspectorApi.GetRules
+            ()
+            (RemoteEffect.flatten >> RulesLoaded)
+    )
+    Do(
+        RemoteEffect.call
+            "ICompositionInspectorApi.GetDisclosure"
+            inspectorApi.GetDisclosure
+            ()
+            (RemoteEffect.flatten >> DisclosureLoaded)
+    )
+    Do(
+        RemoteEffect.call
+            "ICompositionInspectorApi.GetProvenance"
+            inspectorApi.GetProvenance
+            ()
+            (RemoteEffect.flatten >> ProvenanceLoaded)
+    )
+]
+
+let internal exportPanel (panel: InspectorPanel) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "ICompositionInspectorApi.ExportPanel" inspectorApi.ExportPanel panel (fun reply ->
+            ExportComplete(panel, RemoteEffect.flatten reply))
+    )
+]
 
 let private loading: Model = {
     Composition = PanelLoading
@@ -110,7 +146,8 @@ let private loading: Model = {
     ExportError = None
 }
 
-let init () : Model * Cmd<Msg> = loading, loadAll ()
+let init () : Model * Cmd<Msg> =
+    (loading, loadAll ()) |> RemoteEffect.run
 
 /// Fold one panel's answer into its slot.
 let private settle (result: Result<'T, string>) : PanelData<'T> =
@@ -145,28 +182,30 @@ let private downloadJson (panel: InspectorPanel) (json: string) =
     document.body.removeChild anchor |> ignore
     emitJsExpr<unit> url "URL.revokeObjectURL($0)"
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The browser download of an exported panel. It dispatches nothing.
+let internal download (panel: InspectorPanel) (json: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(RemoteEffect.legacy "CompositionInspectorUI.downloadJson" (fun _ -> downloadJson panel json))
+]
+
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh -> { loading with Exporting = None }, loadAll ()
-    | CompositionLoaded r -> { model with Composition = settle r }, Cmd.none
-    | SurfacesLoaded r -> { model with Surfaces = settle r }, Cmd.none
-    | RulesLoaded r -> { model with Rules = settle r }, Cmd.none
-    | DisclosureLoaded r -> { model with Disclosure = settle r }, Cmd.none
-    | ProvenanceLoaded r -> { model with Provenance = settle r }, Cmd.none
+    | CompositionLoaded r -> { model with Composition = settle r }, []
+    | SurfacesLoaded r -> { model with Surfaces = settle r }, []
+    | RulesLoaded r -> { model with Rules = settle r }, []
+    | DisclosureLoaded r -> { model with Disclosure = settle r }, []
+    | ProvenanceLoaded r -> { model with Provenance = settle r }, []
 
     | ExportRequested panel ->
-        let cmd =
-            Cmd.OfRemoting.call inspectorApi.ExportPanel panel (fun r -> ExportComplete(panel, r)) (fun e ->
-                ExportComplete(panel, Error e.Message))
-
         {
             model with
                 Exporting = Some panel
                 ExportError = None
         },
-        cmd
+        exportPanel panel
 
-    | ExportComplete(panel, Ok json) -> { model with Exporting = None }, Cmd.ofEffect (fun _ -> downloadJson panel json)
+    | ExportComplete(panel, Ok json) -> { model with Exporting = None }, download panel json
 
     | ExportComplete(panel, Error err) ->
         {
@@ -174,7 +213,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Exporting = None
                 ExportError = Some(panel, err)
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
@@ -463,7 +505,7 @@ let private page (panel: InspectorPanel) (render: CompositionInspectorMessages -
     (fun (model: Model) (ctx: RenderContext<Msg>) ->
         PageContent.FullWidth(inspectorPage ctx.Messages.CompositionInspector panel model ctx.Dispatch render))
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.CompositionInspector"
