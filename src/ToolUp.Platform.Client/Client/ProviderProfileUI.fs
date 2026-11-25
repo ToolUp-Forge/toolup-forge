@@ -405,28 +405,18 @@ let internal step
                         (RemoteEffect.flatten >> SaveCompleted)
                 )
 
-            // A rename replaces the entry under a new label, so the old
-            // one is removed after the new one lands. Ordering matters:
-            // removing first would delete the stored credential the new
-            // entry may be relying on when no key was re-pasted.
-            let renamedFrom =
-                match model.Editing with
-                | Some seed when seed.Original <> None && seed.Original <> Some candidate.Label -> seed.Original
-                | _ -> None
-
+            // The seed takes the label being saved, so `SaveCompleted` can
+            // tell a rename (`Original` differs from `Label`) and name what
+            // it saved. The form's fields are React-local and read the seed
+            // only on mount, so this does not touch what the user is typing.
             {
                 model with
+                    Editing = model.Editing |> Option.map (fun seed -> { seed with Label = candidate.Label })
                     Busy = true
                     Error = None
                     Status = None
             },
-            [
-                save
-                match renamedFrom with
-                | None -> ()
-                | Some previous ->
-                    Do(RemoteEffect.call "IProviderProfileApi.RemoveEntry" config.Api.RemoveEntry previous (mutated ""))
-            ]
+            [ save ]
 
     | SaveCompleted(Ok()) ->
         // Record what the consumer's delegate observed, so the health
@@ -450,6 +440,22 @@ let internal step
               ]
             | _ -> []
 
+        // A rename replaces the entry under a new label, so the old one is
+        // removed only now that the new one has landed, and never after a
+        // failed save: removing first would delete the stored credential
+        // the new entry may rely on when no key was re-pasted. A failed
+        // removal arrives as `Mutated(Error _)`, so the notice shows it and
+        // the old entry stays listed beside the new one.
+        let removed =
+            match model.Editing with
+            | Some {
+                       Original = Some previous
+                       Label = saved
+                   } when previous <> saved -> [
+                Do(RemoteEffect.call "IProviderProfileApi.RemoveEntry" config.Api.RemoveEntry previous (mutated ""))
+              ]
+            | _ -> []
+
         {
             model with
                 Busy = false
@@ -461,7 +467,7 @@ let internal step
         // record and the credential flag are the server's answers, and
         // showing our own optimistic edit as though it were theirs is
         // how a failed write reads as a success.
-        recorded @ [ Then Load ]
+        recorded @ removed @ [ Then Load ]
 
     | SaveCompleted(Error err) ->
         {
