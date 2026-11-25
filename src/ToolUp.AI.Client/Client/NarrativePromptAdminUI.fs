@@ -3,6 +3,7 @@
 
 module ToolUp.AI.Client.NarrativePromptAdminUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -182,21 +183,44 @@ type Msg =
 let private api =
     Api.makeProxy<NarrativePromptApi> (customOptions = UserSession.withRequestHeaders)
 
-let private failure (e: exn) = Error e.Message
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
+
+/// A call answering `Result<'t, string>`; a thrown exception replies to the
+/// call's own `Error` branch.
+let private call
+    (methodName: string)
+    (proxyCall: 'a -> Async<Result<'t, string>>)
+    (arg: 'a)
+    (reply: Result<'t, string> -> Msg)
+    : Steps =
+    [
+        Do(RemoteEffect.call ("NarrativePromptApi." + methodName) proxyCall arg (RemoteEffect.flatten >> reply))
+    ]
 
 let private loadList () =
-    Cmd.OfRemoting.call api.ListNarratives () NarrativesLoaded (failure >> NarrativesLoaded)
+    call "ListNarratives" api.ListNarratives () NarrativesLoaded
 
 let private loadVersions (runKey: string) =
-    Cmd.OfRemoting.call api.ListVersions runKey VersionsLoaded (failure >> VersionsLoaded)
+    call "ListVersions" api.ListVersions runKey VersionsLoaded
 
 let private loadLearning (runKey: string) =
-    Cmd.OfRemoting.call api.ListProposals runKey LearningLoaded (failure >> LearningLoaded)
+    call "ListProposals" api.ListProposals runKey LearningLoaded
 
-let private pollCmd (runKey: string) : Cmd<Msg> =
-    Cmd.OfAsync.perform (fun () -> Async.Sleep pollIntervalMs) () (fun _ -> Poll runKey)
+/// The wait before the next look at a regeneration's run. It dispatches
+/// once.
+let private pollDelay (runKey: string) : Steps = [
+    Do(
+        RemoteEffect.legacy "NarrativePromptAdminUI.pollDelay" (fun dispatch ->
+            Async.StartImmediate(
+                async {
+                    do! Async.Sleep pollIntervalMs
+                    dispatch (Poll runKey)
+                }
+            ))
+    )
+]
 
-let init () : Model * Cmd<Msg> =
+let internal initSteps () : Model * Steps =
     {
         Narratives = Loading
         Open = None
@@ -208,12 +232,15 @@ let init () : Model * Cmd<Msg> =
     },
     loadList ()
 
+let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
+
 let private openKey (model: Model) : string option =
     match model.Open with
     | Some(Loaded view) -> Some view.RunKey
     | _ -> None
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     match msg with
     | Refresh -> { model with Narratives = Loading }, loadList ()
     | NarrativesLoaded(Ok narratives) ->
@@ -221,13 +248,13 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Narratives = Loaded narratives
         },
-        Cmd.none
+        []
     | NarrativesLoaded(Error reason) ->
         {
             model with
                 Narratives = LoadError reason
         },
-        Cmd.none
+        []
 
     | OpenNarrative runKey ->
         {
@@ -238,25 +265,23 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Regenerate = None
                 Banner = None
         },
-        Cmd.batch [
-            Cmd.OfRemoting.call api.GetNarrative runKey NarrativeLoaded (failure >> NarrativeLoaded)
-            loadVersions runKey
-            loadLearning runKey
-        ]
-    | NarrativeLoaded(Ok view) -> { model with Open = Some(Loaded view) }, Cmd.none
+        call "GetNarrative" api.GetNarrative runKey NarrativeLoaded
+        @ loadVersions runKey
+        @ loadLearning runKey
+    | NarrativeLoaded(Ok view) -> { model with Open = Some(Loaded view) }, []
     | NarrativeLoaded(Error reason) ->
         {
             model with
                 Open = Some(LoadError reason)
         },
-        Cmd.none
-    | VersionsLoaded(Ok versions) -> { model with Versions = versions }, Cmd.none
+        []
+    | VersionsLoaded(Ok versions) -> { model with Versions = versions }, []
     | VersionsLoaded(Error reason) ->
         {
             model with
                 Banner = Some(Error reason)
         },
-        Cmd.none
+        []
 
     | Back ->
         {
@@ -275,19 +300,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = true
                 Banner = None
         },
-        Cmd.OfRemoting.call api.SavePrompt request (fun r -> Changed("Saved a new version.", r)) (fun e ->
-            Changed("", Error e.Message))
+        call "SavePrompt" api.SavePrompt request (fun r -> Changed("Saved a new version.", r))
     | Reset runKey ->
         {
             model with
                 Busy = true
                 Banner = None
         },
-        Cmd.OfRemoting.call
-            api.ResetPrompt
-            runKey
-            (fun r -> Changed("The declared wording is back in force.", r))
-            (fun e -> Changed("", Error e.Message))
+        call "ResetPrompt" api.ResetPrompt runKey (fun r -> Changed("The declared wording is back in force.", r))
     | Changed(what, Ok view) ->
         {
             model with
@@ -295,14 +315,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Open = Some(Loaded view)
                 Banner = Some(Ok what)
         },
-        Cmd.batch [ loadVersions view.RunKey; loadLearning view.RunKey ]
+        loadVersions view.RunKey @ loadLearning view.RunKey
     | Changed(_, Error reason) ->
         {
             model with
                 Busy = false
                 Banner = Some(Error reason)
         },
-        Cmd.none
+        []
 
     | RegenerateRequested ->
         match openKey model with
@@ -311,9 +331,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Regenerate = Some RegenerateProgress.Confirming
             },
-            Cmd.none
-        | None -> model, Cmd.none
-    | RegenerateCancelled -> { model with Regenerate = None }, Cmd.none
+            []
+        | None -> model, []
+    | RegenerateCancelled -> { model with Regenerate = None }, []
     | RegenerateConfirmed runKey ->
         match model.Regenerate, openKey model with
         | Some RegenerateProgress.Confirming, Some key when key = runKey ->
@@ -321,8 +341,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Regenerate = Some RegenerateProgress.Starting
             },
-            Cmd.OfRemoting.call api.Regenerate runKey RegenerateAccepted (failure >> RegenerateAccepted)
-        | _ -> { model with Regenerate = None }, Cmd.none
+            call "Regenerate" api.Regenerate runKey RegenerateAccepted
+        | _ -> { model with Regenerate = None }, []
     | RegenerateAccepted(Ok _) ->
         match model.Open, openKey model with
         | Some(Loaded view), Some key ->
@@ -332,19 +352,19 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Regenerate = Some(RegenerateProgress.Awaiting(previous, 0))
             },
-            pollCmd key
-        | _ -> { model with Regenerate = None }, Cmd.none
+            pollDelay key
+        | _ -> { model with Regenerate = None }, []
     | RegenerateAccepted(Error reason) ->
         {
             model with
                 Regenerate = Some(RegenerateProgress.Refused reason)
         },
-        Cmd.none
+        []
     | Poll runKey ->
         match model.Regenerate, openKey model with
         | Some(RegenerateProgress.Awaiting _), Some key when key = runKey ->
-            model, Cmd.OfRemoting.call api.GetNarrative runKey Polled (failure >> Polled)
-        | _ -> model, Cmd.none
+            model, call "GetNarrative" api.GetNarrative runKey Polled
+        | _ -> model, []
     | Polled(Ok view) ->
         match model.Regenerate with
         | Some(RegenerateProgress.Awaiting(previous, _)) when runLanded previous view ->
@@ -353,20 +373,20 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Open = Some(Loaded view)
                     Regenerate = view.LastRun |> Option.map RegenerateProgress.Landed
             },
-            Cmd.none
+            []
         | Some(RegenerateProgress.Awaiting(_, polls)) when polls + 1 >= maxPolls ->
             {
                 model with
                     Regenerate = Some RegenerateProgress.StillRunning
             },
-            Cmd.none
+            []
         | Some(RegenerateProgress.Awaiting(previous, polls)) ->
             {
                 model with
                     Regenerate = Some(RegenerateProgress.Awaiting(previous, polls + 1))
             },
-            pollCmd view.RunKey
-        | _ -> model, Cmd.none
+            pollDelay view.RunKey
+        | _ -> model, []
     | Polled(Error reason) ->
         match model.Regenerate with
         | Some(RegenerateProgress.Awaiting _) ->
@@ -374,32 +394,29 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Banner = Some(Error reason)
             },
-            Cmd.none
-        | _ -> model, Cmd.none
-    | DismissBanner -> { model with Banner = None }, Cmd.none
+            []
+        | _ -> model, []
+    | DismissBanner -> { model with Banner = None }, []
 
-    | LearningLoaded(Ok learning) -> { model with Learning = Some learning }, Cmd.none
+    | LearningLoaded(Ok learning) -> { model with Learning = Some learning }, []
     // The learning loop is optional: a deployment that does not compose it
     // shows no panel rather than an error.
-    | LearningLoaded(Error _) -> { model with Learning = None }, Cmd.none
+    | LearningLoaded(Error _) -> { model with Learning = None }, []
     | ApproveProposal decision ->
         {
             model with
                 Busy = true
                 Banner = None
         },
-        Cmd.OfRemoting.call
-            api.ApproveProposal
-            decision
-            (fun r -> Changed("Approved: the sentence is in the wording the next run uses.", r))
-            (fun e -> Changed("", Error e.Message))
+        call "ApproveProposal" api.ApproveProposal decision (fun r ->
+            Changed("Approved: the sentence is in the wording the next run uses.", r))
     | DismissProposal decision ->
         {
             model with
                 Busy = true
                 Banner = None
         },
-        Cmd.OfRemoting.call api.DismissProposal decision ProposalDismissed (failure >> ProposalDismissed)
+        call "DismissProposal" api.DismissProposal decision ProposalDismissed
     | ProposalDismissed(Ok learning) ->
         {
             model with
@@ -407,14 +424,17 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Learning = Some learning
                 Banner = Some(Ok "Dismissed. It is proposed again only if it recurs under a later wording.")
         },
-        Cmd.none
+        []
     | ProposalDismissed(Error reason) ->
         {
             model with
                 Busy = false
                 Banner = Some(Error reason)
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 
