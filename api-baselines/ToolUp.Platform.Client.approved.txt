@@ -5,9 +5,9 @@
 # still be folded into this file in the same PR.
 AdminHome (class)
 AdminHome.builtIn : ToolUp.Platform.BuiltIn`2[AdminHome+Model, AdminHome+Msg] { get }
-AdminHome.init() : System.Tuple`2[AdminHome+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[AdminHome+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+AdminHome.init() : System.Tuple`2[AdminHome+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[AdminHome+Msg, ToolUp.Platform.RemoteEffect`1[AdminHome+Msg]]]]
 AdminHome.moduleId : System.String { get }
-AdminHome.update(AdminHome+Msg, AdminHome+Model) : System.Tuple`2[AdminHome+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[AdminHome+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+AdminHome.update(AdminHome+Msg, AdminHome+Model) : System.Tuple`2[AdminHome+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[AdminHome+Msg, ToolUp.Platform.RemoteEffect`1[AdminHome+Msg]]]]
 AdminHome.view(AdminHome+Model, ToolUp.Platform.RenderContext`1[AdminHome+Msg]) : ToolUp.Platform.PageContent
 AdminHome+Model (class)
 AdminHome+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
@@ -28,9 +28,9 @@ AdminHome+Msg+WidgetDataLoaded (class)
 AdminHome+Msg+WidgetDataLoaded.Item : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 AuditLogUI (class)
 AuditLogUI.builtIn : ToolUp.Platform.BuiltIn`2[AuditLogUI+Model, AuditLogUI+Msg] { get }
-AuditLogUI.init() : System.Tuple`2[AuditLogUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[AuditLogUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+AuditLogUI.init() : System.Tuple`2[AuditLogUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[AuditLogUI+Msg, ToolUp.Platform.RemoteEffect`1[AuditLogUI+Msg]]]]
 AuditLogUI.moduleId : System.String { get }
-AuditLogUI.update(AuditLogUI+Msg, AuditLogUI+Model) : System.Tuple`2[AuditLogUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[AuditLogUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+AuditLogUI.update(AuditLogUI+Msg, AuditLogUI+Model) : System.Tuple`2[AuditLogUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[AuditLogUI+Msg, ToolUp.Platform.RemoteEffect`1[AuditLogUI+Msg]]]]
 AuditLogUI+Filters (class)
 AuditLogUI+Filters..ctor(System.String, System.String, System.String, System.String)
 AuditLogUI+Filters.Actor : System.String { get }
@@ -185,9 +185,9 @@ Components.ToastCentre (class)
 Components.ToastCentre.ToastCentre() : Fable.React.ReactElement
 CompositionInspectorUI (class)
 CompositionInspectorUI.builtIn : ToolUp.Platform.BuiltIn`2[CompositionInspectorUI+Model, CompositionInspectorUI+Msg] { get }
-CompositionInspectorUI.init() : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[CompositionInspectorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+CompositionInspectorUI.init() : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[CompositionInspectorUI+Msg, ToolUp.Platform.RemoteEffect`1[CompositionInspectorUI+Msg]]]]
 CompositionInspectorUI.moduleId : System.String { get }
-CompositionInspectorUI.update(CompositionInspectorUI+Msg, CompositionInspectorUI+Model) : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[CompositionInspectorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+CompositionInspectorUI.update(CompositionInspectorUI+Msg, CompositionInspectorUI+Model) : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[CompositionInspectorUI+Msg, ToolUp.Platform.RemoteEffect`1[CompositionInspectorUI+Msg]]]]
 CompositionInspectorUI+Model (class)
 CompositionInspectorUI+Model..ctor(CompositionInspectorUI+PanelData`1[ToolUp.Platform.CompositionView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.SurfacesView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.RulesView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.DisclosureView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.ProvenanceView], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InspectorPanel], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.InspectorPanel, System.String]])
 CompositionInspectorUI+Model.Composition : CompositionInspectorUI+PanelData`1[ToolUp.Platform.CompositionView] { get }
@@ -255,9 +255,9 @@ CsrfClient.installRequestGuard(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSha
 CsrfClient.prefetch() : System.Void
 DataIngestionUI (class)
 DataIngestionUI.builtIn : ToolUp.Platform.BuiltIn`2[DataIngestionUI+Model, DataIngestionUI+Msg] { get }
-DataIngestionUI.init() : System.Tuple`2[DataIngestionUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataIngestionUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DataIngestionUI.init() : System.Tuple`2[DataIngestionUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[DataIngestionUI+Msg, ToolUp.Platform.RemoteEffect`1[DataIngestionUI+Msg]]]]
 DataIngestionUI.moduleId : System.String { get }
-DataIngestionUI.update(DataIngestionUI+Msg, DataIngestionUI+Model) : System.Tuple`2[DataIngestionUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataIngestionUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DataIngestionUI.update(DataIngestionUI+Msg, DataIngestionUI+Model) : System.Tuple`2[DataIngestionUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[DataIngestionUI+Msg, ToolUp.Platform.RemoteEffect`1[DataIngestionUI+Msg]]]]
 DataIngestionUI+Model (class)
 DataIngestionUI+Model..ctor(ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataSourceConfig], System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.CredentialStatus], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TokenStatus]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 DataIngestionUI+Model.Creating : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -322,9 +322,9 @@ DataIngestionUI+Msg+TokenStatusLoaded.Item1 : System.String { get }
 DataIngestionUI+Msg+TokenStatusLoaded.Item2 : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TokenStatus] { get }
 DataSubjectRequestAdminUI (class)
 DataSubjectRequestAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[DataSubjectRequestAdminUI+Model, DataSubjectRequestAdminUI+Msg] { get }
-DataSubjectRequestAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[DataSubjectRequestAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataSubjectRequestAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DataSubjectRequestAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[DataSubjectRequestAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[DataSubjectRequestAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[DataSubjectRequestAdminUI+Msg]]]]
 DataSubjectRequestAdminUI.moduleId : System.String { get }
-DataSubjectRequestAdminUI.update(DataSubjectRequestAdminUI+Msg, DataSubjectRequestAdminUI+Model) : System.Tuple`2[DataSubjectRequestAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataSubjectRequestAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DataSubjectRequestAdminUI.update(DataSubjectRequestAdminUI+Msg, DataSubjectRequestAdminUI+Model) : System.Tuple`2[DataSubjectRequestAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[DataSubjectRequestAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[DataSubjectRequestAdminUI+Msg]]]]
 DataSubjectRequestAdminUI+Busy (class)
 DataSubjectRequestAdminUI+Busy.Idle : DataSubjectRequestAdminUI+Busy { get }
 DataSubjectRequestAdminUI+Busy.IsIdle : System.Boolean { get }
@@ -443,9 +443,9 @@ DataSubjectRequestAdminUI+Tab+Tags.ExportTab : System.Int32 (literal)
 DatadogReadbackUI (class)
 DatadogReadbackUI.ObservabilityGroup : System.String (literal)
 DatadogReadbackUI.builtIn(ToolUp.Platform.DatadogReadbackConfig) : ToolUp.Platform.BuiltIn`2[DatadogReadbackUI+Model, DatadogReadbackUI+Msg]
-DatadogReadbackUI.init(ToolUp.Platform.DatadogReadbackConfig, Microsoft.FSharp.Core.Unit) : System.Tuple`2[DatadogReadbackUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DatadogReadbackUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DatadogReadbackUI.init(ToolUp.Platform.DatadogReadbackConfig, Microsoft.FSharp.Core.Unit) : System.Tuple`2[DatadogReadbackUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[DatadogReadbackUI+Msg, ToolUp.Platform.RemoteEffect`1[DatadogReadbackUI+Msg]]]]
 DatadogReadbackUI.moduleId : System.String { get }
-DatadogReadbackUI.update(DatadogReadbackUI+Msg, DatadogReadbackUI+Model) : System.Tuple`2[DatadogReadbackUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DatadogReadbackUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DatadogReadbackUI.update(DatadogReadbackUI+Msg, DatadogReadbackUI+Model) : System.Tuple`2[DatadogReadbackUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[DatadogReadbackUI+Msg, ToolUp.Platform.RemoteEffect`1[DatadogReadbackUI+Msg]]]]
 DatadogReadbackUI+Model (class)
 DatadogReadbackUI+Model..ctor(ToolUp.Platform.DatadogReadbackConfig, DatadogReadbackUI+Tab, ToolUp.Platform.Remote`2[ToolUp.Platform.DatadogMonitorsResponse, System.String], ToolUp.Platform.Remote`2[ToolUp.Platform.DatadogLogsResponse, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.Remote`2[ToolUp.Platform.DatadogMetricResponse, System.String]]])
 DatadogReadbackUI+Model.ActiveTab : DatadogReadbackUI+Tab { get }
@@ -496,9 +496,9 @@ DatadogReadbackUI+Tab+Tags.MonitorsTab : System.Int32 (literal)
 DatadogReadbackUI+Tab+Tags.RecentErrorsTab : System.Int32 (literal)
 ExternalContactManagerUI (class)
 ExternalContactManagerUI.builtIn : ToolUp.Platform.BuiltIn`2[ExternalContactManagerUI+Model, ExternalContactManagerUI+Msg] { get }
-ExternalContactManagerUI.init() : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ExternalContactManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ExternalContactManagerUI.init() : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ExternalContactManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[ExternalContactManagerUI+Msg]]]]
 ExternalContactManagerUI.moduleId : System.String { get }
-ExternalContactManagerUI.update(ExternalContactManagerUI+Msg, ExternalContactManagerUI+Model) : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ExternalContactManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ExternalContactManagerUI.update(ExternalContactManagerUI+Msg, ExternalContactManagerUI+Model) : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ExternalContactManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[ExternalContactManagerUI+Msg]]]]
 ExternalContactManagerUI+ContactForm (class)
 ExternalContactManagerUI+ContactForm..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, System.String, System.String, System.String)
 ExternalContactManagerUI+ContactForm.DisplayName : System.String { get }
@@ -611,9 +611,9 @@ ExternalContactManagerUI+View+Tags.ContactDetail : System.Int32 (literal)
 ExternalContactManagerUI+View+Tags.ContactList : System.Int32 (literal)
 FileManagerUI (class)
 FileManagerUI.builtIn(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], ToolUp.Platform.DataManagerConfig) : ToolUp.Platform.BuiltIn`2[FileManagerUI+Model, FileManagerUI+Msg]
-FileManagerUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+FileManagerUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[FileManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[FileManagerUI+Msg]]]]
 FileManagerUI.moduleId : System.String { get }
-FileManagerUI.update(FileManagerUI+Msg, FileManagerUI+Model) : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+FileManagerUI.update(FileManagerUI+Msg, FileManagerUI+Model) : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[FileManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[FileManagerUI+Msg]]]]
 FileManagerUI+Model (class)
 FileManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]], ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], DataManagementTypes+IngestionStatusFilter, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, ToolUp.Platform.FileManagerMessages)
 FileManagerUI+Model.CurrentUpload : ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo] { get }
@@ -700,9 +700,9 @@ GeneralUITypes+UpdateApp+Tags.UpdateUIOnly : System.Int32 (literal)
 HealthMonitorUI (class)
 HealthMonitorUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
 HealthMonitorUI.builtIn : ToolUp.Platform.BuiltIn`2[HealthMonitorUI+Model, HealthMonitorUI+Msg] { get }
-HealthMonitorUI.init() : System.Tuple`2[HealthMonitorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[HealthMonitorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+HealthMonitorUI.init() : System.Tuple`2[HealthMonitorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[HealthMonitorUI+Msg, ToolUp.Platform.RemoteEffect`1[HealthMonitorUI+Msg]]]]
 HealthMonitorUI.moduleId : System.String { get }
-HealthMonitorUI.update(HealthMonitorUI+Msg, HealthMonitorUI+Model) : System.Tuple`2[HealthMonitorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[HealthMonitorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+HealthMonitorUI.update(HealthMonitorUI+Msg, HealthMonitorUI+Model) : System.Tuple`2[HealthMonitorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[HealthMonitorUI+Msg, ToolUp.Platform.RemoteEffect`1[HealthMonitorUI+Msg]]]]
 HealthMonitorUI+Model (class)
 HealthMonitorUI+Model..ctor(HealthMonitorUI+Tab, ToolUp.Platform.Remote`2[ToolUp.Platform.HealthSnapshot, System.String], ToolUp.Platform.Remote`2[ToolUp.Platform.PreflightSnapshotView, System.String], ToolUp.Platform.Remote`2[ToolUp.Platform.JobSchedulerTelemetryView, System.String], ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability], System.String], ToolUp.Platform.Remote`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup], System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
 HealthMonitorUI+Model.AIDenials : ToolUp.Platform.Remote`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIDenialRollup], System.String] { get }
@@ -756,9 +756,9 @@ HealthMonitorUI+Tab+Tags.LiveHealthTab : System.Int32 (literal)
 HealthMonitorUI+Tab+Tags.PreflightTab : System.Int32 (literal)
 Home (class)
 Home.builtIn(System.Boolean) : ToolUp.Platform.BuiltIn`2[Home+Model, Home+Msg]
-Home.init(System.Boolean, Microsoft.FSharp.Core.Unit) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+Home.init(System.Boolean, Microsoft.FSharp.Core.Unit) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Home+Msg, ToolUp.Platform.RemoteEffect`1[Home+Msg]]]]
 Home.moduleId : System.String { get }
-Home.update(Home+Msg, Home+Model) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+Home.update(Home+Msg, Home+Model) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Home+Msg, ToolUp.Platform.RemoteEffect`1[Home+Msg]]]]
 Home.view(Home+Model, ToolUp.Platform.RenderContext`1[Home+Msg]) : ToolUp.Platform.PageContent
 Home+Model (class)
 Home+Model..ctor(ToolUp.Platform.Remote`2[ToolUp.Platform.HomeOverview, System.String], System.Boolean, ToolUp.Platform.HomePinningState)
@@ -796,7 +796,7 @@ JobsAdminUI.attemptLanded(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime],
 JobsAdminUI.attemptReading(ToolUp.Platform.JobDefinition, ToolUp.Platform.JobRun) : JobsAdminUI+AttemptReading
 JobsAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[JobsAdminUI+Model, JobsAdminUI+Msg] { get }
 JobsAdminUI.formatDuration(System.TimeSpan) : System.String
-JobsAdminUI.init() : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[JobsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+JobsAdminUI.init() : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[JobsAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[JobsAdminUI+Msg]]]]
 JobsAdminUI.maxPolls : System.Int32 { get }
 JobsAdminUI.moduleId : System.String { get }
 JobsAdminUI.newerThanRecord(ToolUp.Platform.JobDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobRun]
@@ -807,7 +807,7 @@ JobsAdminUI.recentAttemptCount : System.Int32 { get }
 JobsAdminUI.rerunOffer(ToolUp.Platform.JobDefinition) : JobsAdminUI+RerunOffer
 JobsAdminUI.standingOf(ToolUp.Platform.JobDefinition) : JobsAdminUI+JobStanding
 JobsAdminUI.startedAfterRecord(ToolUp.Platform.JobDefinition, ToolUp.Platform.JobRun) : System.Boolean
-JobsAdminUI.update(JobsAdminUI+Msg, JobsAdminUI+Model) : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[JobsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+JobsAdminUI.update(JobsAdminUI+Msg, JobsAdminUI+Model) : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[JobsAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[JobsAdminUI+Msg]]]]
 JobsAdminUI.warningOf(ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 JobsAdminUI+AttemptReading (class)
 JobsAdminUI+AttemptReading.Cancelled : JobsAdminUI+AttemptReading { get }
@@ -942,9 +942,9 @@ JobsAdminUI+RerunProgress+Tags.Starting : System.Int32 (literal)
 JobsAdminUI+RerunProgress+Tags.StillRunning : System.Int32 (literal)
 MappingDataManagerUI (class)
 MappingDataManagerUI.builtIn(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], ToolUp.Platform.DataManagerConfig) : ToolUp.Platform.BuiltIn`2[MappingDataManagerUI+Model, MappingDataManagerUI+Msg]
-MappingDataManagerUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MappingDataManagerUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[MappingDataManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[MappingDataManagerUI+Msg]]]]
 MappingDataManagerUI.moduleId : System.String { get }
-MappingDataManagerUI.update(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], MappingDataManagerUI+Msg, MappingDataManagerUI+Model) : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MappingDataManagerUI.update(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], MappingDataManagerUI+Msg, MappingDataManagerUI+Model) : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[MappingDataManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[MappingDataManagerUI+Msg]]]]
 MappingDataManagerUI+HeldFile (class)
 MappingDataManagerUI+HeldFile..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String)
 MappingDataManagerUI+HeldFile.FileName : System.String { get }
@@ -1067,7 +1067,7 @@ MappingDataManagerUI+Msg+WizardMsg (class)
 MappingDataManagerUI+Msg+WizardMsg.Item : MappingDataManagerUI+Wizard+Msg { get }
 MappingDataManagerUI+Wizard (class)
 MappingDataManagerUI+Wizard.init(MappingDataManagerUI+HeldFile) : MappingDataManagerUI+Wizard+Model
-MappingDataManagerUI+Wizard.update(ToolUp.Platform.MappingDataManagerMessages, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], MappingDataManagerUI+Wizard+Msg, MappingDataManagerUI+Wizard+Model) : System.Tuple`3[MappingDataManagerUI+Wizard+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Wizard+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], MappingDataManagerUI+Wizard+Outcome]
+MappingDataManagerUI+Wizard.update(ToolUp.Platform.MappingDataManagerMessages, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], MappingDataManagerUI+Wizard+Msg, MappingDataManagerUI+Wizard+Model) : System.Tuple`3[MappingDataManagerUI+Wizard+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[MappingDataManagerUI+Wizard+Msg, ToolUp.Platform.RemoteEffect`1[MappingDataManagerUI+Wizard+Msg]]], MappingDataManagerUI+Wizard+Outcome]
 MappingDataManagerUI+Wizard.view(ToolUp.Platform.MappingDataManagerMessages, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]], MappingDataManagerUI+Wizard+Model, Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Wizard+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 MappingDataManagerUI+Wizard+Model (class)
 MappingDataManagerUI+Wizard+Model..ctor(MappingDataManagerUI+HeldFile, MappingDataManagerUI+Wizard+Step, Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnProfile], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ColumnMappingTypes+DateOrder], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+MappingSuggestion], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+DerivedColumn], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+DryRunReport], System.Boolean)
@@ -1179,9 +1179,9 @@ MappingDataManagerUI+Wizard+Step+Tags.ReviewMapping : System.Int32 (literal)
 MappingDataManagerUI+Wizard+Step+Tags.ReviewValidation : System.Int32 (literal)
 MigrationStatusUI (class)
 MigrationStatusUI.builtIn : ToolUp.Platform.BuiltIn`2[MigrationStatusUI+Model, MigrationStatusUI+Msg] { get }
-MigrationStatusUI.init() : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MigrationStatusUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MigrationStatusUI.init() : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[MigrationStatusUI+Msg, ToolUp.Platform.RemoteEffect`1[MigrationStatusUI+Msg]]]]
 MigrationStatusUI.moduleId : System.String { get }
-MigrationStatusUI.update(MigrationStatusUI+Msg, MigrationStatusUI+Model) : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MigrationStatusUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MigrationStatusUI.update(MigrationStatusUI+Msg, MigrationStatusUI+Model) : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[MigrationStatusUI+Msg, ToolUp.Platform.RemoteEffect`1[MigrationStatusUI+Msg]]]]
 MigrationStatusUI+Model (class)
 MigrationStatusUI+Model..ctor(ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationDataTypeInfo], System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.MigrationStatus], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice])
 MigrationStatusUI+Model.DataTypes : ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MigrationDataTypeInfo], System.String] { get }
@@ -1221,10 +1221,10 @@ MigrationStatusUI+Msg+TriggerComplete.Item1 : System.String { get }
 MigrationStatusUI+Msg+TriggerComplete.Item2 : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationStatus, System.String] { get }
 ModuleVisibilityAdminUI (class)
 ModuleVisibilityAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[ModuleVisibilityAdminUI+Model, ModuleVisibilityAdminUI+Msg] { get }
-ModuleVisibilityAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ModuleVisibilityAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ModuleVisibilityAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ModuleVisibilityAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ModuleVisibilityAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ModuleVisibilityAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[ModuleVisibilityAdminUI+Msg]]]]
 ModuleVisibilityAdminUI.moduleId : System.String { get }
 ModuleVisibilityAdminUI.profileInput(System.String, ModuleVisibilityAdminUI+Model) : ToolUp.Platform.ModuleVisibilityProfileInput
-ModuleVisibilityAdminUI.update(ModuleVisibilityAdminUI+Msg, ModuleVisibilityAdminUI+Model) : System.Tuple`2[ModuleVisibilityAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ModuleVisibilityAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ModuleVisibilityAdminUI.update(ModuleVisibilityAdminUI+Msg, ModuleVisibilityAdminUI+Model) : System.Tuple`2[ModuleVisibilityAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ModuleVisibilityAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[ModuleVisibilityAdminUI+Msg]]]]
 ModuleVisibilityAdminUI+Model (class)
 ModuleVisibilityAdminUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityProfile], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution], System.Boolean, ModuleVisibilityAdminUI+RuleKind, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], ToolUp.Platform.ModuleVisibilityAdminMessages)
 ModuleVisibilityAdminUI+Model.Busy : System.Boolean { get }
@@ -1298,9 +1298,9 @@ ModuleVisibilityAdminUI+RuleKind+Tags.Allow : System.Int32 (literal)
 ModuleVisibilityAdminUI+RuleKind+Tags.Deny : System.Int32 (literal)
 NotificationPreferencesUI (class)
 NotificationPreferencesUI.builtIn : ToolUp.Platform.BuiltIn`2[NotificationPreferencesUI+Model, NotificationPreferencesUI+Msg] { get }
-NotificationPreferencesUI.init() : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[NotificationPreferencesUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+NotificationPreferencesUI.init() : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[NotificationPreferencesUI+Msg, ToolUp.Platform.RemoteEffect`1[NotificationPreferencesUI+Msg]]]]
 NotificationPreferencesUI.moduleId : System.String { get }
-NotificationPreferencesUI.update(NotificationPreferencesUI+Msg, NotificationPreferencesUI+Model) : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[NotificationPreferencesUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+NotificationPreferencesUI.update(NotificationPreferencesUI+Msg, NotificationPreferencesUI+Model) : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[NotificationPreferencesUI+Msg, ToolUp.Platform.RemoteEffect`1[NotificationPreferencesUI+Msg]]]]
 NotificationPreferencesUI+Model (class)
 NotificationPreferencesUI+Model..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationPreferenceView], ToolUp.Platform.UserNotificationPreferences, System.Boolean, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice])
 NotificationPreferencesUI+Model.Busy : System.Boolean { get }
@@ -1341,9 +1341,9 @@ NotificationPreferencesUI+Msg+ViewLoaded (class)
 NotificationPreferencesUI+Msg+ViewLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationPreferenceView, System.String] { get }
 ObservabilityUI (class)
 ObservabilityUI.builtIn : ToolUp.Platform.BuiltIn`2[ObservabilityUI+Model, ObservabilityUI+Msg] { get }
-ObservabilityUI.init() : System.Tuple`2[ObservabilityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ObservabilityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ObservabilityUI.init() : System.Tuple`2[ObservabilityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ObservabilityUI+Msg, ToolUp.Platform.RemoteEffect`1[ObservabilityUI+Msg]]]]
 ObservabilityUI.moduleId : System.String { get }
-ObservabilityUI.update(ObservabilityUI+Msg, ObservabilityUI+Model) : System.Tuple`2[ObservabilityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ObservabilityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ObservabilityUI.update(ObservabilityUI+Msg, ObservabilityUI+Model) : System.Tuple`2[ObservabilityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ObservabilityUI+Msg, ToolUp.Platform.RemoteEffect`1[ObservabilityUI+Msg]]]]
 ObservabilityUI+FetchError (class)
 ObservabilityUI+FetchError.Forbidden : ObservabilityUI+FetchError { get }
 ObservabilityUI+FetchError.IsForbidden : System.Boolean { get }
@@ -1456,9 +1456,9 @@ ObservabilityUI+Tab+Tags.LogsTab : System.Int32 (literal)
 ObservabilityUI+Tab+Tags.MetricsTab : System.Int32 (literal)
 PermissionsAdminUI (class)
 PermissionsAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[PermissionsAdminUI+Model, PermissionsAdminUI+Msg] { get }
-PermissionsAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PermissionsAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PermissionsAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[PermissionsAdminUI+Msg]]]]
 PermissionsAdminUI.moduleId : System.String { get }
-PermissionsAdminUI.update(PermissionsAdminUI+Msg, PermissionsAdminUI+Model) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PermissionsAdminUI.update(PermissionsAdminUI+Msg, PermissionsAdminUI+Model) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PermissionsAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[PermissionsAdminUI+Msg]]]]
 PermissionsAdminUI+Model (class)
 PermissionsAdminUI+Model..ctor(PermissionsAdminUI+Tab, ToolUp.Platform.Remote`2[PermissionsAdminUI+TeamView, System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.PermissionsAdminMessages)
 PermissionsAdminUI+Model.ActiveTab : PermissionsAdminUI+Tab { get }
@@ -1565,12 +1565,12 @@ PermissionsAdminUI+TeamView.Permissions : ToolUp.Platform.TeamPermissions { get 
 PermissionsAdminUI+TeamView.TeamId : System.String { get }
 PlatformAdminUI (class)
 PlatformAdminUI.builtIn(ToolUp.Platform.PublicUtilityConfig) : ToolUp.Platform.BuiltIn`2[PlatformAdminUI+Model, PlatformAdminUI+Msg]
-PlatformAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PlatformAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PlatformAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[PlatformAdminUI+Msg]]]]
 PlatformAdminUI.moduleId : System.String { get }
-PlatformAdminUI.update(PlatformAdminUI+Msg, PlatformAdminUI+Model) : System.Tuple`2[PlatformAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformAdminUI.update(PlatformAdminUI+Msg, PlatformAdminUI+Model) : System.Tuple`2[PlatformAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[PlatformAdminUI+Msg]]]]
 PlatformAdminUI+AssignConfirm (class)
 PlatformAdminUI+AssignConfirm.init(System.String) : PlatformAdminUI+AssignConfirm+Model
-PlatformAdminUI+AssignConfirm.update(PlatformAdminUI+AssignConfirm+Msg, PlatformAdminUI+AssignConfirm+Model) : System.Tuple`2[PlatformAdminUI+AssignConfirm+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+AssignConfirm+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformAdminUI+AssignConfirm.update(PlatformAdminUI+AssignConfirm+Msg, PlatformAdminUI+AssignConfirm+Model) : System.Tuple`2[PlatformAdminUI+AssignConfirm+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformAdminUI+AssignConfirm+Msg, ToolUp.Platform.RemoteEffect`1[PlatformAdminUI+AssignConfirm+Msg]]]]
 PlatformAdminUI+AssignConfirm.view(ToolUp.Platform.PlatformAdminMessages, UserDirectory+Model, PlatformAdminUI+AssignConfirm+Model, Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+AssignConfirm+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 PlatformAdminUI+AssignConfirm+Model (class)
 PlatformAdminUI+AssignConfirm+Model..ctor(System.String, System.Boolean, PlatformAdminUI+AssignConfirm+Outcome)
@@ -1605,7 +1605,7 @@ PlatformAdminUI+AssignConfirm+Outcome+Tags.Done : System.Int32 (literal)
 PlatformAdminUI+AssignConfirm+Outcome+Tags.Open : System.Int32 (literal)
 PlatformAdminUI+ConfirmDeleteTeam (class)
 PlatformAdminUI+ConfirmDeleteTeam.init(System.String, System.String) : PlatformAdminUI+ConfirmDeleteTeam+Model
-PlatformAdminUI+ConfirmDeleteTeam.update(PlatformAdminUI+ConfirmDeleteTeam+Msg, PlatformAdminUI+ConfirmDeleteTeam+Model) : System.Tuple`2[PlatformAdminUI+ConfirmDeleteTeam+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+ConfirmDeleteTeam+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformAdminUI+ConfirmDeleteTeam.update(PlatformAdminUI+ConfirmDeleteTeam+Msg, PlatformAdminUI+ConfirmDeleteTeam+Model) : System.Tuple`2[PlatformAdminUI+ConfirmDeleteTeam+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformAdminUI+ConfirmDeleteTeam+Msg, ToolUp.Platform.RemoteEffect`1[PlatformAdminUI+ConfirmDeleteTeam+Msg]]]]
 PlatformAdminUI+ConfirmDeleteTeam.view(ToolUp.Platform.PlatformAdminMessages, PlatformAdminUI+ConfirmDeleteTeam+Model, Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+ConfirmDeleteTeam+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 PlatformAdminUI+ConfirmDeleteTeam+Model (class)
 PlatformAdminUI+ConfirmDeleteTeam+Model..ctor(System.String, System.String, System.Boolean, PlatformAdminUI+ConfirmDeleteTeam+Outcome)
@@ -1768,9 +1768,9 @@ PlatformAdminUI+Tab+Tags.SettingsTab : System.Int32 (literal)
 PlatformAdminUI+Tab+Tags.TeamsTab : System.Int32 (literal)
 PlatformUsersUI (class)
 PlatformUsersUI.builtIn : ToolUp.Platform.BuiltIn`2[PlatformUsersUI+Model, PlatformUsersUI+Msg] { get }
-PlatformUsersUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformUsersUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformUsersUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformUsersUI+Msg, ToolUp.Platform.RemoteEffect`1[PlatformUsersUI+Msg]]]]
 PlatformUsersUI.moduleId : System.String { get }
-PlatformUsersUI.update(PlatformUsersUI+Msg, PlatformUsersUI+Model) : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformUsersUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformUsersUI.update(PlatformUsersUI+Msg, PlatformUsersUI+Model) : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformUsersUI+Msg, ToolUp.Platform.RemoteEffect`1[PlatformUsersUI+Msg]]]]
 PlatformUsersUI+Model (class)
 PlatformUsersUI+Model..ctor(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrincipalSummary]], System.Boolean, System.Boolean, UserDirectory+Model, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], Microsoft.FSharp.Core.FSharpOption`1[PlatformUsersUI+OffboardModalState], ToolUp.Platform.PlatformUsersMessages)
 PlatformUsersUI+Model.Directory : UserDirectory+Model { get }
@@ -1884,10 +1884,10 @@ ProcessedDataContext+ProcessedData (class)
 ProcessedDataContext+ProcessedData.forType(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]
 ProviderProfileUI (class)
 ProviderProfileUI.ProviderProfilePanel(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
-ProviderProfileUI.init(ProviderProfileUI+ProviderProfileConfig) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ProviderProfileUI.init(ProviderProfileUI+ProviderProfileConfig) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ProviderProfileUI+Msg, ToolUp.Platform.RemoteEffect`1[ProviderProfileUI+Msg]]]]
 ProviderProfileUI.parseTags(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ProviderProfileUI.saveBlocked(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+VerificationState, ProviderProfileUI+ProviderCandidate) : System.Boolean
-ProviderProfileUI.update(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+Msg, ProviderProfileUI+Model) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ProviderProfileUI.update(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+Msg, ProviderProfileUI+Model) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ProviderProfileUI+Msg, ToolUp.Platform.RemoteEffect`1[ProviderProfileUI+Msg]]]]
 ProviderProfileUI.view(ProviderProfileUI+ProviderProfileConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ProviderProfileUI+EditorSeed (class)
 ProviderProfileUI+EditorSeed..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, System.String, System.Boolean, System.Boolean)
@@ -2010,9 +2010,9 @@ ProviderProfileUI+VerificationState+Tags.Refused : System.Int32 (literal)
 ProviderProfileUI+VerificationState+Tags.Running : System.Int32 (literal)
 ServiceAccountUI (class)
 ServiceAccountUI.builtIn : ToolUp.Platform.BuiltIn`2[ServiceAccountUI+Model, ServiceAccountUI+Msg] { get }
-ServiceAccountUI.init() : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceAccountUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceAccountUI.init() : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ServiceAccountUI+Msg, ToolUp.Platform.RemoteEffect`1[ServiceAccountUI+Msg]]]]
 ServiceAccountUI.moduleId : System.String { get }
-ServiceAccountUI.update(ServiceAccountUI+Msg, ServiceAccountUI+Model) : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceAccountUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceAccountUI.update(ServiceAccountUI+Msg, ServiceAccountUI+Model) : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ServiceAccountUI+Msg, ToolUp.Platform.RemoteEffect`1[ServiceAccountUI+Msg]]]]
 ServiceAccountUI+Model (class)
 ServiceAccountUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView], Microsoft.FSharp.Core.FSharpOption`1[ServiceAccountUI+PendingSecret], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice])
 ServiceAccountUI+Model.Accounts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount] { get }
@@ -2089,9 +2089,9 @@ ServiceAccountUI+PendingSecret.Token : ToolUp.Platform.ServiceAccountTokenView {
 ServiceStatusBoardUI (class)
 ServiceStatusBoardUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
 ServiceStatusBoardUI.builtIn : ToolUp.Platform.BuiltIn`2[ServiceStatusBoardUI+Model, ServiceStatusBoardUI+Msg] { get }
-ServiceStatusBoardUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ServiceStatusBoardUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceStatusBoardUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceStatusBoardUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ServiceStatusBoardUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ServiceStatusBoardUI+Msg, ToolUp.Platform.RemoteEffect`1[ServiceStatusBoardUI+Msg]]]]
 ServiceStatusBoardUI.moduleId : System.String { get }
-ServiceStatusBoardUI.update(ServiceStatusBoardUI+Msg, ServiceStatusBoardUI+Model) : System.Tuple`2[ServiceStatusBoardUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceStatusBoardUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceStatusBoardUI.update(ServiceStatusBoardUI+Msg, ServiceStatusBoardUI+Model) : System.Tuple`2[ServiceStatusBoardUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ServiceStatusBoardUI+Msg, ToolUp.Platform.RemoteEffect`1[ServiceStatusBoardUI+Msg]]]]
 ServiceStatusBoardUI+Model (class)
 ServiceStatusBoardUI+Model..ctor(ToolUp.Platform.Remote`2[ToolUp.Platform.ServiceStatusSnapshot, System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], ToolUp.Platform.ServiceStatusBoardMessages)
 ServiceStatusBoardUI+Model.Collapsed : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
@@ -2124,10 +2124,10 @@ ServiceStatusBoardUI+Msg+ToggleCollapsed (class)
 ServiceStatusBoardUI+Msg+ToggleCollapsed.section : System.String { get }
 SessionSecurityUI (class)
 SessionSecurityUI.builtIn : ToolUp.Platform.BuiltIn`2[SessionSecurityUI+Model, SessionSecurityUI+Msg] { get }
-SessionSecurityUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+SessionSecurityUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[SessionSecurityUI+Msg, ToolUp.Platform.RemoteEffect`1[SessionSecurityUI+Msg]]]]
 SessionSecurityUI.lastSeenLabelWith(ToolUp.Platform.SessionSecurityMessages, System.DateTimeOffset, System.DateTimeOffset) : System.String
 SessionSecurityUI.moduleId : System.String { get }
-SessionSecurityUI.update(SessionSecurityUI+Msg, SessionSecurityUI+Model) : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+SessionSecurityUI.update(SessionSecurityUI+Msg, SessionSecurityUI+Model) : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[SessionSecurityUI+Msg, ToolUp.Platform.RemoteEffect`1[SessionSecurityUI+Msg]]]]
 SessionSecurityUI.view(SessionSecurityUI+Model, ToolUp.Platform.RenderContext`1[SessionSecurityUI+Msg]) : ToolUp.Platform.PageContent
 SessionSecurityUI+Model (class)
 SessionSecurityUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SessionRecord], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice], ToolUp.Platform.SessionSecurityMessages)
@@ -2189,7 +2189,7 @@ SidebarPreferences.hide(System.String, SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.isHidden(System.String, SidebarPreferences+UserSidebarPreferences) : System.Boolean
 SidebarPreferences.load() : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.normalise(SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
-SidebarPreferences.persist`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
+SidebarPreferences.persist`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.Exception], msg], SidebarPreferences+UserSidebarPreferences) : ToolUp.Platform.RemoteEffect`1[msg]
 SidebarPreferences.restore(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.save(SidebarPreferences+UserSidebarPreferences) : System.Void
 SidebarPreferences.setOrder(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
@@ -2211,13 +2211,13 @@ TeamConfigUI (class)
 TeamConfigUI.OutputVisibilitySection() : Fable.React.ReactElement
 TeamConfigUI.TeamOutputVisibilityNotice() : Fable.React.ReactElement
 TeamConfigUI.builtIn : ToolUp.Platform.BuiltIn`2[TeamConfigUI+Model, TeamConfigUI+Msg] { get }
-TeamConfigUI.init() : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamConfigUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamConfigUI.init() : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TeamConfigUI+Msg, ToolUp.Platform.RemoteEffect`1[TeamConfigUI+Msg]]]]
 TeamConfigUI.moduleId : System.String { get }
 TeamConfigUI.outputLevelDescription(ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TeamVisibilityLevel) : System.String
 TeamConfigUI.outputLevelLabel(ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TeamVisibilityLevel) : System.String
 TeamConfigUI.outputVisibilityNoticeView(ToolUp.Platform.TeamConfigMessages, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamOutputVisibilityView]) : Fable.React.ReactElement
 TeamConfigUI.outputVisibilityView(ToolUp.Platform.TeamConfigMessages, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputVisibilityView, System.String]], TeamConfigUI+FormStatus, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
-TeamConfigUI.update(TeamConfigUI+Msg, TeamConfigUI+Model) : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamConfigUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamConfigUI.update(TeamConfigUI+Msg, TeamConfigUI+Model) : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TeamConfigUI+Msg, ToolUp.Platform.RemoteEffect`1[TeamConfigUI+Msg]]]]
 TeamConfigUI+FormStatus (class)
 TeamConfigUI+FormStatus.Idle : TeamConfigUI+FormStatus { get }
 TeamConfigUI+FormStatus.IsFailed : System.Boolean { get }
@@ -2346,12 +2346,12 @@ TeamConfigUI+Tab+Tags.OutputVisibilityTab : System.Int32 (literal)
 TeamManagerUI (class)
 TeamManagerUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
 TeamManagerUI.builtIn : ToolUp.Platform.BuiltIn`2[TeamManagerUI+Model, TeamManagerUI+Msg] { get }
-TeamManagerUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[TeamManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamManagerUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[TeamManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TeamManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[TeamManagerUI+Msg]]]]
 TeamManagerUI.moduleId : System.String { get }
-TeamManagerUI.update(TeamManagerUI+Msg, TeamManagerUI+Model) : System.Tuple`2[TeamManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamManagerUI.update(TeamManagerUI+Msg, TeamManagerUI+Model) : System.Tuple`2[TeamManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TeamManagerUI+Msg, ToolUp.Platform.RemoteEffect`1[TeamManagerUI+Msg]]]]
 TeamManagerUI+IssueByEmail (class)
 TeamManagerUI+IssueByEmail.init(System.String, System.String) : TeamManagerUI+IssueByEmail+Model
-TeamManagerUI+IssueByEmail.update(TeamManagerUI+IssueByEmail+Msg, TeamManagerUI+IssueByEmail+Model) : System.Tuple`3[TeamManagerUI+IssueByEmail+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamManagerUI+IssueByEmail+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], TeamManagerUI+IssueByEmail+Outcome]
+TeamManagerUI+IssueByEmail.update(TeamManagerUI+IssueByEmail+Msg, TeamManagerUI+IssueByEmail+Model) : System.Tuple`3[TeamManagerUI+IssueByEmail+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TeamManagerUI+IssueByEmail+Msg, ToolUp.Platform.RemoteEffect`1[TeamManagerUI+IssueByEmail+Msg]]], TeamManagerUI+IssueByEmail+Outcome]
 TeamManagerUI+IssueByEmail+Model (class)
 TeamManagerUI+IssueByEmail+Model..ctor(System.String, System.String, ToolUp.Platform.TeamRole, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
 TeamManagerUI+IssueByEmail+Model.Email : System.String { get }
@@ -2578,7 +2578,7 @@ TeamManagerUI+Msg+TransferMsg (class)
 TeamManagerUI+Msg+TransferMsg.Item : TeamManagerUI+TransferOwnership+Msg { get }
 TeamManagerUI+RevokeByEmail (class)
 TeamManagerUI+RevokeByEmail.init(System.String, System.String) : TeamManagerUI+RevokeByEmail+Model
-TeamManagerUI+RevokeByEmail.update(TeamManagerUI+RevokeByEmail+Msg, TeamManagerUI+RevokeByEmail+Model) : System.Tuple`3[TeamManagerUI+RevokeByEmail+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamManagerUI+RevokeByEmail+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], TeamManagerUI+RevokeByEmail+Outcome]
+TeamManagerUI+RevokeByEmail.update(TeamManagerUI+RevokeByEmail+Msg, TeamManagerUI+RevokeByEmail+Model) : System.Tuple`3[TeamManagerUI+RevokeByEmail+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TeamManagerUI+RevokeByEmail+Msg, ToolUp.Platform.RemoteEffect`1[TeamManagerUI+RevokeByEmail+Msg]]], TeamManagerUI+RevokeByEmail+Outcome]
 TeamManagerUI+RevokeByEmail+Model (class)
 TeamManagerUI+RevokeByEmail+Model..ctor(System.String, System.String, System.Boolean)
 TeamManagerUI+RevokeByEmail+Model.Email : System.String { get }
@@ -2616,7 +2616,7 @@ TeamManagerUI+RevokeByEmail+Outcome+Tags.Revoked : System.Int32 (literal)
 TeamManagerUI+RevokeByEmail+Outcome+Tags.Stay : System.Int32 (literal)
 TeamManagerUI+TransferOwnership (class)
 TeamManagerUI+TransferOwnership.init(System.String) : TeamManagerUI+TransferOwnership+Model
-TeamManagerUI+TransferOwnership.update(TeamManagerUI+TransferOwnership+Msg, TeamManagerUI+TransferOwnership+Model) : System.Tuple`3[TeamManagerUI+TransferOwnership+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamManagerUI+TransferOwnership+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], TeamManagerUI+TransferOwnership+Outcome]
+TeamManagerUI+TransferOwnership.update(TeamManagerUI+TransferOwnership+Msg, TeamManagerUI+TransferOwnership+Model) : System.Tuple`3[TeamManagerUI+TransferOwnership+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TeamManagerUI+TransferOwnership+Msg, ToolUp.Platform.RemoteEffect`1[TeamManagerUI+TransferOwnership+Msg]]], TeamManagerUI+TransferOwnership+Outcome]
 TeamManagerUI+TransferOwnership+Model (class)
 TeamManagerUI+TransferOwnership+Model..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamManagerUI+TransferOwnership+Step, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 TeamManagerUI+TransferOwnership+Model.Query : System.String { get }
@@ -2688,8 +2688,8 @@ TeamManagerUI+View+TeamDetails.teamId : System.String { get }
 TeamProviderUI (class)
 TeamProviderUI.TeamProviderPanel(TeamProviderUI+TeamProviderConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 TeamProviderUI.canEdit(TeamProviderUI+TeamProviderConfig) : System.Boolean
-TeamProviderUI.init(TeamProviderUI+TeamProviderConfig) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
-TeamProviderUI.update(TeamProviderUI+TeamProviderConfig, ProviderProfileUI+Msg, ProviderProfileUI+Model) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamProviderUI.init(TeamProviderUI+TeamProviderConfig) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ProviderProfileUI+Msg, ToolUp.Platform.RemoteEffect`1[ProviderProfileUI+Msg]]]]
+TeamProviderUI.update(TeamProviderUI+TeamProviderConfig, ProviderProfileUI+Msg, ProviderProfileUI+Model) : System.Tuple`2[ProviderProfileUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ProviderProfileUI+Msg, ToolUp.Platform.RemoteEffect`1[ProviderProfileUI+Msg]]]]
 TeamProviderUI.view(TeamProviderUI+TeamProviderConfig, ProviderProfileUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[ProviderProfileUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 TeamProviderUI+TeamProviderConfig (class)
 TeamProviderUI+TeamProviderConfig..ctor(ProviderProfileUI+ProviderProfileConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], Microsoft.FSharp.Core.FSharpOption`1[System.String], TeamProviderUI+TeamProviderMessages)
@@ -2712,9 +2712,9 @@ TeamProviderUI+TeamProviderMessagesModule (class)
 TeamProviderUI+TeamProviderMessagesModule.defaults : TeamProviderUI+TeamProviderMessages { get }
 TenantLifecycleAdminUI (class)
 TenantLifecycleAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[TenantLifecycleAdminUI+Model, TenantLifecycleAdminUI+Msg] { get }
-TenantLifecycleAdminUI.init() : System.Tuple`2[TenantLifecycleAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TenantLifecycleAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TenantLifecycleAdminUI.init() : System.Tuple`2[TenantLifecycleAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TenantLifecycleAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[TenantLifecycleAdminUI+Msg]]]]
 TenantLifecycleAdminUI.moduleId : System.String { get }
-TenantLifecycleAdminUI.update(TenantLifecycleAdminUI+Msg, TenantLifecycleAdminUI+Model) : System.Tuple`2[TenantLifecycleAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TenantLifecycleAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TenantLifecycleAdminUI.update(TenantLifecycleAdminUI+Msg, TenantLifecycleAdminUI+Model) : System.Tuple`2[TenantLifecycleAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[TenantLifecycleAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[TenantLifecycleAdminUI+Msg]]]]
 TenantLifecycleAdminUI+Model (class)
 TenantLifecycleAdminUI+Model..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.LifecycleSummary], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice])
 TenantLifecycleAdminUI+Model.Error : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Notice] { get }
@@ -2736,247 +2736,6 @@ TenantLifecycleAdminUI+Msg+Tags (class)
 TenantLifecycleAdminUI+Msg+Tags.DismissError : System.Int32 (literal)
 TenantLifecycleAdminUI+Msg+Tags.SubmitScope : System.Int32 (literal)
 TenantLifecycleAdminUI+Msg+Tags.SummaryLoaded : System.Int32 (literal)
-ToolUp.Elmish.Cmd (class)
-ToolUp.Elmish.Cmd.batch`2(a) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, msg], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd.none`1() : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd.ofEffect`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd.ofMsg`1(msg) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfAsync (class)
-ToolUp.Elmish.Cmd+OfAsync.attempt`3(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[a]], a, Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfAsync.either`3(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[a]], a, Microsoft.FSharp.Core.FSharpFunc`2[a, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfAsync.perform`3(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[a]], a, Microsoft.FSharp.Core.FSharpFunc`2[a, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting (class)
-ToolUp.Elmish.Cmd+OfRemoting.callStreamingWithHandle`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, System.Collections.Generic.IAsyncEnumerable`1[element]], a, Microsoft.FSharp.Core.FSharpFunc`2[System.IDisposable, msg], Microsoft.FSharp.Core.FSharpFunc`2[element, msg], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting.callStreamingWithName`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, System.Collections.Generic.IAsyncEnumerable`1[element]], a, Microsoft.FSharp.Core.FSharpFunc`2[element, msg], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting.callStreaming`3(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Collections.Generic.IAsyncEnumerable`1[element]], a, Microsoft.FSharp.Core.FSharpFunc`2[element, msg], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting.callWithName`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[result, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting.callWithRetryAndName`3(System.String, ToolUp.Elmish.Cmd+RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[result, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting.callWithRetry`3(ToolUp.Elmish.Cmd+RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[result, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting.call`3(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[result, msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Cmd+OfRemoting+CallInfo (class)
-ToolUp.Elmish.Cmd+OfRemoting+CallInfo..ctor(System.DateTime, System.String, System.Collections.Generic.Dictionary`2[System.String, System.Object])
-ToolUp.Elmish.Cmd+OfRemoting+CallInfo.Bag : System.Collections.Generic.Dictionary`2[System.String, System.Object] { get }
-ToolUp.Elmish.Cmd+OfRemoting+CallInfo.MethodName : System.String { get }
-ToolUp.Elmish.Cmd+OfRemoting+CallInfo.StartedAt : System.DateTime { get }
-ToolUp.Elmish.Cmd+OfRemoting+IRemotingInterceptor (interface)
-ToolUp.Elmish.Cmd+OfRemoting+IRemotingInterceptor.OnCalling(ToolUp.Elmish.Cmd+OfRemoting+CallInfo) : System.Void
-ToolUp.Elmish.Cmd+OfRemoting+IRemotingInterceptor.OnError(ToolUp.Elmish.Cmd+OfRemoting+CallInfo, System.Exception) : Microsoft.FSharp.Core.FSharpOption`1[System.Exception]
-ToolUp.Elmish.Cmd+OfRemoting+IRemotingInterceptor.OnSuccess(ToolUp.Elmish.Cmd+OfRemoting+CallInfo, System.Object) : System.Void
-ToolUp.Elmish.Cmd+OfRemoting+Interceptors (class)
-ToolUp.Elmish.Cmd+OfRemoting+Interceptors.register(ToolUp.Elmish.Cmd+OfRemoting+IRemotingInterceptor) : System.Void
-ToolUp.Elmish.Cmd+OfRemoting+Interceptors.setErrorReporter(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit]]) : System.Void
-ToolUp.Elmish.Cmd+OfRemoting+Interceptors.unregister(ToolUp.Elmish.Cmd+OfRemoting+IRemotingInterceptor) : System.Void
-ToolUp.Elmish.Cmd+RetryPolicy (class)
-ToolUp.Elmish.Cmd+RetryPolicy..ctor(System.Int32, System.Int32, System.Double, Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, System.Boolean])
-ToolUp.Elmish.Cmd+RetryPolicy.BackoffMultiplier : System.Double { get }
-ToolUp.Elmish.Cmd+RetryPolicy.InitialDelayMs : System.Int32 { get }
-ToolUp.Elmish.Cmd+RetryPolicy.MaxAttempts : System.Int32 { get }
-ToolUp.Elmish.Cmd+RetryPolicy.ShouldRetry : Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, System.Boolean] { get }
-ToolUp.Elmish.Cmd+RetryPolicyModule (class)
-ToolUp.Elmish.Cmd+RetryPolicyModule.defaultPolicy : ToolUp.Elmish.Cmd+RetryPolicy { get }
-ToolUp.Elmish.Cmd+RetryPolicyModule.none : ToolUp.Elmish.Cmd+RetryPolicy { get }
-ToolUp.Elmish.EffectHandle (class)
-ToolUp.Elmish.EffectHandle.manual`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]) : ToolUp.Elmish.EffectHandle`1[msg]
-ToolUp.Elmish.EffectHandle.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, msg], ToolUp.Elmish.EffectHandle`1[a]) : ToolUp.Elmish.EffectHandle`1[msg]
-ToolUp.Elmish.EffectHandle.moduleLifetime`1(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]) : ToolUp.Elmish.EffectHandle`1[msg]
-ToolUp.Elmish.EffectHandle.ofFireAndForget`1(System.String, ToolUp.Elmish.EffectLifetime, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Elmish.EffectHandle`1[msg]
-ToolUp.Elmish.EffectHandle.programLifetime`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]) : ToolUp.Elmish.EffectHandle`1[msg]
-ToolUp.Elmish.EffectHandle`1 (class)
-ToolUp.Elmish.EffectHandle`1..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable], ToolUp.Elmish.EffectLifetime)
-ToolUp.Elmish.EffectHandle`1.Id : System.String { get }
-ToolUp.Elmish.EffectHandle`1.Lifetime : ToolUp.Elmish.EffectLifetime { get }
-ToolUp.Elmish.EffectHandle`1.Start : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable] { get }
-ToolUp.Elmish.EffectLifetime (class)
-ToolUp.Elmish.EffectLifetime.IsManual : System.Boolean { get }
-ToolUp.Elmish.EffectLifetime.IsModule : System.Boolean { get }
-ToolUp.Elmish.EffectLifetime.IsProgram : System.Boolean { get }
-ToolUp.Elmish.EffectLifetime.Manual : ToolUp.Elmish.EffectLifetime { get }
-ToolUp.Elmish.EffectLifetime.Program : ToolUp.Elmish.EffectLifetime { get }
-ToolUp.Elmish.EffectLifetime.Tag : System.Int32 { get }
-ToolUp.Elmish.EffectLifetime+Module (class)
-ToolUp.Elmish.EffectLifetime+Module.moduleId : System.String { get }
-ToolUp.Elmish.EffectLifetime+Tags (class)
-ToolUp.Elmish.EffectLifetime+Tags.Manual : System.Int32 (literal)
-ToolUp.Elmish.EffectLifetime+Tags.Module : System.Int32 (literal)
-ToolUp.Elmish.EffectLifetime+Tags.Program : System.Int32 (literal)
-ToolUp.Elmish.ErrorContext (class)
-ToolUp.Elmish.ErrorContext..ctor(ToolUp.Elmish.ErrorPhase, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Exception)
-ToolUp.Elmish.ErrorContext.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Elmish.ErrorContext.Exception : System.Exception { get }
-ToolUp.Elmish.ErrorContext.Message : System.String { get }
-ToolUp.Elmish.ErrorContext.ModuleId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Elmish.ErrorContext.Phase : ToolUp.Elmish.ErrorPhase { get }
-ToolUp.Elmish.ErrorContextModule (class)
-ToolUp.Elmish.ErrorContextModule.ofUpstreamShape(System.String, System.Exception) : ToolUp.Elmish.ErrorContext
-ToolUp.Elmish.ErrorContextModule.withCorrelationId(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.ErrorContext) : System.Void
-ToolUp.Elmish.ErrorContextModule.withModule(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.ErrorContext) : System.Void
-ToolUp.Elmish.ErrorPhase (class)
-ToolUp.Elmish.ErrorPhase.Init : ToolUp.Elmish.ErrorPhase { get }
-ToolUp.Elmish.ErrorPhase.IsInit : System.Boolean { get }
-ToolUp.Elmish.ErrorPhase.IsSubscription : System.Boolean { get }
-ToolUp.Elmish.ErrorPhase.IsTermination : System.Boolean { get }
-ToolUp.Elmish.ErrorPhase.IsUpdate : System.Boolean { get }
-ToolUp.Elmish.ErrorPhase.IsView : System.Boolean { get }
-ToolUp.Elmish.ErrorPhase.Tag : System.Int32 { get }
-ToolUp.Elmish.ErrorPhase.Termination : ToolUp.Elmish.ErrorPhase { get }
-ToolUp.Elmish.ErrorPhase.View : ToolUp.Elmish.ErrorPhase { get }
-ToolUp.Elmish.ErrorPhase+Subscription (class)
-ToolUp.Elmish.ErrorPhase+Subscription.subId : System.String { get }
-ToolUp.Elmish.ErrorPhase+Tags (class)
-ToolUp.Elmish.ErrorPhase+Tags.Init : System.Int32 (literal)
-ToolUp.Elmish.ErrorPhase+Tags.Subscription : System.Int32 (literal)
-ToolUp.Elmish.ErrorPhase+Tags.Termination : System.Int32 (literal)
-ToolUp.Elmish.ErrorPhase+Tags.Update : System.Int32 (literal)
-ToolUp.Elmish.ErrorPhase+Tags.View : System.Int32 (literal)
-ToolUp.Elmish.ErrorPhase+Update (class)
-ToolUp.Elmish.ErrorPhase+Update.message : System.Object { get }
-ToolUp.Elmish.HMR.Program (class)
-ToolUp.Elmish.HMR.Program.runWith`4(arg, ToolUp.Elmish.Program`4[arg, model, msg, view]) : System.Void
-ToolUp.Elmish.HMR.Program.run`3(ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, model, msg, view]) : System.Void
-ToolUp.Elmish.HMR.Program.withReactBatched`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.HMR.Program.withReactHydrate`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.HMR.Program.withReactStoreHydrate`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.HMR.Program.withReactStore`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.HMR.Program.withReactSynchronous`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.IDispatcher`1 (interface)
-ToolUp.Elmish.IDispatcher`1.Dispatch(msg) : System.Void
-ToolUp.Elmish.IDispatcher`1.DispatchAsync(Microsoft.FSharp.Control.FSharpAsync`1[msg]) : System.Void
-ToolUp.Elmish.IDispatcher`1.IsActive : System.Boolean { get }
-ToolUp.Elmish.IDispatcher`1.Terminate() : System.Void
-ToolUp.Elmish.IEffectController (interface)
-ToolUp.Elmish.IEffectController.DisposeById(System.String) : System.Void
-ToolUp.Elmish.IEffectController.DisposeByModule(System.String) : System.Void
-ToolUp.Elmish.Memo (class)
-ToolUp.Elmish.Memo.byRef2`3(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[b, v]]) : Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[b, v]]
-ToolUp.Elmish.Memo.byRef`2(Microsoft.FSharp.Core.FSharpFunc`2[a, v]) : Microsoft.FSharp.Core.FSharpFunc`2[a, v]
-ToolUp.Elmish.Memo.oneEntryBy`2(Microsoft.FSharp.Core.FSharpFunc`2[k, Microsoft.FSharp.Core.FSharpFunc`2[k, System.Boolean]], Microsoft.FSharp.Core.FSharpFunc`2[k, v]) : Microsoft.FSharp.Core.FSharpFunc`2[k, v]
-ToolUp.Elmish.Prefetch (class)
-ToolUp.Elmish.Prefetch.error`1(ToolUp.Elmish.Prefetch`1[a]) : Microsoft.FSharp.Core.FSharpOption`1[System.Exception]
-ToolUp.Elmish.Prefetch.failed`1(System.Exception) : ToolUp.Elmish.Prefetch`1[a]
-ToolUp.Elmish.Prefetch.isComplete`1(ToolUp.Elmish.Prefetch`1[a]) : System.Boolean
-ToolUp.Elmish.Prefetch.isFailed`1(ToolUp.Elmish.Prefetch`1[a]) : System.Boolean
-ToolUp.Elmish.Prefetch.isLoaded`1(ToolUp.Elmish.Prefetch`1[a]) : System.Boolean
-ToolUp.Elmish.Prefetch.loaded`1(a) : ToolUp.Elmish.Prefetch`1[a]
-ToolUp.Elmish.Prefetch.none`1() : ToolUp.Elmish.Prefetch`1[a]
-ToolUp.Elmish.Prefetch.onAllLoaded`1(Microsoft.FSharp.Collections.FSharpList`1[System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Prefetch.onAllReady`1(Microsoft.FSharp.Collections.FSharpList`1[System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.Prefetch.reset`1(ToolUp.Elmish.Prefetch`1[a]) : ToolUp.Elmish.Prefetch`1[a]
-ToolUp.Elmish.Prefetch.value`1(ToolUp.Elmish.Prefetch`1[a]) : Microsoft.FSharp.Core.FSharpOption`1[a]
-ToolUp.Elmish.PrefetchStatus`1 (class)
-ToolUp.Elmish.PrefetchStatus`1.IsFailed : System.Boolean { get }
-ToolUp.Elmish.PrefetchStatus`1.IsLoaded : System.Boolean { get }
-ToolUp.Elmish.PrefetchStatus`1.IsPending : System.Boolean { get }
-ToolUp.Elmish.PrefetchStatus`1.Pending : ToolUp.Elmish.PrefetchStatus`1[a] { get }
-ToolUp.Elmish.PrefetchStatus`1.Tag : System.Int32 { get }
-ToolUp.Elmish.PrefetchStatus`1+Failed (class)
-ToolUp.Elmish.PrefetchStatus`1+Failed.Item : System.Exception { get }
-ToolUp.Elmish.PrefetchStatus`1+Loaded (class)
-ToolUp.Elmish.PrefetchStatus`1+Loaded.Item : a { get }
-ToolUp.Elmish.PrefetchStatus`1+Tags (class)
-ToolUp.Elmish.PrefetchStatus`1+Tags.Failed : System.Int32 (literal)
-ToolUp.Elmish.PrefetchStatus`1+Tags.Loaded : System.Int32 (literal)
-ToolUp.Elmish.PrefetchStatus`1+Tags.Pending : System.Int32 (literal)
-ToolUp.Elmish.Prefetch`1 (class)
-ToolUp.Elmish.Prefetch`1..ctor(ToolUp.Elmish.PrefetchStatus`1[a])
-ToolUp.Elmish.Prefetch`1.Status : ToolUp.Elmish.PrefetchStatus`1[a] { get }
-ToolUp.Elmish.ProgramModule (class)
-ToolUp.Elmish.ProgramModule.effectIds`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-ToolUp.Elmish.ProgramModule.errorReporter`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]
-ToolUp.Elmish.ProgramModule.init`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[arg, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]
-ToolUp.Elmish.ProgramModule.mapErrorHandler`4(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.mapSubscription`4(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.mapTermination`4(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.Unit]], System.Tuple`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.Unit]]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.map`7(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[arg, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Tuple`2[b, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[b, System.Tuple`2[b, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], view]], Microsoft.FSharp.Core.FSharpFunc`2[b, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], c]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[b, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]], Microsoft.FSharp.Core.FSharpFunc`2[b, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.Unit]], System.Tuple`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[b, Microsoft.FSharp.Core.Unit]]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[a, b, msg, c]
-ToolUp.Elmish.ProgramModule.mkProgram`4(Microsoft.FSharp.Core.FSharpFunc`2[arg, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], view]]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.mkSimple`4(Microsoft.FSharp.Core.FSharpFunc`2[arg, model], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, model]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], view]]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.onError`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit]
-ToolUp.Elmish.ProgramModule.ringBufferCapacity`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : System.Int32
-ToolUp.Elmish.ProgramModule.runWithDispatch`4(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit]], arg, ToolUp.Elmish.Program`4[arg, model, msg, view]) : System.Void
-ToolUp.Elmish.ProgramModule.runWith`4(arg, ToolUp.Elmish.Program`4[arg, model, msg, view]) : System.Void
-ToolUp.Elmish.ProgramModule.run`3(ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, model, msg, view]) : System.Void
-ToolUp.Elmish.ProgramModule.safeMsgRepr`1(msg) : System.String
-ToolUp.Elmish.ProgramModule.setState`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.ProgramModule.update`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]]
-ToolUp.Elmish.ProgramModule.view`4(ToolUp.Elmish.Program`4[arg, model, msg, view]) : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], view]]
-ToolUp.Elmish.ProgramModule.withDispatcherHandle`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.IDispatcher`1[msg], Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withEffectControllerHandle`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.IEffectController, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withEffect`4(ToolUp.Elmish.EffectHandle`1[msg], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withErrorReporter`4(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withRingBufferCapacity`4(System.Int32, ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withSetState`4(Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withStableDispatch`5(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], stable], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[stable, view]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withSubscription`4(Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withTermination`4(Microsoft.FSharp.Core.FSharpFunc`2[msg, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.Unit], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.ProgramModule.withTrace`4(Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.Unit]]], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Elmish.Program`4 (class)
-ToolUp.Elmish.React.ModelStore (class)
-ToolUp.Elmish.React.ModelStore.create`2() : ToolUp.Elmish.React.ModelStore`2[model, msg]
-ToolUp.Elmish.React.ModelStore.refEquals`1(slice, slice) : System.Boolean
-ToolUp.Elmish.React.ModelStore.useSelector`3(ToolUp.Elmish.React.ModelStore`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, slice], Microsoft.FSharp.Core.FSharpFunc`2[slice, Microsoft.FSharp.Core.FSharpFunc`2[slice, System.Boolean]]) : slice
-ToolUp.Elmish.React.ModelStore`2 (class)
-ToolUp.Elmish.React.ModelStore`2..ctor()
-ToolUp.Elmish.React.ModelStore`2.Snapshot : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Elmish.React.StoreSnapshot`2[model, msg]] { get }
-ToolUp.Elmish.React.Program (class)
-ToolUp.Elmish.React.Program.withReactBatched`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.React.Program.withReactHydrate`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.React.Program.withReactStoreHydrate`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.React.Program.withReactStore`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.React.Program.withReactSynchronous`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
-ToolUp.Elmish.React.StoreSnapshot`2 (class)
-ToolUp.Elmish.React.StoreSnapshot`2..ctor(model, Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit])
-ToolUp.Elmish.React.StoreSnapshot`2.Dispatch : Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit] { get }
-ToolUp.Elmish.React.StoreSnapshot`2.Model : model { get }
-ToolUp.Elmish.RemoteCallSite (class)
-ToolUp.Elmish.RemoteCallSite..ctor(System.String, System.Object, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Elmish.Cmd+RetryPolicy])
-ToolUp.Elmish.RemoteCallSite.Argument : System.Object { get }
-ToolUp.Elmish.RemoteCallSite.Equals(System.Object) : System.Boolean
-ToolUp.Elmish.RemoteCallSite.GetHashCode() : System.Int32
-ToolUp.Elmish.RemoteCallSite.Method : System.String { get }
-ToolUp.Elmish.RemoteCallSite.Retry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Elmish.Cmd+RetryPolicy] { get }
-ToolUp.Elmish.RemoteCall`1 (class)
-ToolUp.Elmish.RemoteEffect (class)
-ToolUp.Elmish.RemoteEffect.callWithRetry`3(System.String, ToolUp.Elmish.Cmd+RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Elmish.RemoteEffect`1[msg]
-ToolUp.Elmish.RemoteEffect.call`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Elmish.RemoteEffect`1[msg]
-ToolUp.Elmish.RemoteEffect.flatten`1(Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpResult`2[t, System.String], System.Exception]) : Microsoft.FSharp.Core.FSharpResult`2[t, System.String]
-ToolUp.Elmish.RemoteEffect.legacy`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Elmish.RemoteEffect`1[msg]
-ToolUp.Elmish.RemoteEffect.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, b], ToolUp.Elmish.RemoteEffect`1[a]) : ToolUp.Elmish.RemoteEffect`1[b]
-ToolUp.Elmish.RemoteEffect.perform`1(ToolUp.Elmish.RemoteEffect`1[msg]) : Fuaran.MVU.Performance`1[msg]
-ToolUp.Elmish.RemoteEffect.run`2(model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Elmish.RemoteEffect`1[msg]]]) : System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
-ToolUp.Elmish.RemoteEffect.toCmd`1(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Elmish.RemoteEffect`1[msg]]]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
-ToolUp.Elmish.RemoteEffect`1 (class)
-ToolUp.Elmish.RemoteEffect`1.IsInvoke : System.Boolean { get }
-ToolUp.Elmish.RemoteEffect`1.IsLegacy : System.Boolean { get }
-ToolUp.Elmish.RemoteEffect`1.Tag : System.Int32 { get }
-ToolUp.Elmish.RemoteEffect`1+Invoke (class)
-ToolUp.Elmish.RemoteEffect`1+Invoke.Item : ToolUp.Elmish.RemoteCall`1[msg] { get }
-ToolUp.Elmish.RemoteEffect`1+Legacy (class)
-ToolUp.Elmish.RemoteEffect`1+Legacy.Item : Fuaran.MVU.LegacyEffect`1[msg] { get }
-ToolUp.Elmish.RemoteEffect`1+Tags (class)
-ToolUp.Elmish.RemoteEffect`1+Tags.Invoke : System.Int32 (literal)
-ToolUp.Elmish.RemoteEffect`1+Tags.Legacy : System.Int32 (literal)
-ToolUp.Elmish.Sub (class)
-ToolUp.Elmish.Sub.batch`2(a) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]
-ToolUp.Elmish.Sub.map`2(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, msg], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.Unit], System.IDisposable]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]
-ToolUp.Elmish.Sub.none`1() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]
-ToolUp.Elmish.Sub+Internal (class)
-ToolUp.Elmish.Sub+Internal.diff`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]) : System.Tuple`4[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]]
-ToolUp.Elmish.Sub+Internal.empty : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]] { get }
-ToolUp.Elmish.Sub+Internal+Fx (class)
-ToolUp.Elmish.Sub+Internal+Fx.change`2(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], b]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, System.IDisposable]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]]
-ToolUp.Elmish.Sub+Internal+Fx.stop`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], a]]) : System.Void
-ToolUp.Elmish.Sub+Internal+Fx.tryStart`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], a, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, System.IDisposable]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]]
-ToolUp.Elmish.Sub+Internal+Fx.tryStop(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable) : System.Void
-ToolUp.Elmish.Sub+Internal+Fx.warnDupe`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], a], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : a
-ToolUp.Elmish.Sub+Internal+NewSubs (class)
-ToolUp.Elmish.Sub+Internal+NewSubs._dupes`1() : Microsoft.FSharp.Collections.FSharpList`1[a]
-ToolUp.Elmish.Sub+Internal+NewSubs._newKeys`1() : Microsoft.FSharp.Collections.FSharpSet`1[b]
-ToolUp.Elmish.Sub+Internal+NewSubs._newSubs`1() : Microsoft.FSharp.Collections.FSharpList`1[c]
-ToolUp.Elmish.Sub+Internal+NewSubs.calculate`2(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[a, b]]) : System.Tuple`3[Microsoft.FSharp.Collections.FSharpList`1[a], Microsoft.FSharp.Collections.FSharpSet`1[a], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[a, b]]]
-ToolUp.Elmish.Sub+Internal+NewSubs.init`3() : System.Tuple`3[Microsoft.FSharp.Collections.FSharpList`1[a], Microsoft.FSharp.Collections.FSharpSet`1[b], Microsoft.FSharp.Collections.FSharpList`1[c]]
-ToolUp.Elmish.Sub+Internal+NewSubs.update`2(a, b, Microsoft.FSharp.Collections.FSharpList`1[a], Microsoft.FSharp.Collections.FSharpSet`1[a], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[a, b]]) : System.Tuple`3[Microsoft.FSharp.Collections.FSharpList`1[a], Microsoft.FSharp.Collections.FSharpSet`1[a], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[a, b]]]
-ToolUp.Elmish.Sub+Internal+SubId (class)
-ToolUp.Elmish.Sub+Internal+SubId.toString(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.Platform.AdPanel.AdScriptLoader (class)
 ToolUp.Platform.AdPanel.AdScriptLoader.ensureLoaded(System.String) : System.Void
 ToolUp.Platform.AdPanel.IAdAnalyticsSink (interface)
@@ -3174,17 +2933,17 @@ ToolUp.Platform.BootSources.reissuedBy`2(ToolUp.Platform.BootSources+ResetTrigge
 ToolUp.Platform.BootSources.retryable`2(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : System.Boolean
 ToolUp.Platform.BootSources.tryFind`2(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BootSources+BootSource`2[model, msg]]
 ToolUp.Platform.BootSources+BootLoads`2 (class)
-ToolUp.Platform.BootSources+BootLoads`2..ctor(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]])
-ToolUp.Platform.BootSources+BootLoads`2.ActiveTeam : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.Configs : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.DataSnapshot : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.Flags : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.Permissions : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.PlatformInfo : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.PlatformRole : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.TeamAutoSelect : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.TeamRole : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]] { get }
-ToolUp.Platform.BootSources+BootLoads`2.Teams : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.BootSources+BootLoads`2..ctor(Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]])
+ToolUp.Platform.BootSources+BootLoads`2.ActiveTeam : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Configs : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.DataSnapshot : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Flags : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Permissions : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.PlatformInfo : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.PlatformRole : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.TeamAutoSelect : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.TeamRole : Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]] { get }
+ToolUp.Platform.BootSources+BootLoads`2.Teams : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]] { get }
 ToolUp.Platform.BootSources+BootScope (class)
 ToolUp.Platform.BootSources+BootScope.Boot : ToolUp.Platform.BootSources+BootScope { get }
 ToolUp.Platform.BootSources+BootScope.IsBoot : System.Boolean { get }
@@ -3201,12 +2960,12 @@ ToolUp.Platform.BootSources+BootScope+Tags.OnDemand : System.Int32 (literal)
 ToolUp.Platform.BootSources+BootScope+Tags.Reported : System.Int32 (literal)
 ToolUp.Platform.BootSources+BootScope+Tags.TeamBoot : System.Int32 (literal)
 ToolUp.Platform.BootSources+BootSource`2 (class)
-ToolUp.Platform.BootSources+BootSource`2..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSourceMessages, System.String], ToolUp.Platform.BootSources+BootScope, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSources+BootLoads`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.BootSources+ResetTrigger])
+ToolUp.Platform.BootSources+BootSource`2..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSourceMessages, System.String], ToolUp.Platform.BootSources+BootScope, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSources+BootLoads`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]]], System.Boolean, System.Boolean, Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.BootSources+ResetTrigger])
 ToolUp.Platform.BootSources+BootSource`2.ClearedBy : Microsoft.FSharp.Collections.FSharpSet`1[ToolUp.Platform.BootSources+ResetTrigger] { get }
 ToolUp.Platform.BootSources+BootSource`2.GatesFirstInit : System.Boolean { get }
 ToolUp.Platform.BootSources+BootSource`2.Key : System.String { get }
 ToolUp.Platform.BootSources+BootSource`2.Label : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSourceMessages, System.String] { get }
-ToolUp.Platform.BootSources+BootSource`2.Load : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSources+BootLoads`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]] { get }
+ToolUp.Platform.BootSources+BootSource`2.Load : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BootSources+BootLoads`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]]] { get }
 ToolUp.Platform.BootSources+BootSource`2.Retryable : System.Boolean { get }
 ToolUp.Platform.BootSources+BootSource`2.Scope : ToolUp.Platform.BootSources+BootScope { get }
 ToolUp.Platform.BootSources+Key (class)
@@ -3286,15 +3045,15 @@ ToolUp.Platform.BuiltInView`2+Tags (class)
 ToolUp.Platform.BuiltInView`2+Tags.Page : System.Int32 (literal)
 ToolUp.Platform.BuiltInView`2+Tags.Pages : System.Int32 (literal)
 ToolUp.Platform.BuiltIn`2 (class)
-ToolUp.Platform.BuiltIn`2..ctor(System.String, ToolUp.Platform.ModuleLabel, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole], ToolUp.Platform.ModuleArea, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], ToolUp.Platform.BuiltInView`2[Model, Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModule`2[Model, Msg], ToolUp.Platform.ClientModule`2[Model, Msg]])
+ToolUp.Platform.BuiltIn`2..ctor(System.String, ToolUp.Platform.ModuleLabel, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole], ToolUp.Platform.ModuleArea, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]]], ToolUp.Platform.BuiltInView`2[Model, Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModule`2[Model, Msg], ToolUp.Platform.ClientModule`2[Model, Msg]])
 ToolUp.Platform.BuiltIn`2.Area : ToolUp.Platform.ModuleArea { get }
 ToolUp.Platform.BuiltIn`2.Defaults : ToolUp.Platform.ModuleLabel { get }
 ToolUp.Platform.BuiltIn`2.Extend : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModule`2[Model, Msg], ToolUp.Platform.ClientModule`2[Model, Msg]] { get }
 ToolUp.Platform.BuiltIn`2.Group : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.BuiltIn`2.Id : System.String { get }
-ToolUp.Platform.BuiltIn`2.Init : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]] { get }
+ToolUp.Platform.BuiltIn`2.Init : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]] { get }
 ToolUp.Platform.BuiltIn`2.NavRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole] { get }
-ToolUp.Platform.BuiltIn`2.Update : Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]] { get }
+ToolUp.Platform.BuiltIn`2.Update : Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]]] { get }
 ToolUp.Platform.BuiltIn`2.View : ToolUp.Platform.BuiltInView`2[Model, Msg] { get }
 ToolUp.Platform.BuiltIn`2.Visibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean] { get }
 ToolUp.Platform.BundleConstants (class)
@@ -3385,26 +3144,29 @@ ToolUp.Platform.Client.buildQueryBus(Microsoft.FSharp.Collections.FSharpList`1[T
 ToolUp.Platform.Client.currentNarrative(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Model) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.Platform.Client.dispatchers(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.Client+Dispatchers
 ToolUp.Platform.Client.emptyChrome : ToolUp.Platform.Client+ExtraChrome { get }
+ToolUp.Platform.Client.errorContextOf`1(Fuaran.MVU.Report`3[msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg]]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ErrorContext]
 ToolUp.Platform.Client.firstInitGates : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
-ToolUp.Platform.Client.init(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], Microsoft.FSharp.Core.Unit) : System.Tuple`2[ToolUp.Platform.Client+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.Platform.Client.init(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], Microsoft.FSharp.Core.Unit) : System.Tuple`2[ToolUp.Platform.Client+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ToolUp.Platform.Client+Msg, ToolUp.Platform.RemoteEffect`1[ToolUp.Platform.Client+Msg]]]]
 ToolUp.Platform.Client.installRequestSeam(ToolUp.Platform.ClientConfig) : System.Void
 ToolUp.Platform.Client.moduleIdentityReport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.String
 ToolUp.Platform.Client.moduleIdentityTable(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleIdentityRow]
 ToolUp.Platform.Client.moduleState(System.String, ToolUp.Platform.Client+Model) : Microsoft.FSharp.Core.FSharpOption`1[System.Object]
+ToolUp.Platform.Client.mountAt`2(System.String, Fuaran.MVU.React.Attach, Fuaran.MVU.React.ModelStore`2[model, Fuaran.MVU.React.ElementView`1[msg]], ToolUp.Platform.Client+ShellProgram`2[model, msg]) : Fuaran.MVU.React.Mounted`6[Microsoft.FSharp.Core.Unit, model, msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg], Fuaran.MVU.React.ElementView`1[msg]]
 ToolUp.Platform.Client.observeModuleStates(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleHost], ToolUp.Platform.Client+Model) : System.Void
 ToolUp.Platform.Client.prepareModules(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
-ToolUp.Platform.Client.program(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Msg, Fable.React.ReactElement]
-ToolUp.Platform.Client.programLifetimeEffects(ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Elmish.EffectHandle`1[ToolUp.Platform.Client+Msg]]
-ToolUp.Platform.Client.programOver`3(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], stable], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[stable, Fable.React.ReactElement]]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, model, msg, Fable.React.ReactElement]
+ToolUp.Platform.Client.program(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Platform.Client+ShellProgram`2[ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Msg]
+ToolUp.Platform.Client.programOver`3(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]]], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]]]], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Collections.FSharpMap`2[Fuaran.MVU.ResourceKey, ToolUp.Platform.Subscription`1[msg]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], stable], Microsoft.FSharp.Core.FSharpFunc`2[model, Microsoft.FSharp.Core.FSharpFunc`2[stable, Fable.React.ReactElement]]) : ToolUp.Platform.Client+ShellProgram`2[model, msg]
+ToolUp.Platform.Client.resources(ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Collections.FSharpMap`2[Fuaran.MVU.ResourceKey, ToolUp.Platform.Subscription`1[ToolUp.Platform.Client+Msg]]
 ToolUp.Platform.Client.run(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
-ToolUp.Platform.Client.shellStore`2(ToolUp.Elmish.React.ModelStore`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, ToolUp.Platform.Client+Model]) : ToolUp.Platform.Client+ShellStore
+ToolUp.Platform.Client.shellStore`2(Fuaran.MVU.React.ModelStore`2[model, view], Microsoft.FSharp.Core.FSharpFunc`2[model, ToolUp.Platform.Client+Model]) : ToolUp.Platform.Client+ShellStore
+ToolUp.Platform.Client.subscriptions(ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Subscription`1[ToolUp.Platform.Client+Msg]]
 ToolUp.Platform.Client.tryDispatchPublicEntry(ToolUp.Platform.ClientConfig) : System.Boolean
-ToolUp.Platform.Client.update(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, ToolUp.Platform.Client+Model) : System.Tuple`2[ToolUp.Platform.Client+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.Platform.Client.unmountOnUnload`2(Fuaran.MVU.React.Mounted`6[Microsoft.FSharp.Core.Unit, model, msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg], Fuaran.MVU.React.ElementView`1[msg]]) : Fuaran.MVU.React.Mounted`6[Microsoft.FSharp.Core.Unit, model, msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg], Fuaran.MVU.React.ElementView`1[msg]]
+ToolUp.Platform.Client.update(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, ToolUp.Platform.Client+Model) : System.Tuple`2[ToolUp.Platform.Client+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ToolUp.Platform.Client+Msg, ToolUp.Platform.RemoteEffect`1[ToolUp.Platform.Client+Msg]]]]
 ToolUp.Platform.Client.view(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Dispatchers) : Fable.React.ReactElement
 ToolUp.Platform.Client.viewSlicedOver(ToolUp.Platform.Client+ShellStore, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Dispatchers) : Fable.React.ReactElement
 ToolUp.Platform.Client.viewWithSignIn(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Dispatchers) : Fable.React.ReactElement
-ToolUp.Platform.Client.withModuleStateObserver`4(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Client+Msg]], Microsoft.FSharp.Core.FSharpFunc`2[model, ToolUp.Platform.Client+Model], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
-ToolUp.Platform.Client.withShellLifetimeEffects`4(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, msg], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
+ToolUp.Platform.Client.withModuleStateObserver`3(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Client+Msg]], Microsoft.FSharp.Core.FSharpFunc`2[model, ToolUp.Platform.Client+Model], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpFunc`2[model, System.Tuple`2[model, steps]]], msg, model) : System.Tuple`2[model, steps]
 ToolUp.Platform.Client+Dispatchers (class)
 ToolUp.Platform.Client+Dispatchers.Dispatch : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.Platform.Client+Dispatchers.ForModule(System.String) : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit]
@@ -3603,6 +3365,12 @@ ToolUp.Platform.Client+Msg+Tags.TeamSwitched : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ToggleShowAllModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+TeamSwitched (class)
 ToolUp.Platform.Client+Msg+TeamSwitched.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Client+ShellProgram`2 (class)
+ToolUp.Platform.Client+ShellProgram`2..ctor(Fuaran.MVU.Component`6[Microsoft.FSharp.Core.Unit, model, msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg], Fuaran.MVU.React.ElementView`1[msg]], Fuaran.MVU.Interpreter`3[msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg]], Fuaran.MVU.Host`5[model, msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg], Fuaran.MVU.React.ElementView`1[msg]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
+ToolUp.Platform.Client+ShellProgram`2.BeginMount : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
+ToolUp.Platform.Client+ShellProgram`2.Component : Fuaran.MVU.Component`6[Microsoft.FSharp.Core.Unit, model, msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg], Fuaran.MVU.React.ElementView`1[msg]] { get }
+ToolUp.Platform.Client+ShellProgram`2.Host : Fuaran.MVU.Host`5[model, msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg], Fuaran.MVU.React.ElementView`1[msg]] { get }
+ToolUp.Platform.Client+ShellProgram`2.Interpreter : Fuaran.MVU.Interpreter`3[msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg]] { get }
 ToolUp.Platform.Client+ShellStore (class)
 ToolUp.Platform.ClientBoundHostView (class)
 ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PageConfig, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, ToolUp.Platform.PageContent]]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
@@ -3672,6 +3440,7 @@ ToolUp.Platform.ClientHandlerRegistryModule (class)
 ToolUp.Platform.ClientHandlerRegistryModule.empty : ToolUp.Platform.ClientHandlerRegistry { get }
 ToolUp.Platform.ClientHostCapabilities (class)
 ToolUp.Platform.ClientHostCapabilities.create`1(Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.ClientHostCapabilities`1[Msg]
+ToolUp.Platform.ClientHostCapabilities.performCall`2(Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Control.FSharpAsync`1[r], Microsoft.FSharp.Core.FSharpFunc`2[r, Msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Msg]) : System.Void
 ToolUp.Platform.ClientHostCapabilities`1 (interface)
 ToolUp.Platform.ClientHostCapabilities`1.Call`1(Microsoft.FSharp.Control.FSharpAsync`1[r], Microsoft.FSharp.Core.FSharpFunc`2[r, Msg], Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Msg]) : System.Void
 ToolUp.Platform.ClientHostCapabilities`1.Dispatch(Msg) : System.Void
@@ -3701,7 +3470,7 @@ ToolUp.Platform.ClientModule.withActionKeys`2(Microsoft.FSharp.Collections.FShar
 ToolUp.Platform.ClientModule.withArea`2(ToolUp.Platform.ModuleArea, ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withAvailability`2(ToolUp.Platform.ModuleAvailability, ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withConfig`2(ToolUp.Platform.ModuleConfigSchema, ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
-ToolUp.Platform.ClientModule.withContextInit`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
+ToolUp.Platform.ClientModule.withContextInit`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withDataTypes`2(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withEventSubscription`2(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Msg], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withFeatureFlags`2(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
@@ -3719,17 +3488,17 @@ ToolUp.Platform.ClientModule.withQueryContract`4(ToolUp.Platform.ModuleQueryCont
 ToolUp.Platform.ClientModule.withQueryHandlers`2(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withQueryTargets`2(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withRequiredDataTypes`2(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
-ToolUp.Platform.ClientModule.withUnitInit`2(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], ToolUp.Platform.ClientModuleContext) : System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.Platform.ClientModule.withUnitInit`2(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]], ToolUp.Platform.ClientModuleContext) : System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]
 ToolUp.Platform.ClientModule.withView`2(Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[Msg], ToolUp.Platform.PageContent]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule.withVisibility`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientModule+ClientModuleSpec`2 (class)
-ToolUp.Platform.ClientModule+ClientModuleSpec`2..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], System.String, Fable.React.ReactElement)
+ToolUp.Platform.ClientModule+ClientModuleSpec`2..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]]], System.String, Fable.React.ReactElement)
 ToolUp.Platform.ClientModule+ClientModuleSpec`2.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.ClientModule+ClientModuleSpec`2.Init : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]] { get }
+ToolUp.Platform.ClientModule+ClientModuleSpec`2.Init : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]] { get }
 ToolUp.Platform.ClientModule+ClientModuleSpec`2.Name : System.String { get }
-ToolUp.Platform.ClientModule+ClientModuleSpec`2.Update : Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]] { get }
+ToolUp.Platform.ClientModule+ClientModuleSpec`2.Update : Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]]] { get }
 ToolUp.Platform.ClientModule`2 (class)
-ToolUp.Platform.ClientModule`2..ctor(ToolUp.Platform.ModuleDefinition, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[Msg], ToolUp.Platform.PageContent]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[Msg], ToolUp.Platform.PageContent]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.ModuleAvailability, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Toolup.Sidebar+SidebarPlacement], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole], ToolUp.Platform.ModuleArea, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[Msg]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Msg]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, ToolUp.Platform.UiStateReport]])
+ToolUp.Platform.ClientModule`2..ctor(ToolUp.Platform.ModuleDefinition, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[Msg], ToolUp.Platform.PageContent]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[Msg], ToolUp.Platform.PageContent]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.ModuleAvailability, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Toolup.Sidebar+SidebarPlacement], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole], ToolUp.Platform.ModuleArea, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[Msg]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Msg]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, ToolUp.Platform.UiStateReport]])
 ToolUp.Platform.ClientModule`2.ActionDecoder : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[Msg]]] { get }
 ToolUp.Platform.ClientModule`2.ActionKeys : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.ClientModule`2.Area : ToolUp.Platform.ModuleArea { get }
@@ -3741,7 +3510,7 @@ ToolUp.Platform.ClientModule`2.Definition : ToolUp.Platform.ModuleDefinition { g
 ToolUp.Platform.ClientModule`2.EventSubscriptions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Msg]] { get }
 ToolUp.Platform.ClientModule`2.FeatureFlags : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag] { get }
 ToolUp.Platform.ClientModule`2.Group : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.ClientModule`2.Init : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]] { get }
+ToolUp.Platform.ClientModule`2.Init : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]] { get }
 ToolUp.Platform.ClientModule`2.InspectState : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, ToolUp.Platform.UiStateReport]] { get }
 ToolUp.Platform.ClientModule`2.NavRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole] { get }
 ToolUp.Platform.ClientModule`2.NeedsData : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.Boolean]] { get }
@@ -3751,7 +3520,7 @@ ToolUp.Platform.ClientModule`2.Placement : Microsoft.FSharp.Core.FSharpOption`1[
 ToolUp.Platform.ClientModule`2.ProvidesNarrative : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]]]] { get }
 ToolUp.Platform.ClientModule`2.ProvidesProcessedData : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]]] { get }
 ToolUp.Platform.ClientModule`2.QueryTargets : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget]] { get }
-ToolUp.Platform.ClientModule`2.Update : Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]] { get }
+ToolUp.Platform.ClientModule`2.Update : Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.FSharpFunc`2[Model, System.Tuple`2[Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[Msg, ToolUp.Platform.RemoteEffect`1[Msg]]]]]] { get }
 ToolUp.Platform.ClientModule`2.View : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[Msg], ToolUp.Platform.PageContent]]] { get }
 ToolUp.Platform.ClientModule`2.Visibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean] { get }
 ToolUp.Platform.ClientOwnedHostView (class)
@@ -3799,12 +3568,12 @@ ToolUp.Platform.CommandPaletteNav+PaletteState.Highlight : System.Int32 { get }
 ToolUp.Platform.CommandPaletteNav+PaletteState.IsOpen : System.Boolean { get }
 ToolUp.Platform.CommandPaletteNav+PaletteState.Query : System.String { get }
 ToolUp.Platform.CompositionConfig (class)
-ToolUp.Platform.CompositionConfig..ctor(ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]])
+ToolUp.Platform.CompositionConfig..ctor(ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ErrorContext, Microsoft.FSharp.Core.Unit]])
 ToolUp.Platform.CompositionConfig.EnableElmishConsoleTrace : System.Boolean { get }
 ToolUp.Platform.CompositionConfig.ExpectedModules : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.CompositionConfig.Handlers : ToolUp.Platform.ClientHandlerRegistry { get }
 ToolUp.Platform.CompositionConfig.ModuleFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.CompositionConfig.OnElmishError : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]] { get }
+ToolUp.Platform.CompositionConfig.OnElmishError : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ErrorContext, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.CompositionConfig.OnError : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.CompositionConfig.PublicEntryDispatchers : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]] { get }
 ToolUp.Platform.CompositionConfig.RequestSeam : ToolUp.Platform.ClientRequestSeam { get }
@@ -3821,7 +3590,7 @@ ToolUp.Platform.Consent.ConsentBanner.init(Microsoft.FSharp.Collections.FSharpLi
 ToolUp.Platform.Consent.ConsentBanner.onCommit(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ConsentState, Microsoft.FSharp.Core.Unit]) : System.Void
 ToolUp.Platform.Consent.ConsentBanner.render() : Fable.React.ReactElement
 ToolUp.Platform.Consent.ConsentBanner.toConsentState(System.DateTimeOffset, ToolUp.Platform.Consent.ConsentBanner+Model) : ToolUp.Platform.ConsentState
-ToolUp.Platform.Consent.ConsentBanner.update(System.DateTimeOffset, ToolUp.Platform.Consent.ConsentBanner+Msg, ToolUp.Platform.Consent.ConsentBanner+Model) : System.Tuple`2[ToolUp.Platform.Consent.ConsentBanner+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Consent.ConsentBanner+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.Platform.Consent.ConsentBanner.update(System.DateTimeOffset, ToolUp.Platform.Consent.ConsentBanner+Msg, ToolUp.Platform.Consent.ConsentBanner+Model) : System.Tuple`2[ToolUp.Platform.Consent.ConsentBanner+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ToolUp.Platform.Consent.ConsentBanner+Msg, ToolUp.Platform.RemoteEffect`1[ToolUp.Platform.Consent.ConsentBanner+Msg]]]]
 ToolUp.Platform.Consent.ConsentBanner+Model (class)
 ToolUp.Platform.Consent.ConsentBanner+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConsentCategory], Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ConsentCategory, System.Boolean], System.Int32, System.Boolean)
 ToolUp.Platform.Consent.ConsentBanner+Model.Dismissed : System.Boolean { get }
@@ -3931,7 +3700,7 @@ ToolUp.Platform.DataTypeDisplayModule.tryDecode`1(ProcessedDataTypes+ProcessedDa
 ToolUp.Platform.DataTypeDisplayModule.typedWith`1(Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Core.FSharpResult`2[T, System.String]], DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[T], Fable.React.ReactElement]) : ToolUp.Platform.DataTypeDisplay
 ToolUp.Platform.DataTypeDisplayModule.typed`1(DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[T], Fable.React.ReactElement]) : ToolUp.Platform.DataTypeDisplay
 ToolUp.Platform.ErasedModule (class)
-ToolUp.Platform.ErasedModule..ctor(ToolUp.Platform.ModuleDefinition, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[System.Object], ToolUp.Platform.PageContent]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[System.Object], ToolUp.Platform.PageContent]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.ModuleAvailability, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Toolup.Sidebar+SidebarPlacement], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole], ToolUp.Platform.ModuleArea, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Object]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Platform.UiStateReport]])
+ToolUp.Platform.ErasedModule..ctor(ToolUp.Platform.ModuleDefinition, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[System.Object, ToolUp.Platform.RemoteEffect`1[System.Object]]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[System.Object, ToolUp.Platform.RemoteEffect`1[System.Object]]]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[System.Object], ToolUp.Platform.PageContent]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[System.Object], ToolUp.Platform.PageContent]]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.Boolean]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag], ToolUp.Platform.ModuleAvailability, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Toolup.Sidebar+SidebarPlacement], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole], ToolUp.Platform.ModuleArea, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Object]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Platform.UiStateReport]])
 ToolUp.Platform.ErasedModule.ActionDecoder : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Object]]] { get }
 ToolUp.Platform.ErasedModule.ActionKeys : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
 ToolUp.Platform.ErasedModule.Area : ToolUp.Platform.ModuleArea { get }
@@ -3943,7 +3712,7 @@ ToolUp.Platform.ErasedModule.Definition : ToolUp.Platform.ModuleDefinition { get
 ToolUp.Platform.ErasedModule.EventSubscriptions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Object]] { get }
 ToolUp.Platform.ErasedModule.FeatureFlags : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FeatureFlag] { get }
 ToolUp.Platform.ErasedModule.Group : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.ErasedModule.Init : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]] { get }
+ToolUp.Platform.ErasedModule.Init : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientModuleContext, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[System.Object, ToolUp.Platform.RemoteEffect`1[System.Object]]]]] { get }
 ToolUp.Platform.ErasedModule.InspectState : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Platform.UiStateReport]] { get }
 ToolUp.Platform.ErasedModule.NavRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NavRole] { get }
 ToolUp.Platform.ErasedModule.NeedsData : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.Boolean], System.Boolean]] { get }
@@ -3953,7 +3722,7 @@ ToolUp.Platform.ErasedModule.Placement : Microsoft.FSharp.Core.FSharpOption`1[To
 ToolUp.Platform.ErasedModule.ProvidesNarrative : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeDocument]]]] { get }
 ToolUp.Platform.ErasedModule.ProvidesProcessedData : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry]]] { get }
 ToolUp.Platform.ErasedModule.QueryTargets : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryTarget]] { get }
-ToolUp.Platform.ErasedModule.Update : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]] { get }
+ToolUp.Platform.ErasedModule.Update : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[System.Object, ToolUp.Platform.RemoteEffect`1[System.Object]]]]]] { get }
 ToolUp.Platform.ErasedModule.View : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RenderContext`1[System.Object], ToolUp.Platform.PageContent]]] { get }
 ToolUp.Platform.ErasedModule.Visibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean] { get }
 ToolUp.Platform.ErasedModuleModule (class)
@@ -3985,6 +3754,34 @@ ToolUp.Platform.ErrorCategory+Unknown (class)
 ToolUp.Platform.ErrorCategory+Unknown.raw : System.String { get }
 ToolUp.Platform.ErrorCategoryModule (class)
 ToolUp.Platform.ErrorCategoryModule.ofWire(System.String) : ToolUp.Platform.ErrorCategory
+ToolUp.Platform.ErrorContext (class)
+ToolUp.Platform.ErrorContext..ctor(ToolUp.Platform.ErrorPhase, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Exception)
+ToolUp.Platform.ErrorContext.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ErrorContext.Exception : System.Exception { get }
+ToolUp.Platform.ErrorContext.Message : System.String { get }
+ToolUp.Platform.ErrorContext.ModuleId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ErrorContext.Phase : ToolUp.Platform.ErrorPhase { get }
+ToolUp.Platform.ErrorContextModule (class)
+ToolUp.Platform.ErrorContextModule.safeMsgRepr`1(msg) : System.String
+ToolUp.Platform.ErrorContextModule.withCorrelationId(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ErrorContext, Microsoft.FSharp.Core.Unit], ToolUp.Platform.ErrorContext) : System.Void
+ToolUp.Platform.ErrorContextModule.withModule(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ErrorContext, Microsoft.FSharp.Core.Unit], ToolUp.Platform.ErrorContext) : System.Void
+ToolUp.Platform.ErrorPhase (class)
+ToolUp.Platform.ErrorPhase.Init : ToolUp.Platform.ErrorPhase { get }
+ToolUp.Platform.ErrorPhase.IsInit : System.Boolean { get }
+ToolUp.Platform.ErrorPhase.IsSubscription : System.Boolean { get }
+ToolUp.Platform.ErrorPhase.IsUpdate : System.Boolean { get }
+ToolUp.Platform.ErrorPhase.IsView : System.Boolean { get }
+ToolUp.Platform.ErrorPhase.Tag : System.Int32 { get }
+ToolUp.Platform.ErrorPhase.View : ToolUp.Platform.ErrorPhase { get }
+ToolUp.Platform.ErrorPhase+Subscription (class)
+ToolUp.Platform.ErrorPhase+Subscription.subId : System.String { get }
+ToolUp.Platform.ErrorPhase+Tags (class)
+ToolUp.Platform.ErrorPhase+Tags.Init : System.Int32 (literal)
+ToolUp.Platform.ErrorPhase+Tags.Subscription : System.Int32 (literal)
+ToolUp.Platform.ErrorPhase+Tags.Update : System.Int32 (literal)
+ToolUp.Platform.ErrorPhase+Tags.View : System.Int32 (literal)
+ToolUp.Platform.ErrorPhase+Update (class)
+ToolUp.Platform.ErrorPhase+Update.message : System.Object { get }
 ToolUp.Platform.FeatureFlags (class)
 ToolUp.Platform.FeatureFlags.flag(System.String) : System.Boolean
 ToolUp.Platform.FeatureFlags.provider(Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.FlagValue], Fable.React.ReactElement) : Fable.React.ReactElement
@@ -4132,6 +3929,10 @@ ToolUp.Platform.IHostStateProjection (class)
 ToolUp.Platform.IHostStateProjection.ofFunc`1(Microsoft.FSharp.Core.FSharpFunc`2[Model, ToolUp.Platform.HostBindingSources]) : ToolUp.Platform.IHostStateProjection`1[Model]
 ToolUp.Platform.IHostStateProjection`1 (interface)
 ToolUp.Platform.IHostStateProjection`1.Project(Model) : ToolUp.Platform.HostBindingSources
+ToolUp.Platform.IRemotingInterceptor (interface)
+ToolUp.Platform.IRemotingInterceptor.OnCalling(ToolUp.Platform.RemoteCallInfo) : System.Void
+ToolUp.Platform.IRemotingInterceptor.OnError(ToolUp.Platform.RemoteCallInfo, System.Exception) : Microsoft.FSharp.Core.FSharpOption`1[System.Exception]
+ToolUp.Platform.IRemotingInterceptor.OnSuccess(ToolUp.Platform.RemoteCallInfo, System.Object) : System.Void
 ToolUp.Platform.InputsPaneWidth (class)
 ToolUp.Platform.InputsPaneWidth.Auto : ToolUp.Platform.InputsPaneWidth { get }
 ToolUp.Platform.InputsPaneWidth.IsAuto : System.Boolean { get }
@@ -4181,6 +3982,10 @@ ToolUp.Platform.Logger.defaultLogger : ToolUp.Platform.ILogger { get }
 ToolUp.Platform.Logger.forCategory(System.String) : ToolUp.Platform.ILogger
 ToolUp.Platform.Logger+ConsoleLogger (class)
 ToolUp.Platform.Logger+ConsoleLogger..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.Memo (class)
+ToolUp.Platform.Memo.byRef2`3(Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[b, v]]) : Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[b, v]]
+ToolUp.Platform.Memo.byRef`2(Microsoft.FSharp.Core.FSharpFunc`2[a, v]) : Microsoft.FSharp.Core.FSharpFunc`2[a, v]
+ToolUp.Platform.Memo.oneEntryBy`2(Microsoft.FSharp.Core.FSharpFunc`2[k, Microsoft.FSharp.Core.FSharpFunc`2[k, System.Boolean]], Microsoft.FSharp.Core.FSharpFunc`2[k, v]) : Microsoft.FSharp.Core.FSharpFunc`2[k, v]
 ToolUp.Platform.MessageCatalogProvider (class)
 ToolUp.Platform.MessageCatalogProvider.browserLocale() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.MessageCatalogProvider.formatCurrency(System.String, System.String, System.Double) : System.String
@@ -4219,7 +4024,8 @@ ToolUp.Platform.ModuleErrorReport.ComponentStack : System.String { get }
 ToolUp.Platform.ModuleErrorReport.Error : System.Exception { get }
 ToolUp.Platform.ModuleErrorReport.ModuleId : System.String { get }
 ToolUp.Platform.ModuleEvents (class)
-ToolUp.Platform.ModuleEvents.publish`1(System.String, System.String) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
+ToolUp.Platform.ModuleEvents.publishNow(System.String, System.String) : System.Void
+ToolUp.Platform.ModuleEvents.publish`1(System.String, System.String) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[msg, ToolUp.Platform.RemoteEffect`1[msg]]]
 ToolUp.Platform.ModuleEvents.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.ModuleGroupingValidator (class)
 ToolUp.Platform.ModuleGroupingValidator.result(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
@@ -4526,6 +4332,69 @@ ToolUp.Platform.RegisteredModules+ModuleEntry..ctor(System.String, System.String
 ToolUp.Platform.RegisteredModules+ModuleEntry.ModuleId : System.String { get }
 ToolUp.Platform.RegisteredModules+ModuleEntry.ModuleName : System.String { get }
 ToolUp.Platform.RegisteredModules+ModuleEntry.PageRoutes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.RemoteCallInfo (class)
+ToolUp.Platform.RemoteCallInfo..ctor(System.DateTime, System.String, System.Collections.Generic.Dictionary`2[System.String, System.Object])
+ToolUp.Platform.RemoteCallInfo.Bag : System.Collections.Generic.Dictionary`2[System.String, System.Object] { get }
+ToolUp.Platform.RemoteCallInfo.MethodName : System.String { get }
+ToolUp.Platform.RemoteCallInfo.StartedAt : System.DateTime { get }
+ToolUp.Platform.RemoteCallSite (class)
+ToolUp.Platform.RemoteCallSite..ctor(System.String, System.Object, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemoteRetryPolicy])
+ToolUp.Platform.RemoteCallSite.Argument : System.Object { get }
+ToolUp.Platform.RemoteCallSite.Equals(System.Object) : System.Boolean
+ToolUp.Platform.RemoteCallSite.GetHashCode() : System.Int32
+ToolUp.Platform.RemoteCallSite.Method : System.String { get }
+ToolUp.Platform.RemoteCallSite.Retry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemoteRetryPolicy] { get }
+ToolUp.Platform.RemoteCall`1 (class)
+ToolUp.Platform.RemoteEffect (class)
+ToolUp.Platform.RemoteEffect.AwaitKind : System.String (literal)
+ToolUp.Platform.RemoteEffect.CallKind : System.String (literal)
+ToolUp.Platform.RemoteEffect.LegacyKind : System.String (literal)
+ToolUp.Platform.RemoteEffect.SignalKind : System.String (literal)
+ToolUp.Platform.RemoteEffect.SubscriptionKind : System.String (literal)
+ToolUp.Platform.RemoteEffect.await`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]
+ToolUp.Platform.RemoteEffect.callWithRetry`3(System.String, ToolUp.Platform.RemoteRetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]
+ToolUp.Platform.RemoteEffect.call`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]
+ToolUp.Platform.RemoteEffect.flatten`1(Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpResult`2[t, System.String], System.Exception]) : Microsoft.FSharp.Core.FSharpResult`2[t, System.String]
+ToolUp.Platform.RemoteEffect.handle`1(ToolUp.Platform.RemoteEffect`1[msg]) : Fuaran.MVU.Handled`1[msg]
+ToolUp.Platform.RemoteEffect.interpreter`1() : Fuaran.MVU.Interpreter`3[msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg]]
+ToolUp.Platform.RemoteEffect.kinds : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.EffectKind] { get }
+ToolUp.Platform.RemoteEffect.legacy`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.RemoteEffect`1[msg]
+ToolUp.Platform.RemoteEffect.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, b], ToolUp.Platform.RemoteEffect`1[a]) : ToolUp.Platform.RemoteEffect`1[b]
+ToolUp.Platform.RemoteEffect.perform`1(ToolUp.Platform.RemoteEffect`1[msg]) : Fuaran.MVU.Performance`1[msg]
+ToolUp.Platform.RemoteEffect.signal`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.RemoteEffect`1[msg]
+ToolUp.Platform.RemoteEffect.start`1(Fuaran.MVU.ResourceKey, ToolUp.Platform.Subscription`1[msg]) : Fuaran.MVU.Started`1[msg]
+ToolUp.Platform.RemoteEffect+Interceptors (class)
+ToolUp.Platform.RemoteEffect+Interceptors.register(ToolUp.Platform.IRemotingInterceptor) : System.Void
+ToolUp.Platform.RemoteEffect+Interceptors.setErrorReporter(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, Microsoft.FSharp.Core.Unit]]) : System.Void
+ToolUp.Platform.RemoteEffect+Interceptors.unregister(ToolUp.Platform.IRemotingInterceptor) : System.Void
+ToolUp.Platform.RemoteEffect`1 (class)
+ToolUp.Platform.RemoteEffect`1.IsAwait : System.Boolean { get }
+ToolUp.Platform.RemoteEffect`1.IsFire : System.Boolean { get }
+ToolUp.Platform.RemoteEffect`1.IsInvoke : System.Boolean { get }
+ToolUp.Platform.RemoteEffect`1.IsLegacy : System.Boolean { get }
+ToolUp.Platform.RemoteEffect`1.Tag : System.Int32 { get }
+ToolUp.Platform.RemoteEffect`1+Await (class)
+ToolUp.Platform.RemoteEffect`1+Await.Item : ToolUp.Platform.RemoteCall`1[msg] { get }
+ToolUp.Platform.RemoteEffect`1+Fire (class)
+ToolUp.Platform.RemoteEffect`1+Fire.Item : ToolUp.Platform.SignalEffect { get }
+ToolUp.Platform.RemoteEffect`1+Invoke (class)
+ToolUp.Platform.RemoteEffect`1+Invoke.Item : ToolUp.Platform.RemoteCall`1[msg] { get }
+ToolUp.Platform.RemoteEffect`1+Legacy (class)
+ToolUp.Platform.RemoteEffect`1+Legacy.Item : Fuaran.MVU.LegacyEffect`1[msg] { get }
+ToolUp.Platform.RemoteEffect`1+Tags (class)
+ToolUp.Platform.RemoteEffect`1+Tags.Await : System.Int32 (literal)
+ToolUp.Platform.RemoteEffect`1+Tags.Fire : System.Int32 (literal)
+ToolUp.Platform.RemoteEffect`1+Tags.Invoke : System.Int32 (literal)
+ToolUp.Platform.RemoteEffect`1+Tags.Legacy : System.Int32 (literal)
+ToolUp.Platform.RemoteRetryPolicy (class)
+ToolUp.Platform.RemoteRetryPolicy..ctor(System.Int32, System.Int32, System.Double, Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, System.Boolean])
+ToolUp.Platform.RemoteRetryPolicy.BackoffMultiplier : System.Double { get }
+ToolUp.Platform.RemoteRetryPolicy.InitialDelayMs : System.Int32 { get }
+ToolUp.Platform.RemoteRetryPolicy.MaxAttempts : System.Int32 { get }
+ToolUp.Platform.RemoteRetryPolicy.ShouldRetry : Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, System.Boolean] { get }
+ToolUp.Platform.RemoteRetryPolicyModule (class)
+ToolUp.Platform.RemoteRetryPolicyModule.defaultPolicy : ToolUp.Platform.RemoteRetryPolicy { get }
+ToolUp.Platform.RemoteRetryPolicyModule.none : ToolUp.Platform.RemoteRetryPolicy { get }
 ToolUp.Platform.RemotingCategorisedException (class)
 ToolUp.Platform.RemotingCategorisedException..ctor(ToolUp.Platform.ErrorCategory, System.String, System.Exception)
 ToolUp.Platform.RemotingCategorisedException.Category : ToolUp.Platform.ErrorCategory { get }
@@ -4743,6 +4612,9 @@ ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.PlatformRole : Microso
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.ShowAllModules : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.SubjectKind : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.VisibilityProfile : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution] { get }
+ToolUp.Platform.SignalEffect (class)
+ToolUp.Platform.SignalEffect..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
+ToolUp.Platform.SignalEffect.Run : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit] { get }
 ToolUp.Platform.SlotExtension (class)
 ToolUp.Platform.SlotExtension..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ErasedModule])
 ToolUp.Platform.SlotExtension.Id : System.String { get }
@@ -4766,6 +4638,11 @@ ToolUp.Platform.SlotFill`1+Tags.Configured : System.Int32 (literal)
 ToolUp.Platform.SlotFill`1+Tags.Default : System.Int32 (literal)
 ToolUp.Platform.SlotFill`1+Tags.Empty : System.Int32 (literal)
 ToolUp.Platform.SlotFill`1+Tags.External : System.Int32 (literal)
+ToolUp.Platform.Subscription (class)
+ToolUp.Platform.Subscription.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, b], ToolUp.Platform.Subscription`1[a]) : ToolUp.Platform.Subscription`1[b]
+ToolUp.Platform.Subscription`1 (class)
+ToolUp.Platform.Subscription`1..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable])
+ToolUp.Platform.Subscription`1.Start : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable] { get }
 ToolUp.Platform.Telemetry (class)
 ToolUp.Platform.Telemetry.EndpointPath : System.String (literal)
 ToolUp.Platform.Telemetry.isPermitted(ToolUp.Platform.ConsentDecision) : System.Boolean
@@ -5493,9 +5370,9 @@ Toolup.UIToolkit.Layout+SidebarProps.SelectedModule : System.String { get }
 UsageDashboard (class)
 UsageDashboard.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
 UsageDashboard.builtIn : ToolUp.Platform.BuiltIn`2[UsageDashboard+Model, UsageDashboard+Msg] { get }
-UsageDashboard.init() : System.Tuple`2[UsageDashboard+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[UsageDashboard+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+UsageDashboard.init() : System.Tuple`2[UsageDashboard+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[UsageDashboard+Msg, ToolUp.Platform.RemoteEffect`1[UsageDashboard+Msg]]]]
 UsageDashboard.moduleId : System.String { get }
-UsageDashboard.update(UsageDashboard+Msg, UsageDashboard+Model) : System.Tuple`2[UsageDashboard+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[UsageDashboard+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+UsageDashboard.update(UsageDashboard+Msg, UsageDashboard+Model) : System.Tuple`2[UsageDashboard+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[UsageDashboard+Msg, ToolUp.Platform.RemoteEffect`1[UsageDashboard+Msg]]]]
 UsageDashboard.view(UsageDashboard+Model, ToolUp.Platform.RenderContext`1[UsageDashboard+Msg]) : ToolUp.Platform.PageContent
 UsageDashboard+Model (class)
 UsageDashboard+Model..ctor(ToolUp.Platform.Usage.UsageGrouping, System.DateTime, System.DateTime, ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Usage.UsageAggregateRow], System.String], System.Boolean)
@@ -5538,9 +5415,9 @@ UserDirectory.email(UserDirectory+Model, System.String) : System.String
 UserDirectory.empty : UserDirectory+Model { get }
 UserDirectory.label(UserDirectory+Model, System.String) : System.String
 UserDirectory.labels(UserDirectory+Model, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]
-UserDirectory.resolve(Microsoft.FSharp.Collections.FSharpList`1[System.String], UserDirectory+Model) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[UserDirectory+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
+UserDirectory.resolve(Microsoft.FSharp.Collections.FSharpList`1[System.String], UserDirectory+Model) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[UserDirectory+Msg, ToolUp.Platform.RemoteEffect`1[UserDirectory+Msg]]]
 UserDirectory.unresolved(Microsoft.FSharp.Collections.FSharpList`1[System.String], UserDirectory+Model) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
-UserDirectory.update(UserDirectory+Msg, UserDirectory+Model) : System.Tuple`2[UserDirectory+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[UserDirectory+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+UserDirectory.update(UserDirectory+Msg, UserDirectory+Model) : System.Tuple`2[UserDirectory+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[UserDirectory+Msg, ToolUp.Platform.RemoteEffect`1[UserDirectory+Msg]]]]
 UserDirectory+Model (class)
 UserDirectory+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary])
 UserDirectory+Model.Entries : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.UserSummary] { get }
@@ -5571,9 +5448,9 @@ UserSession.watchIdentityAcrossTabs() : Microsoft.FSharp.Core.FSharpFunc`2[Micro
 UserSession.withRequestHeaders(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
 WebhookAdminUI (class)
 WebhookAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[WebhookAdminUI+Model, WebhookAdminUI+Msg] { get }
-WebhookAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[WebhookAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[WebhookAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+WebhookAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[WebhookAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[WebhookAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[WebhookAdminUI+Msg]]]]
 WebhookAdminUI.moduleId : System.String { get }
-WebhookAdminUI.update(WebhookAdminUI+Msg, WebhookAdminUI+Model) : System.Tuple`2[WebhookAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[WebhookAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+WebhookAdminUI.update(WebhookAdminUI+Msg, WebhookAdminUI+Model) : System.Tuple`2[WebhookAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[WebhookAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[WebhookAdminUI+Msg]]]]
 WebhookAdminUI+FormStatus (class)
 WebhookAdminUI+FormStatus.Idle : WebhookAdminUI+FormStatus { get }
 WebhookAdminUI+FormStatus.IsDone : System.Boolean { get }

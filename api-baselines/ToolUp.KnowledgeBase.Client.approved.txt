@@ -4,11 +4,10 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ClientModel (class)
-ClientModel.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ClientModel.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ClientModel+Msg, ToolUp.Platform.RemoteEffect`1[ClientModel+Msg]]]]
 ClientModel.narrativeCommitHandler : ToolUp.Platform.NarrativeCommitHandler { get }
 ClientModel.originalDocumentOpener(ToolUp.Platform.MessageCatalog, ToolUp.Platform.VectorKnowledgeTypes+OriginalDocumentRef) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
-ClientModel.step(ClientModel+Msg, ClientModel+Model) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ClientModel+Msg, ToolUp.Elmish.RemoteEffect`1[ClientModel+Msg]]]]
-ClientModel.update(ClientModel+Msg, ClientModel+Model) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ClientModel+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ClientModel.update(ClientModel+Msg, ClientModel+Model) : System.Tuple`2[ClientModel+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[ClientModel+Msg, ToolUp.Platform.RemoteEffect`1[ClientModel+Msg]]]]
 ClientModel+Model (class)
 ClientModel+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ClientModel+NoteEditorTarget], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+BulkImportReport], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ClientModel+VersionHistoryState], ToolUp.Platform.KnowledgeBaseMessages)
 ClientModel+Model.AIContext : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpOption`1[SharedTypes+AIContextEntry]] { get }
@@ -333,9 +332,8 @@ KnowledgeListView+SortKey+Tags.SortByType : System.Int32 (literal)
 KnowledgeListView+SortKey+Tags.SortByUploader : System.Int32 (literal)
 PlatformKnowledgeAdminUI (class)
 PlatformKnowledgeAdminUI.builtIn : ToolUp.Platform.BuiltIn`2[PlatformKnowledgeAdminUI+Model, PlatformKnowledgeAdminUI+Msg] { get }
-PlatformKnowledgeAdminUI.init() : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
-PlatformKnowledgeAdminUI.step(PlatformKnowledgeAdminUI+Msg, PlatformKnowledgeAdminUI+Model) : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformKnowledgeAdminUI+Msg, ToolUp.Elmish.RemoteEffect`1[PlatformKnowledgeAdminUI+Msg]]]]
-PlatformKnowledgeAdminUI.update(PlatformKnowledgeAdminUI+Msg, PlatformKnowledgeAdminUI+Model) : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformKnowledgeAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformKnowledgeAdminUI.init() : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformKnowledgeAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[PlatformKnowledgeAdminUI+Msg]]]]
+PlatformKnowledgeAdminUI.update(PlatformKnowledgeAdminUI+Msg, PlatformKnowledgeAdminUI+Model) : System.Tuple`2[PlatformKnowledgeAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.Step`2[PlatformKnowledgeAdminUI+Msg, ToolUp.Platform.RemoteEffect`1[PlatformKnowledgeAdminUI+Msg]]]]
 PlatformKnowledgeAdminUI+Model (class)
 PlatformKnowledgeAdminUI+Model..ctor(ToolUp.Platform.Remote`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], System.String], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 PlatformKnowledgeAdminUI+Model.DeleteError : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
