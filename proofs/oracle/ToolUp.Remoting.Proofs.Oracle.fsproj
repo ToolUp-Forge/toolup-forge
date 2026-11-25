@@ -4,7 +4,7 @@
          so the differential hosts can RUN them beside production.
 
          Every file under custard/ is GENERATED (Phase 957): one run of
-         Custard's F# backend over the nine models writes the modules, the
+         Custard's F# backend over the five models writes the modules, the
          support library `FStarCustard.fs` they all open, and `Custard.fsproj`
          listing them in compile order; `proofs/check.ps1` re-runs that
          extraction and byte-compares every file against the committed copy,
@@ -54,9 +54,5 @@
         <Compile Include="custard/ToolGate.fs" />
         <Compile Include="custard/ModelInput.fs" />
         <Compile Include="custard/TaintFlow.fs" />
-        <Compile Include="custard/ElmishRing.fs" />
-        <Compile Include="custard/ElmishSub.fs" />
-        <Compile Include="custard/ElmishLoop.fs" />
-        <Compile Include="custard/ElmishRingArray.fs" />
     </ItemGroup>
 </Project>

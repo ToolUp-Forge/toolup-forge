@@ -26,9 +26,6 @@ docs/platform/message-catalog-skeleton.fs
 # the F* extractor's F# output for every proved module, the support library and the project (held by proofs/check.ps1)
 proofs/oracle/custard/
 
-# derived from the extracted support library by the proof leg (held by proofs/check.ps1)
-proofs/oracle/fable/FStarCustard.fs
-
 # the remoting generator's emission, rewritten after every build of HelloWorld.AOT.Contract (held by samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj)
 samples/HelloWorld-AOT/HelloWorld.AOT/Generated/
 

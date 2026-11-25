@@ -3,9 +3,8 @@
 .SYNOPSIS
     The whole proof leg for every model under proofs/ — Phase 787's
     remoting decoder algebra, Phase 790's disclosure fold, Phase 793's
-    tool gate, Phase 792's model-input admissibility, Phase 795's taint
-    flow, Phase 788's Elmish ring buffer and subscription diff, Phase
-    789's dispatch loop, and Phase 955's array ring in Pulse.
+    tool gate, Phase 792's model-input admissibility and Phase 795's taint
+    flow.
 
 .DESCRIPTION
     Self-contained and runnable from the repository root:
@@ -14,7 +13,7 @@
 
     Seven steps, in this order, each refusing rather than warning. Step 2
     runs once PER MODULE in `$modules` below; steps 3–5 run once over the
-    WHOLE PROGRAM the nine modules form; step 6 builds the projects every
+    WHOLE PROGRAM the five modules form; step 6 builds the projects every
     extraction compiles into; step 7 runs the differential hosts.
 
       1. Resolve the pinned F* release named in `fstar-pin.json` — an
@@ -25,36 +24,27 @@
       2. CHECK each module on it, with `--report_assumes error` so an
          `assume` or an `admit` fails the leg rather than quietly
          weakening a theorem.
-      3. EXTRACT the nine modules to F# in ONE run of Custard's F#
+      3. EXTRACT the five modules to F# in ONE run of Custard's F#
          backend (`--codegen FSharp --custard_split`, Phase 957), from
          the cache step 2 populated. Custard is a whole-program
          compiler: every module is a root (`--custard_entry_module`),
          and `--custard_split` writes one F# module per F* module under
-         its own name, so the hosts bind `ElmishRing.push` as they
-         always did. The run writes the modules, the support library
+         its own name, so the hosts bind each model by its module name. The run writes the modules, the support library
          `FStarCustard.fs` and a project `Custard.fsproj` listing them
          in compile order. Until Phase 957 the eight first-order models
          went through the legacy `--codegen FSharp` printer and a layout
          normaliser; the release this leg pins carries neither the
          printer nor the `--extract` option, so there is no second route
          and nothing to normalise.
-      4. Two derived edits, both deterministic. (a) Drop FS0025 from the
+      4. One derived edit, deterministic: drop FS0025 from the
          `#nowarn` line Custard heads every module with, so the oracle
          stays under the incomplete-match rule (Phase 1037) — the one
          edit the leg has ever made to Custard's output, and the reason
          a committed extraction with an incomplete match fails the build
-         by name rather than compiling with the check off. (b) CUT the
-         Fable host's stand-in for the support library out of the
-         generated `FStarCustard.fs`: the `Prims` block, verbatim, under
-         a fixed header. Fable refuses the file as written (128-bit
-         integer arithmetic, console writers, `exit`, a strict UTF-8
-         decoder) and the Elmish extractions reach nothing outside
-         `Prims`, so the stand-in is a projection of the generated file,
-         not a second implementation of anything.
+         by name rather than compiling with the check off.
       5. BYTE-DIFF every generated file against its committed copy under
-         `oracle/custard/` — the nine modules, the support library and
-         the project — and the derived stand-in against
-         `oracle/fable/FStarCustard.fs`. A file on one side with no
+         `oracle/custard/` — the five modules, the support library and
+         the project. A file on one side with no
          counterpart on the other fails too: a model that came to reach
          a ulib definition would make Custard write a tenth module, and
          a byte-diff over a fixed list would not see it. This is the
@@ -66,9 +56,7 @@
          layout the compiler refuses fails here by name; the .NET oracle
          (`oracle/`) the hosts reference, which compiles the same
          committed sources and whose file list is checked against
-         Custard's; and the Fable-host oracle (`oracle/fable/`), which
-         compiles the three Elmish extractions over the stand-in — built
-         on .NET here, transpiled by Fable in `VerifyFable`.
+         Custard's.
       7. RUN each module's differential host — an Expecto list inside
          `ToolUp.Platform.Tests` that runs the extracted model beside
          production and requires them to agree. Skippable with
@@ -178,48 +166,6 @@ $modules = @(
         HostList     = "ToolUp.Platform.Tests.Phase 795 - the proved taint flow as oracle"
         HostSubject  = "the two-party fixtures and the generated pipelines"
     }
-    # Phase 788 — two models, ONE differential host: the ring and the
-    # subscription diff are both the Elmish runtime, and the host that
-    # drives them beside production is one Expecto list, so the two
-    # entries below name the same list. Step 7 therefore runs it twice;
-    # that is the price of keeping "one entry per model" true, and it
-    # is seconds. The SAME differential also runs under Fable
-    # (`src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs`, via
-    # `VerifyFable`), which this leg does not drive — the fable-tier CI
-    # job does.
-    @{
-        Name         = "ElmishRing"
-        Source       = "ElmishRing.fst"
-        HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle"
-        HostSubject  = "generated push/pop sequences, past several doublings"
-    }
-    @{
-        Name         = "ElmishSub"
-        Source       = "ElmishSub.fst"
-        HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle"
-        HostSubject  = "generated subscription sets, with duplicates and the shortcut's exact-key-set case"
-    }
-    # Phase 789 — the dispatch loop AROUND the ring. The first module that
-    # imports another: ElmishLoop.fst opens ElmishRing for the ring, its
-    # opt/pair and append, so its `.checked` is an input to this one and
-    # the entry MUST follow ElmishRing's.
-    @{
-        Name         = "ElmishLoop"
-        Source       = "ElmishLoop.fst"
-        HostList     = "ToolUp.Platform.Tests.Phase 789 - the proved dispatch loop as oracle"
-        HostSubject  = "generated reentrancy scripts against the real Program.runWithDispatch"
-    }
-    # Phase 955 — the ring over a mutable ARRAY, written in Pulse and
-    # proved to refine ElmishRing, which it opens (so it follows it). Its
-    # extraction is run AS the ring rather than beside one. It was the
-    # first module through Custard; since Phase 957 every module is, and
-    # the entry needs nothing the others do not.
-    @{
-        Name         = "ElmishRingArray"
-        Source       = "ElmishRingArray.fst"
-        HostList     = "ToolUp.Platform.Tests.Phase 788 - the proved Elmish runtime as oracle.Phase 955 - the extracted array ring as implementation"
-        HostSubject  = "the shipped ring and the list model, over the campaign and a live one"
-    }
 )
 
 # What one run of Custard writes besides the modules: the support
@@ -231,7 +177,6 @@ $generatedProject = "Custard.fsproj"
 
 # Where the committed copies live, relative to this directory.
 $committedDir = "oracle/custard"
-$fableStandIn = "oracle/fable/FStarCustard.fs"
 
 function Write-Step {
     param([string] $Text)
@@ -241,9 +186,8 @@ function Write-Step {
 
 # The case names proofs.json records under an Expecto list: every `tested`
 # claim whose `evidence.family` names the list — a family is one list name,
-# or several joined by " / " when one claim's evidence spans lists — minus
-# the `(Fable)` families, whose host is the client-tier pack `VerifyFable`
-# drives. A nested list (`<parent>.<child>`) is named by its child.
+# or several joined by " / " when one claim's evidence spans lists. A
+# nested list (`<parent>.<child>`) is named by its child.
 function Get-RegistryCases {
     param($Registry, [string] $HostList)
     $prefix = "ToolUp.Platform.Tests."
@@ -251,7 +195,7 @@ function Get-RegistryCases {
     $names = New-Object System.Collections.Generic.List[string]
     foreach ($claim in $Registry.claims) {
         if ($claim.level -ne 'tested' -or -not $claim.evidence.cases -or -not $claim.evidence.family) { continue }
-        $parts = @($claim.evidence.family -split ' / ') | Where-Object { $_ -notlike '*(Fable)' }
+        $parts = @($claim.evidence.family -split ' / ')
         $matches = $parts | Where-Object { $tail -eq $_ -or $tail.EndsWith("." + $_) }
         if (-not $matches) { continue }
         foreach ($case in $claim.evidence.cases) { if (-not $names.Contains($case)) { $names.Add($case) } }
@@ -260,8 +204,8 @@ function Get-RegistryCases {
 }
 
 # The source files proofs.json names as a family's host (`evidence.host`;
-# one claim's evidence spans two hosts joined by " and "), minus the
-# `(Fable)` families, as basenames: what step 7 resolves to a test pack.
+# one claim's evidence spans two hosts joined by " and "), as basenames:
+# what step 7 resolves to a test pack.
 function Get-RegistryHosts {
     param($Registry, [string] $HostList)
     $prefix = "ToolUp.Platform.Tests."
@@ -269,7 +213,7 @@ function Get-RegistryHosts {
     $hosts = New-Object System.Collections.Generic.List[string]
     foreach ($claim in $Registry.claims) {
         if ($claim.level -ne 'tested' -or -not $claim.evidence.cases -or -not $claim.evidence.family -or -not $claim.evidence.host) { continue }
-        $parts = @($claim.evidence.family -split ' / ') | Where-Object { $_ -notlike '*(Fable)' }
+        $parts = @($claim.evidence.family -split ' / ')
         $matches = $parts | Where-Object { $tail -eq $_ -or $tail.EndsWith("." + $_) }
         if (-not $matches) { continue }
         foreach ($h in @($claim.evidence.host -split ' and ')) {
@@ -431,10 +375,8 @@ for ($run = 1; $run -le $Runs; $run++) {
     # Cold every run, deliberately. A warm `.checked` file is F* telling
     # you it already believed this, which is exactly the thing a repeat
     # run exists not to take on trust. The modules share one cache per
-    # run. Until Phase 789 they shared nothing else — each owned its own
-    # small types and imported only Prims; ElmishLoop.fst opens
-    # ElmishRing, so the shared cache is now also HOW that import
-    # resolves, and the list order above is load-bearing.
+    # run, which is how a module that opens another would resolve the
+    # import; today each owns its own small types and imports only Prims.
     Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
 
@@ -477,7 +419,7 @@ foreach ($name in $generatedNames) {
 
 # ─── 4. The derived edits ────────────────────────────────────────────
 
-Write-Step "4/7  Dropping FS0025 from each module's #nowarn line; cutting the Fable host's support stand-in"
+Write-Step "4/7  Dropping FS0025 from each module's #nowarn line"
 
 # Custard's ONE edit (Phase 1037). Its backend heads every module it
 # writes with a `#nowarn` line that names FS0025, which would switch the
@@ -506,44 +448,6 @@ foreach ($module in $modules) {
     [IO.File]::WriteAllText((Resolve-Path $fresh).Path, $text)
 }
 
-# The Fable host's stand-in (Phase 957). `FStarCustard.fs` as Custard
-# writes it does not transpile — Fable refuses `System.Int128` /
-# `System.UInt128` arithmetic, `TextWriter.Write` / `Flush`, `exit` and
-# the `UTF8Encoding` constructor — and it is one module, so the refusal
-# is of the whole file. The three Elmish extractions the Fable host
-# compiles reach `Prims` and nothing else in it, so the stand-in is
-# that block, CUT from the generated file verbatim: from the line
-# `module Prims =` to the line before the next top-level item. It is
-# derived here on every run and byte-held in step 5, so it cannot drift
-# from the support library it stands in for — which is what made the
-# hand-written stand-in Phase 955 committed, and the hand-written Prims
-# shims before it, assumptions on the ladder rather than projections.
-$fableDir = Join-Path $extractDir "custard-fable"
-New-Item -ItemType Directory -Force -Path $fableDir | Out-Null
-
-$supportLines = [IO.File]::ReadAllLines((Join-Path $custardDir $supportLibrary))
-$primsStart = [Array]::FindIndex($supportLines, [Predicate[string]] { param($l) $l -cmatch '^module Prims =\s*$' })
-if ($primsStart -lt 0) { Fail "the generated $supportLibrary has no `module Prims =` block to cut the Fable stand-in from." }
-
-$primsEnd = $primsStart + 1
-while ($primsEnd -lt $supportLines.Length -and ($supportLines[$primsEnd] -match '^\s' -or $supportLines[$primsEnd] -eq '')) { $primsEnd++ }
-while ($primsEnd -gt $primsStart -and $supportLines[$primsEnd - 1] -eq '') { $primsEnd-- }
-
-$standIn = @(
-    "// Derived by proofs/check.ps1 from the FStarCustard.fs Custard wrote beside the"
-    "// extractions (Phase 957). Do not edit: the leg re-derives and byte-holds it."
-    "//"
-    "// The Fable host's stand-in for Custard's F# support library. The generated file"
-    "// does not transpile (128-bit integer arithmetic, console writers, exit, a strict"
-    "// UTF-8 decoder), and the Elmish extractions this host compiles reach only Prims,"
-    "// so this is that block, verbatim, and nothing else: an extraction that came to"
-    "// need another name from the support library fails to compile here, naming it."
-    "module FStarCustard"
-    ""
-) + $supportLines[$primsStart..($primsEnd - 1)] + @("")
-
-[IO.File]::WriteAllText((Join-Path $fableDir $supportLibrary), (($standIn -join "`n")))
-
 # ─── 5. Byte-diff ────────────────────────────────────────────────────
 
 Write-Step "5/7  Byte-diffing every generated file against its committed copy"
@@ -556,7 +460,7 @@ $committedFiles = @(Get-ChildItem (Join-Path $PSScriptRoot $committedDir) -File 
 $freshFiles = @(Get-ChildItem $custardDir -File | ForEach-Object { $_.Name } | Sort-Object)
 
 foreach ($name in $freshFiles) {
-    if ($committedFiles -notcontains $name) { Fail "Custard wrote $name, which has no committed copy under $committedDir/. If a model now reaches a definition outside the nine modules, say so in the README and commit the file:  Copy-Item '$(Join-Path $custardDir $name)' '$(Join-Path $PSScriptRoot $committedDir)/'" }
+    if ($committedFiles -notcontains $name) { Fail "Custard wrote $name, which has no committed copy under $committedDir/. If a model now reaches a definition outside the five modules, say so in the README and commit the file:  Copy-Item '$(Join-Path $custardDir $name)' '$(Join-Path $PSScriptRoot $committedDir)/'" }
 }
 
 foreach ($name in $committedFiles) {
@@ -567,7 +471,6 @@ $pairs = @()
 foreach ($name in $freshFiles) {
     $pairs += @{ Fresh = (Join-Path $custardDir $name); Committed = "$committedDir/$name" }
 }
-$pairs += @{ Fresh = (Join-Path $fableDir $supportLibrary); Committed = $fableStandIn }
 
 foreach ($pair in $pairs) {
     $fresh = $pair.Fresh
@@ -599,7 +502,7 @@ foreach ($pair in $pairs) {
 
 # ─── 6. Build the oracles ────────────────────────────────────────────
 
-Write-Step "6/7  Building the generated project as generated, the .NET oracle, then the Fable host on .NET"
+Write-Step "6/7  Building the generated project as generated, then the .NET oracle"
 
 # The project Custard wrote, as generated: its .fsproj over its sources,
 # with nothing of this repository's added — the one thing taken away is
@@ -629,13 +532,6 @@ if (($custardCompiles -join "|") -ne ($oracleCompiles -join "|")) {
 
 & dotnet build (Join-Path $PSScriptRoot "oracle/ToolUp.Remoting.Proofs.Oracle.fsproj") --nologo -v q
 if ($LASTEXITCODE -ne 0) { Fail "a committed extraction does not compile in the .NET oracle (exit $LASTEXITCODE)." }
-
-# The Fable-host oracle: the three Elmish extractions over the derived
-# stand-in. Built on .NET here — the same source compiles on both hosts,
-# which is half of what Phase 850 established — and compiled by Fable in
-# `VerifyFable`, which is the other half.
-& dotnet build (Join-Path $PSScriptRoot "oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj") --nologo -v q
-if ($LASTEXITCODE -ne 0) { Fail "the Fable-host oracle does not compile on .NET (exit $LASTEXITCODE)." }
 
 # ─── 7. The differential hosts ───────────────────────────────────────
 

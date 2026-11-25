@@ -214,14 +214,6 @@
       "fantomasIgnore": true
     },
     {
-      "path": "proofs/oracle/fable/FStarCustard.fs",
-      "render": "derived from the extracted support library by the proof leg",
-      "stem": "proofs",
-      "heldBy": "proofs/check.ps1",
-      "regen": { "script": "proofs/check.ps1" },
-      "fantomasIgnore": true
-    },
-    {
       "path": "samples/HelloWorld-AOT/HelloWorld.AOT/Generated/",
       "render": "the remoting generator's emission, rewritten after every build of HelloWorld.AOT.Contract",
       "stem": "aot-sample",
