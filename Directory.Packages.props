@@ -8,7 +8,9 @@
          released versions on nuget.org, never a local-feed build. -->
     <FuaranRestorePath>public</FuaranRestorePath>
     <FuaranCoreVersion>0.45.0</FuaranCoreVersion>
-    <FuaranComputeVersion>0.46.0</FuaranComputeVersion>
+    <!-- Compute 0.47.0 is additive over 0.46.0 and built on the same Core
+         (0.45.0), so it meets every floor below without moving another pin. -->
+    <FuaranComputeVersion>0.47.0</FuaranComputeVersion>
     <!-- The Fuaran-DB repository's pin, for Fuaran.DB (the dataset model and
          its pipeline check; ToolUp.Facts.Server only). Public: a release on
          nuget.org built on the pins above (0.5.0 floors Fuaran.Core at 0.45.0
@@ -28,7 +30,7 @@
          charts). Public: a release on nuget.org. 0.106.0 is the release built
          against the Fuaran.Core and Fuaran.Compute pins above (Core 0.45.0,
          Compute 0.46.0): every package of it floors Core at 0.45.0 and
-         Compute at 0.46.0, so the three pins move together. -->
+         Compute at 0.46.0, which the pins above meet. -->
     <FuaranUIVersion>0.106.0</FuaranUIVersion>
     <!-- The pin for Fuaran.MVU and its React adapter, Fuaran.MVU.React, one
          repository's packages released together: the model-update-view

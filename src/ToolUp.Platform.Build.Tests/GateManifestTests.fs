@@ -225,6 +225,13 @@ let tests =
                 "a floor does not turn a pending arm into anything else"
         }
 
+        test "a HighWater floor file reads past its # comment header to the number" {
+            let text = "# The HIGH-WATER MARK, asserted by\n#\n# prose line\n\n577\n"
+            Expect.equal (Gate.highWaterOfText text) 577 "comments and blanks are skipped"
+            Expect.equal (Gate.highWaterOfText "577\n") 577 "a bare number still reads"
+            Expect.throws (fun () -> Gate.highWaterOfText "# only comments\n" |> ignore) "no mark is a fault"
+        }
+
         test "the fold's floors go red: below AtLeast, off Exactly, below a HighWater mark, and a floor over no count" {
             let pass n = Verdict.Pass(Some n)
 
