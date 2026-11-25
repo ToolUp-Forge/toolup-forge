@@ -15,7 +15,7 @@ minors break.
 
 `FuaranFactsVersion` stays at `Fuaran.Facts` 0.2.1, which floors Core 0.40.3 and runs on 0.45.0. The set is the
 one `Fuaran.UI` 0.106.0 is built on, and `Fuaran.DB` 0.5.0 is built on the same Core and Compute, so the restore
-graph holds one Core and one Compute version. `Fuaran.MVU` 0.1.0 restores beside it.
+graph holds one Core and one Compute version. `Fuaran.MVU` 0.1.1 restores beside it.
 
 ## What a consumer does
 

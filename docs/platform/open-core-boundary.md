@@ -218,7 +218,7 @@ ToolUp client restores anonymously and compiles in a browser.
 
 - **One pin for the producing repository**, `FuaranMvuVersion`, beside the Core, Compute, UI
   and DB pins.
-- **The pin agrees with the Core pin.** `Fuaran.MVU` 0.1.0 floors `Fuaran.Core.Function` and
+- **The pin agrees with the Core pin.** `Fuaran.MVU` 0.1.1 floors `Fuaran.Core.Function` and
   `Fuaran.Core.AiSurface` at 0.44.1 and `FSharp.Core` at 10.1.300, which the pins above
   satisfy, so taking it moved no other pin. `Fuaran.Core.AiSurface` resolves at its 0.44.1
   floor beside the 0.45.0 Core packages; its 0.45.0 release only adds to it.

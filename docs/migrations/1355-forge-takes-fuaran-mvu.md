@@ -4,7 +4,7 @@
 
 `ToolUp.Platform.Client` no longer carries its own MVU runtime. The shell runs on the published
 [`Fuaran.MVU`](https://www.nuget.org/packages/Fuaran.MVU) runtime and mounts through its React
-adapter, `Fuaran.MVU.React` (both 0.1.0, both Apache-2.0, both arriving transitively through
+adapter, `Fuaran.MVU.React` (both 0.1.1, both Apache-2.0, both arriving transitively through
 `ToolUp.Platform.Client` — add no `PackageReference`). Coming from the 0.42 line:
 
 - **The `ToolUp.Elmish`, `ToolUp.Elmish.React` and `ToolUp.Elmish.HMR` namespaces are gone**, and so

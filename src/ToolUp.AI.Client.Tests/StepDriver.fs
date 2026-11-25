@@ -38,16 +38,7 @@ let buildInRender (view: Fuaran.MVU.React.ElementView<'msg>) (dispatch: 'msg -> 
     |> ignore
 
 /// A program's view as a test calls it: the model and the dispatch, built
-/// inside a React render. A test stands for a mount by its dispatch: a
-/// dispatch the previous call was not handed starts a new mount.
+/// inside a React render. A test stands for a mount by its dispatch, as the
+/// program does: a dispatch the previous call was not handed is a new mount.
 let viewOf (program: ToolUp.Platform.Client.ShellProgram<'model, 'msg>) : 'model -> ('msg -> unit) -> unit =
-    let last: ('msg -> unit) option ref = ref None
-
-    fun model dispatch ->
-        match last.Value with
-        | Some seen when obj.ReferenceEquals(seen, dispatch) -> ()
-        | _ ->
-            program.BeginMount()
-            last.Value <- Some dispatch
-
-        buildInRender (program.Component.View model) dispatch
+    fun model dispatch -> buildInRender (program.Component.View model) dispatch
