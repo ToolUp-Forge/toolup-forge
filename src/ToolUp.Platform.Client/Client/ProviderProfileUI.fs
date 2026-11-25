@@ -3,12 +3,13 @@
 
 module ProviderProfileUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── The reusable BYOK provider-profile component (Phase 44) ─────────
+// ─── The reusable BYOK provider-profile component ────────────────────
 //
 // One well-tested BYOK management surface that any ToolUp app embeds,
 // instead of every consumer hand-rolling its own provider form. It
@@ -18,8 +19,8 @@ open ToolUp.Platform
 // overrides, and the ordered fallback chain.
 //
 // **It carries no dependency on `ToolUp.AI`, and that is the entire
-// point of the Phase 42.B decoupling.** It composes over
-// `IProviderProfileApi` — the Phase 44 transport across the canonical
+// point of the decoupling.** It composes over
+// `IProviderProfileApi` — the transport across the canonical
 // `IProviderProfile` store — and takes "verify this key" as a
 // CONSUMER-SUPPLIED DELEGATE. The AI assistant wires an AI-backed
 // verifier; a knowledge-rental gateway wires its own; a consumer with
@@ -219,10 +220,26 @@ type Msg =
     | DismissError
     | DismissStatus
 
-// ─── Commands ────────────────────────────────────────────────────────
+// ─── Remote calls ────────────────────────────────────────────────────
 
-let private loadCmd (config: ProviderProfileConfig) =
-    Cmd.OfRemoting.call config.Api.GetProfile () ProfileLoaded (fun e -> ProfileLoaded(Error e.Message))
+let private load (config: ProviderProfileConfig) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IProviderProfileApi.GetProfile"
+            config.Api.GetProfile
+            ()
+            (RemoteEffect.flatten >> ProfileLoaded)
+    )
+]
+
+/// A mutation's reply, carrying the confirmation it reports on success.
+let private mutated (confirmation: string) (reply: Result<Result<unit, string>, exn>) : Msg =
+    Mutated(RemoteEffect.flatten reply, confirmation)
+
+/// The verification delegate's site label: the embedding app's own code,
+/// not a call on the profile API, so it has no value form yet.
+[<Literal>]
+let private VerifySite = "ProviderProfileUI.verify"
 
 let private toInput (candidate: ProviderCandidate) : ProviderEntryInput = {
     Label = candidate.Label
@@ -267,7 +284,7 @@ let saveBlocked (config: ProviderProfileConfig) (verification: VerificationState
 // ─── Update ──────────────────────────────────────────────────────────
 
 let init (config: ProviderProfileConfig) : Model * Cmd<Msg> =
-    {
+    ({
         Profile = ProviderProfileView.empty
         Loaded = false
         Editing = None
@@ -275,12 +292,18 @@ let init (config: ProviderProfileConfig) : Model * Cmd<Msg> =
         Busy = false
         Error = None
         Status = None
-    },
-    loadCmd config
+     },
+     load config)
+    |> RemoteEffect.run
 
-let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step
+    (config: ProviderProfileConfig)
+    (msg: Msg)
+    (model: Model)
+    : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Load -> { model with Error = None }, loadCmd config
+    | Load -> { model with Error = None }, load config
 
     | ProfileLoaded(Ok profile) ->
         {
@@ -288,7 +311,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 Profile = profile
                 Loaded = true
         },
-        Cmd.none
+        []
 
     | ProfileLoaded(Error err) ->
         {
@@ -296,7 +319,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 Loaded = true
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | BeginAdd ->
         {
@@ -305,11 +328,11 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 Verification = VerificationState.NotAttempted
                 Error = None
         },
-        Cmd.none
+        []
 
     | BeginEdit label ->
         match model.Profile.Entries |> List.tryFind (fun e -> e.Label = label) with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some entry ->
             {
                 model with
@@ -319,7 +342,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                     Verification = VerificationState.NotAttempted
                     Error = None
             },
-            Cmd.none
+            []
 
     | CancelEdit ->
         {
@@ -327,47 +350,60 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 Editing = None
                 Verification = VerificationState.NotAttempted
         },
-        Cmd.none
+        []
 
     | Verify candidate ->
         match config.Verify with
         // No delegate: nothing to run. The view renders `NotVerified`
         // and never offers the action, so this arm is only reachable
         // from a host dispatching the message itself.
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some verify ->
             {
                 model with
                     Verification = VerificationState.Running
             },
-            Cmd.OfAsync.either verify candidate VerifyCompleted (fun e -> VerifyCompleted(Error e.Message))
+            [
+                Do(
+                    RemoteEffect.legacy VerifySite (fun dispatch ->
+                        for effect in
+                            Cmd.OfAsync.either verify candidate VerifyCompleted (fun e ->
+                                VerifyCompleted(Error e.Message)) do
+                            effect dispatch)
+                )
+            ]
 
     | VerifyCompleted(Ok models) ->
         {
             model with
                 Verification = VerificationState.Passed models
         },
-        Cmd.none
+        []
 
     | VerifyCompleted(Error reason) ->
         {
             model with
                 Verification = VerificationState.Refused reason
         },
-        Cmd.none
+        []
 
     | Save candidate ->
         if model.Busy then
-            model, Cmd.none
+            model, []
         elif saveBlocked config model.Verification candidate then
             // Belt-and-braces: the view already disables the action.
             // Restating it here keeps the refusal true for a host that
             // dispatches `Save` itself.
-            model, Cmd.none
+            model, []
         else
-            let saveCmd =
-                Cmd.OfRemoting.call config.Api.SaveEntry (toInput candidate) SaveCompleted (fun e ->
-                    SaveCompleted(Error e.Message))
+            let save =
+                Do(
+                    RemoteEffect.call
+                        "IProviderProfileApi.SaveEntry"
+                        config.Api.SaveEntry
+                        (toInput candidate)
+                        (RemoteEffect.flatten >> SaveCompleted)
+                )
 
             // A rename replaces the entry under a new label, so the old
             // one is removed after the new one lands. Ordering matters:
@@ -378,42 +414,41 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 | Some seed when seed.Original <> None && seed.Original <> Some candidate.Label -> seed.Original
                 | _ -> None
 
-            let cmds =
-                match renamedFrom with
-                | None -> saveCmd
-                | Some previous ->
-                    Cmd.batch [
-                        saveCmd
-                        Cmd.OfRemoting.call config.Api.RemoveEntry previous (fun r -> Mutated(r, "")) (fun e ->
-                            Mutated(Error e.Message, ""))
-                    ]
-
             {
                 model with
                     Busy = true
                     Error = None
                     Status = None
             },
-            cmds
+            [
+                save
+                match renamedFrom with
+                | None -> ()
+                | Some previous ->
+                    Do(RemoteEffect.call "IProviderProfileApi.RemoveEntry" config.Api.RemoveEntry previous (mutated ""))
+            ]
 
     | SaveCompleted(Ok()) ->
         // Record what the consumer's delegate observed, so the health
         // badge reflects a verification the server never ran itself.
-        let recordCmd =
+        let record (outcome: string * ProviderVerificationOutcome) =
+            Do(
+                RemoteEffect.call
+                    "IProviderProfileApi.RecordVerification"
+                    config.Api.RecordVerification
+                    outcome
+                    (mutated "")
+            )
+
+        let recorded =
             match model.Verification, model.Editing with
-            | VerificationState.Passed models, Some seed ->
-                Cmd.OfRemoting.call
-                    config.Api.RecordVerification
-                    (seed.Label, ProviderVerificationOutcome.Verified models)
-                    (fun r -> Mutated(r, ""))
-                    (fun e -> Mutated(Error e.Message, ""))
-            | VerificationState.Refused reason, Some seed ->
-                Cmd.OfRemoting.call
-                    config.Api.RecordVerification
-                    (seed.Label, ProviderVerificationOutcome.Failed reason)
-                    (fun r -> Mutated(r, ""))
-                    (fun e -> Mutated(Error e.Message, ""))
-            | _ -> Cmd.none
+            | VerificationState.Passed models, Some seed -> [
+                record (seed.Label, ProviderVerificationOutcome.Verified models)
+              ]
+            | VerificationState.Refused reason, Some seed -> [
+                record (seed.Label, ProviderVerificationOutcome.Failed reason)
+              ]
+            | _ -> []
 
         {
             model with
@@ -426,7 +461,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
         // record and the credential flag are the server's answers, and
         // showing our own optimistic edit as though it were theirs is
         // how a failed write reads as a success.
-        Cmd.batch [ recordCmd; Cmd.ofMsg Load ]
+        recorded @ [ Then Load ]
 
     | SaveCompleted(Error err) ->
         {
@@ -434,11 +469,11 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | Remove label ->
         if model.Busy then
-            model, Cmd.none
+            model, []
         else
             {
                 model with
@@ -446,23 +481,33 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                     Error = None
                     Status = None
             },
-            Cmd.OfRemoting.call config.Api.RemoveEntry label (fun r -> Mutated(r, "removed")) (fun e ->
-                Mutated(Error e.Message, "removed"))
+            [
+                Do(RemoteEffect.call "IProviderProfileApi.RemoveEntry" config.Api.RemoveEntry label (mutated "removed"))
+            ]
 
     | SetRoute rule ->
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call config.Api.SetRoute rule (fun r -> Mutated(r, "routing")) (fun e ->
-            Mutated(Error e.Message, "routing"))
+        [
+            Do(RemoteEffect.call "IProviderProfileApi.SetRoute" config.Api.SetRoute rule (mutated "routing"))
+        ]
 
     | ClearRoute(surface, context) ->
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call config.Api.ClearRoute (surface, context) (fun r -> Mutated(r, "routing")) (fun e ->
-            Mutated(Error e.Message, "routing"))
+        [
+            Do(
+                RemoteEffect.call
+                    "IProviderProfileApi.ClearRoute"
+                    config.Api.ClearRoute
+                    (surface, context)
+                    (mutated "routing")
+            )
+        ]
 
     | SetFallback ordered ->
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call config.Api.SetFallback ordered (fun r -> Mutated(r, "fallback")) (fun e ->
-            Mutated(Error e.Message, "fallback"))
+        [
+            Do(RemoteEffect.call "IProviderProfileApi.SetFallback" config.Api.SetFallback ordered (mutated "fallback"))
+        ]
 
     | Mutated(Ok(), confirmation) ->
         let status =
@@ -476,7 +521,7 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 Busy = false
                 Status = status
         },
-        Cmd.ofMsg Load
+        [ Then Load ]
 
     | Mutated(Error err, _) ->
         {
@@ -484,11 +529,15 @@ let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * C
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
 
-    | DismissStatus -> { model with Status = None }, Cmd.none
+    | DismissStatus -> { model with Status = None }, []
+
+/// The transitions, on today's loop.
+let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    step config msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
