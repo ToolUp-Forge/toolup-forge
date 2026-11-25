@@ -30,31 +30,7 @@ open ToolUp.Platform
 open ToolUp.Remoting.Client
 open ToolUp.Platform.Tests.Remoting.ReadPolicyFixture
 open ToolUp.AI.Client.Tests.NodeTest
-
-// ─── XMLHttpRequest stub (shared with ReadPolicyTests) ────────────────
-
-[<Emit("""(() => {
-    if (globalThis.__xhrStub) return;
-    const stub = { calls: [], status: 200, body: '' };
-    globalThis.__xhrStub = stub;
-    globalThis.XMLHttpRequest = class {
-        constructor() { this.readyState = 0; this.status = 0; this.responseText = ''; this.headers = {}; }
-        open(method, url) { this.method = method; this.url = url; }
-        setRequestHeader(key, value) { this.headers[key] = value; }
-        abort() { }
-        send(body) {
-            stub.calls.push({ method: this.method, url: this.url, body });
-            this.status = stub.status;
-            this.responseText = stub.body;
-            this.readyState = 4;
-            queueMicrotask(() => { if (this.onreadystatechange) this.onreadystatechange(); });
-        }
-    };
-})()""")>]
-let private installXhrStubJs () : unit = jsNative
-
-[<Emit("(globalThis.__xhrStub.status = $0, globalThis.__xhrStub.body = $1, undefined)")>]
-let private scriptResponse (status: int) (body: string) : unit = jsNative
+open ToolUp.AI.Client.Tests.XhrStub
 
 /// A JWT-shaped token whose payload names `sub` (the signature is never
 /// checked client-side). `nonce` makes two tokens for one subject differ,
@@ -82,8 +58,7 @@ let private api: ReadCatalogApi =
 
 let private setUp () =
     RenderScope.installDom "identity-908" |> ignore
-    Http.useTransport Http.Transport.Xhr
-    installXhrStubJs ()
+    XhrStub.install ()
     ReadPolicies.registerFor<ReadCatalogApi> declarations
     // The token path that needs no server round-trip, on every case.
     UserSession.configureAuthTokenStorage FeatureMode.Disabled

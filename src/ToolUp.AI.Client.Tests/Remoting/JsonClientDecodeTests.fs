@@ -35,46 +35,7 @@ open ToolUp.Remoting.Client
 open ToolUp.Platform.Tests.Remoting
 open ToolUp.Platform.Tests.Remoting.JsonClientDecodeFixture
 open ToolUp.AI.Client.Tests.NodeTest
-
-// ─── XMLHttpRequest stub ────────────────────────────────────────────
-
-[<Emit("""(() => {
-    if (globalThis.__xhrStub) return;
-    const stub = { calls: [], status: 200, body: '' };
-    globalThis.__xhrStub = stub;
-    globalThis.XMLHttpRequest = class {
-        constructor() { this.readyState = 0; this.status = 0; this.responseText = ''; this.headers = {}; }
-        open(method, url) { this.method = method; this.url = url; }
-        setRequestHeader(key, value) { this.headers[key] = value; }
-        abort() { }
-        send(body) {
-            stub.calls.push({ method: this.method, url: this.url, body });
-            this.status = stub.status;
-            this.responseText = stub.body;
-            this.readyState = 4;
-            queueMicrotask(() => { if (this.onreadystatechange) this.onreadystatechange(); });
-        }
-    };
-})()""")>]
-let private installXhrStubJs () : unit = jsNative
-
-// Phase 855 - these cases script XMLHttpRequest, so they select the XHR
-// transport (`fetch` is the default).
-let private installXhrStub () : unit =
-    Http.useTransport Http.Transport.Xhr
-    installXhrStubJs ()
-
-[<Emit("(globalThis.__xhrStub.status = $0, globalThis.__xhrStub.body = $1, undefined)")>]
-let private scriptResponse (status: int) (body: string) : unit = jsNative
-
-[<Emit("globalThis.__xhrStub.calls.length")>]
-let private callCount () : int = jsNative
-
-[<Emit("globalThis.__xhrStub.calls[$0].url")>]
-let private callUrl (i: int) : string = jsNative
-
-[<Emit("globalThis.__xhrStub.calls[$0].body")>]
-let private callBody (i: int) : string = jsNative
+open ToolUp.AI.Client.Tests.XhrStub
 
 // ─── The API under test ─────────────────────────────────────────────
 
@@ -230,7 +191,7 @@ let tests =
 
         testList "843.D — through the proxy" [
             testCaseDeferred "a registered return type decodes through the algebra to the declared value" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.register<LedgerLine> decoder
                 scriptResponse 200 SamplePayload
                 let before = callCount ()
@@ -253,7 +214,7 @@ let tests =
                 "a malformed body is a named refusal on ProxyRequestException, not a parser exception"
                 30
                 (fun () ->
-                    installXhrStub ()
+                    XhrStub.install ()
                     JsonDecoders.register<LedgerLine> decoder
                     scriptResponse 200 """{"Id":"+1","Amount":"""
                     let truncated = start (api.GetLine())
@@ -278,7 +239,7 @@ let tests =
                         | Pending -> failwith "the call never completed")
 
             testCaseDeferred "a well-formed body of the wrong shape is refused at its path" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.register<LedgerLine> decoder
                 scriptResponse 200 (SamplePayload.Replace("\"Tags\":[\"a\",\"b\"]", "\"Tags\":[\"a\",2]"))
                 let wrong = start (api.GetLine())
@@ -296,7 +257,7 @@ let tests =
                     | other -> failwithf "expected a named refusal, got %A" other)
 
             testCaseDeferred "an unregistered return type takes the reflection path, exactly as before" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
                 scriptResponse 200 SamplePayload
                 let outcome = start (api.GetLineViaReflection())
@@ -413,7 +374,7 @@ let tests =
                 "885 acceptance — the reflective proxy sends the pinned body for a decimal, TimeSpan and DateTime argument"
                 30
                 (fun () ->
-                    installXhrStub ()
+                    XhrStub.install ()
                     scriptResponse 200 "null"
                     let before = callCount ()
                     let outcome = start (bookingApi.Book BrowserWriterFixture.booking)
@@ -507,7 +468,7 @@ let tests =
                 "899 — the reflective proxy sends the pinned body for a map keyed by a union with fields"
                 30
                 (fun () ->
-                    installXhrStub ()
+                    XhrStub.install ()
                     scriptResponse 200 "null"
                     let before = callCount ()
                     let outcome = start (tallyApi.Record BrowserWriterFixture.tally)
@@ -547,7 +508,7 @@ let tests =
                 same (viaReflection<int64> "\"+9007199254740993\"") 9007199254740993L "the writer's string is exact"
 
             testCaseDeferred "911 — an int64 number token outside int32 reads exactly through the proxy" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
                 scriptResponse 200 "5000000000"
                 let outcome = start (wideApi.GetCount())
@@ -562,7 +523,7 @@ let tests =
                 "911 — every int64 / uint64 position of a record reads exactly: field, option, list, tuple"
                 30
                 (fun () ->
-                    installXhrStub ()
+                    XhrStub.install ()
                     JsonDecoders.resetForTests ()
 
                     scriptResponse
@@ -588,7 +549,7 @@ let tests =
                         | Pending -> failwith "the call never completed")
 
             testCaseDeferred "911 — an int64 number past 2^53 - 1 is a named refusal, never 0" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
                 scriptResponse 200 """{"Count":1,"Size":1,"Maybe":null,"Series":[9007199254740993],"Pair":[1,"x"]}"""
                 let outcome = start (wideApi.GetReading())
@@ -607,7 +568,7 @@ let tests =
                     | Pending -> failwith "the call never completed")
 
             testCaseDeferred "911 — a fractional or negative token at uint64 is refused" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
                 scriptResponse 200 "-1"
                 let outcome = start (wideApi.GetSize())
@@ -623,7 +584,7 @@ let tests =
                     | other -> failwithf "expected a named refusal, got %A" other)
 
             testCaseDeferred "911 — a fractional token at int64 is refused" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
                 scriptResponse 200 "1.5"
                 let outcome = start (wideApi.GetCount())
@@ -668,7 +629,7 @@ let tests =
                     "the object form is read, high and low"
 
             testCaseDeferred "937 — an object at an int64 record field is a named refusal at its path" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
 
                 scriptResponse
@@ -679,7 +640,7 @@ let tests =
                 fun () -> expectObjectRefusal [ "Count" ] "Int64" (outcome ()))
 
             testCaseDeferred "937 — an object inside an int64 list is refused at the element's path" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
 
                 scriptResponse
@@ -690,7 +651,7 @@ let tests =
                 fun () -> expectObjectRefusal [ "Series"; "[1]" ] "Int64" (outcome ()))
 
             testCaseDeferred "937 — an object at a uint64 return is refused at the root" 30 (fun () ->
-                installXhrStub ()
+                XhrStub.install ()
                 JsonDecoders.resetForTests ()
                 scriptResponse 200 """{"high":-1,"low":-1,"unsigned":true}"""
                 let outcome = start (wideApi.GetSize())

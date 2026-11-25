@@ -163,7 +163,7 @@ let private kbFailing (methodName: string) (msg: ClientModel.Msg) (model: Client
 let tests =
     testList "Remote calls as effect values" [
 
-        testList "the performer keeps what Cmd.OfRemoting carries" [
+        testList "the performer keeps the interceptor chain, the retry policy and the read policy" [
             testCaseDeferred "a performed call passes through the interceptor chain" 30 (fun () ->
                 let interceptor = recording "Probe.Plain" None
                 let seen = ResizeArray<Msg>()
@@ -251,14 +251,13 @@ let tests =
                         same (events interceptor) [ "calling"; "success" ] "the request's one chain"
                         same (List.ofSeq seen) [ Got 7; Got 7 ] "each effect its one reply")
 
-            testCaseDeferred "a read served from the cache answers once; Cmd.OfRemoting answers twice" 150 (fun () ->
+            testCaseDeferred "a read served from the cache answers once, and its refresh is still sent" 150 (fun () ->
                 registerProbe ()
                 ReadPolicies.clear ()
                 let sent = ref 0
                 let answer = ref 1
                 let read = declaredRead "Cached" (ReadPolicy.cacheable 60) sent answer
                 let viaEffect = ResizeArray<Msg>()
-                let viaCmd = ResizeArray<Msg>()
 
                 Async.StartImmediate(
                     async {
@@ -267,20 +266,12 @@ let tests =
 
                         RemoteEffect.toCmd [ Do(RemoteEffect.call "Probe.Cached" read "cached-key" unboxed) ]
                         |> run viaEffect.Add
-
-                        do! Async.Sleep 30
-                        answer.Value <- 3
-
-                        Cmd.OfRemoting.callWithName "Probe.Cached" read "cached-key" (unbox<int> >> Got) (fun ex ->
-                            Failed ex.Message)
-                        |> run viaCmd.Add
                     }
                 )
 
                 fun () ->
                     same (List.ofSeq viaEffect) [ Got 1 ] "the cached value, and nothing after it"
-                    same (List.ofSeq viaCmd) [ Got 2; Got 3 ] "the control: cached, then fresh"
-                    same sent.Value 3 "the prime and both refreshes were sent")
+                    same sent.Value 2 "the prime and the refresh were sent")
         ]
 
         testList "the adapter" [

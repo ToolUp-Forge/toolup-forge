@@ -13,7 +13,7 @@ module ToolUp.AI.Client.Tests.BootDegradationTests
 //
 // The shell `update` is driven directly with hand-built `Client.Model`
 // values: a failing boot load arrives as `BootLoadFailed` (that is the
-// exact message `bootLoadCmd`'s `Cmd.OfAsync.either` produces from a
+// exact message `bootLoadCmd`'s operation answers for a
 // thrown loader), so the tests pin the Model contract — empty teams +
 // one deduped degradation entry + banner-visible state — without
 // needing a live server. The bridge tests stub `globalThis.setInterval`

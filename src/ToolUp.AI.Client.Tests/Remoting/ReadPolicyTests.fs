@@ -3,10 +3,10 @@
 
 module ToolUp.AI.Client.Tests.ReadPolicyTests
 
-// ─── Phase 854 — declared reads: in-flight sharing and stale-while-revalidate ─
+// ─── Declared reads: in-flight sharing and stale-while-revalidate ─
 //
 // Run on the TRANSPILED client, through the real proxy
-// (`Remoting.buildProxy`) and the real `Cmd.OfRemoting`, against a scripted
+// (`Remoting.buildProxy`) and the real `RemoteEffect` performer, against a scripted
 // XMLHttpRequest that counts what is sent:
 //
 //   * two identical calls in flight make ONE request, and both callers
@@ -25,45 +25,13 @@ module ToolUp.AI.Client.Tests.ReadPolicyTests
 // global, same shape; whichever pack runs first installs it), so request
 // counts are read as deltas.
 
+open Fuaran.MVU
 open Fable.Core
 open ToolUp.Elmish
 open ToolUp.Remoting.Client
 open ToolUp.Platform.Tests.Remoting.ReadPolicyFixture
 open ToolUp.AI.Client.Tests.NodeTest
-
-// ─── XMLHttpRequest stub (shared with JsonClientDecodeTests) ─────────
-
-[<Emit("""(() => {
-    if (globalThis.__xhrStub) return;
-    const stub = { calls: [], status: 200, body: '' };
-    globalThis.__xhrStub = stub;
-    globalThis.XMLHttpRequest = class {
-        constructor() { this.readyState = 0; this.status = 0; this.responseText = ''; this.headers = {}; }
-        open(method, url) { this.method = method; this.url = url; }
-        setRequestHeader(key, value) { this.headers[key] = value; }
-        abort() { }
-        send(body) {
-            stub.calls.push({ method: this.method, url: this.url, body });
-            this.status = stub.status;
-            this.responseText = stub.body;
-            this.readyState = 4;
-            queueMicrotask(() => { if (this.onreadystatechange) this.onreadystatechange(); });
-        }
-    };
-})()""")>]
-let private installXhrStubJs () : unit = jsNative
-
-// Phase 855 - these cases script XMLHttpRequest, so they select the XHR
-// transport (`fetch` is the default).
-let private installXhrStub () : unit =
-    Http.useTransport Http.Transport.Xhr
-    installXhrStubJs ()
-
-[<Emit("(globalThis.__xhrStub.status = $0, globalThis.__xhrStub.body = $1, undefined)")>]
-let private scriptResponse (status: int) (body: string) : unit = jsNative
-
-[<Emit("globalThis.__xhrStub.calls.length")>]
-let private callCount () : int = jsNative
+open ToolUp.AI.Client.Tests.XhrStub
 
 // ─── The API under test ─────────────────────────────────────────────
 
@@ -77,7 +45,7 @@ let private api: ReadCatalogApi =
 /// that needs it rather than at import — the packs that run before this one
 /// run with nothing registered, the ones after with this record registered.
 let private setUp () =
-    installXhrStub ()
+    XhrStub.install ()
     ReadPolicies.registerFor<ReadCatalogApi> declarations
     ReadPolicies.clear ()
 
@@ -114,6 +82,12 @@ let private returned (outcome: Outcome<int>) : int option =
 type private Msg =
     | Got of int
     | Failed of string
+
+/// A call's one reply as this pack's message.
+let private gotOrFailed (reply: Result<int, exn>) : Msg =
+    match reply with
+    | Ok value -> Got value
+    | Error e -> Failed e.Message
 
 let private run (dispatch: Msg -> unit) (cmd: Cmd<Msg>) =
     for effect in cmd do
@@ -214,7 +188,7 @@ let tests =
 
         testList "854.B — the interceptor chain counts one request once" [
             testCaseDeferred
-                "two Cmd calls sharing a request: OnCalling once, OnSuccess once, both messages"
+                "two effects sharing a request: OnCalling once, OnSuccess once, both messages"
                 50
                 (fun () ->
                     setUp ()
@@ -224,11 +198,9 @@ let tests =
                     let before = callCount ()
                     let seen = ResizeArray<Msg>()
 
-                    Cmd.batch [
-                        Cmd.OfRemoting.callWithName "ReadCatalogApi.GetShared" api.GetShared "chain-1" Got (fun e ->
-                            Failed e.Message)
-                        Cmd.OfRemoting.callWithName "ReadCatalogApi.GetShared" api.GetShared "chain-1" Got (fun e ->
-                            Failed e.Message)
+                    RemoteEffect.toCmd [
+                        Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-1" gotOrFailed)
+                        Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-1" gotOrFailed)
                     ]
                     |> run seen.Add
 
@@ -249,11 +221,9 @@ let tests =
                     let before = callCount ()
                     let seen = ResizeArray<Msg>()
 
-                    Cmd.batch [
-                        Cmd.OfRemoting.callWithName "ReadCatalogApi.GetShared" api.GetShared "chain-fail" Got (fun e ->
-                            Failed e.Message)
-                        Cmd.OfRemoting.callWithName "ReadCatalogApi.GetShared" api.GetShared "chain-fail" Got (fun e ->
-                            Failed e.Message)
+                    RemoteEffect.toCmd [
+                        Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-fail" gotOrFailed)
+                        Do(RemoteEffect.call "ReadCatalogApi.GetShared" api.GetShared "chain-fail" gotOrFailed)
                     ]
                     |> run seen.Add
 
@@ -275,11 +245,9 @@ let tests =
                 let before = callCount ()
                 let seen = ResizeArray<Msg>()
 
-                Cmd.batch [
-                    Cmd.OfRemoting.callWithName "ReadCatalogApi.GetUndeclared" api.GetUndeclared "each" Got (fun e ->
-                        Failed e.Message)
-                    Cmd.OfRemoting.callWithName "ReadCatalogApi.GetUndeclared" api.GetUndeclared "each" Got (fun e ->
-                        Failed e.Message)
+                RemoteEffect.toCmd [
+                    Do(RemoteEffect.call "ReadCatalogApi.GetUndeclared" api.GetUndeclared "each" gotOrFailed)
+                    Do(RemoteEffect.call "ReadCatalogApi.GetUndeclared" api.GetUndeclared "each" gotOrFailed)
                 ]
                 |> run seen.Add
 
@@ -317,22 +285,30 @@ let tests =
                     // prime + the first hit's refresh + the second hit's refresh
                     same (callCount () - before) 3 "every hit refreshes")
 
-            testCaseDeferred "an Elmish consumer receives the fresh value as an ordinary second message" 60 (fun () ->
+            testCaseDeferred "an effect receives the cached value once; its refresh refills the cache" 60 (fun () ->
                 setUp ()
                 scriptResponse 200 "4"
                 let seen = ResizeArray<Msg>()
+                let mutable afterRefresh = fun () -> Pending
 
                 Async.StartImmediate(
                     async {
                         let! _ = api.GetCount "swr-cmd"
                         scriptResponse 200 "5"
 
-                        Cmd.OfRemoting.call api.GetCount "swr-cmd" Got (fun e -> Failed e.Message)
+                        RemoteEffect.asCmd (
+                            RemoteEffect.call "ReadCatalogApi.GetCount" api.GetCount "swr-cmd" gotOrFailed
+                        )
                         |> run seen.Add
+
+                        do! Async.Sleep 25
+                        afterRefresh <- start (api.GetCount "swr-cmd")
                     }
                 )
 
-                fun () -> same (List.ofSeq seen) [ Got 4; Got 5 ] "the cached value, then the refreshed one")
+                fun () ->
+                    same (List.ofSeq seen) [ Got 4 ] "the cached value, and nothing after it"
+                    same (returned (afterRefresh ())) (Some 5) "the refresh refilled the cache")
 
             testCaseDeferred "a failed refresh dispatches nothing more, and evicts the stale value" 60 (fun () ->
                 setUp ()
@@ -346,7 +322,9 @@ let tests =
                         let! _ = api.GetCount "swr-fail"
                         scriptResponse 500 "down"
 
-                        Cmd.OfRemoting.call api.GetCount "swr-fail" Got (fun e -> Failed e.Message)
+                        RemoteEffect.asCmd (
+                            RemoteEffect.call "ReadCatalogApi.GetCount" api.GetCount "swr-fail" gotOrFailed
+                        )
                         |> run seen.Add
 
                         do! Async.Sleep 25
