@@ -3,12 +3,13 @@
 
 module ServiceStatusBoardUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 9p.A — ServiceStatusBoard admin module ────────────────────
+// ─── ServiceStatusBoard admin module ─────────────────────────────────
 //
 // Single-page admin module that aggregates every operator-facing
 // observability surface (Health, Preflight, Drift, RateLimit, JobQueue,
@@ -49,28 +50,39 @@ type Msg =
 let private boardApi: IServiceStatusBoardApi =
     Api.makeProxy<IServiceStatusBoardApi> (customOptions = UserSession.withRequestHeaders)
 
-let private loadSnapshotCmd () =
-    Cmd.OfRemoting.call boardApi.GetSnapshot () SnapshotLoaded (fun e -> SnapshotLoaded(Error e.Message))
+let internal loadSnapshot () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IServiceStatusBoardApi.GetSnapshot"
+            boardApi.GetSnapshot
+            ()
+            (RemoteEffect.flatten >> SnapshotLoaded)
+    )
+]
 
-let private loadSectionCmd (msgs: ServiceStatusBoardMessages) (section: string) =
-    let api = boardApi
+let internal loadSection (msgs: ServiceStatusBoardMessages) (section: string) : Step<Msg, RemoteEffect<Msg>> list =
+    let refresh (methodName: string) (proxyCall: unit -> Async<Result<SectionSummary, string>>) = [
+        Do(RemoteEffect.call methodName proxyCall () (fun reply -> SectionLoaded(section, RemoteEffect.flatten reply)))
+    ]
 
-    let work: Async<Result<SectionSummary, string>> =
-        match section with
-        | s when s = ServiceStatusSnapshot.HealthSection -> api.RefreshHealth()
-        | s when s = ServiceStatusSnapshot.PreflightSection -> api.RefreshPreflight()
-        | s when s = ServiceStatusSnapshot.DriftSection -> api.RefreshDrift()
-        | s when s = ServiceStatusSnapshot.RateLimitSection -> api.RefreshRateLimit()
-        | s when s = ServiceStatusSnapshot.JobQueueSection -> api.RefreshJobQueue()
-        | s when s = ServiceStatusSnapshot.SmokeTestSection -> api.RefreshSmokeTest()
-        | other -> async { return Error(msgs.UnknownSectionMessage other) }
-
-    Cmd.OfRemoting.call (fun () -> work) () (fun result -> SectionLoaded(section, result)) (fun e ->
-        SectionLoaded(section, Error e.Message))
+    match section with
+    | s when s = ServiceStatusSnapshot.HealthSection ->
+        refresh "IServiceStatusBoardApi.RefreshHealth" boardApi.RefreshHealth
+    | s when s = ServiceStatusSnapshot.PreflightSection ->
+        refresh "IServiceStatusBoardApi.RefreshPreflight" boardApi.RefreshPreflight
+    | s when s = ServiceStatusSnapshot.DriftSection ->
+        refresh "IServiceStatusBoardApi.RefreshDrift" boardApi.RefreshDrift
+    | s when s = ServiceStatusSnapshot.RateLimitSection ->
+        refresh "IServiceStatusBoardApi.RefreshRateLimit" boardApi.RefreshRateLimit
+    | s when s = ServiceStatusSnapshot.JobQueueSection ->
+        refresh "IServiceStatusBoardApi.RefreshJobQueue" boardApi.RefreshJobQueue
+    | s when s = ServiceStatusSnapshot.SmokeTestSection ->
+        refresh "IServiceStatusBoardApi.RefreshSmokeTest" boardApi.RefreshSmokeTest
+    | other -> [ Then(SectionLoaded(section, Error(msgs.UnknownSectionMessage other))) ]
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) =
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
         Snapshot = Remote.Loading
         Collapsed = Set.empty
@@ -79,7 +91,7 @@ let init (ctx: ClientModuleContext) =
         Messages = ctx.Messages.ServiceStatusBoard
     }
 
-    model, loadSnapshotCmd ()
+    (model, loadSnapshot ()) |> RemoteEffect.run
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -140,9 +152,10 @@ let private flippedSections
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | RefreshAll -> { model with Snapshot = Remote.Loading }, loadSnapshotCmd ()
+    | RefreshAll -> { model with Snapshot = Remote.Loading }, loadSnapshot ()
 
     | SnapshotLoaded(Ok snap) ->
         let flipped = flippedSections model.Messages (Remote.toOption model.Snapshot) snap
@@ -153,7 +166,7 @@ let update (msg: Msg) (model: Model) =
                 Refreshing = Set.empty
                 RecentlyFlipped = flipped
         },
-        Cmd.none
+        []
 
     | SnapshotLoaded(Error e) ->
         {
@@ -161,7 +174,7 @@ let update (msg: Msg) (model: Model) =
                 Snapshot = Remote.Failed e
                 Refreshing = Set.empty
         },
-        Cmd.none
+        []
 
     | ToggleCollapsed section ->
         let next =
@@ -170,14 +183,14 @@ let update (msg: Msg) (model: Model) =
             else
                 Set.add section model.Collapsed
 
-        { model with Collapsed = next }, Cmd.none
+        { model with Collapsed = next }, []
 
     | RefreshSection section ->
         {
             model with
                 Refreshing = Set.add section model.Refreshing
         },
-        loadSectionCmd model.Messages section
+        loadSection model.Messages section
 
     | SectionLoaded(section, Ok summary) ->
         let nextRefreshing = Set.remove section model.Refreshing
@@ -211,7 +224,7 @@ let update (msg: Msg) (model: Model) =
                     Refreshing = nextRefreshing
                     RecentlyFlipped = recentlyFlipped
             },
-            Cmd.none
+            []
         | None ->
             // Per-section refresh hit before the composite snapshot
             // landed. Drop the result and let the composite load
@@ -220,7 +233,7 @@ let update (msg: Msg) (model: Model) =
                 model with
                     Refreshing = nextRefreshing
             },
-            Cmd.none
+            []
 
     | SectionLoaded(section, Error e) ->
         let failureSummary =
@@ -247,13 +260,16 @@ let update (msg: Msg) (model: Model) =
                     Refreshing = nextRefreshing
                     RecentlyFlipped = Set.add section model.RecentlyFlipped
             },
-            Cmd.none
+            []
         | None ->
             {
                 model with
                     Refreshing = nextRefreshing
             },
-            Cmd.none
+            []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Renderers ───────────────────────────────────────────────────────
 
@@ -423,7 +439,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.ServiceStatusBoard"
@@ -431,7 +447,7 @@ let moduleId = "_sdk.ServiceStatusBoard"
 /// Create the built-in service-status-board admin module. The shell's
 /// module fills the `ServiceStatusBoard` shell slot (Default /
 /// Configured), which the shell admits on every surface. Grouped under
-/// "Platform Management" so the role-gated sidebar filter (commit 4f.2)
+/// "Platform Management" so the role-gated sidebar filter
 /// hides the entry from non-admin callers.
 let builtIn: BuiltIn<Model, Msg> = {
     Id = moduleId
@@ -449,7 +465,7 @@ let builtIn: BuiltIn<Model, Msg> = {
     Extend = id
 }
 
-/// Phase 573.B — the administration-landing tile of this built-in's
+/// The administration-landing tile of this built-in's
 /// slot (see `HealthMonitorUI.adminTile` for the full rationale): built
 /// for whichever module fills the slot (`owner`), so a replacement keeps
 /// the tile, with its own id, name and icon.

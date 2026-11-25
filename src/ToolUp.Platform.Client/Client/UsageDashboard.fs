@@ -3,6 +3,7 @@
 
 module UsageDashboard
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -14,7 +15,7 @@ open Toolup.UIToolkit
 open ToolUp.Platform
 open ToolUp.Platform.Usage
 
-// ─── Phase 9d — Usage admin module (client) ──────────────────────
+// ─── Usage admin module (client) ─────────────────────────────────
 //
 // Read-only Owner / Admin dashboard. Calls `IUsageQueryApi`
 // (`Aggregate` / `Query` / `ExportCsv`) and renders a date-range
@@ -50,11 +51,27 @@ let private usageApi: IUsageQueryApi =
 
 // ─── Init / update ───────────────────────────────────────────────
 
-let private loadAggregateCmd (grouping: UsageGrouping) =
-    Cmd.OfRemoting.call usageApi.Aggregate grouping (fun rows -> AggregateLoaded(Ok rows)) (fun e ->
-        AggregateLoaded(Error e.Message))
+let internal loadAggregate (grouping: UsageGrouping) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IUsageQueryApi.Aggregate"
+            usageApi.Aggregate
+            grouping
+            (Result.mapError _.Message >> AggregateLoaded)
+    )
+]
 
-let init () =
+let internal exportCsv (range: UsageDateRange option) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IUsageQueryApi.ExportCsv"
+            usageApi.ExportCsv
+            range
+            (Result.mapError _.Message >> ExportComplete)
+    )
+]
+
+let init () : Model * Cmd<Msg> =
     let now = DateTime.UtcNow
     let monthStart = DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc)
 
@@ -66,7 +83,7 @@ let init () =
         Exporting = false
     }
 
-    model, loadAggregateCmd model.Grouping
+    (model, loadAggregate model.Grouping) |> RemoteEffect.run
 
 let private downloadCsv (bytes: byte[]) =
     // Build a Blob, attach an <a download>, click it, revoke the URL.
@@ -84,7 +101,13 @@ let private downloadCsv (bytes: byte[]) =
     document.body.removeChild anchor |> ignore
     emitJsExpr<unit> url "URL.revokeObjectURL($0)"
 
-let update msg model =
+/// The browser download of an exported CSV. It dispatches nothing.
+let internal download (bytes: byte[]) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(RemoteEffect.legacy "UsageDashboard.downloadCsv" (fun _ -> downloadCsv bytes))
+]
+
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SetGrouping g ->
         let m = {
@@ -93,38 +116,37 @@ let update msg model =
                 Aggregate = Remote.Loading
         }
 
-        m, loadAggregateCmd g
+        m, loadAggregate g
 
-    | SetFrom from -> { model with From = from }, Cmd.none
+    | SetFrom from -> { model with From = from }, []
 
-    | SetTo toDt -> { model with To = toDt }, Cmd.none
+    | SetTo toDt -> { model with To = toDt }, []
 
     | Refresh ->
         {
             model with
                 Aggregate = Remote.Loading
         },
-        loadAggregateCmd model.Grouping
+        loadAggregate model.Grouping
 
     | AggregateLoaded result ->
         {
             model with
                 Aggregate = Remote.ofResult result
         },
-        Cmd.none
+        []
 
     | ExportCsv ->
         let range = Some { From = model.From; To = model.To }
 
-        let cmd =
-            Cmd.OfRemoting.call usageApi.ExportCsv range (fun bytes -> ExportComplete(Ok bytes)) (fun e ->
-                ExportComplete(Error e.Message))
+        { model with Exporting = true }, exportCsv range
 
-        { model with Exporting = true }, cmd
+    | ExportComplete(Ok bytes) -> { model with Exporting = false }, download bytes
 
-    | ExportComplete(Ok bytes) -> { model with Exporting = false }, Cmd.ofEffect (fun _ -> downloadCsv bytes)
+    | ExportComplete(Error _) -> { model with Exporting = false }, []
 
-    | ExportComplete(Error _) -> { model with Exporting = false }, Cmd.none
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────
 
@@ -260,7 +282,7 @@ let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.UsageDashboard"
@@ -285,7 +307,7 @@ let builtIn: BuiltIn<Model, Msg> = {
     Extend = id
 }
 
-/// Phase 573.B — the administration-landing tile of this built-in's
+/// The administration-landing tile of this built-in's
 /// slot (see `HealthMonitorUI.adminTile` for the full rationale): built
 /// for whichever module fills the slot (`owner`), so a replacement keeps
 /// the tile, with its own id, name and icon.

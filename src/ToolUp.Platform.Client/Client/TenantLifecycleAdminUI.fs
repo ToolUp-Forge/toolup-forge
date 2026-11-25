@@ -3,15 +3,16 @@
 
 module TenantLifecycleAdminUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 54e — tenant-lifecycle diagnostics admin module ───────────
+// ─── Tenant-lifecycle diagnostics admin module ───────────────────────
 //
 // SDK-built-in Platform-Admin module surfacing the **durable last
-// `LifecycleSummary`** the server already persists (Phase 54e's
+// `LifecycleSummary`** the server already persists (its
 // `ILifecycleSummaryStore` + `IPlatformTenantApi.GetLifecycleSummary`).
 // Given a tenant/team scope id, it renders the outcome of that scope's
 // most recent provision / offboard run — per-hook name, result, elapsed
@@ -23,12 +24,11 @@ open ToolUp.Platform
 // is no "list every scope" method, so the panel takes a scope-id input
 // (the admin types / pastes a tenant or team scope id) and fetches the
 // last summary on submit. A "list scopes with a recorded run" API is a
-// possible follow-on (noted in `TIDY-UP.md`), not this phase.
+// possible follow-on.
 //
-// **The registered hook set** is surfaced by the Phase 54e
-// `TenantLifecycleDiagnosticsContributor` at `/dev/inspect` (which already
-// satisfies the phase's hook-visibility acceptance criterion). Rather than
-// add a new API method here, the panel links operators to that surface.
+// **The registered hook set** is surfaced by the
+// `TenantLifecycleDiagnosticsContributor` at `/dev/inspect`, which already
+// lists the hooks. Rather than add a new API method here, the panel links operators to that surface.
 //
 // **Gating (Platform-Admin).** Sidebar group "Platform Management" — the
 // shell's role gate hides the whole group from non-admin callers, exactly
@@ -91,13 +91,24 @@ let init () : Model * Cmd<Msg> =
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let internal getSummary (scopeId: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IPlatformTenantApi.GetLifecycleSummary"
+            tenantApi.GetLifecycleSummary
+            scopeId
+            (RemoteEffect.flatten >> SummaryLoaded)
+    )
+]
+
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SubmitScope scopeId ->
         let scopeId = scopeId.Trim()
 
         if scopeId = "" then
-            model, Cmd.none
+            model, []
         else
             {
                 model with
@@ -107,8 +118,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Loading = true
                     Error = None
             },
-            Cmd.OfRemoting.call tenantApi.GetLifecycleSummary scopeId SummaryLoaded (fun e ->
-                SummaryLoaded(Error e.Message))
+            getSummary scopeId
 
     | SummaryLoaded(Ok summary) ->
         {
@@ -118,7 +128,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Loading = false
                 Error = None
         },
-        Cmd.none
+        []
 
     | SummaryLoaded(Error err) ->
         {
@@ -128,9 +138,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Loading = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ──────────────────────────────────────────────────────
 
