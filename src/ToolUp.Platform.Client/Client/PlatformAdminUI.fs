@@ -3,6 +3,7 @@
 
 module PlatformAdminUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
@@ -74,22 +75,33 @@ module AssignConfirm =
         Outcome = Open
     }
 
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    /// The transitions, with the call as a value.
+    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
         match msg with
-        | Confirm when model.InFlight -> model, Cmd.none
+        | Confirm when model.InFlight -> model, []
         | Confirm ->
             { model with InFlight = true },
-            Cmd.OfRemoting.call platformAdminApi.AssignPlatformAdmin model.TargetUserId Resolved (fun ex ->
-                Resolved(Error ex.Message))
-        | Cancel when model.InFlight -> model, Cmd.none
-        | Cancel -> { model with Outcome = Cancelled }, Cmd.none
+            [
+                Do(
+                    RemoteEffect.call
+                        "PlatformAdminApi.AssignPlatformAdmin"
+                        platformAdminApi.AssignPlatformAdmin
+                        model.TargetUserId
+                        (RemoteEffect.flatten >> Resolved)
+                )
+            ]
+        | Cancel when model.InFlight -> model, []
+        | Cancel -> { model with Outcome = Cancelled }, []
         | Resolved result ->
             {
                 model with
                     InFlight = false
                     Outcome = Done result
             },
-            Cmd.none
+            []
+
+    /// The transitions, on today's loop.
+    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
     let view (msgs: PlatformAdminMessages) (directory: UserDirectory.Model) (model: Model) (dispatch: Msg -> unit) =
         let label = UserDirectory.email directory model.TargetUserId
@@ -170,21 +182,33 @@ module ConfirmDeleteTeam =
         Outcome = Open
     }
 
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    /// The transitions, with the call as a value.
+    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
         match msg with
-        | Confirm when model.InFlight -> model, Cmd.none
+        | Confirm when model.InFlight -> model, []
         | Confirm ->
             { model with InFlight = true },
-            Cmd.OfRemoting.call teamApi.DeleteTeamHard model.TeamId Resolved (fun ex -> Resolved(Error ex.Message))
-        | Cancel when model.InFlight -> model, Cmd.none
-        | Cancel -> { model with Outcome = Cancelled }, Cmd.none
+            [
+                Do(
+                    RemoteEffect.call
+                        "TeamApi.DeleteTeamHard"
+                        teamApi.DeleteTeamHard
+                        model.TeamId
+                        (RemoteEffect.flatten >> Resolved)
+                )
+            ]
+        | Cancel when model.InFlight -> model, []
+        | Cancel -> { model with Outcome = Cancelled }, []
         | Resolved result ->
             {
                 model with
                     InFlight = false
                     Outcome = Done result
             },
-            Cmd.none
+            []
+
+    /// The transitions, on today's loop.
+    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
     let view (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
         Modal.confirm
@@ -308,51 +332,90 @@ type Msg =
 
 // ─── Init / commands ─────────────────────────────────────────────────
 
-let private loadAdminsCmd () =
-    Cmd.OfRemoting.call platformAdminApi.ListPlatformAdmins () (fun list -> AdminsLoaded(Ok list)) (fun ex ->
-        AdminsLoaded(Error ex.Message))
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
 
-let private revokeCmd (targetUserId: string) =
-    Cmd.OfRemoting.call
-        platformAdminApi.RevokePlatformAdmin
-        targetUserId
-        (fun result -> RevokeResolved(targetUserId, result))
-        (fun ex -> RevokeResolved(targetUserId, Error ex.Message))
+let internal loadAdmins () : Steps = [
+    Do(
+        RemoteEffect.call
+            "PlatformAdminApi.ListPlatformAdmins"
+            platformAdminApi.ListPlatformAdmins
+            ()
+            (Result.mapError _.Message >> AdminsLoaded)
+    )
+]
 
-let private loadPlatformKnowledgeBaseCmd () =
-    Cmd.OfRemoting.call
-        platformAdminApi.GetPlatformKnowledgeBase
-        ()
-        (fun mode -> PlatformKnowledgeBaseLoaded(Ok mode))
-        (fun ex -> PlatformKnowledgeBaseLoaded(Error ex.Message))
+let internal revoke (targetUserId: string) : Steps = [
+    Do(
+        RemoteEffect.call
+            "PlatformAdminApi.RevokePlatformAdmin"
+            platformAdminApi.RevokePlatformAdmin
+            targetUserId
+            (fun reply -> RevokeResolved(targetUserId, RemoteEffect.flatten reply))
+    )
+]
 
-let private setPlatformKnowledgeBaseCmd (mode: FeatureMode) =
-    Cmd.OfRemoting.call
-        platformAdminApi.SetPlatformKnowledgeBase
-        mode
-        (fun result -> TogglePlatformKnowledgeBaseResolved(mode, result))
-        (fun ex -> TogglePlatformKnowledgeBaseResolved(mode, Error ex.Message))
+let internal loadPlatformKnowledgeBase () : Steps = [
+    Do(
+        RemoteEffect.call
+            "PlatformAdminApi.GetPlatformKnowledgeBase"
+            platformAdminApi.GetPlatformKnowledgeBase
+            ()
+            (Result.mapError _.Message >> PlatformKnowledgeBaseLoaded)
+    )
+]
 
-let private createTeamCmd (request: CreateTeamRequest) =
-    Cmd.OfRemoting.call teamApi.CreateTeamWithOwner request CreateTeamResolved (fun ex ->
-        CreateTeamResolved(Error ex.Message))
+let internal setPlatformKnowledgeBase (mode: FeatureMode) : Steps = [
+    Do(
+        RemoteEffect.call
+            "PlatformAdminApi.SetPlatformKnowledgeBase"
+            platformAdminApi.SetPlatformKnowledgeBase
+            mode
+            (fun reply -> TogglePlatformKnowledgeBaseResolved(mode, RemoteEffect.flatten reply))
+    )
+]
 
-let private loadTeamsCmd () =
-    Cmd.OfRemoting.call teamApi.ListAllTeams () TeamsLoaded (fun ex -> TeamsLoaded(Error ex.Message))
+let internal createTeam (request: CreateTeamRequest) : Steps = [
+    Do(
+        RemoteEffect.call
+            "TeamApi.CreateTeamWithOwner"
+            teamApi.CreateTeamWithOwner
+            request
+            (RemoteEffect.flatten >> CreateTeamResolved)
+    )
+]
 
-let private setArchivedCmd (teamId: string) (archived: bool) =
-    let call =
+let internal loadTeams () : Steps = [
+    Do(RemoteEffect.call "TeamApi.ListAllTeams" teamApi.ListAllTeams () (RemoteEffect.flatten >> TeamsLoaded))
+]
+
+let internal setArchived (teamId: string) (archived: bool) : Steps =
+    let methodName, call =
         if archived then
-            teamApi.ArchiveTeam
+            "TeamApi.ArchiveTeam", teamApi.ArchiveTeam
         else
-            teamApi.RestoreTeam
+            "TeamApi.RestoreTeam", teamApi.RestoreTeam
 
-    Cmd.OfRemoting.call call teamId (fun result -> TeamArchiveResolved(teamId, archived, result)) (fun ex ->
-        TeamArchiveResolved(teamId, archived, Error ex.Message))
+    [
+        Do(
+            RemoteEffect.call methodName call teamId (fun reply ->
+                TeamArchiveResolved(teamId, archived, RemoteEffect.flatten reply))
+        )
+    ]
+
+/// The directory's commands as steps, one per command element, each a
+/// `RemoteEffect.legacy` body that dispatches the element's one message:
+/// the directory does not name its calls as values.
+let private directorySteps (site: string) (cmd: Cmd<UserDirectory.Msg>) : Steps =
+    cmd
+    |> List.mapi (fun index effect ->
+        Do(RemoteEffect.legacy (sprintf "%s #%d" site index) (fun dispatch -> effect (DirectoryMsg >> dispatch))))
 
 /// Ask the directory for `ids`; it skips blank and already-known ids.
-let private resolveCmd (ids: string list) (model: Model) =
-    UserDirectory.resolve ids model.Directory |> Cmd.map DirectoryMsg
+let internal resolve (ids: string list) (model: Model) : Steps =
+    let pending = UserDirectory.unresolved ids model.Directory
+
+    UserDirectory.resolve ids model.Directory
+    |> directorySteps ("UserDirectory.resolve " + String.concat "," pending)
 
 /// Every user id the loaded admin list + teams table reference (Owners +
 /// Admins) — what the directory should hold.
@@ -366,7 +429,7 @@ let private referencedUserIds (model: Model) =
 
     adminIds @ teamIds
 
-let init (ctx: ClientModuleContext) =
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
         ActiveTab = AdminsTab
         Admins = Remote.Loading
@@ -388,21 +451,24 @@ let init (ctx: ClientModuleContext) =
         Messages = ctx.Messages.PlatformAdmin
     }
 
-    model, Cmd.batch [ loadAdminsCmd (); loadTeamsCmd (); loadPlatformKnowledgeBaseCmd () ]
+    (model, loadAdmins () @ loadTeams () @ loadPlatformKnowledgeBase ())
+    |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// Delegate to the open grant confirmation, then act on how it ended.
-let private assignConfirmUpdate (msg: AssignConfirm.Msg) (model: Model) =
+let private assignConfirmStep (msg: AssignConfirm.Msg) (model: Model) : Model * Steps =
     match model.AssignConfirm with
-    | None -> model, Cmd.none
+    | None -> model, []
     | Some sub ->
-        let sub, subCmd = AssignConfirm.update msg sub
-        let subCmd = Cmd.map AssignConfirmMsg subCmd
+        let sub, subSteps = AssignConfirm.step msg sub
+
+        let subSteps =
+            Step.mapAll AssignConfirmMsg (RemoteEffect.map AssignConfirmMsg) subSteps
 
         match sub.Outcome with
-        | AssignConfirm.Open -> { model with AssignConfirm = Some sub }, subCmd
-        | AssignConfirm.Cancelled -> { model with AssignConfirm = None }, subCmd
+        | AssignConfirm.Open -> { model with AssignConfirm = Some sub }, subSteps
+        | AssignConfirm.Cancelled -> { model with AssignConfirm = None }, subSteps
         | AssignConfirm.Done(Ok()) ->
             {
                 model with
@@ -411,22 +477,22 @@ let private assignConfirmUpdate (msg: AssignConfirm.Msg) (model: Model) =
                     AssignError = None
                     Admins = Remote.Loading
             },
-            Cmd.batch [ subCmd; loadAdminsCmd () ]
+            subSteps @ loadAdmins ()
         | AssignConfirm.Done(Error e) ->
             {
                 model with
                     AssignConfirm = None
                     AssignError = Some(Notice.Problem e)
             },
-            subCmd
+            subSteps
 
 /// Delegate to the open delete-team confirmation, then act on how it ended.
-let private deleteTeamUpdate (msg: ConfirmDeleteTeam.Msg) (model: Model) =
+let private deleteTeamStep (msg: ConfirmDeleteTeam.Msg) (model: Model) : Model * Steps =
     match model.ConfirmDeleteTeam with
-    | None -> model, Cmd.none
+    | None -> model, []
     | Some sub ->
-        let sub, subCmd = ConfirmDeleteTeam.update msg sub
-        let subCmd = Cmd.map DeleteTeamMsg subCmd
+        let sub, subSteps = ConfirmDeleteTeam.step msg sub
+        let subSteps = Step.mapAll DeleteTeamMsg (RemoteEffect.map DeleteTeamMsg) subSteps
 
         match sub.Outcome with
         | ConfirmDeleteTeam.Open ->
@@ -434,28 +500,29 @@ let private deleteTeamUpdate (msg: ConfirmDeleteTeam.Msg) (model: Model) =
                 model with
                     ConfirmDeleteTeam = Some sub
             },
-            subCmd
-        | ConfirmDeleteTeam.Cancelled -> { model with ConfirmDeleteTeam = None }, subCmd
+            subSteps
+        | ConfirmDeleteTeam.Cancelled -> { model with ConfirmDeleteTeam = None }, subSteps
         | ConfirmDeleteTeam.Done(Ok()) ->
             {
                 model with
                     ConfirmDeleteTeam = None
                     Teams = Remote.Loading
             },
-            Cmd.batch [ subCmd; loadTeamsCmd () ]
+            subSteps @ loadTeams ()
         | ConfirmDeleteTeam.Done(Error e) ->
             {
                 model with
                     ConfirmDeleteTeam = None
                     TeamActionError = model.TeamActionError |> Map.add sub.TeamId (Notice.Problem e)
             },
-            subCmd
+            subSteps
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     match msg with
-    | SwitchTab tab -> { model with ActiveTab = tab }, Cmd.none
+    | SwitchTab tab -> { model with ActiveTab = tab }, []
 
-    | RefreshAdmins -> { model with Admins = Remote.Loading }, loadAdminsCmd ()
+    | RefreshAdmins -> { model with Admins = Remote.Loading }, loadAdmins ()
 
     | AdminsLoaded(Ok list) ->
         let model = {
@@ -463,14 +530,14 @@ let update (msg: Msg) (model: Model) =
                 Admins = Remote.Loaded(list |> List.sort)
         }
 
-        model, resolveCmd (referencedUserIds model) model
+        model, resolve (referencedUserIds model) model
 
     | AdminsLoaded(Error msg) ->
         {
             model with
                 Admins = Remote.Failed msg
         },
-        Cmd.none
+        []
 
     | UpdateAssignInput input ->
         {
@@ -478,7 +545,7 @@ let update (msg: Msg) (model: Model) =
                 AssignInput = input
                 AssignError = None
         },
-        Cmd.none
+        []
 
     | RequestAssignConfirm ->
         let trimmed = model.AssignInput.Trim()
@@ -488,7 +555,7 @@ let update (msg: Msg) (model: Model) =
                 model with
                     AssignError = Some(Notice.Problem model.Messages.EnterUserId)
             },
-            Cmd.none
+            []
         else
             {
                 model with
@@ -496,25 +563,25 @@ let update (msg: Msg) (model: Model) =
                     AssignConfirm = Some(AssignConfirm.init trimmed)
             },
             // Resolve the target so the confirmation can echo their email.
-            resolveCmd [ trimmed ] model
+            resolve [ trimmed ] model
 
-    | AssignConfirmMsg subMsg -> assignConfirmUpdate subMsg model
+    | AssignConfirmMsg subMsg -> assignConfirmStep subMsg model
 
     | RequestRevoke targetUserId ->
         {
             model with
                 RevokeError = model.RevokeError |> Map.remove targetUserId
         },
-        revokeCmd targetUserId
+        revoke targetUserId
 
-    | RevokeResolved(_, Ok()) -> { model with Admins = Remote.Loading }, loadAdminsCmd ()
+    | RevokeResolved(_, Ok()) -> { model with Admins = Remote.Loading }, loadAdmins ()
 
     | RevokeResolved(targetUserId, Error msg) ->
         {
             model with
                 RevokeError = model.RevokeError |> Map.add targetUserId (Notice.Problem msg)
         },
-        Cmd.none
+        []
 
     | SetNewTeamName name ->
         {
@@ -522,7 +589,7 @@ let update (msg: Msg) (model: Model) =
                 NewTeamName = name
                 CreateTeamError = None
         },
-        Cmd.none
+        []
 
     | SetNewTeamOwnerUserId userId ->
         {
@@ -532,7 +599,7 @@ let update (msg: Msg) (model: Model) =
         },
         // Resolve the committed id so the confirmation line can echo the
         // owner's email.
-        resolveCmd [ userId.Trim() ] model
+        resolve [ userId.Trim() ] model
 
     | UseSelfAsTeamOwner ->
         {
@@ -540,7 +607,7 @@ let update (msg: Msg) (model: Model) =
                 NewTeamOwnerUserId = UserSession.getUserId ()
                 CreateTeamError = None
         },
-        Cmd.none
+        []
 
     | SubmitCreateTeam ->
         let name = model.NewTeamName.Trim()
@@ -551,20 +618,20 @@ let update (msg: Msg) (model: Model) =
                 model with
                     CreateTeamError = Some(Notice.Problem model.Messages.TeamNameRequired)
             },
-            Cmd.none
+            []
         elif String.length ownerId = 0 then
             {
                 model with
                     CreateTeamError = Some(Notice.Problem model.Messages.OwnerRequired)
             },
-            Cmd.none
+            []
         else
             {
                 model with
                     CreateTeamError = None
                     CreateTeamInFlight = true
             },
-            createTeamCmd {
+            createTeam {
                 Name = name
                 InitialOwnerUserId = ownerId
             }
@@ -579,7 +646,7 @@ let update (msg: Msg) (model: Model) =
                 Teams = Remote.Loading
         },
         // Refresh the admin table so the new team appears immediately.
-        loadTeamsCmd ()
+        loadTeams ()
 
     | CreateTeamResolved(Error msg) ->
         {
@@ -587,9 +654,9 @@ let update (msg: Msg) (model: Model) =
                 CreateTeamError = Some(Notice.Problem msg)
                 CreateTeamInFlight = false
         },
-        Cmd.none
+        []
 
-    | RefreshTeams -> { model with Teams = Remote.Loading }, loadTeamsCmd ()
+    | RefreshTeams -> { model with Teams = Remote.Loading }, loadTeams ()
 
     | TeamsLoaded(Ok teams) ->
         let model = {
@@ -597,9 +664,9 @@ let update (msg: Msg) (model: Model) =
                 Teams = Remote.Loaded(teams |> List.sortBy (fun t -> t.Name.ToLowerInvariant()))
         }
 
-        model, resolveCmd (referencedUserIds model) model
+        model, resolve (referencedUserIds model) model
 
-    | TeamsLoaded(Error msg) -> { model with Teams = Remote.Failed msg }, Cmd.none
+    | TeamsLoaded(Error msg) -> { model with Teams = Remote.Failed msg }, []
 
     | SetTeamArchived(teamId, archived) ->
         {
@@ -607,7 +674,7 @@ let update (msg: Msg) (model: Model) =
                 TeamActionPending = model.TeamActionPending |> Set.add teamId
                 TeamActionError = model.TeamActionError |> Map.remove teamId
         },
-        setArchivedCmd teamId archived
+        setArchived teamId archived
 
     | TeamArchiveResolved(teamId, _, Ok()) ->
         {
@@ -615,7 +682,7 @@ let update (msg: Msg) (model: Model) =
                 TeamActionPending = model.TeamActionPending |> Set.remove teamId
                 Teams = Remote.Loading
         },
-        loadTeamsCmd ()
+        loadTeams ()
 
     | TeamArchiveResolved(teamId, _, Error msg) ->
         {
@@ -623,7 +690,7 @@ let update (msg: Msg) (model: Model) =
                 TeamActionPending = model.TeamActionPending |> Set.remove teamId
                 TeamActionError = model.TeamActionError |> Map.add teamId (Notice.Problem msg)
         },
-        Cmd.none
+        []
 
     | RequestDeleteTeam teamId ->
         let teamName =
@@ -638,9 +705,9 @@ let update (msg: Msg) (model: Model) =
                 ConfirmDeleteTeam = Some(ConfirmDeleteTeam.init teamId teamName)
                 TeamActionError = model.TeamActionError |> Map.remove teamId
         },
-        Cmd.none
+        []
 
-    | DeleteTeamMsg subMsg -> deleteTeamUpdate subMsg model
+    | DeleteTeamMsg subMsg -> deleteTeamStep subMsg model
 
     | PlatformKnowledgeBaseLoaded(Ok mode) ->
         {
@@ -648,17 +715,16 @@ let update (msg: Msg) (model: Model) =
                 PlatformKnowledgeBase = Remote.Loaded mode
                 SettingsError = None
         },
-        Cmd.none
+        []
 
     | PlatformKnowledgeBaseLoaded(Error msg) ->
         {
             model with
                 PlatformKnowledgeBase = Remote.Failed msg
         },
-        Cmd.none
+        []
 
-    | TogglePlatformKnowledgeBase requested ->
-        { model with SettingsError = None }, setPlatformKnowledgeBaseCmd requested
+    | TogglePlatformKnowledgeBase requested -> { model with SettingsError = None }, setPlatformKnowledgeBase requested
 
     | TogglePlatformKnowledgeBaseResolved(requested, Ok()) ->
         {
@@ -666,18 +732,21 @@ let update (msg: Msg) (model: Model) =
                 PlatformKnowledgeBase = Remote.Loaded requested
                 SettingsError = None
         },
-        Cmd.none
+        []
 
     | TogglePlatformKnowledgeBaseResolved(_, Error msg) ->
         {
             model with
                 SettingsError = Some(Notice.Problem msg)
         },
-        Cmd.none
+        []
 
     | DirectoryMsg subMsg ->
         let directory, cmd = UserDirectory.update subMsg model.Directory
-        { model with Directory = directory }, Cmd.map DirectoryMsg cmd
+        { model with Directory = directory }, directorySteps "UserDirectory.update" cmd
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
@@ -1156,7 +1225,7 @@ let private view (config: PublicUtilityConfig) (model: Model) (ctx: RenderContex
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `create` registers the module under it.
 let moduleId = "_sdk.PlatformAdmin"
