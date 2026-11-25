@@ -3,6 +3,7 @@
 
 module PermissionsAdminUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
@@ -10,9 +11,7 @@ open ToolUp.Platform
 
 // ─── PermissionsAdminUI ──────────────────────────────────────────────
 //
-// Tidy-Up sweep #3 — closes the Phase 4 + Phase 5 long-standing
-// "PermissionsAdminUI built-in module" residual `[ ]`. Brings RBAC
-// admin to surface parity with the other built-in admin modules
+// The built-in RBAC admin, at surface parity with the other built-in admin modules
 // (`TeamConfigUI`, `WebhookAdminUI`, `HealthMonitorUI`,
 // `DataIngestionUI`, `ServiceStatusBoardUI`).
 //
@@ -263,26 +262,60 @@ let private loadSnapshotAsync (msgs: PermissionsAdminMessages) = async {
                 }
 }
 
-let private loadSnapshotCmd (msgs: PermissionsAdminMessages) =
-    Cmd.OfRemoting.call loadSnapshotAsync msgs SnapshotLoaded (fun ex -> SnapshotLoaded(Error ex.Message))
+/// The snapshot read: several calls in one block, so it is named for this
+/// module rather than for one API method.
+let internal loadSnapshot (msgs: PermissionsAdminMessages) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "PermissionsAdminUI.loadSnapshot" (fun () -> loadSnapshotAsync msgs) () (fun reply ->
+            SnapshotLoaded(RemoteEffect.flatten reply))
+    )
+]
 
-let private saveDefaultsCmd (teamId: string) (defaults: Map<string, ModulePermission list>) =
-    Cmd.OfRemoting.call permissionApi.SetTeamDefaults (teamId, defaults) SaveDefaultsResult (fun ex ->
-        SaveDefaultsResult(Error ex.Message))
+let internal saveDefaults
+    (teamId: string)
+    (defaults: Map<string, ModulePermission list>)
+    : Step<Msg, RemoteEffect<Msg>> list =
+    [
+        Do(
+            RemoteEffect.call
+                "PermissionApi.SetTeamDefaults"
+                permissionApi.SetTeamDefaults
+                (teamId, defaults)
+                (RemoteEffect.flatten >> SaveDefaultsResult)
+        )
+    ]
 
-let private setExposureCmd (teamId: string) (moduleName: string) (previous: ModuleExposure) (next: ModuleExposure) =
-    Cmd.OfRemoting.call
-        permissionApi.SetModuleExposure
-        (teamId, moduleName, next)
-        (fun result -> ExposureResult(moduleName, previous, next, result))
-        (fun ex -> ExposureResult(moduleName, previous, next, Error ex.Message))
+let internal setExposure
+    (teamId: string)
+    (moduleName: string)
+    (previous: ModuleExposure)
+    (next: ModuleExposure)
+    : Step<Msg, RemoteEffect<Msg>> list =
+    [
+        Do(
+            RemoteEffect.call
+                "PermissionApi.SetModuleExposure"
+                permissionApi.SetModuleExposure
+                (teamId, moduleName, next)
+                (fun reply -> ExposureResult(moduleName, previous, next, RemoteEffect.flatten reply))
+        )
+    ]
 
-let private saveMemberCmd (teamId: string) (userId: string) (moduleName: string) (perms: ModulePermission list) =
-    Cmd.OfRemoting.call
-        permissionApi.SetMemberPermissions
-        (teamId, userId, moduleName, perms)
-        (fun result -> SaveMemberResult(userId, moduleName, result))
-        (fun ex -> SaveMemberResult(userId, moduleName, Error ex.Message))
+let internal saveMember
+    (teamId: string)
+    (userId: string)
+    (moduleName: string)
+    (perms: ModulePermission list)
+    : Step<Msg, RemoteEffect<Msg>> list =
+    [
+        Do(
+            RemoteEffect.call
+                "PermissionApi.SetMemberPermissions"
+                permissionApi.SetMemberPermissions
+                (teamId, userId, moduleName, perms)
+                (fun reply -> SaveMemberResult(userId, moduleName, RemoteEffect.flatten reply))
+        )
+    ]
 
 let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
@@ -297,7 +330,7 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.PermissionsAdmin
     }
 
-    model, loadSnapshotCmd model.Messages
+    (model, loadSnapshot model.Messages) |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
@@ -337,7 +370,8 @@ let private setLevel (level: ModulePermission) (add: bool) (current: ModulePermi
     else
         current
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SwitchTab tab ->
         {
@@ -345,7 +379,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 ActiveTab = tab
                 Banner = None
         },
-        Cmd.none
+        []
 
     | RefreshSnapshot ->
         {
@@ -355,7 +389,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 EditingMembers = Map.empty
                 Banner = None
         },
-        loadSnapshotCmd model.Messages
+        loadSnapshot model.Messages
 
     | SnapshotLoaded(Ok snap) ->
         // First member auto-selected so the Members tab renders an
@@ -371,7 +405,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 SelectedMember = firstMember
                 Banner = None
         },
-        Cmd.none
+        []
 
     | SnapshotLoaded(Error msg) ->
         {
@@ -380,11 +414,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 EditingDefaults = None
                 EditingMembers = Map.empty
         },
-        Cmd.none
+        []
 
     | ToggleDefault(moduleName, perm) ->
         match model.EditingDefaults with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some edits ->
             let current = Map.tryFind moduleName edits |> Option.defaultValue []
 
@@ -399,24 +433,24 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     EditingDefaults = Some(edits |> Map.add moduleName (toggleInList perm current))
                     Banner = None
             },
-            Cmd.none
+            []
 
     | ResetDefaults ->
         match Remote.toOption model.Snapshot with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some snap ->
             {
                 model with
                     EditingDefaults = Some snap.Permissions.Defaults
                     Banner = None
             },
-            Cmd.none
+            []
 
     | SaveDefaults ->
         match Remote.toOption model.Snapshot, model.EditingDefaults with
         | Some snap, Some edits when not model.SaveInFlight ->
-            { model with SaveInFlight = true }, saveDefaultsCmd snap.TeamId edits
-        | _ -> model, Cmd.none
+            { model with SaveInFlight = true }, saveDefaults snap.TeamId edits
+        | _ -> model, []
 
     | SaveDefaultsResult(Ok()) ->
         // Persist the just-saved edits into the snapshot's
@@ -440,7 +474,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 SaveInFlight = false
                 Banner = Some(Notice.Info(model.Messages.TeamDefaultsSaved))
         },
-        Cmd.none
+        []
 
     | SaveDefaultsResult(Error msg) ->
         {
@@ -448,7 +482,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 SaveInFlight = false
                 Banner = Some(Notice.Problem(model.Messages.SaveFailed msg))
         },
-        Cmd.none
+        []
 
     | SelectMember userId ->
         {
@@ -456,12 +490,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 SelectedMember = Some userId
                 Banner = None
         },
-        Cmd.none
+        []
 
     | ToggleMemberPermission(userId, moduleName, perm) ->
         // Overlay-only: toggle the level on the cell's effective value.
         match Remote.toOption model.Snapshot with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some snap ->
             let current = effectiveMemberPerms snap model.EditingMembers userId moduleName
 
@@ -470,14 +504,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     EditingMembers = model.EditingMembers |> Map.add (userId, moduleName) (toggleInList perm current)
                     Banner = None
             },
-            Cmd.none
+            []
 
     | ToggleMemberColumn(userId, level, add) ->
         // Select-all / clear-all for one column on the given user's row
         // set: every managed module whose effective value changes gets an
         // overlay entry; the rest are left alone.
         match Remote.toOption model.Snapshot with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some snap ->
             let editing =
                 snap.Managed
@@ -497,7 +531,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     EditingMembers = editing
                     Banner = None
             },
-            Cmd.none
+            []
 
     | ResetMembers userId ->
         // Drop every pending overlay entry for the given user.
@@ -506,7 +540,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 EditingMembers = model.EditingMembers |> Map.filter (fun (uid, _) _ -> uid <> userId)
                 Banner = None
         },
-        Cmd.none
+        []
 
     | SaveMembers userId ->
         match Remote.toOption model.Snapshot with
@@ -519,13 +553,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 |> List.choose (fun ((uid, moduleName), next) -> if uid = userId then Some(moduleName, next) else None)
 
             if List.isEmpty pending then
-                { model with Banner = None }, Cmd.none
+                { model with Banner = None }, []
             else
                 { model with SaveInFlight = true },
                 pending
-                |> List.map (fun (moduleName, next) -> saveMemberCmd snap.TeamId userId moduleName next)
-                |> Cmd.batch
-        | _ -> model, Cmd.none
+                |> List.collect (fun (moduleName, next) -> saveMember snap.TeamId userId moduleName next)
+        | _ -> model, []
 
     | SaveMemberResult(userId, moduleName, Ok()) ->
         // Drop the pending overlay entry on success. When the last pending
@@ -539,7 +572,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     EditingMembers = editing
                     Banner = Some(Notice.Info(model.Messages.SavedModuleForUser moduleName userId))
             },
-            Cmd.none
+            []
         else
             {
                 model with
@@ -547,7 +580,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     SaveInFlight = false
                     Banner = Some(Notice.Info(model.Messages.SavedPermissionsFor userId))
             },
-            loadSnapshotCmd model.Messages
+            loadSnapshot model.Messages
 
     | SaveMemberResult(userId, moduleName, Error msg) ->
         {
@@ -555,11 +588,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 SaveInFlight = false
                 Banner = Some(Notice.Problem(model.Messages.OverrideSaveFailed userId moduleName msg))
         },
-        Cmd.none
+        []
 
     | SetExposure(moduleName, previous, next) ->
         match Remote.toOption model.Snapshot with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some snap ->
             // Optimistic local update so the selector responds instantly;
             // reverted to `previous` on a failed round-trip.
@@ -568,7 +601,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Snapshot = Remote.Loaded(withExposure moduleName next snap)
                     Banner = None
             },
-            setExposureCmd snap.TeamId moduleName previous next
+            setExposure snap.TeamId moduleName previous next
 
     | ExposureResult(moduleName, _previous, attempted, Ok()) ->
         // Tell the shell to re-fetch its accessible-modules list so the
@@ -581,7 +614,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Banner = Some(Notice.Info(exposureBanner model.Messages moduleName attempted))
         },
-        Cmd.none
+        []
 
     | ExposureResult(moduleName, previous, _attempted, Error msg) ->
         // Revert the optimistic change back to the prior state.
@@ -589,9 +622,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             mapSnapshot (withExposure moduleName previous) model with
                 Banner = Some(Notice.Problem(model.Messages.ExposureChangeFailed moduleName msg))
         },
-        Cmd.none
+        []
 
-    | DismissBanner -> { model with Banner = None }, Cmd.none
+    | DismissBanner -> { model with Banner = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

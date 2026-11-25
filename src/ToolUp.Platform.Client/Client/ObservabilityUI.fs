@@ -3,6 +3,7 @@
 
 module ObservabilityUI
 
+open Fuaran.MVU
 open System
 open Fable.Core
 open Fable.SimpleHttp
@@ -14,11 +15,11 @@ open ToolUp.Elmish
 open ToolUp.Platform
 open Toolup.UIToolkit
 
-// ─── Phase 9x — the self-hosted observability admin module ───────────
+// ─── The self-hosted observability admin module ──────────────────────
 //
 // Logs / Metrics / Alerts over the SDK's own `/api/observability/*`
-// endpoints: the Phase 828 log store, the Phase 829 metrics history and
-// the Phase 178 alert engine's per-rule state. Registered under the
+// endpoints: the log store, the metrics history and the alert engine's
+// per-rule state. Registered under the
 // "Observability" sidebar group beside the health monitor and the
 // Datadog readback.
 //
@@ -38,11 +39,10 @@ open Toolup.UIToolkit
 // commands run outside any render and so cannot reach the resolved
 // message catalog; the view renders the error at the one place that can.
 //
-// **No trace cross-references tab.** The shard sketched one "shown only
-// when `IActivitySink` is registered". A stored `LogRecord` carries no
+// **No trace cross-references tab.** A stored `LogRecord` carries no
 // trace id (the log store keeps scope and correlation ids only) and
-// `IActivitySink` is export-only, so there is nothing for such a tab to
-// read; the Logs tab's "every line of this request" action — a search on
+// `IActivitySink` is export-only, so there is nothing for a trace tab
+// to read; the Logs tab's "every line of this request" action — a search on
 // the correlation id — is the cross-reference the stored data supports.
 
 // ─── Model ───────────────────────────────────────────────────────────
@@ -50,11 +50,11 @@ open Toolup.UIToolkit
 /// The module's three sections. Only those whose source the server
 /// enabled are rendered.
 type Tab =
-    /// The log search (Phase 828 log store).
+    /// The log search (the log store).
     | LogsTab
-    /// The metric charts (Phase 829 metrics history).
+    /// The metric charts (the metrics history).
     | MetricsTab
-    /// The alert rules and their state (Phase 178 engine).
+    /// The alert rules and their state (the alert engine).
     | AlertsTab
 
 /// Why a read produced no data. `NotComposed` covers both a 404 (the
@@ -170,7 +170,11 @@ let inline private fetchJson<'T> (url: string) : Async<Result<'T, FetchError>> =
 // `fetchJson` is `inline` and each wrapper below resolves `'T`
 // concretely — the Datadog readback module records why both halves are
 // load-bearing: `Json.parseAs<'T>` needs the type at compile time, and
-// handing the generic function itself to `Cmd.OfAsync` would erase it.
+// handing the generic function itself to `fetch` below would erase it.
+// They are plain HTTP reads, not remote calls, so each is a
+// `RemoteEffect.legacy` body under a site label naming its URL, off the
+// remoting interceptor chain, and dispatches exactly once (`fetchJson`
+// answers every failure as an `Error`).
 
 let private fetchSources (url: string) : Async<Result<ObservabilitySources, FetchError>> = fetchJson url
 
@@ -193,10 +197,28 @@ let private levelToken (level: LogLevel) : string =
     | LogLevel.Warn -> "warn"
     | LogLevel.Error -> "error"
 
-let private loadSourcesCmd () =
-    Cmd.OfAsync.perform fetchSources (ObservabilityReadback.RoutePrefix + "/sources") SourcesLoaded
+/// One read as an effect value: the site label names the URL, so two
+/// reads compare equal exactly when they fetch the same thing.
+let private fetch
+    (read: string -> Async<Result<'T, FetchError>>)
+    (url: string)
+    (reply: Result<'T, FetchError> -> Msg)
+    : Step<Msg, RemoteEffect<Msg>> =
+    Do(
+        RemoteEffect.legacy ("ObservabilityUI.fetch " + url) (fun dispatch ->
+            Async.StartImmediate(
+                async {
+                    let! result = read url
+                    dispatch (reply result)
+                }
+            ))
+    )
 
-let private loadLogsCmd (filter: LogFilter) =
+let internal loadSources () : Step<Msg, RemoteEffect<Msg>> list = [
+    fetch fetchSources (ObservabilityReadback.RoutePrefix + "/sources") SourcesLoaded
+]
+
+let internal loadLogs (filter: LogFilter) : Step<Msg, RemoteEffect<Msg>> list =
     let optional (name: string) (value: string) =
         if String.IsNullOrWhiteSpace value then
             ""
@@ -219,9 +241,9 @@ let private loadLogsCmd (filter: LogFilter) =
             (optional "scope" filter.ScopeId)
             (optional "correlationId" filter.CorrelationId)
 
-    Cmd.OfAsync.perform fetchLogs url LogsLoaded
+    [ fetch fetchLogs url LogsLoaded ]
 
-let private loadMetricCmd (windowMinutes: int) (metric: string) =
+let internal loadMetric (windowMinutes: int) (metric: string) : Step<Msg, RemoteEffect<Msg>> list =
     let url =
         sprintf
             "%s/metrics?metric=%s&minutes=%d"
@@ -229,15 +251,14 @@ let private loadMetricCmd (windowMinutes: int) (metric: string) =
             (encodeUriComponent metric)
             windowMinutes
 
-    Cmd.OfAsync.perform fetchMetric url (fun result -> MetricLoaded(metric, result))
+    [ fetch fetchMetric url (fun result -> MetricLoaded(metric, result)) ]
 
-let private loadMetricsCmd (model: Model) =
-    model.Metrics
-    |> List.map (fst >> loadMetricCmd model.MetricsWindow)
-    |> Cmd.batch
+let internal loadMetrics (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
+    model.Metrics |> List.collect (fst >> loadMetric model.MetricsWindow)
 
-let private loadAlertsCmd () =
-    Cmd.OfAsync.perform fetchAlerts (ObservabilityReadback.RoutePrefix + "/alerts") AlertsLoaded
+let internal loadAlerts () : Step<Msg, RemoteEffect<Msg>> list = [
+    fetch fetchAlerts (ObservabilityReadback.RoutePrefix + "/alerts") AlertsLoaded
+]
 
 // ─── Init / update ───────────────────────────────────────────────────
 
@@ -250,7 +271,7 @@ let private defaultFilter: LogFilter = {
 }
 
 /// The initial state: every read pending on the sources answer.
-let init () =
+let init () : Model * Cmd<Msg> =
     let model = {
         Sources = Remote.Loading
         ActiveTab = LogsTab
@@ -266,7 +287,7 @@ let init () =
         Alerts = Remote.NotAsked
     }
 
-    model, loadSourcesCmd ()
+    (model, loadSources ()) |> RemoteEffect.run
 
 /// The first tab whose source is on, in tab order.
 let private firstTab (sources: ObservabilitySources) : Tab =
@@ -281,17 +302,17 @@ let private searchLogs (model: Model) (filter: LogFilter) =
             Logs = Remote.Loading
             Selected = None
     },
-    loadLogsCmd filter
+    loadLogs filter
 
-/// The module's update — pure; every read is a `Cmd`.
-let update (msg: Msg) (model: Model) =
+/// The transitions — pure; every read is an effect value.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SourcesLoaded(Error error) ->
         {
             model with
                 Sources = Remote.Failed error
         },
-        Cmd.none
+        []
 
     | SourcesLoaded(Ok sources) ->
         let withMetrics =
@@ -312,16 +333,16 @@ let update (msg: Msg) (model: Model) =
         }
 
         next,
-        Cmd.batch [
+        [
             if sources.Logs then
-                loadLogsCmd next.Filter
+                yield! loadLogs next.Filter
             if sources.Metrics then
-                loadMetricsCmd next
+                yield! loadMetrics next
             if sources.Alerts then
-                loadAlertsCmd ()
+                yield! loadAlerts ()
         ]
 
-    | SwitchTab tab -> { model with ActiveTab = tab }, Cmd.none
+    | SwitchTab tab -> { model with ActiveTab = tab }, []
 
     | SubmitFilter filter -> searchLogs model filter
 
@@ -345,12 +366,12 @@ let update (msg: Msg) (model: Model) =
             model with
                 Logs = Remote.ofResult result
         },
-        Cmd.none
+        []
 
-    | SelectRecord record -> { model with Selected = Some record }, Cmd.none
+    | SelectRecord record -> { model with Selected = Some record }, []
 
     | ShowCorrelated correlationId ->
-        let next, cmd =
+        let next, steps =
             searchLogs model {
                 model.Filter with
                     CorrelationId = correlationId
@@ -362,7 +383,7 @@ let update (msg: Msg) (model: Model) =
             next with
                 FilterRevision = model.FilterRevision + 1
         },
-        cmd
+        steps
 
     | SetMetricsWindow minutes ->
         let next = {
@@ -371,7 +392,7 @@ let update (msg: Msg) (model: Model) =
                 Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Remote.Loading)
         }
 
-        next, loadMetricsCmd next
+        next, loadMetrics next
 
     | RefreshMetrics ->
         let next = {
@@ -379,7 +400,7 @@ let update (msg: Msg) (model: Model) =
                 Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Remote.Loading)
         }
 
-        next, loadMetricsCmd next
+        next, loadMetrics next
 
     | MetricLoaded(metric, result) ->
         let loaded = Remote.ofResult result
@@ -390,7 +411,7 @@ let update (msg: Msg) (model: Model) =
                     model.Metrics
                     |> List.map (fun (name, state) -> if name = metric then name, loaded else name, state)
         },
-        Cmd.none
+        []
 
     | ShowMetric metric ->
         let known = model.Metrics |> List.exists (fun (name, _) -> name = metric)
@@ -406,20 +427,19 @@ let update (msg: Msg) (model: Model) =
                         model.Metrics @ [ metric, Remote.Loading ]
         }
 
-        next,
-        (if known then
-             Cmd.none
-         else
-             loadMetricCmd model.MetricsWindow metric)
+        next, (if known then [] else loadMetric model.MetricsWindow metric)
 
-    | RefreshAlerts -> { model with Alerts = Remote.Loading }, loadAlertsCmd ()
+    | RefreshAlerts -> { model with Alerts = Remote.Loading }, loadAlerts ()
 
     | AlertsLoaded result ->
         {
             model with
                 Alerts = Remote.ofResult result
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Shared renderers ────────────────────────────────────────────────
 
