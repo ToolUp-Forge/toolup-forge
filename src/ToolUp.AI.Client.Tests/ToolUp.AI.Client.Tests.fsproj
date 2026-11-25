@@ -110,12 +110,12 @@
              guard (`resolveActiveStop`). Same reason as the packs above:
              `Toolup.Sidebar` cannot be touched from the .NET harness. -->
         <Compile Include="SidebarKeyboardTests.fs" />
-        <!-- Shell program-lifetime effects: the outer-composer contract
-             (programLifetimeEffects / withShellLifetimeEffects /
-             EffectHandle.map) — pins that an outer Program composer
-             (AIClientConfig.withSidePanel) re-attaches the shell's
+        <!-- The shell's subscriptions: the outer-composer contract
+             (Client.subscriptions / Client.resources / Subscription.map) —
+             pins that a composer (AIClientConfig) lists the shell's
              background subscriptions, the admin-tile click-through
-             regression class. -->
+             regression class — and what the runtime does with a shell
+             program: one render per drain, stop-once, the error sink. -->
         <Compile Include="ShellLifetimeEffectsTests.fs" />
         <Compile Include="ShellUpdateEffectsTests.fs" />
         <Compile Include="BootSourcesTests.fs" />

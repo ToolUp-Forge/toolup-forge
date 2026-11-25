@@ -331,8 +331,8 @@ module Layout =
     //
     // What makes the boundary hold is the caller's half of the contract:
     // the six callbacks must be the SAME functions from render to render
-    // (the SDK shell builds them once per Elmish loop, in `Client.Dispatchers`
-    // through `Program.withStableDispatch`), and the icons must be the elements the
+    // (the SDK shell builds them once per mount, in `Client.Dispatchers`
+    // through `Client.programOver`), and the icons must be the elements the
     // modules declared rather than fresh ones. A caller that passes fresh
     // closures gets a correct sidebar that renders every time.
 

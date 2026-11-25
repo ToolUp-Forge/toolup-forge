@@ -8,9 +8,9 @@ module ToolUp.AI.Client.Tests.ModuleDispatchStabilityTests
 // The shell hands every module view a `ModuleMsg` wrapper over `dispatch`,
 // carrying that module's id. Built inline in `Client.view`, the module's one
 // dispatch prop would be a fresh closure on every render and no memo boundary
-// around a module view could ever hold. The loop's `Client.Dispatchers` set
-// builds it once per module, and the program builds the set once per loop
-// (`Program.withStableDispatch`), so every render hands out the SAME function.
+// around a module view could ever hold. The mount's `Client.Dispatchers` set
+// builds it once per module, and the program builds the set once per mount
+// (`Client.programOver`), so every render hands out the SAME function.
 //
 // This is the transpiled code's property (a JavaScript function's
 // identity is what `React.memo` compares), so it is pinned here under

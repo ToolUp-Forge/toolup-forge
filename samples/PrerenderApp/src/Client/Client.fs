@@ -53,7 +53,7 @@ let private config = {
 //     prerender), this is reached AFTER `installEntryPoint` has
 //     short-circuited via `isBrowser () = false`, and
 //     `Hydration.run`'s underlying `Client.run` also fails fast
-//     in Node because `Program.run`'s React mount requires a
+//     in Node because the shell's React mount requires a
 //     DOM. The consumer can wrap `Hydration.run` in
 //     `if PrerenderExport.isBrowser () then ...` for an
 //     even-belt-and-braces shape; here the install-first
