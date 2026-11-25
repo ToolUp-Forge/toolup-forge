@@ -6,9 +6,9 @@ module ToolUp.Platform.AuthDiagnostics
 open Fable.Core
 open Fable.Core.JsInterop
 
-// ─── Auth-observability A4 — generic client-side auth diagnostics ────
+// ─── Generic client-side auth diagnostics ────────────────────────────
 //
-// The OIDC provider's `AuthTracer` shipped first (Phase 3) and was
+// The OIDC provider's `AuthTracer` came first and was
 // scoped to the OIDC sign-in / refresh / classify flow. This module
 // lifts the tracer shape into `ToolUp.Platform.Client` so every
 // client-side auth-relevant code path — CsrfClient warnings,
@@ -17,7 +17,7 @@ open Fable.Core.JsInterop
 //
 // Wire shape and semantics deliberately mirror the OIDC `AuthTracer`
 // so a thin compatibility shim can land in the OIDC provider that
-// forwards to this module (follow-up; not in this commit). The
+// forwards to this module. The
 // diagnostic record is generic — no OIDC-specific fields — so non-OIDC
 // auth providers (Clerk, future) can adopt without inheriting OIDC
 // vocabulary.

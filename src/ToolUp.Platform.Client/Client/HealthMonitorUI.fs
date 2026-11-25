@@ -3,6 +3,7 @@
 
 module HealthMonitorUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -24,16 +25,16 @@ type Model = {
     Live: Remote<HealthSnapshot, string>
     /// Preflight snapshot from `GetPreflightSnapshot`.
     Preflight: Remote<PreflightSnapshotView, string>
-    /// Phase 9b.A — most recent job-scheduler missed-tick telemetry.
+    /// The most recent job-scheduler missed-tick telemetry.
     /// Loaded alongside `Live` so the operator sees both on the Live
     /// tab without a second click. `HasScheduler = false` (carried
     /// inside the view) suppresses the inline card.
     SchedulerTelemetry: Remote<JobSchedulerTelemetryView, string>
-    /// Phase 118 — degraded-capability set from `GetDegradedCapabilities`.
+    /// The degraded-capability set from `GetDegradedCapabilities`.
     /// Loaded alongside `Live`; empty on a healthy deployment, in which
     /// case the card is suppressed entirely (GP 13).
     Degraded: Remote<DegradedCapability list, string>
-    /// Phase 47 — rolling AI action-denial rollup from
+    /// The rolling AI action-denial rollup from
     /// `GetAIDenialRollup`. Loaded alongside `Live`. `Loaded None` means
     /// no AI companion is composed (the `IAIDenialRollupProbe` seam is
     /// absent from DI) and the card is suppressed — distinct from
@@ -66,26 +67,57 @@ let private healthMonitorApi: IHealthMonitorApi =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let private loadLiveCmd () =
-    Cmd.OfRemoting.call healthMonitorApi.GetCurrentHealth () LiveLoaded (fun e -> LiveLoaded(Error e.Message))
+let internal loadLive () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IHealthMonitorApi.GetCurrentHealth"
+            healthMonitorApi.GetCurrentHealth
+            ()
+            (RemoteEffect.flatten >> LiveLoaded)
+    )
+]
 
-let private loadPreflightCmd () =
-    Cmd.OfRemoting.call healthMonitorApi.GetPreflightSnapshot () PreflightLoaded (fun e ->
-        PreflightLoaded(Error e.Message))
+let internal loadPreflight () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IHealthMonitorApi.GetPreflightSnapshot"
+            healthMonitorApi.GetPreflightSnapshot
+            ()
+            (RemoteEffect.flatten >> PreflightLoaded)
+    )
+]
 
-let private loadSchedulerTelemetryCmd () =
-    Cmd.OfRemoting.call healthMonitorApi.GetJobSchedulerTelemetry () SchedulerTelemetryLoaded (fun e ->
-        SchedulerTelemetryLoaded(Error e.Message))
+let internal loadSchedulerTelemetry () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IHealthMonitorApi.GetJobSchedulerTelemetry"
+            healthMonitorApi.GetJobSchedulerTelemetry
+            ()
+            (RemoteEffect.flatten >> SchedulerTelemetryLoaded)
+    )
+]
 
-let private loadDegradedCmd () =
-    Cmd.OfRemoting.call healthMonitorApi.GetDegradedCapabilities () DegradedLoaded (fun e ->
-        DegradedLoaded(Error e.Message))
+let internal loadDegraded () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IHealthMonitorApi.GetDegradedCapabilities"
+            healthMonitorApi.GetDegradedCapabilities
+            ()
+            (RemoteEffect.flatten >> DegradedLoaded)
+    )
+]
 
-let private loadAIDenialsCmd () =
-    Cmd.OfRemoting.call healthMonitorApi.GetAIDenialRollup () AIDenialsLoaded (fun e ->
-        AIDenialsLoaded(Error e.Message))
+let internal loadAIDenials () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IHealthMonitorApi.GetAIDenialRollup"
+            healthMonitorApi.GetAIDenialRollup
+            ()
+            (RemoteEffect.flatten >> AIDenialsLoaded)
+    )
+]
 
-let init () =
+let init () : Model * Cmd<Msg> =
     let model = {
         ActiveTab = LiveHealthTab
         Live = Remote.Loading
@@ -96,14 +128,13 @@ let init () =
         RecentlyFlipped = Set.empty
     }
 
-    model,
-    Cmd.batch [
-        loadLiveCmd ()
-        loadPreflightCmd ()
-        loadSchedulerTelemetryCmd ()
-        loadDegradedCmd ()
-        loadAIDenialsCmd ()
-    ]
+    (model,
+     loadLive ()
+     @ loadPreflight ()
+     @ loadSchedulerTelemetry ()
+     @ loadDegraded ()
+     @ loadAIDenials ())
+    |> RemoteEffect.run
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -126,9 +157,10 @@ let private flippedNames (prev: HealthSnapshot option) (next: HealthSnapshot) : 
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | SwitchTab tab -> { model with ActiveTab = tab }, Cmd.none
+    | SwitchTab tab -> { model with ActiveTab = tab }, []
 
     | RefreshLive ->
         // Refresh both panels on the Live tab in one click — scheduler
@@ -141,12 +173,7 @@ let update (msg: Msg) (model: Model) =
                 Degraded = Remote.Loading
                 AIDenials = Remote.Loading
         },
-        Cmd.batch [
-            loadLiveCmd ()
-            loadSchedulerTelemetryCmd ()
-            loadDegradedCmd ()
-            loadAIDenialsCmd ()
-        ]
+        loadLive () @ loadSchedulerTelemetry () @ loadDegraded () @ loadAIDenials ()
 
     | LiveLoaded(Ok snapshot) ->
         let flipped = flippedNames (Remote.toOption model.Live) snapshot
@@ -156,44 +183,47 @@ let update (msg: Msg) (model: Model) =
                 Live = Remote.Loaded snapshot
                 RecentlyFlipped = flipped
         },
-        Cmd.none
+        []
 
-    | LiveLoaded(Error msg) -> { model with Live = Remote.Failed msg }, Cmd.none
+    | LiveLoaded(Error msg) -> { model with Live = Remote.Failed msg }, []
 
     | RefreshPreflight ->
         {
             model with
                 Preflight = Remote.Loading
         },
-        loadPreflightCmd ()
+        loadPreflight ()
 
     | PreflightLoaded result ->
         {
             model with
                 Preflight = Remote.ofResult result
         },
-        Cmd.none
+        []
 
     | SchedulerTelemetryLoaded result ->
         {
             model with
                 SchedulerTelemetry = Remote.ofResult result
         },
-        Cmd.none
+        []
 
     | DegradedLoaded result ->
         {
             model with
                 Degraded = Remote.ofResult result
         },
-        Cmd.none
+        []
 
     | AIDenialsLoaded result ->
         {
             model with
                 AIDenials = Remote.ofResult result
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Status-pill renderers ───────────────────────────────────────────
 
@@ -223,7 +253,7 @@ let private refreshButton (msgs: HealthMonitorMessages) (label: string) (onClick
 
 // ─── Live health tab ─────────────────────────────────────────────────
 
-// ─── Job-scheduler telemetry card (Phase 9b.A) ───────────────────────
+// ─── Job-scheduler telemetry card ────────────────────────────────────
 
 /// Inline card on the Live tab. Suppressed entirely when no scheduler
 /// is registered (`HasScheduler = false`) so deployments without
@@ -303,7 +333,7 @@ let private schedulerTelemetryCard (msgs: HealthMonitorMessages) (view: JobSched
             ]
         ]
 
-// ─── Degraded-capability card (Phase 118) ────────────────────────────
+// ─── Degraded-capability card ────────────────────────────────────────
 
 /// Inline card on the Live tab listing capabilities that wired
 /// best-effort and FAILED — the deployment is up but a capability is
@@ -380,7 +410,7 @@ let private degradedCapabilitiesCard (msgs: HealthMonitorMessages) (entries: Deg
             ]
         ]
 
-// ─── AI action-denial card (Phase 47) ────────────────────────────────
+// ─── AI action-denial card ───────────────────────────────────────────
 
 /// Inline card on the Live tab showing the rolling AI action-denial
 /// rollup — the production-safe twin of the `EnableDevEndpoints`-gated
@@ -587,14 +617,14 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
                     refreshButton msgs msgs.Refresh (fun () -> dispatch RefreshLive) isLoading
                 ]
             ]
-            // Phase 118 — degraded capabilities first (most urgent: a
+            // Degraded capabilities first (most urgent: a
             // capability is down). Suppressed when the set is empty or
             // the load is in flight.
             match model.Degraded with
             | Remote.Loaded entries -> degradedCapabilitiesCard msgs entries
             | _ -> Html.none
 
-            // Phase 47 — AI action denials. `Loaded None` means no AI
+            // AI action denials. `Loaded None` means no AI
             // companion is composed, so there is nothing to say; a
             // `Some` rollup suppresses itself when the deployment has
             // never recorded a denial.
@@ -602,7 +632,7 @@ let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (disp
             | Remote.Loaded(Some rollup) -> aiDenialCard msgs rollup
             | _ -> Html.none
 
-            // Phase 9b.A — surface scheduler drift above the probe
+            // Surface scheduler drift above the probe
             // table. Suppressed when no scheduler is registered, and
             // when the load is in flight (no point flashing "Loading..."
             // for a side-counter).
@@ -710,7 +740,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.HealthMonitor"
@@ -720,17 +750,16 @@ let moduleId = "_sdk.HealthMonitor"
 /// which the shell admits on every surface; its `PlatformAdminOnly` nav
 /// role hides it from non-admins.
 ///
-/// **Phase 4b re-gate (commit 4f.1, 2026-05-10).** The server-side
-/// handler now gates on `AccessContext.canModifyPlatformConfig`
+/// **The gate.** The server-side
+/// handler gates on `AccessContext.canModifyPlatformConfig`
 /// (Platform Admin role) rather than per-team Owner/Admin — probes
 /// are deployment-wide data, so the gate is too. The sidebar group is
 /// "Platform Management" (not the previous "Admin") so the shell's
-/// role-gated sidebar filter (commit 4f.2) hides the entry from
+/// role-gated sidebar filter hides the entry from
 /// non-admin callers. Existing Team Admins relying on HealthMonitor lose access
 /// until they're also assigned `PlatformRole.PlatformAdmin`.
 ///
-/// **Phase 9x — regrouped under "Observability"** (operator decision
-/// 2026-09-23), beside the Datadog readback and self-hosted
+/// **Grouped under "Observability"**, beside the Datadog readback and self-hosted
 /// observability modules: three observability modules, one group. The
 /// group joined the platform-admin allow-list in the same change, so
 /// the entry keeps its administration area and a team-less platform
@@ -751,11 +780,11 @@ let builtIn: BuiltIn<Model, Msg> = {
     Extend = id
 }
 
-/// Phase 573.B — the administration-landing tile of the health-monitor
+/// The administration-landing tile of the health-monitor
 /// slot, declared here rather than in the landing page so the page never
 /// names a module (GP 9).
 ///
-/// Phase 879 — the tile belongs to the SLOT, not to this module: the
+/// The tile belongs to the SLOT, not to this module: the
 /// shell builds it for whichever module fills the slot (`owner`), so a
 /// deployment that puts its own module in the slot keeps the tile, and
 /// the tile's click-through, name and icon are the replacement's. An

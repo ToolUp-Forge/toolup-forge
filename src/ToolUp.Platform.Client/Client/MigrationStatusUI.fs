@@ -3,12 +3,13 @@
 
 module MigrationStatusUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 open Toolup.UIToolkit
 
-// ─── Phase 10a — built-in data-migration admin ──────────────────────
+// ─── Built-in data-migration admin ──────────────────────────────────
 //
 // Sidebar entry showing, for the caller's own scope, every registered
 // data type's declared schema version and how far the stored objects
@@ -65,20 +66,37 @@ let private migrationApi: IDataMigrationApi =
 
 // ─── Init / update ──────────────────────────────────────────────────
 
-let private loadDataTypesCmd () =
-    Cmd.OfRemoting.call migrationApi.ListDataTypes () (Ok >> DataTypesLoaded) (fun e ->
-        DataTypesLoaded(Error e.Message))
+let internal loadDataTypes () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IDataMigrationApi.ListDataTypes"
+            migrationApi.ListDataTypes
+            ()
+            (Result.mapError _.Message >> DataTypesLoaded)
+    )
+]
 
-let private loadStatusesCmd () =
+let internal loadStatuses () : Step<Msg, RemoteEffect<Msg>> list = [
     // Best-effort — a status read failure leaves the counts blank
     // rather than pushing a banner over a table that still renders the
     // declared versions usefully.
-    Cmd.OfRemoting.call migrationApi.ListStatuses () StatusesLoaded (fun _ -> StatusesLoaded [])
+    Do(
+        RemoteEffect.call "IDataMigrationApi.ListStatuses" migrationApi.ListStatuses () (function
+            | Ok statuses -> StatusesLoaded statuses
+            | Error _ -> StatusesLoaded [])
+    )
+]
 
-let private refreshCmd () =
-    Cmd.batch [ loadDataTypesCmd (); loadStatusesCmd () ]
+let internal refresh () : Step<Msg, RemoteEffect<Msg>> list = loadDataTypes () @ loadStatuses ()
 
-let init () =
+let internal trigger (dataTypeId: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "IDataMigrationApi.TriggerMigration" migrationApi.TriggerMigration dataTypeId (fun reply ->
+            TriggerComplete(dataTypeId, RemoteEffect.flatten reply))
+    )
+]
+
+let init () : Model * Cmd<Msg> =
     let model = {
         DataTypes = Remote.Loading
         Statuses = Map.empty
@@ -87,45 +105,39 @@ let init () =
         LastError = None
     }
 
-    model, refreshCmd ()
+    (model, refresh ()) |> RemoteEffect.run
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh ->
         {
             model with
                 DataTypes = Remote.Loading
         },
-        refreshCmd ()
+        refresh ()
 
     | DataTypesLoaded result ->
         {
             model with
                 DataTypes = Remote.ofResult result
         },
-        Cmd.none
+        []
 
     | StatusesLoaded statuses ->
         {
             model with
                 Statuses = statuses |> List.map (fun s -> s.DataTypeId, s) |> Map.ofList
         },
-        Cmd.none
+        []
 
     | TriggerClicked dataTypeId ->
-        let cmd =
-            Cmd.OfRemoting.call
-                migrationApi.TriggerMigration
-                dataTypeId
-                (fun result -> TriggerComplete(dataTypeId, result))
-                (fun e -> TriggerComplete(dataTypeId, Error e.Message))
-
         {
             model with
                 Triggering = model.Triggering |> Set.add dataTypeId
                 LastError = None
         },
-        cmd
+        trigger dataTypeId
 
     | TriggerComplete(dataTypeId, Ok status) ->
         // The trigger returns the status it persisted, so the row
@@ -135,7 +147,7 @@ let update (msg: Msg) (model: Model) =
                 Triggering = model.Triggering |> Set.remove dataTypeId
                 Statuses = model.Statuses |> Map.add dataTypeId status
         },
-        Cmd.none
+        []
 
     | TriggerComplete(dataTypeId, Error message) ->
         {
@@ -143,7 +155,7 @@ let update (msg: Msg) (model: Model) =
                 Triggering = model.Triggering |> Set.remove dataTypeId
                 LastError = Some(Notice.Problem message)
         },
-        Cmd.none
+        []
 
     | ToggleFailures dataTypeId ->
         let next =
@@ -151,9 +163,12 @@ let update (msg: Msg) (model: Model) =
             | Some current when current = dataTypeId -> None
             | _ -> Some dataTypeId
 
-        { model with ExpandedFailures = next }, Cmd.none
+        { model with ExpandedFailures = next }, []
 
-    | DismissError -> { model with LastError = None }, Cmd.none
+    | DismissError -> { model with LastError = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 
@@ -389,7 +404,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataMigrations"

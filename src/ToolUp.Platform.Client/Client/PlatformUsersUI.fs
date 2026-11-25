@@ -3,6 +3,7 @@
 
 module PlatformUsersUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -13,10 +14,10 @@ open ToolUp.Platform
 //
 // The operator surface `TenantLifecycleAdminUI` was missing: instead of
 // paste-a-scope-id diagnostics, this panel enumerates every principal the
-// substrate has evidence for (Phase 543 `IPlatformTenantApi.ListPrincipals`
+// substrate has evidence for (`IPlatformTenantApi.ListPrincipals`
 // — a derived, read-only projection over the membership blobs, `user-*`
 // scopes and `UserLoggedIn` audit trail), flags team-less ones, and drives
-// the *existing* Phase 54-family offboard flow per row against the
+// the *existing* tenant offboard flow per row against the
 // `user-<id>` scope. No new destructive machinery — UI composition over
 // shipped substrate.
 //
@@ -63,7 +64,7 @@ type OffboardStep =
     | Compose
     /// A read-only `PreviewDeprovision` result is shown; proceed or back.
     | Previewed of LifecyclePreview
-    /// The server demanded a confirmation token (Phase 54i). The operator
+    /// The server demanded a confirmation token. The operator
     /// mints one or pastes one from a second admin, then confirms.
     | Confirming
     /// Terminal — the offboard's `LifecycleSummary` (+ export archive when
@@ -152,16 +153,65 @@ let private actorUserId () = UserSession.getUserId ()
 
 /// The server refuses a token-less destructive call with
 /// `Error "offboard confirmation required"` when a confirmation policy is
-/// active (Phase 54i). Detect that specific refusal so the modal can
+/// active. Detect that specific refusal so the modal can
 /// switch to its confirmation step rather than surfacing it as a plain
 /// transport error. Matched case-insensitively on the stable phrase.
 let private isConfirmationRequired (err: string) =
     err.ToLower().Contains "confirmation required"
 
+// ─── Effects ─────────────────────────────────────────────────────────
+
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
+
+let internal loadPrincipals () : Steps = [
+    Do(
+        RemoteEffect.call
+            "IPlatformTenantApi.ListPrincipals"
+            tenantApi.ListPrincipals
+            ()
+            (RemoteEffect.flatten >> PrincipalsLoaded)
+    )
+]
+
+let internal preview (scopeId: string) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IPlatformTenantApi.PreviewDeprovision"
+            tenantApi.PreviewDeprovision
+            scopeId
+            (RemoteEffect.flatten >> PreviewLoaded)
+    )
+]
+
+let internal requestToken (scopeId: string) (reason: string) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IPlatformTenantApi.RequestDeprovisionToken"
+            tenantApi.RequestDeprovisionToken
+            (scopeId, reason)
+            (RemoteEffect.flatten >> TokenMinted)
+    )
+]
+
+/// The directory's commands as steps, one per command element, each a
+/// `RemoteEffect.legacy` body that dispatches the element's one message:
+/// the directory does not name its calls as values.
+let private directorySteps (site: string) (cmd: Cmd<UserDirectory.Msg>) : Steps =
+    cmd
+    |> List.mapi (fun index effect ->
+        Do(RemoteEffect.legacy (sprintf "%s #%d" site index) (fun dispatch -> effect (DirectoryMsg >> dispatch))))
+
+/// Ask the directory for `ids`; it skips blank and already-known ids.
+let internal resolve (ids: string list) (model: Model) : Steps =
+    let pending = UserDirectory.unresolved ids model.Directory
+
+    UserDirectory.resolve ids model.Directory
+    |> directorySteps ("UserDirectory.resolve " + String.concat "," pending)
+
 // ─── Init ────────────────────────────────────────────────────────────
 
 let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
-    {
+    ({
         Principals = None
         Loading = true
         TeamLessOnly = false
@@ -169,8 +219,9 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Error = None
         Offboard = None
         Messages = ctx.Messages.PlatformUsers
-    },
-    Cmd.OfRemoting.call tenantApi.ListPrincipals () PrincipalsLoaded (fun e -> PrincipalsLoaded(Error e.Message))
+     },
+     loadPrincipals ())
+    |> RemoteEffect.run
 
 // ─── Update helpers ──────────────────────────────────────────────────
 
@@ -178,25 +229,40 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
 /// kind. In `Confirming` we always use the confirmed plain path (the
 /// export path has no confirmed variant); otherwise the plain or export
 /// path per `Kind`.
-let private submitCmd (m: OffboardModalState) : Cmd<Msg> =
+let internal submit (m: OffboardModalState) : Steps =
     let reason = m.Reason.Trim()
     let actor = actorUserId ()
 
     match m.Step with
-    | Confirming ->
-        Cmd.OfRemoting.call
-            tenantApi.DeprovisionTenantConfirmed
-            (m.ScopeId, actor, reason, m.Token.Trim())
-            OffboardDone
-            (fun e -> OffboardDone(Error e.Message))
+    | Confirming -> [
+        Do(
+            RemoteEffect.call
+                "IPlatformTenantApi.DeprovisionTenantConfirmed"
+                tenantApi.DeprovisionTenantConfirmed
+                (m.ScopeId, actor, reason, m.Token.Trim())
+                (RemoteEffect.flatten >> OffboardDone)
+        )
+      ]
     | _ ->
         match m.Kind with
-        | PlainOffboard ->
-            Cmd.OfRemoting.call tenantApi.DeprovisionTenant (m.ScopeId, actor, reason) OffboardDone (fun e ->
-                OffboardDone(Error e.Message))
-        | ExportOffboard ->
-            Cmd.OfRemoting.call tenantApi.ExportThenDeprovision (m.ScopeId, actor, reason) ExportOffboardDone (fun e ->
-                ExportOffboardDone(Error e.Message))
+        | PlainOffboard -> [
+            Do(
+                RemoteEffect.call
+                    "IPlatformTenantApi.DeprovisionTenant"
+                    tenantApi.DeprovisionTenant
+                    (m.ScopeId, actor, reason)
+                    (RemoteEffect.flatten >> OffboardDone)
+            )
+          ]
+        | ExportOffboard -> [
+            Do(
+                RemoteEffect.call
+                    "IPlatformTenantApi.ExportThenDeprovision"
+                    tenantApi.ExportThenDeprovision
+                    (m.ScopeId, actor, reason)
+                    (RemoteEffect.flatten >> ExportOffboardDone)
+            )
+          ]
 
 /// Apply a destructive-call result (shared by the plain + export folds):
 /// success → `Completed`; a confirmation-required refusal (only when not
@@ -207,9 +273,9 @@ let private applyOffboardResult
     (archive: LifecycleExportArchive option)
     (err: string option)
     (model: Model)
-    : Model * Cmd<Msg> =
+    : Model * Steps =
     match model.Offboard with
-    | None -> model, Cmd.none
+    | None -> model, []
     | Some m ->
         match summary, err with
         | Some s, _ ->
@@ -223,7 +289,7 @@ let private applyOffboardResult
                                 Error = None
                         }
             },
-            Cmd.none
+            []
         | None, Some e when m.Step <> Confirming && isConfirmationRequired e ->
             {
                 model with
@@ -235,7 +301,7 @@ let private applyOffboardResult
                                 Error = None
                         }
             },
-            Cmd.none
+            []
         | None, Some e ->
             {
                 model with
@@ -246,17 +312,18 @@ let private applyOffboardResult
                                 Error = Some(Notice.Problem e)
                         }
             },
-            Cmd.none
+            []
         | None, None ->
             {
                 model with
                     Offboard = Some { m with Busy = false }
             },
-            Cmd.none
+            []
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     match msg with
     | LoadPrincipals ->
         {
@@ -264,7 +331,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Loading = true
                 Error = None
         },
-        Cmd.OfRemoting.call tenantApi.ListPrincipals () PrincipalsLoaded (fun e -> PrincipalsLoaded(Error e.Message))
+        loadPrincipals ()
 
     | PrincipalsLoaded(Ok principals) ->
         {
@@ -273,8 +340,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Loading = false
                 Error = None
         },
-        UserDirectory.resolve (principals |> List.map _.UserId) model.Directory
-        |> Cmd.map DirectoryMsg
+        resolve (principals |> List.map _.UserId) model
 
     | PrincipalsLoaded(Error e) ->
         {
@@ -283,20 +349,20 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Loading = false
                 Error = Some(Notice.Problem e)
         },
-        Cmd.none
+        []
 
     | ToggleTeamLessOnly ->
         {
             model with
                 TeamLessOnly = not model.TeamLessOnly
         },
-        Cmd.none
+        []
 
     | DirectoryMsg subMsg ->
         let directory, cmd = UserDirectory.update subMsg model.Directory
-        { model with Directory = directory }, Cmd.map DirectoryMsg cmd
+        { model with Directory = directory }, directorySteps "UserDirectory.update" cmd
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
 
     | OpenOffboard(userId, kind) ->
         {
@@ -313,23 +379,23 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                         Error = None
                     }
         },
-        Cmd.none
+        []
 
-    | CloseOffboard -> { model with Offboard = None }, Cmd.none
+    | CloseOffboard -> { model with Offboard = None }, []
 
     | SetOffboardReason reason ->
         {
             model with
                 Offboard = model.Offboard |> Option.map (fun m -> { m with Reason = reason })
         },
-        Cmd.none
+        []
 
     | SetOffboardToken token ->
         {
             model with
                 Offboard = model.Offboard |> Option.map (fun m -> { m with Token = token })
         },
-        Cmd.none
+        []
 
     | RequestPreview ->
         match model.Offboard with
@@ -338,9 +404,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Offboard = Some { m with Busy = true; Error = None }
             },
-            Cmd.OfRemoting.call tenantApi.PreviewDeprovision m.ScopeId PreviewLoaded (fun e ->
-                PreviewLoaded(Error e.Message))
-        | _ -> model, Cmd.none
+            preview m.ScopeId
+        | _ -> model, []
 
     | PreviewLoaded(Ok preview) ->
         {
@@ -354,7 +419,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                             Error = None
                     })
         },
-        Cmd.none
+        []
 
     | PreviewLoaded(Error e) ->
         {
@@ -367,7 +432,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                             Error = Some(Notice.Problem e)
                     })
         },
-        Cmd.none
+        []
 
     | RequestToken ->
         match model.Offboard with
@@ -376,9 +441,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Offboard = Some { m with Busy = true; Error = None }
             },
-            Cmd.OfRemoting.call tenantApi.RequestDeprovisionToken (m.ScopeId, m.Reason.Trim()) TokenMinted (fun e ->
-                TokenMinted(Error e.Message))
-        | _ -> model, Cmd.none
+            requestToken m.ScopeId (m.Reason.Trim())
+        | _ -> model, []
 
     | TokenMinted(Ok confirmation) ->
         {
@@ -392,7 +456,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                             Error = None
                     })
         },
-        Cmd.none
+        []
 
     | TokenMinted(Error e) ->
         {
@@ -405,11 +469,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                             Error = Some(Notice.Problem e)
                     })
         },
-        Cmd.none
+        []
 
     | SubmitOffboard ->
         match model.Offboard with
-        | Some m when m.Busy -> model, Cmd.none
+        | Some m when m.Busy -> model, []
         | Some m when m.Reason.Trim() = "" ->
             {
                 model with
@@ -419,7 +483,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                                 Error = Some(Notice.Problem model.Messages.ReasonRequired)
                         }
             },
-            Cmd.none
+            []
         | Some m when m.Step = Confirming && m.Token.Trim() = "" ->
             {
                 model with
@@ -429,14 +493,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                                 Error = Some(Notice.Problem model.Messages.TokenRequired)
                         }
             },
-            Cmd.none
+            []
         | Some m ->
             {
                 model with
                     Offboard = Some { m with Busy = true; Error = None }
             },
-            submitCmd m
-        | None -> model, Cmd.none
+            submit m
+        | None -> model, []
 
     | OffboardDone(Ok summary) -> applyOffboardResult (Some summary) None None model
 
@@ -445,6 +509,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | ExportOffboardDone(Ok result) -> applyOffboardResult (Some result.Summary) (Some result.Archive) None model
 
     | ExportOffboardDone(Error e) -> applyOffboardResult None None (Some e) model
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

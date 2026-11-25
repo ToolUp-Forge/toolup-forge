@@ -3,13 +3,14 @@
 
 module AdminHome
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 
-// ─── Phase 573 — the Administration-area landing surface ─────────────
+// ─── The Administration-area landing surface ─────────────────────────
 //
-// Phase 567 gave the shell two navigation areas and a switcher between
+// The shell has two navigation areas and a switcher between
 // them. Flipping into Administration re-pointed the RAIL and left the
 // content pane on whatever was already open, so "go and administer
 // something" landed the operator on a product module, or — once the
@@ -23,7 +24,7 @@ open ToolUp.Platform
 // to maintain.
 //
 // **It names no module, and it holds no tile.** Every tile comes from a
-// contributor through the Phase 217 seam (`AdminTile` = a `HomeWidget`
+// contributor through the admin-tile seam (`AdminTile` = a `HomeWidget`
 // plus the id of the module it fronts); the SDK's own admin built-ins
 // contribute theirs beside their `create`, gated on their own
 // `ClientConfig` modes. The shell filters them through the SAME
@@ -69,22 +70,31 @@ let private homeApi: IHomeOverviewApi =
 /// Fetch the shared widget-data bag. A failure is not surfaced: the bag
 /// is an enrichment, and an error banner over a navigational surface
 /// would be louder than the thing it reports.
-let private loadWidgetDataCmd =
-    Cmd.OfRemoting.call homeApi.GetOverview () (fun ov -> WidgetDataLoaded ov.WidgetData) (fun _ ->
-        WidgetDataLoaded Map.empty)
+let internal loadWidgetData () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "IHomeOverviewApi.GetOverview" homeApi.GetOverview () (function
+            | Ok ov -> WidgetDataLoaded ov.WidgetData
+            | Error _ -> WidgetDataLoaded Map.empty)
+    )
+]
 
-let init () = { Data = Map.empty }, loadWidgetDataCmd
+let init () : Model * Cmd<Msg> =
+    ({ Data = Map.empty }, loadWidgetData ()) |> RemoteEffect.run
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Refresh -> model, loadWidgetDataCmd
-    | WidgetDataLoaded data -> { model with Data = data }, Cmd.none
+    | Refresh -> model, loadWidgetData ()
+    | WidgetDataLoaded data -> { model with Data = data }, []
     | OpenModule ownerModuleId ->
         // Navigate the way a sidebar click does — the shell's
         // `NavigationRequest` bus dispatches the same `ModuleSelected`,
         // so the route guard and the area derivation both apply.
         NavigationRequest.request ownerModuleId
-        model, Cmd.none
+        model, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────
 
@@ -217,12 +227,12 @@ let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 /// shell's `prepareModules` injects it only under
 /// `ShellChrome.AdminArea = ChromeFill.On()` — under the default inline groups
 /// there are no areas to land between, so the composition is
-/// byte-for-byte pre-573 (GP 11).
+/// byte-for-byte what it was before the areas existed (GP 11).
 ///
 /// Ungrouped, and declared into the `Administration` area explicitly
 /// (rather than inheriting it from an admin group name), so the area
 /// derivation does not depend on a presentational label — the same
-/// separation Phase 568 made for the role gate. `NavRole.TeamOwnerAdmin`
+/// separation the role gate makes. `NavRole.TeamOwnerAdmin`
 /// is the weakest gate any administration surface carries, so every
 /// caller who has an administration area to enter can see its landing,
 /// and a plain Member — who has no admin modules and therefore no

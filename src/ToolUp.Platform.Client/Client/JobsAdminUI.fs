@@ -3,13 +3,14 @@
 
 module JobsAdminUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 1106 — built-in background-jobs admin ────────────────────
+// ─── Built-in background-jobs admin ─────────────────────────────────
 //
 // A job that fails for good — dead-lettered after its retries, or
 // refused outright by its handler (`JobResult.PermanentFailure`, which
@@ -26,7 +27,7 @@ open ToolUp.Platform
 // polled until the new attempt lands. It adds no retry policy and no
 // server surface.
 //
-// Phase 1110 — the definition's `LastRun*` fields move only when a
+// The definition's `LastRun*` fields move only when a
 // dispatch ENDS, so while a dispatch is still retrying the record keeps
 // the previous dispatch's outcome. The attempts list is what says what a
 // job is doing now: an attempt that started after the record's
@@ -258,29 +259,55 @@ let private jobApi: JobApi =
 
 // ─── Init / update ──────────────────────────────────────────────────
 
-let private loadJobsCmd () =
-    Cmd.OfRemoting.call jobApi.ListJobs () (Ok >> JobsLoaded) (fun e -> JobsLoaded(Error e.Message))
+let internal loadJobs () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(RemoteEffect.call "JobApi.ListJobs" jobApi.ListJobs () (Result.mapError _.Message >> JobsLoaded))
+]
 
-let private loadAttemptsCmd (jobId: Guid) : Cmd<Msg> =
-    Cmd.OfRemoting.call
-        jobApi.GetRecentRuns
-        (jobId, recentAttemptCount)
-        (fun runs -> AttemptsLoaded(jobId, Ok runs))
-        (fun e -> AttemptsLoaded(jobId, Error e.Message))
+let internal loadAttempts (jobId: Guid) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "JobApi.GetRecentRuns" jobApi.GetRecentRuns (jobId, recentAttemptCount) (fun reply ->
+            AttemptsLoaded(jobId, Result.mapError (fun (e: exn) -> e.Message) reply))
+    )
+]
 
-let private pollCmd (jobId: Guid) : Cmd<Msg> =
-    Cmd.OfAsync.perform (fun () -> Async.Sleep pollIntervalMs) () (fun _ -> PollJob jobId)
+let internal getJob (jobId: Guid) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "JobApi.GetJob" jobApi.GetJob jobId (fun reply ->
+            JobPolled(jobId, Result.mapError (fun (e: exn) -> e.Message) reply))
+    )
+]
 
-let init () =
-    {
+let internal triggerOnce (jobId: Guid) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call "JobApi.TriggerOnce" jobApi.TriggerOnce jobId (fun reply ->
+            RerunAccepted(jobId, RemoteEffect.flatten reply))
+    )
+]
+
+/// The poll timer: one `PollJob` after the interval.
+let internal poll (jobId: Guid) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.legacy ("JobsAdminUI.poll " + string jobId) (fun dispatch ->
+            Async.StartImmediate(
+                async {
+                    do! Async.Sleep pollIntervalMs
+                    dispatch (PollJob jobId)
+                }
+            ))
+    )
+]
+
+let init () : Model * Cmd<Msg> =
+    ({
         Jobs = Remote.Loading
         Confirming = None
         Reruns = Map.empty
         Attempts = Map.empty
         Expanded = Set.empty
         LastError = None
-    },
-    loadJobsCmd ()
+     },
+     loadJobs ())
+    |> RemoteEffect.run
 
 let private findJob (model: Model) (jobId: Guid) : JobDefinition option =
     model.Jobs
@@ -294,9 +321,10 @@ let private replaceJob (job: JobDefinition) (model: Model) : Model = {
             |> Remote.map (List.map (fun j -> if j.JobId = job.JobId then job else j))
 }
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Refresh -> { model with Jobs = Remote.Loading }, loadJobsCmd ()
+    | Refresh -> { model with Jobs = Remote.Loading }, loadJobs ()
 
     | JobsLoaded(Ok jobs) ->
         // A job already showing attempts keeps them on screen while the
@@ -312,14 +340,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Jobs = Remote.Loaded jobs
                 Attempts = attempts
         },
-        Cmd.batch (jobs |> List.map (fun job -> loadAttemptsCmd job.JobId))
+        jobs |> List.collect (fun job -> loadAttempts job.JobId)
 
     | JobsLoaded(Error message) ->
         {
             model with
                 Jobs = Remote.Failed message
         },
-        Cmd.none
+        []
 
     | ToggleAttempts jobId ->
         if model.Expanded.Contains jobId then
@@ -327,7 +355,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Expanded = model.Expanded.Remove jobId
             },
-            Cmd.none
+            []
         else
             // Expanding reads the attempts again: the list is about what
             // the job is doing NOW, not when the table was loaded.
@@ -335,38 +363,34 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Expanded = model.Expanded.Add jobId
             },
-            loadAttemptsCmd jobId
+            loadAttempts jobId
 
     | AttemptsLoaded(jobId, Ok runs) ->
         {
             model with
                 Attempts = model.Attempts |> Map.add jobId (Remote.Loaded(newestFirst runs))
         },
-        Cmd.none
+        []
 
     | AttemptsLoaded(jobId, Error message) ->
         {
             model with
                 Attempts = model.Attempts |> Map.add jobId (Remote.Failed message)
         },
-        Cmd.none
+        []
 
     | RerunRequested jobId ->
         // Only a job the table offers the action for can reach the
         // confirmation — the model refuses what the view would not show.
         match findJob model jobId with
-        | Some job when rerunOffer job = RerunOffer.Offered -> { model with Confirming = Some jobId }, Cmd.none
-        | _ -> model, Cmd.none
+        | Some job when rerunOffer job = RerunOffer.Offered -> { model with Confirming = Some jobId }, []
+        | _ -> model, []
 
-    | RerunCancelled -> { model with Confirming = None }, Cmd.none
+    | RerunCancelled -> { model with Confirming = None }, []
 
     | RerunConfirmed jobId ->
         match model.Confirming, findJob model jobId with
         | Some confirming, Some job when confirming = jobId && rerunOffer job = RerunOffer.Offered ->
-            let cmd =
-                Cmd.OfRemoting.call jobApi.TriggerOnce jobId (fun result -> RerunAccepted(jobId, result)) (fun e ->
-                    RerunAccepted(jobId, Error e.Message))
-
             // The attempts list opens, so the new attempt is seen as it
             // starts.
             {
@@ -375,8 +399,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Reruns = model.Reruns |> Map.add jobId RerunProgress.Starting
                     Expanded = model.Expanded.Add jobId
             },
-            cmd
-        | _ -> { model with Confirming = None }, Cmd.none
+            triggerOnce jobId
+        | _ -> { model with Confirming = None }, []
 
     | RerunAccepted(jobId, Ok()) ->
         let previous = findJob model jobId |> Option.bind _.LastRunAt
@@ -385,25 +409,19 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Reruns = model.Reruns |> Map.add jobId (RerunProgress.Awaiting(previous, 0))
         },
-        Cmd.batch [ loadAttemptsCmd jobId; pollCmd jobId ]
+        loadAttempts jobId @ poll jobId
 
     | RerunAccepted(jobId, Error reason) ->
         {
             model with
                 Reruns = model.Reruns |> Map.add jobId (RerunProgress.Refused reason)
         },
-        Cmd.none
+        []
 
     | PollJob jobId ->
         match model.Reruns.TryFind jobId with
-        | Some(RerunProgress.Awaiting _) ->
-            model,
-            Cmd.batch [
-                Cmd.OfRemoting.call jobApi.GetJob jobId (fun job -> JobPolled(jobId, Ok job)) (fun e ->
-                    JobPolled(jobId, Error e.Message))
-                loadAttemptsCmd jobId
-            ]
-        | _ -> model, Cmd.none
+        | Some(RerunProgress.Awaiting _) -> model, getJob jobId @ loadAttempts jobId
+        | _ -> model, []
 
     | JobPolled(jobId, result) ->
         match model.Reruns.TryFind jobId, result with
@@ -413,7 +431,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     Reruns = model.Reruns |> Map.add jobId (RerunProgress.Landed(standingOf job))
             },
             // One last read, so the list ends on the attempt that landed.
-            loadAttemptsCmd jobId
+            loadAttempts jobId
         | Some(RerunProgress.Awaiting(previous, polls)), Ok _ ->
             let polls = polls + 1
 
@@ -422,23 +440,26 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     model with
                         Reruns = model.Reruns |> Map.add jobId RerunProgress.StillRunning
                 },
-                Cmd.none
+                []
             else
                 {
                     model with
                         Reruns = model.Reruns |> Map.add jobId (RerunProgress.Awaiting(previous, polls))
                 },
-                pollCmd jobId
+                poll jobId
         | Some(RerunProgress.Awaiting _), Error message ->
             {
                 model with
                     Reruns = model.Reruns |> Map.add jobId RerunProgress.StillRunning
                     LastError = Some(Notice.Problem message)
             },
-            Cmd.none
-        | _ -> model, Cmd.none
+            []
+        | _ -> model, []
 
-    | DismissError -> { model with LastError = None }, Cmd.none
+    | DismissError -> { model with LastError = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 

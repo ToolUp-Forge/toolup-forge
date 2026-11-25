@@ -3,6 +3,7 @@
 
 module DatadogReadbackUI
 
+open Fuaran.MVU
 open System
 open Fable.Core
 open Fable.SimpleHttp
@@ -13,7 +14,7 @@ open ToolUp.Elmish
 open ToolUp.Platform
 open Toolup.UIToolkit
 
-// ─── Phase 9w — the Datadog readback admin module ────────────────────
+// ─── The Datadog readback admin module ───────────────────────────────
 //
 // Three tabs over the SDK's `/api/observability/datadog/*` endpoints:
 // monitor state, recent error logs, and a small grid of charts over the
@@ -23,7 +24,7 @@ open Toolup.UIToolkit
 // **Plain `Http.request`, not a Remoting proxy.** The server side is
 // three read-only REST endpoints rather than a contract record (they are
 // also reachable by an operator with `curl`), so the reads go through
-// `Fable.SimpleHttp` the way the Phase 61 admin widgets do. Identity and
+// `Fable.SimpleHttp` the way the admin widgets do. Identity and
 // CSRF headers are spliced in at send time by `CsrfClient`'s request
 // guard, so nothing is threaded through here.
 //
@@ -98,9 +99,16 @@ let inline private fetchJson<'T> (url: string) : Async<Result<'T, string>> = asy
 // `Json.parseAs<'T>` needs the type at COMPILE time, and Fable erases
 // generics at runtime, so a non-inline generic fetcher is not a style
 // preference but a compile error — `Cannot get type info of generic
-// parameter T`. Passing the inline function itself to `Cmd.OfAsync`
-// would erase it again, which is why each command names a concrete
+// parameter T`. Passing the inline function itself to `fetch` below
+// would erase it again, which is why each load names a concrete
 // wrapper rather than `fetchJson<Something>`.
+//
+// These are plain HTTP reads, not remote calls, so they are not
+// `RemoteEffect.call` values: that would route them through the
+// remoting interceptor chain, which has never seen them. Each is a
+// `RemoteEffect.legacy` body under a site label naming its URL, and
+// dispatches exactly once (`fetchJson` answers every failure as an
+// `Error`).
 
 let private fetchMonitors (url: string) : Async<Result<DatadogMonitorsResponse, string>> = fetchJson url
 
@@ -108,14 +116,32 @@ let private fetchLogs (url: string) : Async<Result<DatadogLogsResponse, string>>
 
 let private fetchMetric (url: string) : Async<Result<DatadogMetricResponse, string>> = fetchJson url
 
-let private loadMonitorsCmd () =
-    Cmd.OfAsync.perform fetchMonitors (RoutePrefix + "/monitors") MonitorsLoaded
+/// One read as an effect value: the site label names the URL, so two
+/// reads compare equal exactly when they fetch the same thing.
+let private fetch
+    (read: string -> Async<Result<'T, string>>)
+    (url: string)
+    (reply: Result<'T, string> -> Msg)
+    : Step<Msg, RemoteEffect<Msg>> =
+    Do(
+        RemoteEffect.legacy ("DatadogReadbackUI.fetch " + url) (fun dispatch ->
+            Async.StartImmediate(
+                async {
+                    let! result = read url
+                    dispatch (reply result)
+                }
+            ))
+    )
 
-let private loadLogsCmd (config: DatadogReadbackConfig) =
+let internal loadMonitors () : Step<Msg, RemoteEffect<Msg>> list = [
+    fetch fetchMonitors (RoutePrefix + "/monitors") MonitorsLoaded
+]
+
+let internal loadLogs (config: DatadogReadbackConfig) : Step<Msg, RemoteEffect<Msg>> list =
     let url =
         sprintf "%s/logs?minutes=%d&limit=%d" RoutePrefix config.DefaultWindowMinutes config.LogPageLimit
 
-    Cmd.OfAsync.perform fetchLogs url LogsLoaded
+    [ fetch fetchLogs url LogsLoaded ]
 
 /// `encodeURIComponent` rather than `Uri.EscapeDataString`: the BCL
 /// call has no Fable implementation, and the browser's own is what this
@@ -123,20 +149,18 @@ let private loadLogsCmd (config: DatadogReadbackConfig) =
 [<Emit("encodeURIComponent($0)")>]
 let private encodeUriComponent (value: string) : string = jsNative
 
-let private loadMetricCmd (config: DatadogReadbackConfig) (metric: string) =
+let internal loadMetric (config: DatadogReadbackConfig) (metric: string) : Step<Msg, RemoteEffect<Msg>> =
     let url =
         sprintf "%s/metric?metric=%s&minutes=%d" RoutePrefix (encodeUriComponent metric) config.DefaultWindowMinutes
 
-    Cmd.OfAsync.perform fetchMetric url (fun result -> MetricLoaded(metric, result))
+    fetch fetchMetric url (fun result -> MetricLoaded(metric, result))
 
-let private loadMetricsCmd (config: DatadogReadbackConfig) =
-    DatadogReadback.defaultChartedMetrics
-    |> List.map (loadMetricCmd config)
-    |> Cmd.batch
+let internal loadMetrics (config: DatadogReadbackConfig) : Step<Msg, RemoteEffect<Msg>> list =
+    DatadogReadback.defaultChartedMetrics |> List.map (loadMetric config)
 
 // ─── Init / update ───────────────────────────────────────────────────
 
-let init (config: DatadogReadbackConfig) () =
+let init (config: DatadogReadbackConfig) () : Model * Cmd<Msg> =
     let model = {
         Config = config
         ActiveTab = MonitorsTab
@@ -147,36 +171,38 @@ let init (config: DatadogReadbackConfig) () =
             |> List.map (fun metric -> metric, Remote.Loading)
     }
 
-    model, Cmd.batch [ loadMonitorsCmd (); loadLogsCmd config; loadMetricsCmd config ]
+    (model, loadMonitors () @ loadLogs config @ loadMetrics config)
+    |> RemoteEffect.run
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their reads as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | SwitchTab tab -> { model with ActiveTab = tab }, Cmd.none
+    | SwitchTab tab -> { model with ActiveTab = tab }, []
 
-    | RefreshMonitors -> { model with Monitors = Remote.Loading }, loadMonitorsCmd ()
+    | RefreshMonitors -> { model with Monitors = Remote.Loading }, loadMonitors ()
 
     | MonitorsLoaded result ->
         {
             model with
                 Monitors = Remote.ofResult result
         },
-        Cmd.none
+        []
 
-    | RefreshLogs -> { model with Logs = Remote.Loading }, loadLogsCmd model.Config
+    | RefreshLogs -> { model with Logs = Remote.Loading }, loadLogs model.Config
 
     | LogsLoaded result ->
         {
             model with
                 Logs = Remote.ofResult result
         },
-        Cmd.none
+        []
 
     | RefreshMetrics ->
         {
             model with
                 Metrics = model.Metrics |> List.map (fun (metric, _) -> metric, Remote.Loading)
         },
-        loadMetricsCmd model.Config
+        loadMetrics model.Config
 
     | MetricLoaded(metric, result) ->
         let next = Remote.ofResult result
@@ -187,7 +213,10 @@ let update (msg: Msg) (model: Model) =
                     model.Metrics
                     |> List.map (fun (name, state) -> if name = metric then name, next else name, state)
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Shared renderers ────────────────────────────────────────────────
 
@@ -494,8 +523,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// The sidebar group this module coined at Phase 9w. Since Phase 9x
-/// the string itself lives in `SidebarVisibility.ObservabilitySidebarGroup`
+/// The sidebar group this module coined. The string itself lives in `SidebarVisibility.ObservabilitySidebarGroup`
 /// — the platform-admin group allow-list names it, and that file compiles
 /// ahead of every module — and this alias keeps the published name. A
 /// sibling observability module reuses it rather than minting a
@@ -507,14 +535,14 @@ let ObservabilityGroup = ToolUp.Platform.SidebarVisibility.ObservabilitySidebarG
 /// `prepareModules` injects it when
 /// `ClientConfig.Chrome.DatadogReadback = EnabledDatadogReadback cfg`.
 ///
-/// **Gating.** `NavRole.PlatformAdminOnly` is the gate (Phase 568's
+/// **Gating.** `NavRole.PlatformAdminOnly` is the gate (the
 /// typed field, not the deprecated group-name fallback) — monitor state
 /// and error logs are deployment-wide data, and the endpoints enforce
 /// the same predicate server-side regardless of what the client renders.
 /// `withArea Administration` is declared EXPLICITLY rather than derived:
-/// the Phase 567 area derivation reads the GROUP name against a closed
+/// the area derivation reads the GROUP name against a closed
 /// set, and when this module coined its group that set did not name it.
-/// Phase 9x added the group to the set, so the declaration is now
+/// The group has since joined the set, so the declaration is now
 /// belt-and-braces rather than load-bearing; it stays, because the area
 /// is this module's decision and should not hinge on a set elsewhere.
 /// This built-in's module id.

@@ -3,6 +3,7 @@
 
 module WebhookAdminUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -80,11 +81,19 @@ let private webhookApi: IWebhookApi =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let private loadSubscriptionsCmd () =
-    Cmd.OfRemoting.call webhookApi.ListSubscriptions () SubscriptionsLoaded (fun e ->
-        SubscriptionsLoaded(Error e.Message))
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
 
-let init (ctx: ClientModuleContext) =
+let internal loadSubscriptions () : Steps = [
+    Do(
+        RemoteEffect.call
+            "IWebhookApi.ListSubscriptions"
+            webhookApi.ListSubscriptions
+            ()
+            (RemoteEffect.flatten >> SubscriptionsLoaded)
+    )
+]
+
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     let model = {
         Subscriptions = []
         SelectedId = None
@@ -97,22 +106,64 @@ let init (ctx: ClientModuleContext) =
         Messages = ctx.Messages.WebhookAdmin
     }
 
-    model, loadSubscriptionsCmd ()
+    (model, loadSubscriptions ()) |> RemoteEffect.run
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-let private loadDeliveriesCmd (id: Guid) =
-    Cmd.OfRemoting.call webhookApi.ListDeliveries id (fun result -> DeliveriesLoaded(id, result)) (fun e ->
-        DeliveriesLoaded(id, Error e.Message))
+let internal loadDeliveries (id: Guid) : Steps = [
+    Do(
+        RemoteEffect.call "IWebhookApi.ListDeliveries" webhookApi.ListDeliveries id (fun reply ->
+            DeliveriesLoaded(id, RemoteEffect.flatten reply))
+    )
+]
+
+let internal deleteSubscription (id: Guid) : Steps = [
+    Do(
+        RemoteEffect.call "IWebhookApi.DeleteSubscription" webhookApi.DeleteSubscription id (fun reply ->
+            DeleteCompleted(id, RemoteEffect.flatten reply))
+    )
+]
+
+let internal rotateSecret (id: Guid) : Steps = [
+    Do(
+        RemoteEffect.call "IWebhookApi.RotateSecret" webhookApi.RotateSecret id (fun reply ->
+            RotateSecretCompleted(id, RemoteEffect.flatten reply))
+    )
+]
+
+let internal testFire (id: Guid) : Steps = [
+    Do(
+        RemoteEffect.call "IWebhookApi.TestFire" webhookApi.TestFire id (fun reply ->
+            TestFireCompleted(id, RemoteEffect.flatten reply))
+    )
+]
+
+let internal createSubscription (req: CreateWebhookRequest) : Steps = [
+    Do(
+        RemoteEffect.call
+            "IWebhookApi.CreateSubscription"
+            webhookApi.CreateSubscription
+            req
+            (RemoteEffect.flatten >> CreateCompleted)
+    )
+]
+
+let internal updateStatus (id: Guid) (status: WebhookStatus) : Steps = [
+    Do(
+        RemoteEffect.call "IWebhookApi.UpdateStatus" webhookApi.UpdateStatus (id, status) (fun reply ->
+            StatusUpdateCompleted(id, RemoteEffect.flatten reply))
+    )
+]
 
 let private sortByCreatedDesc (subs: WebhookSubscription list) =
     subs |> List.sortByDescending _.CreatedAt
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     match msg with
-    | LoadSubscriptions -> model, loadSubscriptionsCmd ()
+    | LoadSubscriptions -> model, loadSubscriptions ()
 
     | SubscriptionsLoaded(Ok subs) ->
         let sorted = sortByCreatedDesc subs
@@ -126,8 +177,8 @@ let update (msg: Msg) (model: Model) =
 
         let cmd =
             match selected with
-            | Some id when not (model.Deliveries |> Map.containsKey id) -> loadDeliveriesCmd id
-            | _ -> Cmd.none
+            | Some id when not (model.Deliveries |> Map.containsKey id) -> loadDeliveries id
+            | _ -> []
 
         {
             model with
@@ -144,23 +195,18 @@ let update (msg: Msg) (model: Model) =
                 Loaded = true
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | SelectSubscription id ->
         let cmd =
             if model.Deliveries |> Map.containsKey id then
-                Cmd.none
+                []
             else
-                loadDeliveriesCmd id
+                loadDeliveries id
 
         { model with SelectedId = Some id }, cmd
 
-    | CreateSubmit req ->
-        let cmd =
-            Cmd.OfRemoting.call webhookApi.CreateSubscription req CreateCompleted (fun e ->
-                CreateCompleted(Error e.Message))
-
-        model, cmd
+    | CreateSubmit req -> model, createSubscription req
 
     | CreateCompleted(Ok sub) ->
         // Hold the unmasked secret in the model so the detail pane can
@@ -169,58 +215,47 @@ let update (msg: Msg) (model: Model) =
         // session until `DismissCreatedSecret` clears it.
         {
             model with
-                // Phase 6d.A — `Secret` is now an option; the create
+                // `Secret` is an option; the create
                 // response reveals the value transiently as `Some`.
                 NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret |> Option.defaultValue "")
                 SelectedId = Some sub.SubscriptionId
         },
-        loadSubscriptionsCmd ()
+        loadSubscriptions ()
 
     | CreateCompleted(Error err) ->
         {
             model with
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | UpdateStatusSubmit(id, status) ->
-        let cmd =
-            Cmd.OfRemoting.call
-                webhookApi.UpdateStatus
-                (id, status)
-                (fun result -> StatusUpdateCompleted(id, result))
-                (fun e -> StatusUpdateCompleted(id, Error e.Message))
-
         {
             model with
                 Status = model.Status |> Map.add id Working
         },
-        cmd
+        updateStatus id status
 
     | StatusUpdateCompleted(id, Ok()) ->
         {
             model with
                 Status = model.Status |> Map.add id (Done model.Messages.StatusUpdated)
         },
-        loadSubscriptionsCmd ()
+        loadSubscriptions ()
 
     | StatusUpdateCompleted(id, Error err) ->
         {
             model with
                 Status = model.Status |> Map.add id (Failed err)
         },
-        Cmd.none
+        []
 
     | DeleteSubmit id ->
-        let cmd =
-            Cmd.OfRemoting.call webhookApi.DeleteSubscription id (fun result -> DeleteCompleted(id, result)) (fun e ->
-                DeleteCompleted(id, Error e.Message))
-
         {
             model with
                 Status = model.Status |> Map.add id Working
         },
-        cmd
+        deleteSubscription id
 
     | DeleteCompleted(id, Ok()) ->
         // Drop cached deliveries / test results / status for the removed
@@ -239,25 +274,21 @@ let update (msg: Msg) (model: Model) =
                 Status = model.Status |> Map.remove id
                 SelectedId = nextSelected
         },
-        loadSubscriptionsCmd ()
+        loadSubscriptions ()
 
     | DeleteCompleted(id, Error err) ->
         {
             model with
                 Status = model.Status |> Map.add id (Failed err)
         },
-        Cmd.none
+        []
 
     | RotateSecretSubmit id ->
-        let cmd =
-            Cmd.OfRemoting.call webhookApi.RotateSecret id (fun result -> RotateSecretCompleted(id, result)) (fun e ->
-                RotateSecretCompleted(id, Error e.Message))
-
         {
             model with
                 Status = model.Status |> Map.add id Working
         },
-        cmd
+        rotateSecret id
 
     | RotateSecretCompleted(id, Ok sub) ->
         // Reveal the new secret once — same one-time-reveal banner the
@@ -266,31 +297,27 @@ let update (msg: Msg) (model: Model) =
         // session until `DismissCreatedSecret` clears it.
         {
             model with
-                // Phase 6d.A — `Secret` is now an option; the rotate
+                // `Secret` is an option; the rotate
                 // response reveals the new value transiently as `Some`.
                 NewlyCreatedSecret = Some(sub.SubscriptionId, sub.Secret |> Option.defaultValue "")
                 SelectedId = Some sub.SubscriptionId
                 Status = model.Status |> Map.add id (Done model.Messages.SecretRotated)
         },
-        loadSubscriptionsCmd ()
+        loadSubscriptions ()
 
     | RotateSecretCompleted(id, Error err) ->
         {
             model with
                 Status = model.Status |> Map.add id (Failed err)
         },
-        Cmd.none
+        []
 
     | TestFireSubmit id ->
-        let cmd =
-            Cmd.OfRemoting.call webhookApi.TestFire id (fun result -> TestFireCompleted(id, result)) (fun e ->
-                TestFireCompleted(id, Error e.Message))
-
         {
             model with
                 Status = model.Status |> Map.add id Working
         },
-        cmd
+        testFire id
 
     | TestFireCompleted(id, Ok result) ->
         let msgs = model.Messages
@@ -309,39 +336,42 @@ let update (msg: Msg) (model: Model) =
                 Status = model.Status |> Map.add id (Done label)
         },
         // Reload deliveries so the row appears in the log immediately.
-        loadDeliveriesCmd id
+        loadDeliveries id
 
     | TestFireCompleted(id, Error err) ->
         {
             model with
                 Status = model.Status |> Map.add id (Failed err)
         },
-        Cmd.none
+        []
 
-    | LoadDeliveries id -> model, loadDeliveriesCmd id
+    | LoadDeliveries id -> model, loadDeliveries id
 
     | DeliveriesLoaded(id, Ok rows) ->
         {
             model with
                 Deliveries = model.Deliveries |> Map.add id rows
         },
-        Cmd.none
+        []
 
     | DeliveriesLoaded(_, Error _) ->
         // Silently swallow — the detail pane shows "no deliveries yet"
         // when the map is empty; a banner here would be noisy.
-        model, Cmd.none
+        model, []
 
-    | DismissCreatedSecret -> { model with NewlyCreatedSecret = None }, Cmd.none
+    | DismissCreatedSecret -> { model with NewlyCreatedSecret = None }, []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
 
     | DismissPerSubStatus id ->
         {
             model with
                 Status = model.Status |> Map.remove id
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Helpers (display) ───────────────────────────────────────────────
 
@@ -816,7 +846,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.WebhookAdmin"

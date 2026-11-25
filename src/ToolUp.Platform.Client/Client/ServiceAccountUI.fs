@@ -3,13 +3,14 @@
 
 module ServiceAccountUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 527 — service-account admin ───────────────────────────────
+// ─── Service-account admin ───────────────────────────────────────────
 //
 // Owner/Admin surface over `IServiceAccountApi`: list / create / disable
 // service accounts, and mint / revoke their scoped API tokens.
@@ -85,16 +86,70 @@ let private serviceAccountApi: IServiceAccountApi =
         customOptions = UserSession.withRequestHeaders
     )
 
-let private loadAccountsCmd () =
-    Cmd.OfRemoting.call serviceAccountApi.ListAccounts () AccountsLoaded (fun e -> AccountsLoaded(Error e.Message))
+let internal loadAccounts () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IServiceAccountApi.ListAccounts"
+            serviceAccountApi.ListAccounts
+            ()
+            (RemoteEffect.flatten >> AccountsLoaded)
+    )
+]
 
-let private loadTokensCmd (accountId: string) =
-    Cmd.OfRemoting.call serviceAccountApi.ListTokens accountId TokensLoaded (fun e -> TokensLoaded(Error e.Message))
+let internal loadTokens (accountId: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IServiceAccountApi.ListTokens"
+            serviceAccountApi.ListTokens
+            accountId
+            (RemoteEffect.flatten >> TokensLoaded)
+    )
+]
+
+let internal createAccount (request: CreateServiceAccountRequest) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IServiceAccountApi.CreateAccount"
+            serviceAccountApi.CreateAccount
+            request
+            (RemoteEffect.flatten >> AccountCreated)
+    )
+]
+
+let internal setStatus (accountId: string) (status: ServiceAccountStatus) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IServiceAccountApi.SetAccountStatus"
+            serviceAccountApi.SetAccountStatus
+            (accountId, status)
+            (RemoteEffect.flatten >> StatusSet)
+    )
+]
+
+let internal mintToken (request: MintServiceAccountTokenRequest) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IServiceAccountApi.MintToken"
+            serviceAccountApi.MintToken
+            request
+            (RemoteEffect.flatten >> TokenMinted)
+    )
+]
+
+let internal revokeToken (tokenId: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IServiceAccountApi.RevokeToken"
+            serviceAccountApi.RevokeToken
+            tokenId
+            (RemoteEffect.flatten >> TokenRevoked)
+    )
+]
 
 // ─── Init / update ───────────────────────────────────────────────────
 
 let init () : Model * Cmd<Msg> =
-    {
+    ({
         Accounts = []
         SelectedAccountId = None
         Tokens = []
@@ -102,12 +157,14 @@ let init () : Model * Cmd<Msg> =
         Loaded = false
         Busy = true
         Error = None
-    },
-    loadAccountsCmd ()
+     },
+     loadAccounts ())
+    |> RemoteEffect.run
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | LoadAccounts -> { model with Busy = true; Error = None }, loadAccountsCmd ()
+    | LoadAccounts -> { model with Busy = true; Error = None }, loadAccounts ()
 
     | AccountsLoaded(Ok accounts) ->
         {
@@ -117,7 +174,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = None
         },
-        Cmd.none
+        []
 
     | AccountsLoaded(Error err) ->
         {
@@ -126,7 +183,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | SelectAccount accountId ->
         {
@@ -136,7 +193,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = true
                 Error = None
         },
-        loadTokensCmd accountId
+        loadTokens accountId
 
     | BackToList ->
         {
@@ -145,7 +202,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Tokens = []
                 Error = None
         },
-        Cmd.none
+        []
 
     | TokensLoaded(Ok tokens) ->
         {
@@ -154,7 +211,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = None
         },
-        Cmd.none
+        []
 
     | TokensLoaded(Error err) ->
         {
@@ -162,14 +219,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | CreateAccount request ->
-        { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call serviceAccountApi.CreateAccount request AccountCreated (fun e ->
-            AccountCreated(Error e.Message))
+    | CreateAccount request -> { model with Busy = true; Error = None }, createAccount request
 
-    | AccountCreated(Ok _) -> { model with Busy = true }, loadAccountsCmd ()
+    | AccountCreated(Ok _) -> { model with Busy = true }, loadAccounts ()
 
     | AccountCreated(Error err) ->
         {
@@ -177,14 +231,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | SetStatus(accountId, status) ->
-        { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call serviceAccountApi.SetAccountStatus (accountId, status) StatusSet (fun e ->
-            StatusSet(Error e.Message))
+    | SetStatus(accountId, status) -> { model with Busy = true; Error = None }, setStatus accountId status
 
-    | StatusSet(Ok _) -> { model with Busy = true }, loadAccountsCmd ()
+    | StatusSet(Ok _) -> { model with Busy = true }, loadAccounts ()
 
     | StatusSet(Error err) ->
         {
@@ -192,11 +243,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | MintToken request ->
-        { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call serviceAccountApi.MintToken request TokenMinted (fun e -> TokenMinted(Error e.Message))
+    | MintToken request -> { model with Busy = true; Error = None }, mintToken request
 
     | TokenMinted(Ok minted) ->
         // The secret lands in the model and stays there until
@@ -204,8 +253,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // new row is present when the panel clears.
         let refresh =
             match model.SelectedAccountId with
-            | Some accountId -> loadTokensCmd accountId
-            | None -> Cmd.none
+            | Some accountId -> loadTokens accountId
+            | None -> []
 
         {
             model with
@@ -225,19 +274,17 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | AcknowledgeSecret -> { model with PendingSecret = None }, Cmd.none
+    | AcknowledgeSecret -> { model with PendingSecret = None }, []
 
-    | RevokeToken tokenId ->
-        { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call serviceAccountApi.RevokeToken tokenId TokenRevoked (fun e -> TokenRevoked(Error e.Message))
+    | RevokeToken tokenId -> { model with Busy = true; Error = None }, revokeToken tokenId
 
     | TokenRevoked(Ok()) ->
         let refresh =
             match model.SelectedAccountId with
-            | Some accountId -> loadTokensCmd accountId
-            | None -> Cmd.none
+            | Some accountId -> loadTokens accountId
+            | None -> []
 
         { model with Busy = true }, refresh
 
@@ -247,9 +294,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
@@ -670,7 +720,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.ServiceAccountAdmin"

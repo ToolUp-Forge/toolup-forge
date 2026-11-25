@@ -3,6 +3,7 @@
 
 module AuditLogUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -13,7 +14,7 @@ open Fable.Core.JsInterop
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 529 — audit-trail viewer admin module (client) ────────────
+// ─── Audit-trail viewer admin module (client) ────────────────────────
 //
 // Read-only Owner/Admin surface over `IAuditViewApi`: a filter bar
 // (time window / event type / actor), a paged event table, a per-row
@@ -137,15 +138,45 @@ let private toQuery (cursor: string option) (filters: Filters) : AuditTrailQuery
 
 // ─── Commands ────────────────────────────────────────────────────────
 
-let private loadPageCmd (filters: Filters) =
-    Cmd.OfRemoting.call auditApi.Query (toQuery None filters) PageLoaded (fun e -> PageLoaded(Error e.Message))
+let internal loadPage (filters: Filters) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IAuditViewApi.Query"
+            auditApi.Query
+            (toQuery None filters)
+            (RemoteEffect.flatten >> PageLoaded)
+    )
+]
 
-let private loadMoreCmd (filters: Filters) (cursor: string) =
-    Cmd.OfRemoting.call auditApi.Query (toQuery (Some cursor) filters) MorePageLoaded (fun e ->
-        MorePageLoaded(Error e.Message))
+let internal loadMore (filters: Filters) (cursor: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IAuditViewApi.Query"
+            auditApi.Query
+            (toQuery (Some cursor) filters)
+            (RemoteEffect.flatten >> MorePageLoaded)
+    )
+]
 
-let private loadEventTypesCmd () =
-    Cmd.OfRemoting.call auditApi.ListEventTypes () EventTypesLoaded (fun e -> EventTypesLoaded(Error e.Message))
+let internal loadEventTypes () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IAuditViewApi.ListEventTypes"
+            auditApi.ListEventTypes
+            ()
+            (RemoteEffect.flatten >> EventTypesLoaded)
+    )
+]
+
+let internal exportCsv (filters: Filters) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IAuditViewApi.ExportCsv"
+            auditApi.ExportCsv
+            (toQuery None filters)
+            (RemoteEffect.flatten >> ExportComplete)
+    )
+]
 
 let init () : Model * Cmd<Msg> =
     let model = {
@@ -161,7 +192,7 @@ let init () : Model * Cmd<Msg> =
         Exporting = false
     }
 
-    model, Cmd.batch [ loadPageCmd emptyFilters; loadEventTypesCmd () ]
+    (model, loadPage emptyFilters @ loadEventTypes ()) |> RemoteEffect.run
 
 // ─── CSV download ────────────────────────────────────────────────────
 
@@ -199,37 +230,43 @@ let private restart (filters: Filters) (model: Model) =
             Expanded = Set.empty
             Status = Remote.Loading
     },
-    loadPageCmd filters
+    loadPage filters
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The browser download of an exported CSV. It dispatches nothing.
+let internal download (bytes: byte[]) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(RemoteEffect.legacy "AuditLogUI.downloadCsv" (fun _ -> downloadCsv bytes))
+]
+
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SetFrom v ->
         {
             model with
                 Draft = { model.Draft with From = v }
         },
-        Cmd.none
+        []
 
     | SetTo v ->
         {
             model with
                 Draft = { model.Draft with To = v }
         },
-        Cmd.none
+        []
 
     | SetEventType v ->
         {
             model with
                 Draft = { model.Draft with EventType = v }
         },
-        Cmd.none
+        []
 
     | SetActor v ->
         {
             model with
                 Draft = { model.Draft with Actor = v }
         },
-        Cmd.none
+        []
 
     | ApplyFilters -> restart model.Draft model
     | ClearFilters -> restart emptyFilters model
@@ -243,19 +280,19 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 MatchedCount = page.MatchedCount
                 Status = Remote.Loaded()
         },
-        Cmd.none
+        []
 
     | PageLoaded(Error err) ->
         {
             model with
                 Status = Remote.Failed err
         },
-        Cmd.none
+        []
 
     | LoadMore ->
         match model.NextCursor with
-        | None -> model, Cmd.none
-        | Some cursor -> { model with LoadingMore = true }, loadMoreCmd model.Applied cursor
+        | None -> model, []
+        | Some cursor -> { model with LoadingMore = true }, loadMore model.Applied cursor
 
     | MorePageLoaded(Ok page) ->
         {
@@ -265,7 +302,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 MatchedCount = page.MatchedCount
                 LoadingMore = false
         },
-        Cmd.none
+        []
 
     // A failed continuation leaves the rows already on screen alone —
     // they are still valid — and reports the failure in the same banner.
@@ -275,14 +312,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 LoadingMore = false
                 Status = Remote.Failed err
         },
-        Cmd.none
+        []
 
-    | EventTypesLoaded(Ok types) -> { model with EventTypes = types }, Cmd.none
+    | EventTypesLoaded(Ok types) -> { model with EventTypes = types }, []
 
     // The filter bar degrades to a free-of-options select rather than
     // taking the whole page down: the event-type list is an affordance,
     // not the data.
-    | EventTypesLoaded(Error _) -> model, Cmd.none
+    | EventTypesLoaded(Error _) -> model, []
 
     | ToggleDetail id ->
         let expanded =
@@ -291,16 +328,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             else
                 Set.add id model.Expanded
 
-        { model with Expanded = expanded }, Cmd.none
+        { model with Expanded = expanded }, []
 
-    | ExportCsv ->
-        let cmd =
-            Cmd.OfRemoting.call auditApi.ExportCsv (toQuery None model.Applied) ExportComplete (fun e ->
-                ExportComplete(Error e.Message))
+    | ExportCsv -> { model with Exporting = true }, exportCsv model.Applied
 
-        { model with Exporting = true }, cmd
-
-    | ExportComplete(Ok bytes) -> { model with Exporting = false }, Cmd.ofEffect (fun _ -> downloadCsv bytes)
+    | ExportComplete(Ok bytes) -> { model with Exporting = false }, download bytes
 
     | ExportComplete(Error err) ->
         {
@@ -308,7 +340,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Exporting = false
                 Status = Remote.Failed err
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────────
 
@@ -532,7 +567,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.AuditLog"
