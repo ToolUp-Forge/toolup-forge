@@ -3,13 +3,14 @@
 
 module ToolUp.AI.Client.PlatformAIKeysAdminUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 open ToolUp.AI
 
-// ─── Phase 70 — Platform Admin AI keys module ───────────────────
+// ─── Platform Admin AI keys module ──────────────────────────────
 //
 // SDK-built-in admin module surfacing `PlatformAIKeysApi`. Lets a
 // Platform Admin manage platform-scope AI keys (default for every
@@ -67,9 +68,36 @@ type Msg =
 let private api =
     Api.makeProxy<PlatformAIKeysApi> (customOptions = UserSession.withRequestHeaders)
 
+// ─── Remote calls ───────────────────────────────────────────────
+
+type internal Steps = Step<Msg, RemoteEffect<Msg>> list
+
+/// A call's reply: its answer through `onOk`, a failure to the screen's
+/// one error branch.
+let private orApiError (onOk: 'r -> Msg) (reply: Result<'r, exn>) : Msg =
+    match reply with
+    | Ok answer -> onOk answer
+    | Error ex -> ApiError ex.Message
+
+let private call (methodName: string) (proxyCall: 'a -> Async<'r>) (arg: 'a) (onOk: 'r -> Msg) : Steps = [
+    Do(RemoteEffect.call ("PlatformAIKeysApi." + methodName) proxyCall arg (orApiError onOk))
+]
+
+let private loadDescriptors () =
+    call "ListPlatformDescriptors" api.ListPlatformDescriptors () (Finished >> LoadDescriptors)
+
+let private refreshPlatform () =
+    call "ListPlatformKeyStatuses" api.ListPlatformKeyStatuses () (Finished >> LoadPlatformStatuses)
+
+let private loadTeams () =
+    call "ListTeams" api.ListTeams () (Finished >> LoadTeams)
+
+let private refreshTeam (teamId: string) =
+    call "ListTeamKeyStatuses" api.ListTeamKeyStatuses teamId (Finished >> LoadTeamStatuses)
+
 // ─── Init ───────────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let internal initSteps () : Model * Steps =
     {
         Descriptors = []
         PlatformStatuses = []
@@ -79,34 +107,23 @@ let init () : Model * Cmd<Msg> =
         Banner = None
         Loading = true
     },
-    Cmd.batch [
-        Cmd.OfRemoting.call api.ListPlatformDescriptors () (Finished >> LoadDescriptors) (fun ex -> ApiError ex.Message)
-        Cmd.OfRemoting.call api.ListPlatformKeyStatuses () (Finished >> LoadPlatformStatuses) (fun ex ->
-            ApiError ex.Message)
-        Cmd.OfRemoting.call api.ListTeams () (Finished >> LoadTeams) (fun ex -> ApiError ex.Message)
-    ]
+    loadDescriptors () @ refreshPlatform () @ loadTeams ()
+
+let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
 
 // ─── Update ─────────────────────────────────────────────────────
 
-let private refreshPlatform () =
-    Cmd.OfRemoting.call api.ListPlatformKeyStatuses () (Finished >> LoadPlatformStatuses) (fun ex ->
-        ApiError ex.Message)
-
-let private refreshTeam (teamId: string) =
-    Cmd.OfRemoting.call api.ListTeamKeyStatuses teamId (Finished >> LoadTeamStatuses) (fun ex -> ApiError ex.Message)
-
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Steps =
     match msg with
-    | LoadDescriptors(Start()) ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call api.ListPlatformDescriptors () (Finished >> LoadDescriptors) (fun ex -> ApiError ex.Message)
+    | LoadDescriptors(Start()) -> { model with Loading = true }, loadDescriptors ()
     | LoadDescriptors(Finished ds) ->
         {
             model with
                 Descriptors = ds
                 Loading = false
         },
-        Cmd.none
+        []
 
     | LoadPlatformStatuses(Start()) -> { model with Loading = true }, refreshPlatform ()
     | LoadPlatformStatuses(Finished ss) ->
@@ -115,24 +132,22 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PlatformStatuses = ss
                 Loading = false
         },
-        Cmd.none
+        []
 
-    | LoadTeams(Start()) ->
-        { model with Loading = true },
-        Cmd.OfRemoting.call api.ListTeams () (Finished >> LoadTeams) (fun ex -> ApiError ex.Message)
+    | LoadTeams(Start()) -> { model with Loading = true }, loadTeams ()
     | LoadTeams(Finished ts) ->
         {
             model with
                 Teams = ts
                 Loading = false
         },
-        Cmd.none
+        []
 
     | SelectTeam teamIdOpt ->
         let cmd =
             match teamIdOpt with
             | Some teamId -> refreshTeam teamId
-            | None -> Cmd.none
+            | None -> []
 
         {
             model with
@@ -148,38 +163,33 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 TeamStatuses = ss
                 Loading = false
         },
-        Cmd.none
+        []
 
     | SetPlatformKey(providerId, apiKey) ->
         { model with Loading = true },
-        Cmd.OfRemoting.call
+        call
+            "SetPlatformKey"
             api.SetPlatformKey
             {
                 ProviderId = providerId
                 ApiKey = apiKey
             }
             (fun r -> ActionFinished(r, $"Saved platform key for {providerId}."))
-            (fun ex -> ApiError ex.Message)
 
     | DeletePlatformKey providerId ->
         { model with Loading = true },
-        Cmd.OfRemoting.call
-            api.DeletePlatformKey
-            providerId
-            (fun r -> ActionFinished(r, $"Removed platform key for {providerId}."))
-            (fun ex -> ApiError ex.Message)
+        call "DeletePlatformKey" api.DeletePlatformKey providerId (fun r ->
+            ActionFinished(r, $"Removed platform key for {providerId}."))
 
     | TestPlatformKey providerId ->
         { model with Loading = true },
-        Cmd.OfRemoting.call
-            api.TestPlatformKey
-            providerId
-            (fun r -> ActionFinished(r, $"Platform key for {providerId} accepted by the provider."))
-            (fun ex -> ApiError ex.Message)
+        call "TestPlatformKey" api.TestPlatformKey providerId (fun r ->
+            ActionFinished(r, $"Platform key for {providerId} accepted by the provider."))
 
     | SetTeamKey(teamId, providerId, apiKey) ->
         { model with Loading = true },
-        Cmd.OfRemoting.call
+        call
+            "SetTeamKey"
             api.SetTeamKey
             {
                 TeamId = teamId
@@ -187,28 +197,21 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 ApiKey = apiKey
             }
             (fun r -> ActionFinished(r, $"Saved team key for {providerId} on team {teamId}."))
-            (fun ex -> ApiError ex.Message)
 
     | DeleteTeamKey(teamId, providerId) ->
         { model with Loading = true },
-        Cmd.OfRemoting.call
-            api.DeleteTeamKey
-            (teamId, providerId)
-            (fun r -> ActionFinished(r, $"Removed team key for {providerId} on team {teamId}."))
-            (fun ex -> ApiError ex.Message)
+        call "DeleteTeamKey" api.DeleteTeamKey (teamId, providerId) (fun r ->
+            ActionFinished(r, $"Removed team key for {providerId} on team {teamId}."))
 
     | TestTeamKey(teamId, providerId) ->
         { model with Loading = true },
-        Cmd.OfRemoting.call
-            api.TestTeamKey
-            (teamId, providerId)
-            (fun r -> ActionFinished(r, $"Team key for {providerId} on team {teamId} accepted."))
-            (fun ex -> ApiError ex.Message)
+        call "TestTeamKey" api.TestTeamKey (teamId, providerId) (fun r ->
+            ActionFinished(r, $"Team key for {providerId} on team {teamId} accepted."))
 
     | ActionFinished(Ok(), successMsg) ->
-        let refreshCmd =
+        let refresh =
             match model.SelectedTeamId with
-            | Some tid -> Cmd.batch [ refreshPlatform (); refreshTeam tid ]
+            | Some tid -> refreshPlatform () @ refreshTeam tid
             | None -> refreshPlatform ()
 
         {
@@ -216,7 +219,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Banner = Some(Success successMsg)
                 Loading = false
         },
-        refreshCmd
+        refresh
 
     | ActionFinished(Error err, _) ->
         {
@@ -224,7 +227,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Banner = Some(Failure err)
                 Loading = false
         },
-        Cmd.none
+        []
 
     | ApiError msg ->
         {
@@ -232,9 +235,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Banner = Some(Failure msg)
                 Loading = false
         },
-        Cmd.none
+        []
 
-    | DismissBanner -> { model with Banner = None }, Cmd.none
+    | DismissBanner -> { model with Banner = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────
 
