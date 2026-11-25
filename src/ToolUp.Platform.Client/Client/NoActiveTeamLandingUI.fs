@@ -3,6 +3,7 @@
 
 module ToolUp.Platform.NoActiveTeamLandingUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
@@ -18,7 +19,7 @@ open Toolup.UIToolkit
 // `TeamMemberKind`, so it never appears in a team member's sidebar even
 // though the deployment-wide gate is then inert.
 //
-// ─── Phase 548 — the invite check ────────────────────────────────────
+// ─── The invite check ────────────────────────────────────────────────
 //
 // This page is exactly where a stuck invitee sits: signed in, on no
 // team, waiting for an invitation that has already been issued.
@@ -73,24 +74,33 @@ type internal Msg =
 
 /// Errors fold into the model rather than throwing — a transport
 /// failure leaves the page usable with the button still available.
-let private checkCmd =
-    Cmd.OfRemoting.call inviteApi.CheckMyInvites () InvitesChecked (fun ex -> InvitesChecked(Error ex.Message))
+let private check: Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "ITeamInviteApi.CheckMyInvites"
+            inviteApi.CheckMyInvites
+            ()
+            (RemoteEffect.flatten >> InvitesChecked)
+    )
+]
 
 let private init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
-    {
+    ({
         State = CheckState.Checking
         OnTeamSwitched = ctx.OnTeamSwitched
-    },
-    checkCmd
+     },
+     check)
+    |> RemoteEffect.run
 
-let private update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | CheckInvites ->
         {
             model with
                 State = CheckState.Checking
         },
-        checkCmd
+        check
 
     | InvitesChecked(Ok(Some team)) ->
         // Hand off to the shell's team-switch reset path. Direct
@@ -103,21 +113,24 @@ let private update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 State = CheckState.Joined team.Name
         },
-        Cmd.none
+        []
 
     | InvitesChecked(Ok None) ->
         {
             model with
                 State = CheckState.NothingPending
         },
-        Cmd.none
+        []
 
     | InvitesChecked(Error message) ->
         {
             model with
                 State = CheckState.Failed message
         },
-        Cmd.none
+        []
+
+/// The transitions, on today's loop.
+let private update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 let private statusLine (msgs: NoActiveTeamLandingMessages) (state: CheckState) : ReactElement =
     match state with

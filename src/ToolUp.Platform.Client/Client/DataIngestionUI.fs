@@ -3,13 +3,14 @@
 
 module DataIngestionUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
 open Toolup.UIToolkit
 
-// ─── Phase 10b — built-in data-ingestion admin ──────────────────────
+// ─── Built-in data-ingestion admin ──────────────────────────────────
 //
 // Sidebar entry that lists configured data sources, surfaces their
 // credential status, and routes Connect / Disconnect actions through
@@ -33,7 +34,7 @@ type Model = {
     /// the source list arrives. Missing entries render as "checking…"
     /// in the table.
     Statuses: Map<DataSourceId, CredentialStatus>
-    /// Phase 10h — OAuth-refresh token-status per data source. Loaded
+    /// OAuth-refresh token-status per data source. Loaded
     /// in parallel alongside `Statuses` after the source list arrives.
     /// `None` for a key (the entry exists in the map with `None`
     /// payload) means the per-source server lookup returned no
@@ -82,27 +83,37 @@ let private dataIngestionApi: IDataIngestionApi =
 
 // ─── Init / update ──────────────────────────────────────────────────
 
-let private loadSourcesCmd () =
-    Cmd.OfRemoting.call dataIngestionApi.ListDataSources () (Ok >> SourcesLoaded) (fun e ->
-        SourcesLoaded(Error e.Message))
+let private loadSources () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IDataIngestionApi.ListDataSources"
+            dataIngestionApi.ListDataSources
+            ()
+            (Result.mapError _.Message >> SourcesLoaded)
+    )
+]
 
-let private loadStatusCmd (id: DataSourceId) =
-    Cmd.OfRemoting.call dataIngestionApi.GetCredentialStatus id (fun s -> StatusLoaded(id, s)) (fun _ ->
-        // Best-effort — status read failure renders as
-        // "checking…" rather than a disruptive error banner.
-        StatusLoaded(id, NotConfigured))
+let private loadStatus (id: DataSourceId) : Step<Msg, RemoteEffect<Msg>> =
+    Do(
+        RemoteEffect.call "IDataIngestionApi.GetCredentialStatus" dataIngestionApi.GetCredentialStatus id (fun reply ->
+            // Best-effort — status read failure renders as
+            // "checking…" rather than a disruptive error banner.
+            StatusLoaded(id, reply |> Result.defaultValue NotConfigured))
+    )
 
-let private loadTokenStatusCmd (id: DataSourceId) =
+let private loadTokenStatus (id: DataSourceId) : Step<Msg, RemoteEffect<Msg>> =
     // Best-effort — a token-status read failure (server unavailable,
     // `IOAuthTokenRefresher` not registered, etc.) collapses to "no
     // descriptor", which the column renders as "—". Same noise-floor
-    // rule as `loadStatusCmd`: failures never push a banner because
+    // rule as `loadStatus`: failures never push a banner because
     // the column is supplementary, not load-bearing for the page.
-    Cmd.OfRemoting.call dataIngestionApi.GetTokenStatus id (fun ts -> TokenStatusLoaded(id, ts)) (fun _ ->
-        TokenStatusLoaded(id, None))
+    Do(
+        RemoteEffect.call "IDataIngestionApi.GetTokenStatus" dataIngestionApi.GetTokenStatus id (fun reply ->
+            TokenStatusLoaded(id, reply |> Result.defaultValue None))
+    )
 
-let init () =
-    let model = {
+let init () : Model * Cmd<Msg> =
+    ({
         Sources = Remote.Loading
         Statuses = Map.empty
         TokenStatuses = Map.empty
@@ -110,11 +121,14 @@ let init () =
         LastError = None
         Disconnecting = Set.empty
         Creating = None
-    }
+     },
+     loadSources ())
+    |> RemoteEffect.run
 
-    model, loadSourcesCmd ()
-
-let update (msg: Msg) (model: Model) =
+/// The transitions, with their remote calls as values. The browser
+/// navigation to an OAuth authorize URL is not among them: it answers no
+/// message, which an effect value cannot yet say, so `update` keeps it.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | RefreshSources ->
         {
@@ -127,40 +141,35 @@ let update (msg: Msg) (model: Model) =
                 // refresh clicks also close it — same effect.
                 Creating = None
         },
-        loadSourcesCmd ()
+        loadSources ()
 
     | SourcesLoaded(Ok sources) ->
-        let statusCmds =
-            sources
-            |> List.collect (fun s -> [ loadStatusCmd s.Id; loadTokenStatusCmd s.Id ])
-            |> Cmd.batch
-
         {
             model with
                 Sources = Remote.Loaded sources
         },
-        statusCmds
+        sources |> List.collect (fun s -> [ loadStatus s.Id; loadTokenStatus s.Id ])
 
     | SourcesLoaded(Error msg) ->
         {
             model with
                 Sources = Remote.Failed msg
         },
-        Cmd.none
+        []
 
     | StatusLoaded(id, status) ->
         {
             model with
                 Statuses = model.Statuses |> Map.add id status
         },
-        Cmd.none
+        []
 
     | TokenStatusLoaded(id, tokenStatus) ->
         {
             model with
                 TokenStatuses = model.TokenStatuses |> Map.add id tokenStatus
         },
-        Cmd.none
+        []
 
     | ToggleExpanded id ->
         let next =
@@ -168,47 +177,46 @@ let update (msg: Msg) (model: Model) =
             | Some current when current = id -> None
             | _ -> Some id
 
-        { model with Expanded = next }, Cmd.none
+        { model with Expanded = next }, []
 
     | ConnectClicked(id, flowName) ->
-        let cmd =
-            Cmd.OfRemoting.call
-                dataIngestionApi.BeginOAuth
-                (id, flowName)
-                (fun result -> ConnectUrlReady(id, result))
-                (fun e -> ConnectUrlReady(id, Error e.Message))
+        { model with LastError = None },
+        [
+            Do(
+                RemoteEffect.call
+                    "IDataIngestionApi.BeginOAuth"
+                    dataIngestionApi.BeginOAuth
+                    (id, flowName)
+                    (fun reply -> ConnectUrlReady(id, RemoteEffect.flatten reply))
+            )
+        ]
 
-        { model with LastError = None }, cmd
-
-    | ConnectUrlReady(_, Ok url) ->
-        // Navigate the browser to the upstream provider's authorize
-        // endpoint. `assign` records a history entry; the user can
-        // back-button to ToolUp if they cancel consent. Deferred through
-        // a Cmd so `update` stays pure (effect runs after the model commits).
-        model, Cmd.ofEffect (fun _ -> Browser.Dom.window.location.assign url)
+    // `update` performs the navigation; see above.
+    | ConnectUrlReady(_, Ok _) -> model, []
 
     | ConnectUrlReady(_, Error msg) ->
         {
             model with
                 LastError = Some(Notice.Problem msg)
         },
-        Cmd.none
+        []
 
     | DisconnectClicked id ->
-        let cmd =
-            Cmd.OfRemoting.call dataIngestionApi.Disconnect id (fun result -> DisconnectComplete(id, result)) (fun e ->
-                DisconnectComplete(id, Error e.Message))
-
         {
             model with
                 Disconnecting = model.Disconnecting |> Set.add id
                 LastError = None
         },
-        cmd
+        [
+            Do(
+                RemoteEffect.call "IDataIngestionApi.Disconnect" dataIngestionApi.Disconnect id (fun reply ->
+                    DisconnectComplete(id, RemoteEffect.flatten reply))
+            )
+        ]
 
     | DisconnectComplete(id, Ok()) ->
         // Re-load just this source's status so the row pill flips to
-        // NeedsAuthorization. Re-load the token status too: Phase 10h
+        // NeedsAuthorization. Re-load the token status too: OAuth-refresh
         // connectors unregister their `IOAuthTokenRefresher` descriptor
         // on `Disconnect`, so the column should collapse back to "—".
         {
@@ -216,7 +224,7 @@ let update (msg: Msg) (model: Model) =
                 Disconnecting = model.Disconnecting |> Set.remove id
                 TokenStatuses = model.TokenStatuses |> Map.remove id
         },
-        Cmd.batch [ loadStatusCmd id; loadTokenStatusCmd id ]
+        [ loadStatus id; loadTokenStatus id ]
 
     | DisconnectComplete(id, Error msg) ->
         {
@@ -224,9 +232,9 @@ let update (msg: Msg) (model: Model) =
                 Disconnecting = model.Disconnecting |> Set.remove id
                 LastError = Some(Notice.Problem msg)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with LastError = None }, Cmd.none
+    | DismissError -> { model with LastError = None }, []
 
     | StartCreate kind ->
         {
@@ -234,9 +242,21 @@ let update (msg: Msg) (model: Model) =
                 Creating = Some kind
                 LastError = None
         },
-        Cmd.none
+        []
 
-    | CancelCreate -> { model with Creating = None }, Cmd.none
+    | CancelCreate -> { model with Creating = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+    match msg with
+    | ConnectUrlReady(_, Ok url) ->
+        // Navigate the browser to the upstream provider's authorize
+        // endpoint. `assign` records a history entry; the user can
+        // back-button to ToolUp if they cancel consent. Deferred through
+        // a Cmd so the transition stays pure (effect runs after the model
+        // commits).
+        model, Cmd.ofEffect (fun _ -> Browser.Dom.window.location.assign url)
+    | _ -> step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 
@@ -263,7 +283,7 @@ let private statusDetail (msgs: DataIngestionMessages) (status: CredentialStatus
     | NeedsReauthorization reason -> Html.span [ prop.className "text-xs text-red-700"; prop.text reason ]
     | _ -> Html.none
 
-// ─── Phase 10h — Token-status column ────────────────────────────────
+// ─── Token-status column ────────────────────────────────────────────
 //
 // Last terminal `_platform.oauth.refresh` outcome + next scheduled
 // refresh, derived server-side from `IOAuthTokenRefresher` +
@@ -673,7 +693,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataIngestion"

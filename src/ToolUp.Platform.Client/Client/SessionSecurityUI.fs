@@ -3,13 +3,14 @@
 
 module SessionSecurityUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 528 — session security (client-tier slice) ────────────────
+// ─── Session security (client-tier slice) ────────────────────────────
 //
 // The user-facing half of the session registry: which devices are signed
 // in as me, when each was last seen, and a way to cut any of them — or
@@ -96,22 +97,42 @@ type Msg =
 let private sessionApi: ISessionApi =
     Api.makeProxy<ISessionApi> (customOptions = UserSession.withRequestHeaders)
 
-// ─── Commands ────────────────────────────────────────────────────────
+// ─── Remote calls ────────────────────────────────────────────────────
 
-let private loadCmd () =
-    Cmd.OfRemoting.call sessionApi.ListMySessions () SessionsLoaded (fun e -> SessionsLoaded(Error e.Message))
+let private load () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "ISessionApi.ListMySessions"
+            sessionApi.ListMySessions
+            ()
+            (RemoteEffect.flatten >> SessionsLoaded)
+    )
+]
 
-let private revokeCmd (sessionId: string) =
-    Cmd.OfRemoting.call sessionApi.RevokeSession sessionId RevokeCompleted (fun e -> RevokeCompleted(Error e.Message))
+let private revoke (sessionId: string) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "ISessionApi.RevokeSession"
+            sessionApi.RevokeSession
+            sessionId
+            (RemoteEffect.flatten >> RevokeCompleted)
+    )
+]
 
-let private revokeAllCmd () =
-    Cmd.OfRemoting.call sessionApi.RevokeAllMySessions () RevokeAllCompleted (fun e ->
-        RevokeAllCompleted(Error e.Message))
+let private revokeAll () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "ISessionApi.RevokeAllMySessions"
+            sessionApi.RevokeAllMySessions
+            ()
+            (RemoteEffect.flatten >> RevokeAllCompleted)
+    )
+]
 
 // ─── Init ────────────────────────────────────────────────────────────
 
 let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
-    {
+    ({
         Sessions = []
         Loaded = false
         Busy = false
@@ -120,14 +141,16 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Error = None
         Status = None
         Messages = ctx.Messages.SessionSecurity
-    },
-    loadCmd ()
+     },
+     load ())
+    |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Load -> { model with Error = None }, loadCmd ()
+    | Load -> { model with Error = None }, load ()
 
     | SessionsLoaded(Ok sessions) ->
         {
@@ -136,7 +159,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Loaded = true
                 Busy = false
         },
-        Cmd.none
+        []
 
     | SessionsLoaded(Error err) ->
         {
@@ -148,7 +171,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | AskRevoke sessionId ->
         {
@@ -156,9 +179,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PendingRevoke = Some sessionId
                 PendingRevokeAll = false
         },
-        Cmd.none
+        []
 
-    | CancelRevoke -> { model with PendingRevoke = None }, Cmd.none
+    | CancelRevoke -> { model with PendingRevoke = None }, []
 
     | ConfirmRevoke sessionId ->
         {
@@ -168,7 +191,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Error = None
                 Status = None
         },
-        revokeCmd sessionId
+        revoke sessionId
 
     | RevokeCompleted(Ok()) ->
         // Reload rather than patching the local list: the server is the
@@ -177,12 +200,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         //
         // A pure reducer has no rendered tree and therefore no `msgs`
         // hook to read — go straight to the English catalog value, per
-        // `TeamManagerUI.update`'s recorded pattern (Phase 751).
+        // `TeamManagerUI.update`'s recorded pattern.
         {
             model with
                 Status = Some(Notice.Info model.Messages.RevokeSuccess)
         },
-        loadCmd ()
+        load ()
 
     | RevokeCompleted(Error err) ->
         {
@@ -190,7 +213,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | AskRevokeAll ->
         {
@@ -198,9 +221,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 PendingRevokeAll = true
                 PendingRevoke = None
         },
-        Cmd.none
+        []
 
-    | CancelRevokeAll -> { model with PendingRevokeAll = false }, Cmd.none
+    | CancelRevokeAll -> { model with PendingRevokeAll = false }, []
 
     | ConfirmRevokeAll ->
         {
@@ -210,7 +233,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Error = None
                 Status = None
         },
-        revokeAllCmd ()
+        revokeAll ()
 
     | RevokeAllCompleted(Ok count) ->
         // Report the server's count rather than "done". Zero is a real
@@ -226,7 +249,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model with
                 Status = Some(Notice.Info message)
         },
-        loadCmd ()
+        load ()
 
     | RevokeAllCompleted(Error err) ->
         {
@@ -234,11 +257,14 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
 
-    | DismissStatus -> { model with Status = None }, Cmd.none
+    | DismissStatus -> { model with Status = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
@@ -247,7 +273,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 /// rendering a precise time would imply an accuracy the substrate does
 /// not promise.
 ///
-/// Public non-component render helper (Phase 751) — the arity cannot
+/// Public non-component render helper — the arity cannot
 /// widen without reading as a removal in the public-API approval
 /// baseline, so the message-catalog-aware body is the additive
 /// `…With` variant and this delegates with the English catalog,
@@ -266,10 +292,9 @@ let lastSeenLabelWith (msgs: SessionSecurityMessages) (now: DateTimeOffset) (at:
     elif elapsed < TimeSpan.FromDays 30.0 then
         msgs.DaysAgo(int elapsed.TotalDays)
     else
-        // A .NET date format specifier, not translatable prose — see
-        // the Phase 751 sweep's "date/number format specifiers" scope
-        // note. Baking it into a translated template would make the
-        // date FORMAT a property of the language.
+        // A .NET date format specifier, not translatable prose. Baking
+        // it into a translated template would make the date FORMAT a
+        // property of the language.
         at.ToString "d MMM yyyy"
 
 let private sessionRow
@@ -411,7 +436,7 @@ let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.SessionSecurity"

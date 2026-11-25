@@ -5,13 +5,16 @@
 /// admin modules render ids through, as one sub-model. A parent holds
 /// `Directory: UserDirectory.Model`, routes `DirectoryMsg of
 /// UserDirectory.Msg` to `UserDirectory.update`, and asks for ids with
-/// `UserDirectory.resolve ids model.Directory |> Cmd.map DirectoryMsg`.
+/// `UserDirectory.resolve ids model.Directory |> Cmd.map DirectoryMsg`
+/// (or, from a ported parent, `resolveSteps` with `Step.map` and
+/// `RemoteEffect.map`).
 ///
 /// A failed lookup (no directory companion wired, a provider hiccup) leaves
 /// the entries as they were, so the ids keep rendering raw: the directory
 /// only ever makes a page friendlier, never blocks it.
 module UserDirectory
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open ToolUp.Platform
@@ -34,11 +37,24 @@ let unresolved (ids: string list) (model: Model) =
     |> List.filter (fun id -> not (String.IsNullOrWhiteSpace id) && not (Map.containsKey id model.Entries))
     |> List.distinct
 
+/// The lookup of the ids `model` does not hold yet, as an effect value;
+/// no step when there are none.
+let internal resolveSteps (ids: string list) (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
+    match unresolved ids model with
+    | [] -> []
+    | pending -> [
+        Do(
+            RemoteEffect.call
+                "IUserDirectoryApi.ResolveUsers"
+                directoryApi.ResolveUsers
+                pending
+                (RemoteEffect.flatten >> Resolved)
+        )
+      ]
+
 /// Resolve the ids `model` does not hold yet; `Cmd.none` when there are none.
 let resolve (ids: string list) (model: Model) : Cmd<Msg> =
-    match unresolved ids model with
-    | [] -> Cmd.none
-    | pending -> Cmd.OfRemoting.call directoryApi.ResolveUsers pending Resolved (fun ex -> Resolved(Error ex.Message))
+    resolveSteps ids model |> RemoteEffect.toCmd
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with

@@ -3,13 +3,14 @@
 
 module Home
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 open ProcessedDataTypes
 
-// ─── Phase 171 — Home / Overview landing module (client) ─────────
+// ─── Home / Overview landing module (client) ─────────────────────
 //
 // Optional SDK-built-in landing surface. When a deployment opts in
 // via `ClientConfig.Slots.HomeModule = SlotFill.Default`, the shell injects
@@ -19,15 +20,15 @@ open ProcessedDataTypes
 // filtered server-side: one card per data-producing tool (with its
 // per-type record counts + a thoughtful empty state), an "Active AI"
 // card, and a deployment-context strip. Each tool card navigates to
-// its module via `NavigationRequest.request` (Phase 6g.C) — no
+// its module via `NavigationRequest.request` — no
 // dependency on the shell's internal `Msg` type. Mirrors
 // `UsageDashboard`'s shape: `_sdk.home` reserved Id.
 
 type Model = {
     Overview: Remote<HomeOverview, string>
-    // Phase 217 — recents/pinning. `Recents` mirrors
+    // Recents/pinning. `Recents` mirrors
     // `ClientConfig.Shell.HomeRecents` (captured at module creation); when
-    // false the surface is byte-for-byte Phase 171 (GP 13).
+    // false the surface is the overview alone (GP 13).
     Recents: bool
     Pinning: HomePinningState
 }
@@ -35,7 +36,7 @@ type Model = {
 type Msg =
     | Refresh
     | OverviewLoaded of Result<HomeOverview, string>
-    // Phase 217 — recents/pinning.
+    // Recents/pinning.
     | PinningLoaded of HomePinningState
     | OpenTool of string
     | TogglePin of moduleId: string * pinned: bool
@@ -52,64 +53,83 @@ let private homeApi: IHomeOverviewApi =
 
 // ─── Init / update ───────────────────────────────────────────────
 
-let private loadOverviewCmd =
-    Cmd.OfRemoting.call homeApi.GetOverview () (fun ov -> OverviewLoaded(Ok ov)) (fun e ->
-        OverviewLoaded(Error e.Message))
+/// A pinning reply; a failure keeps `fallback`, the state already shown.
+let private pinningOr (fallback: HomePinningState) (reply: Result<HomePinningState, exn>) : Msg =
+    reply |> Result.defaultValue fallback |> PinningLoaded
 
-let private loadPinningCmd =
-    Cmd.OfRemoting.call homeApi.GetPinning () PinningLoaded (fun _ -> PinningLoaded HomePinningState.empty)
+let private loadOverview: Step<Msg, RemoteEffect<Msg>> =
+    Do(
+        RemoteEffect.call
+            "IHomeOverviewApi.GetOverview"
+            homeApi.GetOverview
+            ()
+            (Result.mapError _.Message >> OverviewLoaded)
+    )
+
+let private loadPinning: Step<Msg, RemoteEffect<Msg>> =
+    Do(RemoteEffect.call "IHomeOverviewApi.GetPinning" homeApi.GetPinning () (pinningOr HomePinningState.empty))
+
+/// The overview, and the pinning state when recents is on. Pinning is only
+/// fetched when opted in, so a non-recents deployment makes the overview
+/// call alone.
+let private load (recents: bool) : Step<Msg, RemoteEffect<Msg>> list =
+    if recents then
+        [ loadOverview; loadPinning ]
+    else
+        [ loadOverview ]
 
 /// `recents` is partially applied at module creation from
-/// `ClientConfig.Shell.HomeRecents`. Pinning is only fetched when opted in,
-/// so a non-recents deployment makes exactly the Phase 171 call set.
-let init (recents: bool) () =
-    let model = {
+/// `ClientConfig.Shell.HomeRecents`.
+let init (recents: bool) () : Model * Cmd<Msg> =
+    ({
         Overview = Remote.Loading
         Recents = recents
         Pinning = HomePinningState.empty
-    }
+     },
+     load recents)
+    |> RemoteEffect.run
 
-    let cmd =
-        if recents then
-            Cmd.batch [ loadOverviewCmd; loadPinningCmd ]
-        else
-            loadOverviewCmd
-
-    model, cmd
-
-let update msg model =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Refresh ->
-        let cmd =
-            if model.Recents then
-                Cmd.batch [ loadOverviewCmd; loadPinningCmd ]
-            else
-                loadOverviewCmd
-
-        { model with Overview = Remote.Loading }, cmd
+    | Refresh -> { model with Overview = Remote.Loading }, load model.Recents
     | OverviewLoaded result ->
         {
             model with
                 Overview = Remote.ofResult result
         },
-        Cmd.none
-    | PinningLoaded p -> { model with Pinning = p }, Cmd.none
+        []
+    | PinningLoaded p -> { model with Pinning = p }, []
     | OpenTool moduleId ->
         // Navigate the same way a sidebar click does, and record the
         // visit (best-effort; failure keeps the current pinning state).
         NavigationRequest.request moduleId
 
-        let recordCmd =
+        model,
+        [
             if model.Recents then
-                Cmd.OfRemoting.call homeApi.RecordVisit moduleId PinningLoaded (fun _ -> PinningLoaded model.Pinning)
-            else
-                Cmd.none
-
-        model, recordCmd
+                Do(
+                    RemoteEffect.call
+                        "IHomeOverviewApi.RecordVisit"
+                        homeApi.RecordVisit
+                        moduleId
+                        (pinningOr model.Pinning)
+                )
+        ]
     | TogglePin(moduleId, pinned) ->
         model,
-        Cmd.OfRemoting.call homeApi.SetPinned { ModuleId = moduleId; Pinned = pinned } PinningLoaded (fun _ ->
-            PinningLoaded model.Pinning)
+        [
+            Do(
+                RemoteEffect.call
+                    "IHomeOverviewApi.SetPinned"
+                    homeApi.SetPinned
+                    { ModuleId = moduleId; Pinned = pinned }
+                    (pinningOr model.Pinning)
+            )
+        ]
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────
 
@@ -229,7 +249,7 @@ let private ToolsGrid (msgs: HomeMessages) (onOpen: string -> unit) (tools: Tool
         prop.children (augmented |> List.map (renderToolCard msgs onOpen))
     ]
 
-/// One module-contributed widget (Phase 217). A titled card whose body
+/// One module-contributed widget. A titled card whose body
 /// is the contributor's own `ReactElement`, rendered with the
 /// scope-correct `HomeWidgetContext` built from the overview's
 /// `WidgetData` bag. Click-through is the widget's own concern — its
@@ -251,8 +271,7 @@ let private renderWidget (ctx: HomeWidgetContext) (widget: HomeWidget) =
     ]
 
 /// The module-contributed widget section. Renders nothing when no
-/// contributor is wired in, so Home is byte-for-byte the Phase 171
-/// surface (GP 13). Widgets arrive pre-sorted by `Weight` from the
+/// contributor is wired in, so Home is the overview alone (GP 13). Widgets arrive pre-sorted by `Weight` from the
 /// registry.
 let private renderContributedWidgets (ov: HomeOverview) =
     match HomeWidgetRegistry.widgets () with
@@ -265,10 +284,10 @@ let private renderContributedWidgets (ov: HomeOverview) =
             prop.children (widgets |> List.map (renderWidget ctx))
         ]
 
-/// Phase 217 — the built-in "Pinned / Recent" widget. One clickable
+/// The built-in "Pinned / Recent" widget. One clickable
 /// chip per pinned / recently-visited tool, each with a pin toggle.
 /// `Html.none` unless recents is on AND there is something to show, so
-/// a recents-off (or empty) deployment is byte-for-byte Phase 171
+/// a recents-off (or empty) deployment shows the overview alone
 /// (GP 13). Tool ids resolve to names via the overview's tool list;
 /// an id with no matching tool falls back to the raw id.
 let private renderRecentsPinned
@@ -351,7 +370,7 @@ let private renderOverview (msgs: HomeMessages) (model: Model) (dispatch: Msg ->
                 ]
             ]
 
-            // Phase 217 — built-in "Pinned / Recent" widget. `Html.none`
+            // The built-in "Pinned / Recent" widget. `Html.none`
             // unless recents is on with something to show (GP 13).
             if model.Recents then
                 renderRecentsPinned msgs dispatch model.Pinning ov.Tools
@@ -376,9 +395,9 @@ let private renderOverview (msgs: HomeMessages) (model: Model) (dispatch: Msg ->
                 ]
             ]
 
-            // Phase 217 — module-contributed widgets, below the
-            // built-in cards. `Html.none` when no contributor is wired
-            // in, so the render is identical to Phase 171 (GP 13).
+            // Module-contributed widgets, below the built-in cards.
+            // `Html.none` when no contributor is wired in, so the render
+            // is the overview alone (GP 13).
             renderContributedWidgets ov
         ]
     ]
@@ -419,7 +438,7 @@ let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `create` registers the module under it.
 let moduleId = "_sdk.home"

@@ -3,13 +3,14 @@
 
 module NotificationPreferencesUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 441 — notification preference centre ─────────────────────
+// ─── Notification preference centre ─────────────────────────────────
 //
 // The built-in settings module over `INotificationPreferenceApi`: a
 // category × channel matrix (rows = the categories the deployment's
@@ -72,30 +73,45 @@ let private preferenceApi: INotificationPreferenceApi =
         customOptions = UserSession.withRequestHeaders
     )
 
-let private loadCmd () =
-    Cmd.OfRemoting.call preferenceApi.GetMyPreferences () ViewLoaded (fun e -> ViewLoaded(Error e.Message))
+let private load () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "INotificationPreferenceApi.GetMyPreferences"
+            preferenceApi.GetMyPreferences
+            ()
+            (RemoteEffect.flatten >> ViewLoaded)
+    )
+]
 
-let private saveCmd (draft: UserNotificationPreferences) =
-    Cmd.OfRemoting.call preferenceApi.SaveMyPreferences draft SaveCompleted (fun e -> SaveCompleted(Error e.Message))
+let private save (draft: UserNotificationPreferences) : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "INotificationPreferenceApi.SaveMyPreferences"
+            preferenceApi.SaveMyPreferences
+            draft
+            (RemoteEffect.flatten >> SaveCompleted)
+    )
+]
 
 // ─── Init / update ───────────────────────────────────────────────────
 
 /// Initial model + the first load.
 let init () : Model * Cmd<Msg> =
-    {
+    ({
         View = None
         Draft = UserNotificationPreferences.empty
         Loaded = false
         Busy = true
         Saved = false
         Error = None
-    },
-    loadCmd ()
+     },
+     load ())
+    |> RemoteEffect.run
 
-/// Pure state transitions; every side effect is a `Cmd`.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// Pure state transitions; every remote call is an effect value.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Load -> { model with Busy = true; Error = None }, loadCmd ()
+    | Load -> { model with Busy = true; Error = None }, load ()
 
     | ViewLoaded(Ok view) ->
         {
@@ -106,7 +122,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = None
         },
-        Cmd.none
+        []
 
     | ViewLoaded(Error err) ->
         {
@@ -115,7 +131,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | SetCell(category, channel, delivery) ->
         {
@@ -123,7 +139,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Draft = UserNotificationPreferences.setDelivery category channel delivery model.Draft
                 Saved = false
         },
-        Cmd.none
+        []
 
     | SetQuietHours quiet ->
         {
@@ -131,7 +147,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Draft = { model.Draft with QuietHours = quiet }
                 Saved = false
         },
-        Cmd.none
+        []
 
     | Save ->
         match UserNotificationPreferences.validate model.Draft with
@@ -140,8 +156,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model with
                     Error = Some(Notice.Problem err)
             },
-            Cmd.none
-        | Ok draft -> { model with Busy = true; Error = None }, saveCmd draft
+            []
+        | Ok draft -> { model with Busy = true; Error = None }, save draft
 
     | SaveCompleted(Ok()) ->
         {
@@ -150,7 +166,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Saved = true
                 View = model.View |> Option.map (fun v -> { v with Preferences = model.Draft })
         },
-        Cmd.none
+        []
 
     | SaveCompleted(Error err) ->
         {
@@ -158,9 +174,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Wire tokens for the cell picker ─────────────────────────────────
 
@@ -437,7 +456,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.NotificationPreferences"
